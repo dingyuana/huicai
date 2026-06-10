@@ -1,0 +1,29 @@
+// 全局样式
+* {
+  box-sizing: border-box;
+}
+
+.page-container {
+  padding: 20px;
+}
+
+// 响应式表格
+.el-table {
+  width: 100%;
+}
+
+// 搜索表单区域
+.search-form {
+  background: #fff;
+  padding: 20px;
+  margin-bottom: 16px;
+  border-radius: 4px;
+}
+
+// 操作栏
+.table-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}

@@ -1,0 +1,20 @@
+#!/bin/bash
+# Maven Wrapper - downloads Maven if not installed
+# Usage: ./mvnw <goals>
+
+MVNW_REPOURL=https://repo1.maven.org/maven2
+MAVEN_VERSION=3.9.6
+HOME_DIR="$(cd "$(dirname "$0")" && pwd -P)"
+
+if [ -f "$HOME_DIR/.mvn/wrapper/maven-wrapper.jar" ]; then
+  exec java -jar "$HOME_DIR/.mvn/wrapper/maven-wrapper.jar" "$@"
+fi
+
+if command -v mvn &>/dev/null; then
+  exec mvn "$@"
+fi
+
+echo "Maven not found and wrapper jar not available."
+echo "Please install Maven 3.9+ or re-download the wrapper jar:"
+echo "  curl -sL ${MVNW_REPOURL}/org/apache/maven/wrapper/maven-wrapper-distribution/${MAVEN_VERSION}/maven-wrapper-distribution-${MAVEN_VERSION}.zip"
+exit 1

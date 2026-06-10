@@ -1,0 +1,63 @@
+version: "3.8"
+
+networks:
+  huicai-net:
+    driver: bridge
+
+volumes:
+  pgdata:
+  minio-data:
+
+services:
+  postgres16:
+    image: postgres:16
+    container_name: huicai-postgres
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: huicai
+      POSTGRES_PASSWORD: huicai123
+      POSTGRES_DB: huicai
+    volumes:
+      - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      - huicai-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U huicai"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis7:
+    image: redis:7-alpine
+    container_name: huicai-redis
+    ports:
+      - "6379:6379"
+    networks:
+      - huicai-net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  minio:
+    image: minio/minio
+    container_name: huicai-minio
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: huicai
+      MINIO_ROOT_PASSWORD: huicai123
+    command: server /data --console-address ":9001"
+    volumes:
+      - minio-data:/data
+    networks:
+      - huicai-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
