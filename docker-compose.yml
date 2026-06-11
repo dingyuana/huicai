@@ -10,7 +10,7 @@ volumes:
 
 services:
   postgres16:
-    image: postgres:16
+    image: pgvector/pgvector:pg16
     container_name: huicai-postgres
     ports:
       - "5432:5432"
@@ -61,3 +61,20 @@ services:
       interval: 10s
       timeout: 5s
       retries: 3
+
+  rabbitmq3:
+    image: rabbitmq:3-management
+    container_name: huicai-rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: huicai
+      RABBITMQ_DEFAULT_PASS: huicai123
+    networks:
+      - huicai-net
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
