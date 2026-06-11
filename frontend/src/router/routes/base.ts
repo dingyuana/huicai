@@ -146,6 +146,12 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/finance/bank-statement/BankStatementView.vue'),
         meta: { title: '银行对账单', permission: 'bank:statement:list', keepAlive: true },
       },
+      {
+        path: 'finance/bank-reconciliation',
+        name: 'ReconciliationView',
+        component: () => import('@/views/finance/bank-reconciliation/ReconciliationView.vue'),
+        meta: { title: '银行对账', permission: 'bank:reconciliation:list', keepAlive: true },
+      },
     ],
   },
 ]
