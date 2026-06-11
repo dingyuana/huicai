@@ -5,6 +5,9 @@ export interface CloseCheckResult {
   issues: string[]
   trialBalance: {
     balanced: boolean
+    beginBalanced: boolean
+    movementBalanced: boolean
+    endBalanced: boolean
     totalBeginDebit: number
     totalBeginCredit: number
     totalDebitTotal: number

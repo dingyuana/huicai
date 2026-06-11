@@ -110,6 +110,24 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/finance/period-close/PeriodCloseView.vue'),
         meta: { title: '期末结账', permission: 'period:close', keepAlive: true },
       },
+      {
+        path: 'finance/business-doc',
+        name: 'BusinessDocList',
+        component: () => import('@/views/finance/business-doc/BusinessDocList.vue'),
+        meta: { title: '业务单据', permission: 'doc:list', keepAlive: true },
+      },
+      {
+        path: 'finance/business-doc/edit',
+        name: 'BusinessDocEdit',
+        component: () => import('@/views/finance/business-doc/BusinessDocEdit.vue'),
+        meta: { title: '编辑单据', permission: 'doc:edit' },
+      },
+      {
+        path: 'finance/business-doc/detail',
+        name: 'BusinessDocDetail',
+        component: () => import('@/views/finance/business-doc/BusinessDocDetail.vue'),
+        meta: { title: '单据详情', permission: 'doc:list' },
+      },
     ],
   },
 ]
