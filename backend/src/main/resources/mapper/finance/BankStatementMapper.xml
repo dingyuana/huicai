@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.huicai.module.finance.mapper.BankStatementMapper">
+    <select id="selectByAccountAndStatus" resultType="com.huicai.module.finance.entity.BankStatementEntity">
+        SELECT * FROM t_bank_statement
+        WHERE account_id = #{accountId}
+        <if test="status != null and status != ''">
+            AND match_status = #{status}
+        </if>
+        AND deleted = 0
+        ORDER BY tx_date
+    </select>
+
+    <update id="updateMatch">
+        UPDATE t_bank_statement
+        SET matched_journal_id = #{journalId}, match_status = #{status}
+        WHERE id = #{id}
+    </update>
+</mapper>
