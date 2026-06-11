@@ -98,6 +98,12 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/finance/voucher/VoucherDetail.vue'),
         meta: { title: '凭证详情', permission: 'voucher:list' },
       },
+      {
+        path: 'finance/ledger',
+        name: 'LedgerView',
+        component: () => import('@/views/finance/ledger/LedgerView.vue'),
+        meta: { title: '账簿查询', permission: 'ledger:list', keepAlive: true },
+      },
     ],
   },
 ]
