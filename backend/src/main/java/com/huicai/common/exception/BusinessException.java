@@ -28,4 +28,8 @@ public class BusinessException extends RuntimeException {
     public static BusinessException conflict(String msg) {
         return new BusinessException(409, msg);
     }
+
+    public static BusinessException unauthorized(String msg) {
+        return new BusinessException(401, msg);
+    }
 }
