@@ -104,6 +104,12 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/finance/ledger/LedgerView.vue'),
         meta: { title: '账簿查询', permission: 'ledger:list', keepAlive: true },
       },
+      {
+        path: 'finance/period-close',
+        name: 'PeriodClose',
+        component: () => import('@/views/finance/period-close/PeriodCloseView.vue'),
+        meta: { title: '期末结账', permission: 'period:close', keepAlive: true },
+      },
     ],
   },
 ]
