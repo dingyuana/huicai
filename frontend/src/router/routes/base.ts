@@ -128,6 +128,12 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/finance/business-doc/BusinessDocDetail.vue'),
         meta: { title: '单据详情', permission: 'doc:list' },
       },
+      {
+        path: 'finance/bank-account',
+        name: 'BankAccountList',
+        component: () => import('@/views/finance/bank-account/BankAccountList.vue'),
+        meta: { title: '银行账户', permission: 'bank:account:list', keepAlive: true },
+      },
     ],
   },
 ]
