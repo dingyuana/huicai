@@ -25,6 +25,18 @@ public class BankStatementEntity {
     private Long matchedJournalId;
     private String matchStatus;
 
+    // P1 业务分类字段 (V17)
+    private String direction;             // 业务方向 in/out
+    private String batchId;               // 导入批号
+    private String classification;        // 业务分类
+    private Long ruleId;                  // 命中规则 ID
+    private Integer aiConfidence;         // AI 置信度 0-100
+    private String aiSuggestedAction;     // AI 建议分类
+    private String aiBusinessScene;       // AI 业务场景
+    private String reviewStatus;          // 出纳确认状态
+    private Long reviewedBy;              // 审核人
+    private LocalDateTime reviewedAt;     // 审核时间
+
     @TableField(fill = FieldFill.INSERT)
     private LocalDateTime importedAt;
 
