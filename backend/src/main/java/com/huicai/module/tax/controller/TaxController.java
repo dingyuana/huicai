@@ -1,0 +1,157 @@
+package com.huicai.module.tax.controller;
+
+import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.huicai.common.response.R;
+import com.huicai.module.tax.entity.InputInvoiceEntity;
+import com.huicai.module.tax.entity.OutputInvoiceEntity;
+import com.huicai.module.tax.entity.TaxDeclarationEntity;
+import com.huicai.module.tax.entity.TaxTypeEntity;
+import com.huicai.module.tax.service.TaxService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import lombok.RequiredArgsConstructor;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
+import java.util.Map;
+
+@Tag(name = "税务管理")
+@RestController
+@RequestMapping("/api/v1/tax")
+@RequiredArgsConstructor
+public class TaxController {
+
+    private final TaxService service;
+
+    // ========== 税种管理 ==========
+    @Operation(summary = "税种分页查询")
+    @GetMapping("/types/page")
+    public R<IPage<TaxTypeEntity>> pageQueryTaxType(
+            @RequestParam(required = false) String keyword,
+            @RequestParam(defaultValue = "1") Integer current,
+            @RequestParam(defaultValue = "20") Integer size) {
+        return R.ok(service.pageQueryTaxType(keyword, current, size));
+    }
+
+    @Operation(summary = "查询全部税种")
+    @GetMapping("/types/list")
+    public R<List<TaxTypeEntity>> listTaxTypes() {
+        return R.ok(service.listAllTaxTypes());
+    }
+
+    @Operation(summary = "创建税种")
+    @PostMapping("/types")
+    public R<TaxTypeEntity> createTaxType(@RequestBody TaxTypeEntity entity) {
+        return R.ok(service.createTaxType(entity));
+    }
+
+    @Operation(summary = "更新税种")
+    @PutMapping("/types/{id}")
+    public R<TaxTypeEntity> updateTaxType(@PathVariable Long id, @RequestBody TaxTypeEntity entity) {
+        entity.setId(id);
+        return R.ok(service.updateTaxType(entity));
+    }
+
+    @Operation(summary = "删除税种")
+    @DeleteMapping("/types/{id}")
+    public R<Void> deleteTaxType(@PathVariable Long id) {
+        service.deleteTaxType(id);
+        return R.ok();
+    }
+
+    // ========== 进项发票 ==========
+    @Operation(summary = "进项发票分页")
+    @GetMapping("/input-invoices/page")
+    public R<IPage<InputInvoiceEntity>> pageInput(
+            @RequestParam(required = false) String vendorName,
+            @RequestParam(required = false) String period,
+            @RequestParam(required = false) String certStatus,
+            @RequestParam(defaultValue = "1") Integer current,
+            @RequestParam(defaultValue = "20") Integer size) {
+        return R.ok(service.pageQueryInput(vendorName, period, certStatus, current, size));
+    }
+
+    @Operation(summary = "创建进项发票")
+    @PostMapping("/input-invoices")
+    public R<InputInvoiceEntity> createInput(@RequestBody InputInvoiceEntity entity) {
+        return R.ok(service.createInput(entity));
+    }
+
+    @Operation(summary = "认证进项发票")
+    @PostMapping("/input-invoices/{id}/certify")
+    public R<InputInvoiceEntity> certify(@PathVariable Long id,
+                                          @RequestParam(required = false) String deductionPeriod) {
+        return R.ok(service.certify(id, deductionPeriod));
+    }
+
+    @Operation(summary = "进项汇总")
+    @GetMapping("/input-invoices/summary")
+    public R<Map<String, Object>> inputSummary(@RequestParam String period) {
+        return R.ok(service.inputSummary(period));
+    }
+
+    @Operation(summary = "进项按税率分组")
+    @GetMapping("/input-invoices/by-tax-rate")
+    public R<List<Map<String, Object>>> inputByTaxRate(@RequestParam String period) {
+        return R.ok(service.inputByTaxRate(period));
+    }
+
+    // ========== 销项发票 ==========
+    @Operation(summary = "销项发票分页")
+    @GetMapping("/output-invoices/page")
+    public R<IPage<OutputInvoiceEntity>> pageOutput(
+            @RequestParam(required = false) String customerName,
+            @RequestParam(required = false) String period,
+            @RequestParam(required = false) String status,
+            @RequestParam(defaultValue = "1") Integer current,
+            @RequestParam(defaultValue = "20") Integer size) {
+        return R.ok(service.pageQueryOutput(customerName, period, status, current, size));
+    }
+
+    @Operation(summary = "创建销项发票")
+    @PostMapping("/output-invoices")
+    public R<OutputInvoiceEntity> createOutput(@RequestBody OutputInvoiceEntity entity) {
+        return R.ok(service.createOutput(entity));
+    }
+
+    @Operation(summary = "销项汇总")
+    @GetMapping("/output-invoices/summary")
+    public R<Map<String, Object>> outputSummary(@RequestParam String period) {
+        return R.ok(service.outputSummary(period));
+    }
+
+    @Operation(summary = "销项按税率分组")
+    @GetMapping("/output-invoices/by-tax-rate")
+    public R<List<Map<String, Object>>> outputByTaxRate(@RequestParam String period) {
+        return R.ok(service.outputByTaxRate(period));
+    }
+
+    // ========== 增值税计算 ==========
+    @Operation(summary = "计算增值税")
+    @GetMapping("/vat/calculate")
+    public R<Map<String, Object>> calculateVat(@RequestParam String period) {
+        return R.ok(service.calculateVat(period));
+    }
+
+    // ========== 申报 ==========
+    @Operation(summary = "申报分页")
+    @GetMapping("/declarations/page")
+    public R<IPage<TaxDeclarationEntity>> pageDeclaration(
+            @RequestParam(required = false) String status,
+            @RequestParam(defaultValue = "1") Integer current,
+            @RequestParam(defaultValue = "20") Integer size) {
+        return R.ok(service.pageQueryDeclaration(status, current, size));
+    }
+
+    @Operation(summary = "创建申报")
+    @PostMapping("/declarations")
+    public R<TaxDeclarationEntity> createDeclaration(@RequestBody TaxDeclarationEntity entity) {
+        return R.ok(service.createDeclaration(entity));
+    }
+
+    @Operation(summary = "提交申报")
+    @PostMapping("/declarations/{id}/submit")
+    public R<TaxDeclarationEntity> submitDeclaration(@PathVariable Long id) {
+        return R.ok(service.submitDeclaration(id));
+    }
+}
