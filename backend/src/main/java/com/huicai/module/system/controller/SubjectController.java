@@ -52,4 +52,11 @@ public class SubjectController {
     public R<Subject> getById(@PathVariable Long id) {
         return R.ok(subjectService.getById(id));
     }
+
+    @Operation(summary = "一键导入国家标准科目")
+    @PostMapping("/import-standard")
+    public R<Integer> importStandard() {
+        int count = subjectService.importStandard();
+        return R.ok(count);
+    }
 }

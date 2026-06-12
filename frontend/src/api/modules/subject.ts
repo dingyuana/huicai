@@ -56,3 +56,7 @@ export function updateSubject(id: number, data: SubjectUpdateParam): Promise<voi
 export function deleteSubject(id: number): Promise<void> {
   return request.delete(`/subjects/${id}`)
 }
+
+export function importStandardSubjects(): Promise<number> {
+  return request.post('/subjects/import-standard')
+}

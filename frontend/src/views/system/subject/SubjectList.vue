@@ -5,6 +5,7 @@
         <span class="page-title">科目管理</span>
         <div>
           <el-button type="primary" @click="openCreate(null)">新增一级科目</el-button>
+          <el-button type="success" @click="handleImportStandard">一键导入常用科目</el-button>
           <el-button @click="fetchTree">刷新</el-button>
         </div>
       </div>
@@ -92,7 +93,7 @@
 import { ref, onMounted, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import type { FormInstance } from 'element-plus'
-import { getSubjectTree, createSubject, updateSubject, deleteSubject, getSubject } from '@/api/modules/subject'
+import { getSubjectTree, createSubject, updateSubject, deleteSubject, getSubject, importStandardSubjects } from '@/api/modules/subject'
 import type { SubjectVO, SubjectCreateParam, SubjectUpdateParam } from '@/api/modules/subject'
 
 const loading = ref(false)
@@ -206,6 +207,21 @@ async function handleDelete(row: SubjectVO) {
     await fetchTree()
   } catch {
     // handled
+  }
+}
+
+async function handleImportStandard() {
+  try {
+    await ElMessageBox.confirm(
+      '确认一键导入国家标准科目？此操作会为所有6大类（资产/负债/共同/权益/成本/损益）创建一级科目。\n注意：科目表必须为空才能导入。',
+      '导入确认',
+      { confirmButtonText: '确认导入', cancelButtonText: '取消', type: 'warning' }
+    )
+    const count = await importStandardSubjects()
+    ElMessage.success(`成功导入 ${count} 个国家标准一级科目`)
+    await fetchTree()
+  } catch {
+    // cancelled or error
   }
 }
 

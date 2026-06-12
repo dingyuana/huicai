@@ -36,4 +36,10 @@ public interface SubjectService {
      * 获取科目详情
      */
     Subject getById(Long id);
+
+    /**
+     * 一键导入国家标准会计科目
+     * @return 导入的科目数量
+     */
+    int importStandard();
 }
