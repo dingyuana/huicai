@@ -81,7 +81,7 @@ jwt:
 # 代码审核定时任务配置
 huicai:
   code-audit:
-    # cron 表达式: 秒 分 时 日 月 周(?)  默认为每天 09:00
-    cron: 0 0 9 * * ?
+    # cron 表达式: 秒 分 时 日 月 周(?)  默认为每天 06:00
+    cron: 0 0 6 * * ?
     # 项目根目录 (默认自动探测 .git 目录)
     project-root: ${user.dir}
