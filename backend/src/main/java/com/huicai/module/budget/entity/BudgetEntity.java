@@ -1,0 +1,34 @@
+package com.huicai.module.budget.entity;
+
+import com.baomidou.mybatisplus.annotation.*;
+import lombok.Data;
+
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
+
+@Data
+@TableName("t_budget")
+public class BudgetEntity {
+
+    @TableId(type = IdType.ASSIGN_ID)
+    private Long id;
+
+    private String budgetNo;
+    private String period;
+    private String budgetType;
+    private BigDecimal totalAmount;
+    private String status;
+    private Long approvedBy;
+    private LocalDateTime approvedAt;
+    private String remark;
+    private Long createdBy;
+    private Long updatedBy;
+
+    @TableField(fill = FieldFill.INSERT)
+    private LocalDateTime createdAt;
+    @TableField(fill = FieldFill.INSERT_UPDATE)
+    private LocalDateTime updatedAt;
+
+    @TableLogic
+    private Integer deleted;
+}
