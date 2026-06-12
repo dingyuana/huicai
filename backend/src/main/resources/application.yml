@@ -77,3 +77,11 @@ jwt:
   secret: huicai-finance-jwt-secret-key-2026-very-long-secret-string
   access-token-expiration: 86400000
   refresh-token-expiration: 604800000
+
+# 代码审核定时任务配置
+huicai:
+  code-audit:
+    # cron 表达式: 秒 分 时 日 月 周(?)  默认为每天 09:00
+    cron: 0 0 9 * * ?
+    # 项目根目录 (默认自动探测 .git 目录)
+    project-root: ${user.dir}
