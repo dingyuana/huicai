@@ -86,19 +86,44 @@ CREATE INDEX idx_ai_feedback_tenant ON t_ai_feedback_log(tenant_id);
 
 #### 1.3 扩充 `t_bank_statement` 表
 
-需要为 `t_bank_statement` 增加以下字段（通过 DDL 迁移）：
+> **方案 C 迁移策略**：V5 字段**全部保留**（包括 `tx_type` 4 值与 `match_status` 对账语义），**仅新增**字段。P1 不动现有 autoMatch/confirmMatch 逻辑。
+
+需要为 `t_bank_statement` 增加以下字段（通过 DDL 迁移，建议新建 `V17__p1_bank_classification.sql`）：
 
 ```sql
-ALTER TABLE t_bank_statement ADD COLUMN IF NOT EXISTS direction VARCHAR(4);       -- in/out
-ALTER TABLE t_bank_statement ADD COLUMN IF NOT EXISTS classification VARCHAR(50);  -- bank_fee/interest_income/...
+-- P1 业务分类相关
+ALTER TABLE t_bank_statement ADD COLUMN IF NOT EXISTS direction VARCHAR(4);       -- 业务方向 in/out
+ALTER TABLE t_bank_statement ADD COLUMN IF NOT EXISTS batch_id VARCHAR(50);        -- 导入批号
+ALTER TABLE t_bank_statement ADD COLUMN IF NOT EXISTS classification VARCHAR(50);  -- 业务分类 bank_fee/.../pending
 ALTER TABLE t_bank_statement ADD COLUMN IF NOT EXISTS rule_id BIGINT;              -- 命中规则 ID
-ALTER TABLE t_bank_statement ADD COLUMN IF NOT EXISTS ai_confidence INT DEFAULT 0; -- AI 置信度
+
+-- P1 AI 增强相关
+ALTER TABLE t_bank_statement ADD COLUMN IF NOT EXISTS ai_confidence INT DEFAULT 0;
 ALTER TABLE t_bank_statement ADD COLUMN IF NOT EXISTS ai_suggested_action VARCHAR(50);
 ALTER TABLE t_bank_statement ADD COLUMN IF NOT EXISTS ai_business_scene VARCHAR(100);
+
+-- P1 出纳确认相关（review_status 独立于 match_status）
+ALTER TABLE t_bank_statement ADD COLUMN IF NOT EXISTS review_status VARCHAR(20) DEFAULT 'PENDING';
 ALTER TABLE t_bank_statement ADD COLUMN IF NOT EXISTS reviewed_by BIGINT;
 ALTER TABLE t_bank_statement ADD COLUMN IF NOT EXISTS reviewed_at TIMESTAMP;
-ALTER TABLE t_bank_statement ADD COLUMN IF NOT EXISTS batch_id VARCHAR(50);        -- 导入批号
+
+-- 约束
+ALTER TABLE t_bank_statement ADD CONSTRAINT chk_stmt_review_status
+  CHECK (review_status IN ('PENDING', 'CONFIRMED', 'RECLASSIFIED'));
+ALTER TABLE t_bank_statement ADD CONSTRAINT chk_stmt_direction
+  CHECK (direction IN ('in', 'out') OR direction IS NULL);
+
+-- 索引（高频查询）
+CREATE INDEX IF NOT EXISTS idx_stmt_review_status ON t_bank_statement(review_status);
+CREATE INDEX IF NOT EXISTS idx_stmt_classification ON t_bank_statement(classification);
+CREATE INDEX IF NOT EXISTS idx_stmt_batch_id ON t_bank_statement(batch_id);
 ```
+
+**与 V5 已有字段的语义关系**：
+- `tx_type` (V5, 4 值) **保留不动**——继续服务对账流程（autoMatch/confirmMatch）
+- `direction` (P1, 2 值) — 分类引擎入口参数，与 `tx_type` 关系：`direction=in` ↔ `tx_type IN ('INCOME','TRANSFER_IN')`；`direction=out` ↔ `tx_type IN ('EXPENSE','TRANSFER_OUT')`
+- `match_status` (V5, 4 值) — **对账状态**（与银行日记账的匹配）
+- `review_status` (P1, 3 值) — **出纳确认状态**（PENDING/CONFIRMED/RECLASSIFIED）—— **与 match_status 独立**
 
 ### 2. 分类规则引擎（Java 后端）
 
@@ -271,12 +296,14 @@ AiTaskService.createAndDispatch("ANOMALY", "voucher", voucherId, inputData)
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| POST | `/api/v1/bank-statements/preview` | 预览 Excel 内容 |
-| POST | `/api/v1/bank-statements/import` | 导入银行流水 |
-| GET | `/api/v1/bank-statements/page` | 分页查询流水（已有，增强） |
+| POST | `/api/v1/bank-statements/preview` | 预览 Excel 内容（两阶段列名映射 + 预校验） |
+| POST | `/api/v1/bank-statements/import` | 导入银行流水（触发分类引擎） |
+| GET | `/api/v1/bank-statements/page` | 分页查询流水（已有，增强 review_status 过滤） |
 | POST | `/api/v1/bank-statements/{id}/classify` | 单笔重分类 |
 | POST | `/api/v1/bank-statements/classify-all` | 批量重分类（待处理流水） |
-| POST | `/api/v1/bank-statements/batch-confirm` | 批量确认 |
+| POST | `/api/v1/bank-statements/{id}/review` | **P1 新增** 出纳确认流水（PENDING→CONFIRMED，触发业务单据/凭证生成） |
+| POST | `/api/v1/bank-statements/batch-review` | **P1 新增** 批量出纳确认 |
+| POST | `/api/v1/bank-statements/batch-confirm` | 批量确认（兼容旧版，等价于 batch-review） |
 | GET | `/api/v1/classification-rules` | 规则列表 |
 | POST | `/api/v1/classification-rules` | 创建规则 |
 | PUT | `/api/v1/classification-rules/{id}` | 更新规则 |
