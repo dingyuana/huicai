@@ -87,7 +87,7 @@ export function getRole(id: number): Promise<RoleVO> {
   return request.get(`/system/role/${id}`)
 }
 
-export function createRole(data: RoleParam): Promise<void> {
+export function createRole(data: RoleParam): Promise<RoleVO> {
   return request.post('/system/role', data)
 }
 

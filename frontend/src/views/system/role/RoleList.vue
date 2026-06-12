@@ -18,6 +18,7 @@
           </el-form-item>
         </el-form>
         <el-button type="primary" @click="openCreate">新增角色</el-button>
+        <el-button @click="showPresets = true">默认角色模板</el-button>
       </div>
 
       <el-table :data="list" v-loading="loading" border stripe>
@@ -110,6 +111,26 @@
         <el-button type="primary" @click="handleAssignMenu">保存</el-button>
       </template>
     </el-dialog>
+
+    <el-dialog v-model="showPresets" title="选择默认角色模板" width="640" destroy-on-close>
+      <el-table :data="ROLE_PRESETS" border stripe @row-click="selectPreset">
+        <el-table-column prop="code" label="角色编码" width="140" />
+        <el-table-column prop="name" label="角色名称" width="140" />
+        <el-table-column prop="description" label="描述" min-width="200" />
+        <el-table-column label="操作" width="100">
+          <template #default="{ row }">
+            <el-button type="primary" size="small" @click.stop="selectPreset(row)">创建</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+    </el-dialog>
+
+    <el-dialog v-model="creatingPreset" title="正在创建默认角色..." width="400" :close-on-click-modal="false">
+      <div style="text-align:center;padding:20px">
+        <el-progress :percentage="presetProgress" :stroke-width="8" style="margin-bottom:16px" />
+        <p>{{ presetStatus }}</p>
+      </div>
+    </el-dialog>
   </div>
 </template>
 
@@ -119,7 +140,7 @@ import { ElMessage } from 'element-plus'
 import type { FormInstance } from 'element-plus'
 import {
   getRolePage, createRole, updateRole, updateRoleStatus, deleteRole,
-  getRoleMenus, assignRoleMenus,
+  getRoleMenus, assignRoleMenus, getAllRoles,
   getMenuTree,
   type RoleVO, type MenuVO,
 } from '@/api/modules/system'
@@ -136,6 +157,47 @@ const editingId = ref<number | null>(null)
 const assignRoleId = ref<number>(0)
 const menuTree = ref<MenuVO[]>([])
 const menuTreeRef = ref()
+const showPresets = ref(false)
+const creatingPreset = ref(false)
+const presetProgress = ref(0)
+const presetStatus = ref('')
+
+// 默认角色模板 - 基于财务软件常见岗位预置菜单权限
+const ROLE_PRESETS = [
+  { code: 'accountant', name: '会计', description: '凭证录入/账簿查询/业务单据/科目管理/基础数据',
+    menuIds: [2,40,50,60,70, 1000,1010,1011,1012,1013,1014,1015,1016,1017,1018, 1020,1021, 1040,1041,1042,1043,1044,1045,
+              2000,2010,2011,2012,2013,2014, 2020,2021,2022,2023,2024,2025, 2030,2031,2032,
+              3000,3010,3011,3012,3013,3014, 3020,3021,3022,3023,3024, 3030,3031, 3040,3041, 3050,3051,3052, 3060,3061,3062,3063,
+              4000,4010,4011,4012,4013, 4020,4021,4022, 4030,4031] },
+  { code: 'chief_accountant', name: '会计主管', description: '会计权限 + 审核/结账/报表/分析',
+    menuIds: [2,40,50,60,70, 1000,1010,1011,1012,1013,1014,1015,1016,1017,1018,
+              1020,1021, 1030,1031,1032, 1033, 1040,1041,1042,1043,1044,1045,
+              2000,2010,2011,2012,2013,2014, 2020,2021,2022,2023,2024,2025, 2030,2031,2032,
+              3000,3010,3011,3012,3013,3014, 3020,3021,3022,3023,3024, 3030,3031, 3040,3041, 3050,3051,3052, 3060,3061,3062,3063,
+              4000,4010,4011,4012,4013, 4020,4021,4022, 4030,4031,
+              6000,6010,6011, 6020,6021, 6030,6031, 6040,6041,
+              7000,7010,7011, 7020,7021,
+              8000,8010,8011, 8020,8021] },
+  { code: 'cashier', name: '出纳', description: '银行账户/日记账/对账/现金日记账/票据管理',
+    menuIds: [2,50, 1000,1050,1051,1052,1053,1054, 1060,1061, 1070,1071, 1080,1081,
+              1090,1091,1092,1093,1094, 1095,1096,1097,1098,1099] },
+  { code: 'finance_manager', name: '财务经理', description: '全部查看权限 + 报表/分析/预算',
+    menuIds: [1,2,40,50,60,70,80,90,91,92,93,94, 95,96, 1000,1010,1011,1020,1021,1030,1031,1032,1033,
+              1040,1041,1050,1051,1060,1061,1070,1071,1080,1081,1090,1091,1095,1096,1100,1101,1102,1103,
+              2000,2010,2011,2020,2021,2030,2031,
+              3000,3010,3011,3020,3021,3030,3031,3040,3041,3050,3051,3060,3061,
+              4000,4010,4011,4020,4021,4030,4031,
+              5000,5001,5002,5003,5004,
+              6000,6010,6011,6020,6021,6030,6031,6040,6041,
+              7000,7010,7011,7020,7021,
+              8000,8010,8011,8020,8021] },
+  { code: 'arap_accountant', name: '往来会计', description: '客户/供应商/应收/应付/坏账/核销',
+    menuIds: [2,40,50,60,70, 1000,1010,1011, 1040,1041,1042,1043,1044,1045,
+              3000,3010,3011,3012,3013,3014, 3020,3021,3022,3023,3024, 3030,3031, 3040,3041,
+              3050,3051,3052, 3060,3061,3062,3063] },
+  { code: 'tax_accountant', name: '税务会计', description: '进项发票/销项发票/增值税计算/申报',
+    menuIds: [2,40,50,60,70, 1000,1010,1011, 4000,4010,4011,4012,4013, 4020,4021,4022, 4030,4031] },
+]
 
 const query = reactive({ page: 1, size: 10, keyword: '', status: '' })
 
@@ -233,6 +295,27 @@ async function handleAssignMenu() {
     ElMessage.success('分配成功')
     menuDialogVisible.value = false
   } catch { /* ignore */ }
+}
+
+async function selectPreset(preset: any) {
+  showPresets.value = false
+  creatingPreset.value = true
+  presetProgress.value = 10
+  presetStatus.value = '正在创建角色...'
+  try {
+    const role: any = await createRole({ code: preset.code, name: preset.name, description: preset.description, sortOrder: 0, status: 'active' })
+    presetProgress.value = 50
+    presetStatus.value = '正在分配菜单权限...'
+    await assignRoleMenus(role.id, preset.menuIds)
+    presetProgress.value = 100
+    presetStatus.value = '创建完成'
+    ElMessage.success(`默认角色"${preset.name}"创建成功`)
+    fetchData()
+  } catch (e: any) {
+    ElMessage.error(e?.message || '创建失败')
+  } finally {
+    setTimeout(() => { creatingPreset.value = false; presetProgress.value = 0 }, 1000)
+  }
 }
 
 onMounted(() => fetchData())

@@ -46,9 +46,9 @@ public class RoleController {
 
     @PostMapping
     @Log(value = "新增角色", module = "system")
-    public R<?> create(@RequestBody RoleEntity role) {
+    public R<RoleEntity> create(@RequestBody RoleEntity role) {
         roleService.create(role);
-        return R.ok();
+        return R.ok(role);
     }
 
     @PutMapping("/{id}")
