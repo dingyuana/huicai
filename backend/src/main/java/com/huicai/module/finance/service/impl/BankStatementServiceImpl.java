@@ -19,6 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.LocalDate;
 import java.util.*;
 
 @Slf4j
@@ -30,6 +31,7 @@ public class BankStatementServiceImpl implements BankStatementService {
     private final BankJournalMapper journalMapper;
     private final ClassificationRuleService classificationRuleService;
     private final FallbackHeuristicService fallbackHeuristic;
+    private final ColumnMappingResolver columnMappingResolver;
 
     @Override
     public IPage<BankStatementEntity> pageQuery(Long accountId, String status, Integer current, Integer size) {
@@ -48,35 +50,88 @@ public class BankStatementServiceImpl implements BankStatementService {
             throw BusinessException.badRequest("CSV内容为空");
         }
         String[] lines = csvContent.split("\\r?\\n");
+        if (lines.length == 0) return 0;
+
+        // 1. 解析表头 (智能映射)
+        String[] headers = lines[0].split(",");
+        ColumnMappingResolver.MappingResult mapping = columnMappingResolver.resolve(headers);
+
+        // 2. 预校验
+        if (!mapping.isValid()) {
+            throw BusinessException.badRequest(
+                    "必含列名缺失 (交易日期/金额). 实际表头: " + String.join(",", headers)
+            );
+        }
+
+        // 3. 逐行解析导入
         int imported = 0;
-        boolean firstLine = true;
-        for (String line : lines) {
+        for (int i = 1; i < lines.length; i++) {
+            String line = lines[i];
             if (StrUtil.isBlank(line)) continue;
-            String[] cols = line.split(",");
-            if (firstLine) {
-                firstLine = false;
-                // 首行可能是表头, 尝试检测
-                if (cols[0].contains("日期") || cols[0].toLowerCase().contains("date")) continue;
-            }
-            if (cols.length < 3) continue;
+            String[] cols = line.split(",", -1);
             try {
-                BankStatementEntity stmt = new BankStatementEntity();
-                stmt.setAccountId(accountId);
-                stmt.setTxDate(java.time.LocalDate.parse(cols[0].trim()));
-                String typeStr = cols[1].trim();
-                stmt.setTxType(typeStr.contains("收") || typeStr.toLowerCase().contains("in") ? "INCOME" : "EXPENSE");
-                stmt.setAmount(new BigDecimal(cols[2].trim()));
-                if (cols.length > 3) stmt.setCounterAccount(cols[3].trim());
-                if (cols.length > 4) stmt.setSummary(cols[4].trim());
-                stmt.setMatchStatus("UNMATCHED");
-                statementMapper.insert(stmt);
-                imported++;
+                BankStatementEntity stmt = parseRow(cols, mapping, accountId);
+                if (stmt != null) {
+                    statementMapper.insert(stmt);
+                    imported++;
+                }
             } catch (Exception e) {
-                log.warn("解析CSV行失败: {}", line, e);
+                log.warn("解析CSV第{}行失败: {}", i + 1, line, e);
             }
         }
         log.info("导入对账单: accountId={}, imported={}", accountId, imported);
         return imported;
+    }
+
+    /**
+     * 按列映射从 CSV 行解析一条对账单记录.
+     *
+     * @param cols    CSV 分割后的列数组
+     * @param mapping 列名映射结果
+     * @param accountId 银行账户 ID
+     * @return 解析后的实体, 日期或金额缺失时返回 null
+     */
+    private BankStatementEntity parseRow(String[] cols, ColumnMappingResolver.MappingResult mapping, Long accountId) {
+        BankStatementEntity stmt = new BankStatementEntity();
+        stmt.setAccountId(accountId);
+        stmt.setMatchStatus("UNMATCHED");
+
+        Integer dateIdx = mapping.getFieldToColumnIndex().get(ColumnMappingResolver.Field.TX_DATE);
+        if (dateIdx != null && dateIdx < cols.length) {
+            stmt.setTxDate(LocalDate.parse(cols[dateIdx].trim()));
+        } else {
+            return null;
+        }
+
+        Integer amtIdx = mapping.getFieldToColumnIndex().get(ColumnMappingResolver.Field.AMOUNT);
+        if (amtIdx != null && amtIdx < cols.length) {
+            stmt.setAmount(new BigDecimal(cols[amtIdx].trim()));
+        } else {
+            return null;
+        }
+
+        Integer typeIdx = mapping.getFieldToColumnIndex().get(ColumnMappingResolver.Field.TX_TYPE);
+        if (typeIdx != null && typeIdx < cols.length) {
+            String typeStr = cols[typeIdx].trim();
+            stmt.setTxType(typeStr.contains("收") || typeStr.toLowerCase().contains("in") || typeStr.contains("贷") ? "INCOME" : "EXPENSE");
+        }
+
+        Integer counterIdx = mapping.getFieldToColumnIndex().get(ColumnMappingResolver.Field.COUNTER_ACCOUNT);
+        if (counterIdx != null && counterIdx < cols.length) {
+            stmt.setCounterAccount(cols[counterIdx].trim());
+        }
+
+        Integer summaryIdx = mapping.getFieldToColumnIndex().get(ColumnMappingResolver.Field.SUMMARY);
+        if (summaryIdx != null && summaryIdx < cols.length) {
+            stmt.setSummary(cols[summaryIdx].trim());
+        }
+
+        Integer extIdx = mapping.getFieldToColumnIndex().get(ColumnMappingResolver.Field.EXTERNAL_NO);
+        if (extIdx != null && extIdx < cols.length) {
+            stmt.setExternalNo(cols[extIdx].trim());
+        }
+
+        return stmt;
     }
 
     @Override
