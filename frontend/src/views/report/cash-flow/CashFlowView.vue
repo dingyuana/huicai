@@ -11,6 +11,7 @@
         </el-form-item>
         <el-form-item>
           <el-button type="primary" @click="fetchData">查询</el-button>
+          <el-button @click="onExport">导出</el-button>
         </el-form-item>
       </el-form>
 
