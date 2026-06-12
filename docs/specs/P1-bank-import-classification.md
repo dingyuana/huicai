@@ -295,6 +295,8 @@ AiTaskService.createAndDispatch("ANOMALY", "voucher", voucherId, inputData)
 6. ✅ 种子规则自动初始化（新租户首次使用时）
 7. ✅ 无规则时不影响导入，全部归入待处理
 8. ✅ 与现有 AI 服务（RabbitMQ 通道）可正常通信
+9. ✅ **导入阶段不自动创建任何业务单据/凭证**；所有单据（收款单/付款单/银行转账单）与凭证（bank_fee/interest_income/tax_payment/social_security/insurance_fee）均在出纳在 FR-BANK-07 工作台确认流水后，根据分类触发创建/生成
+10. ✅ **salary_payment 分类**（兜底第 6 级识别）在出纳确认时生成付款单（DRAFT 状态，`FROM_BANK_TXN` 来源标记，关联员工档案）
 
 ## OpenCode 执行指令
 
