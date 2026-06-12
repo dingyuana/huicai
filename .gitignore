@@ -47,3 +47,10 @@ ai-service/logs/
 ai-service/.venv/
 ai-service/__pycache__/
 **/__pycache__/
+# Office files (per project rule R3, 2026-06-13)
+*.xlsx
+*.xls
+*.docx
+*.doc
+*.pptx
+*.ppt
