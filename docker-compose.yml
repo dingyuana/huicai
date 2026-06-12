@@ -78,3 +78,63 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+
+  ai-service:
+    build:
+      context: ./ai-service
+      dockerfile: Dockerfile
+    container_name: huicai-ai-service
+    ports:
+      - "8000:8000"
+    environment:
+      HUICAI_RABBITMQ_URL: amqp://huicai:huicai123@rabbitmq3:5672/
+      HUICAI_DB_HOST: postgres16
+      HUICAI_DB_PORT: 5432
+      HUICAI_DB_USER: huicai
+      HUICAI_DB_PASSWORD: huicai123
+      HUICAI_DB_NAME: huicai
+      HUICAI_MINIO_ENDPOINT: http://minio:9000
+      HUICAI_MINIO_ACCESS_KEY: huicai
+      HUICAI_MINIO_SECRET_KEY: huicai123
+      HUICAI_OCR_ENGINE: tesseract
+    depends_on:
+      rabbitmq3:
+        condition: service_healthy
+      postgres16:
+        condition: service_healthy
+    networks:
+      - huicai-net
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: huicai-backend
+    ports:
+      - "8080:8080"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres16:5432/huicai
+      SPRING_DATASOURCE_USERNAME: huicai
+      SPRING_DATASOURCE_PASSWORD: huicai123
+      SPRING_RABBITMQ_HOST: rabbitmq3
+      SPRING_RABBITMQ_PORT: 5672
+      SPRING_RABBITMQ_USERNAME: huicai
+      SPRING_RABBITMQ_PASSWORD: huicai123
+      SPRING_DATA_REDIS_HOST: redis7
+      SPRING_DATA_REDIS_PORT: 6379
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_ACCESS_KEY: huicai
+      MINIO_SECRET_KEY: huicai123
+    depends_on:
+      postgres16:
+        condition: service_healthy
+      redis7:
+        condition: service_healthy
+      rabbitmq3:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    networks:
+      - huicai-net
+    restart: unless-stopped

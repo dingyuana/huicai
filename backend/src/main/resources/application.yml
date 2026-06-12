@@ -77,3 +77,17 @@ jwt:
   secret: huicai-finance-jwt-secret-key-2026-very-long-secret-string
   access-token-expiration: 86400000
   refresh-token-expiration: 604800000
+
+# MinIO 配置
+minio:
+  endpoint: http://localhost:9000
+  access-key: huicai
+  secret-key: huicai123
+  bucket: huicai-files
+
+# AI 服务配置
+ai:
+  service-url: http://localhost:8000
+  enabled: true
+  ocr-enabled: false
+  embedding-enabled: false

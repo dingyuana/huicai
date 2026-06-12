@@ -34,3 +34,16 @@ docker/volumes/
 # Temp
 tmp/
 temp/
+
+# OpenCode session data (untracked)
+.omo/
+
+# Test artifacts
+test-results/
+playwright-report/
+frontend/test.txt
+ai-service/data/
+ai-service/logs/
+ai-service/.venv/
+ai-service/__pycache__/
+**/__pycache__/
