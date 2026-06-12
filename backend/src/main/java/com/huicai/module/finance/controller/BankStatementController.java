@@ -53,4 +53,22 @@ public class BankStatementController {
     public R<Integer> ignore(@PathVariable Long statementId) {
         return R.ok(service.ignoreStatement(statementId));
     }
+
+    @Operation(summary = "手动触发单条分类")
+    @PostMapping("/{id}/classify")
+    public R<BankStatementEntity> classify(@PathVariable Long id) {
+        return R.ok(service.classifySingle(id));
+    }
+
+    @Operation(summary = "出纳单条确认分类")
+    @PostMapping("/{id}/review")
+    public R<BankStatementEntity> review(@PathVariable Long id) {
+        return R.ok(service.review(id));
+    }
+
+    @Operation(summary = "批量确认分类")
+    @PostMapping("/batch-review")
+    public R<Integer> batchReview(@RequestBody List<Long> ids) {
+        return R.ok(service.batchReview(ids));
+    }
 }

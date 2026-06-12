@@ -20,6 +20,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.*;
 
 @Slf4j
@@ -228,5 +229,43 @@ public class BankStatementServiceImpl implements BankStatementService {
         stmt.setClassification(finalClassification);
         statementMapper.updateById(stmt);
         return stmt;
+    }
+
+    @Override
+    @Transactional
+    public BankStatementEntity review(Long statementId) {
+        BankStatementEntity stmt = statementMapper.selectById(statementId);
+        if (stmt == null) {
+            throw BusinessException.notFound("对账单记录不存在");
+        }
+        if (StrUtil.isBlank(stmt.getClassification())) {
+            throw BusinessException.badRequest("流水尚未分类, 请先调用 classifySingle");
+        }
+        stmt.setReviewStatus("CONFIRMED");
+        stmt.setReviewedBy(1L);
+        stmt.setReviewedAt(LocalDateTime.now());
+        statementMapper.updateById(stmt);
+        // TODO M4 接入: salary_payment 分类时, 此处触发 business_doc_service.createPaymentOrder(DRAFT, FROM_BANK_TXN)
+        log.info("出纳确认分类: statementId={}, classification={}", statementId, stmt.getClassification());
+        return stmt;
+    }
+
+    @Override
+    @Transactional
+    public int batchReview(List<Long> statementIds) {
+        if (statementIds == null || statementIds.isEmpty()) {
+            throw BusinessException.badRequest("确认 ID 列表为空");
+        }
+        int confirmed = 0;
+        for (Long id : statementIds) {
+            try {
+                review(id);
+                confirmed++;
+            } catch (Exception e) {
+                log.warn("批量确认失败: statementId={}", id, e);
+            }
+        }
+        log.info("批量确认分类: 总数={}, 成功={}", statementIds.size(), confirmed);
+        return confirmed;
     }
 }
