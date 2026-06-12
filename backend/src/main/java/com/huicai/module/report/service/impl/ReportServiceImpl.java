@@ -1,12 +1,19 @@
 package com.huicai.module.report.service.impl;
 
+import cn.hutool.core.io.IoUtil;
+import cn.hutool.poi.excel.ExcelUtil;
+import cn.hutool.poi.excel.ExcelWriter;
 import com.huicai.module.report.mapper.ReportDataMapper;
 import com.huicai.module.report.service.ReportService;
+import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
+import java.io.IOException;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -73,18 +80,18 @@ public class ReportServiceImpl implements ReportService {
         String yearStart = period.substring(0, 4) + "01";
         Map<String, Object> cumulative = reportDataMapper.cumulativeData(yearStart, period);
 
-        BigDecimal revenue = toBigDecimal(data.get("revenue"))
-                .subtract(toBigDecimal(data.get("revenue_offset")));
-        BigDecimal cost = toBigDecimal(data.get("cost"));
-        BigDecimal expense = toBigDecimal(data.get("expense"));
-        BigDecimal otherExpense = toBigDecimal(data.get("other_expense"));
+        BigDecimal revenue = toBigDecimal(getOrNull(data, "revenue"))
+                .subtract(toBigDecimal(getOrNull(data, "revenue_offset")));
+        BigDecimal cost = toBigDecimal(getOrNull(data, "cost"));
+        BigDecimal expense = toBigDecimal(getOrNull(data, "expense"));
+        BigDecimal otherExpense = toBigDecimal(getOrNull(data, "other_expense"));
 
         BigDecimal grossProfit = revenue.subtract(cost);
         BigDecimal operatingProfit = grossProfit.subtract(expense);
         BigDecimal totalProfit = operatingProfit.subtract(otherExpense);
 
-        BigDecimal cumRevenue = toBigDecimal(cumulative.get("cumulative_revenue"));
-        BigDecimal cumCost = toBigDecimal(cumulative.get("cumulative_cost"));
+        BigDecimal cumRevenue = toBigDecimal(getOrNull(cumulative, "cumulative_revenue"));
+        BigDecimal cumCost = toBigDecimal(getOrNull(cumulative, "cumulative_cost"));
 
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("period", period);
@@ -99,6 +106,10 @@ public class ReportServiceImpl implements ReportService {
         result.put("cumulativeCost", cumCost);
         result.put("cumulativeProfit", cumRevenue.subtract(cumCost));
         return result;
+    }
+
+    private static Object getOrNull(Map<String, Object> map, String key) {
+        return map == null ? null : map.get(key);
     }
 
     @Override
@@ -150,5 +161,88 @@ public class ReportServiceImpl implements ReportService {
     private BigDecimal toBigDecimal(Object o) {
         if (o == null) return BigDecimal.ZERO;
         return new BigDecimal(o.toString()).setScale(2, RoundingMode.HALF_UP);
+    }
+
+    private void writeExcel(HttpServletResponse response, String fileName, String[] headers, List<List<Object>> rows) throws IOException {
+        response.setContentType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+        response.setHeader("Content-Disposition", "attachment;filename=" + URLEncoder.encode(fileName, StandardCharsets.UTF_8) + ".xlsx");
+        ExcelWriter writer = ExcelUtil.getWriter(true);
+        writer.addHeaderAlias("col", fileName);
+        for (int i = 0; i < headers.length; i++) {
+            writer.writeCellValue(i, 0, headers[i]);
+        }
+        for (int i = 0; i < rows.size(); i++) {
+            List<Object> row = rows.get(i);
+            for (int j = 0; j < row.size(); j++) {
+                writer.writeCellValue(j, i + 1, row.get(j));
+            }
+        }
+        writer.flush(response.getOutputStream());
+        writer.close();
+    }
+
+    @Override
+    public void exportSubjectBalance(String period, HttpServletResponse response) throws IOException {
+        List<Map<String, Object>> data = subjectBalanceTable(period);
+        String[] headers = {"科目编码", "科目名称", "方向", "期初余额", "本期借方", "本期贷方", "期末余额"};
+        List<List<Object>> rows = new ArrayList<>();
+        for (Map<String, Object> row : data) {
+            rows.add(List.of(
+                row.get("code"), row.get("name"), row.get("direction"),
+                row.get("begin_balance"), row.get("debit_total"),
+                row.get("credit_total"), row.get("end_balance")
+            ));
+        }
+        writeExcel(response, "科目余额表_" + period, headers, rows);
+    }
+
+    @Override
+    public void exportBalanceSheet(String period, HttpServletResponse response) throws IOException {
+        Map<String, Object> data = balanceSheet(period);
+        String[] headers = {"项目", "行次", "期末余额", "年初余额"};
+        List<List<Object>> rows = new ArrayList<>();
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> assets = (List<Map<String, Object>>) data.get("assets");
+        for (Map<String, Object> a : assets) {
+            rows.add(List.of(a.get("name"), "", a.get("end_balance"), a.get("begin_balance")));
+        }
+        rows.add(List.of("资产总计", "", data.get("totalAssets"), ""));
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> liab = (List<Map<String, Object>>) data.get("liabilities");
+        for (Map<String, Object> l : liab) {
+            rows.add(List.of(l.get("name"), "", l.get("end_balance"), l.get("begin_balance")));
+        }
+        writeExcel(response, "资产负债表_" + period, headers, rows);
+    }
+
+    @Override
+    public void exportIncomeStatement(String period, HttpServletResponse response) throws IOException {
+        Map<String, Object> data = incomeStatement(period);
+        String[] headers = {"项目", "行次", "本期金额", "本年累计"};
+        List<List<Object>> rows = new ArrayList<>();
+        rows.add(List.of("一、营业收入", "1", data.get("revenue"), data.get("cumulativeRevenue")));
+        rows.add(List.of("减：营业成本", "2", data.get("cost"), data.get("cumulativeCost")));
+        rows.add(List.of("二、营业利润", "3", data.get("operatingProfit"), data.get("cumulativeProfit")));
+        rows.add(List.of("减：营业费用", "4", data.get("expense"), ""));
+        rows.add(List.of("三、利润总额", "5", data.get("totalProfit"), ""));
+        writeExcel(response, "利润表_" + period, headers, rows);
+    }
+
+    @Override
+    public void exportCashFlow(String period, HttpServletResponse response) throws IOException {
+        Map<String, Object> data = cashFlowStatement(period);
+        String[] headers = {"项目", "行次", "本期金额"};
+        List<List<Object>> rows = new ArrayList<>();
+        rows.add(List.of("经营活动现金流入", "1", data.get("operatingIn")));
+        rows.add(List.of("经营活动现金流出", "2", data.get("operatingOut")));
+        rows.add(List.of("经营活动净额", "3", data.get("operatingNet")));
+        rows.add(List.of("投资活动现金流入", "4", data.get("investingIn")));
+        rows.add(List.of("投资活动现金流出", "5", data.get("investingOut")));
+        rows.add(List.of("投资活动净额", "6", data.get("investingNet")));
+        rows.add(List.of("筹资活动现金流入", "7", data.get("financingIn")));
+        rows.add(List.of("筹资活动现金流出", "8", data.get("financingOut")));
+        rows.add(List.of("筹资活动净额", "9", data.get("financingNet")));
+        rows.add(List.of("现金净增加额", "10", data.get("totalNet")));
+        writeExcel(response, "现金流量表_" + period, headers, rows);
     }
 }

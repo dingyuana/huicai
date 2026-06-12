@@ -5,9 +5,11 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import com.huicai.module.report.service.AnalysisService;
 import com.huicai.module.report.service.ReportService;
 import com.huicai.common.response.R;
+import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
+import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 
@@ -68,6 +70,30 @@ public class ReportController {
     @GetMapping("/analysis/yoy-mom")
     public R<Map<String, Object>> yoyMom(@RequestParam String period) {
         return R.ok(analysisService.yoyMom(period));
+    }
+
+    @Operation(summary = "科目余额表导出")
+    @GetMapping("/subject-balance/export")
+    public void exportSubjectBalance(@RequestParam String period, HttpServletResponse response) throws IOException {
+        reportService.exportSubjectBalance(period, response);
+    }
+
+    @Operation(summary = "资产负债表导出")
+    @GetMapping("/balance-sheet/export")
+    public void exportBalanceSheet(@RequestParam String period, HttpServletResponse response) throws IOException {
+        reportService.exportBalanceSheet(period, response);
+    }
+
+    @Operation(summary = "利润表导出")
+    @GetMapping("/income-statement/export")
+    public void exportIncomeStatement(@RequestParam String period, HttpServletResponse response) throws IOException {
+        reportService.exportIncomeStatement(period, response);
+    }
+
+    @Operation(summary = "现金流量表导出")
+    @GetMapping("/cash-flow/export")
+    public void exportCashFlow(@RequestParam String period, HttpServletResponse response) throws IOException {
+        reportService.exportCashFlow(period, response);
     }
 
     @Operation(summary = "指标定义")
