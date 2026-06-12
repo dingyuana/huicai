@@ -185,6 +185,56 @@ export interface DeptVO {
   children: DeptVO[]
 }
 
+export interface DeptParam {
+  name?: string
+  parentId?: number | null
+  sortOrder?: number
+  status?: string
+  leader?: string
+  phone?: string
+  email?: string
+}
+
 export function getDeptTree(): Promise<DeptVO[]> {
   return request.get('/system/dept/tree')
+}
+
+export function getDept(id: number): Promise<DeptVO> {
+  return request.get(`/system/dept/${id}`)
+}
+
+export function createDept(data: DeptParam): Promise<void> {
+  return request.post('/system/dept', data)
+}
+
+export function updateDept(id: number, data: DeptParam): Promise<void> {
+  return request.put(`/system/dept/${id}`, data)
+}
+
+export function deleteDept(id: number): Promise<void> {
+  return request.delete(`/system/dept/${id}`)
+}
+
+// ==================== Audit Log ====================
+export interface AuditLogVO {
+  id: number
+  username: string
+  module: string
+  action: string
+  resourceType: string
+  resourceId: string
+  ip: string
+  userAgent: string
+  requestParams: any
+  status: string
+  errorMsg: string
+  createdAt: string
+}
+
+export function getAuditLogPage(params: { page: number; size: number; module?: string; status?: string; startDate?: string; endDate?: string }): Promise<PageResult<AuditLogVO>> {
+  return request.get('/system/audit-log/page', { params })
+}
+
+export function getAuditLog(id: number): Promise<AuditLogVO> {
+  return request.get(`/system/audit-log/${id}`)
 }

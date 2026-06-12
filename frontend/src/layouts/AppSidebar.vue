@@ -35,6 +35,14 @@
           <el-icon><Menu /></el-icon>
           <template #title>菜单管理</template>
         </el-menu-item>
+        <el-menu-item index="/system/dept" v-if="authStore.hasPermission('system:dept:list')">
+          <el-icon><OfficeBuilding /></el-icon>
+          <template #title>部门管理</template>
+        </el-menu-item>
+        <el-menu-item index="/system/audit-log" v-if="authStore.hasPermission('system:audit:list')">
+          <el-icon><List /></el-icon>
+          <template #title>操作日志</template>
+        </el-menu-item>
       </el-sub-menu>
 
       <!-- 基础数据 -->
@@ -147,7 +155,7 @@ import { useRoute } from 'vue-router'
 import { useAppStore } from '@/stores/app.store'
 import { useAuthStore } from '@/stores/auth.store'
 import {
-  HomeFilled, Setting, User, Avatar, Menu, Files, Money, Box,
+  HomeFilled, Setting, User, Avatar, Menu, OfficeBuilding, List, Files, Money, Box,
   Connection, Document, PieChart, DataLine, TrendCharts, MagicStick,
 } from '@element-plus/icons-vue'
 

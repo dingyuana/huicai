@@ -49,6 +49,18 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/system/menu/MenuList.vue'),
         meta: { title: '菜单管理', permission: 'system:menu:list', keepAlive: true },
       },
+      {
+        path: 'system/dept',
+        name: 'DeptList',
+        component: () => import('@/views/system/dept/DeptList.vue'),
+        meta: { title: '部门管理', permission: 'system:dept:list', keepAlive: true },
+      },
+      {
+        path: 'system/audit-log',
+        name: 'AuditLogList',
+        component: () => import('@/views/system/audit-log/AuditLogList.vue'),
+        meta: { title: '操作日志', permission: 'system:audit:list', keepAlive: true },
+      },
       // M2 基础数据管理
       {
         path: 'basis/subject',

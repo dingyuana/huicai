@@ -99,7 +99,7 @@ public class MenuServiceImpl implements MenuService {
         }
 
         return menuMapper.selectBatchIds(menuIds).stream()
-                .filter(m -> "button".equals(m.getType()) && m.getPermissionCode() != null)
+                .filter(m -> m.getPermissionCode() != null)
                 .map(MenuEntity::getPermissionCode)
                 .collect(Collectors.toList());
     }
