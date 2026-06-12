@@ -101,14 +101,14 @@ const saving = ref(false)
 const treeData = ref<SubjectVO[]>([])
 const dialogVisible = ref(false)
 const isEdit = ref(false)
-const editId = ref<number | null>(null)
+const editId = ref<string | null>(null)
 const selectedParent = ref<SubjectVO | null>(null)
 const formRef = ref<FormInstance>()
 
 const form = ref({
   code: '',
   name: '',
-  parentId: null as number | null,
+  parentId: null as string | null,
   direction: 'debit',
   auxCalcType: '' as string,
   isActive: true,
