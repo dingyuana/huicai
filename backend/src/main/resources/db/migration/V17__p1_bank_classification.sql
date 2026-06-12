@@ -25,11 +25,22 @@ ALTER TABLE t_bank_statement ADD COLUMN IF NOT EXISTS review_status    VARCHAR(2
 ALTER TABLE t_bank_statement ADD COLUMN IF NOT EXISTS reviewed_by      BIGINT;                        -- 审核人
 ALTER TABLE t_bank_statement ADD COLUMN IF NOT EXISTS reviewed_at      TIMESTAMP;                     -- 审核时间
 
--- 约束
-ALTER TABLE t_bank_statement ADD CONSTRAINT IF NOT EXISTS chk_stmt_review_status
-    CHECK (review_status IN ('PENDING', 'CONFIRMED', 'RECLASSIFIED'));
-ALTER TABLE t_bank_statement ADD CONSTRAINT IF NOT EXISTS chk_stmt_direction
-    CHECK (direction IN ('in', 'out') OR direction IS NULL);
+-- 约束 (PostgreSQL 不支持 ADD CONSTRAINT IF NOT EXISTS, 使用 DO 块实现幂等)
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'chk_stmt_review_status') THEN
+        ALTER TABLE t_bank_statement ADD CONSTRAINT chk_stmt_review_status
+            CHECK (review_status IN ('PENDING', 'CONFIRMED', 'RECLASSIFIED'));
+    END IF;
+END $$;
+
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'chk_stmt_direction') THEN
+        ALTER TABLE t_bank_statement ADD CONSTRAINT chk_stmt_direction
+            CHECK (direction IN ('in', 'out') OR direction IS NULL);
+    END IF;
+END $$;
 
 -- 索引 (高频查询)
 CREATE INDEX IF NOT EXISTS idx_stmt_review_status   ON t_bank_statement(review_status);
