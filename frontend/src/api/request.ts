@@ -33,7 +33,7 @@ request.interceptors.response.use(
       const { status, data } = error.response
       if (status === 401) {
         localStorage.removeItem('huicai_token')
-        localStorage.removeItem('huicai_user')
+        localStorage.removeItem('huicai_refresh_token')
         window.location.href = '/login'
         return Promise.reject(error)
       }

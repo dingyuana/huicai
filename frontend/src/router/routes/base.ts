@@ -152,6 +152,133 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/finance/bank-reconciliation/ReconciliationView.vue'),
         meta: { title: '银行对账', permission: 'bank:reconciliation:list', keepAlive: true },
       },
+      // 固定资产
+      {
+        path: 'asset/category',
+        name: 'AssetCategoryList',
+        component: () => import('@/views/asset/category/AssetCategoryList.vue'),
+        meta: { title: '资产类别', permission: 'asset:category:list', keepAlive: true },
+      },
+      {
+        path: 'asset/card',
+        name: 'AssetCardList',
+        component: () => import('@/views/asset/card/AssetCardList.vue'),
+        meta: { title: '资产卡片', permission: 'asset:card:list', keepAlive: true },
+      },
+      {
+        path: 'asset/disposal',
+        name: 'AssetDisposalList',
+        component: () => import('@/views/asset/disposal/AssetDisposalList.vue'),
+        meta: { title: '资产处置', permission: 'asset:disposal:list', keepAlive: true },
+      },
+      // 往来管理
+      {
+        path: 'arap/customer',
+        name: 'CustomerList',
+        component: () => import('@/views/arap/customer/CustomerList.vue'),
+        meta: { title: '客户档案', permission: 'customer:list', keepAlive: true },
+      },
+      {
+        path: 'arap/vendor',
+        name: 'VendorList',
+        component: () => import('@/views/arap/vendor/VendorList.vue'),
+        meta: { title: '供应商档案', permission: 'vendor:list', keepAlive: true },
+      },
+      {
+        path: 'arap/receivable',
+        name: 'ReceivableList',
+        component: () => import('@/views/arap/receivable/ReceivableList.vue'),
+        meta: { title: '应收明细', permission: 'receivable:list', keepAlive: true },
+      },
+      {
+        path: 'arap/payable',
+        name: 'PayableList',
+        component: () => import('@/views/arap/payable/PayableList.vue'),
+        meta: { title: '应付明细', permission: 'payable:list', keepAlive: true },
+      },
+      {
+        path: 'arap/bad-debt',
+        name: 'BadDebtList',
+        component: () => import('@/views/arap/bad-debt/BadDebtList.vue'),
+        meta: { title: '坏账准备', permission: 'bad:debt:list', keepAlive: true },
+      },
+      // 税务管理
+      {
+        path: 'tax/input-invoice',
+        name: 'InputInvoiceList',
+        component: () => import('@/views/tax/input-invoice/InputInvoiceList.vue'),
+        meta: { title: '进项发票', permission: 'tax:input:list', keepAlive: true },
+      },
+      {
+        path: 'tax/output-invoice',
+        name: 'OutputInvoiceList',
+        component: () => import('@/views/tax/output-invoice/OutputInvoiceList.vue'),
+        meta: { title: '销项发票', permission: 'tax:output:list', keepAlive: true },
+      },
+      {
+        path: 'tax/vat',
+        name: 'TaxVatView',
+        component: () => import('@/views/tax/declaration/TaxVatView.vue'),
+        meta: { title: '增值税计算', permission: 'tax:vat:view', keepAlive: true },
+      },
+      // 预算
+      {
+        path: 'budget',
+        name: 'BudgetList',
+        component: () => import('@/views/budget/BudgetList.vue'),
+        meta: { title: '预算管理', permission: 'budget:list', keepAlive: true },
+      },
+      // 报表
+      {
+        path: 'report/subject-balance',
+        name: 'SubjectBalanceView',
+        component: () => import('@/views/report/subject-balance/SubjectBalanceView.vue'),
+        meta: { title: '科目余额表', permission: 'report:subject:list', keepAlive: true },
+      },
+      {
+        path: 'report/balance-sheet',
+        name: 'BalanceSheetView',
+        component: () => import('@/views/report/balance-sheet/BalanceSheetView.vue'),
+        meta: { title: '资产负债表', permission: 'report:balance:view', keepAlive: true },
+      },
+      {
+        path: 'report/income-statement',
+        name: 'IncomeStatementView',
+        component: () => import('@/views/report/income-statement/IncomeStatementView.vue'),
+        meta: { title: '利润表', permission: 'report:income:view', keepAlive: true },
+      },
+      {
+        path: 'report/cash-flow',
+        name: 'CashFlowView',
+        component: () => import('@/views/report/cash-flow/CashFlowView.vue'),
+        meta: { title: '现金流量表', permission: 'report:cashflow:view', keepAlive: true },
+      },
+      // 财务分析
+      {
+        path: 'analysis/key-metrics',
+        name: 'KeyMetricsView',
+        component: () => import('@/views/analysis/key-metrics/KeyMetricsView.vue'),
+        meta: { title: '关键指标', permission: 'analysis:key:view', keepAlive: true },
+      },
+      {
+        path: 'analysis/dupont',
+        name: 'DupontView',
+        component: () => import('@/views/analysis/dupont/DupontView.vue'),
+        meta: { title: '杜邦分析', permission: 'analysis:dupont:view', keepAlive: true },
+      },
+      // AI
+      {
+        path: 'ai/task',
+        name: 'AiTaskList',
+        component: () => import('@/views/ai/task/AiTaskList.vue'),
+        meta: { title: 'AI 任务', permission: 'ai:task:list', keepAlive: true },
+      },
+      {
+        path: 'ai/anomaly',
+        name: 'AnomalyList',
+        component: () => import('@/views/ai/anomaly/AnomalyList.vue'),
+        meta: { title: 'AI 异常', permission: 'ai:anomaly:list', keepAlive: true },
+      },
     ],
   },
 ]

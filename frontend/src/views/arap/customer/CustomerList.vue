@@ -1,0 +1,148 @@
+<template>
+  <div class="customer-list">
+    <el-card shadow="never">
+      <div class="page-header">
+        <span class="page-title">客户档案</span>
+        <el-button type="primary" @click="openEdit()">新增客户</el-button>
+      </div>
+
+      <el-form :model="query" inline class="filter-form">
+        <el-form-item label="关键字">
+          <el-input v-model="query.keyword" placeholder="编码/名称/联系人" clearable style="width:240px" />
+        </el-form-item>
+        <el-form-item>
+          <el-button type="primary" @click="fetchData">查询</el-button>
+        </el-form-item>
+      </el-form>
+
+      <el-table :data="list" v-loading="loading" border>
+        <el-table-column prop="code" label="客户编码" width="120" />
+        <el-table-column prop="name" label="客户名称" min-width="180" />
+        <el-table-column prop="contactPerson" label="联系人" width="100" />
+        <el-table-column prop="phone" label="电话" width="140" />
+        <el-table-column label="信用额度" width="140" align="right">
+          <template #default="{ row }">{{ fmtAmount(row.creditLimit) }}</template>
+        </el-table-column>
+        <el-table-column prop="creditDays" label="账期(天)" width="100" align="center" />
+        <el-table-column label="状态" width="100" align="center">
+          <template #default="{ row }">
+            <el-tag :type="row.isActive ? 'success' : 'info'" size="small">
+              {{ row.isActive ? '启用' : '停用' }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="操作" width="160" fixed="right">
+          <template #default="{ row }">
+            <el-button text type="primary" @click="openEdit(row)">编辑</el-button>
+            <el-popconfirm title="确认删除?" @confirm="onDelete(row)">
+              <template #reference>
+                <el-button text type="danger">删除</el-button>
+              </template>
+            </el-popconfirm>
+          </template>
+        </el-table-column>
+      </el-table>
+
+      <div class="page-pagination">
+        <el-pagination
+          v-model:current-page="query.current"
+          v-model:page-size="query.size"
+          :page-sizes="[10, 20, 50]"
+          :total="total"
+          layout="total, sizes, prev, pager, next, jumper"
+          @size-change="fetchData"
+          @current-change="fetchData"
+        />
+      </div>
+    </el-card>
+
+    <el-dialog v-model="dialogVisible" :title="form.id ? '编辑客户' : '新增客户'" width="640px">
+      <el-form :model="form" label-width="100px" :rules="rules" ref="formRef">
+        <el-form-item label="编码" prop="code"><el-input v-model="form.code" /></el-form-item>
+        <el-form-item label="名称" prop="name"><el-input v-model="form.name" /></el-form-item>
+        <el-form-item label="联系人"><el-input v-model="form.contactPerson" /></el-form-item>
+        <el-form-item label="电话"><el-input v-model="form.phone" /></el-form-item>
+        <el-form-item label="邮箱"><el-input v-model="form.email" /></el-form-item>
+        <el-form-item label="地址"><el-input v-model="form.address" /></el-form-item>
+        <el-form-item label="税号"><el-input v-model="form.taxNo" /></el-form-item>
+        <el-form-item label="信用额度">
+          <el-input-number v-model="form.creditLimit" :min="0" :precision="2" style="width:100%" />
+        </el-form-item>
+        <el-form-item label="账期(天)">
+          <el-input-number v-model="form.creditDays" :min="0" style="width:100%" />
+        </el-form-item>
+        <el-form-item label="启用">
+          <el-switch v-model="form.isActive" />
+        </el-form-item>
+        <el-form-item label="备注">
+          <el-input v-model="form.remark" type="textarea" :rows="2" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="dialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="onSubmit">确定</el-button>
+      </template>
+    </el-dialog>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { onMounted, reactive, ref } from 'vue'
+import { ElMessage, type FormInstance } from 'element-plus'
+import { pageCustomer, createCustomer, updateCustomer, deleteCustomer } from '@/api/modules/arap'
+
+const query = reactive({ keyword: '', current: 1, size: 20 })
+const list = ref<any[]>([])
+const total = ref(0)
+const loading = ref(false)
+const dialogVisible = ref(false)
+const formRef = ref<FormInstance>()
+const form = reactive<any>({ isActive: true, creditLimit: 0, creditDays: 30 })
+const rules = {
+  code: [{ required: true, message: '请输入编码', trigger: 'blur' }],
+  name: [{ required: true, message: '请输入名称', trigger: 'blur' }],
+}
+
+const fetchData = async () => {
+  loading.value = true
+  try {
+    const res: any = await pageCustomer(query)
+    list.value = res.records || []
+    total.value = res.total || 0
+  } finally {
+    loading.value = false
+  }
+}
+
+const fmtAmount = (v: any) => Number(v || 0).toFixed(2)
+
+const openEdit = (row?: any) => {
+  if (row) Object.assign(form, row)
+  else Object.assign(form, { id: undefined, code: '', name: '', contactPerson: '', phone: '', email: '', address: '', taxNo: '', creditLimit: 0, creditDays: 30, isActive: true, remark: '' })
+  dialogVisible.value = true
+}
+
+const onSubmit = async () => {
+  if (!formRef.value) return
+  await formRef.value.validate(async (valid) => {
+    if (!valid) return
+    if (form.id) {
+      await updateCustomer(form.id, form)
+      ElMessage.success('更新成功')
+    } else {
+      await createCustomer(form)
+      ElMessage.success('创建成功')
+    }
+    dialogVisible.value = false
+    fetchData()
+  })
+}
+
+const onDelete = async (row: any) => {
+  await deleteCustomer(row.id)
+  ElMessage.success('删除成功')
+  fetchData()
+}
+
+onMounted(fetchData)
+</script>

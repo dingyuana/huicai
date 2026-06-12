@@ -16,6 +16,11 @@ export default defineConfig({
       resolvers: [ElementPlusResolver()],
     }),
   ],
+  test: {
+    environment: 'happy-dom',
+    include: ['src/__tests__/**/*.test.ts'],
+    globals: true,
+  },
   resolve: {
     alias: {
       '@': path.resolve(__dirname, 'src'),

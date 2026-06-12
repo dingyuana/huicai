@@ -1,11 +1,34 @@
 import request from '@/api/request'
 
-/** 登录 */
-export function login(account: string, password: string): Promise<any> {
-  return request.post('/auth/login', { account, password })
+export interface LoginParams {
+  username: string
+  password: string
 }
 
-/** 获取当前用户信息 */
-export function getUserInfo(): Promise<any> {
+export interface UserInfo {
+  id: number
+  username: string
+  realName: string
+  nickname: string
+  email: string
+  phone: string
+  avatar: string
+  deptId: number
+  roles: number[]
+  permissions: string[]
+}
+
+export interface LoginResult {
+  token: string
+  refreshToken: string
+  tokenType: string
+  userInfo: UserInfo
+}
+
+export function login(data: LoginParams): Promise<LoginResult> {
+  return request.post('/auth/login', data)
+}
+
+export function getUserInfo(): Promise<UserInfo> {
   return request.get('/auth/userinfo')
 }

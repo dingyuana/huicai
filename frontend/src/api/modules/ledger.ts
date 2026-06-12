@@ -25,6 +25,7 @@ export interface LedgerRow {
 
 export interface TrialBalance {
   period: string
+  balanced: boolean
   beginBalanced: boolean
   movementBalanced: boolean
   endBalanced: boolean
@@ -34,7 +35,6 @@ export interface TrialBalance {
   totalCreditTotal: number
   totalEndDebit: number
   totalEndCredit: number
-  balanced: boolean
 }
 
 export function getSubjectBalance(period: string): Promise<SubjectBalanceRow[]> {
