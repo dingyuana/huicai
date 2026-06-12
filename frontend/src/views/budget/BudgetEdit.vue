@@ -53,10 +53,10 @@
 </template>
 
 <script setup lang="ts">
+import request from '@/api/request'
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useRoute, useRouter } from 'vue-router'
-const { default: request } = await import('@/api/request')
 
 const route = useRoute()
 const router = useRouter()

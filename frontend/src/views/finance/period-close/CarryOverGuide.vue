@@ -40,9 +40,9 @@
   </div>
 </template>
 <script setup lang="ts">
+import request from '@/api/request'
 import { ref, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
-const { default: request } = await import('@/api/request')
 
 const period = ref('')
 const periods = ref<string[]>([])

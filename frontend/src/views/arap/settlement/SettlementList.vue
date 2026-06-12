@@ -65,9 +65,9 @@
 </template>
 
 <script setup lang="ts">
+import request from '@/api/request'
 import { ref, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
-const { default: request } = await import('@/api/request')
 
 const loading = ref(false), saving = ref(false), dialogVisible = ref(false), detailDialog = ref(false)
 const list = ref<any[]>([]), total = ref(0), detail = ref<any>(null), parties = ref<any[]>([])
