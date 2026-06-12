@@ -50,7 +50,7 @@
         </el-tab-pane>
 
         <el-tab-pane label="启用/锁定" name="lock">
-          <el-alert title="期初数据录入并试算平衡后，需点击"启用"按钮锁定期初数据。锁定后不可修改。" type="warning" show-icon />
+          <el-alert title='期初数据录入并试算平衡后，需点击"启用"按钮锁定期初数据。锁定后不可修改。' type="warning" show-icon />
           <div style="margin-top:16px">
             <el-button v-if="!isLocked" type="primary" @click="confirmLock">启用并锁定期初</el-button>
             <el-tag v-else type="success" size="large">期初已锁定 ✅</el-tag>
