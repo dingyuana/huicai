@@ -1,0 +1,55 @@
+package com.huicai.module.arap.mapper;
+
+import com.baomidou.mybatisplus.core.mapper.BaseMapper;
+import com.huicai.module.arap.entity.ReceivableEntity;
+import org.apache.ibatis.annotations.Mapper;
+import org.apache.ibatis.annotations.Param;
+import org.apache.ibatis.annotations.Select;
+
+import java.math.BigDecimal;
+import java.util.List;
+import java.util.Map;
+
+@Mapper
+public interface ReceivableMapper extends BaseMapper<ReceivableEntity> {
+
+    @Select("""
+        SELECT customer_id, SUM(unsettled_amount) AS total_unsettled
+        FROM t_receivable
+        WHERE deleted = 0
+        GROUP BY customer_id
+    """)
+    List<Map<String, Object>> aggregateByCustomer();
+
+    @Select("""
+        SELECT r.*, c.name AS customer_name
+        FROM t_receivable r
+        LEFT JOIN t_customer c ON c.id = r.customer_id
+        WHERE r.deleted = 0
+          AND c.deleted = 0
+          AND r.unsettled_amount > 0
+          AND r.due_date < CURRENT_DATE
+        ORDER BY r.due_date ASC
+    """)
+    List<Map<String, Object>> overdueList();
+
+    @Select("""
+        SELECT
+          CASE
+            WHEN r.due_date >= CURRENT_DATE THEN 'current'
+            WHEN r.due_date >= CURRENT_DATE - INTERVAL '30 days' THEN 'days_0_30'
+            WHEN r.due_date >= CURRENT_DATE - INTERVAL '60 days' THEN 'days_31_60'
+            WHEN r.due_date >= CURRENT_DATE - INTERVAL '90 days' THEN 'days_61_90'
+            WHEN r.due_date >= CURRENT_DATE - INTERVAL '180 days' THEN 'days_91_180'
+            WHEN r.due_date >= CURRENT_DATE - INTERVAL '365 days' THEN 'days_181_365'
+            ELSE 'over_365'
+          END AS aging_bucket,
+          SUM(r.unsettled_amount) AS amount,
+          COUNT(*) AS count
+        FROM t_receivable r
+        WHERE r.deleted = 0 AND r.unsettled_amount > 0
+          AND r.customer_id = #{customerId}
+        GROUP BY aging_bucket
+    """)
+    List<Map<String, Object>> agingByCustomer(@Param("customerId") Long customerId);
+}
