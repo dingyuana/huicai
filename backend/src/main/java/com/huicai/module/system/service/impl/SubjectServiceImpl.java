@@ -141,10 +141,10 @@ public class SubjectServiceImpl implements SubjectService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public int importStandard() {
-        // 检查是否已有科目数据
-        Long existingCount = subjectMapper.selectCount(new LambdaQueryWrapper<>());
-        if (existingCount > 0) {
-            throw BusinessException.badRequest("科目表中已有数据，请先清空后再导入");
+        // 检查是否已有科目数据（含逻辑删除的记录）
+        Long totalCount = subjectMapper.selectCountPhysical();
+        if (totalCount > 0) {
+            throw BusinessException.badRequest("系统已存在科目记录（含已删除科目），请先手动清空所有科目数据后再导入");
         }
 
         // 国家标准的 6 类一级科目定义

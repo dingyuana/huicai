@@ -220,8 +220,8 @@ public class TaxServiceImpl implements TaxService {
     public Map<String, Object> calculateVat(String period) {
         Map<String, Object> output = outputMapper.summaryByPeriod(period);
         Map<String, Object> input = inputMapper.summaryByPeriod(period);
-        BigDecimal outputTax = toBigDecimal(output.get("tax"));
-        BigDecimal inputTax = toBigDecimal(input.get("deductible"));
+        BigDecimal outputTax = toBigDecimal(output == null ? null : output.get("tax"));
+        BigDecimal inputTax = toBigDecimal(input == null ? null : input.get("deductible"));
         BigDecimal payable = outputTax.subtract(inputTax);
         Map<String, Object> result = new java.util.LinkedHashMap<>();
         result.put("period", period);
