@@ -72,6 +72,10 @@
         <el-menu-item index="/finance/bank-journal">银行日记账</el-menu-item>
         <el-menu-item index="/finance/bank-statement">银行对账单</el-menu-item>
         <el-menu-item index="/finance/bank-reconciliation">银行对账</el-menu-item>
+        <el-menu-item index="/finance/cash-journal">现金日记账</el-menu-item>
+        <el-menu-item index="/finance/ticket">票据管理</el-menu-item>
+        <el-menu-item index="/finance/beginning-balance">期初建账</el-menu-item>
+        <el-menu-item index="/finance/carryover-guide">结转向导</el-menu-item>
       </el-sub-menu>
 
       <!-- 固定资产 -->
@@ -96,6 +100,7 @@
         <el-menu-item index="/arap/receivable">应收明细</el-menu-item>
         <el-menu-item index="/arap/payable">应付明细</el-menu-item>
         <el-menu-item index="/arap/bad-debt">坏账准备</el-menu-item>
+        <el-menu-item index="/arap/settlement">往来核销</el-menu-item>
       </el-sub-menu>
 
       <!-- 税务管理 -->

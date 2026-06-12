@@ -123,6 +123,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '期末结账', permission: 'period:close', keepAlive: true },
       },
       {
+        path: 'finance/carryover-guide',
+        name: 'CarryOverGuide',
+        component: () => import('@/views/finance/period-close/CarryOverGuide.vue'),
+        meta: { title: '结转向导', permission: 'period:carryover:guide', keepAlive: true },
+      },
+      {
         path: 'finance/business-doc',
         name: 'BusinessDocList',
         component: () => import('@/views/finance/business-doc/BusinessDocList.vue'),
@@ -163,6 +169,24 @@ const routes: RouteRecordRaw[] = [
         name: 'ReconciliationView',
         component: () => import('@/views/finance/bank-reconciliation/ReconciliationView.vue'),
         meta: { title: '银行对账', permission: 'bank:reconciliation:list', keepAlive: true },
+      },
+      {
+        path: 'finance/cash-journal',
+        name: 'CashJournalList',
+        component: () => import('@/views/finance/cash-journal/CashJournalList.vue'),
+        meta: { title: '现金日记账', permission: 'cash:journal:list', keepAlive: true },
+      },
+      {
+        path: 'finance/ticket',
+        name: 'TicketList',
+        component: () => import('@/views/finance/ticket/TicketList.vue'),
+        meta: { title: '票据管理', permission: 'ticket:list', keepAlive: true },
+      },
+      {
+        path: 'finance/beginning-balance',
+        name: 'BeginningBalanceView',
+        component: () => import('@/views/finance/beginning-balance/BeginningBalanceView.vue'),
+        meta: { title: '期初建账', permission: 'beginning:balance:init', keepAlive: true },
       },
       // 固定资产
       {
@@ -214,6 +238,12 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/arap/bad-debt/BadDebtList.vue'),
         meta: { title: '坏账准备', permission: 'bad:debt:list', keepAlive: true },
       },
+      {
+        path: 'arap/settlement',
+        name: 'SettlementList',
+        component: () => import('@/views/arap/settlement/SettlementList.vue'),
+        meta: { title: '往来核销', permission: 'arap:settlement:list', keepAlive: true },
+      },
       // 税务管理
       {
         path: 'tax/input-invoice',
@@ -239,6 +269,12 @@ const routes: RouteRecordRaw[] = [
         name: 'BudgetList',
         component: () => import('@/views/budget/BudgetList.vue'),
         meta: { title: '预算管理', permission: 'budget:list', keepAlive: true },
+      },
+      {
+        path: 'budget/edit',
+        name: 'BudgetEdit',
+        component: () => import('@/views/budget/BudgetEdit.vue'),
+        meta: { title: '编辑预算', permission: 'budget:create' },
       },
       // 报表
       {

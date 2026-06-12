@@ -60,3 +60,15 @@ export function deleteSubject(id: string): Promise<void> {
 export function importStandardSubjects(): Promise<number> {
   return request.post('/subjects/import-standard')
 }
+
+export function initOpeningBalances(period: string, balances: Record<number, number>): Promise<void> {
+  return request.post('/subject-balances/init', balances, { params: { period } })
+}
+
+export function getSubjectBalances(period: string): Promise<any[]> {
+  return request.get('/subject-balances', { params: { period } })
+}
+
+export function checkTrialBalance(period: string): Promise<any> {
+  return request.get('/subject-balances/trial-balance', { params: { period } })
+}
