@@ -29,6 +29,7 @@ public class BankStatementServiceImpl implements BankStatementService {
     private final BankStatementMapper statementMapper;
     private final BankJournalMapper journalMapper;
     private final ClassificationRuleService classificationRuleService;
+    private final FallbackHeuristicService fallbackHeuristic;
 
     @Override
     public IPage<BankStatementEntity> pageQuery(Long accountId, String status, Integer current, Integer size) {
@@ -144,12 +145,32 @@ public class BankStatementServiceImpl implements BankStatementService {
         BankStatementEntity stmt = statementMapper.selectById(statementId);
         if (stmt == null) throw BusinessException.notFound("对账单记录不存在");
 
+        // 第一层: 规则引擎匹配
         ClassificationRuleEntity rule = classificationRuleService.match(
                 stmt.getSummary(), stmt.getDirection()
         );
 
-        stmt.setRuleId(rule == null ? null : rule.getId());
-        stmt.setClassification(rule == null ? null : rule.getClassification());
+        String finalClassification;
+        Long finalRuleId;
+
+        if (rule != null) {
+            // 规则命中
+            finalClassification = rule.getClassification();
+            finalRuleId = rule.getId();
+            stmt.setAiBusinessScene(null); // 规则命中时清除兜底标记
+        } else {
+            // 第三层: 兜底启发式 (永不返回 null)
+            FallbackHeuristicService.Result fb = fallbackHeuristic.classify(
+                    stmt.getSummary(), stmt.getDirection()
+            );
+            finalClassification = fb.getClassification();
+            finalRuleId = null; // 兜底无规则
+            // 兜底命中的信息写入 ai_business_scene 便于调试追溯
+            stmt.setAiBusinessScene("FB:" + fb.getPriority() + ":" + fb.getMatchedKeyword());
+        }
+
+        stmt.setRuleId(finalRuleId);
+        stmt.setClassification(finalClassification);
         statementMapper.updateById(stmt);
         return stmt;
     }
