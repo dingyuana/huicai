@@ -13,4 +13,9 @@ public interface BankStatementService {
     int confirmMatch(Long statementId, Long journalId);
     int ignoreStatement(Long statementId);
     List<BankStatementEntity> listUnmatched(Long accountId);
+
+    /**
+     * 对单条对账单执行规则分类
+     */
+    BankStatementEntity classifySingle(Long statementId);
 }

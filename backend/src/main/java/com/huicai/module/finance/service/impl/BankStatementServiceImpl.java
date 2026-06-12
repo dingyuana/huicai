@@ -7,9 +7,11 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.huicai.common.exception.BusinessException;
 import com.huicai.module.finance.entity.BankJournalEntity;
 import com.huicai.module.finance.entity.BankStatementEntity;
+import com.huicai.module.finance.entity.ClassificationRuleEntity;
 import com.huicai.module.finance.mapper.BankJournalMapper;
 import com.huicai.module.finance.mapper.BankStatementMapper;
 import com.huicai.module.finance.service.BankStatementService;
+import com.huicai.module.finance.service.ClassificationRuleService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -26,6 +28,7 @@ public class BankStatementServiceImpl implements BankStatementService {
 
     private final BankStatementMapper statementMapper;
     private final BankJournalMapper journalMapper;
+    private final ClassificationRuleService classificationRuleService;
 
     @Override
     public IPage<BankStatementEntity> pageQuery(Long accountId, String status, Integer current, Integer size) {
@@ -133,5 +136,21 @@ public class BankStatementServiceImpl implements BankStatementService {
     @Override
     public List<BankStatementEntity> listUnmatched(Long accountId) {
         return statementMapper.selectByAccountAndStatus(accountId, "UNMATCHED");
+    }
+
+    @Override
+    @Transactional
+    public BankStatementEntity classifySingle(Long statementId) {
+        BankStatementEntity stmt = statementMapper.selectById(statementId);
+        if (stmt == null) throw BusinessException.notFound("对账单记录不存在");
+
+        ClassificationRuleEntity rule = classificationRuleService.match(
+                stmt.getSummary(), stmt.getDirection()
+        );
+
+        stmt.setRuleId(rule == null ? null : rule.getId());
+        stmt.setClassification(rule == null ? null : rule.getClassification());
+        statementMapper.updateById(stmt);
+        return stmt;
     }
 }

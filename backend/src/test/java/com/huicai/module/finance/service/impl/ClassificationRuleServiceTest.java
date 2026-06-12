@@ -260,4 +260,73 @@ class ClassificationRuleServiceTest {
         assertTrue(seeds.stream().allMatch(ClassificationRuleEntity::getIsActive));
         assertEquals(0, seeds.stream().filter(s -> s.getDeleted() != 0).count());
     }
+
+    // ==================== match ====================
+
+    private ClassificationRuleEntity rule(Long id, int priority, String name, String direction, String pattern, String classification) {
+        ClassificationRuleEntity r = new ClassificationRuleEntity();
+        r.setId(id);
+        r.setTenantId(1L);
+        r.setPriority(priority);
+        r.setName(name);
+        r.setRuleType("keyword_regex");
+        r.setMatchField("description");
+        r.setDirection(direction);
+        r.setPattern(pattern);
+        r.setClassification(classification);
+        r.setIsActive(true);
+        return r;
+    }
+
+    private List<ClassificationRuleEntity> seedRules() {
+        return List.of(
+                rule(1L, 1, "银行手续费", "out", "手续费|工本费|年费|账户管理费", "bank_fee"),
+                rule(2L, 2, "利息收入", "in", "利息|结息|存款利息", "interest_income"),
+                rule(3L, 3, "业务收款", "in", "货款", "business_receipt"),
+                rule(4L, 4, "业务付款", "out", "货款", "business_payment"),
+                rule(5L, 5, "内部转账", null, "转账|转存|调拨|上划|下拨", "internal_transfer"),
+                rule(6L, 6, "税务缴费", "out", "税|税务|缴税|税金|税款|增值税|所得税|城建税|教育费附加|国家金库|国库|印花", "tax_payment"),
+                rule(7L, 7, "社保缴费", "out", "社保|公积金|养老|医疗|失业|工伤|生育", "social_security"),
+                rule(8L, 8, "保险费用", "out", "保险|保费|投保|财产险|责任险|雇主责任险|意外险", "insurance_fee")
+        );
+    }
+
+    @Test
+    void match_命中手续费() {
+        when(mapper.selectList(any())).thenReturn(seedRules());
+        ClassificationRuleEntity result = service.match("银行账户管理费扣款", "out");
+        assertNotNull(result);
+        assertEquals("银行手续费", result.getName());
+        assertEquals("bank_fee", result.getClassification());
+    }
+
+    @Test
+    void match_命中利息() {
+        when(mapper.selectList(any())).thenReturn(seedRules());
+        ClassificationRuleEntity result = service.match("存款结息", "in");
+        assertNotNull(result);
+        assertEquals("利息收入", result.getName());
+        assertEquals("interest_income", result.getClassification());
+    }
+
+    @Test
+    void match_方向过滤() {
+        when(mapper.selectList(any())).thenReturn(seedRules());
+        ClassificationRuleEntity result = service.match("存款结息", "out");
+        assertNull(result);
+    }
+
+    @Test
+    void match_未命中() {
+        when(mapper.selectList(any())).thenReturn(seedRules());
+        ClassificationRuleEntity result = service.match("XXXXX", "in");
+        assertNull(result);
+    }
+
+    @Test
+    void match_description为空() {
+        assertNull(service.match(null, "in"));
+        assertNull(service.match("", "in"));
+        verify(mapper, never()).selectList(any());
+    }
 }

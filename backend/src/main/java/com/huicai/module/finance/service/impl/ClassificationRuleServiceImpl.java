@@ -122,8 +122,40 @@ public class ClassificationRuleServiceImpl implements ClassificationRuleService 
 
     @Override
     public ClassificationRuleEntity match(String description, String direction) {
-        // @TODO 分类引擎后续任务
+        if (StrUtil.isBlank(description)) return null;
+
+        // @TODO P1 阶段硬编码 tenantId=1L, 后续从 SecurityContext 或 statement 反查
+        Long tenantId = 1L;
+
+        List<ClassificationRuleEntity> rules = mapper.selectList(
+                new LambdaQueryWrapper<ClassificationRuleEntity>()
+                        .eq(ClassificationRuleEntity::getTenantId, tenantId)
+                        .eq(ClassificationRuleEntity::getIsActive, true)
+                        .orderByAsc(ClassificationRuleEntity::getPriority)
+        );
+
+        for (ClassificationRuleEntity rule : rules) {
+            if (!matchDirection(rule, direction)) continue;
+            if (!matchText(rule, description)) continue;
+            return rule;
+        }
         return null;
+    }
+
+    private boolean matchDirection(ClassificationRuleEntity rule, String direction) {
+        if (StrUtil.isBlank(rule.getDirection())) return true;
+        return rule.getDirection().equalsIgnoreCase(direction);
+    }
+
+    private boolean matchText(ClassificationRuleEntity rule, String text) {
+        if (StrUtil.isBlank(rule.getPattern())) return false;
+        if (!"keyword_regex".equals(rule.getRuleType())) return false;
+
+        String[] keywords = rule.getPattern().split("\\|");
+        for (String kw : keywords) {
+            if (StrUtil.isNotBlank(kw) && text.contains(kw.trim())) return true;
+        }
+        return false;
     }
 
     private ClassificationRuleEntity createSeed(Long tenantId, int priority, String name, String ruleType,
