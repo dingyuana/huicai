@@ -35,9 +35,10 @@ class FallbackHeuristicServiceTest {
     }
 
     @Test
-    void bank_fee_方向不匹配走pending() {
+    void bank_fee_方向不匹配走方向兜底() {
         FallbackHeuristicService.Result r = service.classify("账户管理费", "in");
-        assertEquals("pending", r.getClassification());
+        assertEquals("business_receipt", r.getClassification());
+        assertEquals(10, r.getPriority());
     }
 
     // ==================== Level 2: interest_income ====================
@@ -51,9 +52,10 @@ class FallbackHeuristicServiceTest {
     }
 
     @Test
-    void interest_income_方向不匹配走pending() {
+    void interest_income_方向不匹配走方向兜底() {
         FallbackHeuristicService.Result r = service.classify("存款利息收入", "out");
-        assertEquals("pending", r.getClassification());
+        assertEquals("business_payment", r.getClassification());
+        assertEquals(10, r.getPriority());
     }
 
     // ==================== Level 3: tax_payment ====================
@@ -181,31 +183,46 @@ class FallbackHeuristicServiceTest {
         assertEquals("转账", r.getMatchedKeyword());
     }
 
-    // ==================== Level 10: pending (兜底) ====================
+    // ==================== Level 10: 方向兜底 ====================
 
     @Test
-    void pending_未命中() {
+    void 方向兜底_in_返回业务收款() {
         FallbackHeuristicService.Result r = service.classify("XXXXX", "in");
-        assertEquals("pending", r.getClassification());
+        assertEquals("business_receipt", r.getClassification());
         assertEquals(10, r.getPriority());
     }
 
     @Test
-    void pending_方向过滤后落入() {
-        // "工资" 属于 salary_payment(out), 但入参方向为 in → 不命中前 9 级 → pending
+    void 方向兜底_out_返回业务付款() {
+        FallbackHeuristicService.Result r = service.classify("XXXXX", "out");
+        assertEquals("business_payment", r.getClassification());
+        assertEquals(10, r.getPriority());
+    }
+
+    @Test
+    void 方向兜底_方向过滤后落入() {
+        // "工资" 属于 salary_payment(out), 但入参方向为 in → 不命中前 9 级 → 走方向兜底
         FallbackHeuristicService.Result r = service.classify("发放5月工资", "in");
-        assertEquals("pending", r.getClassification());
+        assertEquals("business_receipt", r.getClassification());
         assertEquals(10, r.getPriority());
     }
 
     @Test
-    void pending_description为空() {
+    void 方向兜底_description为空() {
         FallbackHeuristicService.Result r = service.classify(null, "in");
-        assertEquals("pending", r.getClassification());
+        assertEquals("business_receipt", r.getClassification());
         assertEquals(10, r.getPriority());
 
-        r = service.classify("", "in");
+        r = service.classify("", "out");
+        assertEquals("business_payment", r.getClassification());
+    }
+
+    @Test
+    void pending_方向也为空() {
+        // 方向兜底都需要方向, 没方向就只能 pending
+        FallbackHeuristicService.Result r = service.classify("XXXXX", null);
         assertEquals("pending", r.getClassification());
+        assertEquals(10, r.getPriority());
     }
 
     // ==================== 优先级验证: 高优先级优先 ====================

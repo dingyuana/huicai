@@ -245,6 +245,8 @@ public class BankStatementServiceImpl implements BankStatementService {
             finalClassification = rule.getClassification();
             finalRuleId = rule.getId();
             stmt.setAiBusinessScene(null); // 规则命中时清除兜底标记
+            stmt.setAiConfidence(90);
+            stmt.setAiSuggestedAction(null);
         } else {
             // 第三层: 兜底启发式 (永不返回 null)
             FallbackHeuristicService.Result fb = fallbackHeuristic.classify(
@@ -252,8 +254,10 @@ public class BankStatementServiceImpl implements BankStatementService {
             );
             finalClassification = fb.getClassification();
             finalRuleId = null; // 兜底无规则
-            // 兜底命中的信息写入 ai_business_scene 便于调试追溯
             stmt.setAiBusinessScene("FB:" + fb.getPriority() + ":" + fb.getMatchedKeyword());
+            // 关键词兜底 (priority 1-9) = 75; 方向兜底或 pending (priority 10) = 50 需人工确认
+            stmt.setAiConfidence(fb.getPriority() < 10 ? 75 : 50);
+            stmt.setAiSuggestedAction(fb.getPriority() < 10 ? null : "manual_confirm");
         }
 
         stmt.setRuleId(finalRuleId);
