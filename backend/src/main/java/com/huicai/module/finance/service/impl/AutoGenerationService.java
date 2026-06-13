@@ -126,10 +126,10 @@ public class AutoGenerationService {
                 creditAcct = bankAcct;
                 break;
             }
-            case "social_security":
-            case "salary_payment": {
-                // 借: 应付职工薪酬(2211)  贷: 银行存款(1002)
-                debitAcct = findSubjectByCode("2211");
+            case "social_security": {
+                // 借: 应付职工薪酬-社保(2211.04)  贷: 银行存款(1002)
+                Subject socialAcct = findSubjectByCode("2211.04");
+                debitAcct = socialAcct != null ? socialAcct : findSubjectByCode("2211");
                 creditAcct = bankAcct;
                 break;
             }
@@ -303,7 +303,7 @@ public class AutoGenerationService {
         return switch (classification) {
             case "business_receipt" -> "RECEIPT";
             case "business_payment", "salary_payment", "social_security" -> "PAYMENT";
-            case "internal_transfer" -> "OTHER_PAYABLE";
+            case "internal_transfer" -> "TRANSFER";
             default -> "EXPENSE";
         };
     }

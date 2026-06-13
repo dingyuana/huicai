@@ -14,6 +14,7 @@ import com.huicai.module.finance.service.BankStatementService;
 import com.huicai.module.finance.service.ClassificationRuleService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -28,11 +29,21 @@ import java.util.*;
 @RequiredArgsConstructor
 public class BankStatementServiceImpl implements BankStatementService {
 
+    /**
+     * 导入时主动生单开关 (R1 触发时机).
+     * 默认 true = 导入后立即对每条流水调 autoGenerateService.autoGenerate.
+     * 设为 false = 回退到 P1 验收第 9 条 "导入时不自动创建, 确认后才触发" 行为.
+     * (老丁 2026-06-13 明确要"主动生单", 保留 yml 关闭以备运维回退)
+     */
+    @Value("${huicai.bank.autoGenerateOnImport:true}")
+    private boolean autoGenerateOnImport;
+
     private final BankStatementMapper statementMapper;
     private final BankJournalMapper journalMapper;
     private final ClassificationRuleService classificationRuleService;
     private final FallbackHeuristicService fallbackHeuristic;
     private final ColumnMappingResolver columnMappingResolver;
+    private final AutoGenerationService autoGenerationService;
 
     @Override
     public IPage<BankStatementEntity> pageQuery(Long accountId, String status, Integer current, Integer size) {
@@ -66,6 +77,7 @@ public class BankStatementServiceImpl implements BankStatementService {
 
         // 3. 逐行解析导入
         int imported = 0;
+        int aClassCount = 0, bClassCount = 0;
         for (int i = 1; i < lines.length; i++) {
             String line = lines[i];
             if (StrUtil.isBlank(line)) continue;
@@ -75,12 +87,31 @@ public class BankStatementServiceImpl implements BankStatementService {
                 if (stmt != null) {
                     statementMapper.insert(stmt);
                     imported++;
+
+                    // R1: 导入后主动生单 (老丁 2026-06-13 指示)
+                    if (autoGenerateOnImport) {
+                        try {
+                            String type = AutoGenerationService.classifyType(stmt.getClassification());
+                            if ("C".equals(type)) {
+                                stmt.setReviewStatus("UNCONFIRMED");
+                                statementMapper.updateById(stmt);
+                            } else {
+                                autoGenerationService.autoGenerate(stmt.getId(), 1L);
+                                if ("A".equals(type)) aClassCount++;
+                                else if ("B".equals(type)) bClassCount++;
+                            }
+                        } catch (Exception e) {
+                            log.warn("导入后自动生单失败: statementId={}, classification={}",
+                                    stmt.getId(), stmt.getClassification(), e);
+                        }
+                    }
                 }
             } catch (Exception e) {
                 log.warn("解析CSV第{}行失败: {}", i + 1, line, e);
             }
         }
-        log.info("导入对账单: accountId={}, imported={}", accountId, imported);
+        log.info("导入对账单: accountId={}, imported={}, aClass={}, bClass={}, autoGenerateOnImport={}",
+                accountId, imported, aClassCount, bClassCount, autoGenerateOnImport);
         return imported;
     }
 
@@ -267,5 +298,32 @@ public class BankStatementServiceImpl implements BankStatementService {
         }
         log.info("批量确认分类: 总数={}, 成功={}", statementIds.size(), confirmed);
         return confirmed;
+    }
+
+    @Override
+    public BankStatementEntity getDetail(Long id) {
+        BankStatementEntity entity = statementMapper.selectById(id);
+        if (entity == null) throw BusinessException.notFound("对账单记录不存在");
+        return entity;
+    }
+
+    @Override
+    public void deleteStatement(Long id) {
+        BankStatementEntity entity = statementMapper.selectById(id);
+        if (entity == null) throw BusinessException.notFound("对账单记录不存在");
+        statementMapper.deleteById(id);
+        log.info("删除对账单: id={}", id);
+    }
+
+    @Override
+    public BankStatementEntity updateClassification(Long id, String classification) {
+        BankStatementEntity stmt = statementMapper.selectById(id);
+        if (stmt == null) throw BusinessException.notFound("对账单记录不存在");
+        stmt.setClassification(classification);
+        stmt.setRuleId(null);
+        stmt.setAiBusinessScene("MANUAL");
+        statementMapper.updateById(stmt);
+        log.info("手动修改分类: id={}, classification={}", id, classification);
+        return stmt;
     }
 }
