@@ -173,18 +173,27 @@ ClassificationRuleService:
 
 ```java
 fallbackClassify(description, counterparty, direction, amount) → String
-// 关键词分组按优先级:
-//   银行费用费用 → feeKeywords
-//   利息收入 → interestKeywords
-//   保险费用 → insuranceKeywords
-//   税务缴费 → taxKeywords
-//   社保缴费 → socialKeywords
-//   工资发放 → salaryKeywords
-//   内部转账 → transferKeywords
-//   业务收款 → receiptKeywords (direction=in)
-//   业务付款 → paymentKeywords (direction=out)
-//   兜底 → "pending" (归入待处理池)
+// 关键词分组按优先级 (1 最高, 9 关键词兜底, 10 方向兜底):
+//   1  bank_fee         out    手续费/工本费/年费/账户管理费
+//   2  interest_income  in     利息/结息/存款利息
+//   3  tax_payment      out    税/税务/缴税/税金/增值税/所得税/...
+//   4  social_security  out    社保/公积金/养老/医疗/...
+//   5  insurance_fee    out    保险/保费/投保
+//   6  salary_payment   out    工资/薪资/薪酬/劳务费/奖金/津贴
+//   7  business_receipt in     货款/收款/销售/回款/客户/应收/收入
+//   8  business_payment out    货款/付款/采购/支付/供应商/应付/支出
+//   9  internal_transfer (不限) 转账/转存/调拨/上划/下拨/内部
+//  10  方向兜底 (低置信度)    in→business_receipt, out→business_payment
+//  兜底 (无方向)            → "pending" (归入待处理池, 等人工确认)
 ```
+
+**置信度标记** (写入 `t_bank_statement.ai_confidence` 0-100):
+- 规则命中 → 90 (高置信度)
+- 关键词兜底命中 (priority 1-9) → 75 (中高置信度)
+- 方向兜底 (priority 10) → 50 (低置信度, **待人工确认**)
+- pending (无方向) → 50 (低置信度, **待人工确认**)
+
+低置信度 (ai_confidence < 60) 的流水在出纳工作台优先展示, 需人工复核或重新分类.
 
 ### 3. Excel/CSV 导入流程
 
