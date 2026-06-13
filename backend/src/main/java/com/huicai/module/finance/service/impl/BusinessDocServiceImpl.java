@@ -1,9 +1,6 @@
 package com.huicai.module.finance.service.impl;
 
 import cn.hutool.core.util.StrUtil;
-import cn.hutool.json.JSONArray;
-import cn.hutool.json.JSONObject;
-import cn.hutool.json.JSONUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
@@ -15,12 +12,10 @@ import com.huicai.module.finance.entity.BusinessDocEntity;
 import com.huicai.module.finance.entity.BusinessDocEntryEntity;
 import com.huicai.module.finance.entity.VoucherEntity;
 import com.huicai.module.finance.entity.VoucherEntryEntity;
-import com.huicai.module.finance.entity.VoucherTemplateEntity;
 import com.huicai.module.finance.mapper.BusinessDocEntryMapper;
 import com.huicai.module.finance.mapper.BusinessDocMapper;
 import com.huicai.module.finance.mapper.VoucherEntryMapper;
 import com.huicai.module.finance.mapper.VoucherMapper;
-import com.huicai.module.finance.mapper.VoucherTemplateMapper;
 import com.huicai.module.finance.service.BusinessDocService;
 import com.huicai.module.finance.service.VoucherNoService;
 import com.huicai.module.system.entity.PeriodEntity;
@@ -50,11 +45,28 @@ public class BusinessDocServiceImpl implements BusinessDocService {
             "INVOICE_IN", "FPR", "INVOICE_OUT", "FPS", "OTHER_RECEIVABLE", "QTY", "OTHER_PAYABLE", "QTF"
     );
 
+    /**
+     * 业务单据 → 凭证 科目映射 (硬编码降级).
+     * 格式: docType → [{"debit": "科目代码", "credit": "科目代码"}]
+     */
+    private static List<String[]> pair(String... codes) {
+        return java.util.Collections.singletonList(codes);
+    }
+
+    private static final Map<String, List<String[]>> DOC_VOUCHER_SUBJECTS = Map.ofEntries(
+            Map.entry("RECEIPT",            pair("1002", "1122")),
+            Map.entry("PAYMENT",            pair("2202", "1002")),
+            Map.entry("EXPENSE",            pair("6602", "1002")),
+            Map.entry("INVOICE_IN",         pair("1403", "2202")),
+            Map.entry("INVOICE_OUT",        pair("1122", "6001")),
+            Map.entry("OTHER_RECEIVABLE",   pair("1221", "1002")),
+            Map.entry("OTHER_PAYABLE",      pair("1002", "2241"))
+    );
+
     private final BusinessDocMapper docMapper;
     private final BusinessDocEntryMapper docEntryMapper;
     private final VoucherMapper voucherMapper;
     private final VoucherEntryMapper voucherEntryMapper;
-    private final VoucherTemplateMapper templateMapper;
     private final VoucherNoService voucherNoService;
     private final StringRedisTemplate redisTemplate;
     private final PeriodService periodService;
@@ -223,19 +235,13 @@ public class BusinessDocServiceImpl implements BusinessDocService {
         if (entity.getVoucherId() != null) {
             throw BusinessException.badRequest("该单据已生成凭证");
         }
-        VoucherTemplateEntity template = templateMapper.selectByDocType(entity.getDocType());
-        if (template == null) {
-            throw BusinessException.badRequest("未找到 " + entity.getDocType() + " 对应的凭证模板, 请先配置");
+        // 根据 docType 查找科目映射 (硬编码降级)
+        List<String[]> subjectPairs = DOC_VOUCHER_SUBJECTS.get(entity.getDocType());
+        if (subjectPairs == null || subjectPairs.isEmpty()) {
+            throw BusinessException.badRequest("未找到 " + entity.getDocType() + " 对应的凭证科目映射, 请先配置模板");
         }
 
         List<BusinessDocEntryEntity> docEntries = docEntryMapper.selectByDocId(id);
-
-        JSONArray templateEntries;
-        try {
-            templateEntries = JSONUtil.parseArray(template.getEntries());
-        } catch (Exception e) {
-            throw BusinessException.badRequest("模板JSON格式错误: " + e.getMessage());
-        }
 
         VoucherEntity voucher = new VoucherEntity();
         voucher.setVoucherNo(voucherNoService.generateNextNo(entity.getPeriod(), 1L));
@@ -253,18 +259,13 @@ public class BusinessDocServiceImpl implements BusinessDocService {
         BigDecimal totalC = BigDecimal.ZERO;
         int sortOrder = 1;
         for (BusinessDocEntryEntity docEntry : docEntries) {
-            for (Object obj : templateEntries) {
-                JSONObject tpl = (JSONObject) obj;
-                BigDecimal amount = docEntry.getAmount();
-                String debitSubjectCode = tpl.getStr("debitSubjectCode");
-                String creditSubjectCode = tpl.getStr("creditSubjectCode");
+            BigDecimal amount = docEntry.getAmount();
+            for (String[] pair : subjectPairs) {
+                String debitSubjectCode = pair[0];
+                String creditSubjectCode = pair.length > 1 ? pair[1] : null;
 
-                Subject debitSubj = subjectMapper.selectOne(
-                        new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<Subject>()
-                                .eq(Subject::getCode, debitSubjectCode));
-                Subject creditSubj = subjectMapper.selectOne(
-                        new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<Subject>()
-                                .eq(Subject::getCode, creditSubjectCode));
+                Subject debitSubj = findSubjectByCode(debitSubjectCode);
+                Subject creditSubj = creditSubjectCode != null ? findSubjectByCode(creditSubjectCode) : null;
 
                 if (debitSubj != null) {
                     VoucherEntryEntity ve = new VoucherEntryEntity();
@@ -358,6 +359,13 @@ public class BusinessDocServiceImpl implements BusinessDocService {
         Long serial = redisTemplate.opsForValue().increment(key);
         if (serial == null) serial = 1L;
         return typeCode + period + String.format("%04d", serial);
+    }
+
+    private Subject findSubjectByCode(String code) {
+        return subjectMapper.selectOne(
+                new LambdaQueryWrapper<Subject>()
+                        .eq(Subject::getCode, code)
+                        .last("LIMIT 1"));
     }
 
     private BusinessDocEntity getValid(Long id) {

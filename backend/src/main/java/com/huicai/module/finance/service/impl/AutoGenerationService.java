@@ -6,15 +6,16 @@ import com.huicai.common.exception.BusinessException;
 import com.huicai.module.finance.entity.*;
 import com.huicai.module.finance.mapper.*;
 import com.huicai.module.finance.service.VoucherNoService;
+import com.huicai.module.finance.service.VoucherTemplateService;
 import com.huicai.module.system.entity.Subject;
 import com.huicai.module.system.mapper.SubjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
-import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
@@ -42,6 +43,7 @@ public class AutoGenerationService {
     private final VoucherEntryMapper voucherEntryMapper;
     private final VoucherNoService voucherNoService;
     private final SubjectMapper subjectMapper;
+    private final VoucherTemplateService voucherTemplateService;
 
     /**
      * 对已确认分类的银行流水执行自动生单/制证.
@@ -98,43 +100,53 @@ public class AutoGenerationService {
 
     private void generateVoucherDirect(BankStatementEntity stmt, Long userId) {
         BigDecimal amount = stmt.getAmount();
-        String direction = stmt.getDirection(); // in/out
+        String direction = stmt.getDirection();
         String period = stmt.getTxDate().format(DateTimeFormatter.ofPattern("yyyyMM"));
 
+        // 1. 尝试按模板生成 (配置驱动)
+        VoucherTemplateEntity template = voucherTemplateService.matchByClassification(stmt.getClassification());
+        if (template != null) {
+            List<VoucherTemplateLineEntity> lines = voucherTemplateService.getLines(template.getId());
+            if (lines != null && !lines.isEmpty()) {
+                generateVoucherFromTemplate(template, lines, stmt, period, amount, userId);
+                log.info("模板制证: statementId={}, templateId={}, classification={}",
+                        stmt.getId(), template.getId(), stmt.getClassification());
+                return;
+            }
+        }
+
+        // 2. 降级: 硬编码逻辑 (向后兼容)
+        log.warn("流水分类 {} 无激活模板, 回退硬编码", stmt.getClassification());
+
         // 查找科目
-        Subject bankAcct = findSubjectByCode("1002"); // 银行存款
+        Subject bankAcct = findSubjectByCode("1002");
 
         Subject debitAcct = null;
         Subject creditAcct = null;
 
         switch (stmt.getClassification()) {
             case "bank_fee": {
-                // 借: 财务费用-手续费(6602.01)  贷: 银行存款(1002)
                 debitAcct = findSubjectByCode("6602.01");
                 creditAcct = bankAcct;
                 break;
             }
             case "interest_income": {
-                // 借: 银行存款(1002)  贷: 财务费用-利息收入(6602.02) [借方红字]
                 debitAcct = bankAcct;
                 creditAcct = findSubjectByCode("6602.02");
                 break;
             }
             case "tax_payment": {
-                // 借: 应交税费(2221)  贷: 银行存款(1002)
                 debitAcct = findSubjectByCode("2221");
                 creditAcct = bankAcct;
                 break;
             }
             case "social_security": {
-                // 借: 应付职工薪酬-社保(2211.04)  贷: 银行存款(1002)
                 Subject socialAcct = findSubjectByCode("2211.04");
                 debitAcct = socialAcct != null ? socialAcct : findSubjectByCode("2211");
                 creditAcct = bankAcct;
                 break;
             }
             case "insurance_fee": {
-                // 借: 管理费用-保险费(6602.06)  贷: 银行存款(1002)
                 debitAcct = findSubjectByCode("6602.06");
                 creditAcct = bankAcct;
                 break;
@@ -145,11 +157,9 @@ public class AutoGenerationService {
             throw new BusinessException(500, "缺少科目配置, 无法生成凭证. classification=" + stmt.getClassification());
         }
 
-        // 创建凭证
         VoucherEntity voucher = createVoucher(stmt, period, amount, userId);
         int sort = 1;
 
-        // 分录: 借
         VoucherEntryEntity entryDr = new VoucherEntryEntity();
         entryDr.setVoucherId(voucher.getId());
         entryDr.setSubjectId(debitAcct.getId());
@@ -159,7 +169,6 @@ public class AutoGenerationService {
         entryDr.setSortOrder(sort++);
         voucherEntryMapper.insert(entryDr);
 
-        // 分录: 贷
         VoucherEntryEntity entryCr = new VoucherEntryEntity();
         entryCr.setVoucherId(voucher.getId());
         entryCr.setSubjectId(creditAcct.getId());
@@ -169,16 +178,87 @@ public class AutoGenerationService {
         entryCr.setSortOrder(sort++);
         voucherEntryMapper.insert(entryCr);
 
-        // 更新借贷合计
         voucher.setTotalDebit(amount);
         voucher.setTotalCredit(amount);
         voucherMapper.updateById(voucher);
 
-        // 回写流水
         stmt.setGeneratedVoucherId(voucher.getId());
 
-        log.info("A类直接制证: statementId={}, voucherId={}, classification={}",
+        log.info("A类硬编码制证: statementId={}, voucherId={}, classification={}",
                 stmt.getId(), voucher.getId(), stmt.getClassification());
+    }
+
+    /**
+     * 根据模板 + 分录行生成凭证.
+     */
+    private void generateVoucherFromTemplate(VoucherTemplateEntity template,
+                                              List<VoucherTemplateLineEntity> lines,
+                                              BankStatementEntity stmt,
+                                              String period,
+                                              BigDecimal amount,
+                                              Long userId) {
+        VoucherEntity voucher = createVoucher(stmt, period, amount, userId);
+        voucher.setTemplateId(template.getId());
+        voucherMapper.updateById(voucher);
+
+        BigDecimal totalDebit = BigDecimal.ZERO;
+        BigDecimal totalCredit = BigDecimal.ZERO;
+        int sort = 1;
+
+        for (VoucherTemplateLineEntity line : lines) {
+            // 解析金额
+            BigDecimal dr = resolveAmount(line.getDrAmountTemplate(), amount, stmt);
+            BigDecimal cr = resolveAmount(line.getCrAmountTemplate(), amount, stmt);
+            if (dr == null) dr = BigDecimal.ZERO;
+            if (cr == null) cr = BigDecimal.ZERO;
+
+            // 方向约束: 如果行标记为 debit, 确保 cr=0; credit 行则 dr=0
+            if ("debit".equals(line.getDirection())) {
+                if (dr.compareTo(BigDecimal.ZERO) == 0 && cr.compareTo(BigDecimal.ZERO) > 0) {
+                    dr = cr;
+                    cr = BigDecimal.ZERO;
+                } else {
+                    cr = BigDecimal.ZERO;
+                }
+            } else if ("credit".equals(line.getDirection())) {
+                if (cr.compareTo(BigDecimal.ZERO) == 0 && dr.compareTo(BigDecimal.ZERO) > 0) {
+                    cr = dr;
+                    dr = BigDecimal.ZERO;
+                } else {
+                    dr = BigDecimal.ZERO;
+                }
+            }
+
+            if (dr.compareTo(BigDecimal.ZERO) == 0 && cr.compareTo(BigDecimal.ZERO) == 0) {
+                continue; // 跳过 0 金额行
+            }
+
+            // 解析摘要
+            String summary = resolveSummary(line.getSummaryTemplate(), stmt);
+
+            VoucherEntryEntity entry = new VoucherEntryEntity();
+            entry.setVoucherId(voucher.getId());
+            entry.setSubjectId(line.getSubjectId());
+            entry.setDebit(dr);
+            entry.setCredit(cr);
+            entry.setSummary(summary);
+            entry.setSortOrder(sort++);
+            voucherEntryMapper.insert(entry);
+
+            totalDebit = totalDebit.add(dr);
+            totalCredit = totalCredit.add(cr);
+        }
+
+        // 更新借贷合计
+        BigDecimal maxAmt = totalDebit.max(totalCredit);
+        voucher.setTotalDebit(maxAmt);
+        voucher.setTotalCredit(maxAmt);
+        voucherMapper.updateById(voucher);
+
+        stmt.setGeneratedVoucherId(voucher.getId());
+
+        log.info("A类模板制证: statementId={}, voucherId={}, templateId={}, classification={}",
+                stmt.getId(), voucher.getId(), template.getId(), stmt.getClassification());
     }
 
     // ─── B类: 先生成业务单据, 再生成凭证 ───
@@ -200,15 +280,32 @@ public class AutoGenerationService {
         doc.setCreatedBy(userId);
         docMapper.insert(doc);
 
-        // 2. 生成凭证
-        Subject bankAcct = findSubjectByCode("1002"); // 银行存款
+        // 2. 尝试模板制证
+        VoucherTemplateEntity template = voucherTemplateService.matchByClassification(stmt.getClassification());
+        if (template != null) {
+            List<VoucherTemplateLineEntity> lines = voucherTemplateService.getLines(template.getId());
+            if (lines != null && !lines.isEmpty()) {
+                generateVoucherFromTemplate(template, lines, stmt, period, amount, userId);
+                doc.setVoucherId(stmt.getGeneratedVoucherId());
+                doc.setStatus("VOUCHERED");
+                doc.setUpdatedAt(LocalDateTime.now());
+                docMapper.updateById(doc);
+                stmt.setGeneratedDocId(doc.getId());
+                log.info("B类模板制证: statementId={}, docId={}, voucherId={}, templateId={}",
+                        stmt.getId(), doc.getId(), stmt.getGeneratedVoucherId(), template.getId());
+                return;
+            }
+        }
+
+        // 3. 降级: 硬编码
+        log.warn("流水分类 {} 无激活模板, 回退硬编码", stmt.getClassification());
+        Subject bankAcct = findSubjectByCode("1002");
 
         VoucherEntity voucher = createVoucher(stmt, period, amount, userId);
         int sort = 1;
 
         switch (stmt.getClassification()) {
             case "business_receipt": {
-                // 借: 银行存款(1002)  贷: 应收账款(1122)
                 Subject arAcct = findSubjectByCode("1122");
                 addVoucherEntry(voucher.getId(), bankAcct.getId(), amount, BigDecimal.ZERO, stmt.getSummary(), sort++);
                 addVoucherEntry(voucher.getId(), arAcct.getId(), BigDecimal.ZERO, amount, stmt.getSummary(), sort++);
@@ -216,7 +313,6 @@ public class AutoGenerationService {
                 break;
             }
             case "business_payment": {
-                // 借: 应付账款(2202)/费用  贷: 银行存款(1002)
                 Subject apAcct = findSubjectByCode("2202");
                 addVoucherEntry(voucher.getId(), apAcct.getId(), amount, BigDecimal.ZERO, stmt.getSummary(), sort++);
                 addVoucherEntry(voucher.getId(), bankAcct.getId(), BigDecimal.ZERO, amount, stmt.getSummary(), sort++);
@@ -224,7 +320,6 @@ public class AutoGenerationService {
                 break;
             }
             case "internal_transfer": {
-                // 借: 其他货币资金(1012)/其他应收款(1221)  贷: 银行存款(1002)
                 Subject otherAcct = findSubjectByCode("1012");
                 if (otherAcct == null) otherAcct = findSubjectByCode("1221");
                 addVoucherEntry(voucher.getId(), otherAcct.getId(), amount, BigDecimal.ZERO, stmt.getSummary(), sort++);
@@ -232,7 +327,6 @@ public class AutoGenerationService {
                 break;
             }
             case "salary_payment": {
-                // 借: 应付职工薪酬(2211)  贷: 银行存款(1002)
                 Subject salaryAcct = findSubjectByCode("2211");
                 addVoucherEntry(voucher.getId(), salaryAcct.getId(), amount, BigDecimal.ZERO, stmt.getSummary(), sort++);
                 addVoucherEntry(voucher.getId(), bankAcct.getId(), BigDecimal.ZERO, amount, stmt.getSummary(), sort++);
@@ -240,12 +334,10 @@ public class AutoGenerationService {
             }
         }
 
-        // 更新借贷合计
         voucher.setTotalDebit(amount);
         voucher.setTotalCredit(amount);
         voucherMapper.updateById(voucher);
 
-        // 回写单据和流水
         doc.setVoucherId(voucher.getId());
         doc.setStatus("VOUCHERED");
         doc.setUpdatedAt(LocalDateTime.now());
@@ -254,7 +346,7 @@ public class AutoGenerationService {
         stmt.setGeneratedDocId(doc.getId());
         stmt.setGeneratedVoucherId(voucher.getId());
 
-        log.info("B类生单+制证: statementId={}, docId={}, voucherId={}, classification={}",
+        log.info("B类硬编码生单+制证: statementId={}, docId={}, voucherId={}, classification={}",
                 stmt.getId(), doc.getId(), voucher.getId(), stmt.getClassification());
     }
 
@@ -288,6 +380,46 @@ public class AutoGenerationService {
         voucherEntryMapper.insert(entry);
     }
 
+    /**
+     * 解析模板金额表达式.
+     * 支持: {{amount}} — 流水的交易金额
+     *       {{taxAmount}} — 保留, 暂为 0
+     *       纯数字 — 直接使用
+     *       空或 null — 返回 0
+     */
+    private BigDecimal resolveAmount(String template, BigDecimal amount, BankStatementEntity stmt) {
+        if (StrUtil.isBlank(template)) return BigDecimal.ZERO;
+        String expr = template.trim();
+
+        if ("{{amount}}".equals(expr)) return amount;
+        if ("{{taxAmount}}".equals(expr)) return BigDecimal.ZERO;
+
+        // 纯数字
+        try {
+            return new BigDecimal(expr);
+        } catch (NumberFormatException e) {
+            log.warn("无法解析金额模板 '{}', 返回 0", expr);
+            return BigDecimal.ZERO;
+        }
+    }
+
+    /**
+     * 解析摘要模板.
+     * 支持: {{summary}} — 替换为流水的摘要
+     *       纯文本 — 直接返回
+     *       空 — 返回流水摘要
+     */
+    private String resolveSummary(String template, BankStatementEntity stmt) {
+        if (StrUtil.isBlank(template)) {
+            return stmt.getSummary() != null ? stmt.getSummary() : "";
+        }
+        String result = template.replace("{{summary}}",
+                stmt.getSummary() != null ? stmt.getSummary() : "");
+        result = result.replace("{{counterAccount}}",
+                stmt.getCounterAccount() != null ? stmt.getCounterAccount() : "");
+        return result;
+    }
+
     private Subject findSubjectByCode(String code) {
         List<Subject> list = subjectMapper.selectList(
                 new LambdaQueryWrapper<Subject>().eq(Subject::getCode, code).last("LIMIT 1"));
@@ -295,7 +427,6 @@ public class AutoGenerationService {
     }
 
     private String generateDocNo(String classification, String period) {
-        // Simple in-memory sequence — in production use Redis
         return mapToDocType(classification) + period + String.format("%04d", System.currentTimeMillis() % 10000);
     }
 
@@ -309,17 +440,10 @@ public class AutoGenerationService {
     }
 
     private Long guessPartyId(String counterAccount, boolean isSupplier) {
-        // Placeholder — in production would look up customer/supplier by name
         if (StrUtil.isBlank(counterAccount)) return null;
         return null;
     }
 
-    /**
-     * 分类路由: 返回 A / B / C
-     * A类 — 直接制证: bank_fee, interest_income, tax_payment, social_security, insurance_fee
-     * B类 — 需中转: business_receipt, business_payment, internal_transfer, salary_payment
-     * C类 — 待人工: pending 及其他
-     */
     public static String classifyType(String classification) {
         return switch (classification) {
             case "bank_fee", "interest_income", "tax_payment",
@@ -328,5 +452,10 @@ public class AutoGenerationService {
                  "internal_transfer", "salary_payment" -> "B";
             default -> "C";
         };
+    }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public boolean autoGenerateInNewTx(Long statementId, Long userId) {
+        return autoGenerate(statementId, userId);
     }
 }
