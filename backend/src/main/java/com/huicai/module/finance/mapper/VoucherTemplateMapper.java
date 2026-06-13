@@ -9,6 +9,14 @@ import java.util.List;
 
 @Mapper
 public interface VoucherTemplateMapper extends BaseMapper<VoucherTemplateEntity> {
-    VoucherTemplateEntity selectByDocType(@Param("docType") String docType);
+
+    /**
+     * 根据分类查找激活的模板 (每个分类最多 1 个激活模板).
+     */
+    VoucherTemplateEntity selectActiveByClassification(@Param("classification") String classification);
+
+    /**
+     * 查询所有有效模板.
+     */
     List<VoucherTemplateEntity> selectAllActive();
 }

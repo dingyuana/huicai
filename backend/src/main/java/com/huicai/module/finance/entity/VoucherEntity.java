@@ -13,7 +13,7 @@ import java.time.LocalDateTime;
 @TableName("t_voucher")
 public class VoucherEntity {
 
-    @TableId(type = IdType.ASSIGN_ID)
+    @TableId(type = IdType.AUTO)
     private Long id;
 
     /** 凭证号(格式: 类型+年份+月份+流水号) */
@@ -74,6 +74,9 @@ public class VoucherEntity {
 
     /** 记账时间 */
     private LocalDateTime postedAt;
+
+    /** 生成该凭证的模板ID (配置驱动, 替代硬编码) */
+    private Long templateId;
 
     /** 被红冲凭证ID */
     private Long reversedFrom;

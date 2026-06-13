@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.huicai.module.finance.mapper.VoucherTemplateLineMapper">
+
+    <resultMap id="lineMap" type="com.huicai.module.finance.entity.VoucherTemplateLineEntity">
+        <id column="id" property="id"/>
+        <result column="template_id" property="templateId"/>
+        <result column="subject_id" property="subjectId"/>
+        <result column="dr_amount_template" property="drAmountTemplate"/>
+        <result column="cr_amount_template" property="crAmountTemplate"/>
+        <result column="summary_template" property="summaryTemplate"/>
+        <result column="direction" property="direction"/>
+        <result column="line_order" property="lineOrder"/>
+        <result column="created_at" property="createdAt"/>
+        <result column="deleted" property="deleted"/>
+    </resultMap>
+
+    <select id="selectByTemplateId" resultMap="lineMap">
+        SELECT * FROM t_voucher_template_line
+        WHERE template_id = #{templateId} AND deleted = 0
+        ORDER BY line_order
+    </select>
+
+    <delete id="deleteByTemplateId">
+        UPDATE t_voucher_template_line
+        SET deleted = 1
+        WHERE template_id = #{templateId}
+    </delete>
+
+</mapper>
