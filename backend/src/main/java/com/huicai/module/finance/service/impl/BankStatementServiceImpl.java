@@ -30,12 +30,12 @@ import java.util.*;
 public class BankStatementServiceImpl implements BankStatementService {
 
     /**
-     * 导入时主动生单开关 (R1 触发时机).
-     * 默认 true = 导入后立即对每条流水调 autoGenerateService.autoGenerate.
-     * 设为 false = 回退到 P1 验收第 9 条 "导入时不自动创建, 确认后才触发" 行为.
-     * (老丁 2026-06-13 明确要"主动生单", 保留 yml 关闭以备运维回退)
+     * 导入时主动生单开关.
+     * 默认 false = 严格按 SPEC FR-BANK-05/06: 导入阶段仅分类入库, 不触发单据/凭证生成.
+     * 出纳在工作台 review() 确认后才触发 autoGenerate.
+     * 设为 true = 导入后立即对每条流水调 autoGenerateService.autoGenerate (旧行为, 仅供运维回退).
      */
-    @Value("${huicai.bank.autoGenerateOnImport:true}")
+    @Value("${huicai.bank.autoGenerateOnImport:false}")
     private boolean autoGenerateOnImport;
 
     private final BankStatementMapper statementMapper;
@@ -276,7 +276,25 @@ public class BankStatementServiceImpl implements BankStatementService {
         stmt.setReviewedBy(1L);
         stmt.setReviewedAt(LocalDateTime.now());
         statementMapper.updateById(stmt);
-        // TODO M4 接入: salary_payment 分类时, 此处触发 business_doc_service.createPaymentOrder(DRAFT, FROM_BANK_TXN)
+
+        // SPEC FR-BANK-05/06: 出纳确认后才触发单据/凭证生成
+        // A类 (bank_fee/interest_income/tax/social_security/insurance) → 直接生成凭证
+        // B类 (business_receipt/payment) → 先生成业务单据, 再生成凭证
+        // C类 (internal_transfer/salary_payment/pending) → 仅生成单据或不处理
+        try {
+            String type = AutoGenerationService.classifyType(stmt.getClassification());
+            if (!"C".equals(type)) {
+                boolean ok = autoGenerationService.autoGenerateInNewTx(stmt.getId(), stmt.getReviewedBy());
+                log.info("出纳确认生单: statementId={}, classification={}, type={}, ok={}",
+                        statementId, stmt.getClassification(), type, ok);
+            } else {
+                log.info("出纳确认(C类, 不生单): statementId={}, classification={}", statementId, stmt.getClassification());
+            }
+        } catch (Exception e) {
+            log.warn("出纳确认后生单失败: statementId={}, classification={}, err={}",
+                    statementId, stmt.getClassification(), e.getMessage());
+        }
+
         log.info("出纳确认分类: statementId={}, classification={}", statementId, stmt.getClassification());
         return stmt;
     }

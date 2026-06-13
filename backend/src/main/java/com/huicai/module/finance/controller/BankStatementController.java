@@ -4,10 +4,13 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.huicai.common.response.R;
 import com.huicai.module.finance.entity.BankStatementEntity;
 import com.huicai.module.finance.service.BankStatementService;
+import com.huicai.module.finance.service.impl.AutoGenerationService;
+import com.huicai.module.finance.service.impl.BankStatementExcelImportService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 import java.util.Map;
@@ -19,6 +22,11 @@ import java.util.Map;
 public class BankStatementController {
 
     private final BankStatementService service;
+    private final BankStatementExcelImportService excelImportService;
+    private final AutoGenerationService autoGenerationService;
+
+    private static final org.slf4j.Logger logger =
+            org.slf4j.LoggerFactory.getLogger(BankStatementController.class);
 
     @Operation(summary = "分页查询对账单")
     @GetMapping("/page")
@@ -30,10 +38,42 @@ public class BankStatementController {
         return R.ok(service.pageQuery(accountId, status, current, size));
     }
 
+    @Operation(summary = "获取对账单详情")
+    @GetMapping("/{id}")
+    public R<BankStatementEntity> detail(@PathVariable Long id) {
+        return R.ok(service.getDetail(id));
+    }
+
     @Operation(summary = "导入CSV对账单")
     @PostMapping("/import-csv")
     public R<Integer> importCsv(@RequestParam Long accountId, @RequestBody String csvContent) {
         return R.ok(service.importFromCsv(accountId, csvContent));
+    }
+
+    @Operation(summary = "Excel导入第一步: 上传预览, 不写入数据库")
+    @PostMapping("/preview-excel")
+    public R<Map<String, Object>> previewExcel(
+            @RequestParam Long accountId,
+            @RequestParam("file") MultipartFile file) {
+        return R.ok(excelImportService.previewExcel(accountId, file));
+    }
+
+    @Operation(summary = "Excel导入第二步: 用户确认预览后, 真正写入数据库")
+    @PostMapping("/confirm-import")
+    public R<Map<String, Object>> confirmImport(@RequestParam String batchId) {
+        return R.ok(excelImportService.confirmImport(batchId));
+    }
+
+    @Operation(summary = "Excel导入直接模式 (兼容旧调用, 等于preview+confirm)")
+    @PostMapping("/import-excel")
+    public R<Map<String, Object>> importExcel(
+            @RequestParam Long accountId,
+            @RequestParam("file") MultipartFile file) {
+        var preview = excelImportService.previewExcel(accountId, file);
+        String batchId = (String) preview.get("batchId");
+        var confirm = excelImportService.confirmImport(batchId);
+        confirm.put("total", preview.get("total"));
+        return R.ok(confirm);
     }
 
     @Operation(summary = "智能匹配建议")
@@ -60,15 +100,80 @@ public class BankStatementController {
         return R.ok(service.classifySingle(id));
     }
 
-    @Operation(summary = "出纳单条确认分类")
+    @Operation(summary = "出纳单条确认分类 (确认后自动生成单据与凭证)")
     @PostMapping("/{id}/review")
     public R<BankStatementEntity> review(@PathVariable Long id) {
-        return R.ok(service.review(id));
+        BankStatementEntity stmt = service.review(id);
+        try {
+            autoGenerationService.autoGenerate(id, 1L);
+        } catch (Exception e) {
+            logger.warn("自动生成单据/凭证失败: statementId={}, {}", id, e.getMessage());
+        }
+        return R.ok(service.getDetail(id));
     }
 
-    @Operation(summary = "批量确认分类")
+    @Operation(summary = "批量确认分类 (确认后自动生成单据与凭证)")
     @PostMapping("/batch-review")
     public R<Integer> batchReview(@RequestBody List<Long> ids) {
-        return R.ok(service.batchReview(ids));
+        int confirmed = service.batchReview(ids);
+        int generated = 0;
+        for (Long id : ids) {
+            try {
+                if (autoGenerationService.autoGenerate(id, 1L)) {
+                    generated++;
+                }
+            } catch (Exception e) {
+                logger.warn("自动生成失败: statementId={}, {}", id, e.getMessage());
+            }
+        }
+        logger.info("批量确认+生成: confirmed={}, generated={}", confirmed, generated);
+        return R.ok(confirmed);
+    }
+
+    @Operation(summary = "批量确认流水并自动生成单据凭证")
+    @PostMapping("/batch-confirm")
+    public R<Map<String, Object>> batchConfirm(@RequestBody List<Long> ids) {
+        int confirmed = 0;
+        int vouchersCreated = 0;
+        int docsCreated = 0;
+        int failed = 0;
+
+        for (Long id : ids) {
+            try {
+                BankStatementEntity stmt = service.review(id);
+                confirmed++;
+                if (autoGenerationService.autoGenerate(id, 1L)) {
+                    stmt = service.getDetail(id);
+                    if (stmt.getGeneratedVoucherId() != null) vouchersCreated++;
+                    if (stmt.getGeneratedDocId() != null) docsCreated++;
+                }
+            } catch (Exception e) {
+                failed++;
+                logger.warn("batch-confirm 失败: id={}, {}", id, e.getMessage());
+            }
+        }
+
+        return R.ok(Map.of(
+                "confirmed", confirmed,
+                "vouchers_created", vouchersCreated,
+                "docs_created", docsCreated,
+                "failed", failed
+        ));
+    }
+
+    @Operation(summary = "删除单条对账单")
+    @DeleteMapping("/{id}")
+    public R<Void> delete(@PathVariable Long id) {
+        service.deleteStatement(id);
+        return R.ok();
+    }
+
+    @Operation(summary = "手动修改流水分类")
+    @PutMapping("/{id}/classification")
+    public R<BankStatementEntity> updateClassification(
+            @PathVariable Long id,
+            @RequestBody Map<String, String> body) {
+        String classification = body.get("classification");
+        return R.ok(service.updateClassification(id, classification));
     }
 }

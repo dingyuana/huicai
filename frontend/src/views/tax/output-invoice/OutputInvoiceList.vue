@@ -3,7 +3,10 @@
     <el-card shadow="never">
       <div class="page-header">
         <span class="page-title">销项发票</span>
-        <el-button type="primary" @click="openEdit()">新增发票</el-button>
+        <el-space>
+          <el-button @click="openImportDialog">导入发票</el-button>
+          <el-button type="primary" @click="openEdit()">新增发票</el-button>
+        </el-space>
       </div>
 
       <el-form :model="query" inline class="filter-form">
@@ -89,13 +92,69 @@
         <el-button type="primary" @click="onSubmit">确定</el-button>
       </template>
     </el-dialog>
+
+    <!-- 导入发票 -->
+    <el-dialog v-model="importVisible" title="导入销售发票" width="720px" destroy-on-close>
+      <template v-if="!importPreview">
+        <el-alert type="info" :closable="false" style="margin-bottom:12px">
+          上传销售发票 Excel，系统自动识别列名、匹配客户、生成应收单据和凭证。
+        </el-alert>
+        <el-upload drag :auto-upload="false" :limit="1" accept=".xlsx,.xls" @change="onImportFileChange" ref="importUploadRef">
+          <el-icon class="el-icon--upload" style="font-size:48px"><upload-filled /></el-icon>
+          <div class="el-upload__text">拖放文件到此处或 <em>点击选择</em></div>
+          <template #tip>
+            <div class="el-upload__tip">支持销项发票格式（发票号码、购方识别号、购买方名称、开票日期、金额、税额、价税合计）</div>
+          </template>
+        </el-upload>
+        <div style="margin-top:12px;text-align:right">
+          <el-button @click="importVisible = false">取消</el-button>
+          <el-button type="primary" :loading="importPreviewing" :disabled="!importFile" @click="onImportPreview">下一步: 预览</el-button>
+        </div>
+      </template>
+
+      <template v-else>
+        <el-descriptions :column="3" border size="small" style="margin-bottom:12px">
+          <el-descriptions-item label="总行数">{{ importPreview.total }}</el-descriptions-item>
+          <el-descriptions-item label="有效行数">{{ importPreview.valid }}</el-descriptions-item>
+          <el-descriptions-item label="错误">
+            <el-tag v-if="importPreview.errors?.length" type="danger">{{ importPreview.errors.length }}</el-tag>
+            <el-tag v-else type="success">0</el-tag>
+          </el-descriptions-item>
+        </el-descriptions>
+        <el-table :data="(importPreview.previews || []).slice(0, 50)" border size="small" max-height="300">
+          <el-table-column type="index" label="#" width="40" />
+          <el-table-column prop="invoiceNo" label="发票号" width="160" />
+          <el-table-column prop="buyerName" label="购方" min-width="140" show-overflow-tooltip />
+          <el-table-column prop="invoiceDate" label="日期" width="90" />
+          <el-table-column prop="goodsName" label="商品" width="120" show-overflow-tooltip />
+          <el-table-column label="金额" width="100" align="right">
+            <template #default="{ row }">{{ fmtAmount(row.amount) }}</template>
+          </el-table-column>
+          <el-table-column label="税额" width="90" align="right">
+            <template #default="{ row }">{{ fmtAmount(row.taxAmount) }}</template>
+          </el-table-column>
+          <el-table-column label="价税合计" width="100" align="right">
+            <template #default="{ row }">{{ fmtAmount(row.totalAmount) }}</template>
+          </el-table-column>
+        </el-table>
+        <div style="margin-top:12px;text-align:right">
+          <el-button @click="importPreview = null; importFile = null">重新上传</el-button>
+          <el-button @click="importVisible = false">取消</el-button>
+          <el-button type="primary" :loading="importConfirming" :disabled="!importPreview.valid" @click="onImportConfirm">
+            确认导入 {{ importPreview.valid }} 条
+          </el-button>
+        </div>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue'
 import { ElMessage, type FormInstance } from 'element-plus'
+import { UploadFilled } from '@element-plus/icons-vue'
 import { pageOutputInvoice, createOutputInvoice } from '@/api/modules/tax'
+import { previewSalesInvoices, confirmSalesInvoicesImport } from '@/api/modules/salesInvoice'
 
 const STATUS_MAP: Record<string, string> = { DRAFT: '草稿', ISSUED: '已开具', VOID: '已作废', RED_INK: '红字' }
 const STATUS_TAG_MAP: Record<string, string> = { DRAFT: 'info', ISSUED: 'success', VOID: 'warning', RED_INK: 'danger' }
@@ -155,4 +214,49 @@ const onSubmit = async () => {
 }
 
 onMounted(fetchData)
+
+// ====== 发票导入 ======
+const importVisible = ref(false)
+const importPreviewing = ref(false)
+const importConfirming = ref(false)
+const importFile = ref<File | null>(null)
+const importPreview = ref<any>(null)
+const importUploadRef = ref<any>(null)
+
+const openImportDialog = () => {
+  importFile.value = null
+  importPreview.value = null
+  importVisible.value = true
+}
+
+const onImportFileChange = (f: any) => {
+  importFile.value = f.raw || null
+  importPreview.value = null
+}
+
+const onImportPreview = async () => {
+  if (!importFile.value) { ElMessage.warning('请选择文件'); return }
+  importPreviewing.value = true
+  try {
+    importPreview.value = await previewSalesInvoices(importFile.value)
+    if (importPreview.value.total === 0) {
+      ElMessage.warning('未解析到有效发票行')
+    } else {
+      ElMessage.success(`解析完成: ${importPreview.value.total} 行, 有效 ${importPreview.value.valid} 行`)
+    }
+  } finally { importPreviewing.value = false }
+}
+
+const onImportConfirm = async () => {
+  if (!importPreview.value?.batchId) { ElMessage.warning('请先预览'); return }
+  importConfirming.value = true
+  try {
+    const res = await confirmSalesInvoicesImport(importPreview.value.batchId)
+    ElMessage.success(`导入 ${res.success} 张发票，生成 ${res.voucherCreated} 张凭证`)
+    importVisible.value = false
+    importPreview.value = null
+    importFile.value = null
+    fetchData()
+  } finally { importConfirming.value = false }
+}
 </script>

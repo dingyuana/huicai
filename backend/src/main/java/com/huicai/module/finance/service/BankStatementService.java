@@ -30,4 +30,19 @@ public interface BankStatementService {
      * 验收第 10 条: salary_payment 出纳确认时生成付款单 (DRAFT 状态, 关联员工档案)
      */
     int batchReview(List<Long> statementIds);
+
+    /**
+     * 获取单条对账单详情
+     */
+    BankStatementEntity getDetail(Long id);
+
+    /**
+     * 删除单条对账单(逻辑删除)
+     */
+    void deleteStatement(Long id);
+
+    /**
+     * 手动修改流水分类
+     */
+    BankStatementEntity updateClassification(Long id, String classification);
 }

@@ -2,6 +2,7 @@ package com.huicai.module.finance.mapper;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.huicai.module.finance.entity.VoucherEntryEntity;
+import org.apache.ibatis.annotations.Delete;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
@@ -27,4 +28,10 @@ public interface VoucherEntryMapper extends BaseMapper<VoucherEntryEntity> {
      * 删除凭证下所有分录
      */
     int deleteByVoucherId(@Param("voucherId") Long voucherId);
+
+    @Delete("DELETE FROM t_voucher_entry WHERE voucher_id IN (SELECT id FROM t_voucher WHERE source = #{source})")
+    int deleteByVoucherSource(@Param("source") String source);
+
+    @Delete("DELETE FROM t_voucher_entry")
+    int deleteAll();
 }

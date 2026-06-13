@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test'
 
-const BASE = 'http://localhost:3002'
+const BASE = 'http://localhost:3001'
 
 test.describe('慧财财务 - Login Flow', () => {
   test('login page loads and shows login form', async ({ page }) => {

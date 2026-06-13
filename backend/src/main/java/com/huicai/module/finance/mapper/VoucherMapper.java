@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.huicai.module.finance.entity.VoucherEntity;
+import org.apache.ibatis.annotations.Delete;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
@@ -41,4 +42,10 @@ public interface VoucherMapper extends BaseMapper<VoucherEntity> {
     int batchUpdateStatus(@Param("ids") List<Long> ids,
                           @Param("status") String status,
                           @Param("userId") Long userId);
+
+    @Delete("DELETE FROM t_voucher WHERE source = #{source}")
+    int deleteBySource(@Param("source") String source);
+
+    @Delete("DELETE FROM t_voucher")
+    int deleteAll();
 }

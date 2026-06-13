@@ -1,16 +1,14 @@
 package com.huicai.module.finance.service.impl;
 
 import cn.hutool.core.util.StrUtil;
-import com.alibaba.excel.EasyExcel;
-import com.alibaba.excel.context.AnalysisContext;
-import com.alibaba.excel.read.listener.ReadListener;
-import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.huicai.common.exception.BusinessException;
 import com.huicai.module.finance.entity.BankStatementEntity;
 import com.huicai.module.finance.mapper.BankStatementMapper;
 import com.huicai.module.finance.service.BankStatementService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.poi.ss.usermodel.*;
+import org.apache.poi.ss.util.CellUtil;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -23,7 +21,7 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.*;
-import java.util.stream.Collectors;
+import java.util.concurrent.ConcurrentHashMap;
 
 @Slf4j
 @Service
@@ -34,56 +32,254 @@ public class BankStatementExcelImportService {
     private final BankStatementService bankStatementService;
     private final ColumnMappingResolver columnMappingResolver;
 
-    /**
-     * 导入银行对账单 Excel (.xlsx)
-     * 文件格式: 第1行=查询信息(跳过), 第2行=表头, 第3行起=数据
-     */
-    @Transactional
-    public Map<String, Object> importExcel(Long accountId, MultipartFile file) {
-        if (file == null || file.isEmpty()) {
-            throw BusinessException.badRequest("上传文件为空");
-        }
-        String filename = file.getOriginalFilename();
-        if (filename == null || (!filename.endsWith(".xlsx") && !filename.endsWith(".xls"))) {
-            throw BusinessException.badRequest("仅支持 .xlsx / .xls 文件");
-        }
+    private final Map<String, List<BankStatementEntity>> batchCache = new ConcurrentHashMap<>();
 
-        String batchId = "IMP_" + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMddHHmmss"));
+    /**
+     * 第一步: 解析 Excel, 不写入数据库.
+     * 银行对账单 Excel 格式: 第1行=查询信息(跳过), 第2行=表头, 第3行起=数据.
+     */
+    public Map<String, Object> previewExcel(Long accountId, MultipartFile file) {
+        if (file == null || file.isEmpty()) throw BusinessException.badRequest("上传文件为空");
+        String filename = file.getOriginalFilename();
+        if (filename == null || (!filename.endsWith(".xlsx") && !filename.endsWith(".xls")))
+            throw BusinessException.badRequest("仅支持 .xlsx / .xls 文件");
+
+        String batchId = "PRE_" + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMddHHmmss"))
+                + "_" + UUID.randomUUID().toString().substring(0, 6);
         List<Map<String, Object>> errors = new ArrayList<>();
+        List<Map<String, Object>> previews = new ArrayList<>();
         List<BankStatementEntity> records = new ArrayList<>();
 
         try (InputStream is = file.getInputStream()) {
-            ExcelImportListener listener = new ExcelImportListener(accountId, batchId, errors, records, columnMappingResolver);
-            EasyExcel.read(is, new HashMap<Integer, String>().getClass(), listener)
-                    .sheet()
-                    .doRead();
+            Workbook workbook = WorkbookFactory.create(is);
+            Sheet sheet = workbook.getSheetAt(0);
+            if (sheet == null) throw BusinessException.badRequest("Excel 中没有工作表");
+
+            // 查找实际表头行: 跳过空行和标题行, 找非空单元格数 >= 5 的行
+            int headerRowIdx = -1;
+            for (int i = 0; i <= sheet.getLastRowNum(); i++) {
+                Row row = sheet.getRow(i);
+                if (row == null) continue;
+                int nonEmpty = 0;
+                for (int c = 0; c < row.getLastCellNum(); c++) {
+                    Cell cell = row.getCell(c);
+                    if (cell != null && StrUtil.isNotBlank(cell.toString().trim())) nonEmpty++;
+                }
+                if (nonEmpty >= 5) { headerRowIdx = i; break; }
+            }
+            if (headerRowIdx < 0) throw BusinessException.badRequest("未找到表头行");
+
+            Row headerRow = sheet.getRow(headerRowIdx);
+            int lastCol = headerRow.getLastCellNum();
+            String[] headers = new String[lastCol];
+            for (int i = 0; i < lastCol; i++) {
+                Cell cell = headerRow.getCell(i);
+                headers[i] = (cell != null ? cell.toString().trim() : "");
+            }
+
+            ColumnMappingResolver.MappingResult mapping = columnMappingResolver.resolve(headers);
+            if (!mapping.isValid()) {
+                throw BusinessException.badRequest("必含列名缺失(交易日期/金额). 表头: " + String.join(",", headers));
+            }
+
+            // 解析数据行
+            for (int rowIdx = headerRowIdx + 1; rowIdx <= sheet.getLastRowNum(); rowIdx++) {
+                Row row = sheet.getRow(rowIdx);
+                if (row == null) continue;
+
+                Map<Integer, String> cellValues = new HashMap<>();
+                for (int ci = 0; ci < lastCol; ci++) {
+                    Cell cell = row.getCell(ci);
+                    if (cell == null) { cellValues.put(ci, ""); continue; }
+                    switch (cell.getCellType()) {
+                        case STRING: cellValues.put(ci, cell.getStringCellValue().trim()); break;
+                        case NUMERIC:
+                            if (DateUtil.isCellDateFormatted(cell)) {
+                                java.util.Date d = cell.getDateCellValue();
+                                java.text.SimpleDateFormat sdf = new java.text.SimpleDateFormat("yyyy-MM-dd");
+                                cellValues.put(ci, sdf.format(d));
+                            } else {
+                                double val = cell.getNumericCellValue();
+                                cellValues.put(ci, new BigDecimal(val).toPlainString());
+                            }
+                            break;
+                        case BOOLEAN: cellValues.put(ci, String.valueOf(cell.getBooleanCellValue())); break;
+                        default: cellValues.put(ci, cell.toString().trim());
+                    }
+                }
+
+                Map<String, Object> p = new LinkedHashMap<>();
+                p.put("rowIndex", rowIdx + 1);
+                p.put("txDate", null);
+                p.put("txType", null);
+                p.put("direction", null);
+                p.put("amount", null);
+                p.put("counterAccount", null);
+                p.put("summary", null);
+                p.put("externalNo", null);
+                p.put("isDuplicate", false);
+                p.put("isError", false);
+                p.put("errorMessage", null);
+
+                try {
+                    BankStatementEntity stmt = parseRow(cellValues, mapping, accountId, batchId);
+                    if (stmt == null) {
+                        String reason = "解析失败: 必含字段缺失(交易日期/金额)";
+                        p.put("isError", true);
+                        p.put("errorMessage", reason);
+                        errors.add(Map.of("row", rowIdx + 1, "message", reason));
+                        previews.add(p);
+                        continue;
+                    }
+                    boolean isDup = false;
+                    if (StrUtil.isNotBlank(stmt.getExternalNo()) && stmt.getAmount() != null && stmt.getTxDate() != null) {
+                        try {
+                            isDup = statementMapper.countDuplicate(accountId, stmt.getTxDate(), stmt.getExternalNo(), stmt.getAmount()) > 0;
+                        } catch (Exception ignored) {}
+                    }
+                    stmt.setReviewStatus(isDup ? "DUPLICATE" : "PENDING");
+
+                    records.add(stmt);
+                    p.put("txDate", stmt.getTxDate());
+                    p.put("txType", stmt.getTxType());
+                    p.put("direction", stmt.getDirection());
+                    p.put("amount", stmt.getAmount());
+                    p.put("counterAccount", stmt.getCounterAccount());
+                    p.put("summary", stmt.getSummary());
+                    p.put("externalNo", stmt.getExternalNo());
+                    p.put("isDuplicate", isDup);
+                    previews.add(p);
+                } catch (Exception e) {
+                    String reason = "解析失败: " + e.getMessage();
+                    p.put("isError", true);
+                    p.put("errorMessage", reason);
+                    java.util.Map<String, Object> errItem = new java.util.LinkedHashMap<>();
+                    errItem.put("row", rowIdx + 1);
+                    errItem.put("message", reason);
+                    errors.add(errItem);
+                    previews.add(p);
+                }
+            }
+            workbook.close();
         } catch (IOException e) {
             throw new BusinessException(500, "读取Excel失败: " + e.getMessage());
         }
 
-        if (records.isEmpty()) {
-            return Map.of(
-                    "total", 0,
-                    "success", 0,
-                    "errors", errors,
-                    "batchId", batchId,
-                    "message", "未解析到有效数据行，请检查表头是否在第2行"
-            );
-        }
+        batchCache.put(batchId, records);
 
-        // 批量插入
-        int inserted = 0;
-        for (BankStatementEntity stmt : records) {
-            try {
-                statementMapper.insert(stmt);
-                inserted++;
-            } catch (Exception e) {
-                log.warn("插入对账单记录失败: {}", stmt, e);
-                errors.add(Map.of("row", stmt.getExternalNo(), "message", "数据库插入失败: " + e.getMessage()));
+        int validCount = records.size();
+        int totalCount = validCount + errors.size();
+        return Map.of(
+                "total", totalCount,
+                "valid", validCount,
+                "errors", errors,
+                "batchId", batchId,
+                "previews", previews
+        );
+    }
+
+    private BankStatementEntity parseRow(Map<Integer, String> vals, ColumnMappingResolver.MappingResult mapping,
+                                          Long accountId, String batchId) {
+        BankStatementEntity stmt = new BankStatementEntity();
+        stmt.setAccountId(accountId);
+        stmt.setMatchStatus("UNMATCHED");
+        stmt.setBatchId(batchId);
+        stmt.setDirection("in");
+
+        Integer dateIdx = mapping.getFieldToColumnIndex().get(ColumnMappingResolver.Field.TX_DATE);
+        if (dateIdx != null) {
+            String dateStr = vals.getOrDefault(dateIdx, "").trim();
+            if (StrUtil.isNotBlank(dateStr)) stmt.setTxDate(parseBankDate(dateStr));
+        }
+        if (stmt.getTxDate() == null) return null;
+
+        Integer amtIdx = mapping.getFieldToColumnIndex().get(ColumnMappingResolver.Field.AMOUNT);
+        if (amtIdx != null) {
+            String amtStr = vals.getOrDefault(amtIdx, "").trim();
+            if (StrUtil.isNotBlank(amtStr))
+                stmt.setAmount(new BigDecimal(amtStr.replaceAll("[^0-9.\\-]", "")));
+        }
+        if (stmt.getAmount() == null) return null;
+
+        Integer typeIdx = mapping.getFieldToColumnIndex().get(ColumnMappingResolver.Field.TX_TYPE);
+        if (typeIdx != null) {
+            String typeStr = vals.getOrDefault(typeIdx, "").trim();
+            if (typeStr.contains("来账") || typeStr.contains("收") || typeStr.contains("贷") || typeStr.toLowerCase().contains("in")) {
+                stmt.setTxType("INCOME"); stmt.setDirection("in");
+            } else if (typeStr.contains("往账") || typeStr.contains("付") || typeStr.contains("借") || typeStr.toLowerCase().contains("out")) {
+                stmt.setTxType("EXPENSE"); stmt.setDirection("out");
             }
         }
 
-        // 自动分类
+        String counterparty = null;
+        Integer payerIdx = mapping.getFieldToColumnIndex().get(ColumnMappingResolver.Field.PAYER_NAME);
+        Integer payeeIdx = mapping.getFieldToColumnIndex().get(ColumnMappingResolver.Field.PAYEE_NAME);
+        if ("INCOME".equals(stmt.getTxType()) && payeeIdx != null) {
+            counterparty = vals.getOrDefault(payeeIdx, "").trim();
+        } else if ("EXPENSE".equals(stmt.getTxType()) && payerIdx != null) {
+            counterparty = vals.getOrDefault(payerIdx, "").trim();
+        }
+        if (StrUtil.isBlank(counterparty)) {
+            if (payerIdx != null) counterparty = vals.getOrDefault(payerIdx, "").trim();
+            if (StrUtil.isBlank(counterparty) && payeeIdx != null) counterparty = vals.getOrDefault(payeeIdx, "").trim();
+        }
+        stmt.setCounterAccount(StrUtil.isNotBlank(counterparty) ? counterparty : null);
+
+        String summary = null;
+        Integer summaryIdx = mapping.getFieldToColumnIndex().get(ColumnMappingResolver.Field.SUMMARY);
+        if (summaryIdx != null) summary = vals.getOrDefault(summaryIdx, "").trim();
+        // cascade fallback
+        if (StrUtil.isBlank(summary)) {
+            for (int ci : vals.keySet()) {
+                String h = ""; // not available directly, skip
+            }
+        }
+        stmt.setSummary(StrUtil.isNotBlank(summary) ? summary : null);
+
+        Integer extIdx = mapping.getFieldToColumnIndex().get(ColumnMappingResolver.Field.EXTERNAL_NO);
+        if (extIdx != null) stmt.setExternalNo(vals.getOrDefault(extIdx, "").trim());
+
+        return stmt;
+    }
+
+    private LocalDate parseBankDate(String dateStr) {
+        if (StrUtil.isBlank(dateStr)) return null;
+        String clean = dateStr.trim();
+        if (clean.matches("\\d{8}"))
+            return LocalDate.parse(clean, DateTimeFormatter.ofPattern("yyyyMMdd"));
+        if (clean.matches("\\d{4}-\\d{2}-\\d{2}"))
+            return LocalDate.parse(clean);
+        try { return LocalDate.parse(clean); } catch (DateTimeParseException e) { return null; }
+    }
+
+    public Map<String, Object> confirmImport(String batchId) {
+        if (StrUtil.isBlank(batchId)) throw BusinessException.badRequest("batchId 不能为空");
+        List<BankStatementEntity> records = batchCache.remove(batchId);
+        if (records == null) throw BusinessException.notFound("批次不存在或已过期");
+        if (records.isEmpty()) return buildImportResult(0, 0, 0, 0, 0, List.of(), batchId);
+
+        int inserted = 0;
+        int duplicate = 0;
+        int failed = 0;
+        List<Map<String, Object>> errors = new ArrayList<>();
+        for (BankStatementEntity stmt : records) {
+            if ("DUPLICATE".equals(stmt.getReviewStatus())) {
+                duplicate++;
+                continue;
+            }
+            try {
+                stmt.setImportedAt(LocalDateTime.now());
+                statementMapper.insert(stmt);
+                inserted++;
+            } catch (Exception e) {
+                failed++;
+                java.util.Map<String, Object> err = new java.util.LinkedHashMap<>();
+                err.put("row", stmt.getExternalNo());
+                err.put("message", "插入失败: " + e.getMessage());
+                errors.add(err);
+            }
+        }
+
         int classified = 0;
         for (BankStatementEntity stmt : records) {
             if (stmt.getId() != null) {
@@ -91,219 +287,26 @@ public class BankStatementExcelImportService {
                     bankStatementService.classifySingle(stmt.getId());
                     classified++;
                 } catch (Exception e) {
-                    log.warn("自动分类失败 statementId={}: {}", stmt.getId(), e.getMessage());
+                    log.warn("分类失败 statementId={}: {}", stmt.getId(), e.getMessage());
                 }
             }
         }
 
-        log.info("Excel对账单导入完成: batchId={}, total={}, inserted={}, classified={}, errors={}",
-                batchId, records.size(), inserted, classified, errors.size());
-
-        return Map.of(
-                "total", records.size(),
-                "success", inserted,
-                "classified", classified,
-                "errors", errors,
-                "batchId", batchId
-        );
+        return buildImportResult(records.size(), inserted, duplicate, failed, classified, errors, batchId);
     }
 
-    /**
-     * EasyExcel 行级监听器 — 手动处理表头映射 + 数据行解析
-     */
-    private static class ExcelImportListener implements ReadListener<Map<Integer, String>> {
-
-        private final Long accountId;
-        private final String batchId;
-        private final List<Map<String, Object>> errors;
-        private final List<BankStatementEntity> records;
-        private final ColumnMappingResolver resolver;
-
-        private boolean headerRowProcessed = false;
-        private boolean isFirstRow = true;      // 跳过第1行(查询信息)
-        private boolean isSecondRow = false;    // 第2行=表头
-        private String[] headers;
-        private ColumnMappingResolver.MappingResult mapping;
-        private int dataRowIndex = 0;
-
-        ExcelImportListener(Long accountId, String batchId,
-                            List<Map<String, Object>> errors,
-                            List<BankStatementEntity> records,
-                            ColumnMappingResolver resolver) {
-            this.accountId = accountId;
-            this.batchId = batchId;
-            this.errors = errors;
-            this.records = records;
-            this.resolver = resolver;
-        }
-
-        @Override
-        public void invoke(Map<Integer, String> rowMap, AnalysisContext context) {
-            int rowIndex = context.readRowHolder().getRowIndex();
-
-            if (isFirstRow) {
-                isFirstRow = false;
-                isSecondRow = true;
-                return; // 跳过第1行
-            }
-
-            if (isSecondRow) {
-                isSecondRow = false;
-                // 第2行是表头
-                headers = new String[rowMap.size()];
-                for (int i = 0; i < rowMap.size(); i++) {
-                    headers[i] = rowMap.getOrDefault(i, "").trim();
-                }
-                mapping = resolver.resolve(headers);
-                if (!mapping.isValid()) {
-                    throw new RuntimeException("必含列名缺失(交易日期/金额). 表头: " + String.join(",", headers));
-                }
-                return;
-            }
-
-            // 数据行
-            dataRowIndex++;
-            try {
-                BankStatementEntity stmt = parseRow(rowMap, dataRowIndex);
-                if (stmt != null) {
-                    records.add(stmt);
-                }
-            } catch (Exception e) {
-                errors.add(Map.of(
-                        "row", dataRowIndex + 2,
-                        "message", "解析失败: " + e.getMessage()
-                ));
-            }
-        }
-
-        private BankStatementEntity parseRow(Map<Integer, String> rowMap, int rowNum) {
-            if (mapping == null) return null;
-
-            BankStatementEntity stmt = new BankStatementEntity();
-            stmt.setAccountId(accountId);
-            stmt.setMatchStatus("UNMATCHED");
-            stmt.setBatchId(batchId);
-            stmt.setDirection("in"); // default
-
-            // 原始数据JSON
-            Map<String, String> rawMap = new LinkedHashMap<>();
-            for (int i = 0; i < (headers != null ? headers.length : 0); i++) {
-                rawMap.put(headers[i], rowMap.getOrDefault(i, ""));
-            }
-            stmt.setRawData(rawMap.toString());
-
-            // --- 交易日期 ---
-            Integer dateIdx = mapping.getFieldToColumnIndex().get(ColumnMappingResolver.Field.TX_DATE);
-            if (dateIdx != null) {
-                String dateStr = rowMap.getOrDefault(dateIdx, "").trim();
-                if (StrUtil.isNotBlank(dateStr)) {
-                    stmt.setTxDate(parseDate(dateStr));
-                }
-            }
-            if (stmt.getTxDate() == null) return null;
-
-            // --- 交易金额 ---
-            Integer amtIdx = mapping.getFieldToColumnIndex().get(ColumnMappingResolver.Field.AMOUNT);
-            if (amtIdx != null) {
-                String amtStr = rowMap.getOrDefault(amtIdx, "").trim();
-                if (StrUtil.isNotBlank(amtStr)) {
-                    stmt.setAmount(new BigDecimal(amtStr.replaceAll("[^0-9.-]", "")));
-                }
-            }
-            if (stmt.getAmount() == null) return null;
-
-            // --- 方向: 来账=INCOME, 往账=EXPENSE ---
-            Integer typeIdx = mapping.getFieldToColumnIndex().get(ColumnMappingResolver.Field.TX_TYPE);
-            if (typeIdx != null) {
-                String typeStr = rowMap.getOrDefault(typeIdx, "").trim();
-                if (typeStr.contains("来账") || typeStr.contains("收") || typeStr.contains("贷")
-                        || typeStr.toLowerCase().contains("in")) {
-                    stmt.setTxType("INCOME");
-                    stmt.setDirection("in");
-                } else if (typeStr.contains("往账") || typeStr.contains("付") || typeStr.contains("借")
-                        || typeStr.toLowerCase().contains("out")) {
-                    stmt.setTxType("EXPENSE");
-                    stmt.setDirection("out");
-                }
-            }
-
-            // --- 对方户名: 优先付款人名称(来账=收款方视角), 否则收款人名称 ---
-            String counterparty = null;
-            Integer payerIdx = mapping.getFieldToColumnIndex().get(ColumnMappingResolver.Field.PAYER_NAME);
-            Integer payeeIdx = mapping.getFieldToColumnIndex().get(ColumnMappingResolver.Field.PAYEE_NAME);
-            if ("INCOME".equals(stmt.getTxType()) && payeeIdx != null) {
-                counterparty = rowMap.getOrDefault(payeeIdx, "").trim();
-            } else if ("EXPENSE".equals(stmt.getTxType()) && payerIdx != null) {
-                counterparty = rowMap.getOrDefault(payerIdx, "").trim();
-            }
-            if (StrUtil.isBlank(counterparty)) {
-                if (payerIdx != null) counterparty = rowMap.getOrDefault(payerIdx, "").trim();
-                if (StrUtil.isBlank(counterparty) && payeeIdx != null)
-                    counterparty = rowMap.getOrDefault(payeeIdx, "").trim();
-            }
-            stmt.setCounterAccount(StrUtil.isNotBlank(counterparty) ? counterparty : null);
-
-            // --- 摘要: 三级级联: 摘要→用途→交易附言 ---
-            String summary = null;
-            Integer summaryIdx = mapping.getFieldToColumnIndex().get(ColumnMappingResolver.Field.SUMMARY);
-            if (summaryIdx != null) summary = rowMap.getOrDefault(summaryIdx, "").trim();
-
-            if (StrUtil.isBlank(summary)) {
-                // 回退: 用途[Purpose] 或 交易附言[Remark]
-                for (int ci = 0; ci < (headers != null ? headers.length : 0); ci++) {
-                    String h = headers[ci].toLowerCase();
-                    if (h.contains("用途") || h.contains("purpose")) {
-                        summary = rowMap.getOrDefault(ci, "").trim();
-                        break;
-                    }
-                }
-            }
-            if (StrUtil.isBlank(summary)) {
-                for (int ci = 0; ci < (headers != null ? headers.length : 0); ci++) {
-                    String h = headers[ci].toLowerCase();
-                    if (h.contains("交易附言") || h.contains("remark")) {
-                        summary = rowMap.getOrDefault(ci, "").trim();
-                        break;
-                    }
-                }
-            }
-            stmt.setSummary(StrUtil.isNotBlank(summary) ? summary : null);
-
-            // --- 交易流水号 ---
-            Integer extIdx = mapping.getFieldToColumnIndex().get(ColumnMappingResolver.Field.EXTERNAL_NO);
-            if (extIdx != null) {
-                stmt.setExternalNo(rowMap.getOrDefault(extIdx, "").trim());
-            }
-
-            return stmt;
-        }
-
-        private LocalDate parseDate(String dateStr) {
-            if (StrUtil.isBlank(dateStr)) return null;
-            String clean = dateStr.trim();
-            // yyyyMMdd (如 "20240710")
-            if (clean.matches("\\d{8}")) {
-                return LocalDate.parse(clean, DateTimeFormatter.ofPattern("yyyyMMdd"));
-            }
-            // yyyy-MM-dd
-            if (clean.matches("\\d{4}-\\d{2}-\\d{2}")) {
-                return LocalDate.parse(clean);
-            }
-            // yyyy-MM-dd HH:mm:ss
-            if (clean.matches("\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}")) {
-                return LocalDate.parse(clean.substring(0, 10));
-            }
-            try {
-                return LocalDate.parse(clean);
-            } catch (DateTimeParseException e) {
-                log.warn("无法解析日期: {}", dateStr);
-                return null;
-            }
-        }
-
-        @Override
-        public void doAfterAllAnalysed(AnalysisContext context) {
-            log.info("Excel解析完成, 共 {} 条数据行", dataRowIndex);
-        }
+    private Map<String, Object> buildImportResult(int total, int success, int duplicate, int failed,
+                                                   int classified, List<Map<String, Object>> errors, String batchId) {
+        java.util.Map<String, Object> result = new java.util.LinkedHashMap<>();
+        result.put("total", total);
+        result.put("success", success);
+        result.put("duplicate", duplicate);
+        result.put("failed", failed);
+        result.put("classified", classified);
+        result.put("errors", errors);
+        result.put("batchId", batchId);
+        result.put("message", String.format("共解析 %d 条, 成功 %d 条, 重复跳过 %d 条, 失败 %d 条, 已分类 %d 条",
+                total, success, duplicate, failed, classified));
+        return result;
     }
 }

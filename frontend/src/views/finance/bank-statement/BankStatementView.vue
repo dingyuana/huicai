@@ -12,9 +12,14 @@
             <el-option v-for="a in accounts" :key="a.id" :label="`${a.accountName} (${a.accountNo})`" :value="a.id" />
           </el-select>
         </el-form-item>
-        <el-form-item label="匹配状态">
-          <el-select v-model="query.status" placeholder="全部" clearable style="width:140px" @change="onSearch">
-            <el-option v-for="(label, value) in MATCH_STATUS_LABELS" :key="value" :label="label" :value="value" />
+        <el-form-item label="确认状态">
+          <el-select v-model="query.reviewStatus" placeholder="全部" clearable style="width:140px" @change="onSearch">
+            <el-option v-for="(label, value) in REVIEW_STATUS_LABELS" :key="value" :label="label" :value="value" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="分类">
+          <el-select v-model="query.classification" placeholder="全部" clearable style="width:140px" @change="onSearch">
+            <el-option v-for="(label, value) in CLASSIFICATION_LABELS" :key="value" :label="label" :value="value" />
           </el-select>
         </el-form-item>
         <el-form-item>
@@ -24,79 +29,277 @@
       </el-form>
 
       <el-space style="margin-bottom: 12px">
-        <el-button type="primary" @click="openImport">导入CSV</el-button>
-        <el-button :disabled="!query.accountId" @click="onAutoMatch">智能匹配</el-button>
+        <el-button type="primary" @click="openImport">导入对账单</el-button>
+        <el-button :disabled="!selectedIds.length" type="success" @click="onBatchConfirm">批量确认并生成</el-button>
+        <el-button :disabled="!query.accountId" @click="onAutoClassify">自动分类全部</el-button>
       </el-space>
 
-      <h3 class="section-title">智能匹配建议</h3>
-      <el-table :data="suggestions" v-loading="matchLoading" border size="small">
-        <el-table-column prop="txDate" label="对账日期" width="120" />
-        <el-table-column label="金额" width="140" align="right">
-          <template #default="{ row }">{{ fmtAmount(row.amount) }}</template>
-        </el-table-column>
-        <el-table-column prop="counterAccount" label="对方" min-width="160" show-overflow-tooltip />
-        <el-table-column label="建议日记账" width="120" align="center">
-          <template #default="{ row }">
-            <el-tag v-if="row.matchedJournalId" type="success">#{{ row.matchedJournalId }}</el-tag>
-            <el-tag v-else type="info">无</el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column label="置信度" width="120" align="center">
-          <template #default="{ row }">
-            <el-progress :percentage="Math.min(100, row.score * 100)" :stroke-width="10" />
-          </template>
-        </el-table-column>
-        <el-table-column label="操作" width="160" align="center" fixed="right">
-          <template #default="{ row }">
-            <el-button v-if="row.matchedJournalId" text size="small" type="success" @click="onConfirm(row)">确认</el-button>
-          </template>
-        </el-table-column>
-      </el-table>
-
-      <h3 class="section-title">对账单记录</h3>
-      <el-table :data="list" v-loading="loading" border stripe>
-        <el-table-column prop="txDate" label="日期" width="120" />
-        <el-table-column prop="txType" label="类型" width="100" align="center">
+      <el-table :data="list" v-loading="loading" border stripe @selection-change="onSelectionChange" @row-click="onRowClick" style="cursor:pointer">
+        <el-table-column type="selection" width="40" />
+        <el-table-column prop="txDate" label="日期" width="110" />
+        <el-table-column prop="txType" label="方向" width="70" align="center">
           <template #default="{ row }">
             <el-tag :type="row.txType === 'INCOME' ? 'success' : 'warning'" size="small">
-              {{ row.txType === 'INCOME' ? '收入' : '支出' }}
+              {{ row.txType === 'INCOME' ? '收' : '支' }}
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="金额" width="140" align="right">
+        <el-table-column label="金额" width="130" align="right">
           <template #default="{ row }">{{ fmtAmount(row.amount) }}</template>
         </el-table-column>
-        <el-table-column prop="counterAccount" label="对方" min-width="160" show-overflow-tooltip />
-        <el-table-column prop="summary" label="摘要" min-width="200" show-overflow-tooltip />
-        <el-table-column label="匹配状态" width="120" align="center">
+        <el-table-column prop="counterAccount" label="对方" min-width="140" show-overflow-tooltip />
+        <el-table-column prop="summary" label="摘要" min-width="180" show-overflow-tooltip />
+        <el-table-column label="分类" width="100" align="center">
           <template #default="{ row }">
-            <el-tag :type="statusType(row.matchStatus) as 'success' | 'warning' | 'info' | 'primary' | 'danger'" size="small">
-              {{ MATCH_STATUS_LABELS[row.matchStatus] || row.matchStatus }}
+            <el-tag v-if="row.classification && row.classification !== 'pending'"
+              :type="row.reviewStatus === 'CONFIRMED' ? 'success' : 'warning'" size="small">
+              {{ CLASSIFICATION_LABELS[row.classification] || row.classification }}
+            </el-tag>
+            <el-tag v-else type="info" size="small">未分类</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="确认状态" width="90" align="center">
+          <template #default="{ row }">
+            <el-tag :type="row.reviewStatus === 'CONFIRMED' ? 'success' : 'warning'" size="small">
+              {{ REVIEW_STATUS_LABELS[row.reviewStatus] || '待确认' }}
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="匹配日记账" width="120" align="center">
+        <el-table-column label="生成结果" width="130" align="center">
           <template #default="{ row }">
-            <span v-if="row.matchedJournalId">#{{ row.matchedJournalId }}</span>
+            <span v-if="row.generatedVoucherId" style="color:var(--el-color-success)">
+              凭证 #{{ row.generatedVoucherId }}
+            </span>
+            <span v-else-if="row.generatedDocId" style="color:var(--el-color-primary)">
+              单据 #{{ row.generatedDocId }}
+            </span>
             <span v-else>-</span>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="180" fixed="right">
+        <el-table-column label="操作" width="220" fixed="right">
           <template #default="{ row }">
-            <el-button v-if="row.matchStatus === 'UNMATCHED'" text size="small" type="danger" @click="onIgnore(row)">忽略</el-button>
+            <el-button v-if="!row.classification || row.classification === 'pending'"
+              text size="small" type="primary" @click="onClassify(row)">分类</el-button>
+            <el-button v-if="row.classification && row.classification !== 'pending' && row.reviewStatus !== 'CONFIRMED'"
+              text size="small" type="success" @click="onReview(row)">确认</el-button>
+            <el-button v-if="row.generatedVoucherId" text size="small" type="primary"
+              @click="openVoucher(row.generatedVoucherId!)">查看凭证</el-button>
+            <el-popconfirm title="确定删除该条流水?" @confirm="onDelete(row)">
+              <template #reference>
+                <el-button text size="small" type="danger">删除</el-button>
+              </template>
+            </el-popconfirm>
           </template>
         </el-table-column>
       </el-table>
+
+      <el-pagination
+        v-if="total > 0"
+        v-model:current="query.current"
+        v-model:page-size="query.size"
+        :total="total"
+        layout="total, prev, pager, next"
+        style="margin-top:12px;justify-content:flex-end"
+        @change="fetchData"
+      />
     </el-card>
 
-    <el-dialog v-model="importDialogVisible" title="导入CSV对账单" width="640" destroy-on-close>
-      <el-alert type="info" :closable="false" style="margin-bottom:12px">
-        格式: 日期,类型(收/支),金额,对方,摘要 (每行一条,首行可为表头)
-      </el-alert>
-      <el-input v-model="csvContent" type="textarea" :rows="10" placeholder="2026-06-01,收,1000.00,客户A,货款&#10;2026-06-02,支,500.00,供应商B,采购款" />
+    <!-- 导入对话框: CSV + Excel 双标签 -->
+    <el-dialog v-model="importDialogVisible" title="导入对账单" width="780" destroy-on-close>
+      <el-tabs v-model="activeTab">
+        <el-tab-pane label="CSV导入" name="csv">
+          <el-alert type="info" :closable="false" style="margin-bottom:12px">
+            格式: 日期,类型(收/支),金额,对方,摘要 (每行一条,首行可为表头)
+          </el-alert>
+          <el-input v-model="csvContent" type="textarea" :rows="10" placeholder="2026-06-01,收,1000.00,客户A,货款&#10;2026-06-02,支,500.00,供应商B,采购款" />
+          <template #footer>
+            <el-button @click="importDialogVisible = false">取消</el-button>
+            <el-button type="primary" :loading="importing" @click="onImportCsv">导入CSV</el-button>
+          </template>
+        </el-tab-pane>
+
+        <el-tab-pane label="Excel导入" name="excel">
+          <el-alert type="info" :closable="false" style="margin-bottom:12px">
+            支持 .xlsx 格式。表头在第2行（自动跳过第1行查询信息行），自动识别列名。两步流程：① 上传文件预览 → ② 确认后写入数据库并执行智能分类。
+          </el-alert>
+
+          <!-- 步骤1: 上传 -->
+          <div v-if="!previewData">
+            <el-upload
+              ref="uploadRef" drag
+              :auto-upload="false" :show-file-list="true"
+              accept=".xlsx,.xls"
+              :limit="1"
+              @change="onFileChange">
+              <el-icon class="el-icon--upload" style="font-size:48px"><upload-filled /></el-icon>
+              <div class="el-upload__text">拖放对账单Excel文件到此处或 <em>点击选择</em></div>
+              <template #tip><div class="el-upload__tip">支持银行标准对账单格式（交易日期、交易金额、摘要等列）</div></template>
+            </el-upload>
+            <div style="margin-top:16px;text-align:right">
+              <el-button @click="importDialogVisible = false">取消</el-button>
+              <el-button type="primary" :loading="previewing" :disabled="!selectedFile" @click="onPreviewExcel">
+                {{ previewing ? '解析中...' : '下一步: 预览' }}
+              </el-button>
+            </div>
+          </div>
+
+          <!-- 步骤2: 预览 -->
+          <div v-else>
+            <el-descriptions :column="3" border size="small" style="margin-bottom:12px">
+              <el-descriptions-item label="总行数">{{ previewData.total }}</el-descriptions-item>
+              <el-descriptions-item label="有效行数">{{ previewData.valid }}</el-descriptions-item>
+              <el-descriptions-item label="错误行数">
+                <el-tag v-if="previewData.errors?.length" type="danger">{{ previewData.errors.length }}</el-tag>
+                <el-tag v-else type="success">0</el-tag>
+              </el-descriptions-item>
+            </el-descriptions>
+
+            <h4 style="margin:12px 0 8px">预览 ({{ previewData.previews?.length || 0 }} 行)</h4>
+            <el-table :data="(previewData.previews || []).slice(0, 50)" border size="small" max-height="300"
+              :row-class-name="previewRowClass">
+              <el-table-column type="index" label="行号" width="50" />
+              <el-table-column prop="txDate" label="交易日期" width="100" />
+              <el-table-column label="方向" width="60">
+                <template #default="{ row }">
+                  <el-tag v-if="row.txType" :type="row.txType === 'INCOME' ? 'success' : 'warning'" size="small">
+                    {{ row.txType === 'INCOME' ? '收' : '支' }}
+                  </el-tag>
+                  <span v-else>-</span>
+                </template>
+              </el-table-column>
+              <el-table-column label="金额" width="120" align="right">
+                <template #default="{ row }">{{ fmtAmount(row.amount) }}</template>
+              </el-table-column>
+              <el-table-column prop="counterAccount" label="对方" min-width="140" show-overflow-tooltip />
+              <el-table-column prop="summary" label="摘要" min-width="160" show-overflow-tooltip />
+              <el-table-column prop="externalNo" label="流水号" width="160" show-overflow-tooltip />
+              <el-table-column label="状态" width="80" align="center">
+                <template #default="{ row }">
+                  <el-tag v-if="row.isError" type="danger" size="small" :title="row.errorMessage">失败</el-tag>
+                  <el-tag v-else-if="row.isDuplicate" type="warning" size="small">重复</el-tag>
+                  <el-tag v-else type="success" size="small">有效</el-tag>
+                </template>
+              </el-table-column>
+            </el-table>
+            <p v-if="(previewData.previews?.length || 0) > 50" style="text-align:center;color:#909399;margin-top:8px">
+              仅显示前 50 行, 共 {{ previewData.previews.length }} 条
+            </p>
+
+            <el-collapse v-if="previewData.errors?.length" style="margin-top:12px">
+              <el-collapse-item :title="`错误明细 (${previewData.errors.length} 条)`" name="errors">
+                <el-table :data="previewData.errors" border size="small">
+                  <el-table-column prop="row" label="行号" width="80" />
+                  <el-table-column prop="message" label="错误原因" min-width="200" />
+                </el-table>
+              </el-collapse-item>
+            </el-collapse>
+
+            <div style="margin-top:16px;text-align:right">
+              <el-button @click="previewData = null">重新上传</el-button>
+              <el-button @click="importDialogVisible = false">取消</el-button>
+              <el-button type="primary" :loading="confirming" :disabled="!previewData.valid" @click="onConfirmImport">
+                {{ confirming ? '导入中...' : `确认导入 ${previewData.valid} 条` }}
+              </el-button>
+            </div>
+          </div>
+        </el-tab-pane>
+      </el-tabs>
+    </el-dialog>
+
+    <!-- 导入结果摘要 -->
+    <el-dialog v-model="importResultVisible" title="导入完成" width="480" :close-on-click-modal="false">
+      <el-result v-if="importResult" :icon="importResult.failed === 0 ? 'success' : 'warning'"
+        :title="importResult.failed === 0 ? '导入成功' : '部分行导入失败'">
+        <template #extra>
+          <el-descriptions :column="1" border size="small" style="text-align:left">
+            <el-descriptions-item label="共解析">{{ importResult.total }} 条</el-descriptions-item>
+            <el-descriptions-item label="成功导入">
+              <el-tag type="success">{{ importResult.success }} 条</el-tag>
+            </el-descriptions-item>
+            <el-descriptions-item v-if="importResult.duplicate > 0" label="重复跳过">
+              <el-tag type="warning">{{ importResult.duplicate }} 条</el-tag>
+            </el-descriptions-item>
+            <el-descriptions-item v-if="importResult.failed > 0" label="失败">
+              <el-tag type="danger">{{ importResult.failed }} 条</el-tag>
+            </el-descriptions-item>
+            <el-descriptions-item label="已自动分类">
+              <el-tag type="primary">{{ importResult.classified }} 条</el-tag>
+              <span style="color:#909399;margin-left:8px">待出纳在工作台确认</span>
+            </el-descriptions-item>
+          </el-descriptions>
+        </template>
+      </el-result>
       <template #footer>
-        <el-button @click="importDialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="importing" @click="onImport">导入</el-button>
+        <el-button type="primary" @click="importResultVisible = false">确定</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 批量确认结果 -->
+    <el-dialog v-model="resultDialogVisible" title="批量确认结果" width="420">
+      <el-result v-if="batchResult" :icon="batchResult.failed === 0 ? 'success' : 'warning'"
+        :title="`确认 ${batchResult.confirmed} 条`">
+        <template #extra>
+          <p>已生成凭证: {{ batchResult.vouchers_created }}</p>
+          <p>已生成单据: {{ batchResult.docs_created }}</p>
+          <p v-if="batchResult.failed > 0" style="color:var(--el-color-danger)">失败: {{ batchResult.failed }}</p>
+        </template>
+      </el-result>
+    </el-dialog>
+
+    <!-- 流水详情弹窗 -->
+    <el-dialog v-model="detailVisible" title="流水详情" width="600px">
+      <template v-if="detailData">
+        <el-descriptions :column="2" border>
+          <el-descriptions-item label="交易日期">{{ detailData.txDate }}</el-descriptions-item>
+          <el-descriptions-item label="银行账户">{{ bankNameMap[detailData.accountId] || '未知' }}</el-descriptions-item>
+          <el-descriptions-item label="方向">
+            <el-tag :type="detailData.txType === 'INCOME' ? 'success' : 'warning'" size="small">
+              {{ detailData.txType === 'INCOME' ? '收款' : '付款' }}
+            </el-tag>
+          </el-descriptions-item>
+          <el-descriptions-item label="金额">
+            <span :style="{ color: detailData.txType === 'INCOME' ? 'var(--el-color-success)' : 'var(--el-color-danger)' }">
+              ¥{{ fmtAmount(detailData.amount) }}
+            </span>
+          </el-descriptions-item>
+          <el-descriptions-item label="对方名称" :span="2">{{ detailData.counterAccount || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="摘要" :span="2">{{ detailData.summary || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="流水号" :span="2">{{ detailData.externalNo || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="分类">
+            <el-select v-if="detailEditable" v-model="editClassification" placeholder="选择分类" size="small" style="width:140px">
+              <el-option v-for="(label, value) in CLASSIFICATION_LABELS" :key="value" :label="label" :value="value" />
+            </el-select>
+            <el-tag v-else-if="detailData.classification" :type="detailData.reviewStatus === 'CONFIRMED' ? 'success' : 'warning'" size="small">
+              {{ CLASSIFICATION_LABELS[detailData.classification] || detailData.classification }}
+            </el-tag>
+            <span v-else>-</span>
+          </el-descriptions-item>
+          <el-descriptions-item label="确认状态">
+            <el-tag :type="detailData.reviewStatus === 'CONFIRMED' ? 'success' : 'warning'" size="small">
+              {{ REVIEW_STATUS_LABELS[detailData.reviewStatus] || detailData.reviewStatus || '待确认' }}
+            </el-tag>
+          </el-descriptions-item>
+          <el-descriptions-item label="导入时间">{{ detailData.importedAt || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="生成结果">
+            <span v-if="detailData.generatedVoucherId" style="color:var(--el-color-success)">凭证 #{{ detailData.generatedVoucherId }}</span>
+            <span v-else-if="detailData.generatedDocId" style="color:var(--el-color-primary)">单据 #{{ detailData.generatedDocId }}</span>
+            <span v-else>-</span>
+          </el-descriptions-item>
+        </el-descriptions>
+      </template>
+      <template #footer>
+        <el-button @click="detailVisible = false">关闭</el-button>
+        <el-button v-if="!detailEditable" text type="primary" @click="startEdit">修改分类</el-button>
+        <template v-if="detailEditable">
+          <el-button @click="cancelEdit">取消</el-button>
+          <el-button type="primary" @click="saveClassification">保存</el-button>
+        </template>
+        <el-button v-if="!detailEditable && detailData && (!detailData.classification || detailData.classification === 'pending')"
+          type="primary" @click="onClassify(detailData); detailVisible = false">自动分类</el-button>
+        <el-button v-if="!detailEditable && detailData && detailData.classification && detailData.classification !== 'pending' && detailData.reviewStatus !== 'CONFIRMED'"
+          type="success" @click="onReview(detailData); detailVisible = false">确认</el-button>
+        <el-button v-if="!detailEditable && detailData && detailData.generatedVoucherId" type="primary"
+          @click="openVoucher(detailData.generatedVoucherId!); detailVisible = false">查看凭证</el-button>
       </template>
     </el-dialog>
   </div>
@@ -105,33 +308,45 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
+import { UploadFilled } from '@element-plus/icons-vue'
 import {
-  getBankStatementPage, importStatementCsv, autoMatchStatements,
-  confirmStatementMatch, ignoreStatement, MATCH_STATUS_LABELS, type BankStatementVO, type MatchSuggestion,
+  getBankStatementPage, previewStatementExcel, confirmStatementImport, importStatementCsv,
+  classifyStatement, reviewStatement,   batchConfirmStatements, deleteStatement, updateStatementClassification,
+  getBankStatementDetail,
+  CLASSIFICATION_LABELS, REVIEW_STATUS_LABELS,
+  type BankStatementVO,
 } from '@/api/modules/bankStatement'
 import { getActiveBankAccounts, type BankAccountVO } from '@/api/modules/bankAccount'
 
 const loading = ref(false)
-const matchLoading = ref(false)
 const importing = ref(false)
+const previewing = ref(false)
+const confirming = ref(false)
 const list = ref<BankStatementVO[]>([])
-const suggestions = ref<MatchSuggestion[]>([])
+const total = ref(0)
 const accounts = ref<BankAccountVO[]>([])
+const selectedIds = ref<number[]>([])
+const selectedFile = ref<File | null>(null)
+
 const importDialogVisible = ref(false)
+const activeTab = ref('csv')
+const previewData = ref<{
+  total: number; valid: number; errors: any[]; batchId: string; previews: any[]
+} | null>(null)
+const importResultVisible = ref(false)
+const importResult = ref<{ total: number; success: number; duplicate: number; failed: number; classified: number; message: string } | null>(null)
+const resultDialogVisible = ref(false)
+const detailVisible = ref(false)
+const detailData = ref<any>(null)
+const detailEditable = ref(false)
+const editClassification = ref('')
+const bankNameMap = ref<Record<number, string>>({})
+const batchResult = ref<{ confirmed: number; vouchers_created: number; docs_created: number; failed: number } | null>(null)
 const csvContent = ref('')
 
-const query = ref<{ accountId?: number; status?: string; current: number; size: number }>({
+const query = ref<{ accountId?: number; reviewStatus?: string; classification?: string; current: number; size: number }>({
   current: 1, size: 20,
 })
-
-function statusType(s: string) {
-  switch (s) {
-    case 'MATCHED': return 'success'
-    case 'MANUAL_MATCHED': return 'primary'
-    case 'IGNORED': return 'info'
-    default: return 'warning'
-  }
-}
 
 function fmtAmount(v: number) {
   return v == null ? '' : Number(v).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -140,22 +355,21 @@ function fmtAmount(v: number) {
 async function fetchData() {
   loading.value = true
   try {
-    const res = await getBankStatementPage(query.value)
-    list.value = res.records
-  } catch {
-    // handled
+    const res = await getBankStatementPage(query.value as any)
+    list.value = (res as any).records || []
+    total.value = (res as any).total || 0
   } finally {
     loading.value = false
   }
 }
 
-function onSearch() {
-  query.value.current = 1
-  fetchData()
-}
+function onSearch() { query.value.current = 1; fetchData() }
 function onReset() {
   query.value = { current: 1, size: 20 }
   fetchData()
+}
+function onSelectionChange(rows: BankStatementVO[]) {
+  selectedIds.value = rows.map(r => r.id)
 }
 
 function openImport() {
@@ -164,10 +378,72 @@ function openImport() {
     return
   }
   csvContent.value = ''
+  selectedFile.value = null
+  previewData.value = null
+  activeTab.value = 'csv'
   importDialogVisible.value = true
 }
 
-async function onImport() {
+function onFileChange(uploadFile: any) {
+  selectedFile.value = uploadFile.raw || null
+  previewData.value = null
+}
+
+async function onPreviewExcel() {
+  if (!query.value.accountId || !selectedFile.value) {
+    ElMessage.warning('请选择账户和文件')
+    return
+  }
+  previewing.value = true
+  try {
+    previewData.value = await previewStatementExcel(query.value.accountId, selectedFile.value)
+    if (previewData.value.total === 0) {
+      ElMessage.warning('未解析到有效数据, 请检查Excel格式')
+    } else {
+      ElMessage.success(`解析完成: 共 ${previewData.value.total} 行, 有效 ${previewData.value.valid} 行`)
+    }
+  } finally {
+    previewing.value = false
+  }
+}
+
+async function onConfirmImport() {
+  if (!previewData.value?.batchId) {
+    ElMessage.warning('请先预览')
+    return
+  }
+  if (previewData.value.valid === 0) {
+    ElMessage.warning('没有有效行可导入')
+    return
+  }
+  confirming.value = true
+  try {
+    const res = await confirmStatementImport(previewData.value.batchId) as any
+    importResult.value = {
+      total: res.total || 0,
+      success: res.success || 0,
+      duplicate: res.duplicate || 0,
+      failed: res.failed || 0,
+      classified: res.classified || 0,
+      message: res.message || '',
+    }
+    importDialogVisible.value = false
+    importResultVisible.value = true
+    previewData.value = null
+    selectedFile.value = null
+    await fetchData()
+  } finally {
+    confirming.value = false
+  }
+}
+
+function previewRowClass({ row }: { row: any }) {
+  if (row.isError) return 'preview-row-error'
+  if (row.isDuplicate) return 'preview-row-duplicate'
+  return ''
+}
+
+async function onImportCsv() {
   if (!csvContent.value.trim()) {
     ElMessage.warning('CSV内容不能为空')
     return
@@ -175,50 +451,112 @@ async function onImport() {
   importing.value = true
   try {
     const n = await importStatementCsv(query.value.accountId!, csvContent.value)
-    ElMessage.success(`导入 ${n} 条对账单`)
+    ElMessage.success(`导入 ${n} 条`)
     importDialogVisible.value = false
     await fetchData()
-  } catch {
-    // handled
   } finally {
     importing.value = false
   }
 }
 
-async function onAutoMatch() {
-  if (!query.value.accountId) {
-    ElMessage.warning('请先选择银行账户')
+async function onClassify(row: BankStatementVO) {
+  await classifyStatement(row.id)
+  ElMessage.success('分类完成')
+  await fetchData()
+}
+
+async function onReview(row: BankStatementVO) {
+  await reviewStatement(row.id)
+  ElMessage.success('确认完成，已触发自动生成')
+  await fetchData()
+}
+
+async function onAutoClassify() {
+  if (!query.value.accountId) return
+  loading.value = true
+  try {
+    const res = await getBankStatementPage({ accountId: query.value.accountId, current: 1, size: 9999 } as any)
+    const items = (res as any).records || []
+    let classified = 0
+    for (const item of items) {
+      if (!item.classification || item.classification === 'pending') {
+        try { await classifyStatement(item.id); classified++ } catch { /* skip */ }
+      }
+    }
+    ElMessage.success(`自动分类 ${classified} 条`)
+    await fetchData()
+  } finally {
+    loading.value = false
+  }
+}
+
+async function onBatchConfirm() {
+  if (!selectedIds.value.length) {
+    ElMessage.warning('请先选择流水')
     return
   }
-  matchLoading.value = true
   try {
-    suggestions.value = await autoMatchStatements(query.value.accountId)
-    ElMessage.success(`生成 ${suggestions.value.length} 条匹配建议`)
-  } catch {
-    // handled
-  } finally {
-    matchLoading.value = false
-  }
+    batchResult.value = await batchConfirmStatements(selectedIds.value)
+    resultDialogVisible.value = true
+    await fetchData()
+  } catch { /* handled */ }
 }
 
-async function onConfirm(row: MatchSuggestion) {
-  await confirmStatementMatch(row.statementId, row.matchedJournalId!)
-  ElMessage.success('已确认匹配')
-  await Promise.all([fetchData(), onAutoMatch()])
+function openVoucher(id: number) {
+  window.open(`/#/finance/voucher/detail?id=${id}`, '_blank')
 }
 
-async function onIgnore(row: BankStatementVO) {
-  await ignoreStatement(row.id)
-  ElMessage.success('已忽略')
-  await fetchData()
+async function onRowClick(row: any, column: any) {
+  if (column?.type === 'selection') return
+  try {
+    detailData.value = await getBankStatementDetail(row.id)
+    detailEditable.value = false
+    editClassification.value = ''
+    detailVisible.value = true
+  } catch { /* handled */ }
+}
+
+function startEdit() {
+  editClassification.value = detailData.value.classification || 'pending'
+  detailEditable.value = true
+}
+
+function cancelEdit() {
+  detailEditable.value = false
+  editClassification.value = ''
+}
+
+async function saveClassification() {
+  if (!detailData.value) return
+  try {
+    await updateStatementClassification(detailData.value.id, editClassification.value)
+    detailData.value.classification = editClassification.value
+    detailEditable.value = false
+    await fetchData()
+    ElMessage.success('分类已更新')
+  } catch { /* handled */ }
+}
+
+async function onDelete(row: any) {
+  try {
+    await deleteStatement(row.id)
+    ElMessage.success('已删除')
+    await fetchData()
+  } catch { /* handled */ }
 }
 
 onMounted(async () => {
   try {
     accounts.value = await getActiveBankAccounts()
-  } catch {
-    // ignore
-  }
+    // Build bank name map for detail dialog
+    for (const a of accounts.value) {
+      bankNameMap.value[a.id] = `${a.accountName} (${a.accountNo})`
+    }
+    // 只有一个账户时自动选中
+    if (accounts.value.length === 1) {
+      query.value.accountId = accounts.value[0].id
+    }
+  } catch { /* ignore */ }
   await fetchData()
 })
 </script>
@@ -232,5 +570,14 @@ onMounted(async () => {
 }
 .page-title { font-size: 16px; font-weight: 600; }
 .filter-form { margin-bottom: 12px; }
-.section-title { margin: 16px 0 12px; font-size: 14px; font-weight: 600; }
+:deep(.preview-row-error) {
+  background-color: #fef0f0 !important;
+  color: var(--el-color-danger);
+}
+:deep(.preview-row-error:hover > td) {
+  background-color: #fde2e2 !important;
+}
+:deep(.preview-row-duplicate) {
+  background-color: #fdf6ec !important;
+}
 </style>

@@ -18,7 +18,19 @@ public class SalesInvoiceController {
 
     private final SalesInvoiceImportService importService;
 
-    @Operation(summary = "导入销售发票Excel (恺拓格式)")
+    @Operation(summary = "第一步: 上传销售发票Excel, 解析为预览数据, 不写入数据库")
+    @PostMapping("/preview")
+    public R<Map<String, Object>> previewInvoices(@RequestParam("file") MultipartFile file) {
+        return R.ok(importService.previewInvoices(file));
+    }
+
+    @Operation(summary = "第二步: 用户确认预览后, 真正写入数据库 + 生成单据 + 生成凭证")
+    @PostMapping("/confirm-import")
+    public R<Map<String, Object>> confirmImport(@RequestParam String batchId) {
+        return R.ok(importService.confirmImport(batchId));
+    }
+
+    @Operation(summary = "一步式导入 (兼容旧调用, 内部走 preview + confirm)")
     @PostMapping("/import")
     public R<Map<String, Object>> importInvoices(@RequestParam("file") MultipartFile file) {
         return R.ok(importService.importInvoices(file));
@@ -29,7 +41,6 @@ public class SalesInvoiceController {
     public R<?> page(
             @RequestParam(defaultValue = "1") Integer current,
             @RequestParam(defaultValue = "20") Integer size) {
-        // 发票导入记录直接通过业务单据列表查看 (docType=INVOICE_OUT, source=INVOICE_IMPORT)
         return R.ok(Map.of("message", "请通过 /api/v1/business-docs/page?docType=INVOICE_OUT&source=INVOICE_IMPORT 查看"));
     }
 }

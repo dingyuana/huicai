@@ -5,7 +5,7 @@ export default defineConfig({
   timeout: 30000,
   expect: { timeout: 10000 },
   use: {
-    baseURL: 'http://localhost:3002',
+    baseURL: 'http://localhost:3001',
     headless: true,
     launchOptions: {
       executablePath: '/usr/bin/google-chrome',

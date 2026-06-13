@@ -60,6 +60,20 @@ export function deleteUser(id: number): Promise<void> {
   return request.delete(`/system/user/${id}`)
 }
 
+// ==================== 数据维护 ====================
+export function clearBankStatements(): Promise<{ deleted: number; message: string }> {
+  return request.post('/system/clear-bank-statements')
+}
+export function clearInvoiceRecords(): Promise<{ deleted: number; message: string }> {
+  return request.post('/system/clear-invoice-records')
+}
+export function clearVouchers(): Promise<{ deleted: number; message: string }> {
+  return request.post('/system/clear-vouchers')
+}
+export function clearAll(): Promise<{ deleted: number; message: string }> {
+  return request.post('/system/clear-all')
+}
+
 // ==================== Role ====================
 export interface RoleVO {
   id: number

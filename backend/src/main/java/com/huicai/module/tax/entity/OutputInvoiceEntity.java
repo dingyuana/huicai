@@ -11,7 +11,7 @@ import java.time.LocalDateTime;
 @TableName("t_output_invoice")
 public class OutputInvoiceEntity {
 
-    @TableId(type = IdType.ASSIGN_ID)
+    @TableId(type = IdType.AUTO)
     private Long id;
 
     private String invoiceNo;
@@ -29,6 +29,7 @@ public class OutputInvoiceEntity {
     private Long voucherId;
     private String remark;
     private Long createdBy;
+    @TableField(exist = false)
     private Long updatedBy;
 
     @TableField(fill = FieldFill.INSERT)

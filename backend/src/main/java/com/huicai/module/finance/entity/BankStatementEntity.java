@@ -11,7 +11,7 @@ import java.time.LocalDateTime;
 @TableName("t_bank_statement")
 public class BankStatementEntity {
 
-    @TableId(type = IdType.ASSIGN_ID)
+    @TableId(type = IdType.AUTO)
     private Long id;
 
     private Long accountId;
@@ -36,6 +36,11 @@ public class BankStatementEntity {
     private String reviewStatus;          // 出纳确认状态
     private Long reviewedBy;              // 审核人
     private LocalDateTime reviewedAt;     // 审核时间
+
+    // V22: 自动生成单据与凭证
+    private Long generatedDocId;          // 生成的业务单据 ID
+    private Long generatedVoucherId;      // 生成的会计凭证 ID
+    private LocalDateTime generatedAt;    // 生成时间
 
     @TableField(fill = FieldFill.INSERT)
     private LocalDateTime importedAt;
