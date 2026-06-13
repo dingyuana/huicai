@@ -112,10 +112,10 @@
             格式: 日期,类型(收/支),金额,对方,摘要 (每行一条,首行可为表头)
           </el-alert>
           <el-input v-model="csvContent" type="textarea" :rows="10" placeholder="2026-06-01,收,1000.00,客户A,货款&#10;2026-06-02,支,500.00,供应商B,采购款" />
-          <template #footer>
+          <div style="margin-top:16px;text-align:right">
             <el-button @click="importDialogVisible = false">取消</el-button>
             <el-button type="primary" :loading="importing" @click="onImportCsv">导入CSV</el-button>
-          </template>
+          </div>
         </el-tab-pane>
 
         <el-tab-pane label="Excel导入" name="excel">
@@ -124,7 +124,7 @@
           </el-alert>
 
           <!-- 步骤1: 上传 -->
-          <div v-if="!previewData">
+          <div v-if="!previewData && !mappingStep">
             <el-upload
               ref="uploadRef" drag
               :auto-upload="false" :show-file-list="true"
@@ -137,14 +137,45 @@
             </el-upload>
             <div style="margin-top:16px;text-align:right">
               <el-button @click="importDialogVisible = false">取消</el-button>
-              <el-button type="primary" :loading="previewing" :disabled="!selectedFile" @click="onPreviewExcel">
-                {{ previewing ? '解析中...' : '下一步: 预览' }}
+              <el-button type="primary" :loading="mappingLoading" :disabled="!selectedFile" @click="onParseHeaders">
+                {{ mappingLoading ? '解析表头...' : '下一步: 列映射' }}
+              </el-button>
+            </div>
+          </div>
+
+          <!-- 步骤1.5: 列映射 -->
+          <div v-else-if="mappingStep && !previewData">
+            <el-alert type="info" :closable="false" style="margin-bottom:12px">
+              请将Excel列名映射到系统字段。标记 <el-tag size="small" type="danger">必填</el-tag> 的字段必须映射。
+            </el-alert>
+
+            <el-table :data="systemFields" border size="small" max-height="400">
+              <el-table-column label="系统字段" min-width="160">
+                <template #default="{ row }">
+                  {{ row.label }}
+                  <el-tag v-if="row.required" size="small" type="danger" style="margin-left:4px">必填</el-tag>
+                </template>
+              </el-table-column>
+              <el-table-column label="映射Excel列" min-width="280">
+                <template #default="{ row }">
+                  <el-select v-model="columnMapping[row.field]" placeholder="选择列..." clearable filterable style="width:100%">
+                    <el-option v-for="h in excelHeaders" :key="h" :label="h || '(空列)'" :value="h" />
+                  </el-select>
+                </template>
+              </el-table-column>
+            </el-table>
+
+            <div style="margin-top:16px;text-align:right">
+              <el-button @click="mappingStep = false; previewData = null">重新上传</el-button>
+              <el-button @click="importDialogVisible = false">取消</el-button>
+              <el-button type="primary" :loading="previewing" @click="onPreviewWithMapping">
+                {{ previewing ? '预览中...' : '下一步: 预览' }}
               </el-button>
             </div>
           </div>
 
           <!-- 步骤2: 预览 -->
-          <div v-else>
+          <div v-else-if="previewData">
             <el-descriptions :column="3" border size="small" style="margin-bottom:12px">
               <el-descriptions-item label="总行数">{{ previewData.total }}</el-descriptions-item>
               <el-descriptions-item label="有效行数">{{ previewData.valid }}</el-descriptions-item>
@@ -310,7 +341,8 @@ import { ref, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { UploadFilled } from '@element-plus/icons-vue'
 import {
-  getBankStatementPage, previewStatementExcel, confirmStatementImport, importStatementCsv,
+  getBankStatementPage, previewStatementExcel, previewStatementExcelWithMapping,
+  confirmStatementImport, importStatementCsv, parseExcelHeaders,
   classifyStatement, reviewStatement,   batchConfirmStatements, deleteStatement, updateStatementClassification,
   getBankStatementDetail,
   CLASSIFICATION_LABELS, REVIEW_STATUS_LABELS,
@@ -343,6 +375,13 @@ const editClassification = ref('')
 const bankNameMap = ref<Record<number, string>>({})
 const batchResult = ref<{ confirmed: number; vouchers_created: number; docs_created: number; failed: number } | null>(null)
 const csvContent = ref('')
+
+// 列映射状态
+const mappingStep = ref(false)
+const mappingLoading = ref(false)
+const excelHeaders = ref<string[]>([])
+const systemFields = ref<Array<{ field: string; label: string; required: boolean }>>([])
+const columnMapping = ref<Record<string, string>>({})
 
 const query = ref<{ accountId?: number; reviewStatus?: string; classification?: string; current: number; size: number }>({
   current: 1, size: 20,
@@ -380,6 +419,10 @@ function openImport() {
   csvContent.value = ''
   selectedFile.value = null
   previewData.value = null
+  mappingStep.value = false
+  excelHeaders.value = []
+  systemFields.value = []
+  columnMapping.value = {}
   activeTab.value = 'csv'
   importDialogVisible.value = true
 }
@@ -387,6 +430,66 @@ function openImport() {
 function onFileChange(uploadFile: any) {
   selectedFile.value = uploadFile.raw || null
   previewData.value = null
+  mappingStep.value = false
+  columnMapping.value = {}
+}
+
+async function onParseHeaders() {
+  if (!query.value.accountId || !selectedFile.value) {
+    ElMessage.warning('请选择账户和文件')
+    return
+  }
+  mappingLoading.value = true
+  try {
+    const res = await parseExcelHeaders(selectedFile.value)
+    excelHeaders.value = res.headers
+    systemFields.value = res.fields
+
+    // Auto-map: try to match system field label to Excel headers
+    const autoMap: Record<string, string> = {}
+    for (const sf of res.fields) {
+      const match = res.headers.find(h => h && h.toLowerCase().includes(sf.label.toLowerCase()))
+      if (match) autoMap[sf.field] = match
+    }
+    // Fallback: map TX_DATE to column containing "日期" or "date"
+    if (!autoMap['TX_DATE']) {
+      const d = res.headers.find(h => h && (h.includes('日期') || h.toLowerCase().includes('date')))
+      if (d) autoMap['TX_DATE'] = d
+    }
+    // Fallback: map AMOUNT to column containing "金额" or "amount"
+    if (!autoMap['AMOUNT']) {
+      const a = res.headers.find(h => h && (h.includes('金额') || h.toLowerCase().includes('amount')))
+      if (a) autoMap['AMOUNT'] = a
+    }
+    columnMapping.value = autoMap
+    mappingStep.value = true
+  } catch (e: any) {
+    ElMessage.error(e?.message || '解析表头失败')
+  } finally {
+    mappingLoading.value = false
+  }
+}
+
+async function onPreviewWithMapping() {
+  if (!query.value.accountId || !selectedFile.value) return
+  const missingRequired = systemFields.value
+    .filter(sf => sf.required && !columnMapping.value[sf.field])
+    .map(sf => sf.label)
+  if (missingRequired.length) {
+    ElMessage.warning(`请先映射必填字段: ${missingRequired.join(', ')}`)
+    return
+  }
+  previewing.value = true
+  try {
+    previewData.value = await previewStatementExcelWithMapping(query.value.accountId, selectedFile.value, { ...columnMapping.value })
+    if (previewData.value.total === 0) {
+      ElMessage.warning('未解析到有效数据, 请检查列映射是否正确')
+    } else {
+      ElMessage.success(`解析完成: 共 ${previewData.value.total} 行, 有效 ${previewData.value.valid} 行`)
+    }
+  } finally {
+    previewing.value = false
+  }
 }
 
 async function onPreviewExcel() {

@@ -78,11 +78,30 @@ export function importStatementExcel(accountId: number, file: File): Promise<{ t
   return request.post('/bank-statements/import-excel', formData, { params: { accountId }, headers: { 'Content-Type': 'multipart/form-data' } })
 }
 export function previewStatementExcel(accountId: number, file: File): Promise<{
-  total: number; valid: number; errors: any[]; batchId: string; previews: any[]
+  total: number; valid: number; errors: any[]; batchId: string; previews: any[]; headers?: string[]
 }> {
   const formData = new FormData()
   formData.append('file', file)
   return request.post('/bank-statements/preview-excel', formData, { params: { accountId }, headers: { 'Content-Type': 'multipart/form-data' } })
+}
+
+/** 带自定义列映射的 Excel 预览 */
+export function previewStatementExcelWithMapping(accountId: number, file: File, columnMapping: Record<string, string>): Promise<{
+  total: number; valid: number; errors: any[]; batchId: string; previews: any[]; headers?: string[]
+}> {
+  const formData = new FormData()
+  formData.append('file', file)
+  formData.append('columnMappingJson', JSON.stringify(columnMapping))
+  return request.post('/bank-statements/preview-excel', formData, { params: { accountId }, headers: { 'Content-Type': 'multipart/form-data' } })
+}
+
+/** 解析 Excel 表头 */
+export function parseExcelHeaders(file: File): Promise<{
+  headers: string[]; fields: Array<{ field: string; label: string; required: boolean }>
+}> {
+  const formData = new FormData()
+  formData.append('file', file)
+  return request.post('/bank-statements/parse-headers', formData, { headers: { 'Content-Type': 'multipart/form-data' } })
 }
 export function confirmStatementImport(batchId: string): Promise<{ total: number; success: number; classified: number; batchId: string }> {
   return request.post('/bank-statements/confirm-import', null, { params: { batchId } })
