@@ -10,7 +10,7 @@ import java.time.LocalDateTime;
 @TableName("t_budget_entry")
 public class BudgetEntryEntity {
 
-    @TableId(type = IdType.ASSIGN_ID)
+    @TableId(type = IdType.AUTO)
     private Long id;
 
     private Long budgetId;

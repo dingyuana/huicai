@@ -9,7 +9,7 @@ import java.time.LocalDateTime;
 @TableName("t_report_template")
 public class ReportTemplateEntity {
 
-    @TableId(type = IdType.ASSIGN_ID)
+    @TableId(type = IdType.AUTO)
     private Long id;
 
     private String templateCode;

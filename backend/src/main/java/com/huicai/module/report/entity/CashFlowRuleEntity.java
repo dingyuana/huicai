@@ -9,7 +9,7 @@ import java.time.LocalDateTime;
 @TableName("t_cash_flow_rule")
 public class CashFlowRuleEntity {
 
-    @TableId(type = IdType.ASSIGN_ID)
+    @TableId(type = IdType.AUTO)
     private Long id;
 
     private String code;

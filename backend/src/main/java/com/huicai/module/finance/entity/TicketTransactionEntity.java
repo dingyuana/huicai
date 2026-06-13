@@ -14,7 +14,7 @@ import java.time.LocalDateTime;
 @TableName("t_ticket_transaction")
 public class TicketTransactionEntity {
 
-    @TableId(type = IdType.ASSIGN_ID)
+    @TableId(type = IdType.AUTO)
     private Long id;
 
     private Long ticketId;

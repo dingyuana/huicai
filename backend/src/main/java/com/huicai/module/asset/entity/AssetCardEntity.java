@@ -11,7 +11,7 @@ import java.time.LocalDateTime;
 @TableName("t_asset_card")
 public class AssetCardEntity {
 
-    @TableId(type = IdType.ASSIGN_ID)
+    @TableId(type = IdType.AUTO)
     private Long id;
 
     private String assetCode;

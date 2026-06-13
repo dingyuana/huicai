@@ -9,7 +9,7 @@ import java.time.LocalDateTime;
 @TableName("t_ai_task")
 public class AiTaskEntity {
 
-    @TableId(type = IdType.ASSIGN_ID)
+    @TableId(type = IdType.AUTO)
     private Long id;
 
     private String taskNo;

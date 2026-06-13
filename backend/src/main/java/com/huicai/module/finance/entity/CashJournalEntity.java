@@ -14,7 +14,7 @@ import java.time.LocalDateTime;
 @TableName("t_cash_journal")
 public class CashJournalEntity {
 
-    @TableId(type = IdType.ASSIGN_ID)
+    @TableId(type = IdType.AUTO)
     private Long id;
 
     private String period;

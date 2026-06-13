@@ -10,7 +10,7 @@ import java.time.LocalDateTime;
 @TableName("t_business_doc_entry")
 public class BusinessDocEntryEntity {
 
-    @TableId(type = IdType.ASSIGN_ID)
+    @TableId(type = IdType.AUTO)
     private Long id;
 
     private Long docId;

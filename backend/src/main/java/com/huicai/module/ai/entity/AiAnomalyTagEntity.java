@@ -9,7 +9,7 @@ import java.time.LocalDateTime;
 @TableName("t_ai_anomaly_tag")
 public class AiAnomalyTagEntity {
 
-    @TableId(type = IdType.ASSIGN_ID)
+    @TableId(type = IdType.AUTO)
     private Long id;
 
     private String bizType;

@@ -12,7 +12,7 @@ import java.util.List;
 @Data
 @TableName("t_menu")
 public class MenuEntity {
-    @TableId(type = IdType.ASSIGN_ID)
+    @TableId(type = IdType.AUTO)
     private Long id;
     private String name;
     private String permissionCode;

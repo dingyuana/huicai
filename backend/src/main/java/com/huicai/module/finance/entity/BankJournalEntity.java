@@ -11,7 +11,7 @@ import java.time.LocalDateTime;
 @TableName("t_bank_journal")
 public class BankJournalEntity {
 
-    @TableId(type = IdType.ASSIGN_ID)
+    @TableId(type = IdType.AUTO)
     private Long id;
 
     private Long accountId;

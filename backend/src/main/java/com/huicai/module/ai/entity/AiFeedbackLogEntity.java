@@ -15,7 +15,7 @@ import java.time.LocalDateTime;
 public class AiFeedbackLogEntity {
 
     /** 主键 */
-    @TableId(type = IdType.ASSIGN_ID)
+    @TableId(type = IdType.AUTO)
     private Long id;
 
     /** 租户 ID */

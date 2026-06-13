@@ -12,7 +12,7 @@ import java.time.LocalDateTime;
 @TableName("t_sys_config")
 public class SysConfigEntity {
 
-    @TableId(type = IdType.ASSIGN_ID)
+    @TableId(type = IdType.AUTO)
     private Long id;
 
     /** 参数键 */

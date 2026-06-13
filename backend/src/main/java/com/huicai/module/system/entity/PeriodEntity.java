@@ -13,7 +13,7 @@ import java.time.LocalDateTime;
 @TableName("t_period")
 public class PeriodEntity {
 
-    @TableId(type = IdType.ASSIGN_ID)
+    @TableId(type = IdType.AUTO)
     private Long id;
 
     /** 会计年度 */

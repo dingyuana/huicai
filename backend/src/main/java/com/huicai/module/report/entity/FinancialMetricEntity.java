@@ -9,7 +9,7 @@ import java.time.LocalDateTime;
 @TableName("t_financial_metric")
 public class FinancialMetricEntity {
 
-    @TableId(type = IdType.ASSIGN_ID)
+    @TableId(type = IdType.AUTO)
     private Long id;
 
     private String metricCode;

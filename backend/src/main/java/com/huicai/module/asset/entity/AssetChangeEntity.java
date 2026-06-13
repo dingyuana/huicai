@@ -10,7 +10,7 @@ import java.time.LocalDateTime;
 @TableName("t_asset_change")
 public class AssetChangeEntity {
 
-    @TableId(type = IdType.ASSIGN_ID)
+    @TableId(type = IdType.AUTO)
     private Long id;
 
     private Long assetId;

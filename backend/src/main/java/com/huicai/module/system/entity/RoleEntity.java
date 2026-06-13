@@ -12,7 +12,7 @@ import java.util.List;
 @Data
 @TableName("t_role")
 public class RoleEntity {
-    @TableId(type = IdType.ASSIGN_ID)
+    @TableId(type = IdType.AUTO)
     private Long id;
     private String code;
     private String name;

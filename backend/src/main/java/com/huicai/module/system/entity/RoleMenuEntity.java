@@ -8,7 +8,7 @@ import lombok.Data;
 @Data
 @TableName("t_role_menu")
 public class RoleMenuEntity {
-    @TableId(type = IdType.ASSIGN_ID)
+    @TableId(type = IdType.AUTO)
     private Long id;
     private Long roleId;
     private Long menuId;

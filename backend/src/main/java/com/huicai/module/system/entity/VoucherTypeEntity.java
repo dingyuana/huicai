@@ -12,7 +12,7 @@ import java.time.LocalDateTime;
 @TableName("t_voucher_type")
 public class VoucherTypeEntity {
 
-    @TableId(type = IdType.ASSIGN_ID)
+    @TableId(type = IdType.AUTO)
     private Long id;
 
     /** 类型编码 */

@@ -9,7 +9,7 @@ import java.math.BigDecimal;
 @TableName("t_asset_inventory_entry")
 public class AssetInventoryEntryEntity {
 
-    @TableId(type = IdType.ASSIGN_ID)
+    @TableId(type = IdType.AUTO)
     private Long id;
 
     private Long inventoryId;

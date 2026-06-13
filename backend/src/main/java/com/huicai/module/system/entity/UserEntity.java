@@ -13,7 +13,7 @@ import java.util.List;
 @Data
 @TableName("t_user")
 public class UserEntity {
-    @TableId(type = IdType.ASSIGN_ID)
+    @TableId(type = IdType.AUTO)
     private Long id;
     private String username;
     @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)

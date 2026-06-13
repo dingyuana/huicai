@@ -11,7 +11,7 @@ import java.time.LocalDateTime;
 @TableName("t_asset_disposal")
 public class AssetDisposalEntity {
 
-    @TableId(type = IdType.ASSIGN_ID)
+    @TableId(type = IdType.AUTO)
     private Long id;
 
     private String disposalNo;

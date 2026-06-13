@@ -13,7 +13,7 @@ import java.time.LocalDateTime;
 @TableName("t_subject_balance")
 public class SubjectBalanceEntity {
 
-    @TableId(type = IdType.ASSIGN_ID)
+    @TableId(type = IdType.AUTO)
     private Long id;
 
     /** 科目ID */

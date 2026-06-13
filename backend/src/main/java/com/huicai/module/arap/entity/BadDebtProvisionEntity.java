@@ -11,7 +11,7 @@ import java.time.LocalDateTime;
 @TableName("t_bad_debt_provision")
 public class BadDebtProvisionEntity {
 
-    @TableId(type = IdType.ASSIGN_ID)
+    @TableId(type = IdType.AUTO)
     private Long id;
 
     private String period;

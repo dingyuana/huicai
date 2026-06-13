@@ -12,7 +12,7 @@ import java.time.LocalDateTime;
 @TableName("t_summary_lib")
 public class SummaryLibEntity {
 
-    @TableId(type = IdType.ASSIGN_ID)
+    @TableId(type = IdType.AUTO)
     private Long id;
 
     /** 摘要编码 */

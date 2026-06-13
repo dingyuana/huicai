@@ -11,7 +11,7 @@ import java.time.LocalDateTime;
 @TableName("t_budget_adjustment")
 public class BudgetAdjustmentEntity {
 
-    @TableId(type = IdType.ASSIGN_ID)
+    @TableId(type = IdType.AUTO)
     private Long id;
 
     private String adjustmentNo;
