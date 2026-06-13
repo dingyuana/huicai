@@ -43,6 +43,10 @@
           <el-icon><List /></el-icon>
           <template #title>操作日志</template>
         </el-menu-item>
+        <el-menu-item index="/system/clear-data">
+          <el-icon><Delete /></el-icon>
+          <template #title>数据维护</template>
+        </el-menu-item>
       </el-sub-menu>
 
       <!-- 基础数据 -->
@@ -65,6 +69,7 @@
           <span>财务核心</span>
         </template>
         <el-menu-item index="/finance/voucher">凭证管理</el-menu-item>
+        <el-menu-item index="/finance/voucher-template">凭证模板</el-menu-item>
         <el-menu-item index="/finance/ledger">账簿查询</el-menu-item>
         <el-menu-item index="/finance/period-close">期末结账</el-menu-item>
         <el-menu-item index="/finance/business-doc">业务单据</el-menu-item>
@@ -161,7 +166,7 @@ import { useAppStore } from '@/stores/app.store'
 import { useAuthStore } from '@/stores/auth.store'
 import {
   HomeFilled, Setting, User, Avatar, Menu, OfficeBuilding, List, Files, Money, Box,
-  Connection, Document, PieChart, DataLine, TrendCharts, MagicStick,
+  Connection, Document, PieChart, DataLine, TrendCharts, MagicStick, Delete,
 } from '@element-plus/icons-vue'
 
 const route = useRoute()

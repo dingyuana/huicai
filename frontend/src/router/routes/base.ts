@@ -61,6 +61,12 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/system/audit-log/AuditLogList.vue'),
         meta: { title: '操作日志', permission: 'system:audit:list', keepAlive: true },
       },
+      {
+        path: 'system/clear-data',
+        name: 'ClearDataView',
+        component: () => import('@/views/system/clear-data/ClearDataView.vue'),
+        meta: { title: '数据维护', permission: 'system:clear-data:list', keepAlive: true },
+      },
       // M2 基础数据管理
       {
         path: 'basis/subject',
@@ -97,6 +103,12 @@ const routes: RouteRecordRaw[] = [
         name: 'VoucherList',
         component: () => import('@/views/finance/voucher/VoucherList.vue'),
         meta: { title: '凭证管理', permission: 'voucher:list', keepAlive: true },
+      },
+      {
+        path: 'finance/voucher-template',
+        name: 'VoucherTemplateList',
+        component: () => import('@/views/finance/voucher-template/VoucherTemplateView.vue'),
+        meta: { title: '凭证模板', permission: 'voucher:template:list', keepAlive: true },
       },
       {
         path: 'finance/voucher/edit',
