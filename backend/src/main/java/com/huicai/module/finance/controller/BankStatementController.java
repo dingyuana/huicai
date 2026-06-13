@@ -1,19 +1,23 @@
 package com.huicai.module.finance.controller;
 
+import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.huicai.common.response.R;
 import com.huicai.module.finance.entity.BankStatementEntity;
 import com.huicai.module.finance.service.BankStatementService;
 import com.huicai.module.finance.service.impl.AutoGenerationService;
 import com.huicai.module.finance.service.impl.BankStatementExcelImportService;
+import com.huicai.module.finance.service.impl.ColumnMappingResolver;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 @Tag(name = "银行对账单")
 @RestController
@@ -50,11 +54,39 @@ public class BankStatementController {
         return R.ok(service.importFromCsv(accountId, csvContent));
     }
 
+    @Operation(summary = "解析Excel表头, 返回所有列名和系统字段列表")
+    @PostMapping("/parse-headers")
+    public R<Map<String, Object>> parseHeaders(@RequestParam("file") MultipartFile file) {
+        List<String> headers = excelImportService.parseHeaders(file);
+        List<Map<String, Object>> systemFields = Arrays.stream(ColumnMappingResolver.Field.values())
+                .map(f -> {
+                    java.util.Map<String, Object> m = new java.util.HashMap<>();
+                    m.put("field", f.name());
+                    m.put("label", f.getAliases()[0]);
+                    m.put("required", f == ColumnMappingResolver.Field.TX_DATE || f == ColumnMappingResolver.Field.AMOUNT);
+                    return m;
+                })
+                .collect(Collectors.toList());
+        java.util.Map<String, Object> result = new java.util.HashMap<>();
+        result.put("headers", headers);
+        result.put("fields", systemFields);
+        return R.ok(result);
+    }
+
     @Operation(summary = "Excel导入第一步: 上传预览, 不写入数据库")
     @PostMapping("/preview-excel")
     public R<Map<String, Object>> previewExcel(
             @RequestParam Long accountId,
-            @RequestParam("file") MultipartFile file) {
+            @RequestParam("file") MultipartFile file,
+            @RequestParam(required = false) String columnMappingJson) {
+        if (StrUtil.isNotBlank(columnMappingJson)) {
+            cn.hutool.json.JSONObject mappingObj = new cn.hutool.json.JSONObject(columnMappingJson);
+            Map<String, String> columnMapping = new java.util.HashMap<>();
+            for (var entry : mappingObj.entrySet()) {
+                columnMapping.put(entry.getKey(), entry.getValue().toString());
+            }
+            return R.ok(excelImportService.previewExcel(accountId, file, columnMapping));
+        }
         return R.ok(excelImportService.previewExcel(accountId, file));
     }
 

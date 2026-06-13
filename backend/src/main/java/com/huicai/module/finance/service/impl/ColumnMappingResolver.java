@@ -1,5 +1,6 @@
 package com.huicai.module.finance.service.impl;
 
+import cn.hutool.core.util.StrUtil;
 import lombok.Getter;
 import org.springframework.stereotype.Service;
 
@@ -21,11 +22,11 @@ public class ColumnMappingResolver {
     public enum Field {
         TX_DATE("交易日期", "日期", "记账日期", "date", "transaction date", "tx_date",
                 "开票日期", "发票日期", "invoice date"),
-        TX_TYPE("交易类型", "类型", "借贷标志", "type", "direction", "debit_credit",
+        TX_TYPE("交易类型", "类型", "借贷标志", "方向", "type", "direction", "debit_credit",
                 "凭证类型", "voucher type"),
         AMOUNT("金额", "发生额", "本笔金额", "amount", "money", "value",
                 "交易金额", "价税合计", "不含税金额"),
-        COUNTER_ACCOUNT("对方账户", "对手方", "对方账号", "counterparty", "counter account", "counter_account"),
+        COUNTER_ACCOUNT("对方账户", "对方名称", "对手方", "对方账号", "counterparty", "counter account", "counter_account"),
         SUMMARY("摘要", "备注", "附言", "description", "summary", "memo", "remark",
                 "交易附言", "用途", "purpose", "reference"),
         EXTERNAL_NO("交易流水号", "凭证号", "流水号", "external no", "external_no", "trace no",
@@ -154,6 +155,58 @@ public class ColumnMappingResolver {
         return new MappingResult(
                 Collections.unmodifiableMap(fieldToColumnIndex),
                 Arrays.asList(headers),
+                buildAllWarnings(fieldToColumnIndex),
+                isValid
+        );
+    }
+
+    /**
+     * 根据用户手动指定的列映射创建 MappingResult.
+     * fieldToHeader: Map<Field 名称, Excel 表头原文>
+     * 例如: {"TX_DATE": "交易日期", "AMOUNT": "交易金额", "TX_TYPE": "交易类型"}
+     */
+    public MappingResult resolveFromUserMapping(String[] headers, Map<String, String> fieldToHeader) {
+        if (headers == null || headers.length == 0) {
+            return new MappingResult(new EnumMap<>(Field.class), List.of(), List.of(), false);
+        }
+
+        List<String> headerList = Arrays.asList(headers);
+        String[] normalizedHeaders = new String[headers.length];
+        for (int i = 0; i < headers.length; i++) {
+            String h = headers[i];
+            if (h != null) {
+                h = h.replaceAll("\\s*\\[.*?\\]\\s*", "").trim();
+                h = h.replaceAll("\\s*（.*?）\\s*", "").trim();
+                normalizedHeaders[i] = h;
+            }
+        }
+
+        Map<Field, Integer> fieldToColumnIndex = new EnumMap<>(Field.class);
+        for (Map.Entry<String, String> entry : fieldToHeader.entrySet()) {
+            String fieldName = entry.getKey();
+            String userHeader = entry.getValue();
+            if (StrUtil.isBlank(userHeader)) continue;
+
+            try {
+                Field field = Field.valueOf(fieldName);
+                for (int i = 0; i < headers.length; i++) {
+                    String matchTarget = headers[i] != null ? headers[i].trim() : "";
+                    if (matchTarget.equals(userHeader) ||
+                            (normalizedHeaders[i] != null && normalizedHeaders[i].equals(userHeader))) {
+                        fieldToColumnIndex.put(field, i);
+                        break;
+                    }
+                }
+            } catch (IllegalArgumentException ignored) {
+            }
+        }
+
+        boolean isValid = fieldToColumnIndex.containsKey(Field.TX_DATE)
+                && fieldToColumnIndex.containsKey(Field.AMOUNT);
+
+        return new MappingResult(
+                Collections.unmodifiableMap(fieldToColumnIndex),
+                headerList,
                 buildAllWarnings(fieldToColumnIndex),
                 isValid
         );
