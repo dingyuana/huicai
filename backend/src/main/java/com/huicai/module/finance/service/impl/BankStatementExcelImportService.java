@@ -396,10 +396,13 @@ public class BankStatementExcelImportService {
         String counterparty = null;
         Integer payerIdx = mapping.getFieldToColumnIndex().get(ColumnMappingResolver.Field.PAYER_NAME);
         Integer payeeIdx = mapping.getFieldToColumnIndex().get(ColumnMappingResolver.Field.PAYEE_NAME);
-        if ("INCOME".equals(stmt.getTxType()) && payeeIdx != null) {
-            counterparty = vals.getOrDefault(payeeIdx, "").trim();
-        } else if ("EXPENSE".equals(stmt.getTxType()) && payerIdx != null) {
+        // 按方向选取对方名称: INCOME(收款) → 付款人(付钱给我方的人); EXPENSE(付款) → 收款人(我方付钱给的人)
+        boolean isIncoming = "INCOME".equals(stmt.getTxType()) || "in".equals(stmt.getDirection());
+        boolean isOutgoing = "EXPENSE".equals(stmt.getTxType()) || "out".equals(stmt.getDirection());
+        if (isIncoming && payerIdx != null) {
             counterparty = vals.getOrDefault(payerIdx, "").trim();
+        } else if (isOutgoing && payeeIdx != null) {
+            counterparty = vals.getOrDefault(payeeIdx, "").trim();
         }
         if (StrUtil.isBlank(counterparty)) {
             if (payerIdx != null) counterparty = vals.getOrDefault(payerIdx, "").trim();
