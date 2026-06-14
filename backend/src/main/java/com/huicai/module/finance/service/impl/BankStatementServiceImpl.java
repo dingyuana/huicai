@@ -348,4 +348,19 @@ public class BankStatementServiceImpl implements BankStatementService {
         log.info("手动修改分类: id={}, classification={}", id, classification);
         return stmt;
     }
+
+    @Override
+    public Map<String, Integer> classificationCounts(Long accountId, String reviewStatus) {
+        if (accountId == null) return Map.of();
+        List<Map<String, Object>> rows = (StrUtil.isNotBlank(reviewStatus))
+                ? statementMapper.countByClassificationByReview(accountId, reviewStatus)
+                : statementMapper.countByClassification(accountId);
+        Map<String, Integer> result = new LinkedHashMap<>();
+        for (Map<String, Object> row : rows) {
+            String cls = row.get("classification") == null ? "pending" : String.valueOf(row.get("classification"));
+            Number cnt = (Number) row.get("cnt");
+            result.put(cls, cnt == null ? 0 : cnt.intValue());
+        }
+        return result;
+    }
 }

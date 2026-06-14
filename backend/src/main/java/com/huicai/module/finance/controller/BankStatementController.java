@@ -14,7 +14,6 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -54,11 +53,24 @@ public class BankStatementController {
         return R.ok(service.importFromCsv(accountId, csvContent));
     }
 
+    /** 银行流水导入使用的系统字段. 排除销售发票字段 (发票号码/销方/购方/商品/税率/税额/合计/正负标志). */
+    private static final java.util.Set<ColumnMappingResolver.Field> BANK_STATEMENT_FIELDS = java.util.EnumSet.of(
+            ColumnMappingResolver.Field.TX_DATE,
+            ColumnMappingResolver.Field.TX_TYPE,
+            ColumnMappingResolver.Field.AMOUNT,
+            ColumnMappingResolver.Field.COUNTER_ACCOUNT,
+            ColumnMappingResolver.Field.SUMMARY,
+            ColumnMappingResolver.Field.EXTERNAL_NO,
+            ColumnMappingResolver.Field.PAYER_NAME,
+            ColumnMappingResolver.Field.PAYEE_NAME,
+            ColumnMappingResolver.Field.BALANCE_AFTER
+    );
+
     @Operation(summary = "解析Excel表头, 返回所有列名和系统字段列表")
     @PostMapping("/parse-headers")
     public R<Map<String, Object>> parseHeaders(@RequestParam("file") MultipartFile file) {
         List<String> headers = excelImportService.parseHeaders(file);
-        List<Map<String, Object>> systemFields = Arrays.stream(ColumnMappingResolver.Field.values())
+        List<Map<String, Object>> systemFields = BANK_STATEMENT_FIELDS.stream()
                 .map(f -> {
                     java.util.Map<String, Object> m = new java.util.HashMap<>();
                     m.put("field", f.name());
@@ -112,6 +124,13 @@ public class BankStatementController {
     @GetMapping("/auto-match")
     public R<List<Map<String, Object>>> autoMatch(@RequestParam Long accountId) {
         return R.ok(service.autoMatch(accountId));
+    }
+
+    @Operation(summary = "按分类统计当前账户的流水数量")
+    @GetMapping("/classification-counts")
+    public R<Map<String, Integer>> classificationCounts(@RequestParam Long accountId,
+                                                         @RequestParam(required = false) String reviewStatus) {
+        return R.ok(service.classificationCounts(accountId, reviewStatus));
     }
 
     @Operation(summary = "确认匹配")

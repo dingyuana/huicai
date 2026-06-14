@@ -45,4 +45,10 @@ public interface BankStatementService {
      * 手动修改流水分类
      */
     BankStatementEntity updateClassification(Long id, String classification);
+
+    /**
+     * 按 accountId + 可选 reviewStatus 统计各分类的流水数量.
+     * 返回结构: { classification: count }, 未分类 (NULL classification) 归入 "pending" 键.
+     */
+    Map<String, Integer> classificationCounts(Long accountId, String reviewStatus);
 }
