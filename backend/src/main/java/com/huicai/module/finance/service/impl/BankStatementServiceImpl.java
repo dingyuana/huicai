@@ -11,6 +11,7 @@ import com.huicai.module.finance.entity.BankStatementEntity;
 import com.huicai.module.finance.entity.ClassificationRuleEntity;
 import com.huicai.module.finance.mapper.BankJournalMapper;
 import com.huicai.module.finance.mapper.BankStatementMapper;
+import com.huicai.module.finance.mapper.ClassificationRuleMapper;
 import com.huicai.module.finance.service.BankStatementService;
 import com.huicai.module.finance.service.ClassificationRuleService;
 import lombok.RequiredArgsConstructor;
@@ -42,19 +43,39 @@ public class BankStatementServiceImpl implements BankStatementService {
     private final BankStatementMapper statementMapper;
     private final BankJournalMapper journalMapper;
     private final ClassificationRuleService classificationRuleService;
+    private final ClassificationRuleMapper classificationRuleMapper;
     private final FallbackHeuristicService fallbackHeuristic;
     private final ColumnMappingResolver columnMappingResolver;
     private final AutoGenerationService autoGenerationService;
     private final ReconciliationService reconciliationService;
 
+    /**
+     * 分页查询对账单.
+     * <p>
+     * 防御性过滤: status / classification / reviewStatus 三个字符串参数,
+     * 当值为 null / blank / "__all__" 哨兵时, 不加 eq 条件 (视为"全部").
+     * 之前用 {@code .eq(StrUtil.isNotBlank(...))} 在收到显式空串或哨兵时仍可能下发错误的 WHERE 条件.
+     */
     @Override
-    public IPage<BankStatementEntity> pageQuery(Long accountId, String status, Integer current, Integer size) {
+    public IPage<BankStatementEntity> pageQuery(Long accountId, String status, String classification, String reviewStatus, Integer current, Integer size) {
         Page<BankStatementEntity> page = new Page<>(current == null ? 1 : current, size == null ? 20 : size);
         LambdaQueryWrapper<BankStatementEntity> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(accountId != null, BankStatementEntity::getAccountId, accountId)
-                .eq(StrUtil.isNotBlank(status), BankStatementEntity::getMatchStatus, status)
+                .eq(shouldFilter(status), BankStatementEntity::getMatchStatus, status)
+                .eq(shouldFilter(classification), BankStatementEntity::getClassification, classification)
+                .eq(shouldFilter(reviewStatus), BankStatementEntity::getReviewStatus, reviewStatus)
                 .orderByDesc(BankStatementEntity::getTxDate);
         return statementMapper.selectPage(page, wrapper);
+    }
+
+    /**
+     * 判定字符串过滤值是否应参与 WHERE 条件.
+     * <p>
+     * 规则: 非 null && 非空白 && 不等于 "__all__" 哨兵 → 参与过滤.
+     * 用于 MyBatis-Plus LambdaQueryWrapper.eq(condition, column, val) 的 condition 位.
+     */
+    private static boolean shouldFilter(String val) {
+        return val != null && !val.isBlank() && !"__all__".equals(val);
     }
 
     @Override
@@ -147,13 +168,38 @@ public class BankStatementServiceImpl implements BankStatementService {
         Integer typeIdx = mapping.getFieldToColumnIndex().get(ColumnMappingResolver.Field.TX_TYPE);
         if (typeIdx != null && typeIdx < cols.length) {
             String typeStr = cols[typeIdx].trim();
-            stmt.setTxType(typeStr.contains("收") || typeStr.toLowerCase().contains("in") || typeStr.contains("贷") ? "INCOME" : "EXPENSE");
+            if (typeStr.contains("来账") || typeStr.contains("收") || typeStr.contains("贷") || typeStr.toLowerCase().contains("in")) {
+                stmt.setTxType("INCOME");
+            } else if (typeStr.contains("往账") || typeStr.contains("付") || typeStr.contains("借") || typeStr.toLowerCase().contains("out")) {
+                stmt.setTxType("EXPENSE");
+            }
+        } else {
+            // 无交易类型列时, 根据金额正负推断
+            if (stmt.getAmount() != null && stmt.getAmount().signum() >= 0) {
+                stmt.setTxType("INCOME");
+            } else if (stmt.getAmount() != null) {
+                stmt.setTxType("EXPENSE");
+            }
         }
 
-        Integer counterIdx = mapping.getFieldToColumnIndex().get(ColumnMappingResolver.Field.COUNTER_ACCOUNT);
-        if (counterIdx != null && counterIdx < cols.length) {
-            stmt.setCounterAccount(cols[counterIdx].trim());
+        // 按方向选取对方名称: INCOME(收款) → 付款人(付钱方); EXPENSE(付款) → 收款人(收钱方)
+        boolean isIncoming = "INCOME".equals(stmt.getTxType());
+        String counterparty = null;
+        Integer payerIdx = mapping.getFieldToColumnIndex().get(ColumnMappingResolver.Field.PAYER_NAME);
+        Integer payeeIdx = mapping.getFieldToColumnIndex().get(ColumnMappingResolver.Field.PAYEE_NAME);
+        if (isIncoming && payerIdx != null && payerIdx < cols.length) {
+            counterparty = cols[payerIdx].trim();
+        } else if (!isIncoming && payeeIdx != null && payeeIdx < cols.length) {
+            counterparty = cols[payeeIdx].trim();
         }
+        // fallback: 通用对方账号/名称列
+        if (StrUtil.isBlank(counterparty)) {
+            Integer counterIdx = mapping.getFieldToColumnIndex().get(ColumnMappingResolver.Field.COUNTER_ACCOUNT);
+            if (counterIdx != null && counterIdx < cols.length) {
+                counterparty = cols[counterIdx].trim();
+            }
+        }
+        stmt.setCounterAccount(StrUtil.isNotBlank(counterparty) ? counterparty : null);
 
         Integer summaryIdx = mapping.getFieldToColumnIndex().get(ColumnMappingResolver.Field.SUMMARY);
         if (summaryIdx != null && summaryIdx < cols.length) {
@@ -234,9 +280,9 @@ public class BankStatementServiceImpl implements BankStatementService {
         BankStatementEntity stmt = statementMapper.selectById(statementId);
         if (stmt == null) throw BusinessException.notFound("对账单记录不存在");
 
-        // 第一层: 规则引擎匹配
+        // 第一层: 规则引擎匹配 (摘要 + 方向 + 对方户名)
         ClassificationRuleEntity rule = classificationRuleService.match(
-                stmt.getSummary(), stmt.getDirection()
+                stmt.getSummary(), stmt.getDirection(), stmt.getCounterAccount()
         );
 
         String finalClassification;
@@ -278,31 +324,182 @@ public class BankStatementServiceImpl implements BankStatementService {
         if (StrUtil.isBlank(stmt.getClassification())) {
             throw BusinessException.badRequest("流水尚未分类, 请先调用 classifySingle");
         }
-        stmt.setReviewStatus("CONFIRMED");
-        stmt.setReviewedBy(1L);
-        stmt.setReviewedAt(LocalDateTime.now());
-        statementMapper.updateById(stmt);
 
-        // SPEC FR-BANK-05/06: 出纳确认后才触发单据/凭证生成
-        // A类 (bank_fee/interest_income/tax/social_security/insurance) → 直接生成凭证
-        // B类 (business_receipt/payment) → 先生成业务单据, 再生成凭证
-        // C类 (internal_transfer/salary_payment/pending) → 仅生成单据或不处理
-        try {
-            String type = AutoGenerationService.classifyType(stmt.getClassification());
-            if (!"C".equals(type)) {
-                boolean ok = autoGenerationService.autoGenerateInNewTx(stmt.getId(), stmt.getReviewedBy());
-                log.info("出纳确认生单: statementId={}, classification={}, type={}, ok={}",
-                        statementId, stmt.getClassification(), type, ok);
-            } else {
-                log.info("出纳确认(C类, 不生单): statementId={}, classification={}", statementId, stmt.getClassification());
-            }
-        } catch (Exception e) {
-            log.warn("出纳确认后生单失败: statementId={}, classification={}, err={}",
-                    statementId, stmt.getClassification(), e.getMessage());
+        // 检查当前状态是否可以复审 (classified/PENDING/旧 CONFIRMED 均可继续推进)
+        String curStatus = stmt.getReviewStatus();
+        boolean canReview = curStatus == null
+                || "PENDING".equals(curStatus)
+                || "classified".equals(curStatus)
+                || "RECLASSIFIED".equals(curStatus);
+        if (!canReview) {
+            throw BusinessException.badRequest("当前状态 " + curStatus + " 无法复审, 请先撤回或等待审批");
         }
 
-        log.info("出纳确认分类: statementId={}, classification={}", statementId, stmt.getClassification());
+        // 确定 A/B/C 路由类型: 优先命中规则的 route_type, 其次使用分类硬编码映射
+        String type = null;
+        if (stmt.getRuleId() != null) {
+            ClassificationRuleEntity rule = classificationRuleMapper.selectById(stmt.getRuleId());
+            if (rule != null && StrUtil.isNotBlank(rule.getRouteType())) {
+                type = rule.getRouteType();
+            }
+        }
+        if (type == null) {
+            type = AutoGenerationService.classifyType(stmt.getClassification());
+        }
+
+        stmt.setReviewedBy(1L);
+        stmt.setReviewedAt(LocalDateTime.now());
+
+        switch (type) {
+            case "A":
+                try {
+                    boolean ok = autoGenerationService.autoGenerateInNewTx(stmt.getId(), stmt.getReviewedBy());
+                    stmt.setReviewStatus(ok ? "voucher_generated" : "classified");
+                    log.info("A类制证: statementId={}, classification={}, ok={}", statementId, stmt.getClassification(), ok);
+                } catch (Exception e) {
+                    stmt.setReviewStatus("classified");
+                    log.warn("A类制证失败: statementId={}, err={}", statementId, e.getMessage());
+                }
+                break;
+            case "B":
+                try {
+                    boolean ok = autoGenerationService.autoGenerateInNewTx(stmt.getId(), stmt.getReviewedBy());
+                    stmt.setReviewStatus(ok ? "payment_created" : "classified");
+                    log.info("B类生单: statementId={}, classification={}, ok={}", statementId, stmt.getClassification(), ok);
+                } catch (Exception e) {
+                    stmt.setReviewStatus("classified");
+                    log.warn("B类生单失败: statementId={}, err={}", statementId, e.getMessage());
+                }
+                break;
+            default:
+                stmt.setReviewStatus("manual_pending");
+                log.info("C类待人工: statementId={}, classification={}", statementId, stmt.getClassification());
+                break;
+        }
+
+        statementMapper.updateById(stmt);
+        log.info("出纳确认: statementId={}, status={}", statementId, stmt.getReviewStatus());
         return stmt;
+    }
+
+    @Override
+    @Transactional
+    public void approve(Long statementId) {
+        BankStatementEntity stmt = statementMapper.selectById(statementId);
+        if (stmt == null) {
+            throw BusinessException.notFound("对账单记录不存在");
+        }
+        String curStatus = stmt.getReviewStatus();
+        if (!"voucher_generated".equals(curStatus) && !"payment_created".equals(curStatus)) {
+            throw BusinessException.badRequest("当前状态 " + curStatus + " 无法核准, 仅支持 voucher_generated/payment_created");
+        }
+        stmt.setReviewStatus("approved");
+        statementMapper.updateById(stmt);
+        log.info("核准过账: statementId={}", statementId);
+    }
+
+    @Override
+    @Transactional
+    public BankStatementEntity processManual(Long statementId, String targetType, String paymentType) {
+        BankStatementEntity stmt = statementMapper.selectById(statementId);
+        if (stmt == null) {
+            throw BusinessException.notFound("对账单记录不存在");
+        }
+        if (!"manual_pending".equals(stmt.getReviewStatus())) {
+            throw BusinessException.badRequest("当前状态 " + stmt.getReviewStatus() + " 无法人工处理, 仅支持 manual_pending");
+        }
+        if (!"A".equals(targetType) && !"B".equals(targetType)) {
+            throw BusinessException.badRequest("targetType 必须为 A 或 B");
+        }
+
+        stmt.setReviewedBy(1L);
+        stmt.setReviewedAt(LocalDateTime.now());
+
+        switch (targetType) {
+            case "A":
+                try {
+                    boolean ok = autoGenerationService.autoGenerateInNewTx(stmt.getId(), stmt.getReviewedBy());
+                    stmt.setReviewStatus(ok ? "voucher_generated" : "manual_pending");
+                    log.info("人工指定A类: statementId={}, ok={}", statementId, ok);
+                } catch (Exception e) {
+                    log.warn("人工指定A类失败: statementId={}, err={}", statementId, e.getMessage());
+                    throw BusinessException.badRequest("A类制证失败: " + e.getMessage());
+                }
+                break;
+            case "B":
+                try {
+                    boolean ok = autoGenerationService.autoGenerateInNewTx(stmt.getId(), stmt.getReviewedBy());
+                    stmt.setReviewStatus(ok ? "payment_created" : "manual_pending");
+                    log.info("人工指定B类: statementId={}, paymentType={}, ok={}", statementId, paymentType, ok);
+                } catch (Exception e) {
+                    log.warn("人工指定B类失败: statementId={}, err={}", statementId, e.getMessage());
+                    throw BusinessException.badRequest("B类生单失败: " + e.getMessage());
+                }
+                break;
+        }
+
+        statementMapper.updateById(stmt);
+        log.info("人工处理完成: statementId={}, targetType={}", statementId, targetType);
+        return stmt;
+    }
+
+    @Override
+    public List<BankStatementService.PreviewEntry> previewDraft(Long statementId) {
+        BankStatementEntity stmt = statementMapper.selectById(statementId);
+        if (stmt == null) {
+            throw BusinessException.notFound("对账单记录不存在");
+        }
+        if (StrUtil.isBlank(stmt.getClassification())) {
+            throw BusinessException.badRequest("流水尚未分类, 无法预览");
+        }
+
+        BigDecimal amount = stmt.getAmount();
+        String direction = stmt.getDirection();
+        List<BankStatementService.PreviewEntry> entries = new ArrayList<>();
+
+        // 按分类计算分录: 复用 AutoGenerationService 中硬编码的分录逻辑
+        switch (stmt.getClassification()) {
+            case "bank_fee":
+                entries.add(new BankStatementService.PreviewEntry("debit", "6602.01", "手续费", amount, stmt.getSummary()));
+                entries.add(new BankStatementService.PreviewEntry("credit", "1002", "银行存款", amount, stmt.getSummary()));
+                break;
+            case "interest_income":
+                entries.add(new BankStatementService.PreviewEntry("debit", "1002", "银行存款", amount, stmt.getSummary()));
+                entries.add(new BankStatementService.PreviewEntry("credit", "6602.02", "利息收入", amount, stmt.getSummary()));
+                break;
+            case "tax_payment":
+                entries.add(new BankStatementService.PreviewEntry("debit", "2221", "应交税费", amount, stmt.getSummary()));
+                entries.add(new BankStatementService.PreviewEntry("credit", "1002", "银行存款", amount, stmt.getSummary()));
+                break;
+            case "social_security":
+                entries.add(new BankStatementService.PreviewEntry("debit", "2211", "应付职工薪酬", amount, stmt.getSummary()));
+                entries.add(new BankStatementService.PreviewEntry("credit", "1002", "银行存款", amount, stmt.getSummary()));
+                break;
+            case "insurance_fee":
+                entries.add(new BankStatementService.PreviewEntry("debit", "6602.06", "保险费", amount, stmt.getSummary()));
+                entries.add(new BankStatementService.PreviewEntry("credit", "1002", "银行存款", amount, stmt.getSummary()));
+                break;
+            case "business_receipt":
+                entries.add(new BankStatementService.PreviewEntry("debit", "1002", "银行存款", amount, stmt.getSummary()));
+                entries.add(new BankStatementService.PreviewEntry("credit", "1122", "应收账款", amount, stmt.getSummary()));
+                break;
+            case "business_payment":
+                entries.add(new BankStatementService.PreviewEntry("debit", "2202", "应付账款", amount, stmt.getSummary()));
+                entries.add(new BankStatementService.PreviewEntry("credit", "1002", "银行存款", amount, stmt.getSummary()));
+                break;
+            case "internal_transfer":
+                entries.add(new BankStatementService.PreviewEntry("debit", "1012", "其他货币资金", amount, stmt.getSummary()));
+                entries.add(new BankStatementService.PreviewEntry("credit", "1002", "银行存款", amount, stmt.getSummary()));
+                break;
+            case "salary_payment":
+                entries.add(new BankStatementService.PreviewEntry("debit", "2211", "应付职工薪酬", amount, stmt.getSummary()));
+                entries.add(new BankStatementService.PreviewEntry("credit", "1002", "银行存款", amount, stmt.getSummary()));
+                break;
+            default:
+                throw BusinessException.badRequest("分类 " + stmt.getClassification() + " 不支持预览生成");
+        }
+
+        return entries;
     }
 
     @Override
@@ -385,7 +582,7 @@ public class BankStatementServiceImpl implements BankStatementService {
 
         ReconciliationService.RecommendResult recommend = reconciliationService.recommendForStatement(
                 stmt.getId(), stmt.getAccountId(), direction, stmt.getAmount(),
-                counterpartyName, summary);
+                counterpartyName, summary, stmt.getTxDate(), stmt.getExternalNo());
 
         if (recommend.items() == null || recommend.items().isEmpty()) {
             return new ReconciliationRecommendResult("未找到匹配的应收/应付记录", List.of());

@@ -15,6 +15,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -24,6 +25,7 @@ class BankStatementServiceTest {
     @Mock private BankJournalMapper journalMapper;
     @Mock private ClassificationRuleService classificationRuleService;
     @Mock private FallbackHeuristicService fallbackHeuristic;
+    @Mock private AutoGenerationService autoGenerationService;
 
     @InjectMocks private BankStatementServiceImpl service;
 
@@ -39,15 +41,19 @@ class BankStatementServiceTest {
 
     @Test
     void review_已分类_标记CONFIRMED() {
-        when(statementMapper.selectById(1L)).thenReturn(stub(1L, "bank_fee"));
+        // 新 review() 状态机: bank_fee 归 A 类 (硬编码映射), autoGenerateInNewTx 返回 true → "voucher_generated"
+        BankStatementEntity stmt = stub(1L, "bank_fee");
+        when(statementMapper.selectById(1L)).thenReturn(stmt);
+        when(autoGenerationService.autoGenerateInNewTx(anyLong(), anyLong())).thenReturn(true);
         when(statementMapper.updateById(any(BankStatementEntity.class))).thenReturn(1);
 
         BankStatementEntity result = service.review(1L);
 
         assertNotNull(result);
-        assertEquals("CONFIRMED", result.getReviewStatus());
+        assertEquals("voucher_generated", result.getReviewStatus());
         assertEquals(1L, result.getReviewedBy());
         assertNotNull(result.getReviewedAt());
+        verify(autoGenerationService).autoGenerateInNewTx(anyLong(), anyLong());
         verify(statementMapper).updateById(any(BankStatementEntity.class));
     }
 

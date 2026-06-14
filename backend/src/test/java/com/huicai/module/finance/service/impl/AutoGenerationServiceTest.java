@@ -23,7 +23,6 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.*;
 
 /**
@@ -115,11 +114,11 @@ class AutoGenerationServiceTest {
         // D2 修复后: salary_payment 归 B 类, autoGenerate 应走 generateDocThenVoucher
         // 因 mock 没设 businessDocMapper 详细预期, 走完会因 docMapper.insert(null/空) 等抛错
         // 关键: 不能走 A 类 (A 类会调 voucherEntryMapper 走 findSubjectByCode 2211)
+        // 注: voucherNoService / subjectMapper("2211") 的 stub 被删 — 因 voucherTemplateService 未 mock,
+        //     代码在 generateDocThenVoucher 内 matchByClassification 时抛 NPE,
+        //     根本走不到 createVoucher()/findSubjectByCode("2211"), 这两个 stub 触发 UnnecessaryStubbing
         BankStatementEntity stmt = newStmt("salary_payment", "out");
         when(statementMapper.selectById(1L)).thenReturn(stmt);
-        when(voucherNoService.generateNextNo(anyString(), anyLong())).thenReturn("V202606-001");
-        when(subjectMapper.selectList(argThat(w -> w != null && w.getSqlSet() != null && w.getSqlSet().toString().contains("2211"))))
-                .thenReturn(Collections.singletonList(mockSubject(20L, "2211")));
 
         // 不抛异常 + docMapper 被调用 (B 类特征) 即为正确
         try {
@@ -143,13 +142,11 @@ class AutoGenerationServiceTest {
     void testMapToDocType_internalTransfer_是TRANSFER() {
         // D3 修复: 通过 autoGenerate B 类 internal_transfer 流程验证 mapToDocType 输出
         // (mapToDocType 是 private, 改测生成 doc 时 doc.getDocType())
+        // 注: voucherNoService / subjectMapper("1012") 的 stub 被删 — 因 voucherTemplateService 未 mock,
+        //     代码在 generateDocThenVoucher 内 matchByClassification 时抛 NPE,
+        //     根本走不到 createVoucher()/findSubjectByCode("1012"), 这两个 stub 触发 UnnecessaryStubbing
         BankStatementEntity stmt = newStmt("internal_transfer", "out");
         when(statementMapper.selectById(1L)).thenReturn(stmt);
-        when(voucherNoService.generateNextNo(anyString(), anyLong())).thenReturn("V202606-001");
-        when(subjectMapper.selectList(argThat(w -> w != null
-                && w.getSqlSet() != null
-                && w.getSqlSet().toString().contains("1012"))))
-                .thenReturn(Collections.singletonList(mockSubject(30L, "1012")));
 
         try {
             service.autoGenerate(1L, 1L);
