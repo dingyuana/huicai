@@ -35,6 +35,12 @@ public class PeriodController {
         return R.ok(periodService.list());
     }
 
+    @Operation(summary = "获取期间列表(全量, /list 路径兼容前端)")
+    @GetMapping("/list")
+    public R<List<PeriodEntity>> listAllNamed() {
+        return R.ok(periodService.list());
+    }
+
     @Operation(summary = "新增期间")
     @PostMapping
     public R<PeriodEntity> create(@Valid @RequestBody PeriodEntity period) {

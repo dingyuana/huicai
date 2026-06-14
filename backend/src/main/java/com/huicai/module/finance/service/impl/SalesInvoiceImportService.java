@@ -449,10 +449,11 @@ public class SalesInvoiceImportService {
                 if (!byShort.isEmpty()) return byShort.get(0).getId();
             }
         }
-        if (StrUtil.isNotBlank(row.buyerName) && StrUtil.isNotBlank(row.buyerTaxId)) {
+        // 只有名称(无税号)也能自动创建客户
+        if (StrUtil.isNotBlank(row.buyerName)) {
             CustomerEntity newCustomer = new CustomerEntity();
             newCustomer.setName(row.buyerName);
-            newCustomer.setTaxNo(row.buyerTaxId);
+            newCustomer.setTaxNo(StrUtil.isNotBlank(row.buyerTaxId) ? row.buyerTaxId : null);
             newCustomer.setCode("AUTO-" + System.currentTimeMillis());
             newCustomer.setIsActive(true);
             newCustomer.setRemark("发票导入自动创建");
