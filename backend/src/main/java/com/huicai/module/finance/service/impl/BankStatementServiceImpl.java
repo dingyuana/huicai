@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.huicai.common.exception.BusinessException;
+import com.huicai.module.arap.service.ReconciliationService;
 import com.huicai.module.finance.entity.BankJournalEntity;
 import com.huicai.module.finance.entity.BankStatementEntity;
 import com.huicai.module.finance.entity.ClassificationRuleEntity;
@@ -44,6 +45,7 @@ public class BankStatementServiceImpl implements BankStatementService {
     private final FallbackHeuristicService fallbackHeuristic;
     private final ColumnMappingResolver columnMappingResolver;
     private final AutoGenerationService autoGenerationService;
+    private final ReconciliationService reconciliationService;
 
     @Override
     public IPage<BankStatementEntity> pageQuery(Long accountId, String status, Integer current, Integer size) {
@@ -362,5 +364,32 @@ public class BankStatementServiceImpl implements BankStatementService {
             result.put(cls, cnt == null ? 0 : cnt.intValue());
         }
         return result;
+    }
+
+    @Override
+    public ReconciliationRecommendResult reconciliationRecommend(Long statementId) {
+        BankStatementEntity stmt = statementMapper.selectById(statementId);
+        if (stmt == null) {
+            return new ReconciliationRecommendResult("对账单记录不存在", List.of());
+        }
+        if (stmt.getClassification() == null) {
+            return new ReconciliationRecommendResult("流水尚未分类", List.of());
+        }
+        String cls = stmt.getClassification();
+        if (!"business_receipt".equals(cls) && !"business_payment".equals(cls)) {
+            return new ReconciliationRecommendResult("当前分类(" + cls + ")不支持核销推荐", List.of());
+        }
+        String direction = "business_receipt".equals(cls) ? "in" : "out";
+        String counterpartyName = stmt.getCounterAccount() != null ? stmt.getCounterAccount() : "";
+        String summary = stmt.getSummary() != null ? stmt.getSummary() : "";
+
+        ReconciliationService.RecommendResult recommend = reconciliationService.recommendForStatement(
+                stmt.getId(), stmt.getAccountId(), direction, stmt.getAmount(),
+                counterpartyName, summary);
+
+        if (recommend.items() == null || recommend.items().isEmpty()) {
+            return new ReconciliationRecommendResult("未找到匹配的应收/应付记录", List.of());
+        }
+        return new ReconciliationRecommendResult("推荐" + recommend.items().size() + "条核销项", recommend.items());
     }
 }

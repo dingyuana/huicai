@@ -256,6 +256,12 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/arap/settlement/SettlementList.vue'),
         meta: { title: '往来核销', permission: 'arap:settlement:list', keepAlive: true },
       },
+      {
+        path: 'arap/reconciliation-workbench',
+        name: 'ReconciliationWorkbench',
+        component: () => import('@/views/arap/reconciliation-workbench/ReconciliationWorkbench.vue'),
+        meta: { title: '核销工作台', permission: 'arap:reconciliation:workbench', keepAlive: true },
+      },
       // 税务管理
       {
         path: 'tax/input-invoice',

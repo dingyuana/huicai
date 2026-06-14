@@ -51,4 +51,16 @@ public interface BankStatementService {
      * 返回结构: { classification: count }, 未分类 (NULL classification) 归入 "pending" 键.
      */
     Map<String, Integer> classificationCounts(Long accountId, String reviewStatus);
+
+    /**
+     * P5.2: 获取核销推荐. 对 business_receipt/business_payment 分类的流水,
+     * 调用 ReconciliationService.recommendForStatement 匹配应收/应付.
+     */
+    ReconciliationRecommendResult reconciliationRecommend(Long statementId);
+
+    /** P5.2: 核销推荐结果 DTO */
+    record ReconciliationRecommendResult(
+        String message,
+        List<com.huicai.module.arap.service.ReconciliationService.RecommendItem> items
+    ) {}
 }
