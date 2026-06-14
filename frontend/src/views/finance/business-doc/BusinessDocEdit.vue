@@ -25,6 +25,16 @@
         <el-form-item label="金额" prop="amount">
           <el-input-number v-model="form.amount" :min="0" :precision="2" :step="0.01" style="width:160px" />
         </el-form-item>
+        <el-form-item v-if="showCustomer" label="客户">
+          <el-select v-model="form.customerId" filterable clearable placeholder="选择客户" style="width:240px">
+            <el-option v-for="c in customers" :key="c.id" :label="c.name" :value="c.id" />
+          </el-select>
+        </el-form-item>
+        <el-form-item v-if="showSupplier" label="供应商">
+          <el-select v-model="form.supplierId" filterable clearable placeholder="选择供应商" style="width:240px">
+            <el-option v-for="v in suppliers" :key="v.id" :label="v.name" :value="v.id" />
+          </el-select>
+        </el-form-item>
         <el-form-item label="摘要" prop="summary">
           <el-input v-model="form.summary" placeholder="单据摘要" style="width:340px" maxlength="500" show-word-limit />
         </el-form-item>
@@ -85,15 +95,17 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import type { FormInstance } from 'element-plus'
 import {
   getBusinessDoc, createBusinessDoc, updateBusinessDoc, submitBusinessDoc,
-  DOC_TYPE_LABELS, type BusinessDocDTO, type BusinessDocEntry,
+  DOC_TYPE_LABELS, CUSTOMER_DOC_TYPES, SUPPLIER_DOC_TYPES,
+  type BusinessDocDTO, type BusinessDocEntry,
 } from '@/api/modules/businessDoc'
 import { getSubjectTree, type SubjectVO } from '@/api/modules/subject'
+import { listCustomer, listVendor } from '@/api/modules/arap'
 
 const route = useRoute()
 const router = useRouter()
@@ -105,6 +117,11 @@ const isEdit = mode === 'edit' && editId != null
 const saving = ref(false)
 const formRef = ref<FormInstance>()
 const subjectTree = ref<SubjectVO[]>([])
+const customers = ref<Array<{id: number; name: string}>>([])
+const suppliers = ref<Array<{id: number; name: string}>>([])
+
+const showCustomer = computed(() => CUSTOMER_DOC_TYPES.includes(form.value.docType))
+const showSupplier = computed(() => SUPPLIER_DOC_TYPES.includes(form.value.docType))
 
 const today = new Date().toISOString().slice(0, 10)
 const currentPeriod = new Date().toISOString().slice(0, 7).replace('-', '')
@@ -214,9 +231,23 @@ async function onSave(submitAfter: boolean) {
   }
 }
 
+async function loadPartyOptions() {
+  try {
+    const [cust, vend] = await Promise.all([listCustomer(), listVendor()])
+    customers.value = (cust as any[]).map((c: any) => ({ id: c.id, name: c.name }))
+    suppliers.value = (vend as any[]).map((v: any) => ({ id: v.id, name: v.name }))
+  } catch { /* ignore */ }
+}
+
+watch(() => form.value.docType, () => {
+  if (showCustomer.value) form.value.supplierId = undefined
+  if (showSupplier.value) form.value.customerId = undefined
+})
+
 onMounted(async () => {
   try {
     subjectTree.value = await getSubjectTree()
+    await loadPartyOptions()
   } catch {
     // ignore
   }

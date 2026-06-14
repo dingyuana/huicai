@@ -23,18 +23,26 @@ export interface BusinessDocVO {
   amount: number
   status: string
   supplierId?: number
+  supplierName?: string
   customerId?: number
+  customerName?: string
   applicantId?: number
   deptId?: number
   summary?: string
   source?: string
   attachmentIds?: string
   voucherId?: number
+  createdByName?: string
   createdAt?: string
+  submittedByName?: string
   submittedAt?: string
+  approvedByName?: string
   approvedAt?: string
   entries: BusinessDocEntry[]
 }
+
+export const CUSTOMER_DOC_TYPES = ['RECEIPT', 'INVOICE_OUT', 'OTHER_RECEIVABLE']
+export const SUPPLIER_DOC_TYPES = ['PAYMENT', 'EXPENSE', 'INVOICE_IN', 'OTHER_PAYABLE']
 
 export interface BusinessDocDTO {
   id?: number

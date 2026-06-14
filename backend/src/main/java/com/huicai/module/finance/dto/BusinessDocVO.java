@@ -19,7 +19,9 @@ public class BusinessDocVO {
     private BigDecimal amount;
     private String status;
     private Long supplierId;
+    private String supplierName;
     private Long customerId;
+    private String customerName;
     private Long applicantId;
     private Long deptId;
     private String summary;

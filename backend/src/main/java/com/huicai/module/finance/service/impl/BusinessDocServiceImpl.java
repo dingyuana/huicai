@@ -29,10 +29,16 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.huicai.module.arap.entity.CustomerEntity;
+import com.huicai.module.arap.entity.VendorEntity;
+import com.huicai.module.arap.mapper.CustomerMapper;
+import com.huicai.module.arap.mapper.VendorMapper;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -72,6 +78,8 @@ public class BusinessDocServiceImpl implements BusinessDocService {
     private final PeriodService periodService;
     private final SubjectMapper subjectMapper;
     private final VoucherTypeService voucherTypeService;
+    private final CustomerMapper customerMapper;
+    private final VendorMapper vendorMapper;
 
     @Override
     public IPage<BusinessDocVO> pageQuery(BusinessDocQueryDTO q) {
@@ -88,7 +96,9 @@ public class BusinessDocServiceImpl implements BusinessDocService {
         IPage<BusinessDocEntity> entityPage = docMapper.selectPage(page, wrapper);
 
         IPage<BusinessDocVO> voPage = new Page<>(entityPage.getCurrent(), entityPage.getSize(), entityPage.getTotal());
-        voPage.setRecords(entityPage.getRecords().stream().map(BusinessDocVO::fromEntity).toList());
+        List<BusinessDocVO> vos = entityPage.getRecords().stream().map(BusinessDocVO::fromEntity).toList();
+        populatePartyNames(vos);
+        voPage.setRecords(vos);
         return voPage;
     }
 
@@ -108,6 +118,7 @@ public class BusinessDocServiceImpl implements BusinessDocService {
                 }
             }
         }
+        populatePartyNames(List.of(vo));
         return vo;
     }
 
@@ -380,6 +391,26 @@ public class BusinessDocServiceImpl implements BusinessDocService {
         if (p == null) throw BusinessException.badRequest("会计期间不存在: " + period);
         if ("CLOSED".equals(p.getStatus()) || "LOCKED".equals(p.getStatus())) {
             throw BusinessException.badRequest("会计期间不可操作: " + period);
+        }
+    }
+
+    private void populatePartyNames(List<BusinessDocVO> vos) {
+        if (vos.isEmpty()) return;
+        Map<Long, String> customerMap = Collections.emptyMap();
+        Map<Long, String> vendorMap = Collections.emptyMap();
+        List<Long> customerIds = vos.stream().map(BusinessDocVO::getCustomerId).filter(java.util.Objects::nonNull).distinct().toList();
+        List<Long> vendorIds = vos.stream().map(BusinessDocVO::getSupplierId).filter(java.util.Objects::nonNull).distinct().toList();
+        if (!customerIds.isEmpty()) {
+            customerMap = customerMapper.selectBatchIds(customerIds).stream()
+                    .collect(Collectors.toMap(CustomerEntity::getId, CustomerEntity::getName));
+        }
+        if (!vendorIds.isEmpty()) {
+            vendorMap = vendorMapper.selectBatchIds(vendorIds).stream()
+                    .collect(Collectors.toMap(VendorEntity::getId, VendorEntity::getName));
+        }
+        for (BusinessDocVO vo : vos) {
+            if (vo.getCustomerId() != null) vo.setCustomerName(customerMap.get(vo.getCustomerId()));
+            if (vo.getSupplierId() != null) vo.setSupplierName(vendorMap.get(vo.getSupplierId()));
         }
     }
 }

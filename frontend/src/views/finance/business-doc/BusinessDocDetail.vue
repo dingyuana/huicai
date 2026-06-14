@@ -24,13 +24,18 @@
             {{ DOC_STATUS_LABELS[doc.status] || doc.status }}
           </el-tag>
         </el-descriptions-item>
+        <el-descriptions-item label="客户" :span="3">{{ doc.customerName || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="供应商" :span="3">{{ doc.supplierName || '-' }}</el-descriptions-item>
         <el-descriptions-item label="摘要" :span="3">{{ doc.summary || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="凭证ID" :span="3">
+        <el-descriptions-item label="凭证ID">
           <span v-if="doc.voucherId">#{{ doc.voucherId }}</span>
           <span v-else style="color:#909399">未生成</span>
         </el-descriptions-item>
+        <el-descriptions-item label="制单人">{{ doc.createdByName || '-' }}</el-descriptions-item>
         <el-descriptions-item label="制单时间">{{ doc.createdAt || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="提交人">{{ doc.submittedByName || '-' }}</el-descriptions-item>
         <el-descriptions-item label="提交时间">{{ doc.submittedAt || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="审批人">{{ doc.approvedByName || '-' }}</el-descriptions-item>
         <el-descriptions-item label="审批时间">{{ doc.approvedAt || '-' }}</el-descriptions-item>
       </el-descriptions>
 

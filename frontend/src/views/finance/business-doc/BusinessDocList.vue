@@ -39,7 +39,12 @@
         </el-table-column>
         <el-table-column prop="docDate" label="单据日期" width="120" />
         <el-table-column prop="period" label="期间" width="80" align="center" />
-        <el-table-column prop="summary" label="摘要" min-width="180" show-overflow-tooltip />
+        <el-table-column prop="summary" label="摘要" min-width="160" show-overflow-tooltip />
+        <el-table-column label="客户/供应商" width="140" show-overflow-tooltip>
+          <template #default="{ row }">
+            {{ row.customerName || row.supplierName || '-' }}
+          </template>
+        </el-table-column>
         <el-table-column label="金额" width="140" align="right">
           <template #default="{ row }">{{ fmtAmount(row.amount) }}</template>
         </el-table-column>
