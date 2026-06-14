@@ -1,0 +1,37 @@
+=========================================
+代码审核报告 - 2026-06-14 22:01:23
+=========================================
+
+--- 项目结构 ---
+total 96
+drwxrwxrwx 9 root root  4096 Jun 14 22:00 .
+drwxr-xr-x 1 root root  4096 Jun 14 16:49 ..
+drwxr-xr-x 8 root root  4096 Jun 14 22:00 .git
+-rw-r--r-- 1 root root   542 Jun 14 22:00 .gitignore
+-rw-r--r-- 1 root root  3523 Jun 14 22:00 AGENTS.md
+-rw-r--r-- 1 root root   642 Jun 14 22:00 README.md
+drwxr-xr-x 3 root root  4096 Jun 14 22:00 ai
+drwxr-xr-x 3 root root  4096 Jun 14 22:00 ai-service
+drwxr-xr-x 3 root root  4096 Jun 14 22:00 backend
+drwxr-xr-x 3 root root  4096 Jun 14 22:00 docker
+-rw-r--r-- 1 root root  3363 Jun 14 22:00 docker-compose.yml
+drwxr-xr-x 8 root root  4096 Jun 14 22:00 docs
+drwxr-xr-x 4 root root  4096 Jun 14 22:00 frontend
+-rw-r--r-- 1 root root 43045 Jun 14 22:00 基于Web财务软件的项目说明书.md
+
+--- 代码统计 ---
+Java文件数量: 294
+Go文件数量: 0
+Python文件数量: 19
+JavaScript文件数量: 0
+TypeScript文件数量: 47
+
+--- Git状态 ---
+?? backend/src/main/scripts/
+?? docs/reports/
+
+--- 未提交的更改 ---
+
+=========================================
+审核完成
+=========================================
