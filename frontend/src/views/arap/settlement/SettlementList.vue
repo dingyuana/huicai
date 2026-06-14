@@ -1,120 +1,370 @@
 <template>
   <div class="settlement-page">
     <el-card shadow="never">
-      <div class="page-header"><span class="page-title">往来核销</span></div>
-      <div class="toolbar">
-        <el-form :model="query" inline>
-          <el-form-item label="类型"><el-select v-model="query.settlementType" placeholder="全部" style="width:130px" @change="fetchData">
-            <el-option label="全部" value="" /><el-option label="应收核销" value="RECEIVABLE" /><el-option label="应付核销" value="PAYABLE" />
-          </el-select></el-form-item>
-          <el-form-item><el-button type="primary" @click="fetchData">查询</el-button></el-form-item>
-        </el-form>
-        <el-button type="primary" @click="openCreate">新增核销</el-button>
+      <div class="page-header">
+        <span class="page-title">往来核销</span>
+        <el-space>
+          <el-button type="primary" @click="goToWorkbench">核销工作台</el-button>
+          <el-button @click="refreshActive">刷新</el-button>
+        </el-space>
       </div>
-      <el-table :data="list" v-loading="loading" border stripe style="width:100%">
-        <el-table-column type="index" label="序号" width="50" />
-        <el-table-column prop="settlementNo" label="核销编号" width="140" />
-        <el-table-column label="类型" width="100">
-          <template #default="{row}">{{ row.settlementType==='RECEIVABLE'?'应收核销':'应付核销' }}</template>
-        </el-table-column>
-        <el-table-column prop="customerName" label="客户/供应商" min-width="150" />
-        <el-table-column prop="totalAmount" label="核销金额" width="130">{{ (row:any) => row.totalAmount?.toFixed(2) }}</el-table-column>
-        <el-table-column prop="settlementDate" label="核销日期" width="100" />
-        <el-table-column prop="status" label="状态" width="90">
-          <template #default="{row}"><el-tag :type="row.status==='CONFIRMED'?'success':'info'" size="small">{{ row.status==='CONFIRMED'?'已确认':'草稿' }}</el-tag></template>
-        </el-table-column>
-        <el-table-column label="操作" width="180" fixed="right">
-          <template #default="{row}">
-            <el-button v-if="row.status==='DRAFT'" text size="small" @click="confirmSettlement(row)">确认</el-button>
-            <el-button text size="small" @click="viewDetail(row)">详情</el-button>
-            <el-popconfirm v-if="row.status==='DRAFT'" title="确认删除?" @confirm="handleDelete(row)">
-              <template #reference><el-button text type="danger" size="small">删除</el-button></template>
-            </el-popconfirm>
-          </template>
-        </el-table-column>
-      </el-table>
-      <div class="pagination"><el-pagination v-model:current-page="query.current" v-model:page-size="query.size"
-        :total="total" layout="total,prev,pager,next" @current-change="fetchData" /></div>
+
+      <el-tabs v-model="activeTab" @tab-change="onTabChange">
+        <!-- Tab 1: 核销单 -->
+        <el-tab-pane label="核销单" name="settlement">
+          <div class="toolbar">
+            <el-form :model="settlementQuery" inline>
+              <el-form-item label="类型">
+                <el-select v-model="settlementQuery.settlementType" placeholder="全部" style="width:130px" @change="fetchSettlements">
+                  <el-option label="全部" value="" />
+                  <el-option label="应收核销" value="RECEIVABLE" />
+                  <el-option label="应付核销" value="PAYABLE" />
+                </el-select>
+              </el-form-item>
+              <el-form-item label="状态">
+                <el-select v-model="settlementQuery.status" placeholder="全部" style="width:120px" clearable @change="fetchSettlements">
+                  <el-option label="全部" value="" />
+                  <el-option label="草稿" value="DRAFT" />
+                  <el-option label="已确认" value="CONFIRMED" />
+                  <el-option label="已记账" value="VOUCHERED" />
+                  <el-option label="已冲销" value="REVERSED" />
+                </el-select>
+              </el-form-item>
+              <el-form-item>
+                <el-button type="primary" @click="fetchSettlements">查询</el-button>
+              </el-form-item>
+            </el-form>
+            <el-button type="primary" @click="openCreate">新增核销</el-button>
+          </div>
+
+          <el-table :data="settlementList" v-loading="settlementLoading" border stripe style="width:100%">
+            <el-table-column type="index" label="序号" width="50" />
+            <el-table-column prop="settlementNo" label="核销编号" width="140" />
+            <el-table-column label="类型" width="100" align="center">
+              <template #default="{row}">
+                <el-tag :type="row.settlementType==='RECEIVABLE'?'success':'warning'" size="small">
+                  {{ row.settlementType==='RECEIVABLE'?'应收核销':'应付核销' }}
+                </el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column prop="settlementDate" label="核销日期" width="100" />
+            <el-table-column label="客户/供应商" min-width="150">
+              <template #default="{row}">{{ row.customerName || row.vendorName || '-' }}</template>
+            </el-table-column>
+            <el-table-column label="核销金额" width="130" align="right">
+              <template #default="{row}">{{ fmtAmount(row.totalAmount) }}</template>
+            </el-table-column>
+            <el-table-column prop="period" label="期间" width="80" align="center" />
+            <el-table-column label="状态" width="90" align="center">
+              <template #default="{row}">
+                <el-tag :type="statusType(row.status)" size="small">{{ statusLabel(row.status) }}</el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column label="操作" width="200" fixed="right">
+              <template #default="{row}">
+                <el-button v-if="row.status==='DRAFT'" text size="small" type="success" @click="onConfirmSettlement(row)">确认</el-button>
+                <el-button text size="small" type="primary" @click="onViewSettlement(row)">详情</el-button>
+                <el-popconfirm v-if="row.status==='DRAFT'" title="确认删除?" @confirm="onDeleteSettlement(row)">
+                  <template #reference><el-button text type="danger" size="small">删除</el-button></template>
+                </el-popconfirm>
+              </template>
+            </el-table-column>
+          </el-table>
+
+          <div class="pagination">
+            <el-pagination v-model:current-page="settlementQuery.current" v-model:page-size="settlementQuery.size"
+              :total="settlementTotal" layout="total,prev,pager,next" @current-change="fetchSettlements" />
+          </div>
+        </el-tab-pane>
+
+        <!-- Tab 2: 核销日志 -->
+        <el-tab-pane label="核销日志" name="reconLog">
+          <div class="toolbar">
+            <el-form :model="logQuery" inline>
+              <el-form-item label="来源类型">
+                <el-select v-model="logQuery.sourceDocType" placeholder="全部" style="width:160px" clearable @change="fetchReconLogs">
+                  <el-option label="全部" value="" />
+                  <el-option label="银行流水" value="bank_txn" />
+                  <el-option label="收款单" value="receipt" />
+                  <el-option label="付款单" value="payment" />
+                </el-select>
+              </el-form-item>
+              <el-form-item>
+                <el-button type="primary" @click="fetchReconLogs">查询</el-button>
+              </el-form-item>
+            </el-form>
+          </div>
+
+          <el-table :data="reconLogList" v-loading="logLoading" border stripe style="width:100%">
+            <el-table-column type="index" label="序号" width="50" />
+            <el-table-column prop="id" label="日志ID" width="70" />
+            <el-table-column label="来源" width="120">
+              <template #default="{row}">
+                <el-tag size="small">{{ sourceLabel(row.sourceDocType) }}</el-tag>
+                <span style="margin-left:4px">#{{ row.sourceDocId }}</span>
+              </template>
+            </el-table-column>
+            <el-table-column label="目标单据" width="140">
+              <template #default="{row}">
+                <el-tag :type="row.targetDocType==='INVOICE_OUT'?'success':'warning'" size="small">
+                  {{ row.targetDocType==='INVOICE_OUT'?'应收':'应付' }}
+                </el-tag>
+                <span style="margin-left:4px">#{{ row.targetDocId }}</span>
+              </template>
+            </el-table-column>
+            <el-table-column label="核销金额" width="130" align="right">
+              <template #default="{row}">{{ fmtAmount(row.allocatedAmount) }}</template>
+            </el-table-column>
+            <el-table-column label="匹配度" width="90" align="center">
+              <template #default="{row}">
+                <el-tag v-if="row.matchScore != null" :type="row.matchScore >= 0.95 ? 'success' : 'warning'" size="small">
+                  {{ (row.matchScore * 100).toFixed(0) }}%
+                </el-tag>
+                <span v-else>-</span>
+              </template>
+            </el-table-column>
+            <el-table-column label="匹配方式" width="90" align="center">
+              <template #default="{row}">
+                <el-tag :type="row.matchMethod==='AUTO'?'primary':'info'" size="small">
+                  {{ row.matchMethod==='AUTO'?'自动':'手动' }}
+                </el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column label="状态" width="90" align="center">
+              <template #default="{row}">
+                <el-tag :type="row.status==='CONFIRMED'?'success':'danger'" size="small">
+                  {{ row.status==='CONFIRMED'?'已核销':'已取消' }}
+                </el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column prop="createdAt" label="创建时间" width="170" />
+            <el-table-column label="操作" width="100" fixed="right">
+              <template #default="{row}">
+                <el-popconfirm v-if="row.status==='CONFIRMED'" title="确定反核销?" @confirm="onReverseRecon(row)">
+                  <template #reference><el-button text type="danger" size="small">反核销</el-button></template>
+                </el-popconfirm>
+              </template>
+            </el-table-column>
+          </el-table>
+
+          <div class="pagination">
+            <el-pagination v-model:current-page="logQuery.current" v-model:page-size="logQuery.size"
+              :total="logTotal" layout="total,prev,pager,next" @current-change="fetchReconLogs" />
+          </div>
+        </el-tab-pane>
+      </el-tabs>
     </el-card>
 
-    <el-dialog v-model="dialogVisible" title="新增核销" width="600">
-      <el-form :model="form" label-width="100">
-        <el-form-item label="类型"><el-select v-model="form.settlementType" style="width:100%">
-          <el-option label="应收核销" value="RECEIVABLE" /><el-option label="应付核销" value="PAYABLE" />
-        </el-select></el-form-item>
-        <el-form-item label="客户/供应商"><el-select v-model="form.partyId" filterable style="width:100%" placeholder="搜索">
-          <el-option v-for="p in parties" :key="p.id" :label="p.name" :value="p.id" />
-        </el-select></el-form-item>
-        <el-form-item label="金额"><el-input-number v-model="form.totalAmount" :precision="2" :min="0" style="width:100%" /></el-form-item>
-        <el-form-item label="备注"><el-input v-model="form.remark" type="textarea" /></el-form-item>
+    <!-- 新增核销对话框 -->
+    <el-dialog v-model="createDialogVisible" title="新增核销" width="600">
+      <el-form :model="createForm" label-width="100">
+        <el-form-item label="类型">
+          <el-select v-model="createForm.settlementType" style="width:100%">
+            <el-option label="应收核销" value="RECEIVABLE" />
+            <el-option label="应付核销" value="PAYABLE" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="客户/供应商">
+          <el-select v-model="createForm.partyId" filterable style="width:100%" placeholder="搜索">
+            <el-option v-for="p in parties" :key="p.id" :label="p.name" :value="p.id" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="金额">
+          <el-input-number v-model="createForm.totalAmount" :precision="2" :min="0" style="width:100%" />
+        </el-form-item>
+        <el-form-item label="备注">
+          <el-input v-model="createForm.remark" type="textarea" />
+        </el-form-item>
       </el-form>
-      <template #footer><el-button @click="dialogVisible=false">取消</el-button>
-        <el-button type="primary" :loading="saving" @click="handleSave">保存</el-button></template>
+      <template #footer>
+        <el-button @click="createDialogVisible=false">取消</el-button>
+        <el-button type="primary" :loading="createSaving" @click="onCreateSave">保存</el-button>
+      </template>
     </el-dialog>
 
-    <el-dialog v-model="detailDialog" title="核销详情" width="500">
-      <el-descriptions :column="1" border>
-        <el-descriptions-item label="核销编号">{{ detail?.settlementNo }}</el-descriptions-item>
-        <el-descriptions-item label="类型">{{ detail?.settlementType==='RECEIVABLE'?'应收核销':'应付核销' }}</el-descriptions-item>
-        <el-descriptions-item label="金额">{{ detail?.totalAmount?.toFixed(2) }}</el-descriptions-item>
-        <el-descriptions-item label="状态">{{ detail?.status==='CONFIRMED'?'已确认':'草稿' }}</el-descriptions-item>
-        <el-descriptions-item label="备注">{{ detail?.remark }}</el-descriptions-item>
-      </el-descriptions>
+    <!-- 核销单详情对话框 -->
+    <el-dialog v-model="detailDialogVisible" title="核销单详情" width="600">
+      <template v-if="settlementDetail">
+        <el-descriptions :column="2" border>
+          <el-descriptions-item label="核销编号" :span="2">{{ settlementDetail.settlementNo }}</el-descriptions-item>
+          <el-descriptions-item label="类型">
+            <el-tag :type="settlementDetail.settlementType==='RECEIVABLE'?'success':'warning'" size="small">
+              {{ settlementDetail.settlementType==='RECEIVABLE'?'应收核销':'应付核销' }}
+            </el-tag>
+          </el-descriptions-item>
+          <el-descriptions-item label="状态">
+            <el-tag :type="statusType(settlementDetail.status)" size="small">{{ statusLabel(settlementDetail.status) }}</el-tag>
+          </el-descriptions-item>
+          <el-descriptions-item label="核销日期">{{ settlementDetail.settlementDate }}</el-descriptions-item>
+          <el-descriptions-item label="期间">{{ settlementDetail.period }}</el-descriptions-item>
+          <el-descriptions-item label="客户/供应商" :span="2">{{ settlementDetail.customerName || settlementDetail.vendorName || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="核销金额">{{ fmtAmount(settlementDetail.totalAmount) }}</el-descriptions-item>
+          <el-descriptions-item label="折扣金额">{{ fmtAmount(settlementDetail.discountAmount) }}</el-descriptions-item>
+          <el-descriptions-item label="备注" :span="2">{{ settlementDetail.remark || '-' }}</el-descriptions-item>
+        </el-descriptions>
+      </template>
+      <template #footer>
+        <el-button @click="detailDialogVisible=false">关闭</el-button>
+      </template>
     </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import request from '@/api/request'
 import { ref, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
+import { useRouter } from 'vue-router'
+import {
+  pageSettlements, getSettlementDetail, createSettlement,
+  confirmSettlement, deleteSettlement,
+  pageReconLogs, reverseRecon,
+  type ArapSettlement, type ReconciliationLog,
+} from '@/api/modules/arapSettlement'
 
-const loading = ref(false), saving = ref(false), dialogVisible = ref(false), detailDialog = ref(false)
-const list = ref<any[]>([]), total = ref(0), detail = ref<any>(null), parties = ref<any[]>([])
-const query = ref({ settlementType: '', current: 1, size: 20 })
-const form = ref({ settlementType: 'RECEIVABLE', partyId: null, totalAmount: 0, remark: '' })
+const router = useRouter()
 
-async function fetchData() {
-  loading.value = true
-  try {
-    const res: any = await request.get('/arap-settlements/page', { params: query.value })
-    list.value = res.records; total.value = res.total
-  } finally { loading.value = false }
+function fmtAmount(v: number) {
+  return v == null ? '' : Number(v).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
+
+function statusType(s: string) {
+  if (s === 'CONFIRMED' || s === 'VOUCHERED') return 'success'
+  if (s === 'REVERSED') return 'danger'
+  return 'info'
+}
+
+function statusLabel(s: string) {
+  const map: Record<string, string> = { DRAFT: '草稿', CONFIRMED: '已确认', VOUCHERED: '已记账', REVERSED: '已冲销' }
+  return map[s] || s
+}
+
+function sourceLabel(s: string) {
+  const map: Record<string, string> = { bank_txn: '银行流水', receipt: '收款单', payment: '付款单' }
+  return map[s] || s
+}
+
+// Tab
+const activeTab = ref('settlement')
+
+// Settlement tab
+const settlementLoading = ref(false)
+const settlementList = ref<ArapSettlement[]>([])
+const settlementTotal = ref(0)
+const settlementQuery = ref({ settlementType: '', status: '', current: 1, size: 20 })
+
+async function fetchSettlements() {
+  settlementLoading.value = true
+  try {
+    const res: any = await pageSettlements(settlementQuery.value)
+    settlementList.value = res.records || []
+    settlementTotal.value = res.total || 0
+  } finally { settlementLoading.value = false }
+}
+
+// Recon log tab
+const logLoading = ref(false)
+const reconLogList = ref<ReconciliationLog[]>([])
+const logTotal = ref(0)
+const logQuery = ref({ sourceDocType: '', current: 1, size: 20 })
+
+async function fetchReconLogs() {
+  logLoading.value = true
+  try {
+    const res: any = await pageReconLogs(logQuery.value)
+    reconLogList.value = res.records || []
+    logTotal.value = res.total || 0
+  } finally { logLoading.value = false }
+}
+
+function onTabChange() {
+  if (activeTab.value === 'settlement') fetchSettlements()
+  else fetchReconLogs()
+}
+
+// Create settlement
+const createDialogVisible = ref(false)
+const createSaving = ref(false)
+const parties = ref<Array<{id: number; name: string}>>([])
+const createForm = ref({ settlementType: 'RECEIVABLE', partyId: undefined as number | undefined, totalAmount: 0, remark: '' })
 
 async function openCreate() {
-  form.value = { settlementType: 'RECEIVABLE', partyId: null, totalAmount: 0, remark: '' }
-  const cust: any[] = await request.get('/customers/list')
-  const vend: any[] = await request.get('/vendors/list')
-  parties.value = [...cust.map((c:any)=>({id:c.id,name:c.name})), ...vend.map((v:any)=>({id:v.id,name:v.name}))]
-  dialogVisible.value = true
-}
-
-async function handleSave() {
-  saving.value = true
+  createForm.value = { settlementType: 'RECEIVABLE', partyId: undefined, totalAmount: 0, remark: '' }
   try {
-    await request.post('/arap-settlements', form.value)
-    ElMessage.success('新增成功'); dialogVisible.value = false; fetchData()
-  } finally { saving.value = false }
+    const { listCustomer, listVendor } = await import('@/api/modules/arap')
+    const [cust, vend] = await Promise.all([listCustomer(), listVendor()])
+    parties.value = [
+      ...(cust as any[]).map((c: any) => ({ id: c.id, name: `[客户] ${c.name}` })),
+      ...(vend as any[]).map((v: any) => ({ id: v.id, name: `[供应商] ${v.name}` })),
+    ]
+  } catch { parties.value = [] }
+  createDialogVisible.value = true
 }
 
-async function confirmSettlement(row: any) {
-  await request.post(`/arap-settlements/${row.id}/confirm`)
-  ElMessage.success('核销已确认'); fetchData()
+async function onCreateSave() {
+  if (!createForm.value.partyId) { ElMessage.warning('请选择客户/供应商'); return }
+  if (createForm.value.totalAmount <= 0) { ElMessage.warning('金额必须大于0'); return }
+  createSaving.value = true
+  try {
+    await createSettlement(createForm.value as any)
+    ElMessage.success('新增成功')
+    createDialogVisible.value = false
+    await fetchSettlements()
+  } finally { createSaving.value = false }
 }
 
-async function handleDelete(row: any) {
-  await request.delete(`/arap-settlements/${row.id}`)
-  ElMessage.success('删除成功'); fetchData()
+// Settlement actions
+async function onConfirmSettlement(row: ArapSettlement) {
+  try {
+    await confirmSettlement(row.id)
+    ElMessage.success('核销已确认')
+    await fetchSettlements()
+  } catch (e: any) { ElMessage.error(e?.message || '确认失败') }
 }
 
-async function viewDetail(row: any) {
-  detail.value = await request.get(`/arap-settlements/${row.id}`)
-  detailDialog.value = true
+async function onDeleteSettlement(row: ArapSettlement) {
+  try {
+    await deleteSettlement(row.id)
+    ElMessage.success('删除成功')
+    await fetchSettlements()
+  } catch (e: any) { ElMessage.error(e?.message || '删除失败') }
 }
 
-onMounted(fetchData)
+// Detail
+const detailDialogVisible = ref(false)
+const settlementDetail = ref<ArapSettlement | null>(null)
+
+async function onViewSettlement(row: ArapSettlement) {
+  try {
+    settlementDetail.value = await getSettlementDetail(row.id)
+    detailDialogVisible.value = true
+  } catch (e: any) { ElMessage.error(e?.message || '查询详情失败') }
+}
+
+// Reverse reconciliation
+async function onReverseRecon(row: ReconciliationLog) {
+  try {
+    await reverseRecon(row.id)
+    ElMessage.success('反核销成功')
+    await fetchReconLogs()
+  } catch (e: any) { ElMessage.error(e?.message || '反核销失败') }
+}
+
+// Navigate to workbench
+function goToWorkbench() {
+  router.push('/arap/reconciliation-workbench')
+}
+
+// Refresh
+async function refreshActive() {
+  if (activeTab.value === 'settlement') await fetchSettlements()
+  else await fetchReconLogs()
+}
+
+onMounted(() => {
+  fetchSettlements()
+})
 </script>
+
 <style scoped>
 .page-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; }
 .page-title { font-size:16px; font-weight:600; }

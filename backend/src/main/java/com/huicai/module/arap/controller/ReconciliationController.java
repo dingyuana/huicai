@@ -72,6 +72,15 @@ public class ReconciliationController {
         return R.ok(reconciliationService.getRecords(sourceDocType, sourceDocId));
     }
 
+    @Operation(summary = "分页查询核销日志")
+    @GetMapping("/logs/page")
+    public R<com.baomidou.mybatisplus.core.metadata.IPage<ReconciliationLogEntity>> pageLogs(
+            @RequestParam(required = false) String sourceDocType,
+            @RequestParam(defaultValue = "1") Integer current,
+            @RequestParam(defaultValue = "20") Integer size) {
+        return R.ok(reconciliationService.pageLogs(sourceDocType, current, size));
+    }
+
     @Operation(summary = "反核销")
     @PostMapping("/{id}/reverse")
     public R<Void> reverse(@PathVariable Long id) {

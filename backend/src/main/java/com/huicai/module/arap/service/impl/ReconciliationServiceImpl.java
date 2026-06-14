@@ -12,6 +12,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
@@ -270,6 +272,15 @@ public class ReconciliationServiceImpl implements ReconciliationService {
     @Override
     public List<ReconciliationLogEntity> getRecords(String sourceDocType, Long sourceDocId) {
         return logMapper.findBySource(sourceDocType, sourceDocId);
+    }
+
+    @Override
+    public IPage<ReconciliationLogEntity> pageLogs(String sourceDocType, Integer current, Integer size) {
+        Page<ReconciliationLogEntity> page = new Page<>(current == null ? 1 : current, size == null ? 20 : size);
+        LambdaQueryWrapper<ReconciliationLogEntity> wrapper = new LambdaQueryWrapper<ReconciliationLogEntity>()
+                .eq(sourceDocType != null, ReconciliationLogEntity::getSourceDocType, sourceDocType)
+                .orderByDesc(ReconciliationLogEntity::getCreatedAt);
+        return logMapper.selectPage(page, wrapper);
     }
 
     @Override

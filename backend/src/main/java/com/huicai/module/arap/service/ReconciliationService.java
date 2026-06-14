@@ -61,6 +61,9 @@ public interface ReconciliationService {
     /** 查询核销记录 */
     List<ReconciliationLogEntity> getRecords(String sourceDocType, Long sourceDocId);
 
+    /** 分页查询核销日志 */
+    com.baomidou.mybatisplus.core.metadata.IPage<ReconciliationLogEntity> pageLogs(String sourceDocType, Integer current, Integer size);
+
     /** 反核销 */
     void reverse(Long logId);
 }
