@@ -66,6 +66,9 @@ export const REVIEW_STATUS_LABELS: Record<string, string> = {
 export function getBankStatementPage(params: { accountId?: number; status?: string; current?: number; size?: number }): Promise<PageResult<BankStatementVO>> {
   return request.get('/bank-statements/page', { params })
 }
+export function getClassificationCounts(accountId: number, reviewStatus?: string): Promise<Record<string, number>> {
+  return request.get('/bank-statements/classification-counts', { params: { accountId, reviewStatus } })
+}
 export function getBankStatementDetail(id: number): Promise<BankStatementVO> {
   return request.get(`/bank-statements/${id}`)
 }

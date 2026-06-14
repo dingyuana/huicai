@@ -8,7 +8,7 @@
 
       <el-form :model="query" inline class="filter-form">
         <el-form-item label="银行账户">
-          <el-select v-model="query.accountId" placeholder="选择账户" clearable style="width:240px" @change="onSearch">
+          <el-select v-model="query.accountId" placeholder="选择账户" clearable style="width:240px" @change="onAccountChange">
             <el-option v-for="a in accounts" :key="a.id" :label="`${a.accountName} (${a.accountNo})`" :value="a.id" />
           </el-select>
         </el-form-item>
@@ -17,16 +17,21 @@
             <el-option v-for="(label, value) in REVIEW_STATUS_LABELS" :key="value" :label="label" :value="value" />
           </el-select>
         </el-form-item>
-        <el-form-item label="分类">
-          <el-select v-model="query.classification" placeholder="全部" clearable style="width:140px" @change="onSearch">
-            <el-option v-for="(label, value) in CLASSIFICATION_LABELS" :key="value" :label="label" :value="value" />
-          </el-select>
-        </el-form-item>
         <el-form-item>
           <el-button type="primary" @click="onSearch">查询</el-button>
           <el-button @click="onReset">重置</el-button>
         </el-form-item>
       </el-form>
+
+      <el-radio-group v-model="query.classification" class="classification-tabs" @change="onSearch">
+        <el-radio-button :key="'__all__'" :value="''">全部 ({{ totalCount }})</el-radio-button>
+        <el-radio-button
+          v-for="(label, value) in CLASSIFICATION_LABELS"
+          :key="value"
+          :value="value">
+          {{ label }} ({{ classificationCounts[value] || 0 }})
+        </el-radio-button>
+      </el-radio-group>
 
       <el-space style="margin-bottom: 12px">
         <el-button type="primary" @click="openImport">导入对账单</el-button>
@@ -337,14 +342,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { UploadFilled } from '@element-plus/icons-vue'
 import {
   getBankStatementPage, previewStatementExcel, previewStatementExcelWithMapping,
   confirmStatementImport, importStatementCsv, parseExcelHeaders,
   classifyStatement, reviewStatement,   batchConfirmStatements, deleteStatement, updateStatementClassification,
-  getBankStatementDetail,
+  getBankStatementDetail, getClassificationCounts,
   CLASSIFICATION_LABELS, REVIEW_STATUS_LABELS,
   type BankStatementVO,
 } from '@/api/modules/bankStatement'
@@ -383,6 +388,10 @@ const excelHeaders = ref<string[]>([])
 const systemFields = ref<Array<{ field: string; label: string; required: boolean }>>([])
 const columnMapping = ref<Record<string, string>>({})
 
+// 分类 tab 计数: { classification: count }
+const classificationCounts = ref<Record<string, number>>({})
+const totalCount = computed(() => Object.values(classificationCounts.value).reduce((a, b) => a + b, 0))
+
 const query = ref<{ accountId?: number; reviewStatus?: string; classification?: string; current: number; size: number }>({
   current: 1, size: 20,
 })
@@ -400,6 +409,29 @@ async function fetchData() {
   } finally {
     loading.value = false
   }
+}
+
+async function fetchClassificationCounts() {
+  if (!query.value.accountId) {
+    classificationCounts.value = {}
+    return
+  }
+  try {
+    const res: any = await getClassificationCounts(query.value.accountId, query.value.reviewStatus)
+    classificationCounts.value = res || {}
+  } catch {
+    classificationCounts.value = {}
+  }
+}
+
+async function onAccountChange() {
+  query.value.classification = ''
+  query.value.current = 1
+  await Promise.all([fetchData(), fetchClassificationCounts()])
+}
+
+async function refreshAll() {
+  await Promise.all([fetchData(), fetchClassificationCounts()])
 }
 
 function onSearch() { query.value.current = 1; fetchData() }
@@ -534,7 +566,7 @@ async function onConfirmImport() {
     importResultVisible.value = true
     previewData.value = null
     selectedFile.value = null
-    await fetchData()
+    await refreshAll()
   } finally {
     confirming.value = false
   }
@@ -556,7 +588,7 @@ async function onImportCsv() {
     const n = await importStatementCsv(query.value.accountId!, csvContent.value)
     ElMessage.success(`导入 ${n} 条`)
     importDialogVisible.value = false
-    await fetchData()
+    await refreshAll()
   } finally {
     importing.value = false
   }
@@ -565,13 +597,13 @@ async function onImportCsv() {
 async function onClassify(row: BankStatementVO) {
   await classifyStatement(row.id)
   ElMessage.success('分类完成')
-  await fetchData()
+  await refreshAll()
 }
 
 async function onReview(row: BankStatementVO) {
   await reviewStatement(row.id)
   ElMessage.success('确认完成，已触发自动生成')
-  await fetchData()
+  await refreshAll()
 }
 
 async function onAutoClassify() {
@@ -587,7 +619,7 @@ async function onAutoClassify() {
       }
     }
     ElMessage.success(`自动分类 ${classified} 条`)
-    await fetchData()
+    await refreshAll()
   } finally {
     loading.value = false
   }
@@ -601,7 +633,7 @@ async function onBatchConfirm() {
   try {
     batchResult.value = await batchConfirmStatements(selectedIds.value)
     resultDialogVisible.value = true
-    await fetchData()
+    await refreshAll()
   } catch { /* handled */ }
 }
 
@@ -635,7 +667,7 @@ async function saveClassification() {
     await updateStatementClassification(detailData.value.id, editClassification.value)
     detailData.value.classification = editClassification.value
     detailEditable.value = false
-    await fetchData()
+    await refreshAll()
     ElMessage.success('分类已更新')
   } catch { /* handled */ }
 }
@@ -644,7 +676,7 @@ async function onDelete(row: any) {
   try {
     await deleteStatement(row.id)
     ElMessage.success('已删除')
-    await fetchData()
+    await refreshAll()
   } catch { /* handled */ }
 }
 
@@ -660,7 +692,7 @@ onMounted(async () => {
       query.value.accountId = accounts.value[0].id
     }
   } catch { /* ignore */ }
-  await fetchData()
+  await Promise.all([fetchData(), fetchClassificationCounts()])
 })
 </script>
 
@@ -673,6 +705,8 @@ onMounted(async () => {
 }
 .page-title { font-size: 16px; font-weight: 600; }
 .filter-form { margin-bottom: 12px; }
+.classification-tabs { margin-bottom: 12px; flex-wrap: wrap; row-gap: 4px; }
+.classification-tabs :deep(.el-radio-button__inner) { padding: 8px 14px; }
 :deep(.preview-row-error) {
   background-color: #fef0f0 !important;
   color: var(--el-color-danger);
