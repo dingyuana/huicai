@@ -16,8 +16,11 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.*;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -26,9 +29,8 @@ import java.util.stream.Collectors;
 public class ReconciliationServiceImpl implements ReconciliationService {
 
     private static final BigDecimal TOLERANCE = new BigDecimal("5.00");
-    private static final BigDecimal TAIL_DIFF = new BigDecimal("0.50");
     private static final BigDecimal SCORE_THRESHOLD = new BigDecimal("0.70");
-    private static final BigDecimal GREEN_THRESHOLD = new BigDecimal("0.95");
+    private static final BigDecimal TOLERANCE_RATE = new BigDecimal("0.10"); // L5: 容差 10%
     private static final long DEFAULT_TENANT_ID = 1L;
     private static final long DEFAULT_USER_ID = 1L;
 
@@ -41,16 +43,16 @@ public class ReconciliationServiceImpl implements ReconciliationService {
 
     @Override
     public RecommendResult recommendReceipt(Long receiptId, Long customerId, BigDecimal amount, String summary, String counterpartyName) {
-        return recommend(customerId, null, amount, summary, counterpartyName, true, "receipt", receiptId);
+        return recommend(customerId, null, amount, summary, counterpartyName, true, "receipt", receiptId, null, null);
     }
 
     @Override
     public RecommendResult recommendPayment(Long paymentId, Long vendorId, BigDecimal amount, String summary, String counterpartyName) {
-        return recommend(null, vendorId, amount, summary, counterpartyName, false, "payment", paymentId);
+        return recommend(null, vendorId, amount, summary, counterpartyName, false, "payment", paymentId, null, null);
     }
 
     @Override
-    public RecommendResult recommendForStatement(Long statementId, Long accountId, String direction, BigDecimal amount, String counterpartyName, String summary) {
+    public RecommendResult recommendForStatement(Long statementId, Long accountId, String direction, BigDecimal amount, String counterpartyName, String summary, LocalDate txDate, String externalNo) {
         boolean isReceipt = "in".equalsIgnoreCase(direction);
         String customerName = counterpartyName;
         Long partyId = null;
@@ -63,10 +65,10 @@ public class ReconciliationServiceImpl implements ReconciliationService {
                     new LambdaQueryWrapper<VendorEntity>().like(VendorEntity::getName, counterpartyName).last("LIMIT 1"));
             if (!vendors.isEmpty()) partyId = vendors.get(0).getId();
         }
-        return recommend(isReceipt ? partyId : null, isReceipt ? null : partyId, amount, summary, counterpartyName, isReceipt, "bank_txn", statementId);
+        return recommend(isReceipt ? partyId : null, isReceipt ? null : partyId, amount, summary, counterpartyName, isReceipt, "bank_txn", statementId, txDate, externalNo);
     }
 
-    private RecommendResult recommend(Long customerId, Long vendorId, BigDecimal amount, String summary, String counterpartyName, boolean isReceipt, String sourceType, Long sourceId) {
+    private RecommendResult recommend(Long customerId, Long vendorId, BigDecimal amount, String summary, String counterpartyName, boolean isReceipt, String sourceType, Long sourceId, LocalDate txDate, String externalNo) {
         List<RecommendItem> items = new ArrayList<>();
         List<?> invoices;
         if (isReceipt && customerId != null) {
@@ -85,6 +87,7 @@ public class ReconciliationServiceImpl implements ReconciliationService {
             BigDecimal unsettledAmount;
             String invoiceNo;
             Long targetDocId;
+            LocalDate invoiceTxDate = null;
             String targetDocType = isReceipt ? "INVOICE_OUT" : "INVOICE_IN";
             String invoiceSummary;
             String invoiceCustomerName = "";
@@ -93,11 +96,13 @@ public class ReconciliationServiceImpl implements ReconciliationService {
                 unsettledAmount = r.getUnsettledAmount();
                 invoiceNo = String.valueOf(r.getId());
                 targetDocId = r.getId();
+                invoiceTxDate = r.getTxDate();
                 invoiceSummary = r.getSummary() != null ? r.getSummary() : "";
             } else if (invoice instanceof PayableEntity p) {
                 unsettledAmount = p.getUnsettledAmount();
                 invoiceNo = String.valueOf(p.getId());
                 targetDocId = p.getId();
+                invoiceTxDate = p.getTxDate();
                 invoiceSummary = p.getSummary() != null ? p.getSummary() : "";
             } else {
                 continue;
@@ -105,17 +110,83 @@ public class ReconciliationServiceImpl implements ReconciliationService {
 
             if (unsettledAmount == null || unsettledAmount.compareTo(BigDecimal.ZERO) <= 0) continue;
 
-            BigDecimal matchScore = calculateScore(amount, unsettledAmount, summary, invoiceSummary, counterpartyName, invoiceCustomerName);
-            if (matchScore.compareTo(SCORE_THRESHOLD) < 0) continue;
+            // 确定 L1-L5 匹配级别
+            String matchLevel = determineMatchLevel(amount, unsettledAmount, summary, invoiceSummary,
+                    counterpartyName, externalNo, invoiceNo, txDate, invoiceTxDate);
+            if (matchLevel == null) continue; // 未达到最低匹配标准
 
-            String matchLevel = matchScore.compareTo(GREEN_THRESHOLD) >= 0 ? "GREEN" : "YELLOW";
+            // 连续分: 同类级别内排序用
+            BigDecimal matchScore = calculateScore(amount, unsettledAmount, summary, invoiceSummary, counterpartyName, invoiceCustomerName);
             BigDecimal suggestedAmount = amount.min(unsettledAmount);
 
             items.add(new RecommendItem(targetDocId, invoiceNo, targetDocType, amount, unsettledAmount, matchScore, matchLevel, suggestedAmount));
         }
 
-        items.sort((a, b) -> b.matchScore().compareTo(a.matchScore()));
+        items.sort((a, b) -> {
+            int levelCmp = levelOrder(a.matchLevel()) - levelOrder(b.matchLevel());
+            if (levelCmp != 0) return levelCmp;
+            return b.matchScore().compareTo(a.matchScore());
+        });
         return new RecommendResult(sourceType, sourceId, counterpartyName, amount, items);
+    }
+
+    private static int levelOrder(String level) {
+        if (level == null) return 99;
+        return switch (level) {
+            case "L1" -> 1;
+            case "L2" -> 2;
+            case "L3" -> 3;
+            case "L4" -> 4;
+            case "L5" -> 5;
+            default -> 99;
+        };
+    }
+
+    /**
+     * 确定 L1-L5 匹配级别 (按优先级依次检查, 返回最高级别).
+     *
+     * @return 级别字符串 L1-L5, 或 null (不匹配)
+     */
+    private String determineMatchLevel(BigDecimal sourceAmount, BigDecimal unsettledAmount,
+                                        String sourceSummary, String targetSummary,
+                                        String sourceName, String externalNo, String invoiceNo,
+                                        LocalDate txDate, LocalDate invoiceTxDate) {
+        // L1: 引用号匹配 — externalNo 与 invoice ID 一致
+        if (StrUtil.isNotBlank(externalNo) && externalNo.equals(invoiceNo)) {
+            return "L1";
+        }
+
+        // L2: 发票号匹配 — 摘要中包含发票号码 (数字6-10位)
+        if (StrUtil.isNotBlank(sourceSummary) && StrUtil.isNotBlank(invoiceNo)) {
+            Pattern invoicePattern = Pattern.compile("\\b" + Pattern.quote(invoiceNo) + "\\b");
+            if (invoicePattern.matcher(sourceSummary).find()) {
+                return "L2";
+            }
+        }
+
+        BigDecimal diff = sourceAmount.subtract(unsettledAmount).abs();
+
+        // L3: 金额+日期 — 金额精确 + 日期 ±3天 (客商已由上游查询保证)
+        if (diff.compareTo(BigDecimal.ZERO) == 0
+                && txDate != null && invoiceTxDate != null
+                && Math.abs(ChronoUnit.DAYS.between(txDate, invoiceTxDate)) <= 3) {
+            return "L3";
+        }
+
+        // L4: 金额精确
+        if (diff.compareTo(BigDecimal.ZERO) == 0) {
+            return "L4";
+        }
+
+        // L5: 容差匹配 — 金额差异 ≤ invoice 金额的 10%
+        if (unsettledAmount.compareTo(BigDecimal.ZERO) > 0) {
+            BigDecimal rate = diff.divide(unsettledAmount, 4, RoundingMode.HALF_UP);
+            if (rate.compareTo(TOLERANCE_RATE) <= 0) {
+                return "L5";
+            }
+        }
+
+        return null;
     }
 
     private BigDecimal calculateScore(BigDecimal sourceAmount, BigDecimal unsettledAmount, String sourceSummary, String targetSummary, String sourceName, String targetName) {
@@ -261,6 +332,70 @@ public class ReconciliationServiceImpl implements ReconciliationService {
 
         log.info("核销执行完成: sourceType={}, sourceId={}, targetId={}, amount={}", request.sourceDocType(), request.sourceDocId(), request.targetDocId(), request.amount());
         return reconLog;
+    }
+
+    @Override
+    public PreCheckResult preCheck(ExecuteRequest request) {
+        List<PreCheckItem> checks = new ArrayList<>();
+
+        // 1. 单据有效: sourceDoc 是否存在
+        boolean docValid = request.sourceDocType() != null && request.sourceDocId() != null;
+        checks.add(new PreCheckItem("sourceDocValid", docValid, docValid ? "来源单据有效" : "来源单据无效"));
+
+        // 2. 发票有效: 目标单据存在且未结清
+        boolean invoiceExists = false;
+        String invoiceMsg;
+        if ("INVOICE_OUT".equals(request.targetDocType())) {
+            ReceivableEntity r = receivableMapper.selectById(request.targetDocId());
+            invoiceExists = r != null && r.getUnsettledAmount().compareTo(BigDecimal.ZERO) > 0;
+            invoiceMsg = invoiceExists ? "应收单据有效" : "应收单据不存在或已结清";
+        } else if ("INVOICE_IN".equals(request.targetDocType())) {
+            PayableEntity p = payableMapper.selectById(request.targetDocId());
+            invoiceExists = p != null && p.getUnsettledAmount().compareTo(BigDecimal.ZERO) > 0;
+            invoiceMsg = invoiceExists ? "应付单据有效" : "应付单据不存在或已结清";
+        } else {
+            invoiceMsg = "未知单据类型: " + request.targetDocType();
+        }
+        checks.add(new PreCheckItem("invoiceValid", invoiceExists, invoiceMsg));
+
+        // 3. 客商一致: 来源与目标客商匹配
+        boolean partyMatch = false;
+        String partyMsg;
+        if ("INVOICE_OUT".equals(request.targetDocType()) && request.customerId() != null) {
+            ReceivableEntity r = receivableMapper.selectById(request.targetDocId());
+            partyMatch = r != null && r.getCustomerId().equals(request.customerId());
+            partyMsg = partyMatch ? "客商一致(客户)" : "客户不匹配";
+        } else if ("INVOICE_IN".equals(request.targetDocType()) && request.vendorId() != null) {
+            PayableEntity p = payableMapper.selectById(request.targetDocId());
+            partyMatch = p != null && p.getVendorId().equals(request.vendorId());
+            partyMsg = partyMatch ? "客商一致(供应商)" : "供应商不匹配";
+        } else {
+            partyMatch = true;
+            partyMsg = "客商未指定, 跳过检查";
+        }
+        checks.add(new PreCheckItem("partyMatch", partyMatch, partyMsg));
+
+        // 4. 金额充足: 核销金额 ≤ 未结算金额
+        boolean amountValid = false;
+        String amountMsg;
+        BigDecimal unsettled = BigDecimal.ZERO;
+        if ("INVOICE_OUT".equals(request.targetDocType())) {
+            ReceivableEntity r = receivableMapper.selectById(request.targetDocId());
+            unsettled = r != null ? r.getUnsettledAmount() : BigDecimal.ZERO;
+        } else if ("INVOICE_IN".equals(request.targetDocType())) {
+            PayableEntity p = payableMapper.selectById(request.targetDocId());
+            unsettled = p != null ? p.getUnsettledAmount() : BigDecimal.ZERO;
+        }
+        amountValid = request.amount().compareTo(unsettled) <= 0;
+        amountMsg = amountValid ? "核销金额 " + request.amount() + " ≤ 未结算金额 " + unsettled : "核销金额超过未结算余额";
+        checks.add(new PreCheckItem("amountValid", amountValid, amountMsg));
+
+        // 5. 期间正常: period 格式校验 (YYYYMM 格式)
+        boolean periodValid = request.period() != null && request.period().matches("\\d{6}");
+        checks.add(new PreCheckItem("periodValid", periodValid, periodValid ? "期间格式正确: " + request.period() : "期间格式无效: " + request.period()));
+
+        boolean allPassed = checks.stream().allMatch(PreCheckItem::passed);
+        return new PreCheckResult(allPassed, checks);
     }
 
     @Override

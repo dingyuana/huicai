@@ -121,8 +121,8 @@ public class ClassificationRuleServiceImpl implements ClassificationRuleService 
     }
 
     @Override
-    public ClassificationRuleEntity match(String description, String direction) {
-        if (StrUtil.isBlank(description)) return null;
+    public ClassificationRuleEntity match(String description, String direction, String counterparty) {
+        if (StrUtil.isBlank(description) && StrUtil.isBlank(counterparty)) return null;
 
         // @TODO P1 阶段硬编码 tenantId=1L, 后续从 SecurityContext 或 statement 反查
         Long tenantId = 1L;
@@ -136,7 +136,7 @@ public class ClassificationRuleServiceImpl implements ClassificationRuleService 
 
         for (ClassificationRuleEntity rule : rules) {
             if (!matchDirection(rule, direction)) continue;
-            if (!matchText(rule, description)) continue;
+            if (!matchByRule(rule, description, counterparty)) continue;
             return rule;
         }
         return null;
@@ -147,15 +147,29 @@ public class ClassificationRuleServiceImpl implements ClassificationRuleService 
         return rule.getDirection().equalsIgnoreCase(direction);
     }
 
-    private boolean matchText(ClassificationRuleEntity rule, String text) {
+    /**
+     * 按规则的 matchField + ruleType 执行匹配.
+     * matchField 决定匹配来源（摘要/对方户名）, ruleType 决定匹配方式（包含/正则/对方匹配）
+     */
+    private boolean matchByRule(ClassificationRuleEntity rule, String description, String counterparty) {
         if (StrUtil.isBlank(rule.getPattern())) return false;
-        if (!"keyword_regex".equals(rule.getRuleType())) return false;
 
-        String[] keywords = rule.getPattern().split("\\|");
-        for (String kw : keywords) {
-            if (StrUtil.isNotBlank(kw) && text.contains(kw.trim())) return true;
+        String textToMatch = "counterparty".equals(rule.getMatchField()) ? counterparty : description;
+        if (StrUtil.isBlank(textToMatch)) return false;
+
+        switch (rule.getRuleType()) {
+            case "keyword":
+            case "counterparty_match":
+                return textToMatch.contains(rule.getPattern().trim());
+            default: // keyword_regex
+                String[] keywords = rule.getPattern().split("\\|");
+                for (String kw : keywords) {
+                    if (StrUtil.isNotBlank(kw) && textToMatch.contains(kw.trim())) {
+                        return true;
+                    }
+                }
+                return false;
         }
-        return false;
     }
 
     private ClassificationRuleEntity createSeed(Long tenantId, int priority, String name, String ruleType,

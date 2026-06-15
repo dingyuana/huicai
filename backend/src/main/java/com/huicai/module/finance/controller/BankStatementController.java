@@ -36,9 +36,11 @@ public class BankStatementController {
     public R<IPage<BankStatementEntity>> page(
             @RequestParam(required = false) Long accountId,
             @RequestParam(required = false) String status,
+            @RequestParam(required = false) String classification,
+            @RequestParam(required = false) String reviewStatus,
             @RequestParam(defaultValue = "1") Integer current,
             @RequestParam(defaultValue = "20") Integer size) {
-        return R.ok(service.pageQuery(accountId, status, current, size));
+        return R.ok(service.pageQuery(accountId, status, classification, reviewStatus, current, size));
     }
 
     @Operation(summary = "获取对账单详情")
@@ -151,65 +153,25 @@ public class BankStatementController {
         return R.ok(service.classifySingle(id));
     }
 
-    @Operation(summary = "出纳单条确认分类 (确认后自动生成单据与凭证)")
+    @Operation(summary = "出纳单条确认分类 (确认后自动生成单据与凭证, 状态机推进)")
     @PostMapping("/{id}/review")
     public R<BankStatementEntity> review(@PathVariable Long id) {
-        BankStatementEntity stmt = service.review(id);
-        try {
-            autoGenerationService.autoGenerate(id, 1L);
-        } catch (Exception e) {
-            logger.warn("自动生成单据/凭证失败: statementId={}, {}", id, e.getMessage());
-        }
-        return R.ok(service.getDetail(id));
+        return R.ok(service.review(id));
     }
 
-    @Operation(summary = "批量确认分类 (确认后自动生成单据与凭证)")
+    @Operation(summary = "批量确认分类 (状态机推进)")
     @PostMapping("/batch-review")
     public R<Integer> batchReview(@RequestBody List<Long> ids) {
         int confirmed = service.batchReview(ids);
-        int generated = 0;
-        for (Long id : ids) {
-            try {
-                if (autoGenerationService.autoGenerate(id, 1L)) {
-                    generated++;
-                }
-            } catch (Exception e) {
-                logger.warn("自动生成失败: statementId={}, {}", id, e.getMessage());
-            }
-        }
-        logger.info("批量确认+生成: confirmed={}, generated={}", confirmed, generated);
+        logger.info("批量确认: confirmed={}", confirmed);
         return R.ok(confirmed);
     }
 
-    @Operation(summary = "批量确认流水并自动生成单据凭证")
-    @PostMapping("/batch-confirm")
-    public R<Map<String, Object>> batchConfirm(@RequestBody List<Long> ids) {
-        int confirmed = 0;
-        int vouchersCreated = 0;
-        int docsCreated = 0;
-        int failed = 0;
-
-        for (Long id : ids) {
-            try {
-                BankStatementEntity stmt = service.review(id);
-                confirmed++;
-                if (autoGenerationService.autoGenerate(id, 1L)) {
-                    stmt = service.getDetail(id);
-                    if (stmt.getGeneratedVoucherId() != null) vouchersCreated++;
-                    if (stmt.getGeneratedDocId() != null) docsCreated++;
-                }
-            } catch (Exception e) {
-                failed++;
-                logger.warn("batch-confirm 失败: id={}, {}", id, e.getMessage());
-            }
-        }
-
-        return R.ok(Map.of(
-                "confirmed", confirmed,
-                "vouchers_created", vouchersCreated,
-                "docs_created", docsCreated,
-                "failed", failed
-        ));
+    @Operation(summary = "核准过账 (仅 voucher_generated/payment_created → approved)")
+    @PostMapping("/{id}/approve")
+    public R<Void> approve(@PathVariable Long id) {
+        service.approve(id);
+        return R.ok();
     }
 
     @Operation(summary = "删除单条对账单")
@@ -232,5 +194,19 @@ public class BankStatementController {
             @RequestBody Map<String, String> body) {
         String classification = body.get("classification");
         return R.ok(service.updateClassification(id, classification));
+    }
+
+    @Operation(summary = "P2: C类人工处理 - 指定 A/B 类型后自动生成")
+    @PostMapping("/{id}/process-manual")
+    public R<BankStatementEntity> processManual(@PathVariable Long id,
+                                                 @RequestParam String targetType,
+                                                 @RequestParam(required = false) String paymentType) {
+        return R.ok(service.processManual(id, targetType, paymentType));
+    }
+
+    @Operation(summary = "P2: 预览凭证草稿 (只计算不写入)")
+    @GetMapping("/{id}/preview-draft")
+    public R<List<BankStatementService.PreviewEntry>> previewDraft(@PathVariable Long id) {
+        return R.ok(service.previewDraft(id));
     }
 }

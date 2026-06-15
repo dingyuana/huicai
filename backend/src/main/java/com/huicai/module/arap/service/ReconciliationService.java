@@ -3,6 +3,7 @@ package com.huicai.module.arap.service;
 import com.huicai.module.arap.entity.ReconciliationLogEntity;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.List;
 
 public interface ReconciliationService {
@@ -15,7 +16,7 @@ public interface ReconciliationService {
         BigDecimal originalAmount,
         BigDecimal unsettledAmount,
         BigDecimal matchScore,
-        String matchLevel,   // GREEN / YELLOW
+        String matchLevel,   // L1 / L2 / L3 / L4 / L5
         BigDecimal suggestedAmount
     ) {}
 
@@ -26,6 +27,19 @@ public interface ReconciliationService {
         String counterpartyName,
         BigDecimal sourceAmount,
         List<RecommendItem> items
+    ) {}
+
+    /** 核销预检查单项结果 */
+    record PreCheckItem(
+        String checkName,
+        boolean passed,
+        String message
+    ) {}
+
+    /** 核销预检查结果 */
+    record PreCheckResult(
+        boolean allPassed,
+        List<PreCheckItem> checks
     ) {}
 
     /** 执行核销请求 */
@@ -49,8 +63,8 @@ public interface ReconciliationService {
     /** 付款核销推荐 */
     RecommendResult recommendPayment(Long paymentId, Long vendorId, BigDecimal amount, String summary, String counterpartyName);
 
-    /** 银行流水自动推荐 */
-    RecommendResult recommendForStatement(Long statementId, Long accountId, String direction, BigDecimal amount, String counterpartyName, String summary);
+    /** 银行流水自动推荐 (L1-L5 级匹配依赖 txDate 和 externalNo) */
+    RecommendResult recommendForStatement(Long statementId, Long accountId, String direction, BigDecimal amount, String counterpartyName, String summary, LocalDate txDate, String externalNo);
 
     /** 执行单笔核销 */
     ReconciliationLogEntity execute(ExecuteRequest request);
@@ -66,4 +80,7 @@ public interface ReconciliationService {
 
     /** 反核销 */
     void reverse(Long logId);
+
+    /** 核销前预检查 (5项: 单据有效/发票有效/客商一致/金额充足/期间正常) */
+    PreCheckResult preCheck(ExecuteRequest request);
 }

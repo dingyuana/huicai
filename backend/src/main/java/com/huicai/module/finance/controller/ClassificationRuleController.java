@@ -75,10 +75,11 @@ public class ClassificationRuleController {
         return R.ok("已插入 " + count + " 条种子规则", count);
     }
 
-    @Operation(summary = "单笔测试匹配（预留）")
+    @Operation(summary = "单笔测试匹配")
     @PostMapping("/match")
     public R<ClassificationRuleEntity> match(@RequestParam String description,
-                                              @RequestParam(required = false) String direction) {
-        return R.ok(service.match(description, direction));
+                                              @RequestParam(required = false) String direction,
+                                              @RequestParam(required = false) String counterparty) {
+        return R.ok(service.match(description, direction, counterparty));
     }
 }

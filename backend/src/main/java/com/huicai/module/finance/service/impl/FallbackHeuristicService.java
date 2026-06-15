@@ -70,7 +70,7 @@ public class FallbackHeuristicService {
         list.add(new FallbackRule(1, "bank_fee",          "手续费|工本费|年费|账户管理费",      "out"));
         list.add(new FallbackRule(2, "interest_income",   "利息|结息|存款利息",                "in"));
         list.add(new FallbackRule(3, "tax_payment",       "税|税务|缴税|税金|增值税|所得税" +
-                "|城建税|教育费附加|国库|印花", "out"));
+                "|城建税|教育费附加|国库|金库|印花|国家金库", "out"));
         list.add(new FallbackRule(4, "social_security",   "社保|公积金|养老|医疗|失业|工伤|生育", "out"));
         list.add(new FallbackRule(5, "insurance_fee",     "保险|保费|投保",                     "out"));
         list.add(new FallbackRule(6, "salary_payment",    "工资|薪资|薪酬|劳务费|奖金|津贴",    "out"));

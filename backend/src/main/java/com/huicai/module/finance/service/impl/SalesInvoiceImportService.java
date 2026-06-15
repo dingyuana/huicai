@@ -147,14 +147,26 @@ public class SalesInvoiceImportService {
             previews.add(p);
         }
 
-        log.info("销售发票预览完成: batchId={}, total={}, errors={}", batchId, allRows.size(), errors.size());
+        Set<String> existingSet = findExistingInvoiceNos(allRows);
+
+        log.info("销售发票预览完成: batchId={}, total={}, errors={}, existing={}",
+                batchId, allRows.size(), errors.size(), existingSet.size());
+
+        for (Map<String, Object> p : previews) {
+            String invNo = (String) p.get("invoiceNo");
+            if (invNo != null && existingSet.contains(invNo)) {
+                p.put("existing", true);
+            }
+        }
 
         return Map.of(
                 "total", allRows.size(),
                 "valid", allRows.size() - errors.size(),
                 "errors", errors,
                 "batchId", batchId,
-                "previews", previews
+                "previews", previews,
+                "existing", existingSet.size(),
+                "existingList", new ArrayList<>(existingSet)
         );
     }
 
@@ -270,11 +282,24 @@ public class SalesInvoiceImportService {
             return Map.of("total", 0, "success", 0, "docCreated", 0, "voucherCreated", 0, "batchId", batchId);
         }
 
-        int success = 0, docCreated = 0, voucherCreated = 0;
+        ensureStandardSubjects();
+
+        Set<String> existingSet = findExistingInvoiceNos(rows);
+
+        int success = 0, docCreated = 0, voucherCreated = 0, duplicateSkipped = 0;
         List<Map<String, Object>> errors = new ArrayList<>();
 
         for (ParsedInvoiceRow row : rows) {
             try {
+                if (StrUtil.isNotBlank(row.invoiceNo) && existingSet.contains(row.invoiceNo)) {
+                    duplicateSkipped++;
+                    java.util.Map<String, Object> err = new java.util.LinkedHashMap<>();
+                    err.put("row", row.rowNum);
+                    err.put("invoiceNo", row.invoiceNo);
+                    err.put("message", "发票号已存在, 已跳过");
+                    errors.add(err);
+                    continue;
+                }
                 Long customerId = matchOrCreateCustomer(row);
                 if (customerId == null) {
                     errors.add(Map.of("row", row.rowNum, "invoiceNo", row.invoiceNo, "message", "客户匹配失败"));
@@ -283,7 +308,6 @@ public class SalesInvoiceImportService {
                 String period = row.invoiceDate.format(DateTimeFormatter.ofPattern("yyyyMM"));
                 BusinessDocEntity doc = createBusinessDoc(row, customerId, period, batchId);
                 createVoucher(doc, row, customerId, period);
-                // 写入销项发票表(供税务模块查询)
                 insertOutputInvoice(row, customerId, period, doc);
                 success++; docCreated++; voucherCreated++;
             } catch (Exception e) {
@@ -299,6 +323,7 @@ public class SalesInvoiceImportService {
         return Map.of(
                 "total", rows.size(), "success", success,
                 "docCreated", docCreated, "voucherCreated", voucherCreated,
+                "duplicateSkipped", duplicateSkipped,
                 "errors", errors, "batchId", batchId
         );
     }
@@ -397,16 +422,37 @@ public class SalesInvoiceImportService {
         log.info("发票导入生成凭证: invoiceNo={}, voucherId={}", row.invoiceNo, voucher.getId());
     }
 
-    private void insertOutputInvoice(ParsedInvoiceRow row, Long customerId, String period, BusinessDocEntity doc) {
-        // 跳过重复发票号
-        if (StrUtil.isNotBlank(row.invoiceNo)) {
-            long existingCount = outputInvoiceMapper.selectCount(
-                    new LambdaQueryWrapper<OutputInvoiceEntity>().eq(OutputInvoiceEntity::getInvoiceNo, row.invoiceNo));
-            if (existingCount > 0) {
-                log.warn("销项发票已存在, 跳过: invoiceNo={}", row.invoiceNo);
-                return;
+    private void ensureStandardSubjects() {
+        ensureSubject("1122", "应收账款", 1, "debit", null);
+        ensureSubject("5001", "主营业务收入", 1, "credit", null);
+        ensureSubject("2221", "应交税费", 1, "credit", null);
+        ensureSubject("2221.01", "应交增值税-销项税额", 2, "credit", "2221");
+    }
+
+    private void ensureSubject(String code, String name, int level, String direction, String parentCode) {
+        if (findSubjectByCode(code) != null) return;
+        Subject s = new Subject();
+        s.setCode(code);
+        s.setName(name);
+        s.setLevel(level);
+        s.setDirection(direction);
+        s.setIsLeaf(true);
+        s.setIsActive(true);
+        if (parentCode != null) {
+            Subject parent = findSubjectByCode(parentCode);
+            if (parent != null) {
+                s.setParentId(parent.getId());
+                if (Boolean.TRUE.equals(parent.getIsLeaf())) {
+                    parent.setIsLeaf(false);
+                    subjectMapper.updateById(parent);
+                }
             }
         }
+        subjectMapper.insert(s);
+        log.info("自动创建科目: {} {}", code, name);
+    }
+
+    private void insertOutputInvoice(ParsedInvoiceRow row, Long customerId, String period, BusinessDocEntity doc) {
         OutputInvoiceEntity inv = new OutputInvoiceEntity();
         inv.setInvoiceNo(row.invoiceNo);
         inv.setInvoiceDate(row.invoiceDate);
@@ -414,7 +460,13 @@ public class SalesInvoiceImportService {
         inv.setCustomerId(customerId);
         inv.setCustomerName(row.buyerName);
         inv.setAmount(row.amount);
-        inv.setTaxRate(row.taxRate);
+        if (row.taxRate != null) {
+            inv.setTaxRate(row.taxRate);
+        } else if (row.amount.compareTo(BigDecimal.ZERO) != 0) {
+            inv.setTaxRate(row.taxAmount.divide(row.amount, 4, java.math.RoundingMode.HALF_UP));
+        } else {
+            inv.setTaxRate(BigDecimal.ZERO);
+        }
         inv.setTaxAmount(row.taxAmount);
         inv.setTotalAmount(row.totalAmount);
         inv.setInvoiceType("SPECIAL");
@@ -426,7 +478,8 @@ public class SalesInvoiceImportService {
         try {
             outputInvoiceMapper.insert(inv);
         } catch (Exception e) {
-            log.warn("写入销项发票失败(可能已存在): invoiceNo={}, {}", row.invoiceNo, e.getMessage());
+            log.error("写入销项发票失败: invoiceNo={}", row.invoiceNo, e);
+            throw new RuntimeException("写入销项发票失败: " + e.getMessage(), e);
         }
         log.debug("写入销项发票: invoiceNo={}", row.invoiceNo);
     }
@@ -476,6 +529,27 @@ public class SalesInvoiceImportService {
         List<Subject> list = subjectMapper.selectList(
                 new LambdaQueryWrapper<Subject>().eq(Subject::getCode, code).last("LIMIT 1"));
         return list.isEmpty() ? null : list.get(0);
+    }
+
+    /**
+     * 批量查询哪些发票号已存在于 t_output_invoice
+     */
+    private Set<String> findExistingInvoiceNos(List<ParsedInvoiceRow> rows) {
+        Set<String> invoiceNos = new HashSet<>();
+        for (ParsedInvoiceRow row : rows) {
+            if (StrUtil.isNotBlank(row.invoiceNo)) {
+                invoiceNos.add(row.invoiceNo);
+            }
+        }
+        if (invoiceNos.isEmpty()) return Collections.emptySet();
+        List<OutputInvoiceEntity> existing = outputInvoiceMapper.selectList(
+                new LambdaQueryWrapper<OutputInvoiceEntity>()
+                        .in(OutputInvoiceEntity::getInvoiceNo, invoiceNos));
+        Set<String> result = new HashSet<>();
+        for (OutputInvoiceEntity inv : existing) {
+            if (inv.getInvoiceNo() != null) result.add(inv.getInvoiceNo());
+        }
+        return result;
     }
 
     static class ParsedInvoiceRow {

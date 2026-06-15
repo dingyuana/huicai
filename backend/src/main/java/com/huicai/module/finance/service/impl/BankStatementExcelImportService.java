@@ -391,12 +391,19 @@ public class BankStatementExcelImportService {
             } else if (typeStr.contains("往账") || typeStr.contains("付") || typeStr.contains("借") || typeStr.toLowerCase().contains("out")) {
                 stmt.setTxType("EXPENSE"); stmt.setDirection("out");
             }
+        } else {
+            // 无交易类型列时, 根据金额正负推断
+            if (stmt.getAmount() != null && stmt.getAmount().signum() >= 0) {
+                stmt.setTxType("INCOME"); stmt.setDirection("in");
+            } else if (stmt.getAmount() != null) {
+                stmt.setTxType("EXPENSE"); stmt.setDirection("out");
+            }
         }
 
         String counterparty = null;
         Integer payerIdx = mapping.getFieldToColumnIndex().get(ColumnMappingResolver.Field.PAYER_NAME);
         Integer payeeIdx = mapping.getFieldToColumnIndex().get(ColumnMappingResolver.Field.PAYEE_NAME);
-        // 按方向选取对方名称: INCOME(收款) → 付款人(付钱给我方的人); EXPENSE(付款) → 收款人(我方付钱给的人)
+        // 按方向选取对方名称: INCOME(收款) → 付款人(付钱方); EXPENSE(付款) → 收款人(收钱方)
         boolean isIncoming = "INCOME".equals(stmt.getTxType()) || "in".equals(stmt.getDirection());
         boolean isOutgoing = "EXPENSE".equals(stmt.getTxType()) || "out".equals(stmt.getDirection());
         if (isIncoming && payerIdx != null) {
@@ -425,6 +432,18 @@ public class BankStatementExcelImportService {
             }
         }
         stmt.setSummary(StrUtil.isNotBlank(summary) ? summary : null);
+
+        Integer purposeIdx = mapping.getFieldToColumnIndex().get(ColumnMappingResolver.Field.PURPOSE);
+        if (purposeIdx != null) {
+            String purpose = vals.getOrDefault(purposeIdx, "").trim();
+            stmt.setPurpose(StrUtil.isNotBlank(purpose) ? purpose : null);
+        }
+
+        Integer remarkIdx = mapping.getFieldToColumnIndex().get(ColumnMappingResolver.Field.TRANSACTION_REMARK);
+        if (remarkIdx != null) {
+            String remark = vals.getOrDefault(remarkIdx, "").trim();
+            stmt.setTransactionRemark(StrUtil.isNotBlank(remark) ? remark : null);
+        }
 
         Integer extIdx = mapping.getFieldToColumnIndex().get(ColumnMappingResolver.Field.EXTERNAL_NO);
         if (extIdx != null) stmt.setExternalNo(vals.getOrDefault(extIdx, "").trim());

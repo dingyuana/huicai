@@ -48,9 +48,12 @@ public interface ClassificationRuleService {
     int seedForNewTenant(Long tenantId);
 
     /**
-     * 单笔测试匹配（预留骨架）
+     * 单笔测试匹配
      *
-     * @TODO 分类引擎后续任务
+     * @param description 流水摘要
+     * @param direction   业务方向 in/out
+     * @param counterparty 对方户名 (可为 null)
+     * @return 命中的第一条规则, 无匹配返回 null
      */
-    ClassificationRuleEntity match(String description, String direction);
+    ClassificationRuleEntity match(String description, String direction, String counterparty);
 }

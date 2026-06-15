@@ -44,6 +44,7 @@ public class AutoGenerationService {
     private final VoucherNoService voucherNoService;
     private final SubjectMapper subjectMapper;
     private final VoucherTemplateService voucherTemplateService;
+    private final ClassificationRuleMapper classificationRuleMapper;
 
     /**
      * 对已确认分类的银行流水执行自动生单/制证.
@@ -70,7 +71,17 @@ public class AutoGenerationService {
             return false;
         }
 
-        String type = classifyType(classification);
+        // 优先使用命中规则的 route_type, 其次使用分类硬编码映射
+        String type = null;
+        if (stmt.getRuleId() != null) {
+            ClassificationRuleEntity rule = classificationRuleMapper.selectById(stmt.getRuleId());
+            if (rule != null && StrUtil.isNotBlank(rule.getRouteType())) {
+                type = rule.getRouteType();
+            }
+        }
+        if (type == null) {
+            type = classifyType(classification);
+        }
 
         switch (type) {
             case "A":
@@ -99,7 +110,7 @@ public class AutoGenerationService {
     // ─── A类: 直接生成凭证 ───
 
     private void generateVoucherDirect(BankStatementEntity stmt, Long userId) {
-        BigDecimal amount = stmt.getAmount();
+        BigDecimal amount = stmt.getAmount().abs();
         String direction = stmt.getDirection();
         String period = stmt.getTxDate().format(DateTimeFormatter.ofPattern("yyyyMM"));
 
@@ -264,7 +275,7 @@ public class AutoGenerationService {
     // ─── B类: 先生成业务单据, 再生成凭证 ───
 
     private void generateDocThenVoucher(BankStatementEntity stmt, Long userId) {
-        BigDecimal amount = stmt.getAmount();
+        BigDecimal amount = stmt.getAmount().abs();
         String period = stmt.getTxDate().format(DateTimeFormatter.ofPattern("yyyyMM"));
 
         // 1. 生成业务单据

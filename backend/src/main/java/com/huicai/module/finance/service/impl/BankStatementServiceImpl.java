@@ -12,6 +12,10 @@ import com.huicai.module.finance.entity.ClassificationRuleEntity;
 import com.huicai.module.finance.mapper.BankJournalMapper;
 import com.huicai.module.finance.mapper.BankStatementMapper;
 import com.huicai.module.finance.mapper.ClassificationRuleMapper;
+import com.huicai.module.finance.mapper.VoucherMapper;
+import com.huicai.module.finance.mapper.BusinessDocMapper;
+import com.huicai.module.finance.entity.VoucherEntity;
+import com.huicai.module.finance.entity.BusinessDocEntity;
 import com.huicai.module.finance.service.BankStatementService;
 import com.huicai.module.finance.service.ClassificationRuleService;
 import lombok.RequiredArgsConstructor;
@@ -25,6 +29,8 @@ import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.*;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 @Slf4j
 @Service
@@ -48,6 +54,8 @@ public class BankStatementServiceImpl implements BankStatementService {
     private final ColumnMappingResolver columnMappingResolver;
     private final AutoGenerationService autoGenerationService;
     private final ReconciliationService reconciliationService;
+    private final VoucherMapper voucherMapper;
+    private final BusinessDocMapper businessDocMapper;
 
     /**
      * 分页查询对账单.
@@ -65,7 +73,10 @@ public class BankStatementServiceImpl implements BankStatementService {
                 .eq(shouldFilter(classification), BankStatementEntity::getClassification, classification)
                 .eq(shouldFilter(reviewStatus), BankStatementEntity::getReviewStatus, reviewStatus)
                 .orderByDesc(BankStatementEntity::getTxDate);
-        return statementMapper.selectPage(page, wrapper);
+        IPage<BankStatementEntity> result = statementMapper.selectPage(page, wrapper);
+        // 填充生成结果的非持久化字段
+        populateGeneratedRefs(result.getRecords());
+        return result;
     }
 
     /**
@@ -206,6 +217,16 @@ public class BankStatementServiceImpl implements BankStatementService {
             stmt.setSummary(cols[summaryIdx].trim());
         }
 
+        Integer purposeIdx = mapping.getFieldToColumnIndex().get(ColumnMappingResolver.Field.PURPOSE);
+        if (purposeIdx != null && purposeIdx < cols.length) {
+            stmt.setPurpose(cols[purposeIdx].trim());
+        }
+
+        Integer remarkIdx = mapping.getFieldToColumnIndex().get(ColumnMappingResolver.Field.TRANSACTION_REMARK);
+        if (remarkIdx != null && remarkIdx < cols.length) {
+            stmt.setTransactionRemark(cols[remarkIdx].trim());
+        }
+
         Integer extIdx = mapping.getFieldToColumnIndex().get(ColumnMappingResolver.Field.EXTERNAL_NO);
         if (extIdx != null && extIdx < cols.length) {
             stmt.setExternalNo(cols[extIdx].trim());
@@ -280,10 +301,22 @@ public class BankStatementServiceImpl implements BankStatementService {
         BankStatementEntity stmt = statementMapper.selectById(statementId);
         if (stmt == null) throw BusinessException.notFound("对账单记录不存在");
 
-        // 第一层: 规则引擎匹配 (摘要 + 方向 + 对方户名)
+        // 合并多个文本字段: 业务类型 + 摘要 + 用途 + 交易附言
+        String combinedText = Stream.of(stmt.getSummary(), stmt.getPurpose(), stmt.getTransactionRemark())
+                .filter(StrUtil::isNotBlank)
+                .collect(Collectors.joining(" "));
+
+        // 第一层: 规则引擎匹配 (合并字段 + 方向 + 对方户名)
         ClassificationRuleEntity rule = classificationRuleService.match(
-                stmt.getSummary(), stmt.getDirection(), stmt.getCounterAccount()
+                combinedText, stmt.getDirection(), stmt.getCounterAccount()
         );
+
+        // 防误判: 摘要含社保关键词但对方是商业公司 → 跳过规则, 走兜底
+        if (rule != null && "social_security".equals(rule.getClassification())
+                && StrUtil.isNotBlank(stmt.getCounterAccount())
+                && isCommercialEntity(stmt.getCounterAccount())) {
+            rule = null;
+        }
 
         String finalClassification;
         Long finalRuleId;
@@ -297,9 +330,22 @@ public class BankStatementServiceImpl implements BankStatementService {
             stmt.setAiSuggestedAction(null);
         } else {
             // 第三层: 兜底启发式 (永不返回 null)
+            // 将摘要/用途/交易附言和对方户名拼接, 使所有字段中的关键词都能参与匹配
+            String fbDescription = combinedText;
+            if (StrUtil.isNotBlank(stmt.getCounterAccount())) {
+                fbDescription = (fbDescription != null ? fbDescription + " " : "") + stmt.getCounterAccount();
+            }
             FallbackHeuristicService.Result fb = fallbackHeuristic.classify(
-                    stmt.getSummary(), stmt.getDirection()
+                    fbDescription, stmt.getDirection()
             );
+
+            // 防误判: 兜底匹配社保但对方是商业公司 → 降级为方向兜底
+            if ("social_security".equals(fb.getClassification())
+                    && StrUtil.isNotBlank(stmt.getCounterAccount())
+                    && isCommercialEntity(stmt.getCounterAccount())) {
+                fb = fallbackHeuristic.classify("", stmt.getDirection());
+            }
+
             finalClassification = fb.getClassification();
             finalRuleId = null; // 兜底无规则
             stmt.setAiBusinessScene("FB:" + fb.getPriority() + ":" + fb.getMatchedKeyword());
@@ -525,6 +571,7 @@ public class BankStatementServiceImpl implements BankStatementService {
     public BankStatementEntity getDetail(Long id) {
         BankStatementEntity entity = statementMapper.selectById(id);
         if (entity == null) throw BusinessException.notFound("对账单记录不存在");
+        populateGeneratedRefs(List.of(entity));
         return entity;
     }
 
@@ -588,5 +635,43 @@ public class BankStatementServiceImpl implements BankStatementService {
             return new ReconciliationRecommendResult("未找到匹配的应收/应付记录", List.of());
         }
         return new ReconciliationRecommendResult("推荐" + recommend.items().size() + "条核销项", recommend.items());
+    }
+
+    /** 判断对方户名是否为商业公司 (用于社保关键词防误判) */
+    private static boolean isCommercialEntity(String name) {
+        return name.contains("有限公司")
+                || name.contains("有限责任公司")
+                || name.contains("集团有限公司");
+    }
+
+    /**
+     * 批量填充 generatedVoucherNo / generatedDocNo 等非持久化前端展示字段.
+     * 根据 generatedVoucherId 查 t_voucher.voucher_no, 根据 generatedDocId 查 t_business_doc.doc_no.
+     */
+    private void populateGeneratedRefs(List<BankStatementEntity> records) {
+        // 凭证号
+        List<Long> voucherIds = records.stream()
+                .map(BankStatementEntity::getGeneratedVoucherId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toList());
+        if (!voucherIds.isEmpty()) {
+            Map<Long, String> voucherMap = voucherMapper.selectBatchIds(voucherIds).stream()
+                    .collect(Collectors.toMap(VoucherEntity::getId, VoucherEntity::getVoucherNo));
+            records.stream()
+                    .filter(r -> r.getGeneratedVoucherId() != null)
+                    .forEach(r -> r.setGeneratedVoucherNo(voucherMap.get(r.getGeneratedVoucherId())));
+        }
+        // 单据号
+        List<Long> docIds = records.stream()
+                .map(BankStatementEntity::getGeneratedDocId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toList());
+        if (!docIds.isEmpty()) {
+            Map<Long, String> docMap = businessDocMapper.selectBatchIds(docIds).stream()
+                    .collect(Collectors.toMap(BusinessDocEntity::getId, BusinessDocEntity::getDocNo));
+            records.stream()
+                    .filter(r -> r.getGeneratedDocId() != null)
+                    .forEach(r -> r.setGeneratedDocNo(docMap.get(r.getGeneratedDocId())));
+        }
     }
 }

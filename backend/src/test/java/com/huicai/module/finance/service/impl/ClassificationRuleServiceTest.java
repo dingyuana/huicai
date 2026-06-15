@@ -294,7 +294,7 @@ class ClassificationRuleServiceTest {
     @Test
     void match_命中手续费() {
         when(mapper.selectList(any())).thenReturn(seedRules());
-        ClassificationRuleEntity result = service.match("银行账户管理费扣款", "out");
+        ClassificationRuleEntity result = service.match("银行账户管理费扣款", "out", null);
         assertNotNull(result);
         assertEquals("银行手续费", result.getName());
         assertEquals("bank_fee", result.getClassification());
@@ -303,7 +303,7 @@ class ClassificationRuleServiceTest {
     @Test
     void match_命中利息() {
         when(mapper.selectList(any())).thenReturn(seedRules());
-        ClassificationRuleEntity result = service.match("存款结息", "in");
+        ClassificationRuleEntity result = service.match("存款结息", "in", null);
         assertNotNull(result);
         assertEquals("利息收入", result.getName());
         assertEquals("interest_income", result.getClassification());
@@ -312,21 +312,21 @@ class ClassificationRuleServiceTest {
     @Test
     void match_方向过滤() {
         when(mapper.selectList(any())).thenReturn(seedRules());
-        ClassificationRuleEntity result = service.match("存款结息", "out");
+        ClassificationRuleEntity result = service.match("存款结息", "out", null);
         assertNull(result);
     }
 
     @Test
     void match_未命中() {
         when(mapper.selectList(any())).thenReturn(seedRules());
-        ClassificationRuleEntity result = service.match("XXXXX", "in");
+        ClassificationRuleEntity result = service.match("XXXXX", "in", null);
         assertNull(result);
     }
 
     @Test
     void match_description为空() {
-        assertNull(service.match(null, "in"));
-        assertNull(service.match("", "in"));
+        assertNull(service.match(null, "in", null));
+        assertNull(service.match("", "in", null));
         verify(mapper, never()).selectList(any());
     }
 }

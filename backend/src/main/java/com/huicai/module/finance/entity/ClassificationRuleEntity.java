@@ -44,6 +44,9 @@ public class ClassificationRuleEntity {
     /** 是否启用 */
     private Boolean isActive;
 
+    /** A/B/C路由类型: A-直接制证, B-生单后制证, C-待人工 */
+    private String routeType;
+
     /** 借方科目 ID (自动凭证) */
     private Long debitSubjectId;
 

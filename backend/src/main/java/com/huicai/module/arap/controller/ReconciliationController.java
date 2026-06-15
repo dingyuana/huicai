@@ -1,5 +1,6 @@
 package com.huicai.module.arap.controller;
 
+import cn.hutool.core.util.StrUtil;
 import com.huicai.common.response.R;
 import com.huicai.module.arap.entity.ReconciliationLogEntity;
 import com.huicai.module.arap.service.ReconciliationService;
@@ -9,6 +10,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 
@@ -42,7 +44,7 @@ public class ReconciliationController {
         return R.ok(reconciliationService.recommendPayment(paymentId, vendorId, amount, summary, counterpartyName));
     }
 
-    @Operation(summary = "银行流水自动核销推荐")
+    @Operation(summary = "银行流水自动核销推荐 (L1-L5 级匹配)")
     @PostMapping("/auto-recommend/{statementId}")
     public R<ReconciliationService.RecommendResult> recommendForStatement(
             @PathVariable Long statementId,
@@ -50,8 +52,17 @@ public class ReconciliationController {
             @RequestParam String direction,
             @RequestParam BigDecimal amount,
             @RequestParam(required = false) String counterpartyName,
-            @RequestParam(required = false) String summary) {
-        return R.ok(reconciliationService.recommendForStatement(statementId, accountId, direction, amount, counterpartyName, summary));
+            @RequestParam(required = false) String summary,
+            @RequestParam(required = false) String txDate,
+            @RequestParam(required = false) String externalNo) {
+        LocalDate date = StrUtil.isNotBlank(txDate) ? LocalDate.parse(txDate) : null;
+        return R.ok(reconciliationService.recommendForStatement(statementId, accountId, direction, amount, counterpartyName, summary, date, externalNo));
+    }
+
+    @Operation(summary = "核销前预检查 (5项检查)")
+    @PostMapping("/pre-check")
+    public R<ReconciliationService.PreCheckResult> preCheck(@RequestBody ReconciliationService.ExecuteRequest request) {
+        return R.ok(reconciliationService.preCheck(request));
     }
 
     @Operation(summary = "执行单笔核销")

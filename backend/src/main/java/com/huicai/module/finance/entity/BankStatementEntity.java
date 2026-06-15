@@ -20,6 +20,8 @@ public class BankStatementEntity {
     private String counterAccount;
     private BigDecimal amount;
     private String summary;
+    private String purpose;
+    private String transactionRemark;
     private String externalNo;
     private String rawData;
     private Long matchedJournalId;
@@ -41,6 +43,13 @@ public class BankStatementEntity {
     private Long generatedDocId;          // 生成的业务单据 ID
     private Long generatedVoucherId;      // 生成的会计凭证 ID
     private LocalDateTime generatedAt;    // 生成时间
+
+    // 非持久化: 用于前端展示凭证号/单据号
+    @TableField(exist = false)
+    private String generatedVoucherNo;
+
+    @TableField(exist = false)
+    private String generatedDocNo;
 
     @TableField(fill = FieldFill.INSERT)
     private LocalDateTime importedAt;
