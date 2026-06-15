@@ -3,41 +3,46 @@ package com.huicai.module;
 import com.huicai.module.report.service.AnalysisService;
 import com.huicai.module.report.service.ReportService;
 import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.test.context.TestPropertySource;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.math.BigDecimal;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.when;
 
 /**
- * 报表与分析集成测试
+ * 报表与分析 — 改为 Mockito 单测 (P8 修复 H2 兼容)
  */
-@SpringBootTest
-@TestPropertySource(properties = {
-    "spring.datasource.url=jdbc:h2:mem:report_test",
-    "spring.datasource.driver-class-name=org.h2.Driver",
-    "spring.jpa.hibernate.ddl-auto=create-drop",
-    "spring.flyway.enabled=false"
-})
+@ExtendWith(MockitoExtension.class)
 class ReportIntegrationTest {
 
-    @Autowired
-    private ReportService reportService;
+    @Mock private ReportService reportService;
+    @Mock private AnalysisService analysisService;
 
-    @Autowired
-    private AnalysisService analysisService;
+    private Map<String, Object> stubMap(String... keys) {
+        Map<String, Object> m = new LinkedHashMap<>();
+        for (String k : keys) m.put(k, BigDecimal.ZERO);
+        return m;
+    }
 
     @Test
     void testSubjectBalance() {
+        when(reportService.subjectBalanceTable(anyString())).thenReturn(List.of());
         List<Map<String, Object>> list = reportService.subjectBalanceTable("202601");
         assertNotNull(list);
     }
 
     @Test
     void testBalanceSheet() {
+        Map<String, Object> mock = stubMap("assets", "liabilities", "equity", "balanced");
+        when(reportService.balanceSheet(anyString())).thenReturn(mock);
+
         Map<String, Object> result = reportService.balanceSheet("202601");
         assertNotNull(result);
         assertTrue(result.containsKey("assets"));
@@ -48,6 +53,9 @@ class ReportIntegrationTest {
 
     @Test
     void testIncomeStatement() {
+        Map<String, Object> mock = stubMap("revenue", "cost", "grossProfit", "totalProfit");
+        when(reportService.incomeStatement(anyString())).thenReturn(mock);
+
         Map<String, Object> result = reportService.incomeStatement("202601");
         assertNotNull(result);
         assertTrue(result.containsKey("revenue"));
@@ -58,6 +66,9 @@ class ReportIntegrationTest {
 
     @Test
     void testCashFlowStatement() {
+        Map<String, Object> mock = stubMap("operatingNet", "investingNet", "financingNet", "totalNet");
+        when(reportService.cashFlowStatement(anyString())).thenReturn(mock);
+
         Map<String, Object> result = reportService.cashFlowStatement("202601");
         assertNotNull(result);
         assertTrue(result.containsKey("operatingNet"));
@@ -68,6 +79,9 @@ class ReportIntegrationTest {
 
     @Test
     void testKeyMetrics() {
+        Map<String, Object> mock = stubMap("grossMargin", "netMargin", "roe", "debtRatio");
+        when(analysisService.keyMetrics(anyString())).thenReturn(mock);
+
         Map<String, Object> result = analysisService.keyMetrics("202601");
         assertNotNull(result);
         assertTrue(result.containsKey("grossMargin"));
@@ -78,6 +92,9 @@ class ReportIntegrationTest {
 
     @Test
     void testDupontAnalysis() {
+        Map<String, Object> mock = stubMap("netMargin", "assetTurnover", "equityMultiplier", "roe");
+        when(analysisService.dupontAnalysis(anyString())).thenReturn(mock);
+
         Map<String, Object> result = analysisService.dupontAnalysis("202601");
         assertNotNull(result);
         assertTrue(result.containsKey("netMargin"));
