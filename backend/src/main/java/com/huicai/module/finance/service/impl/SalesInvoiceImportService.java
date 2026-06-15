@@ -4,7 +4,9 @@ import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.huicai.common.exception.BusinessException;
 import com.huicai.module.arap.entity.CustomerEntity;
+import com.huicai.module.arap.entity.ReceivableEntity;
 import com.huicai.module.arap.mapper.CustomerMapper;
+import com.huicai.module.arap.mapper.ReceivableMapper;
 import com.huicai.module.finance.entity.BusinessDocEntity;
 import com.huicai.module.finance.entity.VoucherEntity;
 import com.huicai.module.finance.entity.VoucherEntryEntity;
@@ -49,6 +51,7 @@ public class SalesInvoiceImportService {
     private final CustomerMapper customerMapper;
     private final SubjectMapper subjectMapper;
     private final OutputInvoiceMapper outputInvoiceMapper;
+    private final ReceivableMapper receivableMapper;
     private final ColumnMappingResolver columnMappingResolver;
 
     private final Map<String, List<ParsedInvoiceRow>> batchCache = new ConcurrentHashMap<>();
@@ -309,6 +312,7 @@ public class SalesInvoiceImportService {
                 BusinessDocEntity doc = createBusinessDoc(row, customerId, period, batchId);
                 createVoucher(doc, row, customerId, period);
                 insertOutputInvoice(row, customerId, period, doc);
+                createReceivableFromInvoice(doc, row, customerId, period);
                 success++; docCreated++; voucherCreated++;
             } catch (Exception e) {
                 log.warn("处理发票行失败 row={}: {}", row.rowNum, e.getMessage());
@@ -550,6 +554,28 @@ public class SalesInvoiceImportService {
             if (inv.getInvoiceNo() != null) result.add(inv.getInvoiceNo());
         }
         return result;
+    }
+
+    /**
+     * P10-1: 销售发票导入成功后，自动生成应收单 t_receivable.
+     * unsettled_amount 初始 = 总额（待收款），settled = 0.
+     */
+    @Transactional
+    void createReceivableFromInvoice(BusinessDocEntity doc, ParsedInvoiceRow row,
+                                     Long customerId, String period) {
+        ReceivableEntity recv = new ReceivableEntity();
+        recv.setCustomerId(customerId);
+        recv.setDocId(doc.getId());
+        recv.setVoucherId(doc.getVoucherId());
+        recv.setPeriod(period);
+        recv.setTxDate(row.invoiceDate);
+        recv.setAmount(row.totalAmount);
+        recv.setSettledAmount(BigDecimal.ZERO);
+        recv.setUnsettledAmount(row.totalAmount);
+        recv.setSummary(row.goodsName);
+        receivableMapper.insert(recv);
+        log.info("P10-1 销售发票应收单生成: customerId={}, docId={}, amount={}",
+                customerId, doc.getId(), row.totalAmount);
     }
 
     static class ParsedInvoiceRow {

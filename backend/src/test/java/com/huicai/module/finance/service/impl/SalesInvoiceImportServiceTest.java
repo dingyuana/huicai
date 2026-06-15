@@ -1,7 +1,10 @@
 package com.huicai.module.finance.service.impl;
 
 import com.huicai.module.arap.entity.CustomerEntity;
+import com.huicai.module.arap.entity.ReceivableEntity;
 import com.huicai.module.arap.mapper.CustomerMapper;
+import com.huicai.module.arap.mapper.ReceivableMapper;
+import com.huicai.module.finance.entity.BusinessDocEntity;
 import com.huicai.module.finance.mapper.BusinessDocEntryMapper;
 import com.huicai.module.finance.mapper.BusinessDocMapper;
 import com.huicai.module.finance.mapper.VoucherEntryMapper;
@@ -38,6 +41,7 @@ class SalesInvoiceImportServiceTest {
     @Mock private CustomerMapper customerMapper;
     @Mock private SubjectMapper subjectMapper;
     @Mock private OutputInvoiceMapper outputInvoiceMapper;
+    @Mock private ReceivableMapper receivableMapper;
     @Mock private ColumnMappingResolver columnMappingResolver;
 
     @InjectMocks private SalesInvoiceImportService service;
@@ -254,5 +258,74 @@ class SalesInvoiceImportServiceTest {
         m.setAccessible(true);
         LocalDate d = (LocalDate) m.invoke(service, "");
         assertNull(d);
+    }
+
+    // ==================== P10-1: 销售发票→应收单 ====================
+
+    private BusinessDocEntity stubDoc(Long id, String docNo, Long customerId) {
+        BusinessDocEntity d = new BusinessDocEntity();
+        d.setId(id);
+        d.setDocNo(docNo);
+        d.setDocType("INVOICE_OUT");
+        d.setCustomerId(customerId);
+        d.setVoucherId(200L);
+        return d;
+    }
+
+    @Test
+    void createReceivableFromInvoice_正常_插入应收单金额等于总额() throws Exception {
+        SalesInvoiceImportService.ParsedInvoiceRow r = stubRow(1, "INV-001", null, "客户A");
+        BusinessDocEntity doc = stubDoc(100L, "OUT2026060001", 5L);
+
+        Method m = SalesInvoiceImportService.class.getDeclaredMethod(
+                "createReceivableFromInvoice", BusinessDocEntity.class,
+                SalesInvoiceImportService.ParsedInvoiceRow.class, Long.class, String.class);
+        m.setAccessible(true);
+        m.invoke(service, doc, r, 5L, "202606");
+
+        verify(receivableMapper, times(1)).insert(any(ReceivableEntity.class));
+    }
+
+    @Test
+    void createReceivableFromInvoice_字段正确填充() throws Exception {
+        SalesInvoiceImportService.ParsedInvoiceRow r = stubRow(1, "INV-001", null, "客户A");
+        r.goodsName = "测试产品A";
+        BusinessDocEntity doc = stubDoc(100L, "OUT2026060001", 5L);
+
+        Method m = SalesInvoiceImportService.class.getDeclaredMethod(
+                "createReceivableFromInvoice", BusinessDocEntity.class,
+                SalesInvoiceImportService.ParsedInvoiceRow.class, Long.class, String.class);
+        m.setAccessible(true);
+        m.invoke(service, doc, r, 5L, "202606");
+
+        org.mockito.ArgumentCaptor<ReceivableEntity> captor =
+                org.mockito.ArgumentCaptor.forClass(ReceivableEntity.class);
+        verify(receivableMapper).insert(captor.capture());
+        ReceivableEntity captured = captor.getValue();
+        assertEquals(5L, captured.getCustomerId());
+        assertEquals(100L, captured.getDocId());
+        assertEquals(200L, captured.getVoucherId());
+        assertEquals("202606", captured.getPeriod());
+        assertEquals(LocalDate.of(2026, 6, 15), captured.getTxDate());
+        assertEquals(0, captured.getAmount().compareTo(new BigDecimal("1130")));
+        assertEquals(0, captured.getSettledAmount().compareTo(BigDecimal.ZERO));
+        assertEquals(0, captured.getUnsettledAmount().compareTo(new BigDecimal("1130")));
+        assertEquals("测试产品A", captured.getSummary());
+    }
+
+    @Test
+    void createReceivableFromInvoice_零金额_仍插入() throws Exception {
+        // 边界用例: 即便 totalAmount=0 也得落应收单（便于后期手工调整）
+        SalesInvoiceImportService.ParsedInvoiceRow r = stubRow(1, "INV-001", null, "客户A");
+        r.totalAmount = BigDecimal.ZERO;
+        BusinessDocEntity doc = stubDoc(100L, "OUT2026060001", 5L);
+
+        Method m = SalesInvoiceImportService.class.getDeclaredMethod(
+                "createReceivableFromInvoice", BusinessDocEntity.class,
+                SalesInvoiceImportService.ParsedInvoiceRow.class, Long.class, String.class);
+        m.setAccessible(true);
+        m.invoke(service, doc, r, 5L, "202606");
+
+        verify(receivableMapper, times(1)).insert(any(ReceivableEntity.class));
     }
 }
