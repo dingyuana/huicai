@@ -422,7 +422,7 @@ public class SalesInvoiceImportService {
         log.info("发票导入生成凭证: invoiceNo={}, voucherId={}", row.invoiceNo, voucher.getId());
     }
 
-    private void ensureStandardSubjects() {
+    void ensureStandardSubjects() {
         ensureSubject("1122", "应收账款", 1, "debit", null);
         ensureSubject("5001", "主营业务收入", 1, "credit", null);
         ensureSubject("2221", "应交税费", 1, "credit", null);
@@ -484,7 +484,7 @@ public class SalesInvoiceImportService {
         log.debug("写入销项发票: invoiceNo={}", row.invoiceNo);
     }
 
-    private Long matchOrCreateCustomer(ParsedInvoiceRow row) {
+    Long matchOrCreateCustomer(ParsedInvoiceRow row) {
         if (StrUtil.isBlank(row.buyerTaxId) && StrUtil.isBlank(row.buyerName)) return null;
         if (StrUtil.isNotBlank(row.buyerTaxId)) {
             List<CustomerEntity> byTax = customerMapper.selectList(
@@ -534,7 +534,7 @@ public class SalesInvoiceImportService {
     /**
      * 批量查询哪些发票号已存在于 t_output_invoice
      */
-    private Set<String> findExistingInvoiceNos(List<ParsedInvoiceRow> rows) {
+    Set<String> findExistingInvoiceNos(List<ParsedInvoiceRow> rows) {
         Set<String> invoiceNos = new HashSet<>();
         for (ParsedInvoiceRow row : rows) {
             if (StrUtil.isNotBlank(row.invoiceNo)) {
