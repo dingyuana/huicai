@@ -9,6 +9,7 @@ import com.huicai.module.arap.mapper.CustomerMapper;
 import com.huicai.module.arap.mapper.PayableMapper;
 import com.huicai.module.arap.mapper.ReceivableMapper;
 import com.huicai.module.arap.mapper.VendorMapper;
+import com.huicai.module.arap.service.ReconciliationService;
 import com.huicai.module.finance.entity.*;
 import com.huicai.module.finance.mapper.*;
 import com.huicai.module.finance.service.VoucherNoService;
@@ -55,6 +56,7 @@ public class AutoGenerationService {
     private final VendorMapper vendorMapper;
     private final ReceivableMapper receivableMapper;
     private final PayableMapper payableMapper;
+    private final ReconciliationService reconciliationService;
 
     /**
      * 对已确认分类的银行流水执行自动生单/制证.
@@ -519,6 +521,21 @@ public class AutoGenerationService {
             doc.setCustomerId(customerId);
             log.info("P10-3 应收单生成: statementId={}, customerId={}, docId={}, amount={}",
                     stmt.getId(), customerId, doc.getId(), amount);
+
+            // P10-4: 自动核销应收（停在 CONFIRMED 状态）
+            try {
+                reconciliationService.execute(new ReconciliationService.ExecuteRequest(
+                        "bank_txn", stmt.getId(),
+                        "INVOICE_OUT", recv.getId(),
+                        amount, new BigDecimal("100"),
+                        "AUTO", customerId, null,
+                        period, "P10-4 银行流水自动核销"
+                ));
+                log.info("P10-4 应收自动核销完成: statementId={}, receivableId={}, amount={}",
+                        stmt.getId(), recv.getId(), amount);
+            } catch (Exception e) {
+                log.warn("P10-4 应收自动核销失败(不影响主流程): {}", e.getMessage());
+            }
         } else if ("business_payment".equals(classification)) {
             Long vendorId = findVendorByName(counterName);
             if (vendorId == null) {
@@ -539,6 +556,21 @@ public class AutoGenerationService {
             doc.setSupplierId(vendorId);
             log.info("P10-3 应付单生成: statementId={}, vendorId={}, docId={}, amount={}",
                     stmt.getId(), vendorId, doc.getId(), amount);
+
+            // P10-4: 自动核销应付（停在 CONFIRMED 状态）
+            try {
+                reconciliationService.execute(new ReconciliationService.ExecuteRequest(
+                        "bank_txn", stmt.getId(),
+                        "INVOICE_IN", pay.getId(),
+                        amount, new BigDecimal("100"),
+                        "AUTO", null, vendorId,
+                        period, "P10-4 银行流水自动核销"
+                ));
+                log.info("P10-4 应付自动核销完成: statementId={}, payableId={}, amount={}",
+                        stmt.getId(), pay.getId(), amount);
+            } catch (Exception e) {
+                log.warn("P10-4 应付自动核销失败(不影响主流程): {}", e.getMessage());
+            }
         } else {
             // internal_transfer / salary_payment 等不走应收/应付
             log.debug("P10-3 跳过: classification={}, 不需要应收/应付单", classification);
