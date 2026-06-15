@@ -16,7 +16,7 @@ public interface ReconciliationService {
         BigDecimal originalAmount,
         BigDecimal unsettledAmount,
         BigDecimal matchScore,
-        String matchLevel,   // L1 / L2 / L3 / L4 / L5
+        String matchLevel,
         BigDecimal suggestedAmount
     ) {}
 
@@ -63,7 +63,7 @@ public interface ReconciliationService {
     /** 付款核销推荐 */
     RecommendResult recommendPayment(Long paymentId, Long vendorId, BigDecimal amount, String summary, String counterpartyName);
 
-    /** 银行流水自动推荐 (L1-L5 级匹配依赖 txDate 和 externalNo) */
+    /** 银行流水自动推荐 (L1-L5 级匹配) */
     RecommendResult recommendForStatement(Long statementId, Long accountId, String direction, BigDecimal amount, String counterpartyName, String summary, LocalDate txDate, String externalNo);
 
     /** 执行单笔核销 */
@@ -81,6 +81,18 @@ public interface ReconciliationService {
     /** 反核销 */
     void reverse(Long logId);
 
-    /** 核销前预检查 (5项: 单据有效/发票有效/客商一致/金额充足/期间正常) */
+    /** 核销前预检查 (5项) */
     PreCheckResult preCheck(ExecuteRequest request);
+
+    /** 审批执行核销 (CONFIRMED → EXECUTED) */
+    ReconciliationLogEntity approve(Long logId);
+
+    /** 驳回核销 (CONFIRMED → REJECTED, 恢复应收/应付未结金额) */
+    void reject(Long logId, String reason);
+
+    /** 带差额调整的核销 */
+    ReconciliationLogEntity executeWithAdjustment(ExecuteRequest request, BigDecimal adjustAmount, String adjustType, Long adjustSubjectId);
+
+    /** 预收/预付检测 — 判断客户/供应商是否已有未结清应收/应付 */
+    boolean hasOpenInvoices(String targetDocType, Long partyId);
 }

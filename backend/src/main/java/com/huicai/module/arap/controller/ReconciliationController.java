@@ -71,6 +71,16 @@ public class ReconciliationController {
         return R.ok(reconciliationService.execute(request));
     }
 
+    @Operation(summary = "带差额调整的核销 (如手续费/折扣/尾差)")
+    @PostMapping("/execute-with-adjustment")
+    public R<ReconciliationLogEntity> executeWithAdjustment(
+            @RequestBody ReconciliationService.ExecuteRequest request,
+            @RequestParam BigDecimal adjustAmount,
+            @RequestParam String adjustType,
+            @RequestParam(defaultValue = "0") Long adjustSubjectId) {
+        return R.ok(reconciliationService.executeWithAdjustment(request, adjustAmount, adjustType, adjustSubjectId));
+    }
+
     @Operation(summary = "批量核销")
     @PostMapping("/batch-execute")
     public R<List<ReconciliationLogEntity>> batchExecute(@RequestBody List<ReconciliationService.ExecuteRequest> requests) {
@@ -96,6 +106,19 @@ public class ReconciliationController {
     @PostMapping("/{id}/reverse")
     public R<Void> reverse(@PathVariable Long id) {
         reconciliationService.reverse(id);
+        return R.ok();
+    }
+
+    @Operation(summary = "审批执行核销 (CONFIRMED → EXECUTED)")
+    @PostMapping("/{id}/approve")
+    public R<ReconciliationLogEntity> approve(@PathVariable Long id) {
+        return R.ok(reconciliationService.approve(id));
+    }
+
+    @Operation(summary = "驳回核销 (CONFIRMED → REJECTED, 恢复应收/应付未结金额)")
+    @PostMapping("/{id}/reject")
+    public R<Void> reject(@PathVariable Long id, @RequestParam(required = false) String reason) {
+        reconciliationService.reject(id, reason);
         return R.ok();
     }
 }

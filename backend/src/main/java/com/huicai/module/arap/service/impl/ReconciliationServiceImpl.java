@@ -449,4 +449,122 @@ public class ReconciliationServiceImpl implements ReconciliationService {
         logMapper.updateById(reconLog);
         log.info("反核销完成: logId={}, amount={}", logId, amount);
     }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public ReconciliationLogEntity approve(Long logId) {
+        ReconciliationLogEntity reconLog = logMapper.selectById(logId);
+        if (reconLog == null) throw new BusinessException("核销记录不存在: " + logId);
+        if (!"CONFIRMED".equals(reconLog.getStatus())) {
+            throw new BusinessException("仅已确认(CONFIRMED)的核销可审批执行, 当前状态: " + reconLog.getStatus());
+        }
+        reconLog.setStatus("EXECUTED");
+        logMapper.updateById(reconLog);
+        log.info("核销审批执行完成: logId={}, amount={}", logId, reconLog.getAllocatedAmount());
+        return reconLog;
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void reject(Long logId, String reason) {
+        ReconciliationLogEntity reconLog = logMapper.selectById(logId);
+        if (reconLog == null) throw new BusinessException("核销记录不存在: " + logId);
+        if (!"CONFIRMED".equals(reconLog.getStatus())) {
+            throw new BusinessException("仅已确认(CONFIRMED)的核销可驳回, 当前状态: " + reconLog.getStatus());
+        }
+        // 恢复应收/应付未结金额（同 reverse 逻辑）
+        BigDecimal amount = reconLog.getAllocatedAmount();
+        if ("INVOICE_OUT".equals(reconLog.getTargetDocType())) {
+            ReceivableEntity r = receivableMapper.selectById(reconLog.getTargetDocId());
+            if (r != null) {
+                BigDecimal newSettled = r.getSettledAmount().subtract(amount);
+                r.setSettledAmount(newSettled);
+                r.setUnsettledAmount(r.getAmount().subtract(newSettled));
+                receivableMapper.updateById(r);
+            }
+        } else if ("INVOICE_IN".equals(reconLog.getTargetDocType())) {
+            PayableEntity p = payableMapper.selectById(reconLog.getTargetDocId());
+            if (p != null) {
+                BigDecimal newSettled = p.getSettledAmount().subtract(amount);
+                p.setSettledAmount(newSettled);
+                p.setUnsettledAmount(p.getAmount().subtract(newSettled));
+                payableMapper.updateById(p);
+            }
+        }
+        reconLog.setStatus("REJECTED");
+        reconLog.setRemark(reason);
+        logMapper.updateById(reconLog);
+        log.info("核销驳回完成: logId={}, amount={}, reason={}", logId, amount, reason);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public ReconciliationLogEntity executeWithAdjustment(ExecuteRequest request, BigDecimal adjustAmount, String adjustType, Long adjustSubjectId) {
+        if (adjustAmount == null || adjustAmount.compareTo(BigDecimal.ZERO) == 0) {
+            return execute(request); // 无差额, 走普通核销
+        }
+
+        // 主核销金额 = 请求金额 - 差额
+        BigDecimal mainAmount = request.amount().subtract(adjustAmount);
+        if (mainAmount.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new BusinessException("扣除差额后主核销金额必须大于0, mainAmount=" + mainAmount);
+        }
+
+        // 1. 执行主核销
+        ExecuteRequest mainRequest = new ExecuteRequest(
+                request.sourceDocType(), request.sourceDocId(),
+                request.targetDocType(), request.targetDocId(),
+                mainAmount, request.matchScore(), request.matchMethod(),
+                request.customerId(), request.vendorId(),
+                request.period(), request.remark()
+        );
+        ReconciliationLogEntity mainLog = execute(mainRequest);
+
+        // 2. 标记主核销日志差额类型
+        mainLog.setRemark(adjustType + "差额核销, adjustAmount=" + adjustAmount);
+        logMapper.updateById(mainLog);
+
+        // 3. 创建差额调整凭证分录 (仅记录, 不修改应收/应付结算金额)
+        //    实际企业会额外生成一笔调整凭证: 借 财务费用/折扣 / 贷 应收/应付
+        ReconciliationLogEntity adjustLog = new ReconciliationLogEntity();
+        adjustLog.setTenantId(DEFAULT_TENANT_ID);
+        adjustLog.setSourceDocType(request.sourceDocType());
+        adjustLog.setSourceDocId(request.sourceDocId());
+        adjustLog.setTargetDocType(request.targetDocType());
+        adjustLog.setTargetDocId(request.targetDocId());
+        adjustLog.setAllocatedAmount(adjustAmount);
+        adjustLog.setDiscountAmount(adjustAmount);
+        adjustLog.setMatchScore(BigDecimal.ZERO);
+        adjustLog.setMatchMethod("ADJUSTMENT");
+        adjustLog.setStatus("EXECUTED"); // 差额调整自动执行
+        adjustLog.setRemark("差额调整(" + adjustType + "), 科目=" + adjustSubjectId + ", 金额=" + adjustAmount);
+        adjustLog.setCreatedBy(DEFAULT_USER_ID);
+        logMapper.insert(adjustLog);
+
+        log.info("带差额核销完成: sourceId={}, targetId={}, mainAmount={}, adjustAmount={}, adjustType={}",
+                request.sourceDocId(), request.targetDocId(), mainAmount, adjustAmount, adjustType);
+
+        return mainLog;
+    }
+
+    @Override
+    public boolean hasOpenInvoices(String targetDocType, Long partyId) {
+        if (targetDocType == null || partyId == null) return false;
+        if ("INVOICE_OUT".equals(targetDocType)) {
+            List<ReceivableEntity> list = receivableMapper.selectList(
+                    new LambdaQueryWrapper<ReceivableEntity>()
+                            .eq(ReceivableEntity::getCustomerId, partyId)
+                            .gt(ReceivableEntity::getUnsettledAmount, BigDecimal.ZERO)
+                            .last("LIMIT 1"));
+            return !list.isEmpty();
+        } else if ("INVOICE_IN".equals(targetDocType)) {
+            List<PayableEntity> list = payableMapper.selectList(
+                    new LambdaQueryWrapper<PayableEntity>()
+                            .eq(PayableEntity::getVendorId, partyId)
+                            .gt(PayableEntity::getUnsettledAmount, BigDecimal.ZERO)
+                            .last("LIMIT 1"));
+            return !list.isEmpty();
+        }
+        return false;
+    }
 }

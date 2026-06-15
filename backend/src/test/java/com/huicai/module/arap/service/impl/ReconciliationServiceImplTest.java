@@ -45,6 +45,18 @@ class ReconciliationServiceImplTest {
         return r;
     }
 
+    private ReconciliationLogEntity stubLog(Long id, String status) {
+        ReconciliationLogEntity l = new ReconciliationLogEntity();
+        l.setId(id);
+        l.setStatus(status);
+        l.setTargetDocType("INVOICE_OUT");
+        l.setTargetDocId(100L);
+        l.setAllocatedAmount(new BigDecimal("100"));
+        l.setSourceDocType("bank_txn");
+        l.setSourceDocId(1L);
+        return l;
+    }
+
     private PayableEntity stubPayable(Long id, Long vendorId, BigDecimal amount, BigDecimal unsettled) {
         PayableEntity p = new PayableEntity();
         p.setId(id);
@@ -294,5 +306,134 @@ class ReconciliationServiceImplTest {
         var logs = service.batchExecute(List.of(req1, req2));
         assertEquals(2, logs.size());
         verify(logMapper, times(2)).insert(any(ReconciliationLogEntity.class));
+    }
+
+    // ==================== P12-1: 核销审批/驳回 ====================
+
+    @Test
+    void approve_CONFIRMED状态_变为EXECUTED() {
+        when(logMapper.selectById(1L)).thenReturn(stubLog(1L, "CONFIRMED"));
+        when(logMapper.updateById(any(ReconciliationLogEntity.class))).thenReturn(1);
+
+        ReconciliationLogEntity result = service.approve(1L);
+
+        assertEquals("EXECUTED", result.getStatus());
+        verify(logMapper, atLeastOnce()).updateById(any(ReconciliationLogEntity.class));
+    }
+
+    @Test
+    void approve_非CONFIRMED状态_抛异常() {
+        when(logMapper.selectById(1L)).thenReturn(stubLog(1L, "EXECUTED"));
+
+        assertThrows(BusinessException.class, () -> service.approve(1L));
+    }
+
+    @Test
+    void approve_不存在_抛异常() {
+        when(logMapper.selectById(999L)).thenReturn(null);
+
+        assertThrows(BusinessException.class, () -> service.approve(999L));
+    }
+
+    @Test
+    void reject_CONFIRMED状态_恢复应收_变为REJECTED() {
+        when(logMapper.selectById(1L)).thenReturn(stubLog(1L, "CONFIRMED"));
+        when(receivableMapper.selectById(100L)).thenReturn(stubReceivable(100L, 5L, new BigDecimal("500"), new BigDecimal("300")));
+
+        service.reject(1L, "金额有误");
+
+        // 应收恢复: settled=500-300=200, 减去100→100; unsettled=500-100=400
+        org.mockito.ArgumentCaptor<ReceivableEntity> captor =
+                org.mockito.ArgumentCaptor.forClass(ReceivableEntity.class);
+        verify(receivableMapper).updateById(captor.capture());
+        ReceivableEntity updated = captor.getValue();
+        assertEquals(0, updated.getSettledAmount().compareTo(new BigDecimal("100")));
+        assertEquals(0, updated.getUnsettledAmount().compareTo(new BigDecimal("400")));
+        verify(logMapper, atLeastOnce()).updateById(any(ReconciliationLogEntity.class));
+    }
+
+    @Test
+    void reject_非CONFIRMED状态_抛异常() {
+        when(logMapper.selectById(1L)).thenReturn(stubLog(1L, "EXECUTED"));
+
+        assertThrows(BusinessException.class, () -> service.reject(1L, "test"));
+    }
+
+    @Test
+    void reject_不存在_抛异常() {
+        when(logMapper.selectById(999L)).thenReturn(null);
+
+        assertThrows(BusinessException.class, () -> service.reject(999L, "test"));
+    }
+
+    // ==================== P12-2: 差额调整核销 ====================
+
+    @Test
+    void executeWithAdjustment_差额0_走普通核销() {
+        ReceivableEntity r = stubReceivable(1L, 1L, new BigDecimal("1000"), new BigDecimal("500"));
+        when(receivableMapper.selectById(1L)).thenReturn(r);
+
+        ExecuteRequest req = new ExecuteRequest("receipt", 1L, "INVOICE_OUT", 1L, new BigDecimal("500"), BigDecimal.ZERO, "MANUAL", 1L, null, null, "");
+        ReconciliationLogEntity result = service.executeWithAdjustment(req, BigDecimal.ZERO, "FEE", 100L);
+
+        assertNotNull(result);
+        verify(logMapper, times(1)).insert(any(ReconciliationLogEntity.class));
+    }
+
+    @Test
+    void executeWithAdjustment_有差额_主核销加调整日志() {
+        ReceivableEntity r = stubReceivable(1L, 1L, new BigDecimal("1000"), new BigDecimal("500"));
+        when(receivableMapper.selectById(1L)).thenReturn(r);
+
+        // 请求核销 500, 差额 20, 主核销 480
+        ExecuteRequest req = new ExecuteRequest("receipt", 1L, "INVOICE_OUT", 1L, new BigDecimal("500"), BigDecimal.ZERO, "MANUAL", 1L, null, "202606", "");
+        ReconciliationLogEntity result = service.executeWithAdjustment(req, new BigDecimal("20"), "FEE", 100L);
+
+        assertNotNull(result);
+        // 2 次 insert: 主核销 + 差额调整
+        verify(logMapper, times(2)).insert(any(ReconciliationLogEntity.class));
+    }
+
+    @Test
+    void executeWithAdjustment_差额大于请求金额_抛异常() {
+        ExecuteRequest req = new ExecuteRequest("receipt", 1L, "INVOICE_OUT", 1L, new BigDecimal("100"), BigDecimal.ZERO, "MANUAL", 1L, null, null, "");
+
+        assertThrows(BusinessException.class, () ->
+                service.executeWithAdjustment(req, new BigDecimal("200"), "FEE", 100L));
+    }
+
+    // ==================== P12-3: 预收/预付检测 ====================
+
+    @Test
+    void hasOpenInvoices_客户有未结清应收_返回true() {
+        when(receivableMapper.selectList(any())).thenReturn(List.of(stubReceivable(1L, 5L, new BigDecimal("500"), new BigDecimal("300"))));
+
+        boolean result = service.hasOpenInvoices("INVOICE_OUT", 5L);
+
+        assertTrue(result);
+    }
+
+    @Test
+    void hasOpenInvoices_客户无未结清_返回false() {
+        when(receivableMapper.selectList(any())).thenReturn(List.of());
+
+        boolean result = service.hasOpenInvoices("INVOICE_OUT", 5L);
+
+        assertFalse(result);
+    }
+
+    @Test
+    void hasOpenInvoices_供应商有未结清应付_返回true() {
+        when(payableMapper.selectList(any())).thenReturn(List.of(stubPayable(1L, 8L, new BigDecimal("1000"), new BigDecimal("500"))));
+
+        boolean result = service.hasOpenInvoices("INVOICE_IN", 8L);
+
+        assertTrue(result);
+    }
+
+    @Test
+    void hasOpenInvoices_参数为null_返回false() {
+        assertFalse(service.hasOpenInvoices(null, 5L));
+        assertFalse(service.hasOpenInvoices("INVOICE_OUT", null));
     }
 }
