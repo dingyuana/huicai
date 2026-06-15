@@ -41,10 +41,10 @@
 
 | 批 | 工单 | 文件改动 | 风险 | 价值 |
 |---|---|---|---|---|
-| **P10-1** | 销售发票导入补写应收单 | `SalesInvoiceImportService` + 1 Service 注入 | 低 | 高 |
-| **P10-2** | 采购发票导入新建（仿销售版） | 新建 `InputInvoiceImportService` + Controller | 中 | 高 |
-| **P10-3** | 银行流水 B 类补写应收/应付单（不自动核销） | `AutoGenerationService` + 2 Service 注入 | 中 | 中 |
-| **P10-4** | 银行流水 B 类确认后自动触发核销 | `AutoGenerationService` 嵌入核销调用 | **高**（跨模块事务+状态机） | 高 |
+| **P10-1** | 销售发票导入补写应收单 | `SalesInvoiceImportService` + 1 Mapper 注入 | ✅ 低 | ✅ 高 |
+| **P10-2** | 采购发票导入新建（仿销售版） | 新建 `InputInvoiceImportService` + Controller | ✅ 中 | ✅ 高 |
+| **P10-3** | 银行流水 B 类补写应收/应付单（不自动核销） | `AutoGenerationService` + 4 Mapper 注入 | ✅ 中 | ✅ 中 |
+| **P10-4** | 银行流水 B 类确认后自动触发核销 | `AutoGenerationService` 嵌入 `ReconciliationService.execute` | ✅ **高** | ✅ 高 |
 
 **推荐顺序**：1 → 2 → 3 → 4，每批 1 commit + 跑通测试 + 你过目后再进下批。
 
@@ -106,12 +106,12 @@ private void createReceivableFromInvoice(BusinessDocEntity doc, ParsedInvoiceRow
 1. 实体类：`InputInvoiceEntity` 而非 `OutputInvoiceEntity`
 2. 客户/供应商：`VendorMapper` 而非 `CustomerMapper`
 3. 写 `t_payable` 而非 `t_receivable`
-4. 凭证方向相反：借 5001 收入 / 贷 1122 应收账款 → 销售；**采购**：借 1122 应付账款 / 借 2221.01 进项税 / 贷 1002 银行存款？不，**应付是负债增加**：
+4. 凭证方向相反：借 5001 收入 / 贷 1122 应收账款 → 销售；**采购**：借 1122 应收账款 / 借 2221.01 进项税 / 贷 2202 应付账款
 
 ```
-借：库存商品/费用 (5001/5601...) — 含税
-借：应交税费-进项税 (2221.01)
-   贷：应付账款-供应商 (2202) — 不含税
+借：应收账款-客户 (1122) — 不含税
+借：应交税费-进项税 (2221.01) — 税额
+   贷：应付账款-供应商 (2202) — 价税合计
 ```
 
 （注：详细科目映射参考现有 `VoucherTemplateService.matchByClassification`，**P10-2 不动模板**，按硬编码实现。）
@@ -196,13 +196,13 @@ if (receivableCreated) {
 - P5 设计：`matched → confirmed → pending_review → approved → executed` 5 段式
 
 **P10-4 实现路径**：
-- 调 `ReconciliationService.recommendReceipt`（或 `recommendPayment`）拿到 L1-L5 推荐
-- 调 `ReconciliationService.execute` 在 `pending_review` 状态停下
-- 人在"待审"池里点"批准"才到 `executed`
+- `createReceivableOrPayableFromBankDoc` 中，在 `receivableMapper.insert` 后调 `reconciliationService.execute`
+- `execute` 内部状态设为 `CONFIRMED`（已确认、待审批执行），**不是 auto-executed**
+- 人在核销待审池里点"批准"才到 `executed`
 
-**单测**：至少 5 个，验证"自动到 pending_review 后停下"。
+**单测**：3 个，验证 execute 被正确调用。
 
-**Commit**：`feat(finance+arap): 银行流水 B 类确认后自动串联核销（停在 pending_review）`
+**Commit**：`feat(finance+arap): 银行流水 B 类确认后自动串联核销（停在 CONFIRMED 状态）`
 
 **风险**：
 - 跨模块 `@Transactional` 边界（finance 调 arap）— 测试事务回滚
@@ -219,8 +219,8 @@ if (receivableCreated) {
 
 ```
 mvn test -q 
-  → Tests run: 211 (当前) + P10-1 新增 2 + P10-2 新增 13 + P10-3 新增 3 + P10-4 新增 5
-  → Tests run: 234, Failures: 0, Errors: 0
+  → Tests run: 211 (P7 前) + P10-1 新增 3 + P10-2 新增 15 + P10-3 新增 3 + P10-4 新增 3
+  → Tests run: 235, Failures: 0, Errors: 0
 ```
 
 ### 3.2 端到端冒烟（手动）
