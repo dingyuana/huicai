@@ -160,4 +160,31 @@ class TaxServiceImplTest {
         BusinessException ex = assertThrows(BusinessException.class, () -> service.submitDeclaration(1L));
         assertTrue(ex.getMessage().contains("仅草稿状态可提交"));
     }
+
+    // ==================== P18-1: 申报审批 / 驳回 ====================
+
+    @Test
+    void approveDeclaration_submitted_becomes_approved() {
+        when(declarationMapper.selectById(1L)).thenReturn(stubDecl(1L, "SUBMITTED"));
+        TaxDeclarationEntity r = service.approveDeclaration(1L, "zhangsan");
+        assertEquals("APPROVED", r.getStatus());
+        verify(declarationMapper).updateById(any(TaxDeclarationEntity.class));
+    }
+
+    @Test
+    void rejectDeclaration_submitted_becomes_rejected_with_reason() {
+        when(declarationMapper.selectById(1L)).thenReturn(stubDecl(1L, "SUBMITTED"));
+        TaxDeclarationEntity r = service.rejectDeclaration(1L, "lisi", "材料不齐");
+        assertEquals("REJECTED", r.getStatus());
+        assertNotNull(r.getRemark());
+        assertTrue(r.getRemark().contains("材料不齐"));
+    }
+
+    @Test
+    void rejectDeclaration_empty_reason_throws() {
+        when(declarationMapper.selectById(1L)).thenReturn(stubDecl(1L, "SUBMITTED"));
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> service.rejectDeclaration(1L, "x", ""));
+        assertTrue(ex.getMessage().contains("驳回必须填理由"));
+    }
 }

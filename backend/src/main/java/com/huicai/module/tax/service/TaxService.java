@@ -37,4 +37,8 @@ public interface TaxService {
     IPage<TaxDeclarationEntity> pageQueryDeclaration(String status, Integer current, Integer size);
     TaxDeclarationEntity createDeclaration(TaxDeclarationEntity entity);
     TaxDeclarationEntity submitDeclaration(Long id);
+    /** P18-1: 审批通过 (SUBMITTED → APPROVED) */
+    TaxDeclarationEntity approveDeclaration(Long id, String approver);
+    /** P18-1: 驳回 (SUBMITTED → REJECTED) */
+    TaxDeclarationEntity rejectDeclaration(Long id, String approver, String reason);
 }

@@ -15,6 +15,7 @@ import com.huicai.module.tax.mapper.TaxDeclarationMapper;
 import com.huicai.module.tax.mapper.TaxTypeMapper;
 import com.huicai.module.tax.service.TaxService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -24,6 +25,7 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class TaxServiceImpl implements TaxService {
@@ -275,6 +277,43 @@ public class TaxServiceImpl implements TaxService {
         }
         entity.setStatus("SUBMITTED");
         declarationMapper.updateById(entity);
+        return entity;
+    }
+
+    // ─── P18-1: 申报审批 / 驳回 ───
+
+    @Override
+    public TaxDeclarationEntity approveDeclaration(Long id, String approver) {
+        TaxDeclarationEntity entity = declarationMapper.selectById(id);
+        if (entity == null) {
+            throw new BusinessException("申报记录不存在");
+        }
+        if (!"SUBMITTED".equals(entity.getStatus())) {
+            throw new BusinessException("仅已提交状态可审批: 当前=" + entity.getStatus());
+        }
+        entity.setStatus("APPROVED");
+        entity.setUpdatedBy(approver == null ? null : Long.valueOf(approver.hashCode() & 0x7FFFFFFF));
+        declarationMapper.updateById(entity);
+        log.info("P18-1 申报审批通过: id={}, approver={}", id, approver);
+        return entity;
+    }
+
+    @Override
+    public TaxDeclarationEntity rejectDeclaration(Long id, String approver, String reason) {
+        TaxDeclarationEntity entity = declarationMapper.selectById(id);
+        if (entity == null) {
+            throw new BusinessException("申报记录不存在");
+        }
+        if (!"SUBMITTED".equals(entity.getStatus())) {
+            throw new BusinessException("仅已提交状态可驳回: 当前=" + entity.getStatus());
+        }
+        if (reason == null || reason.isBlank()) {
+            throw new BusinessException("驳回必须填理由");
+        }
+        entity.setStatus("REJECTED");
+        entity.setRemark((entity.getRemark() == null ? "" : entity.getRemark() + " | ") + "REJECTED by " + approver + ": " + reason);
+        declarationMapper.updateById(entity);
+        log.info("P18-1 申报驳回: id={}, approver={}, reason={}", id, approver, reason);
         return entity;
     }
 

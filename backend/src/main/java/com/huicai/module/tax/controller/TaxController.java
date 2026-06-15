@@ -154,4 +154,21 @@ public class TaxController {
     public R<TaxDeclarationEntity> submitDeclaration(@PathVariable Long id) {
         return R.ok(service.submitDeclaration(id));
     }
+
+    @Operation(summary = "P18-1 申报审批通过 (SUBMITTED → APPROVED)")
+    @PostMapping("/declarations/{id}/approve")
+    public R<TaxDeclarationEntity> approveDeclaration(
+            @PathVariable Long id,
+            @RequestParam(required = false) String approver) {
+        return R.ok(service.approveDeclaration(id, approver));
+    }
+
+    @Operation(summary = "P18-1 申报驳回 (SUBMITTED → REJECTED, reason 必填)")
+    @PostMapping("/declarations/{id}/reject")
+    public R<TaxDeclarationEntity> rejectDeclaration(
+            @PathVariable Long id,
+            @RequestParam String reason,
+            @RequestParam(required = false) String approver) {
+        return R.ok(service.rejectDeclaration(id, approver, reason));
+    }
 }
