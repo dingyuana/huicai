@@ -51,4 +51,13 @@ public class AttachmentController {
         service.delete(id);
         return R.ok();
     }
+
+    @Operation(summary = "P15-1: 模拟 OCR — 提取附件结构化字段, 持久化到 ocrData")
+    @PostMapping("/{id}/ocr")
+    public R<Map<String, String>> runOcr(
+            @PathVariable Long id,
+            @RequestBody(required = false) Map<String, String> hint) {
+        String json = service.runOcr(id, hint == null ? Map.of() : hint);
+        return R.ok(Map.of("ocrData", json));
+    }
 }
