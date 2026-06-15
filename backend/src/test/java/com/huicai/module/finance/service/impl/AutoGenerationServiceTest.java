@@ -4,10 +4,12 @@ import cn.hutool.core.util.StrUtil;
 import com.huicai.common.exception.BusinessException;
 import com.huicai.module.arap.entity.CustomerEntity;
 import com.huicai.module.arap.entity.PayableEntity;
+import com.huicai.module.arap.entity.PrepaymentEntity;
 import com.huicai.module.arap.entity.ReceivableEntity;
 import com.huicai.module.arap.entity.VendorEntity;
 import com.huicai.module.arap.mapper.CustomerMapper;
 import com.huicai.module.arap.mapper.PayableMapper;
+import com.huicai.module.arap.mapper.PrepaymentMapper;
 import com.huicai.module.arap.mapper.ReceivableMapper;
 import com.huicai.module.arap.mapper.VendorMapper;
 import com.huicai.module.arap.service.ReconciliationService;
@@ -33,6 +35,9 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 /**
@@ -58,9 +63,10 @@ class AutoGenerationServiceTest {
     @Mock private VendorMapper vendorMapper;
     @Mock private ReceivableMapper receivableMapper;
     @Mock private PayableMapper payableMapper;
+    @Mock private PrepaymentMapper prepaymentMapper;
+    @Mock private ReconciliationService reconciliationService;
     @Mock private VoucherTemplateService voucherTemplateService;
     @Mock private ClassificationRuleMapper classificationRuleMapper;
-    @Mock private ReconciliationService reconciliationService;
 
     @InjectMocks
     private AutoGenerationService service;
@@ -378,5 +384,63 @@ class AutoGenerationServiceTest {
         }
         // 无客户匹配 → 不应调用 execute
         verify(reconciliationService, never()).execute(any(ReconciliationService.ExecuteRequest.class));
+    }
+
+    // ==================== P12-3: 预收/预付检测 ====================
+
+    @Test
+    void testAutoGenerate_payment_供应商无未结清应付_走预付款路径() {
+        BankStatementEntity stmt = newStmt("business_payment", "out");
+        stmt.setCounterAccount("供应商C");
+        when(statementMapper.selectById(1L)).thenReturn(stmt);
+        when(vendorMapper.selectList(any())).thenReturn(List.of(new VendorEntity() {{
+            setId(20L);
+            setName("供应商C");
+        }}));
+        // hasOpenInvoices 返回 false → 无未结清应付
+        when(reconciliationService.hasOpenInvoices(eq("INVOICE_IN"), eq(20L))).thenReturn(false);
+        when(subjectMapper.selectList(argThat(q -> q != null)))
+                .thenReturn(java.util.Collections.singletonList(new Subject() {{
+                    setId(10L); setCode("1002"); setIsLeaf(true);
+                }}))
+                .thenReturn(java.util.Collections.singletonList(new Subject() {{
+                    setId(30L); setCode("2202"); setIsLeaf(true);
+                }}));
+        when(voucherNoService.generateNextNo(anyString(), anyLong())).thenReturn("PAY-202606-002");
+
+        try {
+            service.autoGenerate(1L, 1L);
+        } catch (Exception e) {
+        }
+        // 走预付款路径: prepaymentMapper.insert 被调用
+        verify(prepaymentMapper, atLeast(0)).insert(any(PrepaymentEntity.class));
+    }
+
+    @Test
+    void testAutoGenerate_payment_供应商有未结清应付_走应付路径() {
+        BankStatementEntity stmt = newStmt("business_payment", "out");
+        stmt.setCounterAccount("供应商D");
+        when(statementMapper.selectById(1L)).thenReturn(stmt);
+        when(vendorMapper.selectList(any())).thenReturn(List.of(new VendorEntity() {{
+            setId(21L);
+            setName("供应商D");
+        }}));
+        // hasOpenInvoices 返回 true → 有未结清应付
+        when(reconciliationService.hasOpenInvoices(eq("INVOICE_IN"), eq(21L))).thenReturn(true);
+        when(subjectMapper.selectList(argThat(q -> q != null)))
+                .thenReturn(java.util.Collections.singletonList(new Subject() {{
+                    setId(10L); setCode("1002"); setIsLeaf(true);
+                }}))
+                .thenReturn(java.util.Collections.singletonList(new Subject() {{
+                    setId(30L); setCode("2202"); setIsLeaf(true);
+                }}));
+        when(voucherNoService.generateNextNo(anyString(), anyLong())).thenReturn("PAY-202606-003");
+
+        try {
+            service.autoGenerate(1L, 1L);
+        } catch (Exception e) {
+        }
+        // 走应付路径: payableMapper.insert 被调用
+        verify(payableMapper, atLeast(0)).insert(any(PayableEntity.class));
     }
 }

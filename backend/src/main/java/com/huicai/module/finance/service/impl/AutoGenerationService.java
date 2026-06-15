@@ -4,11 +4,8 @@ import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.huicai.common.exception.BusinessException;
 import com.huicai.module.arap.entity.PayableEntity;
-import com.huicai.module.arap.entity.ReceivableEntity;
-import com.huicai.module.arap.mapper.CustomerMapper;
-import com.huicai.module.arap.mapper.PayableMapper;
-import com.huicai.module.arap.mapper.ReceivableMapper;
-import com.huicai.module.arap.mapper.VendorMapper;
+import com.huicai.module.arap.entity.*;
+import com.huicai.module.arap.mapper.*;
 import com.huicai.module.arap.service.ReconciliationService;
 import com.huicai.module.finance.entity.*;
 import com.huicai.module.finance.mapper.*;
@@ -21,6 +18,11 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
+
+import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.util.List;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -56,6 +58,7 @@ public class AutoGenerationService {
     private final VendorMapper vendorMapper;
     private final ReceivableMapper receivableMapper;
     private final PayableMapper payableMapper;
+    private final PrepaymentMapper prepaymentMapper;
     private final ReconciliationService reconciliationService;
 
     /**
@@ -542,34 +545,61 @@ public class AutoGenerationService {
                 log.warn("P10-3 应付单跳过: 供应商名 '{}' 无法匹配", counterName);
                 return;
             }
-            PayableEntity pay = new PayableEntity();
-            pay.setVendorId(vendorId);
-            pay.setDocId(doc.getId());
-            pay.setVoucherId(doc.getVoucherId());
-            pay.setPeriod(period);
-            pay.setTxDate(stmt.getTxDate());
-            pay.setAmount(amount);
-            pay.setSettledAmount(BigDecimal.ZERO);
-            pay.setUnsettledAmount(amount);
-            pay.setSummary(stmt.getSummary());
-            payableMapper.insert(pay);
-            doc.setSupplierId(vendorId);
-            log.info("P10-3 应付单生成: statementId={}, vendorId={}, docId={}, amount={}",
-                    stmt.getId(), vendorId, doc.getId(), amount);
+            // P12-3: 预收/预付检测 — 判断供应商是否已有未结清应付
+            boolean hasOpenPayables = reconciliationService.hasOpenInvoices("INVOICE_IN", vendorId);
+            if (!hasOpenPayables) {
+                // 无未结清应付，走预付款路径
+                log.info("P12-3 供应商 '{}' 无未结清应付，走预付款路径", counterName);
+                PrepaymentEntity prepay = new PrepaymentEntity();
+                prepay.setTenantId(1L);
+                prepay.setVendorId(vendorId);
+                prepay.setDocId(doc.getId());
+                prepay.setVoucherId(doc.getVoucherId());
+                prepay.setPeriod(period);
+                prepay.setTxDate(stmt.getTxDate());
+                prepay.setAmount(amount);
+                prepay.setSettledAmount(BigDecimal.ZERO);
+                prepay.setUnsettledAmount(amount);
+                prepay.setSummary(stmt.getSummary());
+                prepay.setStatus("DRAFT");
+                prepay.setSourceDocType("bank_txn");
+                prepay.setSourceDocId(stmt.getId());
+                prepay.setCreatedBy(String.valueOf(DEFAULT_USER_ID));
+                prepaymentMapper.insert(prepay);
+                doc.setSupplierId(vendorId);
+                log.info("P12-3 预付款生成: statementId={}, vendorId={}, docId={}, amount={}",
+                        stmt.getId(), vendorId, doc.getId(), amount);
+            } else {
+                // 有未结清应付，走应付路径
+                PayableEntity pay = new PayableEntity();
+                pay.setVendorId(vendorId);
+                pay.setDocId(doc.getId());
+                pay.setVoucherId(doc.getVoucherId());
+                pay.setPeriod(period);
+                pay.setTxDate(stmt.getTxDate());
+                pay.setAmount(amount);
+                pay.setSettledAmount(BigDecimal.ZERO);
+                pay.setUnsettledAmount(amount);
+                pay.setSummary(stmt.getSummary());
+                payableMapper.insert(pay);
+                doc.setSupplierId(vendorId);
+                log.info("P10-3 应付单生成: statementId={}, vendorId={}, docId={}, amount={}",
+                        stmt.getId(), vendorId, doc.getId(), amount);
 
-            // P10-4: 自动核销应付（停在 CONFIRMED 状态）
-            try {
-                reconciliationService.execute(new ReconciliationService.ExecuteRequest(
-                        "bank_txn", stmt.getId(),
-                        "INVOICE_IN", pay.getId(),
-                        amount, new BigDecimal("100"),
-                        "AUTO", null, vendorId,
-                        period, "P10-4 银行流水自动核销"
-                ));
-                log.info("P10-4 应付自动核销完成: statementId={}, payableId={}, amount={}",
-                        stmt.getId(), pay.getId(), amount);
-            } catch (Exception e) {
-                log.warn("P10-4 应付自动核销失败(不影响主流程): {}", e.getMessage());
+                // P10-4: 自动核销应付（停在 CONFIRMED 状态）
+                try {
+                    reconciliationService.execute(new ReconciliationService.ExecuteRequest(
+                            "bank_txn", stmt.getId(),
+                            "INVOICE_IN", pay.getId(),
+                            amount, new BigDecimal("100"),
+                            "AUTO", null, vendorId,
+                            period, "P10-4 银行流水自动核销"
+                    ));
+                    log.info("P10-4 应付自动核销完成: statementId={}, payableId={}, amount={}",
+                            stmt.getId(), pay.getId(), amount);
+                } catch (Exception e) {
+                    log.warn("P10-4 应付自动核销失败(不影响主流程): {}", e.getMessage());
+                }
             }
         } else {
             // internal_transfer / salary_payment 等不走应收/应付
