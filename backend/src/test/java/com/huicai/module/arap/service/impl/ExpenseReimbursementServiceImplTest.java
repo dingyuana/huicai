@@ -3,6 +3,12 @@ package com.huicai.module.arap.service.impl;
 import com.huicai.common.exception.BusinessException;
 import com.huicai.module.arap.entity.ExpenseReimbursementEntity;
 import com.huicai.module.arap.mapper.ExpenseReimbursementMapper;
+import com.huicai.module.finance.entity.VoucherEntity;
+import com.huicai.module.finance.entity.VoucherEntryEntity;
+import com.huicai.module.finance.mapper.VoucherEntryMapper;
+import com.huicai.module.finance.mapper.VoucherMapper;
+import com.huicai.module.system.entity.Subject;
+import com.huicai.module.system.mapper.SubjectMapper;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -20,6 +26,9 @@ import static org.mockito.Mockito.*;
 class ExpenseReimbursementServiceImplTest {
 
     @Mock private ExpenseReimbursementMapper mapper;
+    @Mock private VoucherMapper voucherMapper;
+    @Mock private VoucherEntryMapper voucherEntryMapper;
+    @Mock private SubjectMapper subjectMapper;
     @InjectMocks private ExpenseReimbursementServiceImpl service;
 
     private ExpenseReimbursementEntity stub(Long id, String status) {
@@ -168,5 +177,49 @@ class ExpenseReimbursementServiceImplTest {
         assertEquals("DRAFT", r.getStatus());
         assertEquals("OTHER", r.getExpenseType());
         assertEquals(100L, r.getBankStmtId());
+    }
+
+    // ==================== P11-4: 报销单审批后自动生成凭证 ====================
+
+    @Test
+    void generateVoucherForApproved_非APPROVED_throw() {
+        when(mapper.selectById(1L)).thenReturn(stub(1L, "DRAFT"));
+        BusinessException ex = assertThrows(BusinessException.class, () -> service.generateVoucherForApproved(1L));
+        assertTrue(ex.getMessage().contains("仅 APPROVED"));
+    }
+
+    @Test
+    void generateVoucherForApproved_差旅费_生成凭证和2条分录() {
+        when(mapper.selectById(1L)).thenReturn(stub(1L, "APPROVED"));
+        // 借: 5602.03 差旅费, 贷: 1002 银行存款
+        when(subjectMapper.selectList(any()))
+                .thenReturn(List.of(new Subject() {{
+                    setId(20L); setCode("5602.03"); setName("差旅费");
+                }}))
+                .thenReturn(List.of(new Subject() {{
+                    setId(10L); setCode("1002"); setName("银行存款");
+                }}));
+        // mock insert 时回填 id=999
+        when(voucherMapper.insert(any(VoucherEntity.class))).thenAnswer(inv -> {
+            VoucherEntity v = inv.getArgument(0);
+            v.setId(999L);
+            return 1;
+        });
+
+        ExpenseReimbursementEntity r = service.generateVoucherForApproved(1L);
+        assertEquals("VOUCHERED", r.getStatus());
+        assertEquals(999L, r.getVoucherId());
+        // 凭证 + 2 条分录
+        verify(voucherMapper, times(1)).insert(any(VoucherEntity.class));
+        verify(voucherEntryMapper, times(2)).insert(any(VoucherEntryEntity.class));
+    }
+
+    @Test
+    void generateVoucherForApproved_费用科目不存在_throw() {
+        when(mapper.selectById(1L)).thenReturn(stub(1L, "APPROVED"));
+        // 查 5602.03 返回空
+        when(subjectMapper.selectList(any())).thenReturn(List.of());
+        BusinessException ex = assertThrows(BusinessException.class, () -> service.generateVoucherForApproved(1L));
+        assertTrue(ex.getMessage().contains("费用科目"));
     }
 }

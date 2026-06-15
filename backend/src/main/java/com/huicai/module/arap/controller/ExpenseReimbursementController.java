@@ -79,4 +79,10 @@ public class ExpenseReimbursementController {
     public R<ExpenseReimbursementEntity> generateVoucher(@PathVariable Long id, @RequestParam Long voucherId) {
         return R.ok(service.generateVoucher(id, voucherId));
     }
+
+    @Operation(summary = "P11-4: 报销单审批后自动生成真实凭证 (按 expenseType 匹配科目)")
+    @PostMapping("/{id}/auto-voucher")
+    public R<ExpenseReimbursementEntity> autoVoucher(@PathVariable Long id) {
+        return R.ok(service.generateVoucherForApproved(id));
+    }
 }

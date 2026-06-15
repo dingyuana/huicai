@@ -27,8 +27,11 @@ public interface ExpenseReimbursementService {
     /** 驳回 (SUBMITTED → REJECTED) */
     ExpenseReimbursementEntity reject(Long id, String approver, String reason);
 
-    /** 生成凭证 (APPROVED → VOUCHERED) */
+    /** 生成凭证 (APPROVED → VOUCHERED) — 仅记录 voucherId, 不创建真实凭证 */
     ExpenseReimbursementEntity generateVoucher(Long id, Long voucherId);
+
+    /** P11-4: 报销单审批后自动生成凭证 (APPROVED → VOUCHERED), 创建真实凭证 + 2 条分录 */
+    ExpenseReimbursementEntity generateVoucherForApproved(Long id);
 
     /** 按银行流水ID查 (P11-3 自动建单防重用) */
     ExpenseReimbursementEntity findByBankStmtId(Long bankStmtId);
