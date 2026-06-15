@@ -6,6 +6,8 @@ import com.huicai.common.exception.BusinessException;
 import com.huicai.module.arap.entity.PayableEntity;
 import com.huicai.module.arap.entity.*;
 import com.huicai.module.arap.mapper.*;
+import com.huicai.module.arap.service.EmployeeService;
+import com.huicai.module.arap.service.ExpenseReimbursementService;
 import com.huicai.module.arap.service.ReconciliationService;
 import com.huicai.module.finance.entity.*;
 import com.huicai.module.finance.mapper.*;
@@ -60,6 +62,8 @@ public class AutoGenerationService {
     private final PayableMapper payableMapper;
     private final PrepaymentMapper prepaymentMapper;
     private final ReconciliationService reconciliationService;
+    private final EmployeeService employeeService;
+    private final ExpenseReimbursementService expenseReimbursementService;
 
     /**
      * 对已确认分类的银行流水执行自动生单/制证.
@@ -96,6 +100,21 @@ public class AutoGenerationService {
         }
         if (type == null) {
             type = classifyType(classification);
+        }
+
+        // P11-3: 银行流水 → 员工匹配. 若 counterAccount 匹配到员工, 创建报销单草稿
+        if ("out".equalsIgnoreCase(stmt.getDirection()) && StrUtil.isNotBlank(stmt.getCounterAccount())) {
+            EmployeeEntity emp = employeeService.findByName(stmt.getCounterAccount());
+            if (emp != null) {
+                ExpenseReimbursementEntity reimb = expenseReimbursementService.autoCreateForBankStmt(
+                        stmt.getId(), emp.getId(), stmt.getAmount().abs(), stmt.getSummary());
+                log.info("P11-3 自动建报销单: statementId={}, employeeId={}, reimbId={}, amount={}",
+                        stmt.getId(), emp.getId(), reimb.getId(), stmt.getAmount().abs());
+                // 报销单停在 DRAFT, 等人提交 → 审批 → 生成凭证. 流水也标为已处理
+                stmt.setGeneratedAt(LocalDateTime.now());
+                statementMapper.updateById(stmt);
+                return true;
+            }
         }
 
         switch (type) {

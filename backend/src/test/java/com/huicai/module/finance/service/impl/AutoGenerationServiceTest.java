@@ -3,6 +3,8 @@ package com.huicai.module.finance.service.impl;
 import cn.hutool.core.util.StrUtil;
 import com.huicai.common.exception.BusinessException;
 import com.huicai.module.arap.entity.CustomerEntity;
+import com.huicai.module.arap.entity.EmployeeEntity;
+import com.huicai.module.arap.entity.ExpenseReimbursementEntity;
 import com.huicai.module.arap.entity.PayableEntity;
 import com.huicai.module.arap.entity.PrepaymentEntity;
 import com.huicai.module.arap.entity.ReceivableEntity;
@@ -12,6 +14,8 @@ import com.huicai.module.arap.mapper.PayableMapper;
 import com.huicai.module.arap.mapper.PrepaymentMapper;
 import com.huicai.module.arap.mapper.ReceivableMapper;
 import com.huicai.module.arap.mapper.VendorMapper;
+import com.huicai.module.arap.service.EmployeeService;
+import com.huicai.module.arap.service.ExpenseReimbursementService;
 import com.huicai.module.arap.service.ReconciliationService;
 import com.huicai.module.finance.entity.BankStatementEntity;
 import com.huicai.module.finance.entity.BusinessDocEntity;
@@ -67,6 +71,8 @@ class AutoGenerationServiceTest {
     @Mock private ReconciliationService reconciliationService;
     @Mock private VoucherTemplateService voucherTemplateService;
     @Mock private ClassificationRuleMapper classificationRuleMapper;
+    @Mock private EmployeeService employeeService;
+    @Mock private ExpenseReimbursementService expenseReimbursementService;
 
     @InjectMocks
     private AutoGenerationService service;
@@ -442,5 +448,52 @@ class AutoGenerationServiceTest {
         }
         // 走应付路径: payableMapper.insert 被调用
         verify(payableMapper, atLeast(0)).insert(any(PayableEntity.class));
+    }
+
+    // ==================== P11-3: 银行流水 → 员工匹配 ====================
+
+    @Test
+    void testAutoGenerate_out方向_对手方是员工_自动建报销单() {
+        BankStatementEntity stmt = newStmt("internal_transfer", "out");
+        stmt.setCounterAccount("张三");
+        stmt.setSummary("差旅费报销");
+        when(statementMapper.selectById(1L)).thenReturn(stmt);
+        // 员工匹配命中
+        when(employeeService.findByName("张三")).thenReturn(new EmployeeEntity() {{
+            setId(50L); setName("张三");
+        }});
+        when(expenseReimbursementService.autoCreateForBankStmt(eq(1L), eq(50L), any(BigDecimal.class), anyString()))
+                .thenReturn(new ExpenseReimbursementEntity() {{
+                    setId(200L); setStatus("DRAFT");
+                }});
+
+        boolean result = service.autoGenerate(1L, 1L);
+        assertTrue(result);
+        // expenseReimbursementService.autoCreateForBankStmt 被调用
+        verify(expenseReimbursementService).autoCreateForBankStmt(eq(1L), eq(50L), any(BigDecimal.class), anyString());
+    }
+
+    @Test
+    void testAutoGenerate_out方向_对手方不是员工_走常规流程() {
+        BankStatementEntity stmt = newStmt("internal_transfer", "out");
+        stmt.setCounterAccount("某公司");
+        when(statementMapper.selectById(1L)).thenReturn(stmt);
+        // 员工匹配未命中
+        when(employeeService.findByName("某公司")).thenReturn(null);
+        when(subjectMapper.selectList(argThat(q -> q != null)))
+                .thenReturn(java.util.Collections.singletonList(new Subject() {{
+                    setId(10L); setCode("1002"); setIsLeaf(true);
+                }}))
+                .thenReturn(java.util.Collections.singletonList(new Subject() {{
+                    setId(30L); setCode("2202"); setIsLeaf(true);
+                }}));
+        when(voucherNoService.generateNextNo(anyString(), anyLong())).thenReturn("PAY-202606-004");
+
+        try {
+            service.autoGenerate(1L, 1L);
+        } catch (Exception e) {
+        }
+        // expenseReimbursementService.autoCreateForBankStmt 不被调用
+        verify(expenseReimbursementService, never()).autoCreateForBankStmt(anyLong(), anyLong(), any(), anyString());
     }
 }
