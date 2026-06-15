@@ -58,6 +58,28 @@ public interface BankReconciliationService {
      */
     List<MatchResult> runMatching(Long accountId, String period);
 
+    // ─── P14-1: 人工确认 / 驳回 ───
+
+    /** 人工确认结果 */
+    record ConfirmResult(
+        Long statementId,
+        Long journalId,
+        String newStatus,   // MATCHED / UNMATCHED
+        String operator
+    ) {}
+
+    /**
+     * 人工确认 PENDING_CONFIRM → MATCHED.
+     * @return ConfirmResult
+     */
+    ConfirmResult confirmMatch(Long statementId, Long journalId, String operator);
+
+    /**
+     * 人工驳回 PENDING_CONFIRM → UNMATCHED (回到未达账项).
+     * @return ConfirmResult
+     */
+    ConfirmResult rejectMatch(Long statementId, Long journalId, String operator);
+
     // ─── P4.4: 对账锁定 ───
 
     /** 获取对账锁 (同一期间只允许一个用户操作) */

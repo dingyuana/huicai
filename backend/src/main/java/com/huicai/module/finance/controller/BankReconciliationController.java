@@ -80,4 +80,22 @@ public class BankReconciliationController {
         service.unlockReconciliation(accountId, period, operator);
         return R.ok();
     }
+
+    @Operation(summary = "P14-1 人工确认匹配 (PENDING_CONFIRM → MATCHED)")
+    @PostMapping("/confirm")
+    public R<BankReconciliationService.ConfirmResult> confirm(
+            @RequestParam Long statementId,
+            @RequestParam Long journalId,
+            @RequestParam(required = false) String operator) {
+        return R.ok(service.confirmMatch(statementId, journalId, operator == null ? "system" : operator));
+    }
+
+    @Operation(summary = "P14-1 人工驳回匹配 (PENDING_CONFIRM → UNMATCHED)")
+    @PostMapping("/reject")
+    public R<BankReconciliationService.ConfirmResult> reject(
+            @RequestParam Long statementId,
+            @RequestParam Long journalId,
+            @RequestParam(required = false) String operator) {
+        return R.ok(service.rejectMatch(statementId, journalId, operator == null ? "system" : operator));
+    }
 }

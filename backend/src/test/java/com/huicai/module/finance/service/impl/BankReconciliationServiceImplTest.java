@@ -322,4 +322,24 @@ class BankReconciliationServiceImplTest {
         // journal 0 条 → 没有第 3、4 类
         assertEquals(2, rows.size());
     }
+
+    // ==================== P14-1: 人工确认 / 驳回 ====================
+
+    @Test
+    void confirmMatch_returns_MATCHED_status() {
+        var r = service.confirmMatch(1L, 100L, "zhangsan");
+        assertEquals(1L, r.statementId());
+        assertEquals(100L, r.journalId());
+        assertEquals("MATCHED", r.newStatus());
+        assertEquals("zhangsan", r.operator());
+    }
+
+    @Test
+    void rejectMatch_returns_UNMATCHED_status() {
+        var r = service.rejectMatch(1L, 100L, "lisi");
+        assertEquals(1L, r.statementId());
+        assertEquals(100L, r.journalId());
+        assertEquals("UNMATCHED", r.newStatus());
+        assertEquals("lisi", r.operator());
+    }
 }

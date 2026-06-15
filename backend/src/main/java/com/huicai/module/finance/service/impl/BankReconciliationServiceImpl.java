@@ -368,4 +368,22 @@ public class BankReconciliationServiceImpl implements BankReconciliationService 
         }
         return grams;
     }
+
+    // ─── P14-1: 人工确认 / 驳回 ───
+
+    @Override
+    public ConfirmResult confirmMatch(Long statementId, Long journalId, String operator) {
+        log.info("P14-1 确认匹配: statementId={}, journalId={}, operator={}",
+                statementId, journalId, operator);
+        // 实际生产: 更新 t_bank_statement.match_status = MATCHED, 记录 t_bank_reconciliation_log
+        // 当前: 仅返回结果
+        return new ConfirmResult(statementId, journalId, "MATCHED", operator);
+    }
+
+    @Override
+    public ConfirmResult rejectMatch(Long statementId, Long journalId, String operator) {
+        log.info("P14-1 驳回匹配: statementId={}, journalId={}, operator={}",
+                statementId, journalId, operator);
+        return new ConfirmResult(statementId, journalId, "UNMATCHED", operator);
+    }
 }
