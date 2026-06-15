@@ -3,6 +3,12 @@ package com.huicai.module.finance.service.impl;
 import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.huicai.common.exception.BusinessException;
+import com.huicai.module.arap.entity.PayableEntity;
+import com.huicai.module.arap.entity.ReceivableEntity;
+import com.huicai.module.arap.mapper.CustomerMapper;
+import com.huicai.module.arap.mapper.PayableMapper;
+import com.huicai.module.arap.mapper.ReceivableMapper;
+import com.huicai.module.arap.mapper.VendorMapper;
 import com.huicai.module.finance.entity.*;
 import com.huicai.module.finance.mapper.*;
 import com.huicai.module.finance.service.VoucherNoService;
@@ -45,6 +51,10 @@ public class AutoGenerationService {
     private final SubjectMapper subjectMapper;
     private final VoucherTemplateService voucherTemplateService;
     private final ClassificationRuleMapper classificationRuleMapper;
+    private final CustomerMapper customerMapper;
+    private final VendorMapper vendorMapper;
+    private final ReceivableMapper receivableMapper;
+    private final PayableMapper payableMapper;
 
     /**
      * 对已确认分类的银行流水执行自动生单/制证.
@@ -302,6 +312,11 @@ public class AutoGenerationService {
                 doc.setUpdatedAt(LocalDateTime.now());
                 docMapper.updateById(doc);
                 stmt.setGeneratedDocId(doc.getId());
+                // P10-3: 模板路径也生成应收/应付单
+                doc.setSupplierId(null);
+                doc.setCustomerId(null);
+                createReceivableOrPayableFromBankDoc(doc, stmt, period, amount);
+                docMapper.updateById(doc);
                 log.info("B类模板制证: statementId={}, docId={}, voucherId={}, templateId={}",
                         stmt.getId(), doc.getId(), stmt.getGeneratedVoucherId(), template.getId());
                 return;
@@ -320,14 +335,12 @@ public class AutoGenerationService {
                 Subject arAcct = findSubjectByCode("1122");
                 addVoucherEntry(voucher.getId(), bankAcct.getId(), amount, BigDecimal.ZERO, stmt.getSummary(), sort++);
                 addVoucherEntry(voucher.getId(), arAcct.getId(), BigDecimal.ZERO, amount, stmt.getSummary(), sort++);
-                doc.setCustomerId(guessPartyId(stmt.getCounterAccount(), false));
                 break;
             }
             case "business_payment": {
                 Subject apAcct = findSubjectByCode("2202");
                 addVoucherEntry(voucher.getId(), apAcct.getId(), amount, BigDecimal.ZERO, stmt.getSummary(), sort++);
                 addVoucherEntry(voucher.getId(), bankAcct.getId(), BigDecimal.ZERO, amount, stmt.getSummary(), sort++);
-                doc.setSupplierId(guessPartyId(stmt.getCounterAccount(), true));
                 break;
             }
             case "internal_transfer": {
@@ -356,6 +369,12 @@ public class AutoGenerationService {
 
         stmt.setGeneratedDocId(doc.getId());
         stmt.setGeneratedVoucherId(voucher.getId());
+
+        // P10-3: 硬编码路径生成应收/应付单
+        doc.setSupplierId(null);
+        doc.setCustomerId(null);
+        createReceivableOrPayableFromBankDoc(doc, stmt, period, amount);
+        docMapper.updateById(doc);
 
         log.info("B类硬编码生单+制证: statementId={}, docId={}, voucherId={}, classification={}",
                 stmt.getId(), doc.getId(), voucher.getId(), stmt.getClassification());
@@ -450,9 +469,80 @@ public class AutoGenerationService {
         };
     }
 
-    private Long guessPartyId(String counterAccount, boolean isSupplier) {
-        if (StrUtil.isBlank(counterAccount)) return null;
-        return null;
+    /**
+     * P10-3: 按对方名称从客商档案查找客户/供应商 ID.
+     */
+    private Long findCustomerByName(String name) {
+        if (StrUtil.isBlank(name)) return null;
+        List<com.huicai.module.arap.entity.CustomerEntity> list = customerMapper.selectList(
+                new LambdaQueryWrapper<com.huicai.module.arap.entity.CustomerEntity>()
+                        .eq(com.huicai.module.arap.entity.CustomerEntity::getName, name)
+                        .last("LIMIT 1"));
+        return list.isEmpty() ? null : list.get(0).getId();
+    }
+
+    private Long findVendorByName(String name) {
+        if (StrUtil.isBlank(name)) return null;
+        List<com.huicai.module.arap.entity.VendorEntity> list = vendorMapper.selectList(
+                new LambdaQueryWrapper<com.huicai.module.arap.entity.VendorEntity>()
+                        .eq(com.huicai.module.arap.entity.VendorEntity::getName, name)
+                        .last("LIMIT 1"));
+        return list.isEmpty() ? null : list.get(0).getId();
+    }
+
+    /**
+     * P10-3: 银行流水 B 类确认后自动生成应收/应付单.
+     * 在 generateDocThenVoucher 的模板/硬编码路径最后调用.
+     */
+    private void createReceivableOrPayableFromBankDoc(BusinessDocEntity doc, BankStatementEntity stmt,
+                                                       String period, BigDecimal amount) {
+        String classification = stmt.getClassification();
+        String counterName = stmt.getCounterAccount();
+
+        if ("business_receipt".equals(classification)) {
+            Long customerId = findCustomerByName(counterName);
+            if (customerId == null) {
+                log.warn("P10-3 应收单跳过: 客户名 '{}' 无法匹配", counterName);
+                return;
+            }
+            ReceivableEntity recv = new ReceivableEntity();
+            recv.setCustomerId(customerId);
+            recv.setDocId(doc.getId());
+            recv.setVoucherId(doc.getVoucherId());
+            recv.setPeriod(period);
+            recv.setTxDate(stmt.getTxDate());
+            recv.setAmount(amount);
+            recv.setSettledAmount(BigDecimal.ZERO);
+            recv.setUnsettledAmount(amount);
+            recv.setSummary(stmt.getSummary());
+            receivableMapper.insert(recv);
+            doc.setCustomerId(customerId);
+            log.info("P10-3 应收单生成: statementId={}, customerId={}, docId={}, amount={}",
+                    stmt.getId(), customerId, doc.getId(), amount);
+        } else if ("business_payment".equals(classification)) {
+            Long vendorId = findVendorByName(counterName);
+            if (vendorId == null) {
+                log.warn("P10-3 应付单跳过: 供应商名 '{}' 无法匹配", counterName);
+                return;
+            }
+            PayableEntity pay = new PayableEntity();
+            pay.setVendorId(vendorId);
+            pay.setDocId(doc.getId());
+            pay.setVoucherId(doc.getVoucherId());
+            pay.setPeriod(period);
+            pay.setTxDate(stmt.getTxDate());
+            pay.setAmount(amount);
+            pay.setSettledAmount(BigDecimal.ZERO);
+            pay.setUnsettledAmount(amount);
+            pay.setSummary(stmt.getSummary());
+            payableMapper.insert(pay);
+            doc.setSupplierId(vendorId);
+            log.info("P10-3 应付单生成: statementId={}, vendorId={}, docId={}, amount={}",
+                    stmt.getId(), vendorId, doc.getId(), amount);
+        } else {
+            // internal_transfer / salary_payment 等不走应收/应付
+            log.debug("P10-3 跳过: classification={}, 不需要应收/应付单", classification);
+        }
     }
 
     public static String classifyType(String classification) {
