@@ -98,18 +98,21 @@
           <el-table-column label="未核销金额" width="120" align="right">
             <template #default="{ row }">{{ fmtAmount(row.unsettledAmount) }}</template>
           </el-table-column>
-          <el-table-column label="匹配度" width="90" align="center">
+          <el-table-column label="匹配级别" width="100" align="center">
             <template #default="{ row }">
-              <el-tag :type="row.matchLevel === 'GREEN' ? 'success' : 'warning'" size="small">
-                {{ (row.matchScore * 100).toFixed(0) }}%
+              <el-tag :type="matchLevelType(row.matchLevel)" size="small">
+                {{ row.matchLevel }}
               </el-tag>
             </template>
           </el-table-column>
           <el-table-column label="建议核销" width="120" align="right">
             <template #default="{ row }">{{ fmtAmount(row.suggestedAmount) }}</template>
           </el-table-column>
-          <el-table-column label="操作" width="90" align="center">
+          <el-table-column label="操作" width="160" align="center">
             <template #default="{ row }">
+              <el-button text size="small" type="primary" @click="onPreCheck(row)">
+                预检查
+              </el-button>
               <el-button text size="small" type="primary" @click="onExecuteRecon(row)">
                 执行核销
               </el-button>
@@ -120,6 +123,37 @@
         <p v-else style="text-align:center;color:#909399;padding:20px">暂无匹配的核销项</p>
       </template>
     </el-drawer>
+
+    <!-- 核销预检查对话框 -->
+    <el-dialog v-model="preCheckDialogVisible" title="核销预检查" width="480px" destroy-on-close>
+      <template v-if="preCheckLoading">
+        <div style="text-align:center;padding:20px">
+          <el-icon class="is-loading" :size="28"><Loading /></el-icon>
+          <p style="margin-top:8px;color:#909399">正在执行预检查...</p>
+        </div>
+      </template>
+      <template v-else-if="preCheckResult">
+        <el-alert :title="preCheckResult.allPassed ? '全部检查通过' : '存在未通过检查项'"
+          :type="preCheckResult.allPassed ? 'success' : 'warning'" :closable="false" style="margin-bottom:16px" />
+        <el-table :data="preCheckResult.checks" border stripe size="small">
+          <el-table-column label="检查项" min-width="120">
+            <template #default="{ row }">
+              <span>{{ ({ sourceDocValid: '来源单据', invoiceValid: '目标单据', partyMatch: '客商一致', amountValid: '金额充足', periodValid: '期间正常' } as Record<string, string>)[(row as any).checkName as string] || (row as any).checkName }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="结果" width="80" align="center">
+            <template #default="{ row }">
+              <el-tag :type="row.passed ? 'success' : 'danger'" size="small">
+                {{ row.passed ? '通过' : '不通过' }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="说明" min-width="160">
+            <template #default="{ row }">{{ row.message }}</template>
+          </el-table-column>
+        </el-table>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -130,8 +164,8 @@ import { Loading } from '@element-plus/icons-vue'
 import { getBankStatementPage } from '@/api/modules/bankStatement'
 import { getActiveBankAccounts, type BankAccountVO } from '@/api/modules/bankAccount'
 import {
-  getReconciliationRecommend, executeReconciliation,
-  type RecommendItem, type ReconciliationRecommendResult,
+  getReconciliationRecommend, executeReconciliation, preCheckReconciliation,
+  type RecommendItem, type ReconciliationRecommendResult, type PreCheckResult,
 } from '@/api/modules/reconciliation'
 
 const CLASSIFICATION_LABELS: Record<string, string> = {
@@ -153,6 +187,22 @@ const recommendLoading = ref(false)
 const recommendResult = ref<ReconciliationRecommendResult | null>(null)
 const drawerTitle = ref('')
 const currentStatement = ref<any>(null)
+
+const preCheckDialogVisible = ref(false)
+const preCheckLoading = ref(false)
+const preCheckResult = ref<PreCheckResult | null>(null)
+const preCheckTarget = ref<RecommendItem | null>(null)
+
+function matchLevelType(level: string) {
+  switch (level) {
+    case 'L1': return 'success'
+    case 'L2': return 'primary'
+    case 'L3': return 'primary'
+    case 'L4': return 'warning'
+    case 'L5': return 'danger'
+    default: return 'info'
+  }
+}
 
 function fmtAmount(v: number) {
   return v == null ? '' : Number(v).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -238,6 +288,28 @@ async function onExecuteRecon(item: RecommendItem) {
     await fetchData()
   } catch (e: any) {
     ElMessage.error(e?.message || '核销执行失败')
+  }
+}
+
+async function onPreCheck(item: RecommendItem) {
+  if (!currentStatement.value) return
+  preCheckTarget.value = item
+  preCheckResult.value = null
+  preCheckLoading.value = true
+  preCheckDialogVisible.value = true
+  try {
+    preCheckResult.value = await preCheckReconciliation({
+      sourceDocType: 'bank_txn',
+      sourceDocId: currentStatement.value.id,
+      targetDocType: item.targetDocType,
+      targetDocId: item.targetDocId,
+      amount: item.suggestedAmount,
+    })
+  } catch (e: any) {
+    ElMessage.error(e?.message || '预检查失败')
+    preCheckDialogVisible.value = false
+  } finally {
+    preCheckLoading.value = false
   }
 }
 

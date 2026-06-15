@@ -67,6 +67,12 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/system/clear-data/ClearDataView.vue'),
         meta: { title: '数据维护', permission: 'system:clear-data:list', keepAlive: true },
       },
+      {
+        path: 'system/classification-rule',
+        name: 'ClassificationRuleList',
+        component: () => import('@/views/system/classification-rule/ClassificationRuleList.vue'),
+        meta: { title: '分类规则', keepAlive: true },
+      },
       // M2 基础数据管理
       {
         path: 'basis/subject',
@@ -114,7 +120,7 @@ const routes: RouteRecordRaw[] = [
         path: 'finance/voucher/edit',
         name: 'VoucherEdit',
         component: () => import('@/views/finance/voucher/VoucherEdit.vue'),
-        meta: { title: '编辑凭证', permission: 'voucher:edit' },
+        meta: { title: '编辑凭证', permission: 'voucher:update' },
       },
       {
         path: 'finance/voucher/detail',
@@ -177,6 +183,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '银行对账单', permission: 'bank:statement:list', keepAlive: true },
       },
       {
+        path: 'finance/pending-pool',
+        name: 'PendingPool',
+        component: () => import('@/views/finance/pending-pool/PendingPool.vue'),
+        meta: { title: '待处理流水', permission: 'bank:statement:list', keepAlive: true },
+      },
+      {
         path: 'finance/bank-reconciliation',
         name: 'ReconciliationView',
         component: () => import('@/views/finance/bank-reconciliation/ReconciliationView.vue'),
@@ -220,6 +232,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '资产处置', permission: 'asset:disposal:list', keepAlive: true },
       },
       // 往来管理
+      {
+        path: 'arap/aging',
+        name: 'AgingAnalysis',
+        component: () => import('@/views/arap/aging/AgingAnalysis.vue'),
+        meta: { title: '账龄分析', permission: 'arap:aging:view', keepAlive: true },
+      },
       {
         path: 'arap/customer',
         name: 'CustomerList',

@@ -26,16 +26,16 @@
         </el-descriptions-item>
         <el-descriptions-item label="摘要" :span="3">{{ voucher.summary || '-' }}</el-descriptions-item>
         <el-descriptions-item label="制单人">{{ voucher.createdByName || voucher.createdBy }}</el-descriptions-item>
-        <el-descriptions-item label="制单时间">{{ voucher.createdAt }}</el-descriptions-item>
+        <el-descriptions-item label="制单时间">{{ fmtTime(voucher.createdAt) }}</el-descriptions-item>
         <el-descriptions-item label="来源">{{ sourceLabel(voucher.source) }}</el-descriptions-item>
         <el-descriptions-item v-if="voucher.submittedBy" label="提交人">{{ voucher.submittedByName || voucher.submittedBy }}</el-descriptions-item>
-        <el-descriptions-item v-if="voucher.submittedAt" label="提交时间">{{ voucher.submittedAt }}</el-descriptions-item>
+        <el-descriptions-item v-if="voucher.submittedAt" label="提交时间">{{ fmtTime(voucher.submittedAt) }}</el-descriptions-item>
         <el-descriptions-item></el-descriptions-item>
         <el-descriptions-item v-if="voucher.auditedBy" label="审核人">{{ voucher.auditedByName || voucher.auditedBy }}</el-descriptions-item>
-        <el-descriptions-item v-if="voucher.auditedAt" label="审核时间">{{ voucher.auditedAt }}</el-descriptions-item>
+        <el-descriptions-item v-if="voucher.auditedAt" label="审核时间">{{ fmtTime(voucher.auditedAt) }}</el-descriptions-item>
         <el-descriptions-item></el-descriptions-item>
         <el-descriptions-item v-if="voucher.postedBy" label="记账人">{{ voucher.postedByName || voucher.postedBy }}</el-descriptions-item>
-        <el-descriptions-item v-if="voucher.postedAt" label="记账时间">{{ voucher.postedAt }}</el-descriptions-item>
+        <el-descriptions-item v-if="voucher.postedAt" label="记账时间">{{ fmtTime(voucher.postedAt) }}</el-descriptions-item>
         <el-descriptions-item></el-descriptions-item>
       </el-descriptions>
 
@@ -98,6 +98,14 @@ function sourceLabel(s?: string) {
 
 function fmtAmount(v?: number) {
   return v == null ? '' : Number(v).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+
+function fmtTime(v?: string) {
+  if (!v) return ''
+  // "2026-06-15T11:22:22.550228" → "2026-06-15 11:22"
+  const d = new Date(v)
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
 
 function goBack() {

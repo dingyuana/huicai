@@ -47,6 +47,10 @@
           <el-icon><Delete /></el-icon>
           <template #title>数据维护</template>
         </el-menu-item>
+        <el-menu-item index="/system/classification-rule">
+          <el-icon><Collection /></el-icon>
+          <template #title>分类规则</template>
+        </el-menu-item>
       </el-sub-menu>
 
       <!-- 基础数据 -->
@@ -166,7 +170,7 @@ import { useAppStore } from '@/stores/app.store'
 import { useAuthStore } from '@/stores/auth.store'
 import {
   HomeFilled, Setting, User, Avatar, Menu, OfficeBuilding, List, Files, Money, Box,
-  Connection, Document, PieChart, DataLine, TrendCharts, MagicStick, Delete,
+  Connection, Document, PieChart, DataLine, TrendCharts, MagicStick, Delete, Collection,
 } from '@element-plus/icons-vue'
 
 const route = useRoute()

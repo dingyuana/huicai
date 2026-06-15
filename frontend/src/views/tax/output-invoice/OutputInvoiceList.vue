@@ -113,9 +113,13 @@
       </template>
 
       <template v-else>
-        <el-descriptions :column="3" border size="small" style="margin-bottom:12px">
+        <el-descriptions :column="4" border size="small" style="margin-bottom:12px">
           <el-descriptions-item label="总行数">{{ importPreview.total }}</el-descriptions-item>
           <el-descriptions-item label="有效行数">{{ importPreview.valid }}</el-descriptions-item>
+          <el-descriptions-item label="已有">
+            <el-tag v-if="importPreview.existing" type="warning">{{ importPreview.existing }}</el-tag>
+            <el-tag v-else type="success">0</el-tag>
+          </el-descriptions-item>
           <el-descriptions-item label="错误">
             <el-tag v-if="importPreview.errors?.length" type="danger">{{ importPreview.errors.length }}</el-tag>
             <el-tag v-else type="success">0</el-tag>
@@ -124,6 +128,11 @@
         <el-table :data="(importPreview.previews || []).slice(0, 50)" border size="small" max-height="300">
           <el-table-column type="index" label="#" width="40" />
           <el-table-column prop="invoiceNo" label="发票号" width="160" />
+          <el-table-column label="状态" width="60" align="center">
+            <template #default="{ row }">
+              <el-tag v-if="row.existing" type="warning" size="small">已有</el-tag>
+            </template>
+          </el-table-column>
           <el-table-column prop="buyerName" label="购方" min-width="140" show-overflow-tooltip />
           <el-table-column prop="invoiceDate" label="日期" width="90" />
           <el-table-column prop="goodsName" label="商品" width="120" show-overflow-tooltip />
@@ -140,8 +149,10 @@
         <div style="margin-top:12px;text-align:right">
           <el-button @click="importPreview = null; importFile = null">重新上传</el-button>
           <el-button @click="importVisible = false">取消</el-button>
-          <el-button type="primary" :loading="importConfirming" :disabled="!importPreview.valid" @click="onImportConfirm">
-            确认导入 {{ importPreview.valid }} 条
+          <el-button type="primary" :loading="importConfirming"
+            :disabled="!importPreview.valid || (importPreview.valid - (importPreview.existing || 0)) <= 0"
+            @click="onImportConfirm">
+            确认导入 {{ Math.max(0, importPreview.valid - (importPreview.existing || 0)) }} 条
           </el-button>
         </div>
       </template>
@@ -252,7 +263,9 @@ const onImportConfirm = async () => {
   importConfirming.value = true
   try {
     const res = await confirmSalesInvoicesImport(importPreview.value.batchId)
-    ElMessage.success(`导入 ${res.success} 张发票，生成 ${res.voucherCreated} 张凭证`)
+    let msg = `导入 ${res.success} 张发票，生成 ${res.voucherCreated} 张凭证`
+    if (res.duplicateSkipped) msg += `，${res.duplicateSkipped} 张重复已跳过`
+    ElMessage.success(msg)
     importVisible.value = false
     importPreview.value = null
     importFile.value = null

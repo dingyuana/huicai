@@ -25,6 +25,8 @@ export interface BankStatementVO {
   reviewedAt?: string
   generatedDocId?: number
   generatedVoucherId?: number
+  generatedDocNo?: string
+  generatedVoucherNo?: string
   generatedAt?: string
 }
 
@@ -61,9 +63,14 @@ export const REVIEW_STATUS_LABELS: Record<string, string> = {
   PENDING: '待确认',
   CONFIRMED: '已确认',
   RECLASSIFIED: '已重分类',
+  classified: '已分类',
+  voucher_generated: 'A已制证',
+  payment_created: 'B已生单',
+  manual_pending: '待人工',
+  approved: '已过账',
 }
 
-export function getBankStatementPage(params: { accountId?: number; status?: string; current?: number; size?: number }): Promise<PageResult<BankStatementVO>> {
+export function getBankStatementPage(params: { accountId?: number; status?: string; classification?: string; reviewStatus?: string; current?: number; size?: number }): Promise<PageResult<BankStatementVO>> {
   return request.get('/bank-statements/page', { params })
 }
 export function getClassificationCounts(accountId: number, reviewStatus?: string): Promise<Record<string, number>> {
@@ -118,8 +125,11 @@ export function reviewStatement(id: number): Promise<BankStatementVO> {
 export function batchReviewStatements(ids: number[]): Promise<number> {
   return request.post('/bank-statements/batch-review', ids)
 }
-export function batchConfirmStatements(ids: number[]): Promise<{ confirmed: number; vouchers_created: number; docs_created: number; failed: number }> {
-  return request.post('/bank-statements/batch-confirm', ids)
+export function batchConfirmStatements(ids: number[]): Promise<number> {
+  return request.post('/bank-statements/batch-review', ids)
+}
+export function approveStatement(id: number): Promise<void> {
+  return request.post(`/bank-statements/${id}/approve`)
 }
 export function autoMatchStatements(accountId: number): Promise<MatchSuggestion[]> {
   return request.get('/bank-statements/auto-match', { params: { accountId } })
@@ -135,4 +145,12 @@ export function deleteStatement(id: number): Promise<void> {
 }
 export function updateStatementClassification(id: number, classification: string): Promise<BankStatementVO> {
   return request.put(`/bank-statements/${id}/classification`, { classification })
+}
+export function processManualStatement(id: number, targetType: string, paymentType?: string): Promise<BankStatementVO> {
+  return request.post(`/bank-statements/${id}/process-manual`, null, {
+    params: { targetType, paymentType },
+  })
+}
+export function previewDraftStatement(id: number): Promise<any[]> {
+  return request.get(`/bank-statements/${id}/preview-draft`)
 }

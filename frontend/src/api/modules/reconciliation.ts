@@ -51,3 +51,27 @@ export function reverseReconciliation(logId: number): Promise<void> {
 export function getReconciliationRecords(sourceDocType: string, sourceDocId: number): Promise<any[]> {
   return request.get('/reconciliation/records', { params: { sourceDocType, sourceDocId } })
 }
+
+export interface PreCheckItem {
+  checkName: string
+  passed: boolean
+  message: string
+}
+
+export interface PreCheckResult {
+  allPassed: boolean
+  checks: PreCheckItem[]
+}
+
+export function preCheckReconciliation(data: {
+  sourceDocType: string
+  sourceDocId: number
+  targetDocType: string
+  targetDocId: number
+  amount: number
+  customerId?: number
+  vendorId?: number
+  period?: string
+}): Promise<PreCheckResult> {
+  return request.post('/reconciliation/pre-check', data)
+}

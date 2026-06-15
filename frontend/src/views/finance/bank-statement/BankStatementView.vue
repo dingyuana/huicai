@@ -57,38 +57,40 @@
         <el-table-column label="分类" width="100" align="center">
           <template #default="{ row }">
             <el-tag v-if="row.classification && row.classification !== 'pending'"
-              :type="row.reviewStatus === 'CONFIRMED' ? 'success' : 'warning'" size="small">
+              :type="row.reviewStatus === 'approved' ? 'success' : 'warning'" size="small">
               {{ CLASSIFICATION_LABELS[row.classification] || row.classification }}
             </el-tag>
             <el-tag v-else type="info" size="small">未分类</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="确认状态" width="90" align="center">
+        <el-table-column label="流程状态" width="100" align="center">
           <template #default="{ row }">
-            <el-tag :type="row.reviewStatus === 'CONFIRMED' ? 'success' : 'warning'" size="small">
+            <el-tag :type="reviewStatusTagType(row.reviewStatus)" size="small">
               {{ REVIEW_STATUS_LABELS[row.reviewStatus] || '待确认' }}
             </el-tag>
           </template>
         </el-table-column>
         <el-table-column label="生成结果" width="130" align="center">
           <template #default="{ row }">
-            <span v-if="row.generatedVoucherId" style="color:var(--el-color-success)">
-              凭证 #{{ row.generatedVoucherId }}
+            <span v-if="row.generatedVoucherNo" style="color:var(--el-color-success)">
+              {{ row.generatedVoucherNo }}
             </span>
-            <span v-else-if="row.generatedDocId" style="color:var(--el-color-primary)">
-              单据 #{{ row.generatedDocId }}
+            <span v-else-if="row.generatedDocNo" style="color:var(--el-color-primary)">
+              {{ row.generatedDocNo }}
             </span>
             <span v-else>-</span>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="220" fixed="right">
+        <el-table-column label="操作" width="260" fixed="right">
           <template #default="{ row }">
             <el-button v-if="!row.classification || row.classification === 'pending'"
               text size="small" type="primary" @click="onClassify(row)">分类</el-button>
-            <el-button v-if="row.classification && row.classification !== 'pending' && row.reviewStatus !== 'CONFIRMED'"
+            <el-button v-if="canReview(row)"
               text size="small" type="success" @click="onReview(row)">确认</el-button>
             <el-button v-if="row.generatedVoucherId" text size="small" type="primary"
               @click="openVoucher(row.generatedVoucherId!)">查看凭证</el-button>
+            <el-button v-if="canApprove(row)"
+              text size="small" type="primary" @click="onApprove(row)">核准</el-button>
             <el-popconfirm title="确定删除该条流水?" @confirm="onDelete(row)">
               <template #reference>
                 <el-button text size="small" type="danger">删除</el-button>
@@ -272,14 +274,9 @@
 
     <!-- 批量确认结果 -->
     <el-dialog v-model="resultDialogVisible" title="批量确认结果" width="420">
-      <el-result v-if="batchResult" :icon="batchResult.failed === 0 ? 'success' : 'warning'"
-        :title="`确认 ${batchResult.confirmed} 条`">
-        <template #extra>
-          <p>已生成凭证: {{ batchResult.vouchers_created }}</p>
-          <p>已生成单据: {{ batchResult.docs_created }}</p>
-          <p v-if="batchResult.failed > 0" style="color:var(--el-color-danger)">失败: {{ batchResult.failed }}</p>
-        </template>
-      </el-result>
+          <el-result v-if="batchConfirmed > 0" icon="success"
+            :title="`已确认 ${batchConfirmed} 条`">
+          </el-result>
     </el-dialog>
 
     <!-- 流水详情弹窗 -->
@@ -305,20 +302,20 @@
             <el-select v-if="detailEditable" v-model="editClassification" placeholder="选择分类" size="small" style="width:140px">
               <el-option v-for="(label, value) in CLASSIFICATION_LABELS" :key="value" :label="label" :value="value" />
             </el-select>
-            <el-tag v-else-if="detailData.classification" :type="detailData.reviewStatus === 'CONFIRMED' ? 'success' : 'warning'" size="small">
+            <el-tag v-else-if="detailData.classification" :type="detailData.reviewStatus === 'approved' ? 'success' : 'warning'" size="small">
               {{ CLASSIFICATION_LABELS[detailData.classification] || detailData.classification }}
             </el-tag>
             <span v-else>-</span>
           </el-descriptions-item>
-          <el-descriptions-item label="确认状态">
-            <el-tag :type="detailData.reviewStatus === 'CONFIRMED' ? 'success' : 'warning'" size="small">
+          <el-descriptions-item label="流程状态">
+            <el-tag :type="reviewStatusTagType(detailData.reviewStatus)" size="small">
               {{ REVIEW_STATUS_LABELS[detailData.reviewStatus] || detailData.reviewStatus || '待确认' }}
             </el-tag>
           </el-descriptions-item>
           <el-descriptions-item label="导入时间">{{ detailData.importedAt || '-' }}</el-descriptions-item>
           <el-descriptions-item label="生成结果">
-            <span v-if="detailData.generatedVoucherId" style="color:var(--el-color-success)">凭证 #{{ detailData.generatedVoucherId }}</span>
-            <span v-else-if="detailData.generatedDocId" style="color:var(--el-color-primary)">单据 #{{ detailData.generatedDocId }}</span>
+            <span v-if="detailData.generatedVoucherNo" style="color:var(--el-color-success)">{{ detailData.generatedVoucherNo }}</span>
+            <span v-else-if="detailData.generatedDocNo" style="color:var(--el-color-primary)">{{ detailData.generatedDocNo }}</span>
             <span v-else>-</span>
           </el-descriptions-item>
         </el-descriptions>
@@ -332,8 +329,10 @@
         </template>
         <el-button v-if="!detailEditable && detailData && (!detailData.classification || detailData.classification === 'pending')"
           type="primary" @click="onClassify(detailData); detailVisible = false">自动分类</el-button>
-        <el-button v-if="!detailEditable && detailData && detailData.classification && detailData.classification !== 'pending' && detailData.reviewStatus !== 'CONFIRMED'"
+        <el-button v-if="!detailEditable && canReview(detailData)"
           type="success" @click="onReview(detailData); detailVisible = false">确认</el-button>
+        <el-button v-if="!detailEditable && canApprove(detailData)"
+          type="primary" @click="onApprove(detailData); detailVisible = false">核准</el-button>
         <el-button v-if="!detailEditable && detailData && detailData.generatedVoucherId" type="primary"
           @click="openVoucher(detailData.generatedVoucherId!); detailVisible = false">查看凭证</el-button>
       </template>
@@ -348,7 +347,8 @@ import { UploadFilled } from '@element-plus/icons-vue'
 import {
   getBankStatementPage, previewStatementExcel, previewStatementExcelWithMapping,
   confirmStatementImport, importStatementCsv, parseExcelHeaders,
-  classifyStatement, reviewStatement,   batchConfirmStatements, deleteStatement, updateStatementClassification,
+  classifyStatement, reviewStatement, approveStatement,
+  batchConfirmStatements, deleteStatement, updateStatementClassification,
   getBankStatementDetail, getClassificationCounts,
   CLASSIFICATION_LABELS, REVIEW_STATUS_LABELS,
   type BankStatementVO,
@@ -378,7 +378,7 @@ const detailData = ref<any>(null)
 const detailEditable = ref(false)
 const editClassification = ref('')
 const bankNameMap = ref<Record<number, string>>({})
-const batchResult = ref<{ confirmed: number; vouchers_created: number; docs_created: number; failed: number } | null>(null)
+const batchConfirmed = ref(0)
 const csvContent = ref('')
 
 // 列映射状态
@@ -395,6 +395,26 @@ const totalCount = computed(() => Object.values(classificationCounts.value).redu
 const query = ref<{ accountId?: number; reviewStatus?: string; classification?: string; current: number; size: number }>({
   current: 1, size: 20,
 })
+
+type ElTagType = 'success' | 'warning' | 'info' | 'primary' | 'danger'
+
+function reviewStatusTagType(status: string): ElTagType {
+  if (!status || status === 'PENDING' || status === 'classified') return 'warning'
+  if (status === 'voucher_generated' || status === 'payment_created') return 'success'
+  if (status === 'approved') return 'primary'
+  if (status === 'manual_pending') return 'info'
+  return 'warning'
+}
+
+function canReview(row: any): boolean {
+  const s = row.reviewStatus
+  return row.classification && row.classification !== 'pending'
+    && (!s || s === 'PENDING' || s === 'classified' || s === 'RECLASSIFIED')
+}
+
+function canApprove(row: any): boolean {
+  return row.reviewStatus === 'voucher_generated' || row.reviewStatus === 'payment_created'
+}
 
 function fmtAmount(v: number) {
   return v == null ? '' : Number(v).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -602,7 +622,13 @@ async function onClassify(row: BankStatementVO) {
 
 async function onReview(row: BankStatementVO) {
   await reviewStatement(row.id)
-  ElMessage.success('确认完成，已触发自动生成')
+  ElMessage.success('确认完成')
+  await refreshAll()
+}
+
+async function onApprove(row: BankStatementVO) {
+  await approveStatement(row.id)
+  ElMessage.success('已核准过账')
   await refreshAll()
 }
 
@@ -631,7 +657,7 @@ async function onBatchConfirm() {
     return
   }
   try {
-    batchResult.value = await batchConfirmStatements(selectedIds.value)
+    batchConfirmed.value = await batchConfirmStatements(selectedIds.value)
     resultDialogVisible.value = true
     await refreshAll()
   } catch { /* handled */ }

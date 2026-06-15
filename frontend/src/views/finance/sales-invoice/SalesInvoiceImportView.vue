@@ -42,9 +42,13 @@
 
       <!-- 步骤2: 预览 + 确认 -->
       <div v-else>
-        <el-descriptions :column="4" border size="small" style="margin-bottom:16px">
+        <el-descriptions :column="5" border size="small" style="margin-bottom:16px">
           <el-descriptions-item label="总行数">{{ previewData.total }}</el-descriptions-item>
           <el-descriptions-item label="有效行数">{{ previewData.valid }}</el-descriptions-item>
+          <el-descriptions-item label="已有">
+            <el-tag v-if="previewData.existing" type="warning">{{ previewData.existing }}</el-tag>
+            <el-tag v-else type="success">0</el-tag>
+          </el-descriptions-item>
           <el-descriptions-item label="失败行数">
             <el-tag v-if="previewData.errors?.length" type="danger">{{ previewData.errors.length }}</el-tag>
             <el-tag v-else type="success">0</el-tag>
@@ -56,6 +60,11 @@
         <el-table :data="(previewData.previews || []).slice(0, 50)" border size="small" max-height="400">
           <el-table-column type="index" label="行号" width="50" />
           <el-table-column prop="invoiceNo" label="发票号" width="180" />
+          <el-table-column label="状态" width="60" align="center">
+            <template #default="{ row }">
+              <el-tag v-if="row.existing" type="warning" size="small">已有</el-tag>
+            </template>
+          </el-table-column>
           <el-table-column prop="buyerName" label="购方名称" min-width="180" show-overflow-tooltip />
           <el-table-column prop="invoiceDate" label="开票日期" width="120" />
           <el-table-column prop="goodsName" label="商品" min-width="150" show-overflow-tooltip />
@@ -88,10 +97,10 @@
           <el-button
             type="primary"
             :loading="confirming"
-            :disabled="!previewData.valid"
+            :disabled="!previewData.valid || (previewData.valid - (previewData.existing || 0)) <= 0"
             size="large"
             @click="onConfirm">
-            {{ confirming ? '导入中...' : `确认导入 ${previewData.valid} 张` }}
+            {{ confirming ? '导入中...' : `确认导入 ${Math.max(0, previewData.valid - (previewData.existing || 0))} 张` }}
           </el-button>
         </div>
       </div>
@@ -104,6 +113,8 @@
           :icon="result.success === result.total ? 'success' : 'warning'"
           :title="`导入完成: ${result.success}/${result.total}`">
           <template #extra>
+            <p>成功导入: {{ result.success }} 张</p>
+            <p v-if="result.duplicateSkipped">跳过重复: {{ result.duplicateSkipped }} 张</p>
             <p>生成业务单据: {{ result.docCreated }}</p>
             <p>生成凭证: {{ result.voucherCreated }}</p>
             <p>批次号: {{ result.batchId }}</p>
@@ -125,12 +136,12 @@ const confirming = ref(false)
 const selectedFile = ref<File | null>(null)
 const resultVisible = ref(false)
 const result = ref<{
-  total: number; success: number; docCreated: number; voucherCreated: number
+  total: number; success: number; docCreated: number; voucherCreated: number; duplicateSkipped?: number
   errors: Array<{ row: number; invoiceNo: string; message: string }>; batchId: string
 } | null>(null)
 
 const previewData = ref<{
-  total: number; valid: number; errors: any[]; batchId: string; previews: any[]
+  total: number; valid: number; existing: number; errors: any[]; batchId: string; previews: any[]
 } | null>(null)
 
 function onFileChange(uploadFile: any) {
