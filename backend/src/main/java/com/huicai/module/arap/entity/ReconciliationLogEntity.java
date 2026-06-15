@@ -39,7 +39,7 @@ public class ReconciliationLogEntity {
     /** 匹配方式: AUTO / MANUAL */
     private String matchMethod;
 
-    /** 状态: CONFIRMED / CANCELLED */
+    /** 状态: CONFIRMED / EXECUTED / REJECTED / CANCELLED */
     private String status;
 
     /** 备注 */
