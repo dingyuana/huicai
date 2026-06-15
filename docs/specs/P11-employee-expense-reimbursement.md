@@ -1,6 +1,7 @@
 # P11 SPEC — 个人（员工）报销单 端到端自动接入
 
-> 状态：开发方案（待老丁审核 → 委 Hermes 直写）
+> 状态：**已落地**（main 分支 commits 260f701 + 1e33906 + f246d08 + 50a5204）
+> mvn test: 250 → 281 (+31 测试, 0 fail, 0 error)
 > 目标：银行流水→识别"员工"→关联报销单→生成付款单→生成凭证
 > 工期：4 批工单（每批独立 commit、可回滚）
 
@@ -226,9 +227,34 @@ if ("employee_expense".equals(classification)) {
 
 ## 8. 决策点
 
-一、**工单顺序**（1→2→3→4）接受？
-二、**费用类型只列 6 种**（差旅/办公/招待/交通/通讯/其他）够吗？
-三、**报销单审批后自动生成凭证停在 docstatus=0**（不过账）接受？
-四、**先开工 P11-1**（最高 ROI）？
+一、**工单顺序**（1→2→3→4）接受？ ✅
+二、**费用类型只列 6 种**（差旅/办公/招待/交通/通讯/其他）够吗？ ✅
+三、**报销单审批后自动生成凭证停在 docstatus=0**（不过账）接受？ ✅
+四、**先开工 P11-1**（最高 ROI）？ ✅
 
-等你逐项回。
+---
+
+## 9. 落地确认
+
+| 批 | 文件 | commit | 测试+ |
+|---|---|---|---|
+| P11-1 | EmployeeEntity/Mapper/Service/Impl/Controller + V33 SQL | `260f701` | +11 |
+| P11-2 | ExpenseReimbursementEntity/Mapper/Service/Impl/Controller + V34 SQL | `1e33906` | +15 |
+| P11-3 | 改 AutoGenerationService (员工匹配 → autoCreateForBankStmt) | `f246d08` | +2 |
+| P11-4 | generateVoucherForApproved (硬编码 6 种 expenseType → 科目) | `50a5204` | +3 |
+
+**业务链路落地**：
+```
+银行流水 (out) → counterAccount 匹配 t_employee.name
+  ↓
+autoCreateForBankStmt → t_expense_reimbursement (DRAFT, expenseType=OTHER)
+  ↓
+会计: /submit → SUBMITTED
+  ↓
+主管: /approve → APPROVED
+  ↓
+/auto-voucher → t_voucher (DRAFT) + 2 条分录
+  借 5602.0X 费用科目 / 贷 1002 银行存款
+  ↓
+/generate-voucher → VOUCHERED (voucherId 回写)
+```
