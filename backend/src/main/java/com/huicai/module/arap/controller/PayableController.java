@@ -2,13 +2,14 @@ package com.huicai.module.arap.controller;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.huicai.common.response.R;
-import com.huicai.module.arap.entity.PayableEntity;
+import com.huicai.module.arap.dto.PayableVO;
 import com.huicai.module.arap.service.PayableService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
+import com.huicai.module.arap.entity.PayableEntity;
 import java.util.Map;
 
 @Tag(name = "应付明细")
@@ -21,7 +22,7 @@ public class PayableController {
 
     @Operation(summary = "分页查询")
     @GetMapping("/page")
-    public R<IPage<PayableEntity>> page(
+    public R<IPage<PayableVO>> page(
             @RequestParam(required = false) Long vendorId,
             @RequestParam(required = false) String period,
             @RequestParam(defaultValue = "1") Integer current,
@@ -31,7 +32,7 @@ public class PayableController {
 
     @Operation(summary = "详情")
     @GetMapping("/{id}")
-    public R<PayableEntity> getById(@PathVariable Long id) {
+    public R<PayableVO> getById(@PathVariable Long id) {
         return R.ok(service.getById(id));
     }
 

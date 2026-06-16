@@ -36,7 +36,12 @@
           </template>
         </el-table-column>
         <el-table-column prop="dueDate" label="到期日" width="120" />
-        <el-table-column prop="summary" label="摘要" min-width="180" show-overflow-tooltip />
+        <el-table-column label="供应商" width="140" show-overflow-tooltip>
+          <template #default="{ row }">{{ row.vendorName || row.vendorId || '-' }}</template>
+        </el-table-column>
+        <el-table-column label="摘要" min-width="180" show-overflow-tooltip>
+          <template #default="{ row }">{{ row.enrichedSummary || row.summary || '-' }}</template>
+        </el-table-column>
         <el-table-column label="操作" width="80" fixed="right">
           <template #default="{ row }">
             <el-button text size="small" type="primary" @click="openDetail(row)">详情</el-button>
@@ -62,7 +67,7 @@
       <template v-if="detail">
         <el-descriptions :column="2" border>
           <el-descriptions-item label="ID" :span="2">{{ detail.id }}</el-descriptions-item>
-          <el-descriptions-item label="供应商ID">{{ detail.vendorId }}</el-descriptions-item>
+          <el-descriptions-item label="供应商">{{ detail.vendorName || detail.vendorId || '-' }}</el-descriptions-item>
           <el-descriptions-item label="期间">{{ detail.period }}</el-descriptions-item>
           <el-descriptions-item label="发生日期">{{ detail.txDate }}</el-descriptions-item>
           <el-descriptions-item label="到期日">{{ detail.dueDate }}</el-descriptions-item>
@@ -71,7 +76,7 @@
           <el-descriptions-item label="未核销">{{ fmtAmount(detail.unsettledAmount) }}</el-descriptions-item>
           <el-descriptions-item label="单据ID">{{ detail.docId || '-' }}</el-descriptions-item>
           <el-descriptions-item label="凭证ID">{{ detail.voucherId || '-' }}</el-descriptions-item>
-          <el-descriptions-item label="摘要" :span="2">{{ detail.summary || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="摘要" :span="2">{{ detail.enrichedSummary || detail.summary || '-' }}</el-descriptions-item>
           <el-descriptions-item label="创建时间">{{ detail.createdAt }}</el-descriptions-item>
           <el-descriptions-item label="更新时间">{{ detail.updatedAt }}</el-descriptions-item>
         </el-descriptions>

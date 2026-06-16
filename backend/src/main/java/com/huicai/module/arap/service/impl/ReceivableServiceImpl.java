@@ -4,23 +4,31 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.huicai.common.exception.BusinessException;
+import com.huicai.module.arap.dto.ReceivableVO;
 import com.huicai.module.arap.entity.ReceivableEntity;
+import com.huicai.module.arap.mapper.CustomerMapper;
 import com.huicai.module.arap.mapper.ReceivableMapper;
 import com.huicai.module.arap.service.ReceivableService;
+import com.huicai.module.system.entity.UserEntity;
+import com.huicai.module.system.mapper.UserMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
 public class ReceivableServiceImpl implements ReceivableService {
 
     private final ReceivableMapper mapper;
+    private final CustomerMapper customerMapper;
+    private final UserMapper userMapper;
 
     private static final List<String> AGING_BUCKETS = List.of(
             "current", "days_0_30", "days_31_60", "days_61_90",
@@ -28,7 +36,7 @@ public class ReceivableServiceImpl implements ReceivableService {
     );
 
     @Override
-    public IPage<ReceivableEntity> pageQuery(Long customerId, String period, Integer current, Integer size) {
+    public IPage<ReceivableVO> pageQuery(Long customerId, String period, Integer current, Integer size) {
         Page<ReceivableEntity> page = new Page<>(
                 current == null ? 1 : current,
                 size == null ? 20 : size
@@ -42,16 +50,25 @@ public class ReceivableServiceImpl implements ReceivableService {
         }
         wrapper.gt(ReceivableEntity::getUnsettledAmount, BigDecimal.ZERO);
         wrapper.orderByDesc(ReceivableEntity::getTxDate);
-        return mapper.selectPage(page, wrapper);
+        IPage<ReceivableEntity> entityPage = mapper.selectPage(page, wrapper);
+
+        IPage<ReceivableVO> voPage = new Page<>(entityPage.getCurrent(), entityPage.getSize(), entityPage.getTotal());
+        List<ReceivableVO> vos = entityPage.getRecords().stream()
+                .map(ReceivableVO::fromEntity).collect(Collectors.toList());
+        populatePartyNames(vos);
+        voPage.setRecords(vos);
+        return voPage;
     }
 
     @Override
-    public ReceivableEntity getById(Long id) {
+    public ReceivableVO getById(Long id) {
         ReceivableEntity entity = mapper.selectById(id);
         if (entity == null) {
             throw new BusinessException("应收明细不存在");
         }
-        return entity;
+        ReceivableVO vo = ReceivableVO.fromEntity(entity);
+        populatePartyNames(List.of(vo));
+        return vo;
     }
 
     @Override
@@ -107,5 +124,17 @@ public class ReceivableServiceImpl implements ReceivableService {
         result.put("totalAmount", totalAmount);
         result.put("totalCount", totalCount);
         return result;
+    }
+
+    private void populatePartyNames(List<ReceivableVO> vos) {
+        if (vos.isEmpty()) return;
+        List<Long> customerIds = vos.stream()
+                .map(ReceivableVO::getCustomerId).filter(java.util.Objects::nonNull).distinct().toList();
+        if (customerIds.isEmpty()) return;
+        Map<Long, String> nameMap = customerMapper.selectBatchIds(customerIds).stream()
+                .collect(Collectors.toMap(com.huicai.module.arap.entity.CustomerEntity::getId, com.huicai.module.arap.entity.CustomerEntity::getName));
+        for (ReceivableVO vo : vos) {
+            if (vo.getCustomerId() != null) vo.setCustomerName(nameMap.get(vo.getCustomerId()));
+        }
     }
 }

@@ -3,6 +3,7 @@ package com.huicai.module.finance.service.impl;
 import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.huicai.common.exception.BusinessException;
+import com.huicai.module.arap.dto.ExpenseReimbursementVO;
 import com.huicai.module.arap.entity.PayableEntity;
 import com.huicai.module.arap.entity.*;
 import com.huicai.module.arap.mapper.*;
@@ -106,7 +107,7 @@ public class AutoGenerationService {
         if ("out".equalsIgnoreCase(stmt.getDirection()) && StrUtil.isNotBlank(stmt.getCounterAccount())) {
             EmployeeEntity emp = employeeService.findByName(stmt.getCounterAccount());
             if (emp != null) {
-                ExpenseReimbursementEntity reimb = expenseReimbursementService.autoCreateForBankStmt(
+                ExpenseReimbursementVO reimb = expenseReimbursementService.autoCreateForBankStmt(
                         stmt.getId(), emp.getId(), stmt.getAmount().abs(), stmt.getSummary());
                 log.info("P11-3 自动建报销单: statementId={}, employeeId={}, reimbId={}, amount={}",
                         stmt.getId(), emp.getId(), reimb.getId(), stmt.getAmount().abs());

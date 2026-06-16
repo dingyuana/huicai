@@ -5,15 +5,22 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.huicai.common.exception.BusinessException;
+import com.huicai.module.arap.dto.ExpenseReimbursementVO;
+import com.huicai.module.arap.entity.EmployeeEntity;
 import com.huicai.module.arap.entity.ExpenseReimbursementEntity;
+import com.huicai.module.arap.mapper.EmployeeMapper;
 import com.huicai.module.arap.mapper.ExpenseReimbursementMapper;
 import com.huicai.module.arap.service.ExpenseReimbursementService;
 import com.huicai.module.finance.entity.VoucherEntity;
 import com.huicai.module.finance.entity.VoucherEntryEntity;
 import com.huicai.module.finance.mapper.VoucherEntryMapper;
 import com.huicai.module.finance.mapper.VoucherMapper;
+import com.huicai.module.system.entity.DeptEntity;
 import com.huicai.module.system.entity.Subject;
+import com.huicai.module.system.entity.UserEntity;
+import com.huicai.module.system.mapper.DeptMapper;
 import com.huicai.module.system.mapper.SubjectMapper;
+import com.huicai.module.system.mapper.UserMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -23,7 +30,10 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.Collections;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -36,9 +46,12 @@ public class ExpenseReimbursementServiceImpl implements ExpenseReimbursementServ
     private final VoucherMapper voucherMapper;
     private final VoucherEntryMapper voucherEntryMapper;
     private final SubjectMapper subjectMapper;
+    private final EmployeeMapper employeeMapper;
+    private final UserMapper userMapper;
+    private final DeptMapper deptMapper;
 
     @Override
-    public IPage<ExpenseReimbursementEntity> pageQuery(Long employeeId, String status, Integer current, Integer size) {
+    public IPage<ExpenseReimbursementVO> pageQuery(Long employeeId, String status, Integer current, Integer size) {
         Page<ExpenseReimbursementEntity> page = new Page<>(
                 current == null ? 1 : current,
                 size == null ? 20 : size
@@ -47,25 +60,44 @@ public class ExpenseReimbursementServiceImpl implements ExpenseReimbursementServ
         if (employeeId != null) wrapper.eq(ExpenseReimbursementEntity::getEmployeeId, employeeId);
         if (StrUtil.isNotBlank(status)) wrapper.eq(ExpenseReimbursementEntity::getStatus, status);
         wrapper.orderByDesc(ExpenseReimbursementEntity::getCreatedAt);
-        return mapper.selectPage(page, wrapper);
+        IPage<ExpenseReimbursementEntity> entityPage = mapper.selectPage(page, wrapper);
+
+        IPage<ExpenseReimbursementVO> voPage = new Page<>(entityPage.getCurrent(), entityPage.getSize(), entityPage.getTotal());
+        List<ExpenseReimbursementVO> vos = entityPage.getRecords().stream()
+                .map(ExpenseReimbursementVO::fromEntity).collect(Collectors.toList());
+        populateEmployeeNames(vos);
+        populateDeptNames(vos);
+        populateUserNames(vos);
+        voPage.setRecords(vos);
+        return voPage;
     }
 
     @Override
-    public List<ExpenseReimbursementEntity> listAll() {
-        return mapper.selectList(new LambdaQueryWrapper<ExpenseReimbursementEntity>()
+    public List<ExpenseReimbursementVO> listAll() {
+        List<ExpenseReimbursementEntity> list = mapper.selectList(new LambdaQueryWrapper<ExpenseReimbursementEntity>()
                 .orderByDesc(ExpenseReimbursementEntity::getCreatedAt));
+        List<ExpenseReimbursementVO> vos = list.stream()
+                .map(ExpenseReimbursementVO::fromEntity).collect(Collectors.toList());
+        populateEmployeeNames(vos);
+        populateDeptNames(vos);
+        populateUserNames(vos);
+        return vos;
     }
 
     @Override
-    public ExpenseReimbursementEntity getById(Long id) {
+    public ExpenseReimbursementVO getById(Long id) {
         ExpenseReimbursementEntity e = mapper.selectById(id);
         if (e == null) throw new BusinessException("报销单不存在: " + id);
-        return e;
+        ExpenseReimbursementVO vo = ExpenseReimbursementVO.fromEntity(e);
+        populateEmployeeNames(List.of(vo));
+        populateDeptNames(List.of(vo));
+        populateUserNames(List.of(vo));
+        return vo;
     }
 
     @Override
     @Transactional
-    public ExpenseReimbursementEntity createDraft(ExpenseReimbursementEntity entity) {
+    public ExpenseReimbursementVO createDraft(ExpenseReimbursementEntity entity) {
         if (entity.getEmployeeId() == null) throw new BusinessException("员工ID不能为空");
         if (StrUtil.isBlank(entity.getExpenseType())) throw new BusinessException("费用类型不能为空");
         if (entity.getAmount() == null || entity.getAmount().compareTo(BigDecimal.ZERO) <= 0) {
@@ -74,13 +106,14 @@ public class ExpenseReimbursementServiceImpl implements ExpenseReimbursementServ
         entity.setStatus("DRAFT");
         entity.setReimbNo(generateNo());
         mapper.insert(entity);
-        return entity;
+        return getById(entity.getId());
     }
 
     @Override
     @Transactional
-    public ExpenseReimbursementEntity updateDraft(ExpenseReimbursementEntity entity) {
-        ExpenseReimbursementEntity existing = getById(entity.getId());
+    public ExpenseReimbursementVO updateDraft(ExpenseReimbursementEntity entity) {
+        ExpenseReimbursementEntity existing = mapper.selectById(entity.getId());
+        if (existing == null) throw new BusinessException("报销单不存在: " + entity.getId());
         if (!"DRAFT".equals(existing.getStatus())) {
             throw new BusinessException("仅 DRAFT 状态可修改");
         }
@@ -89,26 +122,28 @@ public class ExpenseReimbursementServiceImpl implements ExpenseReimbursementServ
         existing.setSummary(entity.getSummary());
         existing.setAttachmentIds(entity.getAttachmentIds());
         mapper.updateById(existing);
-        return existing;
+        return getById(existing.getId());
     }
 
     @Override
     @Transactional
-    public ExpenseReimbursementEntity submit(Long id) {
-        ExpenseReimbursementEntity e = getById(id);
+    public ExpenseReimbursementVO submit(Long id) {
+        ExpenseReimbursementEntity e = mapper.selectById(id);
+        if (e == null) throw new BusinessException("报销单不存在: " + id);
         if (!"DRAFT".equals(e.getStatus())) {
             throw new BusinessException("仅 DRAFT 可提交: 当前=" + e.getStatus());
         }
         e.setStatus("SUBMITTED");
         e.setSubmittedAt(LocalDateTime.now());
         mapper.updateById(e);
-        return e;
+        return getById(id);
     }
 
     @Override
     @Transactional
-    public ExpenseReimbursementEntity approve(Long id, String approver) {
-        ExpenseReimbursementEntity e = getById(id);
+    public ExpenseReimbursementVO approve(Long id, String approver) {
+        ExpenseReimbursementEntity e = mapper.selectById(id);
+        if (e == null) throw new BusinessException("报销单不存在: " + id);
         if (!"SUBMITTED".equals(e.getStatus())) {
             throw new BusinessException("仅 SUBMITTED 可审批: 当前=" + e.getStatus());
         }
@@ -116,13 +151,14 @@ public class ExpenseReimbursementServiceImpl implements ExpenseReimbursementServ
         e.setApprovedAt(LocalDateTime.now());
         e.setApprovedBy(approver);
         mapper.updateById(e);
-        return e;
+        return getById(id);
     }
 
     @Override
     @Transactional
-    public ExpenseReimbursementEntity reject(Long id, String approver, String reason) {
-        ExpenseReimbursementEntity e = getById(id);
+    public ExpenseReimbursementVO reject(Long id, String approver, String reason) {
+        ExpenseReimbursementEntity e = mapper.selectById(id);
+        if (e == null) throw new BusinessException("报销单不存在: " + id);
         if (!"SUBMITTED".equals(e.getStatus())) {
             throw new BusinessException("仅 SUBMITTED 可驳回: 当前=" + e.getStatus());
         }
@@ -132,45 +168,32 @@ public class ExpenseReimbursementServiceImpl implements ExpenseReimbursementServ
         e.setApprovedBy(approver);
         e.setRejectReason(reason);
         mapper.updateById(e);
-        return e;
+        return getById(id);
     }
 
     @Override
     @Transactional
-    public ExpenseReimbursementEntity generateVoucher(Long id, Long voucherId) {
-        ExpenseReimbursementEntity e = getById(id);
+    public ExpenseReimbursementVO generateVoucher(Long id, Long voucherId) {
+        ExpenseReimbursementEntity e = mapper.selectById(id);
+        if (e == null) throw new BusinessException("报销单不存在: " + id);
         if (!"APPROVED".equals(e.getStatus())) {
             throw new BusinessException("仅 APPROVED 可生成凭证: 当前=" + e.getStatus());
         }
         e.setStatus("VOUCHERED");
         e.setVoucherId(voucherId);
         mapper.updateById(e);
-        return e;
+        return getById(id);
     }
 
-    /**
-     * P11-4: 报销单审批通过后自动生成凭证 (停 DRAFT 状态, 不自动过账).
-     *
-     * <p>按 expenseType 匹配硬编码科目模板:
-     * <ul>
-     *   <li>TRAVEL → 借 5602.03 差旅费 / 贷 1002 银行存款</li>
-     *   <li>OFFICE → 借 5602.04 办公费 / 贷 1002</li>
-     *   <li>ENTERTAIN → 借 5602.05 业务招待费 / 贷 1002</li>
-     *   <li>TRANSPORT → 借 5602.06 交通费 / 贷 1002</li>
-     *   <li>COMMUNICATION → 借 5602.07 通讯费 / 贷 1002</li>
-     *   <li>OTHER → 借 5602.99 其他费用 / 贷 1002</li>
-     * </ul>
-     *
-     * <p>返回 ExpenseReimbursementEntity (status=VOUCHERED, voucherId=新凭证ID)
-     */
+    @Override
     @Transactional
-    public ExpenseReimbursementEntity generateVoucherForApproved(Long id) {
-        ExpenseReimbursementEntity e = getById(id);
+    public ExpenseReimbursementVO generateVoucherForApproved(Long id) {
+        ExpenseReimbursementEntity e = mapper.selectById(id);
+        if (e == null) throw new BusinessException("报销单不存在: " + id);
         if (!"APPROVED".equals(e.getStatus())) {
             throw new BusinessException("仅 APPROVED 可生成凭证: 当前=" + e.getStatus());
         }
 
-        // 1. 创建凭证 (DRAFT 状态, 不自动过账 — 走老丁"人是唯一审核主体"硬约束)
         VoucherEntity voucher = new VoucherEntity();
         voucher.setVoucherNo(generateVoucherNo());
         voucher.setPeriod(LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMM")));
@@ -180,36 +203,60 @@ public class ExpenseReimbursementServiceImpl implements ExpenseReimbursementServ
         voucher.setTotalCredit(e.getAmount());
         voucher.setSummary("报销单 " + e.getReimbNo() + ": " + e.getSummary());
         voucher.setSource("GENERATED");
-        voucher.setCreatedBy(1L); // 默认制单人
+        voucher.setCreatedBy(1L);
         voucherMapper.insert(voucher);
 
-        // 2. 写入分录 (按费用类型选科目)
         String expenseCode = mapExpenseTypeToCode(e.getExpenseType());
         String[] entryInfo = lookupSubject(expenseCode);
         if (entryInfo == null) {
             throw new BusinessException("费用科目 " + expenseCode + " 不存在, 请先配置");
         }
         Long debitSubjectId = entryInfo[0] == null ? null : Long.parseLong(entryInfo[0]);
-        String debitSubjectName = entryInfo[1];
 
         String[] cashInfo = lookupSubject("1002");
         if (cashInfo == null) {
             throw new BusinessException("银行存款科目 1002 不存在, 请先配置");
         }
         Long creditSubjectId = Long.parseLong(cashInfo[0]);
-        String creditSubjectName = cashInfo[1];
 
-        insertEntry(voucher.getId(), debitSubjectId, debitSubjectName, e.getAmount(), BigDecimal.ZERO, 1);
-        insertEntry(voucher.getId(), creditSubjectId, creditSubjectName, BigDecimal.ZERO, e.getAmount(), 2);
+        insertEntry(voucher.getId(), debitSubjectId, e.getAmount(), BigDecimal.ZERO, 1);
+        insertEntry(voucher.getId(), creditSubjectId, BigDecimal.ZERO, e.getAmount(), 2);
 
-        // 3. 更新报销单 → VOUCHERED
         e.setStatus("VOUCHERED");
         e.setVoucherId(voucher.getId());
         mapper.updateById(e);
 
         log.info("P11-4 报销单凭证生成: reimbId={}, voucherId={}, expenseType={}, amount={}",
                 e.getId(), voucher.getId(), e.getExpenseType(), e.getAmount());
-        return e;
+        return getById(id);
+    }
+
+    @Override
+    public ExpenseReimbursementEntity findByBankStmtId(Long bankStmtId) {
+        if (bankStmtId == null) return null;
+        List<ExpenseReimbursementEntity> list = mapper.selectList(
+                new LambdaQueryWrapper<ExpenseReimbursementEntity>()
+                        .eq(ExpenseReimbursementEntity::getBankStmtId, bankStmtId)
+                        .last("LIMIT 1"));
+        return list.isEmpty() ? null : list.get(0);
+    }
+
+    @Override
+    @Transactional
+    public ExpenseReimbursementVO autoCreateForBankStmt(Long bankStmtId, Long employeeId, BigDecimal amount, String summary) {
+        ExpenseReimbursementEntity existing = findByBankStmtId(bankStmtId);
+        if (existing != null) return getById(existing.getId());
+
+        ExpenseReimbursementEntity e = new ExpenseReimbursementEntity();
+        e.setBankStmtId(bankStmtId);
+        e.setEmployeeId(employeeId);
+        e.setAmount(amount);
+        e.setExpenseType("OTHER");
+        e.setSummary(summary);
+        e.setStatus("DRAFT");
+        e.setReimbNo(generateNo());
+        mapper.insert(e);
+        return getById(e.getId());
     }
 
     private String mapExpenseTypeToCode(String expenseType) {
@@ -232,14 +279,12 @@ public class ExpenseReimbursementServiceImpl implements ExpenseReimbursementServ
         return new String[]{s.getId().toString(), s.getName()};
     }
 
-    private void insertEntry(Long voucherId, Long subjectId, String subjectName,
-                              BigDecimal debit, BigDecimal credit, int sort) {
+    private void insertEntry(Long voucherId, Long subjectId, BigDecimal debit, BigDecimal credit, int sort) {
         VoucherEntryEntity entry = new VoucherEntryEntity();
         entry.setVoucherId(voucherId);
         entry.setSubjectId(subjectId);
         entry.setDebit(debit);
         entry.setCredit(credit);
-        entry.setSummary(subjectName);
         entry.setSortOrder(sort);
         voucherEntryMapper.insert(entry);
     }
@@ -249,39 +294,51 @@ public class ExpenseReimbursementServiceImpl implements ExpenseReimbursementServ
         return "REIMB-" + period + "-" + (System.currentTimeMillis() % 10000);
     }
 
-    @Override
-    public ExpenseReimbursementEntity findByBankStmtId(Long bankStmtId) {
-        if (bankStmtId == null) return null;
-        List<ExpenseReimbursementEntity> list = mapper.selectList(
-                new LambdaQueryWrapper<ExpenseReimbursementEntity>()
-                        .eq(ExpenseReimbursementEntity::getBankStmtId, bankStmtId)
-                        .last("LIMIT 1"));
-        return list.isEmpty() ? null : list.get(0);
-    }
-
-    @Override
-    @Transactional
-    public ExpenseReimbursementEntity autoCreateForBankStmt(Long bankStmtId, Long employeeId, BigDecimal amount, String summary) {
-        // 防止重复创建
-        ExpenseReimbursementEntity existing = findByBankStmtId(bankStmtId);
-        if (existing != null) return existing;
-
-        ExpenseReimbursementEntity e = new ExpenseReimbursementEntity();
-        e.setBankStmtId(bankStmtId);
-        e.setEmployeeId(employeeId);
-        e.setAmount(amount);
-        e.setExpenseType("OTHER");
-        e.setSummary(summary);
-        e.setStatus("DRAFT");
-        e.setReimbNo(generateNo());
-        mapper.insert(e);
-        return e;
-    }
-
     private String generateNo() {
         String period = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMM"));
-        // 简化：用时间戳末4位作为序号
         String serial = String.valueOf(System.currentTimeMillis() % 10000);
         return PREFIX + period + "-" + serial;
+    }
+
+    private void populateEmployeeNames(List<ExpenseReimbursementVO> vos) {
+        if (vos.isEmpty()) return;
+        List<Long> empIds = vos.stream()
+                .map(ExpenseReimbursementVO::getEmployeeId).filter(java.util.Objects::nonNull).distinct().toList();
+        if (empIds.isEmpty()) return;
+        Map<Long, String> nameMap = employeeMapper.selectBatchIds(empIds).stream()
+                .collect(Collectors.toMap(EmployeeEntity::getId, EmployeeEntity::getName));
+        for (ExpenseReimbursementVO vo : vos) {
+            if (vo.getEmployeeId() != null) vo.setEmployeeName(nameMap.get(vo.getEmployeeId()));
+        }
+    }
+
+    private void populateDeptNames(List<ExpenseReimbursementVO> vos) {
+        if (vos.isEmpty()) return;
+        List<Long> deptIds = vos.stream()
+                .map(ExpenseReimbursementVO::getDeptId).filter(java.util.Objects::nonNull).distinct().toList();
+        if (deptIds.isEmpty()) return;
+        Map<Long, String> nameMap = deptMapper.selectBatchIds(deptIds).stream()
+                .collect(Collectors.toMap(DeptEntity::getId, DeptEntity::getName));
+        for (ExpenseReimbursementVO vo : vos) {
+            if (vo.getDeptId() != null) vo.setDeptName(nameMap.get(vo.getDeptId()));
+        }
+    }
+
+    private void populateUserNames(List<ExpenseReimbursementVO> vos) {
+        if (vos.isEmpty()) return;
+        List<Long> userIds = vos.stream()
+                .map(ExpenseReimbursementVO::getCreatedBy).filter(java.util.Objects::nonNull).distinct().toList();
+        if (userIds.isEmpty()) return;
+        Map<Long, String> nameMap = userMapper.selectBatchIds(userIds).stream()
+                .collect(Collectors.toMap(UserEntity::getId, this::resolveUserDisplayName));
+        for (ExpenseReimbursementVO vo : vos) {
+            if (vo.getCreatedBy() != null) vo.setCreatedByName(nameMap.get(vo.getCreatedBy()));
+        }
+    }
+
+    private String resolveUserDisplayName(UserEntity user) {
+        if (user.getRealName() != null && !user.getRealName().isBlank()) return user.getRealName();
+        if (user.getNickname() != null && !user.getNickname().isBlank()) return user.getNickname();
+        return user.getUsername();
     }
 }

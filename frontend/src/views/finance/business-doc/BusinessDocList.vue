@@ -39,7 +39,9 @@
         </el-table-column>
         <el-table-column prop="docDate" label="单据日期" width="120" />
         <el-table-column prop="period" label="期间" width="80" align="center" />
-        <el-table-column prop="summary" label="摘要" min-width="160" show-overflow-tooltip />
+        <el-table-column label="摘要" min-width="160" show-overflow-tooltip>
+          <template #default="{ row }">{{ row.enrichedSummary || row.summary || '-' }}</template>
+        </el-table-column>
         <el-table-column label="客户/供应商" width="140" show-overflow-tooltip>
           <template #default="{ row }">
             {{ row.customerName || row.supplierName || '-' }}

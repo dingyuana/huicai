@@ -2,13 +2,14 @@ package com.huicai.module.arap.controller;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.huicai.common.response.R;
-import com.huicai.module.arap.entity.ReceivableEntity;
+import com.huicai.module.arap.dto.ReceivableVO;
 import com.huicai.module.arap.service.ReceivableService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
+import com.huicai.module.arap.entity.ReceivableEntity;
 import java.util.List;
 import java.util.Map;
 
@@ -22,7 +23,7 @@ public class ReceivableController {
 
     @Operation(summary = "分页查询")
     @GetMapping("/page")
-    public R<IPage<ReceivableEntity>> page(
+    public R<IPage<ReceivableVO>> page(
             @RequestParam(required = false) Long customerId,
             @RequestParam(required = false) String period,
             @RequestParam(defaultValue = "1") Integer current,
@@ -32,7 +33,7 @@ public class ReceivableController {
 
     @Operation(summary = "详情")
     @GetMapping("/{id}")
-    public R<ReceivableEntity> getById(@PathVariable Long id) {
+    public R<ReceivableVO> getById(@PathVariable Long id) {
         return R.ok(service.getById(id));
     }
 

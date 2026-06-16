@@ -21,7 +21,9 @@ import com.huicai.module.finance.service.VoucherNoService;
 import com.huicai.module.finance.service.VoucherService;
 import com.huicai.module.system.entity.PeriodEntity;
 import com.huicai.module.system.entity.Subject;
+import com.huicai.module.system.entity.UserEntity;
 import com.huicai.module.system.entity.VoucherTypeEntity;
+import com.huicai.module.system.mapper.UserMapper;
 import com.huicai.module.system.service.PeriodService;
 import com.huicai.module.system.service.SubjectService;
 import com.huicai.module.system.service.VoucherTypeService;
@@ -54,6 +56,7 @@ public class VoucherServiceImpl extends ServiceImpl<VoucherMapper, VoucherEntity
     private final VoucherTypeService voucherTypeService;
     private final SubjectService subjectService;
     private final PeriodService periodService;
+    private final UserMapper userMapper;
 
     @Override
     public IPage<VoucherVO> pageQuery(VoucherQueryDTO queryDTO) {
@@ -70,6 +73,7 @@ public class VoucherServiceImpl extends ServiceImpl<VoucherMapper, VoucherEntity
         List<VoucherVO> voList = entityPage.getRecords().stream()
                 .map(this::toVoucherVO)
                 .collect(Collectors.toList());
+        populateUserNames(voList);
         voPage.setRecords(voList);
         return voPage;
     }
@@ -85,6 +89,7 @@ public class VoucherServiceImpl extends ServiceImpl<VoucherMapper, VoucherEntity
         // 加载分录
         List<VoucherEntryEntity> entries = voucherEntryMapper.selectByVoucherId(id);
         vo.setEntries(entries.stream().map(this::toEntryVO).collect(Collectors.toList()));
+        populateUserNames(List.of(vo));
         return vo;
     }
 
@@ -93,6 +98,9 @@ public class VoucherServiceImpl extends ServiceImpl<VoucherMapper, VoucherEntity
     public VoucherVO create(VoucherCreateDTO dto, Long userId) {
         // 校验期间是否可操作
         assertPeriodOpen(dto.getPeriod());
+
+        // 校验摘要不可为空
+        validateSummary(dto.getSummary());
 
         // 校验分录: 至少2条、借贷平衡、金额非负、末级科目
         validateEntries(dto.getEntries());
@@ -152,6 +160,9 @@ public class VoucherServiceImpl extends ServiceImpl<VoucherMapper, VoucherEntity
 
         // 校验期间是否可操作
         assertPeriodOpen(entity.getPeriod());
+
+        // 校验摘要不可为空
+        validateSummary(dto.getSummary());
 
         // 校验分录
         validateEntries(dto.getEntries());
@@ -508,5 +519,41 @@ public class VoucherServiceImpl extends ServiceImpl<VoucherMapper, VoucherEntity
         }
 
         return vo;
+    }
+
+    /**
+     * 校验凭证摘要不可为空
+     */
+    private void validateSummary(String summary) {
+        if (summary == null || summary.isBlank()) {
+            throw BusinessException.badRequest("凭证摘要不能为空, 请填写"对方单位+业务性质"格式");
+        }
+    }
+
+    /**
+     * 回填制单人/提交人/审核人/记账人真实姓名
+     */
+    private void populateUserNames(List<VoucherVO> vos) {
+        if (vos.isEmpty()) return;
+        List<Long> userIds = vos.stream()
+                .flatMap(vo -> java.util.stream.Stream.of(vo.getCreatedBy(), vo.getSubmittedBy(), vo.getAuditedBy(), vo.getPostedBy()))
+                .filter(java.util.Objects::nonNull)
+                .distinct()
+                .toList();
+        if (userIds.isEmpty()) return;
+        Map<Long, String> userNameMap = userMapper.selectBatchIds(userIds).stream()
+                .collect(Collectors.toMap(UserEntity::getId, this::resolveUserDisplayName));
+        for (VoucherVO vo : vos) {
+            if (vo.getCreatedBy() != null) vo.setCreatedByName(userNameMap.get(vo.getCreatedBy()));
+            if (vo.getSubmittedBy() != null) vo.setSubmittedByName(userNameMap.get(vo.getSubmittedBy()));
+            if (vo.getAuditedBy() != null) vo.setAuditedByName(userNameMap.get(vo.getAuditedBy()));
+            if (vo.getPostedBy() != null) vo.setPostedByName(userNameMap.get(vo.getPostedBy()));
+        }
+    }
+
+    private String resolveUserDisplayName(UserEntity user) {
+        if (user.getRealName() != null && !user.getRealName().isBlank()) return user.getRealName();
+        if (user.getNickname() != null && !user.getNickname().isBlank()) return user.getNickname();
+        return user.getUsername();
     }
 }
