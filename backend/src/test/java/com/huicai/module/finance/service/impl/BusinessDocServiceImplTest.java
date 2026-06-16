@@ -1,9 +1,11 @@
 package com.huicai.module.finance.service.impl;
 
 import com.huicai.common.exception.BusinessException;
+import com.huicai.module.arap.entity.VendorEntity;
 import com.huicai.module.arap.mapper.CustomerMapper;
 import com.huicai.module.arap.mapper.VendorMapper;
 import com.huicai.module.finance.dto.BusinessDocDTO;
+import com.huicai.module.finance.dto.BusinessDocVO;
 import com.huicai.module.finance.entity.BusinessDocEntity;
 import com.huicai.module.finance.entity.BusinessDocEntryEntity;
 import com.huicai.module.finance.mapper.BusinessDocEntryMapper;
@@ -274,5 +276,122 @@ class BusinessDocServiceImplTest {
         assertEquals(555L, saved.getVoucherId());
         assertEquals(2L, saved.getSubmittedBy());
         assertNotNull(saved.getSubmittedAt());
+    }
+
+    // ==================== getDetail — 名称回填端到端验证 ====================
+
+    private BusinessDocEntity stubFullVoucheredDoc() {
+        BusinessDocEntity e = new BusinessDocEntity();
+        e.setId(DOC_ID);
+        e.setDocNo("FK2026060001");
+        e.setDocType("PAYMENT");
+        e.setDocDate(LocalDate.of(2026, 6, 15));
+        e.setPeriod("202606");
+        e.setAmount(new BigDecimal("1000.00"));
+        e.setStatus("VOUCHERED");
+        e.setSupplierId(99L);
+        e.setCustomerId(null);
+        e.setSummary("支付货款");
+        e.setVoucherId(555L);
+        e.setCreatedBy(1L);
+        e.setCreatedAt(java.time.LocalDateTime.of(2026, 6, 15, 9, 0, 0));
+        e.setSubmittedBy(2L);
+        e.setSubmittedAt(java.time.LocalDateTime.of(2026, 6, 16, 10, 30, 0));
+        e.setApprovedBy(3L);
+        e.setApprovedAt(java.time.LocalDateTime.of(2026, 6, 16, 14, 0, 0));
+        return e;
+    }
+
+    private UserEntity stubUser(Long id, String realName) {
+        UserEntity u = new UserEntity();
+        u.setId(id);
+        u.setUsername("user_" + id);
+        u.setRealName(realName);
+        return u;
+    }
+
+    private VendorEntity stubVendor(Long id, String name) {
+        VendorEntity v = new VendorEntity();
+        v.setId(id);
+        v.setName(name);
+        return v;
+    }
+
+    @Test
+    void getDetail_已生成凭证付款单_所有名称回填() {
+        BusinessDocEntity e = stubFullVoucheredDoc();
+        when(docMapper.selectById(DOC_ID)).thenReturn(e);
+        when(vendorMapper.selectBatchIds(argThat(ids -> ids != null && ids.contains(99L))))
+                .thenReturn(List.of(stubVendor(99L, "XX 供应商有限公司")));
+        when(userMapper.selectBatchIds(argThat(ids -> ids != null && ids.contains(1L) && ids.contains(2L) && ids.contains(3L))))
+                .thenReturn(List.of(
+                        stubUser(1L, "张三"),
+                        stubUser(2L, "李四"),
+                        stubUser(3L, "王五")
+                ));
+
+        BusinessDocVO vo = service.getDetail(DOC_ID);
+
+        assertEquals(555L, vo.getVoucherId());
+        assertEquals(1L, vo.getCreatedBy());
+        assertEquals("张三", vo.getCreatedByName());
+        assertEquals(2L, vo.getSubmittedBy());
+        assertEquals("李四", vo.getSubmittedByName());
+        assertEquals(3L, vo.getApprovedBy());
+        assertEquals("王五", vo.getApprovedByName());
+        assertNotNull(vo.getSubmittedAt());
+        assertNotNull(vo.getApprovedAt());
+        assertEquals(99L, vo.getSupplierId());
+        assertEquals("XX 供应商有限公司", vo.getSupplierName());
+    }
+
+    @Test
+    void getDetail_无userId_不查user表() {
+        BusinessDocEntity e = stubFullVoucheredDoc();
+        e.setCreatedBy(null);
+        e.setSubmittedBy(null);
+        e.setApprovedBy(null);
+        when(docMapper.selectById(DOC_ID)).thenReturn(e);
+
+        BusinessDocVO vo = service.getDetail(DOC_ID);
+
+        assertNull(vo.getCreatedByName());
+        assertNull(vo.getSubmittedByName());
+        assertNull(vo.getApprovedByName());
+        verify(userMapper, never()).selectBatchIds(anyList());
+    }
+
+    @Test
+    void getDetail_无supplierId_不查vendor表() {
+        BusinessDocEntity e = stubFullVoucheredDoc();
+        e.setSupplierId(null);
+        when(docMapper.selectById(DOC_ID)).thenReturn(e);
+
+        BusinessDocVO vo = service.getDetail(DOC_ID);
+
+        assertNull(vo.getSupplierName());
+        verify(vendorMapper, never()).selectBatchIds(anyList());
+    }
+
+    @Test
+    void getDetail_记录不存在_throwNotFound() {
+        when(docMapper.selectById(999L)).thenReturn(null);
+        BusinessException ex = assertThrows(BusinessException.class, () -> service.getDetail(999L));
+        assertTrue(ex.getMessage().contains("单据不存在"));
+    }
+
+    @Test
+    void getDetail_userRealName为空_回退到username() {
+        BusinessDocEntity e = stubFullVoucheredDoc();
+        when(docMapper.selectById(DOC_ID)).thenReturn(e);
+        when(vendorMapper.selectBatchIds(anyList())).thenReturn(Collections.emptyList());
+        UserEntity u = new UserEntity();
+        u.setId(1L);
+        u.setUsername("zhangsan_login");
+        when(userMapper.selectBatchIds(anyList())).thenReturn(List.of(u));
+
+        BusinessDocVO vo = service.getDetail(DOC_ID);
+
+        assertEquals("zhangsan_login", vo.getCreatedByName());
     }
 }
