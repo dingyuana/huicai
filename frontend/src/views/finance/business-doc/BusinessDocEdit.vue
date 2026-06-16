@@ -184,7 +184,12 @@ async function loadDoc() {
     docDate: d.docDate,
     period: d.period,
     amount: d.amount,
+    customerId: d.customerId,
+    supplierId: d.supplierId,
+    applicantId: d.applicantId,
+    deptId: d.deptId,
     summary: d.summary || '',
+    attachmentIds: d.attachmentIds,
     entries: d.entries || [],
   }
 }
