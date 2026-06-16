@@ -53,6 +53,11 @@ public class BusinessDocServiceImpl implements BusinessDocService {
             "INVOICE_IN", "FPR", "INVOICE_OUT", "FPS", "OTHER_RECEIVABLE", "QTY", "OTHER_PAYABLE", "QTF"
     );
 
+    /** 付/收 标识: 需要"付"前缀的单据类型 */
+    private static final java.util.Set<String> SUPPLIER_DOC_TYPES = java.util.Set.of(
+            "PAYMENT", "EXPENSE", "INVOICE_IN", "OTHER_PAYABLE"
+    );
+
     /**
      * 业务单据 → 凭证 科目映射 (硬编码降级).
      * 格式: docType → [{"debit": "科目代码", "credit": "科目代码"}]
@@ -99,9 +104,13 @@ public class BusinessDocServiceImpl implements BusinessDocService {
         IPage<BusinessDocEntity> entityPage = docMapper.selectPage(page, wrapper);
 
         IPage<BusinessDocVO> voPage = new Page<>(entityPage.getCurrent(), entityPage.getSize(), entityPage.getTotal());
-        List<BusinessDocVO> vos = entityPage.getRecords().stream().map(BusinessDocVO::fromEntity).toList();
+        List<BusinessDocEntity> entities = entityPage.getRecords();
+        List<BusinessDocVO> vos = entities.stream().map(BusinessDocVO::fromEntity).toList();
         populatePartyNames(vos);
         populateUserNames(vos);
+        for (int i = 0; i < entities.size(); i++) {
+            vos.get(i).setEnrichedSummary(enrichSummary(entities.get(i)));
+        }
         voPage.setRecords(vos);
         return voPage;
     }
@@ -124,6 +133,7 @@ public class BusinessDocServiceImpl implements BusinessDocService {
         }
         populatePartyNames(List.of(vo));
         populateUserNames(List.of(vo));
+        vo.setEnrichedSummary(enrichSummary(entity));
         return vo;
     }
 
@@ -259,6 +269,7 @@ public class BusinessDocServiceImpl implements BusinessDocService {
         }
 
         List<BusinessDocEntryEntity> docEntries = docEntryMapper.selectByDocId(id);
+        String enrichedSummary = enrichSummary(entity);
 
         VoucherEntity voucher = new VoucherEntity();
         voucher.setVoucherNo(voucherNoService.generateNextNo(entity.getPeriod(), 1L));
@@ -266,7 +277,7 @@ public class BusinessDocServiceImpl implements BusinessDocService {
         voucher.setVoucherTypeId(1L);
         voucher.setStatus("DRAFT");
         voucher.setSource("GENERATED");
-        voucher.setSummary(entity.getSummary() != null ? entity.getSummary() : ("生成自单据 " + entity.getDocNo()));
+        voucher.setSummary(enrichedSummary);
         voucher.setTotalDebit(BigDecimal.ZERO);
         voucher.setTotalCredit(BigDecimal.ZERO);
         voucher.setCreatedBy(userId);
@@ -290,7 +301,7 @@ public class BusinessDocServiceImpl implements BusinessDocService {
                     ve.setSubjectId(debitSubj.getId());
                     ve.setDebit(amount);
                     ve.setCredit(BigDecimal.ZERO);
-                    ve.setSummary(docEntry.getSummary() != null ? docEntry.getSummary() : entity.getSummary());
+                    ve.setSummary(docEntry.getSummary() != null ? docEntry.getSummary() : enrichedSummary);
                     ve.setAssistJson(docEntry.getAssistJson());
                     ve.setSortOrder(sortOrder++);
                     voucherEntryMapper.insert(ve);
@@ -302,7 +313,7 @@ public class BusinessDocServiceImpl implements BusinessDocService {
                     ve.setSubjectId(creditSubj.getId());
                     ve.setDebit(BigDecimal.ZERO);
                     ve.setCredit(amount);
-                    ve.setSummary(docEntry.getSummary() != null ? docEntry.getSummary() : entity.getSummary());
+                    ve.setSummary(docEntry.getSummary() != null ? docEntry.getSummary() : enrichedSummary);
                     ve.setAssistJson(docEntry.getAssistJson());
                     ve.setSortOrder(sortOrder++);
                     voucherEntryMapper.insert(ve);
@@ -387,6 +398,30 @@ public class BusinessDocServiceImpl implements BusinessDocService {
             throw BusinessException.badRequest("科目不存在: " + code + ", 请先在科目管理中初始化");
         }
         return s;
+    }
+
+    private String enrichSummary(BusinessDocEntity entity) {
+        String base = entity.getSummary() != null && !entity.getSummary().isBlank()
+                ? entity.getSummary()
+                : "生成自单据 " + entity.getDocNo();
+        String partyName = resolvePartyName(entity);
+        if (partyName == null || partyName.isBlank()) {
+            return base;
+        }
+        String prefix = SUPPLIER_DOC_TYPES.contains(entity.getDocType()) ? "付" : "收";
+        return prefix + partyName + "-" + base;
+    }
+
+    private String resolvePartyName(BusinessDocEntity entity) {
+        if (entity.getSupplierId() != null) {
+            VendorEntity v = vendorMapper.selectById(entity.getSupplierId());
+            if (v != null) return v.getName();
+        }
+        if (entity.getCustomerId() != null) {
+            CustomerEntity c = customerMapper.selectById(entity.getCustomerId());
+            if (c != null) return c.getName();
+        }
+        return null;
     }
 
     private BusinessDocEntity getValid(Long id) {

@@ -25,6 +25,7 @@ public class BusinessDocVO {
     private Long applicantId;
     private Long deptId;
     private String summary;
+    private String enrichedSummary;
     private String source;
     private String attachmentIds;
     private Long voucherId;
