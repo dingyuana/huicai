@@ -526,7 +526,7 @@ public class VoucherServiceImpl extends ServiceImpl<VoucherMapper, VoucherEntity
      */
     private void validateSummary(String summary) {
         if (summary == null || summary.isBlank()) {
-            throw BusinessException.badRequest("凭证摘要不能为空, 请填写"对方单位+业务性质"格式");
+            throw BusinessException.badRequest("凭证摘要不能为空, 请填写【对方单位+业务性质】格式");
         }
     }
 

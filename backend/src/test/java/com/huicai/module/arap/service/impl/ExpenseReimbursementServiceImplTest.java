@@ -1,6 +1,7 @@
 package com.huicai.module.arap.service.impl;
 
 import com.huicai.common.exception.BusinessException;
+import com.huicai.module.arap.dto.ExpenseReimbursementVO;
 import com.huicai.module.arap.entity.ExpenseReimbursementEntity;
 import com.huicai.module.arap.mapper.ExpenseReimbursementMapper;
 import com.huicai.module.finance.entity.VoucherEntity;
@@ -72,7 +73,7 @@ class ExpenseReimbursementServiceImplTest {
     void createDraft_正常_插入并返回() {
         ExpenseReimbursementEntity e = stub(null, "DRAFT");
         when(mapper.insert(any(ExpenseReimbursementEntity.class))).thenReturn(1);
-        ExpenseReimbursementEntity r = service.createDraft(e);
+        ExpenseReimbursementVO r = service.createDraft(e);
         assertEquals("DRAFT", r.getStatus());
         assertNotNull(r.getReimbNo());
         assertTrue(r.getReimbNo().startsWith("REIMB-"));
@@ -103,7 +104,7 @@ class ExpenseReimbursementServiceImplTest {
     @Test
     void submit_DRAFT_变SUBMITTED() {
         when(mapper.selectById(1L)).thenReturn(stub(1L, "DRAFT"));
-        ExpenseReimbursementEntity r = service.submit(1L);
+        ExpenseReimbursementVO r = service.submit(1L);
         assertEquals("SUBMITTED", r.getStatus());
         assertNotNull(r.getSubmittedAt());
     }
@@ -120,7 +121,7 @@ class ExpenseReimbursementServiceImplTest {
     @Test
     void approve_SUBMITTED_变APPROVED() {
         when(mapper.selectById(1L)).thenReturn(stub(1L, "SUBMITTED"));
-        ExpenseReimbursementEntity r = service.approve(1L, "zhangsan");
+        ExpenseReimbursementVO r = service.approve(1L, "zhangsan");
         assertEquals("APPROVED", r.getStatus());
         assertEquals("zhangsan", r.getApprovedBy());
     }
@@ -144,7 +145,7 @@ class ExpenseReimbursementServiceImplTest {
     @Test
     void reject_正常_变REJECTED() {
         when(mapper.selectById(1L)).thenReturn(stub(1L, "SUBMITTED"));
-        ExpenseReimbursementEntity r = service.reject(1L, "lisi", "金额不合理");
+        ExpenseReimbursementVO r = service.reject(1L, "lisi", "金额不合理");
         assertEquals("REJECTED", r.getStatus());
         assertEquals("金额不合理", r.getRejectReason());
     }
@@ -154,7 +155,7 @@ class ExpenseReimbursementServiceImplTest {
     @Test
     void generateVoucher_APPROVED_变VOUCHERED() {
         when(mapper.selectById(1L)).thenReturn(stub(1L, "APPROVED"));
-        ExpenseReimbursementEntity r = service.generateVoucher(1L, 999L);
+        ExpenseReimbursementVO r = service.generateVoucher(1L, 999L);
         assertEquals("VOUCHERED", r.getStatus());
         assertEquals(999L, r.getVoucherId());
     }
@@ -164,7 +165,7 @@ class ExpenseReimbursementServiceImplTest {
     @Test
     void autoCreateForBankStmt_已存在_返回旧单() {
         when(mapper.selectList(any())).thenReturn(List.of(stub(1L, "DRAFT")));
-        ExpenseReimbursementEntity r = service.autoCreateForBankStmt(100L, 5L, new BigDecimal("500"), "差旅");
+        ExpenseReimbursementVO r = service.autoCreateForBankStmt(100L, 5L, new BigDecimal("500"), "差旅");
         assertEquals(1L, r.getId());
         verify(mapper, never()).insert(any(ExpenseReimbursementEntity.class));
     }
@@ -173,7 +174,7 @@ class ExpenseReimbursementServiceImplTest {
     void autoCreateForBankStmt_新_插入草稿() {
         when(mapper.selectList(any())).thenReturn(List.of());
         when(mapper.insert(any(ExpenseReimbursementEntity.class))).thenReturn(1);
-        ExpenseReimbursementEntity r = service.autoCreateForBankStmt(100L, 5L, new BigDecimal("500"), "差旅");
+        ExpenseReimbursementVO r = service.autoCreateForBankStmt(100L, 5L, new BigDecimal("500"), "差旅");
         assertEquals("DRAFT", r.getStatus());
         assertEquals("OTHER", r.getExpenseType());
         assertEquals(100L, r.getBankStmtId());
@@ -206,7 +207,7 @@ class ExpenseReimbursementServiceImplTest {
             return 1;
         });
 
-        ExpenseReimbursementEntity r = service.generateVoucherForApproved(1L);
+        ExpenseReimbursementVO r = service.generateVoucherForApproved(1L);
         assertEquals("VOUCHERED", r.getStatus());
         assertEquals(999L, r.getVoucherId());
         // 凭证 + 2 条分录

@@ -2,6 +2,7 @@ package com.huicai.module.arap.service.impl;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.huicai.common.exception.BusinessException;
+import com.huicai.module.arap.dto.PayableVO;
 import com.huicai.module.arap.entity.PayableEntity;
 import com.huicai.module.arap.mapper.PayableMapper;
 import org.junit.jupiter.api.Test;
@@ -28,7 +29,7 @@ class PayableServiceImplTest {
     @Test
     void pageQuery_带vendorId和period_调selectPage() {
         when(mapper.selectPage(any(), any())).thenReturn(null);
-        IPage<PayableEntity> r = service.pageQuery(1L, "202606", 1, 20);
+        IPage<PayableVO> r = service.pageQuery(1L, "202606", 1, 20);
         assertNull(r);
         verify(mapper).selectPage(any(), any());
     }
@@ -36,7 +37,7 @@ class PayableServiceImplTest {
     @Test
     void pageQuery_无参_走默认值() {
         when(mapper.selectPage(any(), any())).thenReturn(null);
-        IPage<PayableEntity> r = service.pageQuery(null, null, null, null);
+        IPage<PayableVO> r = service.pageQuery(null, null, null, null);
         assertNull(r);
         verify(mapper).selectPage(any(), any());
     }
@@ -46,7 +47,7 @@ class PayableServiceImplTest {
         PayableEntity p = new PayableEntity();
         p.setId(1L);
         when(mapper.selectById(1L)).thenReturn(p);
-        PayableEntity r = service.getById(1L);
+        PayableVO r = service.getById(1L);
         assertNotNull(r);
         assertEquals(1L, r.getId());
     }
@@ -63,7 +64,7 @@ class PayableServiceImplTest {
         PayableEntity p = new PayableEntity();
         p.setAmount(new BigDecimal("1000"));
         // settledAmount null
-        PayableEntity r = service.create(p);
+        PayableVO r = service.create(p);
         assertEquals(0, BigDecimal.ZERO.compareTo(r.getSettledAmount()));
         assertEquals(0, new BigDecimal("1000").compareTo(r.getUnsettledAmount()));
         verify(mapper).insert(p);

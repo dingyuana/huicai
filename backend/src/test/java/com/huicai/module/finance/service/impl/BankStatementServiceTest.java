@@ -47,7 +47,7 @@ class BankStatementServiceTest {
         when(autoGenerationService.autoGenerateInNewTx(anyLong(), anyLong())).thenReturn(true);
         when(statementMapper.updateById(any(BankStatementEntity.class))).thenReturn(1);
 
-        BankStatementEntity result = service.review(1L);
+        BankStatementEntity result = service.review(1L, 1L);
 
         assertNotNull(result);
         assertEquals("voucher_generated", result.getReviewStatus());
@@ -60,7 +60,7 @@ class BankStatementServiceTest {
     @Test
     void review_不存在_throwNotFound() {
         when(statementMapper.selectById(99L)).thenReturn(null);
-        BusinessException ex = assertThrows(BusinessException.class, () -> service.review(99L));
+        BusinessException ex = assertThrows(BusinessException.class, () -> service.review(99L, 1L));
         assertTrue(ex.getMessage().contains("不存在"));
         verify(statementMapper, never()).updateById(any(BankStatementEntity.class));
     }
@@ -68,7 +68,7 @@ class BankStatementServiceTest {
     @Test
     void review_未分类_throwBadRequest() {
         when(statementMapper.selectById(1L)).thenReturn(stub(1L, null));
-        BusinessException ex = assertThrows(BusinessException.class, () -> service.review(1L));
+        BusinessException ex = assertThrows(BusinessException.class, () -> service.review(1L, 1L));
         assertTrue(ex.getMessage().contains("尚未分类"));
         verify(statementMapper, never()).updateById(any(BankStatementEntity.class));
     }
@@ -77,13 +77,13 @@ class BankStatementServiceTest {
 
     @Test
     void batchReview_空列表_throwBadRequest() {
-        BusinessException ex = assertThrows(BusinessException.class, () -> service.batchReview(List.of()));
+        BusinessException ex = assertThrows(BusinessException.class, () -> service.batchReview(List.of(), 1L));
         assertTrue(ex.getMessage().contains("为空"));
     }
 
     @Test
     void batchReview_null_throwBadRequest() {
-        BusinessException ex = assertThrows(BusinessException.class, () -> service.batchReview(null));
+        BusinessException ex = assertThrows(BusinessException.class, () -> service.batchReview(null, 1L));
         assertTrue(ex.getMessage().contains("为空"));
     }
 
@@ -94,7 +94,7 @@ class BankStatementServiceTest {
         when(statementMapper.selectById(3L)).thenReturn(null);
         when(statementMapper.updateById(any(BankStatementEntity.class))).thenReturn(1);
 
-        int confirmed = service.batchReview(List.of(1L, 2L, 3L));
+        int confirmed = service.batchReview(List.of(1L, 2L, 3L), 1L);
 
         assertEquals(1, confirmed);
         verify(statementMapper, times(1)).updateById(any(BankStatementEntity.class));

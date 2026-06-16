@@ -463,7 +463,7 @@ class AutoGenerationServiceTest {
             setId(50L); setName("张三");
         }});
         when(expenseReimbursementService.autoCreateForBankStmt(eq(1L), eq(50L), any(BigDecimal.class), anyString()))
-                .thenReturn(new ExpenseReimbursementEntity() {{
+                .thenReturn(new com.huicai.module.arap.dto.ExpenseReimbursementVO() {{
                     setId(200L); setStatus("DRAFT");
                 }});
 

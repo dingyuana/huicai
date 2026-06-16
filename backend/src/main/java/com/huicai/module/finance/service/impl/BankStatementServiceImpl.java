@@ -362,7 +362,7 @@ public class BankStatementServiceImpl implements BankStatementService {
 
     @Override
     @Transactional
-    public BankStatementEntity review(Long statementId) {
+    public BankStatementEntity review(Long statementId, Long userId) {
         BankStatementEntity stmt = statementMapper.selectById(statementId);
         if (stmt == null) {
             throw BusinessException.notFound("对账单记录不存在");
@@ -393,7 +393,7 @@ public class BankStatementServiceImpl implements BankStatementService {
             type = AutoGenerationService.classifyType(stmt.getClassification());
         }
 
-        stmt.setReviewedBy(1L);
+        stmt.setReviewedBy(userId);
         stmt.setReviewedAt(LocalDateTime.now());
 
         switch (type) {
@@ -446,7 +446,7 @@ public class BankStatementServiceImpl implements BankStatementService {
 
     @Override
     @Transactional
-    public BankStatementEntity processManual(Long statementId, String targetType, String paymentType) {
+    public BankStatementEntity processManual(Long statementId, String targetType, String paymentType, Long userId) {
         BankStatementEntity stmt = statementMapper.selectById(statementId);
         if (stmt == null) {
             throw BusinessException.notFound("对账单记录不存在");
@@ -458,7 +458,7 @@ public class BankStatementServiceImpl implements BankStatementService {
             throw BusinessException.badRequest("targetType 必须为 A 或 B");
         }
 
-        stmt.setReviewedBy(1L);
+        stmt.setReviewedBy(userId);
         stmt.setReviewedAt(LocalDateTime.now());
 
         switch (targetType) {
@@ -550,14 +550,14 @@ public class BankStatementServiceImpl implements BankStatementService {
 
     @Override
     @Transactional
-    public int batchReview(List<Long> statementIds) {
+    public int batchReview(List<Long> statementIds, Long userId) {
         if (statementIds == null || statementIds.isEmpty()) {
             throw BusinessException.badRequest("确认 ID 列表为空");
         }
         int confirmed = 0;
         for (Long id : statementIds) {
             try {
-                review(id);
+                review(id, userId);
                 confirmed++;
             } catch (Exception e) {
                 log.warn("批量确认失败: statementId={}", id, e);

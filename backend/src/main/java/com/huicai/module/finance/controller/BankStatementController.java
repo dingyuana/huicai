@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.huicai.common.response.R;
 import com.huicai.module.finance.entity.BankStatementEntity;
 import com.huicai.module.finance.service.BankStatementService;
+import com.huicai.module.system.util.SecurityUtils;
 import com.huicai.module.finance.service.impl.AutoGenerationService;
 import com.huicai.module.finance.service.impl.BankStatementExcelImportService;
 import com.huicai.module.finance.service.impl.ColumnMappingResolver;
@@ -156,13 +157,13 @@ public class BankStatementController {
     @Operation(summary = "出纳单条确认分类 (确认后自动生成单据与凭证, 状态机推进)")
     @PostMapping("/{id}/review")
     public R<BankStatementEntity> review(@PathVariable Long id) {
-        return R.ok(service.review(id));
+        return R.ok(service.review(id, SecurityUtils.getCurrentUserId()));
     }
 
     @Operation(summary = "批量确认分类 (状态机推进)")
     @PostMapping("/batch-review")
     public R<Integer> batchReview(@RequestBody List<Long> ids) {
-        int confirmed = service.batchReview(ids);
+        int confirmed = service.batchReview(ids, SecurityUtils.getCurrentUserId());
         logger.info("批量确认: confirmed={}", confirmed);
         return R.ok(confirmed);
     }
@@ -201,7 +202,7 @@ public class BankStatementController {
     public R<BankStatementEntity> processManual(@PathVariable Long id,
                                                  @RequestParam String targetType,
                                                  @RequestParam(required = false) String paymentType) {
-        return R.ok(service.processManual(id, targetType, paymentType));
+        return R.ok(service.processManual(id, targetType, paymentType, SecurityUtils.getCurrentUserId()));
     }
 
     @Operation(summary = "P2: 预览凭证草稿 (只计算不写入)")

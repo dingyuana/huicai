@@ -2,6 +2,7 @@ package com.huicai.module.arap.service.impl;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.huicai.common.exception.BusinessException;
+import com.huicai.module.arap.dto.ReceivableVO;
 import com.huicai.module.arap.entity.ReceivableEntity;
 import com.huicai.module.arap.mapper.ReceivableMapper;
 import org.junit.jupiter.api.Test;
@@ -38,7 +39,7 @@ class ReceivableServiceImplTest {
     @Test
     void pageQuery_带customer和period_调selectPage() {
         when(mapper.selectPage(any(), any())).thenReturn(null);
-        IPage<ReceivableEntity> r = service.pageQuery(1L, "202606", 1, 20);
+        IPage<ReceivableVO> r = service.pageQuery(1L, "202606", 1, 20);
         assertNull(r);
         verify(mapper).selectPage(any(), any());
     }
@@ -46,7 +47,7 @@ class ReceivableServiceImplTest {
     @Test
     void getById_存在_返回entity() {
         when(mapper.selectById(1L)).thenReturn(stubRec(1L, 1L, new BigDecimal("500")));
-        ReceivableEntity r = service.getById(1L);
+        ReceivableVO r = service.getById(1L);
         assertNotNull(r);
     }
 
@@ -61,7 +62,7 @@ class ReceivableServiceImplTest {
     void create_settledAmount为null_默认0() {
         ReceivableEntity r = new ReceivableEntity();
         r.setAmount(new BigDecimal("1000"));
-        ReceivableEntity out = service.create(r);
+        ReceivableVO out = service.create(r);
         assertEquals(0, BigDecimal.ZERO.compareTo(out.getSettledAmount()));
         assertEquals(0, new BigDecimal("1000").compareTo(out.getUnsettledAmount()));
     }

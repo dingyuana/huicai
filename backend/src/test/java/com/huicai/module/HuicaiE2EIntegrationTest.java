@@ -1,7 +1,7 @@
 package com.huicai.module;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.huicai.module.arap.entity.ExpenseReimbursementEntity;
+import com.huicai.module.arap.dto.ExpenseReimbursementVO;
 import com.huicai.module.arap.service.ExpenseReimbursementService;
 import com.huicai.module.finance.service.BankReconciliationService;
 import com.huicai.module.tax.service.TaxService;
@@ -83,7 +83,7 @@ class HuicaiE2EIntegrationTest {
 
     @Test
     void e2e_expense_reimbursement_submit_returns_SUBMITTED() throws Exception {
-        ExpenseReimbursementEntity e = new ExpenseReimbursementEntity();
+        ExpenseReimbursementVO e = new ExpenseReimbursementVO();
         e.setId(1L);
         e.setStatus("SUBMITTED");
         e.setReimbNo("REIMB-202606-0001");
@@ -98,7 +98,7 @@ class HuicaiE2EIntegrationTest {
 
     @Test
     void e2e_expense_reimbursement_approve_returns_APPROVED() throws Exception {
-        ExpenseReimbursementEntity e = new ExpenseReimbursementEntity();
+        ExpenseReimbursementVO e = new ExpenseReimbursementVO();
         e.setId(1L);
         e.setStatus("APPROVED");
         e.setApprovedBy("zhangsan");
@@ -113,7 +113,7 @@ class HuicaiE2EIntegrationTest {
 
     @Test
     void e2e_expense_reimbursement_list_returns_array() throws Exception {
-        ExpenseReimbursementEntity e = new ExpenseReimbursementEntity();
+        ExpenseReimbursementVO e = new ExpenseReimbursementVO();
         e.setId(1L);
         e.setStatus("DRAFT");
         e.setReimbNo("REIMB-202606-0001");

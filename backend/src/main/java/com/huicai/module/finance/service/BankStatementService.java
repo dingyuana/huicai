@@ -22,14 +22,20 @@ public interface BankStatementService {
     /**
      * 出纳单条确认分类. 更新 reviewStatus=CONFIRMED, reviewedBy, reviewedAt.
      * 验收第 9 条: 不在导入时自动创建业务单据, 确认后才触发
+     *
+     * @param statementId 流水 ID
+     * @param userId      操作人 ID
      */
-    BankStatementEntity review(Long statementId);
+    BankStatementEntity review(Long statementId, Long userId);
 
     /**
      * 批量确认. salary_payment 分类时记录业务单据生成意图 (DRAFT, FROM_BANK_TXN).
      * 验收第 10 条: salary_payment 出纳确认时生成付款单 (DRAFT 状态, 关联员工档案)
+     *
+     * @param statementIds 流水 ID 列表
+     * @param userId       操作人 ID
      */
-    int batchReview(List<Long> statementIds);
+    int batchReview(List<Long> statementIds, Long userId);
 
     /**
      * 核准过账. 仅允许 voucher_generated / payment_created 状态推进到 approved.
@@ -41,8 +47,9 @@ public interface BankStatementService {
      * @param statementId 流水 ID
      * @param targetType  指定类型 A/B
      * @param paymentType B类时指定收支方向 pay/receive
+     * @param userId      操作人 ID
      */
-    BankStatementEntity processManual(Long statementId, String targetType, String paymentType);
+    BankStatementEntity processManual(Long statementId, String targetType, String paymentType, Long userId);
 
     /**
      * P2: 预览凭证草稿 — 只计算不写入, 返回凭证分录 JSON.

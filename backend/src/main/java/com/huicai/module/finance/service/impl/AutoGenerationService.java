@@ -204,6 +204,8 @@ public class AutoGenerationService {
         }
 
         VoucherEntity voucher = createVoucher(stmt, period, amount, userId);
+        // P19: 分录摘要同样追加对方名称
+        String entrySummary = buildEntrySummary(stmt);
         int sort = 1;
 
         VoucherEntryEntity entryDr = new VoucherEntryEntity();
@@ -211,7 +213,7 @@ public class AutoGenerationService {
         entryDr.setSubjectId(debitAcct.getId());
         entryDr.setDebit("in".equals(direction) ? BigDecimal.ZERO : amount);
         entryDr.setCredit("in".equals(direction) ? amount : BigDecimal.ZERO);
-        entryDr.setSummary(stmt.getSummary());
+        entryDr.setSummary(entrySummary);
         entryDr.setSortOrder(sort++);
         voucherEntryMapper.insert(entryDr);
 
@@ -220,7 +222,7 @@ public class AutoGenerationService {
         entryCr.setSubjectId(creditAcct.getId());
         entryCr.setDebit("in".equals(direction) ? amount : BigDecimal.ZERO);
         entryCr.setCredit("in".equals(direction) ? BigDecimal.ZERO : amount);
-        entryCr.setSummary(stmt.getSummary());
+        entryCr.setSummary(entrySummary);
         entryCr.setSortOrder(sort++);
         voucherEntryMapper.insert(entryCr);
 
@@ -324,6 +326,42 @@ public class AutoGenerationService {
         doc.setStatus("DRAFT");
         doc.setSource("FROM_BANK_TXN");
         doc.setCreatedBy(userId);
+
+        // P19: 从银行流水的对方名称解析客户/供应商 ID, 不存在则自动创建档案
+        String counterName = stmt.getCounterAccount();
+        if (StrUtil.isNotBlank(counterName)) {
+            String docType = doc.getDocType();
+            if ("RECEIPT".equals(docType)) {
+                Long customerId = findCustomerByName(counterName);
+                if (customerId != null) {
+                    doc.setCustomerId(customerId);
+                } else {
+                    CustomerEntity newCust = new CustomerEntity();
+                    newCust.setName(counterName);
+                    newCust.setCode("AUTO-" + System.currentTimeMillis());
+                    newCust.setIsActive(true);
+                    newCust.setRemark("银行流水自动创建");
+                    customerMapper.insert(newCust);
+                    doc.setCustomerId(newCust.getId());
+                    log.info("P19 自动创建客户: name={}, id={}", counterName, newCust.getId());
+                }
+            } else if ("PAYMENT".equals(docType)) {
+                Long vendorId = findVendorByName(counterName);
+                if (vendorId != null) {
+                    doc.setSupplierId(vendorId);
+                } else {
+                    VendorEntity newVend = new VendorEntity();
+                    newVend.setName(counterName);
+                    newVend.setCode("AUTO-" + System.currentTimeMillis());
+                    newVend.setIsActive(true);
+                    newVend.setRemark("银行流水自动创建");
+                    vendorMapper.insert(newVend);
+                    doc.setSupplierId(newVend.getId());
+                    log.info("P19 自动创建供应商: name={}, id={}", counterName, newVend.getId());
+                }
+            }
+        }
+
         docMapper.insert(doc);
 
         // 2. 尝试模板制证
@@ -337,10 +375,8 @@ public class AutoGenerationService {
                 doc.setUpdatedAt(LocalDateTime.now());
                 docMapper.updateById(doc);
                 stmt.setGeneratedDocId(doc.getId());
-                // P10-3: 模板路径也生成应收/应付单
-                doc.setSupplierId(null);
-                doc.setCustomerId(null);
-                createReceivableOrPayableFromBankDoc(doc, stmt, period, amount);
+                // P10-3: 模板路径也生成应收/应付单 (ID 已在前面解析, 不会为 null)
+                createReceivableOrPayableFromBankDoc(doc, stmt, period, amount, userId);
                 docMapper.updateById(doc);
                 log.info("B类模板制证: statementId={}, docId={}, voucherId={}, templateId={}",
                         stmt.getId(), doc.getId(), stmt.getGeneratedVoucherId(), template.getId());
@@ -353,32 +389,33 @@ public class AutoGenerationService {
         Subject bankAcct = findSubjectByCode("1002");
 
         VoucherEntity voucher = createVoucher(stmt, period, amount, userId);
+        String entrySummary = buildEntrySummary(stmt);
         int sort = 1;
 
         switch (stmt.getClassification()) {
             case "business_receipt": {
                 Subject arAcct = findSubjectByCode("1122");
-                addVoucherEntry(voucher.getId(), bankAcct.getId(), amount, BigDecimal.ZERO, stmt.getSummary(), sort++);
-                addVoucherEntry(voucher.getId(), arAcct.getId(), BigDecimal.ZERO, amount, stmt.getSummary(), sort++);
+                addVoucherEntry(voucher.getId(), bankAcct.getId(), amount, BigDecimal.ZERO, entrySummary, sort++);
+                addVoucherEntry(voucher.getId(), arAcct.getId(), BigDecimal.ZERO, amount, entrySummary, sort++);
                 break;
             }
             case "business_payment": {
                 Subject apAcct = findSubjectByCode("2202");
-                addVoucherEntry(voucher.getId(), apAcct.getId(), amount, BigDecimal.ZERO, stmt.getSummary(), sort++);
-                addVoucherEntry(voucher.getId(), bankAcct.getId(), BigDecimal.ZERO, amount, stmt.getSummary(), sort++);
+                addVoucherEntry(voucher.getId(), apAcct.getId(), amount, BigDecimal.ZERO, entrySummary, sort++);
+                addVoucherEntry(voucher.getId(), bankAcct.getId(), BigDecimal.ZERO, amount, entrySummary, sort++);
                 break;
             }
             case "internal_transfer": {
                 Subject otherAcct = findSubjectByCode("1012");
                 if (otherAcct == null) otherAcct = findSubjectByCode("1221");
-                addVoucherEntry(voucher.getId(), otherAcct.getId(), amount, BigDecimal.ZERO, stmt.getSummary(), sort++);
-                addVoucherEntry(voucher.getId(), bankAcct.getId(), BigDecimal.ZERO, amount, stmt.getSummary(), sort++);
+                addVoucherEntry(voucher.getId(), otherAcct.getId(), amount, BigDecimal.ZERO, entrySummary, sort++);
+                addVoucherEntry(voucher.getId(), bankAcct.getId(), BigDecimal.ZERO, amount, entrySummary, sort++);
                 break;
             }
             case "salary_payment": {
                 Subject salaryAcct = findSubjectByCode("2211");
-                addVoucherEntry(voucher.getId(), salaryAcct.getId(), amount, BigDecimal.ZERO, stmt.getSummary(), sort++);
-                addVoucherEntry(voucher.getId(), bankAcct.getId(), BigDecimal.ZERO, amount, stmt.getSummary(), sort++);
+                addVoucherEntry(voucher.getId(), salaryAcct.getId(), amount, BigDecimal.ZERO, entrySummary, sort++);
+                addVoucherEntry(voucher.getId(), bankAcct.getId(), BigDecimal.ZERO, amount, entrySummary, sort++);
                 break;
             }
         }
@@ -395,10 +432,8 @@ public class AutoGenerationService {
         stmt.setGeneratedDocId(doc.getId());
         stmt.setGeneratedVoucherId(voucher.getId());
 
-        // P10-3: 硬编码路径生成应收/应付单
-        doc.setSupplierId(null);
-        doc.setCustomerId(null);
-        createReceivableOrPayableFromBankDoc(doc, stmt, period, amount);
+        // P10-3: 硬编码路径生成应收/应付单 (ID 已在前面解析, 不会为 null)
+        createReceivableOrPayableFromBankDoc(doc, stmt, period, amount, userId);
         docMapper.updateById(doc);
 
         log.info("B类硬编码生单+制证: statementId={}, docId={}, voucherId={}, classification={}",
@@ -415,7 +450,12 @@ public class AutoGenerationService {
         voucher.setVoucherTypeId(DEFAULT_VOUCHER_TYPE_ID);
         voucher.setStatus("DRAFT");
         voucher.setSource("GENERATED");
-        voucher.setSummary(stmt.getSummary() != null ? stmt.getSummary() : "银行流水自动生成");
+        // P19: 凭证摘要追加对方名称, 确保列表/详情可见
+        String summary = stmt.getSummary() != null ? stmt.getSummary() : "银行流水自动生成";
+        if (StrUtil.isNotBlank(stmt.getCounterAccount())) {
+            summary = stmt.getCounterAccount() + "-" + summary;
+        }
+        voucher.setSummary(summary);
         voucher.setTotalDebit(amount);
         voucher.setTotalCredit(amount);
         voucher.setCreatedBy(userId);
@@ -475,6 +515,17 @@ public class AutoGenerationService {
         return result;
     }
 
+    /**
+     * 构建分录摘要, 追加对方名称以便在凭证列表/详情中可见.
+     */
+    private String buildEntrySummary(BankStatementEntity stmt) {
+        String base = stmt.getSummary() != null ? stmt.getSummary() : "";
+        if (StrUtil.isNotBlank(stmt.getCounterAccount())) {
+            return stmt.getCounterAccount() + "-" + base;
+        }
+        return base;
+    }
+
     private Subject findSubjectByCode(String code) {
         List<Subject> list = subjectMapper.selectList(
                 new LambdaQueryWrapper<Subject>().eq(Subject::getCode, code).last("LIMIT 1"));
@@ -520,12 +571,16 @@ public class AutoGenerationService {
      * 在 generateDocThenVoucher 的模板/硬编码路径最后调用.
      */
     private void createReceivableOrPayableFromBankDoc(BusinessDocEntity doc, BankStatementEntity stmt,
-                                                       String period, BigDecimal amount) {
+                                                       String period, BigDecimal amount, Long userId) {
         String classification = stmt.getClassification();
         String counterName = stmt.getCounterAccount();
 
         if ("business_receipt".equals(classification)) {
-            Long customerId = findCustomerByName(counterName);
+            // P19: 若 doc 已在前置解析中设置了 customerId, 直接使用
+            Long customerId = doc.getCustomerId();
+            if (customerId == null) {
+                customerId = findCustomerByName(counterName);
+            }
             if (customerId == null) {
                 log.warn("P10-3 应收单跳过: 客户名 '{}' 无法匹配", counterName);
                 return;
@@ -560,7 +615,11 @@ public class AutoGenerationService {
                 log.warn("P10-4 应收自动核销失败(不影响主流程): {}", e.getMessage());
             }
         } else if ("business_payment".equals(classification)) {
-            Long vendorId = findVendorByName(counterName);
+            // P19: 若 doc 已在前置解析中设置了 supplierId, 直接使用
+            Long vendorId = doc.getSupplierId();
+            if (vendorId == null) {
+                vendorId = findVendorByName(counterName);
+            }
             if (vendorId == null) {
                 log.warn("P10-3 应付单跳过: 供应商名 '{}' 无法匹配", counterName);
                 return;
@@ -584,7 +643,7 @@ public class AutoGenerationService {
                 prepay.setStatus("DRAFT");
                 prepay.setSourceDocType("bank_txn");
                 prepay.setSourceDocId(stmt.getId());
-                prepay.setCreatedBy(String.valueOf(DEFAULT_USER_ID));
+                prepay.setCreatedBy(String.valueOf(userId != null ? userId : DEFAULT_USER_ID));
                 prepaymentMapper.insert(prepay);
                 doc.setSupplierId(vendorId);
                 log.info("P12-3 预付款生成: statementId={}, vendorId={}, docId={}, amount={}",
