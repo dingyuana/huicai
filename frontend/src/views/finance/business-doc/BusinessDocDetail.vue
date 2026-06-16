@@ -10,6 +10,7 @@
           <el-button v-if="doc?.status === 'SUBMITTED'" type="primary" @click="onApprove">审批</el-button>
           <el-button v-if="doc?.status === 'SUBMITTED'" type="danger" @click="onReject">驳回</el-button>
           <el-button v-if="doc?.status === 'APPROVED' && !doc?.voucherId" type="warning" @click="onGenerateVoucher">生成凭证</el-button>
+          <el-button v-if="canReconcile" type="primary" @click="onOpenReconcile">去核销</el-button>
         </div>
       </div>
 
@@ -52,22 +53,91 @@
         </el-table-column>
       </el-table>
     </el-card>
+
+    <el-drawer v-model="reconDrawerVisible" :title="reconDrawerTitle" size="640px" destroy-on-close>
+      <template v-if="reconLoading">
+        <div style="text-align:center;padding:40px">
+          <el-icon class="is-loading" :size="32"><Loading /></el-icon>
+          <p style="margin-top:12px;color:#909399">正在匹配核销推荐...</p>
+        </div>
+      </template>
+      <template v-else-if="reconResult">
+        <el-alert
+          :title="reconResult.items?.length ? `匹配到 ${reconResult.items.length} 个候选目标` : '暂无匹配目标 — 对方可能尚未开票, 建议走预收/预付路径'"
+          :type="reconResult.items?.length ? 'success' : 'info'"
+          :closable="false"
+          style="margin-bottom:16px"
+        />
+        <el-table v-if="reconResult.items?.length" :data="reconResult.items" border stripe size="small">
+          <el-table-column label="类型" width="80" align="center">
+            <template #default="{ row }">
+              <el-tag :type="row.targetDocType === 'INVOICE_OUT' ? 'success' : 'warning'" size="small">
+                {{ row.targetDocType === 'INVOICE_OUT' ? '应收' : '应付' }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column prop="targetDocNo" label="单据号" width="140" />
+          <el-table-column label="原始金额" width="120" align="right">
+            <template #default="{ row }">{{ fmtAmount(row.originalAmount) }}</template>
+          </el-table-column>
+          <el-table-column label="未核销金额" width="120" align="right">
+            <template #default="{ row }">{{ fmtAmount(row.unsettledAmount) }}</template>
+          </el-table-column>
+          <el-table-column label="匹配级别" width="100" align="center">
+            <template #default="{ row }">
+              <el-tag :type="matchLevelType(row.matchLevel)" size="small">{{ row.matchLevel }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="建议核销" width="120" align="right">
+            <template #default="{ row }">{{ fmtAmount(row.suggestedAmount) }}</template>
+          </el-table-column>
+          <el-table-column label="操作" width="120" align="center" fixed="right">
+            <template #default="{ row }">
+              <el-button text size="small" type="primary" :loading="row._executing" @click="onExecuteRecon(row)">执行核销</el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+        <p v-else style="text-align:center;color:#909399;padding:24px 0">
+          若供应商/客户尚未开票, 凭 {{ doc?.voucherId ? '已生成凭证' : '审批后' }} 的单据可直接走"预付/预收"挂账路径
+        </p>
+      </template>
+    </el-drawer>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
+import { Loading } from '@element-plus/icons-vue'
 import {
   getBusinessDoc, submitBusinessDoc, approveBusinessDoc, rejectBusinessDoc,
   generateVoucherFromDoc, DOC_TYPE_LABELS, DOC_STATUS_LABELS, type BusinessDocVO,
 } from '@/api/modules/businessDoc'
+import {
+  getPaymentRecommend, getReceiptRecommend, executeReconciliation,
+  type RecommendItem, type ReconciliationRecommendResult,
+} from '@/api/modules/reconciliation'
 
 const route = useRoute()
 const router = useRouter()
 const doc = ref<BusinessDocVO | null>(null)
 const id = Number(route.query.id)
+
+const reconDrawerVisible = ref(false)
+const reconLoading = ref(false)
+const reconResult = ref<ReconciliationRecommendResult | null>(null)
+const reconDrawerTitle = ref('')
+
+const canReconcile = computed(() => {
+  if (!doc.value) return false
+  if (!['APPROVED', 'VOUCHERED'].includes(doc.value.status)) return false
+  if (!['PAYMENT', 'RECEIPT'].includes(doc.value.docType)) return false
+  if (doc.value.amount == null || Number(doc.value.amount) <= 0) return false
+  if (doc.value.docType === 'PAYMENT' && !doc.value.supplierId) return false
+  if (doc.value.docType === 'RECEIPT' && !doc.value.customerId) return false
+  return true
+})
 
 function statusType(s: string) {
   switch (s) {
@@ -76,6 +146,17 @@ function statusType(s: string) {
     case 'APPROVED': return 'warning'
     case 'VOUCHERED': return 'success'
     case 'REJECTED': return 'danger'
+    default: return 'info'
+  }
+}
+
+function matchLevelType(level: string) {
+  switch (level) {
+    case 'L1': return 'success'
+    case 'L2': return 'primary'
+    case 'L3': return 'primary'
+    case 'L4': return 'warning'
+    case 'L5': return 'danger'
     default: return 'info'
   }
 }
@@ -110,6 +191,65 @@ async function onGenerateVoucher() {
   await generateVoucherFromDoc(id)
   ElMessage.success('凭证已生成, 请前往凭证管理提交记账')
   await fetchData()
+}
+
+async function onOpenReconcile() {
+  if (!doc.value) return
+  const isPayment = doc.value.docType === 'PAYMENT'
+  reconDrawerTitle.value = isPayment
+    ? `核销推荐 — ${doc.value.supplierName || '供应商'} ¥${fmtAmount(doc.value.amount)}`
+    : `核销推荐 — ${doc.value.customerName || '客户'} ¥${fmtAmount(doc.value.amount)}`
+  reconDrawerVisible.value = true
+  reconLoading.value = true
+  reconResult.value = null
+  try {
+    if (isPayment) {
+      reconResult.value = await getPaymentRecommend(doc.value.id, {
+        vendorId: doc.value.supplierId!,
+        amount: doc.value.amount!,
+        summary: doc.value.summary || undefined,
+        counterpartyName: doc.value.supplierName || undefined,
+      })
+    } else {
+      reconResult.value = await getReceiptRecommend(doc.value.id, {
+        customerId: doc.value.customerId!,
+        amount: doc.value.amount!,
+        summary: doc.value.summary || undefined,
+        counterpartyName: doc.value.customerName || undefined,
+      })
+    }
+  } catch (e: any) {
+    ElMessage.error(e?.message || '获取核销推荐失败')
+    reconDrawerVisible.value = false
+  } finally {
+    reconLoading.value = false
+  }
+}
+
+async function onExecuteRecon(item: RecommendItem & { _executing?: boolean }) {
+  if (!doc.value) return
+  item._executing = true
+  try {
+    const sourceDocType = doc.value.docType === 'PAYMENT' ? 'payment' : 'receipt'
+    await executeReconciliation({
+      sourceDocType,
+      sourceDocId: doc.value.id,
+      targetDocType: item.targetDocType,
+      targetDocId: item.targetDocId,
+      amount: item.suggestedAmount,
+      matchScore: item.matchScore,
+      matchMethod: 'MANUAL',
+      customerId: doc.value.customerId,
+      vendorId: doc.value.supplierId,
+      period: doc.value.period,
+    })
+    ElMessage.success('核销执行成功')
+    reconDrawerVisible.value = false
+  } catch (e: any) {
+    ElMessage.error(e?.message || '核销执行失败')
+  } finally {
+    item._executing = false
+  }
 }
 
 onMounted(fetchData)
