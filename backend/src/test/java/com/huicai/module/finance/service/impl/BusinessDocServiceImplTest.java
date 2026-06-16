@@ -8,12 +8,15 @@ import com.huicai.module.finance.dto.BusinessDocDTO;
 import com.huicai.module.finance.dto.BusinessDocVO;
 import com.huicai.module.finance.entity.BusinessDocEntity;
 import com.huicai.module.finance.entity.BusinessDocEntryEntity;
+import com.huicai.module.finance.entity.VoucherEntity;
+import com.huicai.module.finance.entity.VoucherEntryEntity;
 import com.huicai.module.finance.mapper.BusinessDocEntryMapper;
 import com.huicai.module.finance.mapper.BusinessDocMapper;
 import com.huicai.module.finance.mapper.VoucherEntryMapper;
 import com.huicai.module.finance.mapper.VoucherMapper;
 import com.huicai.module.finance.service.VoucherNoService;
 import com.huicai.module.system.entity.PeriodEntity;
+import com.huicai.module.system.entity.Subject;
 import com.huicai.module.system.entity.UserEntity;
 import com.huicai.module.system.mapper.SubjectMapper;
 import com.huicai.module.system.mapper.UserMapper;
@@ -393,5 +396,117 @@ class BusinessDocServiceImplTest {
         BusinessDocVO vo = service.getDetail(DOC_ID);
 
         assertEquals("zhangsan_login", vo.getCreatedByName());
+    }
+
+    // ==================== generateVoucher — 静默失败防护 ====================
+
+    private BusinessDocEntryEntity stubEntry(Long id, BigDecimal amount) {
+        BusinessDocEntryEntity e = new BusinessDocEntryEntity();
+        e.setId(id);
+        e.setDocId(DOC_ID);
+        e.setSubjectId(1L);
+        e.setAmount(amount);
+        e.setSortOrder(1);
+        return e;
+    }
+
+    private BusinessDocEntity stubApprovedPayDoc() {
+        BusinessDocEntity e = new BusinessDocEntity();
+        e.setId(DOC_ID);
+        e.setDocNo("FK2026060001");
+        e.setDocType("PAYMENT");
+        e.setDocDate(LocalDate.of(2026, 6, 15));
+        e.setPeriod("202606");
+        e.setAmount(new BigDecimal("1000.00"));
+        e.setStatus("APPROVED");
+        e.setSupplierId(99L);
+        e.setSummary("支付货款");
+        e.setVoucherId(null);
+        return e;
+    }
+
+    @Test
+    void generateVoucher_科目不存在_抛BusinessException_不标记VOUCHERED() {
+        BusinessDocEntity e = stubApprovedPayDoc();
+        when(docMapper.selectById(DOC_ID)).thenReturn(e);
+        when(docEntryMapper.selectByDocId(DOC_ID))
+                .thenReturn(List.of(stubEntry(1L, new BigDecimal("1000.00"))));
+        when(voucherNoService.generateNextNo("202606", 1L)).thenReturn("FK2026060001");
+        when(subjectMapper.selectOne(any())).thenReturn(null);
+        doAnswer(inv -> {
+            VoucherEntity v = inv.getArgument(0);
+            v.setId(555L);
+            return 1;
+        }).when(voucherMapper).insert(any(VoucherEntity.class));
+
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> service.generateVoucher(DOC_ID, USER_ID));
+
+        assertTrue(ex.getMessage().contains("科目不存在"),
+                "应明确提示科目不存在, 实际消息: " + ex.getMessage());
+        assertTrue(ex.getMessage().contains("2202"),
+                "应指明缺失的科目代码, 实际消息: " + ex.getMessage());
+        verify(docMapper, never()).updateById(any(BusinessDocEntity.class));
+        verify(voucherEntryMapper, never()).insert(any(VoucherEntryEntity.class));
+    }
+
+    @Test
+    void generateVoucher_非APPROVED状态_throwBadRequest() {
+        BusinessDocEntity e = stubApprovedPayDoc();
+        e.setStatus("DRAFT");
+        when(docMapper.selectById(DOC_ID)).thenReturn(e);
+
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> service.generateVoucher(DOC_ID, USER_ID));
+        assertTrue(ex.getMessage().contains("仅已审批状态"));
+        verify(voucherMapper, never()).insert(any(VoucherEntity.class));
+    }
+
+    @Test
+    void generateVoucher_已生成凭证_不重复生成() {
+        BusinessDocEntity e = stubApprovedPayDoc();
+        e.setVoucherId(888L);
+        when(docMapper.selectById(DOC_ID)).thenReturn(e);
+
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> service.generateVoucher(DOC_ID, USER_ID));
+        assertTrue(ex.getMessage().contains("已生成凭证"));
+        verify(voucherMapper, never()).insert(any(VoucherEntity.class));
+    }
+
+    @Test
+    void generateVoucher_正常路径_APPROVED且科目齐备_成功生成() {
+        BusinessDocEntity e = stubApprovedPayDoc();
+        when(docMapper.selectById(DOC_ID)).thenReturn(e);
+        when(docEntryMapper.selectByDocId(DOC_ID))
+                .thenReturn(List.of(stubEntry(1L, new BigDecimal("1000.00"))));
+        when(voucherNoService.generateNextNo("202606", 1L)).thenReturn("FK2026060001");
+        Subject debit = new Subject();
+        debit.setId(10L);
+        debit.setCode("2202");
+        Subject credit = new Subject();
+        credit.setId(20L);
+        credit.setCode("1002");
+        when(subjectMapper.selectOne(any()))
+                .thenReturn(debit)
+                .thenReturn(credit);
+        doAnswer(inv -> {
+            VoucherEntity v = inv.getArgument(0);
+            v.setId(555L);
+            return 1;
+        }).when(voucherMapper).insert(any(VoucherEntity.class));
+        when(vendorMapper.selectBatchIds(anyList())).thenReturn(Collections.emptyList());
+        when(userMapper.selectBatchIds(anyList())).thenReturn(Collections.emptyList());
+
+        BusinessDocVO vo = service.generateVoucher(DOC_ID, USER_ID);
+
+        ArgumentCaptor<BusinessDocEntity> captor = ArgumentCaptor.forClass(BusinessDocEntity.class);
+        verify(docMapper).updateById(captor.capture());
+        BusinessDocEntity saved = captor.getValue();
+        assertEquals(555L, saved.getVoucherId());
+        assertEquals("VOUCHERED", saved.getStatus());
+        // PAYMENT 只有一对科目 (2202/1002), 1 条 doc entry → 2 条 voucher entry
+        verify(voucherEntryMapper, times(2)).insert(any(VoucherEntryEntity.class));
+        assertNotNull(vo);
     }
 }
