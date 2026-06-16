@@ -28,10 +28,13 @@ public class BusinessDocVO {
     private String source;
     private String attachmentIds;
     private Long voucherId;
+    private Long createdBy;
     private String createdByName;
     private LocalDateTime createdAt;
+    private Long submittedBy;
     private String submittedByName;
     private LocalDateTime submittedAt;
+    private Long approvedBy;
     private String approvedByName;
     private LocalDateTime approvedAt;
     private List<EntryVO> entries;
@@ -66,8 +69,11 @@ public class BusinessDocVO {
         vo.setSource(e.getSource());
         vo.setAttachmentIds(e.getAttachmentIds());
         vo.setVoucherId(e.getVoucherId());
+        vo.setCreatedBy(e.getCreatedBy());
         vo.setCreatedAt(e.getCreatedAt());
+        vo.setSubmittedBy(e.getSubmittedBy());
         vo.setSubmittedAt(e.getSubmittedAt());
+        vo.setApprovedBy(e.getApprovedBy());
         vo.setApprovedAt(e.getApprovedAt());
         return vo;
     }
