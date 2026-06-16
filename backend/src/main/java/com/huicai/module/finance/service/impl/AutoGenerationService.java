@@ -61,8 +61,8 @@ public class AutoGenerationService {
     private final VendorMapper vendorMapper;
     private final ReceivableMapper receivableMapper;
     private final PayableMapper payableMapper;
-    private final PrepaymentMapper prepaymentMapper;
     private final ReconciliationService reconciliationService;
+    private final com.huicai.module.arap.service.PrepaymentService prepaymentService;
     private final EmployeeService employeeService;
     private final ExpenseReimbursementService expenseReimbursementService;
 
@@ -576,7 +576,6 @@ public class AutoGenerationService {
         String counterName = stmt.getCounterAccount();
 
         if ("business_receipt".equals(classification)) {
-            // P19: 若 doc 已在前置解析中设置了 customerId, 直接使用
             Long customerId = doc.getCustomerId();
             if (customerId == null) {
                 customerId = findCustomerByName(counterName);
@@ -585,6 +584,22 @@ public class AutoGenerationService {
                 log.warn("P10-3 应收单跳过: 客户名 '{}' 无法匹配", counterName);
                 return;
             }
+            // P12-3: 预收/预付检测 — 判断客户是否已有未结清应收
+            boolean hasOpenReceivables = reconciliationService.hasOpenReceivables(customerId);
+            if (!hasOpenReceivables) {
+                // 无未结清应收，走预收款路径
+                log.info("P12-3 客户 '{}' 无未结清应收，走预收款路径", counterName);
+                prepaymentService.createReceiptPrepay(
+                        customerId, amount, period, stmt.getTxDate(),
+                        stmt.getSummary(), "bank_txn", stmt.getId(),
+                        doc.getId(), doc.getVoucherId(),
+                        String.valueOf(userId != null ? userId : DEFAULT_USER_ID));
+                doc.setCustomerId(customerId);
+                log.info("P12-3 预收款生成: statementId={}, customerId={}, docId={}, amount={}",
+                        stmt.getId(), customerId, doc.getId(), amount);
+                return;
+            }
+            // 有未结清应收 -> 走应收路径
             ReceivableEntity recv = new ReceivableEntity();
             recv.setCustomerId(customerId);
             recv.setDocId(doc.getId());
@@ -615,7 +630,6 @@ public class AutoGenerationService {
                 log.warn("P10-4 应收自动核销失败(不影响主流程): {}", e.getMessage());
             }
         } else if ("business_payment".equals(classification)) {
-            // P19: 若 doc 已在前置解析中设置了 supplierId, 直接使用
             Long vendorId = doc.getSupplierId();
             if (vendorId == null) {
                 vendorId = findVendorByName(counterName);
@@ -625,63 +639,51 @@ public class AutoGenerationService {
                 return;
             }
             // P12-3: 预收/预付检测 — 判断供应商是否已有未结清应付
-            boolean hasOpenPayables = reconciliationService.hasOpenInvoices("INVOICE_IN", vendorId);
+            boolean hasOpenPayables = reconciliationService.hasOpenPayables(vendorId);
             if (!hasOpenPayables) {
                 // 无未结清应付，走预付款路径
                 log.info("P12-3 供应商 '{}' 无未结清应付，走预付款路径", counterName);
-                PrepaymentEntity prepay = new PrepaymentEntity();
-                prepay.setTenantId(1L);
-                prepay.setVendorId(vendorId);
-                prepay.setDocId(doc.getId());
-                prepay.setVoucherId(doc.getVoucherId());
-                prepay.setPeriod(period);
-                prepay.setTxDate(stmt.getTxDate());
-                prepay.setAmount(amount);
-                prepay.setSettledAmount(BigDecimal.ZERO);
-                prepay.setUnsettledAmount(amount);
-                prepay.setSummary(stmt.getSummary());
-                prepay.setStatus("DRAFT");
-                prepay.setSourceDocType("bank_txn");
-                prepay.setSourceDocId(stmt.getId());
-                prepay.setCreatedBy(String.valueOf(userId != null ? userId : DEFAULT_USER_ID));
-                prepaymentMapper.insert(prepay);
+                prepaymentService.createPaymentPrepay(
+                        vendorId, amount, period, stmt.getTxDate(),
+                        stmt.getSummary(), "bank_txn", stmt.getId(),
+                        doc.getId(), doc.getVoucherId(),
+                        String.valueOf(userId != null ? userId : DEFAULT_USER_ID));
                 doc.setSupplierId(vendorId);
                 log.info("P12-3 预付款生成: statementId={}, vendorId={}, docId={}, amount={}",
                         stmt.getId(), vendorId, doc.getId(), amount);
-            } else {
-                // 有未结清应付，走应付路径
-                PayableEntity pay = new PayableEntity();
-                pay.setVendorId(vendorId);
-                pay.setDocId(doc.getId());
-                pay.setVoucherId(doc.getVoucherId());
-                pay.setPeriod(period);
-                pay.setTxDate(stmt.getTxDate());
-                pay.setAmount(amount);
-                pay.setSettledAmount(BigDecimal.ZERO);
-                pay.setUnsettledAmount(amount);
-                pay.setSummary(stmt.getSummary());
-                payableMapper.insert(pay);
-                doc.setSupplierId(vendorId);
-                log.info("P10-3 应付单生成: statementId={}, vendorId={}, docId={}, amount={}",
-                        stmt.getId(), vendorId, doc.getId(), amount);
+                return;
+            }
+            // 有未结清应付，走应付路径
+            PayableEntity pay = new PayableEntity();
+            pay.setVendorId(vendorId);
+            pay.setDocId(doc.getId());
+            pay.setVoucherId(doc.getVoucherId());
+            pay.setPeriod(period);
+            pay.setTxDate(stmt.getTxDate());
+            pay.setAmount(amount);
+            pay.setSettledAmount(BigDecimal.ZERO);
+            pay.setUnsettledAmount(amount);
+            pay.setSummary(stmt.getSummary());
+            payableMapper.insert(pay);
+            doc.setSupplierId(vendorId);
+            log.info("P10-3 应付单生成: statementId={}, vendorId={}, docId={}, amount={}",
+                    stmt.getId(), vendorId, doc.getId(), amount);
 
-                // P10-4: 自动核销应付（停在 CONFIRMED 状态）
-                try {
-                    reconciliationService.execute(new ReconciliationService.ExecuteRequest(
-                            "bank_txn", stmt.getId(),
-                            "INVOICE_IN", pay.getId(),
-                            amount, new BigDecimal("100"),
-                            "AUTO", null, vendorId,
-                            period, "P10-4 银行流水自动核销"
-                    ));
-                    log.info("P10-4 应付自动核销完成: statementId={}, payableId={}, amount={}",
-                            stmt.getId(), pay.getId(), amount);
-                } catch (Exception e) {
-                    log.warn("P10-4 应付自动核销失败(不影响主流程): {}", e.getMessage());
-                }
+            // P10-4: 自动核销应付（停在 CONFIRMED 状态）
+            try {
+                reconciliationService.execute(new ReconciliationService.ExecuteRequest(
+                        "bank_txn", stmt.getId(),
+                        "INVOICE_IN", pay.getId(),
+                        amount, new BigDecimal("100"),
+                        "AUTO", null, vendorId,
+                        period, "P10-4 银行流水自动核销"
+                ));
+                log.info("P10-4 应付自动核销完成: statementId={}, payableId={}, amount={}",
+                        stmt.getId(), pay.getId(), amount);
+            } catch (Exception e) {
+                log.warn("P10-4 应付自动核销失败(不影响主流程): {}", e.getMessage());
             }
         } else {
-            // internal_transfer / salary_payment 等不走应收/应付
             log.debug("P10-3 跳过: classification={}, 不需要应收/应付单", classification);
         }
     }

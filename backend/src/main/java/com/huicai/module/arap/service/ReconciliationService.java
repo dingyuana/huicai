@@ -95,4 +95,10 @@ public interface ReconciliationService {
 
     /** 预收/预付检测 — 判断客户/供应商是否已有未结清应收/应付 */
     boolean hasOpenInvoices(String targetDocType, Long partyId);
+
+    /** 客户是否有未结清应收 */
+    boolean hasOpenReceivables(Long customerId);
+
+    /** 供应商是否有未结清应付 */
+    boolean hasOpenPayables(Long vendorId);
 }

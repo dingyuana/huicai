@@ -549,22 +549,33 @@ public class ReconciliationServiceImpl implements ReconciliationService {
 
     @Override
     public boolean hasOpenInvoices(String targetDocType, Long partyId) {
-        if (targetDocType == null || partyId == null) return false;
         if ("INVOICE_OUT".equals(targetDocType)) {
-            List<ReceivableEntity> list = receivableMapper.selectList(
-                    new LambdaQueryWrapper<ReceivableEntity>()
-                            .eq(ReceivableEntity::getCustomerId, partyId)
-                            .gt(ReceivableEntity::getUnsettledAmount, BigDecimal.ZERO)
-                            .last("LIMIT 1"));
-            return !list.isEmpty();
+            return hasOpenReceivables(partyId);
         } else if ("INVOICE_IN".equals(targetDocType)) {
-            List<PayableEntity> list = payableMapper.selectList(
-                    new LambdaQueryWrapper<PayableEntity>()
-                            .eq(PayableEntity::getVendorId, partyId)
-                            .gt(PayableEntity::getUnsettledAmount, BigDecimal.ZERO)
-                            .last("LIMIT 1"));
-            return !list.isEmpty();
+            return hasOpenPayables(partyId);
         }
         return false;
+    }
+
+    @Override
+    public boolean hasOpenReceivables(Long customerId) {
+        if (customerId == null) return false;
+        List<ReceivableEntity> list = receivableMapper.selectList(
+                new LambdaQueryWrapper<ReceivableEntity>()
+                        .eq(ReceivableEntity::getCustomerId, customerId)
+                        .gt(ReceivableEntity::getUnsettledAmount, BigDecimal.ZERO)
+                        .last("LIMIT 1"));
+        return !list.isEmpty();
+    }
+
+    @Override
+    public boolean hasOpenPayables(Long vendorId) {
+        if (vendorId == null) return false;
+        List<PayableEntity> list = payableMapper.selectList(
+                new LambdaQueryWrapper<PayableEntity>()
+                        .eq(PayableEntity::getVendorId, vendorId)
+                        .gt(PayableEntity::getUnsettledAmount, BigDecimal.ZERO)
+                        .last("LIMIT 1"));
+        return !list.isEmpty();
     }
 }
