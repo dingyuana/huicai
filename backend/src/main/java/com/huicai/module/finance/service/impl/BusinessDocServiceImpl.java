@@ -379,10 +379,14 @@ public class BusinessDocServiceImpl implements BusinessDocService {
     }
 
     private Subject findSubjectByCode(String code) {
-        return subjectMapper.selectOne(
+        Subject s = subjectMapper.selectOne(
                 new LambdaQueryWrapper<Subject>()
                         .eq(Subject::getCode, code)
                         .last("LIMIT 1"));
+        if (s == null) {
+            throw BusinessException.badRequest("科目不存在: " + code + ", 请先在科目管理中初始化");
+        }
+        return s;
     }
 
     private BusinessDocEntity getValid(Long id) {
