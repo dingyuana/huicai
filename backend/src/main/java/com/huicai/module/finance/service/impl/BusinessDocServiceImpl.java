@@ -33,6 +33,8 @@ import com.huicai.module.arap.entity.CustomerEntity;
 import com.huicai.module.arap.entity.VendorEntity;
 import com.huicai.module.arap.mapper.CustomerMapper;
 import com.huicai.module.arap.mapper.VendorMapper;
+import com.huicai.module.system.entity.UserEntity;
+import com.huicai.module.system.mapper.UserMapper;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.Collections;
@@ -80,6 +82,7 @@ public class BusinessDocServiceImpl implements BusinessDocService {
     private final VoucherTypeService voucherTypeService;
     private final CustomerMapper customerMapper;
     private final VendorMapper vendorMapper;
+    private final UserMapper userMapper;
 
     @Override
     public IPage<BusinessDocVO> pageQuery(BusinessDocQueryDTO q) {
@@ -98,6 +101,7 @@ public class BusinessDocServiceImpl implements BusinessDocService {
         IPage<BusinessDocVO> voPage = new Page<>(entityPage.getCurrent(), entityPage.getSize(), entityPage.getTotal());
         List<BusinessDocVO> vos = entityPage.getRecords().stream().map(BusinessDocVO::fromEntity).toList();
         populatePartyNames(vos);
+        populateUserNames(vos);
         voPage.setRecords(vos);
         return voPage;
     }
@@ -119,6 +123,7 @@ public class BusinessDocServiceImpl implements BusinessDocService {
             }
         }
         populatePartyNames(List.of(vo));
+        populateUserNames(List.of(vo));
         return vo;
     }
 
@@ -164,12 +169,13 @@ public class BusinessDocServiceImpl implements BusinessDocService {
         entity.setDocDate(dto.getDocDate());
         entity.setPeriod(dto.getPeriod());
         entity.setAmount(dto.getAmount());
-        entity.setSupplierId(dto.getSupplierId());
-        entity.setCustomerId(dto.getCustomerId());
-        entity.setApplicantId(dto.getApplicantId());
-        entity.setDeptId(dto.getDeptId());
-        entity.setSummary(dto.getSummary());
-        entity.setAttachmentIds(dto.getAttachmentIds());
+        // 可选字段: dto 缺省时保留原值, 避免前端 loadDoc 漏字段导致数据被清空
+        if (dto.getSupplierId() != null) entity.setSupplierId(dto.getSupplierId());
+        if (dto.getCustomerId() != null) entity.setCustomerId(dto.getCustomerId());
+        if (dto.getApplicantId() != null) entity.setApplicantId(dto.getApplicantId());
+        if (dto.getDeptId() != null) entity.setDeptId(dto.getDeptId());
+        if (dto.getSummary() != null) entity.setSummary(dto.getSummary());
+        if (StrUtil.isNotBlank(dto.getAttachmentIds())) entity.setAttachmentIds(dto.getAttachmentIds());
         entity.setUpdatedBy(userId);
         docMapper.updateById(entity);
 
@@ -412,5 +418,28 @@ public class BusinessDocServiceImpl implements BusinessDocService {
             if (vo.getCustomerId() != null) vo.setCustomerName(customerMap.get(vo.getCustomerId()));
             if (vo.getSupplierId() != null) vo.setSupplierName(vendorMap.get(vo.getSupplierId()));
         }
+    }
+
+    private void populateUserNames(List<BusinessDocVO> vos) {
+        if (vos.isEmpty()) return;
+        List<Long> userIds = vos.stream()
+                .flatMap(vo -> java.util.stream.Stream.of(vo.getCreatedBy(), vo.getSubmittedBy(), vo.getApprovedBy()))
+                .filter(java.util.Objects::nonNull)
+                .distinct()
+                .toList();
+        if (userIds.isEmpty()) return;
+        Map<Long, String> userNameMap = userMapper.selectBatchIds(userIds).stream()
+                .collect(Collectors.toMap(UserEntity::getId, this::resolveUserDisplayName));
+        for (BusinessDocVO vo : vos) {
+            if (vo.getCreatedBy() != null) vo.setCreatedByName(userNameMap.get(vo.getCreatedBy()));
+            if (vo.getSubmittedBy() != null) vo.setSubmittedByName(userNameMap.get(vo.getSubmittedBy()));
+            if (vo.getApprovedBy() != null) vo.setApprovedByName(userNameMap.get(vo.getApprovedBy()));
+        }
+    }
+
+    private String resolveUserDisplayName(UserEntity user) {
+        if (user.getRealName() != null && !user.getRealName().isBlank()) return user.getRealName();
+        if (user.getNickname() != null && !user.getNickname().isBlank()) return user.getNickname();
+        return user.getUsername();
     }
 }
