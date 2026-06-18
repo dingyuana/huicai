@@ -1,10 +1,13 @@
 package com.huicai.module.arap.service.impl;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.huicai.common.exception.BusinessException;
 import com.huicai.module.arap.dto.PayableVO;
 import com.huicai.module.arap.entity.PayableEntity;
 import com.huicai.module.arap.mapper.PayableMapper;
+import com.huicai.module.arap.mapper.VendorMapper;
+import com.huicai.module.system.mapper.UserMapper;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -12,6 +15,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
@@ -23,22 +27,28 @@ import static org.mockito.Mockito.*;
 class PayableServiceImplTest {
 
     @Mock private PayableMapper mapper;
+    @Mock private VendorMapper vendorMapper;
+    @Mock private UserMapper userMapper;
 
     @InjectMocks private PayableServiceImpl service;
 
     @Test
     void pageQuery_带vendorId和period_调selectPage() {
-        when(mapper.selectPage(any(), any())).thenReturn(null);
+        Page<PayableEntity> emptyPage = new Page<>(1, 20, 0);
+        when(mapper.selectPage(any(), any())).thenReturn(emptyPage);
         IPage<PayableVO> r = service.pageQuery(1L, "202606", 1, 20);
-        assertNull(r);
+        assertNotNull(r);
+        assertEquals(0, r.getTotal());
         verify(mapper).selectPage(any(), any());
     }
 
     @Test
     void pageQuery_无参_走默认值() {
-        when(mapper.selectPage(any(), any())).thenReturn(null);
+        Page<PayableEntity> emptyPage = new Page<>(1, 20, 0);
+        when(mapper.selectPage(any(), any())).thenReturn(emptyPage);
         IPage<PayableVO> r = service.pageQuery(null, null, null, null);
-        assertNull(r);
+        assertNotNull(r);
+        assertEquals(0, r.getTotal());
         verify(mapper).selectPage(any(), any());
     }
 
@@ -64,7 +74,7 @@ class PayableServiceImplTest {
         PayableEntity p = new PayableEntity();
         p.setAmount(new BigDecimal("1000"));
         // settledAmount null
-        PayableVO r = service.create(p);
+        PayableEntity r = service.create(p);
         assertEquals(0, BigDecimal.ZERO.compareTo(r.getSettledAmount()));
         assertEquals(0, new BigDecimal("1000").compareTo(r.getUnsettledAmount()));
         verify(mapper).insert(p);
