@@ -5,6 +5,7 @@ import com.huicai.module.finance.service.impl.ClearDataService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -16,6 +17,7 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/v1/system")
 @RequiredArgsConstructor
+@PreAuthorize("hasRole('ADMIN')")
 public class ClearDataController {
 
     private final ClearDataService clearDataService;
@@ -46,5 +48,12 @@ public class ClearDataController {
     public R<Map<String, Object>> clearVouchers() {
         int count = clearDataService.clearVouchers();
         return R.ok(Map.of("deleted", count, "message", "已清空所有凭证及相关引用"));
+    }
+
+    @Operation(summary = "清空业务单据(含明细行)")
+    @PostMapping("/clear-business-docs")
+    public R<Map<String, Object>> clearBusinessDocs() {
+        int count = clearDataService.clearBusinessDocs();
+        return R.ok(Map.of("deleted", count, "message", "已清空所有业务单据及明细行"));
     }
 }
