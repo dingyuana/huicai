@@ -4,7 +4,7 @@
       <div class="page-header">
         <span class="page-title">单据详情</span>
         <div>
-          <el-button @click="goBack">返回</el-button>
+          <el-button v-if="!isEmbedded" @click="goBack">返回</el-button>
           <el-button v-if="doc?.status === 'DRAFT'" type="primary" @click="goEdit">编辑</el-button>
           <el-button v-if="doc?.status === 'DRAFT'" type="success" @click="onSubmit">提交</el-button>
           <el-button v-if="doc?.status === 'SUBMITTED'" type="primary" @click="onApprove">审批</el-button>
@@ -21,12 +21,17 @@
         <el-descriptions-item label="会计期间">{{ doc.period }}</el-descriptions-item>
         <el-descriptions-item label="金额">{{ fmtAmount(doc.amount) }}</el-descriptions-item>
         <el-descriptions-item label="状态">
-          <el-tag :type="statusType(doc.status) as 'success' | 'warning' | 'info' | 'primary' | 'danger'">
+          <el-tag :type="statusType(doc.status)">
             {{ DOC_STATUS_LABELS[doc.status] || doc.status }}
           </el-tag>
         </el-descriptions-item>
         <el-descriptions-item label="客户" :span="3">{{ doc.customerName || '-' }}</el-descriptions-item>
         <el-descriptions-item label="供应商" :span="3">{{ doc.supplierName || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="已核销金额">{{ doc.settledAmount != null ? fmtAmount(doc.settledAmount) : '-' }}</el-descriptions-item>
+        <el-descriptions-item label="未核销金额">
+          <span v-if="doc.unsettledAmount != null" style="color:#e6a23c;font-weight:600">{{ fmtAmount(doc.unsettledAmount) }}</span>
+          <span v-else>-</span>
+        </el-descriptions-item>
         <el-descriptions-item label="摘要" :span="3">{{ doc.enrichedSummary || doc.summary || '-' }}</el-descriptions-item>
         <el-descriptions-item label="凭证ID">
           <span v-if="doc.voucherId">#{{ doc.voucherId }}</span>
@@ -54,6 +59,7 @@
       </el-table>
     </el-card>
 
+    <!-- Reconciliation drawer -->
     <el-drawer v-model="reconDrawerVisible" :title="reconDrawerTitle" size="640px" destroy-on-close>
       <template v-if="reconLoading">
         <div style="text-align:center;padding:40px">
@@ -63,11 +69,10 @@
       </template>
       <template v-else-if="reconResult">
         <el-alert
-          :title="reconResult.items?.length ? `匹配到 ${reconResult.items.length} 个候选目标` : '暂无匹配目标 — 对方可能尚未开票, 建议走预收/预付路径'"
+          :title="reconResult.items?.length ? `匹配到 ${reconResult.items.length} 个候选目标` : '暂无匹配目标'"
           :type="reconResult.items?.length ? 'success' : 'info'"
           :closable="false"
-          style="margin-bottom:16px"
-        />
+          style="margin-bottom:16px" />
         <el-table v-if="reconResult.items?.length" :data="reconResult.items" border stripe size="small">
           <el-table-column label="类型" width="80" align="center">
             <template #default="{ row }">
@@ -97,9 +102,7 @@
             </template>
           </el-table-column>
         </el-table>
-        <p v-else style="text-align:center;color:#909399;padding:24px 0">
-          若供应商/客户尚未开票, 凭 {{ doc?.voucherId ? '已生成凭证' : '审批后' }} 的单据可直接走"预付/预收"挂账路径
-        </p>
+        <p v-else style="text-align:center;color:#909399;padding:24px 0">暂无匹配目标</p>
       </template>
     </el-drawer>
   </div>
@@ -119,10 +122,16 @@ import {
   type RecommendItem, type ReconciliationRecommendResult,
 } from '@/api/modules/reconciliation'
 
+const props = defineProps<{
+  docId?: number | string
+}>()
+
 const route = useRoute()
 const router = useRouter()
 const doc = ref<BusinessDocVO | null>(null)
-const id = Number(route.query.id)
+
+const isEmbedded = computed(() => props.docId != null)
+const effectiveId = computed(() => Number(props.docId ?? route.query.id))
 
 const reconDrawerVisible = ref(false)
 const reconLoading = ref(false)
@@ -140,25 +149,11 @@ const canReconcile = computed(() => {
 })
 
 function statusType(s: string) {
-  switch (s) {
-    case 'DRAFT': return 'info'
-    case 'SUBMITTED': return 'primary'
-    case 'APPROVED': return 'warning'
-    case 'VOUCHERED': return 'success'
-    case 'REJECTED': return 'danger'
-    default: return 'info'
-  }
+  return s === 'DRAFT' ? 'info' : s === 'SUBMITTED' ? 'primary' : s === 'APPROVED' ? 'warning' : s === 'VOUCHERED' ? 'success' : 'danger'
 }
 
 function matchLevelType(level: string) {
-  switch (level) {
-    case 'L1': return 'success'
-    case 'L2': return 'primary'
-    case 'L3': return 'primary'
-    case 'L4': return 'warning'
-    case 'L5': return 'danger'
-    default: return 'info'
-  }
+  return level === 'L1' ? 'success' : level === 'L2' || level === 'L3' ? 'primary' : level === 'L4' ? 'warning' : 'danger'
 }
 
 function fmtAmount(v?: number) {
@@ -166,29 +161,29 @@ function fmtAmount(v?: number) {
 }
 
 function goBack() { router.push({ name: 'BusinessDocList' }) }
-function goEdit() { router.push({ name: 'BusinessDocEdit', query: { mode: 'edit', id: String(id) } }) }
+function goEdit() { router.push({ name: 'BusinessDocEdit', query: { mode: 'edit', id: String(effectiveId.value) } }) }
 
 async function fetchData() {
-  doc.value = await getBusinessDoc(id)
+  doc.value = await getBusinessDoc(effectiveId.value)
 }
 
 async function onSubmit() {
-  await submitBusinessDoc(id)
+  await submitBusinessDoc(effectiveId.value)
   ElMessage.success('提交成功')
   await fetchData()
 }
 async function onApprove() {
-  await approveBusinessDoc(id)
+  await approveBusinessDoc(effectiveId.value)
   ElMessage.success('审批成功')
   await fetchData()
 }
 async function onReject() {
-  await rejectBusinessDoc(id)
+  await rejectBusinessDoc(effectiveId.value)
   ElMessage.success('已驳回')
   await fetchData()
 }
 async function onGenerateVoucher() {
-  await generateVoucherFromDoc(id)
+  await generateVoucherFromDoc(effectiveId.value)
   ElMessage.success('凭证已生成, 请前往凭证管理提交记账')
   await fetchData()
 }

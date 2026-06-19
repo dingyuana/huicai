@@ -2,6 +2,7 @@ package com.huicai.module.finance.mapper;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.huicai.module.finance.entity.BusinessDocEntryEntity;
+import org.apache.ibatis.annotations.Delete;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
@@ -11,4 +12,7 @@ import java.util.List;
 public interface BusinessDocEntryMapper extends BaseMapper<BusinessDocEntryEntity> {
     List<BusinessDocEntryEntity> selectByDocId(@Param("docId") Long docId);
     int deleteByDocId(@Param("docId") Long docId);
+
+    @Delete("DELETE FROM t_business_doc_entry")
+    int physicalDeleteAll();
 }

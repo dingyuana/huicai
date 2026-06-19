@@ -14,4 +14,7 @@ public interface BusinessDocMapper extends BaseMapper<BusinessDocEntity> {
 
     @Update("UPDATE t_business_doc SET voucher_id = NULL, status = 'DRAFT' WHERE voucher_id IS NOT NULL")
     int nullOutVoucherIds();
+
+    @Delete("DELETE FROM t_business_doc")
+    int physicalDeleteAll();
 }

@@ -95,3 +95,11 @@ export function payableAging(vendorId: number): Promise<any> {
 export function provisionBadDebtAging(period: string, ratios: Record<string, number>): Promise<any> {
   return request.post('/bad-debts/provision/aging', ratios, { params: { period } })
 }
+
+export function clearReceivables(): Promise<any> {
+  return request.post('/system/clear-receivables')
+}
+
+export function clearPayables(): Promise<any> {
+  return request.post('/system/clear-payables')
+}

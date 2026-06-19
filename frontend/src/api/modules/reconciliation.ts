@@ -44,8 +44,8 @@ export function executeReconciliation(data: {
   return request.post('/reconciliation/execute', data)
 }
 
-export function reverseReconciliation(logId: number): Promise<void> {
-  return request.post(`/reconciliation/${logId}/reverse`)
+export function reverseReconciliation(logId: number, reason?: string): Promise<void> {
+  return request.post(`/reconciliation/${logId}/reverse`, null, { params: { reason: reason || '' } })
 }
 
 export function getReconciliationRecords(sourceDocType: string, sourceDocId: number): Promise<any[]> {

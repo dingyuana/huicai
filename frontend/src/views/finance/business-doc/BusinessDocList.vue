@@ -10,11 +10,6 @@
       </div>
 
       <el-form :model="query" inline class="filter-form">
-        <el-form-item label="单据类型">
-          <el-select v-model="query.docType" placeholder="全部" clearable style="width:140px">
-            <el-option v-for="(label, value) in DOC_TYPE_LABELS" :key="value" :label="label" :value="value" />
-          </el-select>
-        </el-form-item>
         <el-form-item label="状态">
           <el-select v-model="query.status" placeholder="全部" clearable style="width:130px">
             <el-option v-for="(label, value) in DOC_STATUS_LABELS" :key="value" :label="label" :value="value" />
@@ -31,6 +26,16 @@
           <el-button @click="onReset">重置</el-button>
         </el-form-item>
       </el-form>
+
+      <el-radio-group v-model="query.docType" class="doc-type-tabs" @change="onSearch">
+        <el-radio-button :value="''">全部 ({{ totalCount }})</el-radio-button>
+        <el-radio-button
+          v-for="(label, value) in DOC_TYPE_LABELS"
+          :key="value"
+          :value="value">
+          {{ label }} ({{ docTypeCounts[value] || 0 }})
+        </el-radio-button>
+      </el-radio-group>
 
       <el-table :data="list" v-loading="loading" border stripe>
         <el-table-column prop="docNo" label="单据号" width="160" />
@@ -91,6 +96,10 @@
         />
       </div>
     </el-card>
+
+    <el-dialog v-model="detailDialogVisible" title="单据详情" width="900px" top="5vh" destroy-on-close @closed="onDetailClose">
+      <BusinessDocDetail v-if="selectedDocId" :docId="selectedDocId" />
+    </el-dialog>
   </div>
 </template>
 
@@ -104,12 +113,17 @@ import {
   reverseBusinessDoc, DOC_TYPE_LABELS, DOC_STATUS_LABELS,
   type BusinessDocVO, type BusinessDocQuery,
 } from '@/api/modules/businessDoc'
+import BusinessDocDetail from './BusinessDocDetail.vue'
 
 const router = useRouter()
 const loading = ref(false)
 const list = ref<BusinessDocVO[]>([])
 const total = ref(0)
+const totalCount = ref(0)
+const docTypeCounts = ref<Record<string, number>>({})
 const query = ref<BusinessDocQuery>({ current: 1, size: 20 })
+const detailDialogVisible = ref(false)
+const selectedDocId = ref<number | null>(null)
 
 function statusType(s: string) {
   switch (s) {
@@ -125,6 +139,19 @@ function statusType(s: string) {
 
 function fmtAmount(v: number) {
   return v == null ? '' : Number(v).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+
+async function fetchCounts() {
+  try {
+    const all = await getBusinessDocPage({ current: 1, size: 1 }) as any
+    totalCount.value = all.total || 0
+    const counts: Record<string, number> = {}
+    for (const key of Object.keys(DOC_TYPE_LABELS)) {
+      const res = await getBusinessDocPage({ docType: key, current: 1, size: 1 }) as any
+      counts[key] = res.total || 0
+    }
+    docTypeCounts.value = counts
+  } catch { /* ignore */ }
 }
 
 async function fetchData() {
@@ -156,7 +183,14 @@ function goEdit(row: BusinessDocVO) {
   router.push({ name: 'BusinessDocEdit', query: { mode: 'edit', id: String(row.id) } })
 }
 function goDetail(row: BusinessDocVO) {
-  router.push({ name: 'BusinessDocDetail', query: { id: String(row.id) } })
+  selectedDocId.value = row.id
+  detailDialogVisible.value = true
+}
+
+function onDetailClose() {
+  detailDialogVisible.value = false
+  selectedDocId.value = null
+  fetchData()
 }
 
 async function onDelete(row: BusinessDocVO) {
@@ -190,7 +224,10 @@ async function onReverse(row: BusinessDocVO) {
   await fetchData()
 }
 
-onMounted(fetchData)
+onMounted(async () => {
+  await fetchCounts()
+  await fetchData()
+})
 </script>
 
 <style scoped>
@@ -206,5 +243,8 @@ onMounted(fetchData)
   margin-top: 16px;
   display: flex;
   justify-content: flex-end;
+}
+.doc-type-tabs {
+  margin-bottom: 12px;
 }
 </style>

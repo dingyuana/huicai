@@ -29,6 +29,8 @@ public class BusinessDocVO {
     private String source;
     private String attachmentIds;
     private Long voucherId;
+    private BigDecimal settledAmount;
+    private BigDecimal unsettledAmount;
     private Long createdBy;
     private String createdByName;
     private LocalDateTime createdAt;

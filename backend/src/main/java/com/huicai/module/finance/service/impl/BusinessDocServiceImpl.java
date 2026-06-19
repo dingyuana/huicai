@@ -31,8 +31,12 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.huicai.module.arap.entity.CustomerEntity;
 import com.huicai.module.arap.entity.VendorEntity;
+import com.huicai.module.arap.entity.ReceivableEntity;
+import com.huicai.module.arap.entity.PayableEntity;
 import com.huicai.module.arap.mapper.CustomerMapper;
 import com.huicai.module.arap.mapper.VendorMapper;
+import com.huicai.module.arap.mapper.ReceivableMapper;
+import com.huicai.module.arap.mapper.PayableMapper;
 import com.huicai.module.system.entity.UserEntity;
 import com.huicai.module.system.mapper.UserMapper;
 import java.math.BigDecimal;
@@ -87,6 +91,8 @@ public class BusinessDocServiceImpl implements BusinessDocService {
     private final VoucherTypeService voucherTypeService;
     private final CustomerMapper customerMapper;
     private final VendorMapper vendorMapper;
+    private final ReceivableMapper receivableMapper;
+    private final PayableMapper payableMapper;
     private final UserMapper userMapper;
 
     @Override
@@ -134,7 +140,36 @@ public class BusinessDocServiceImpl implements BusinessDocService {
         populatePartyNames(List.of(vo));
         populateUserNames(List.of(vo));
         vo.setEnrichedSummary(enrichSummary(entity));
+        populateSettlementAmounts(vo, entity);
         return vo;
+    }
+
+    private void populateSettlementAmounts(BusinessDocVO vo, BusinessDocEntity entity) {
+        if ("RECEIPT".equals(entity.getDocType())) {
+            List<ReceivableEntity> recvList = receivableMapper.selectList(
+                    new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<ReceivableEntity>()
+                            .eq(ReceivableEntity::getDocId, entity.getId()));
+            BigDecimal totalSettled = BigDecimal.ZERO;
+            BigDecimal totalAmount = BigDecimal.ZERO;
+            for (ReceivableEntity r : recvList) {
+                totalSettled = totalSettled.add(r.getSettledAmount() != null ? r.getSettledAmount() : BigDecimal.ZERO);
+                totalAmount = totalAmount.add(r.getAmount() != null ? r.getAmount() : BigDecimal.ZERO);
+            }
+            vo.setSettledAmount(totalSettled);
+            vo.setUnsettledAmount(totalAmount.subtract(totalSettled));
+        } else if ("PAYMENT".equals(entity.getDocType())) {
+            List<PayableEntity> payList = payableMapper.selectList(
+                    new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<PayableEntity>()
+                            .eq(PayableEntity::getDocId, entity.getId()));
+            BigDecimal totalSettled = BigDecimal.ZERO;
+            BigDecimal totalAmount = BigDecimal.ZERO;
+            for (PayableEntity p : payList) {
+                totalSettled = totalSettled.add(p.getSettledAmount() != null ? p.getSettledAmount() : BigDecimal.ZERO);
+                totalAmount = totalAmount.add(p.getAmount() != null ? p.getAmount() : BigDecimal.ZERO);
+            }
+            vo.setSettledAmount(totalSettled);
+            vo.setUnsettledAmount(totalAmount.subtract(totalSettled));
+        }
     }
 
     @Override
