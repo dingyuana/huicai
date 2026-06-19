@@ -4,6 +4,7 @@ import com.huicai.module.ai.service.AiTaskService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 import java.util.Map;
@@ -14,6 +15,7 @@ import java.util.Map;
  */
 @Slf4j
 @Component
+@ConditionalOnProperty(name = "ai.enabled", havingValue = "true", matchIfMissing = false)
 @RequiredArgsConstructor
 public class AiResultListener {
 

@@ -3,6 +3,7 @@ package com.huicai.module.finance.service.impl;
 import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.huicai.common.exception.BusinessException;
+import com.huicai.module.arap.constant.ArapStatus;
 import com.huicai.module.arap.entity.CustomerEntity;
 import com.huicai.module.arap.entity.ReceivableEntity;
 import com.huicai.module.arap.mapper.CustomerMapper;
@@ -573,6 +574,7 @@ public class SalesInvoiceImportService {
         recv.setSettledAmount(BigDecimal.ZERO);
         recv.setUnsettledAmount(row.totalAmount);
         recv.setSummary(row.goodsName);
+        recv.setStatus(ArapStatus.CONFIRMED);
         receivableMapper.insert(recv);
         log.info("P10-1 销售发票应收单生成: customerId={}, docId={}, amount={}",
                 customerId, doc.getId(), row.totalAmount);

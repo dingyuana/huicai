@@ -3,6 +3,7 @@ package com.huicai.module.finance.service.impl;
 import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.huicai.common.exception.BusinessException;
+import com.huicai.module.arap.constant.ArapStatus;
 import com.huicai.module.arap.entity.PayableEntity;
 import com.huicai.module.arap.entity.VendorEntity;
 import com.huicai.module.arap.mapper.PayableMapper;
@@ -424,6 +425,7 @@ public class InputInvoiceImportService {
         pay.setSettledAmount(BigDecimal.ZERO);
         pay.setUnsettledAmount(row.totalAmount);
         pay.setSummary(row.goodsName);
+        pay.setStatus(ArapStatus.CONFIRMED);
         payableMapper.insert(pay);
         log.info("P10-2 采购发票应付单生成: vendorId={}, docId={}, amount={}",
                 vendorId, doc.getId(), row.totalAmount);

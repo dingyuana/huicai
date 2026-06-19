@@ -4,6 +4,8 @@ import com.huicai.common.exception.BusinessException;
 import com.huicai.module.arap.entity.*;
 import com.huicai.module.arap.mapper.*;
 import com.huicai.module.arap.service.ArapSettlementService;
+import com.huicai.module.arap.service.ReconciliationService;
+import com.huicai.module.arap.service.ReconciliationService.AllocationItem;
 import com.huicai.module.arap.service.ReconciliationService.ExecuteRequest;
 import com.huicai.module.arap.service.ReconciliationService.PreCheckResult;
 import com.huicai.module.arap.service.ReconciliationService.RecommendResult;
@@ -29,6 +31,7 @@ class ReconciliationServiceImplTest {
     @Mock private CustomerMapper customerMapper;
     @Mock private VendorMapper vendorMapper;
     @Mock private ReconciliationLogMapper logMapper;
+    @Mock private ReconciliationExceptionMapper exceptionMapper;
     @Mock private ArapSettlementService settlementService;
 
     @InjectMocks private ReconciliationServiceImpl service;
@@ -271,7 +274,7 @@ class ReconciliationServiceImplTest {
         when(logMapper.selectById(1L)).thenReturn(log);
         when(receivableMapper.selectById(1L)).thenReturn(r);
 
-        service.reverse(1L);
+        service.reverse(1L, "操作失误");
         verify(receivableMapper).updateById(any(ReceivableEntity.class));
         assertEquals("CANCELLED", log.getStatus());
         verify(logMapper).updateById(log);
@@ -280,7 +283,7 @@ class ReconciliationServiceImplTest {
     @Test
     void reverse_记录不存在_throw() {
         when(logMapper.selectById(99L)).thenReturn(null);
-        BusinessException ex = assertThrows(BusinessException.class, () -> service.reverse(99L));
+        BusinessException ex = assertThrows(BusinessException.class, () -> service.reverse(99L, "test"));
         assertTrue(ex.getMessage().contains("不存在"));
     }
 
@@ -290,8 +293,18 @@ class ReconciliationServiceImplTest {
         log.setId(1L);
         log.setStatus("REVERSED");
         when(logMapper.selectById(1L)).thenReturn(log);
-        BusinessException ex = assertThrows(BusinessException.class, () -> service.reverse(1L));
+        BusinessException ex = assertThrows(BusinessException.class, () -> service.reverse(1L, "test"));
         assertTrue(ex.getMessage().contains("已确认"));
+    }
+
+    @Test
+    void reverse_无原因_throw() {
+        ReconciliationLogEntity log = new ReconciliationLogEntity();
+        log.setId(1L);
+        log.setStatus("CONFIRMED");
+        when(logMapper.selectById(1L)).thenReturn(log);
+        BusinessException ex = assertThrows(BusinessException.class, () -> service.reverse(1L, ""));
+        assertTrue(ex.getMessage().contains("原因"));
     }
 
     // ==================== batchExecute ====================
@@ -435,5 +448,110 @@ class ReconciliationServiceImplTest {
     void hasOpenInvoices_参数为null_返回false() {
         assertFalse(service.hasOpenInvoices(null, 5L));
         assertFalse(service.hasOpenInvoices("INVOICE_OUT", null));
+    }
+
+    // ==================== FIFO 自动核销 ====================
+
+    @Test
+    void autoReconcileFifo_金额0_返回空列表() {
+        List<ReconciliationLogEntity> r = service.autoReconcileFifo(1L, "INVOICE_OUT", BigDecimal.ZERO, "receipt", 1L, "202606", "FIFO测试");
+        assertTrue(r.isEmpty());
+        verifyNoInteractions(receivableMapper);
+    }
+
+    @Test
+    void autoReconcileFifo_应收按到期日核销() {
+        ReceivableEntity r1 = stubReceivable(1L, 5L, new BigDecimal("1000"), new BigDecimal("500"));
+        ReceivableEntity r2 = stubReceivable(2L, 5L, new BigDecimal("500"), new BigDecimal("300"));
+        r1.setDueDate(LocalDate.of(2026, 5, 1));
+        r2.setDueDate(LocalDate.of(2026, 6, 1));
+        when(receivableMapper.selectList(any())).thenReturn(List.of(r1, r2));
+        when(receivableMapper.selectById(1L)).thenReturn(r1);
+        when(receivableMapper.selectById(2L)).thenReturn(r2);
+
+        List<ReconciliationLogEntity> logs = service.autoReconcileFifo(5L, "INVOICE_OUT", new BigDecimal("700"), "receipt", 1L, "202606", "FIFO测试");
+        assertEquals(2, logs.size());
+        verify(receivableMapper, times(2)).updateById(any(ReceivableEntity.class));
+        verify(logMapper, times(2)).insert(any(ReconciliationLogEntity.class));
+    }
+
+    // ==================== 异常池 ====================
+
+    @Test
+    void createException_创建异常记录() {
+        ReconciliationExceptionEntity ex = service.createException(
+                "bank_txn", 1L, "INVOICE_OUT", 100L,
+                5L, "CUSTOMER", new BigDecimal("1000"), new BigDecimal("500"),
+                "PARTY_MISMATCH", "客商不匹配", null);
+        verify(exceptionMapper).insert(any(ReconciliationExceptionEntity.class));
+        assertEquals("OPEN", ex.getStatus());
+    }
+
+    @Test
+    void resolveException_正常解决() {
+        ReconciliationExceptionEntity ex = new ReconciliationExceptionEntity();
+        ex.setId(1L);
+        ex.setStatus("OPEN");
+        when(exceptionMapper.selectById(1L)).thenReturn(ex);
+
+        service.resolveException(1L, 1L, "已核对");
+        assertEquals("RESOLVED", ex.getStatus());
+        verify(exceptionMapper).updateById(ex);
+    }
+
+    @Test
+    void resolveException_非OPEN状态_throw() {
+        ReconciliationExceptionEntity ex = new ReconciliationExceptionEntity();
+        ex.setId(1L);
+        ex.setStatus("RESOLVED");
+        when(exceptionMapper.selectById(1L)).thenReturn(ex);
+
+        assertThrows(BusinessException.class, () -> service.resolveException(1L, 1L, "test"));
+    }
+
+    @Test
+    void ignoreException_忽略异常() {
+        ReconciliationExceptionEntity ex = new ReconciliationExceptionEntity();
+        ex.setId(1L);
+        ex.setStatus("OPEN");
+        when(exceptionMapper.selectById(1L)).thenReturn(ex);
+
+        service.ignoreException(1L, 1L, "无需处理");
+        assertEquals("IGNORED", ex.getStatus());
+        verify(exceptionMapper).updateById(ex);
+    }
+
+    @Test
+    void pageExceptions_正常分页() {
+        when(exceptionMapper.selectPage(any(), any())).thenReturn(null);
+        service.pageExceptions("OPEN", "PARTY_MISMATCH", 1, 20);
+        verify(exceptionMapper).selectPage(any(), any());
+    }
+
+    // ==================== 多对多核销 ====================
+
+    @Test
+    void splitAllocate_分配为空_throw() {
+        assertThrows(BusinessException.class, () -> service.splitAllocate(
+                "receipt", 1L, 1L, null,
+                new BigDecimal("500"), List.of(), "202606", "split测试"));
+    }
+
+    @Test
+    void splitAllocate_分配金额超总额_throw() {
+        List<ReconciliationService.AllocationItem> allocs = List.of(
+                new ReconciliationService.AllocationItem("INVOICE_OUT", 1L, new BigDecimal("600"))
+        );
+        assertThrows(BusinessException.class, () -> service.splitAllocate(
+                "receipt", 1L, 1L, null,
+                new BigDecimal("500"), allocs, "202606", "split测试"));
+    }
+
+    @Test
+    void smartAllocate_0金额_返回空() {
+        List<ReconciliationLogEntity> r = service.smartAllocate(
+                "receipt", 1L, 5L, "CUSTOMER", "INVOICE_OUT",
+                BigDecimal.ZERO, "202606", "smart测试");
+        assertTrue(r.isEmpty());
     }
 }
