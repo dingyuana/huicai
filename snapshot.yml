@@ -1,0 +1,12 @@
+- generic [ref=e4]:
+  - heading "慧财智能财务平台" [level=1] [ref=e5]
+  - paragraph [ref=e6]: 企业财务核算全生命周期管理
+  - generic [ref=e7]:
+    - generic [ref=e11]:
+      - img [ref=e14]
+      - textbox "账号" [ref=e16]
+    - generic [ref=e20]:
+      - img [ref=e23]
+      - textbox "密码" [ref=e26]
+    - button "登 录" [ref=e29] [cursor=pointer]:
+      - generic [ref=e30]: 登 录
