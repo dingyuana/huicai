@@ -269,16 +269,24 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '坏账准备', permission: 'bad:debt:list', keepAlive: true },
       },
       {
+        path: 'arap/prepayment',
+        name: 'PrepaymentList',
+        component: () => import('@/views/arap/prepayment/PrepaymentList.vue'),
+        meta: { title: '预收/预付管理', permission: 'prepayment:list', keepAlive: true },
+      },
+      {
         path: 'arap/settlement',
-        name: 'SettlementList',
-        component: () => import('@/views/arap/settlement/SettlementList.vue'),
-        meta: { title: '往来核销', permission: 'arap:settlement:list', keepAlive: true },
+        redirect: 'arap/reconciliation-workbench',
+      },
+      {
+        path: 'finance/arap/reconciliation-workbench',
+        redirect: 'arap/reconciliation-workbench',
       },
       {
         path: 'arap/reconciliation-workbench',
         name: 'ReconciliationWorkbench',
         component: () => import('@/views/arap/reconciliation-workbench/ReconciliationWorkbench.vue'),
-        meta: { title: '核销工作台', permission: 'arap:reconciliation:workbench', keepAlive: true },
+        meta: { title: '往来核销', permission: 'arap:reconciliation:workbench', keepAlive: true },
       },
       // 税务管理
       {

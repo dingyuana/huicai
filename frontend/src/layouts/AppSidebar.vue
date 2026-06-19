@@ -109,7 +109,7 @@
         <el-menu-item index="/arap/receivable">应收明细</el-menu-item>
         <el-menu-item index="/arap/payable">应付明细</el-menu-item>
         <el-menu-item index="/arap/bad-debt">坏账准备</el-menu-item>
-        <el-menu-item index="/arap/settlement">往来核销</el-menu-item>
+        <el-menu-item index="/arap/reconciliation-workbench">往来核销</el-menu-item>
       </el-sub-menu>
 
       <!-- 税务管理 -->

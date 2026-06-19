@@ -16,10 +16,12 @@
       </el-form>
 
       <el-table :data="list" v-loading="loading" border>
-        <el-table-column prop="code" label="客户编码" width="120" />
-        <el-table-column prop="name" label="客户名称" min-width="180" />
-        <el-table-column prop="contactPerson" label="联系人" width="100" />
-        <el-table-column prop="phone" label="电话" width="140" />
+        <el-table-column prop="code" label="客户编码" min-width="180" show-overflow-tooltip />
+        <el-table-column prop="name" label="客户名称" min-width="220" show-overflow-tooltip />
+        <el-table-column prop="contactPerson" label="联系人" min-width="100" show-overflow-tooltip />
+        <el-table-column prop="phone" label="电话" min-width="140" show-overflow-tooltip />
+        <el-table-column prop="email" label="邮箱" min-width="180" show-overflow-tooltip />
+        <el-table-column prop="address" label="地址" min-width="240" show-overflow-tooltip />
         <el-table-column label="信用额度" width="140" align="right">
           <template #default="{ row }">{{ fmtAmount(row.creditLimit) }}</template>
         </el-table-column>
@@ -146,3 +148,28 @@ const onDelete = async (row: any) => {
 
 onMounted(fetchData)
 </script>
+
+<style scoped>
+.customer-list .page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+.page-title { font-size: 16px; font-weight: 600; }
+.filter-form { margin-bottom: 12px; }
+.page-pagination {
+  margin-top: 16px;
+  display: flex;
+  justify-content: flex-end;
+}
+:deep(.el-table .cell) {
+  white-space: normal;
+  word-break: break-all;
+  line-height: 1.4;
+  padding: 4px 6px;
+}
+:deep(.el-table__row td) {
+  padding: 6px 0;
+}
+</style>

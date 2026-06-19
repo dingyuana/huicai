@@ -12,6 +12,9 @@
       <el-descriptions :column="1" border style="margin-bottom:20px">
         <el-descriptions-item label="银行流水数">{{ stats.statements }}</el-descriptions-item>
         <el-descriptions-item label="发票导入记录">{{ stats.invoices }}</el-descriptions-item>
+        <el-descriptions-item label="应收明细数">{{ stats.receivables }}</el-descriptions-item>
+        <el-descriptions-item label="应付明细数">{{ stats.payables }}</el-descriptions-item>
+        <el-descriptions-item label="业务单据数">{{ stats.businessDocs }}</el-descriptions-item>
         <el-descriptions-item label="生成凭证数">{{ stats.vouchers }}</el-descriptions-item>
       </el-descriptions>
 
@@ -61,6 +64,48 @@
         <el-card shadow="hover">
           <div style="display:flex;justify-content:space-between;align-items:center">
             <div>
+              <strong>清空业务单据</strong>
+              <p style="margin:4px 0 0;color:#909399;font-size:12px">删除所有业务单据及明细行（保留银行流水、发票、凭证）</p>
+            </div>
+            <el-popconfirm title="确定清空业务单据?" confirm-button-text="确认清空" @confirm="onClear('businessDocs')">
+              <template #reference>
+                <el-button type="danger" plain>清空业务单据</el-button>
+              </template>
+            </el-popconfirm>
+          </div>
+        </el-card>
+
+        <el-card shadow="hover">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <div>
+              <strong>清空应收明细</strong>
+              <p style="margin:4px 0 0;color:#909399;font-size:12px">删除所有应收明细及关联的核销记录（保留业务单据、凭证）</p>
+            </div>
+            <el-popconfirm title="确定清空所有应收明细?" confirm-button-text="确认清空" @confirm="onClear('receivables')">
+              <template #reference>
+                <el-button type="danger" plain>清空应收明细</el-button>
+              </template>
+            </el-popconfirm>
+          </div>
+        </el-card>
+
+        <el-card shadow="hover">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <div>
+              <strong>清空应付明细</strong>
+              <p style="margin:4px 0 0;color:#909399;font-size:12px">删除所有应付明细及关联的核销记录（保留业务单据、凭证）</p>
+            </div>
+            <el-popconfirm title="确定清空所有应付明细?" confirm-button-text="确认清空" @confirm="onClear('payables')">
+              <template #reference>
+                <el-button type="danger" plain>清空应付明细</el-button>
+              </template>
+            </el-popconfirm>
+          </div>
+        </el-card>
+
+        <el-card shadow="hover">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <div>
               <strong style="color:var(--el-color-danger)">清空全部数据</strong>
               <p style="margin:4px 0 0;color:#909399;font-size:12px">清空银行流水 + 发票记录 + 相关业务单据 + 相关凭证（草稿）</p>
             </div>
@@ -79,12 +124,13 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
-import { clearBankStatements, clearInvoiceRecords, clearVouchers, clearAll } from '@/api/modules/system'
+import { clearBankStatements, clearInvoiceRecords, clearBusinessDocs, clearVouchers, clearAll, clearReceivables, clearPayables } from '@/api/modules/system'
 import { getBankStatementPage } from '@/api/modules/bankStatement'
 import { getBusinessDocPage } from '@/api/modules/businessDoc'
 import { getVoucherPage } from '@/api/modules/voucher'
+import { pageReceivable, pagePayable } from '@/api/modules/arap'
 
-const stats = ref({ statements: 0, invoices: 0, vouchers: 0 })
+const stats = ref({ statements: 0, invoices: 0, receivables: 0, payables: 0, businessDocs: 0, vouchers: 0 })
 
 async function fetchStats() {
   try {
@@ -96,8 +142,20 @@ async function fetchStats() {
     stats.value.invoices = docs.total || 0
   } catch { /* ignore */ }
   try {
+    const docs = await getBusinessDocPage({ current: 1, size: 1 }) as any
+    stats.value.businessDocs = docs.total || 0
+  } catch { /* ignore */ }
+  try {
     const vchs = await getVoucherPage({ current: 1, size: 1 }) as any
     stats.value.vouchers = vchs.total || 0
+  } catch { /* ignore */ }
+  try {
+    const recv = await pageReceivable({ current: 1, size: 1 }) as any
+    stats.value.receivables = recv.total || 0
+  } catch { /* ignore */ }
+  try {
+    const pay = await pagePayable({ current: 1, size: 1 }) as any
+    stats.value.payables = pay.total || 0
   } catch { /* ignore */ }
 }
 
@@ -106,7 +164,10 @@ async function onClear(type: string) {
     let res: any
     if (type === 'statements') res = await clearBankStatements()
     else if (type === 'invoices') res = await clearInvoiceRecords()
+    else if (type === 'businessDocs') res = await clearBusinessDocs()
     else if (type === 'vouchers') res = await clearVouchers()
+    else if (type === 'receivables') res = await clearReceivables()
+    else if (type === 'payables') res = await clearPayables()
     else res = await clearAll()
     ElMessage.success(res.message || '清空完成')
     await fetchStats()

@@ -140,9 +140,7 @@
             <el-table-column prop="createdAt" label="创建时间" width="170" />
             <el-table-column label="操作" width="100" fixed="right">
               <template #default="{row}">
-                <el-popconfirm v-if="row.status==='CONFIRMED'" title="确定反核销?" @confirm="onReverseRecon(row)">
-                  <template #reference><el-button text type="danger" size="small">反核销</el-button></template>
-                </el-popconfirm>
+                <el-button v-if="row.status==='CONFIRMED'" text size="small" type="warning" @click="onReverseRecon(row)">反核销</el-button>
               </template>
             </el-table-column>
           </el-table>
@@ -212,7 +210,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { useRouter } from 'vue-router'
 import {
   pageSettlements, getSettlementDetail, createSettlement,
@@ -343,10 +341,16 @@ async function onViewSettlement(row: ArapSettlement) {
 // Reverse reconciliation
 async function onReverseRecon(row: ReconciliationLog) {
   try {
-    await reverseRecon(row.id)
+    const { value: reason } = await ElMessageBox.prompt('请输入反核销原因', '反核销确认', {
+      confirmButtonText: '确认反核销',
+      cancelButtonText: '取消',
+      inputPlaceholder: '反核销原因（必填）',
+      inputValidator: (v: string) => (v && v.trim() ? true : '请输入反核销原因'),
+    })
+    await reverseRecon(row.id, reason || '')
     ElMessage.success('反核销成功')
     await fetchReconLogs()
-  } catch (e: any) { ElMessage.error(e?.message || '反核销失败') }
+  } catch { /* cancel */ }
 }
 
 // Navigate to workbench

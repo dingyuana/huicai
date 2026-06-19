@@ -32,7 +32,7 @@
           <template #default="{ row }">{{ fmtAmount(row.taxAmount) }}</template>
         </el-table-column>
         <el-table-column prop="taxRate" label="税率" width="80" align="center">
-          <template #default="{ row }">{{ (Number(row.taxRate) * 100).toFixed(0) }}%</template>
+          <template #default="{ row }">{{ Number(row.taxRate).toFixed(2) }}%</template>
         </el-table-column>
         <el-table-column label="状态" width="100" align="center">
           <template #default="{ row }">
@@ -68,9 +68,9 @@
         </el-form-item>
         <el-form-item label="税率" prop="taxRate">
           <el-select v-model="form.taxRate" style="width:100%" @change="recalcTax">
-            <el-option :value="0.13" label="13%" />
-            <el-option :value="0.09" label="9%" />
-            <el-option :value="0.06" label="6%" />
+            <el-option :value="13" label="13%" />
+            <el-option :value="9" label="9%" />
+            <el-option :value="6" label="6%" />
             <el-option :value="0" label="0%" />
           </el-select>
         </el-form-item>
@@ -176,7 +176,7 @@ const total = ref(0)
 const loading = ref(false)
 const dialogVisible = ref(false)
 const formRef = ref<FormInstance>()
-const form = reactive<any>({ invoiceType: 'SPECIAL', taxRate: 0.13 })
+const form = reactive<any>({ invoiceType: 'SPECIAL', taxRate: 13 })
 const rules = {
   invoiceNo: [{ required: true, message: '请输入发票号', trigger: 'blur' }],
   invoiceDate: [{ required: true, message: '请选择开票日期', trigger: 'change' }],
@@ -190,7 +190,7 @@ const fmtAmount = (v: any) => Number(v || 0).toFixed(2)
 
 const recalcTax = () => {
   if (form.amount && form.taxRate != null) {
-    form.taxAmount = Number((form.amount * form.taxRate).toFixed(2))
+    form.taxAmount = Number((form.amount * form.taxRate / 100).toFixed(2))
   }
 }
 
@@ -208,7 +208,7 @@ const fetchData = async () => {
 const openEdit = () => {
   Object.assign(form, {
     id: undefined, invoiceNo: '', invoiceDate: '', customerName: '',
-    amount: 0, taxRate: 0.13, taxAmount: 0, invoiceType: 'SPECIAL', remark: '',
+    amount: 0, taxRate: 13, taxAmount: 0, invoiceType: 'SPECIAL', remark: '',
   })
   dialogVisible.value = true
 }
