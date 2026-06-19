@@ -86,7 +86,7 @@
             <el-button v-if="!row.classification || row.classification === 'pending'"
               text size="small" type="primary" @click="onClassify(row)">分类</el-button>
             <el-button v-if="canReview(row)"
-              text size="small" type="success" @click="onReview(row)">确认</el-button>
+              text size="small" type="success" @click.stop="onReview(row)">确认</el-button>
             <el-button v-if="row.generatedVoucherId" text size="small" type="primary"
               @click="openVoucher(row.generatedVoucherId!)">查看凭证</el-button>
             <el-button v-if="canApprove(row)"
@@ -615,15 +615,23 @@ async function onImportCsv() {
 }
 
 async function onClassify(row: BankStatementVO) {
-  await classifyStatement(row.id)
-  ElMessage.success('分类完成')
-  await refreshAll()
+  try {
+    await classifyStatement(row.id)
+    ElMessage.success('分类完成')
+    await refreshAll()
+  } catch (e: any) {
+    ElMessage.error(e?.message || '分类失败')
+  }
 }
 
 async function onReview(row: BankStatementVO) {
-  await reviewStatement(row.id)
-  ElMessage.success('确认完成')
-  await refreshAll()
+  try {
+    await reviewStatement(row.id)
+    ElMessage.success('确认完成')
+    await refreshAll()
+  } catch (e: any) {
+    ElMessage.error(e?.message || '确认失败')
+  }
 }
 
 async function onApprove(row: BankStatementVO) {

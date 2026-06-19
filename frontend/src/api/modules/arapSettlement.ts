@@ -82,8 +82,8 @@ export function getReconRecords(sourceDocType: string, sourceDocId: number): Pro
   return request.get('/reconciliation/records', { params: { sourceDocType, sourceDocId } })
 }
 
-export function reverseRecon(logId: number): Promise<void> {
-  return request.post(`/reconciliation/${logId}/reverse`)
+export function reverseRecon(logId: number, reason?: string): Promise<void> {
+  return request.post(`/reconciliation/${logId}/reverse`, null, { params: { reason: reason || '' } })
 }
 
 export function pageReconLogs(params: {

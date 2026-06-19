@@ -16,4 +16,5 @@ public interface BankJournalMapper extends BaseMapper<BankJournalEntity> {
     int updateReconciled(@Param("id") Long id, @Param("reconciled") Boolean reconciled);
     BigDecimal sumAmountByAccount(@Param("accountId") Long accountId);
     List<BankJournalEntity> selectUnreconciled(@Param("accountId") Long accountId);
+    int nullOutBusinessDocId();
 }

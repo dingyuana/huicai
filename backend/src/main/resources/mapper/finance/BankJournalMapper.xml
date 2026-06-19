@@ -31,4 +31,8 @@
           AND deleted = 0
         ORDER BY tx_date
     </select>
+
+    <update id="nullOutBusinessDocId">
+        UPDATE t_bank_journal SET business_doc_id = NULL WHERE business_doc_id IS NOT NULL
+    </update>
 </mapper>

@@ -4,6 +4,7 @@ import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.huicai.common.exception.BusinessException;
 import com.huicai.module.arap.dto.ExpenseReimbursementVO;
+import com.huicai.module.arap.constant.ArapStatus;
 import com.huicai.module.arap.entity.PayableEntity;
 import com.huicai.module.arap.entity.*;
 import com.huicai.module.arap.mapper.*;
@@ -576,58 +577,51 @@ public class AutoGenerationService {
         String counterName = stmt.getCounterAccount();
 
         if ("business_receipt".equals(classification)) {
-            // P19: 若 doc 已在前置解析中设置了 customerId, 直接使用
+            // 银行流水代表款项已收，不应创建新的应收单。
+            // 检查该客户是否有未结清应收单，有则按 FIFO 核销；无则跳过。
             Long customerId = doc.getCustomerId();
             if (customerId == null) {
                 customerId = findCustomerByName(counterName);
             }
             if (customerId == null) {
-                log.warn("P10-3 应收单跳过: 客户名 '{}' 无法匹配", counterName);
+                log.warn("银行流水收款跳过: 客户名 '{}' 无法匹配", counterName);
                 return;
             }
-            ReceivableEntity recv = new ReceivableEntity();
-            recv.setCustomerId(customerId);
-            recv.setDocId(doc.getId());
-            recv.setVoucherId(doc.getVoucherId());
-            recv.setPeriod(period);
-            recv.setTxDate(stmt.getTxDate());
-            recv.setAmount(amount);
-            recv.setSettledAmount(BigDecimal.ZERO);
-            recv.setUnsettledAmount(amount);
-            recv.setSummary(stmt.getSummary());
-            receivableMapper.insert(recv);
             doc.setCustomerId(customerId);
-            log.info("P10-3 应收单生成: statementId={}, customerId={}, docId={}, amount={}",
-                    stmt.getId(), customerId, doc.getId(), amount);
 
-            // P10-4: 自动核销应收（停在 CONFIRMED 状态）
-            try {
-                reconciliationService.execute(new ReconciliationService.ExecuteRequest(
+            if (reconciliationService.hasOpenInvoices("INVOICE_OUT", customerId)) {
+                reconciliationService.autoReconcileFifo(
+                        customerId, "INVOICE_OUT", amount,
                         "bank_txn", stmt.getId(),
-                        "INVOICE_OUT", recv.getId(),
-                        amount, new BigDecimal("100"),
-                        "AUTO", customerId, null,
-                        period, "P10-4 银行流水自动核销"
-                ));
-                log.info("P10-4 应收自动核销完成: statementId={}, receivableId={}, amount={}",
-                        stmt.getId(), recv.getId(), amount);
-            } catch (Exception e) {
-                log.warn("P10-4 应收自动核销失败(不影响主流程): {}", e.getMessage());
+                        period, "银行流水自动核销应收");
+                log.info("银行流水收款按 FIFO 核销完成: customerId={}, amount={}, counterName={}",
+                        customerId, amount, counterName);
+            } else {
+                log.info("客户 '{}' 无未结清应收，银行流水收款直接确认，不生成应收明细", counterName);
             }
+
         } else if ("business_payment".equals(classification)) {
-            // P19: 若 doc 已在前置解析中设置了 supplierId, 直接使用
+            // 银行流水代表款项已付，不应创建新的应付单。
+            // 检查该供应商是否有未结清应付单，有则按 FIFO 核销。
             Long vendorId = doc.getSupplierId();
             if (vendorId == null) {
                 vendorId = findVendorByName(counterName);
             }
             if (vendorId == null) {
-                log.warn("P10-3 应付单跳过: 供应商名 '{}' 无法匹配", counterName);
+                log.warn("银行流水付款跳过: 供应商名 '{}' 无法匹配", counterName);
                 return;
             }
-            // P12-3: 预收/预付检测 — 判断供应商是否已有未结清应付
-            boolean hasOpenPayables = reconciliationService.hasOpenInvoices("INVOICE_IN", vendorId);
-            if (!hasOpenPayables) {
-                // 无未结清应付，走预付款路径
+            doc.setSupplierId(vendorId);
+
+            if (reconciliationService.hasOpenInvoices("INVOICE_IN", vendorId)) {
+                reconciliationService.autoReconcileFifo(
+                        vendorId, "INVOICE_IN", amount,
+                        "bank_txn", stmt.getId(),
+                        period, "银行流水自动核销应付");
+                log.info("银行流水付款按 FIFO 核销完成: vendorId={}, amount={}, counterName={}",
+                        vendorId, amount, counterName);
+            } else {
+                // P12-3: 无未结清应付，走预付款路径
                 log.info("P12-3 供应商 '{}' 无未结清应付，走预付款路径", counterName);
                 PrepaymentEntity prepay = new PrepaymentEntity();
                 prepay.setTenantId(1L);
@@ -640,49 +634,17 @@ public class AutoGenerationService {
                 prepay.setSettledAmount(BigDecimal.ZERO);
                 prepay.setUnsettledAmount(amount);
                 prepay.setSummary(stmt.getSummary());
-                prepay.setStatus("DRAFT");
+                prepay.setStatus(ArapStatus.DRAFT);
                 prepay.setSourceDocType("bank_txn");
                 prepay.setSourceDocId(stmt.getId());
                 prepay.setCreatedBy(String.valueOf(userId != null ? userId : DEFAULT_USER_ID));
                 prepaymentMapper.insert(prepay);
-                doc.setSupplierId(vendorId);
                 log.info("P12-3 预付款生成: statementId={}, vendorId={}, docId={}, amount={}",
                         stmt.getId(), vendorId, doc.getId(), amount);
-            } else {
-                // 有未结清应付，走应付路径
-                PayableEntity pay = new PayableEntity();
-                pay.setVendorId(vendorId);
-                pay.setDocId(doc.getId());
-                pay.setVoucherId(doc.getVoucherId());
-                pay.setPeriod(period);
-                pay.setTxDate(stmt.getTxDate());
-                pay.setAmount(amount);
-                pay.setSettledAmount(BigDecimal.ZERO);
-                pay.setUnsettledAmount(amount);
-                pay.setSummary(stmt.getSummary());
-                payableMapper.insert(pay);
-                doc.setSupplierId(vendorId);
-                log.info("P10-3 应付单生成: statementId={}, vendorId={}, docId={}, amount={}",
-                        stmt.getId(), vendorId, doc.getId(), amount);
-
-                // P10-4: 自动核销应付（停在 CONFIRMED 状态）
-                try {
-                    reconciliationService.execute(new ReconciliationService.ExecuteRequest(
-                            "bank_txn", stmt.getId(),
-                            "INVOICE_IN", pay.getId(),
-                            amount, new BigDecimal("100"),
-                            "AUTO", null, vendorId,
-                            period, "P10-4 银行流水自动核销"
-                    ));
-                    log.info("P10-4 应付自动核销完成: statementId={}, payableId={}, amount={}",
-                            stmt.getId(), pay.getId(), amount);
-                } catch (Exception e) {
-                    log.warn("P10-4 应付自动核销失败(不影响主流程): {}", e.getMessage());
-                }
             }
         } else {
             // internal_transfer / salary_payment 等不走应收/应付
-            log.debug("P10-3 跳过: classification={}, 不需要应收/应付单", classification);
+            log.debug("跳过: classification={}, 不需要应收/应付单", classification);
         }
     }
 

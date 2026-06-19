@@ -44,14 +44,14 @@
         </el-table-column>
         <el-table-column label="确认状态" width="90" align="center">
           <template #default="{ row }">
-            <el-tag :type="row.reviewStatus === 'CONFIRMED' ? 'success' : 'warning'" size="small">
-              {{ row.reviewStatus === 'CONFIRMED' ? '已确认' : '待确认' }}
+            <el-tag :type="canShowRecommend(row) ? 'success' : 'warning'" size="small">
+              {{ canShowRecommend(row) ? '已确认' : '待确认' }}
             </el-tag>
           </template>
         </el-table-column>
         <el-table-column label="核销操作" width="150" fixed="right">
           <template #default="{ row }">
-            <el-button v-if="row.reviewStatus === 'CONFIRMED'"
+            <el-button v-if="canShowRecommend(row)"
               text size="small" type="primary" @click.stop="onShowRecommend(row)">
               核销推荐
             </el-button>
@@ -71,8 +71,8 @@
       />
     </el-card>
 
-    <!-- 核销推荐抽屉 -->
-    <el-drawer v-model="recommendDrawerVisible" :title="drawerTitle" size="600px" destroy-on-close>
+    <!-- 核销推荐弹窗 -->
+    <el-dialog v-model="recommendDialogVisible" :title="drawerTitle" width="650px" destroy-on-close>
       <template v-if="recommendLoading">
         <div style="text-align:center;padding:40px">
           <el-icon class="is-loading" :size="32"><Loading /></el-icon>
@@ -84,10 +84,10 @@
         <el-alert :title="recommendResult.message" :type="recommendResult.items?.length ? 'success' : 'info'" :closable="false" style="margin-bottom:16px" />
 
         <el-table v-if="recommendResult.items?.length" :data="recommendResult.items" border stripe size="small">
-          <el-table-column label="单据类型" width="100" align="center">
+          <el-table-column label="发票类型" width="100" align="center">
             <template #default="{ row }">
               <el-tag :type="row.targetDocType === 'INVOICE_OUT' ? 'success' : 'warning'" size="small">
-                {{ row.targetDocType === 'INVOICE_OUT' ? '应收' : '应付' }}
+                {{ row.targetDocType === 'INVOICE_OUT' ? '销售发票' : '采购发票' }}
               </el-tag>
             </template>
           </el-table-column>
@@ -98,10 +98,10 @@
           <el-table-column label="未核销金额" width="120" align="right">
             <template #default="{ row }">{{ fmtAmount(row.unsettledAmount) }}</template>
           </el-table-column>
-          <el-table-column label="匹配级别" width="100" align="center">
+          <el-table-column label="匹配级别" width="150" align="center">
             <template #default="{ row }">
-              <el-tag :type="matchLevelType(row.matchLevel)" size="small">
-                {{ row.matchLevel }}
+              <el-tag :type="matchLevelType(row.matchLevel)" size="small" effect="plain">
+                {{ MATCH_LEVEL_LABELS[row.matchLevel] || row.matchLevel }}
               </el-tag>
             </template>
           </el-table-column>
@@ -122,7 +122,25 @@
 
         <p v-else style="text-align:center;color:#909399;padding:20px">暂无匹配的核销项</p>
       </template>
-    </el-drawer>
+      <template #footer>
+        <div style="display:flex;justify-content:space-between;align-items:center;width:100%">
+          <span v-if="recommendResult" style="color:#909399;font-size:12px">
+            共 {{ recommendResult.items?.length || 0 }} 项，其中精确匹配
+            {{ countExactMatches() }} 项 (L1/L2/L3)
+          </span>
+          <div>
+            <el-button @click="recommendDialogVisible = false">关闭</el-button>
+            <el-button
+              type="success"
+              :disabled="countExactMatches() === 0 || batchReconciling"
+              :loading="batchReconciling"
+              @click="onBatchReconcile">
+              自动核销精确匹配 ({{ countExactMatches() }})
+            </el-button>
+          </div>
+        </div>
+      </template>
+    </el-dialog>
 
     <!-- 核销预检查对话框 -->
     <el-dialog v-model="preCheckDialogVisible" title="核销预检查" width="480px" destroy-on-close>
@@ -173,6 +191,14 @@ const CLASSIFICATION_LABELS: Record<string, string> = {
   business_payment: '业务付款',
 }
 
+const MATCH_LEVEL_LABELS: Record<string, string> = {
+  L1: 'L1 引用号匹配',
+  L2: 'L2 发票号匹配',
+  L3: 'L3 金额+日期匹配',
+  L4: 'L4 金额精确匹配',
+  L5: 'L5 容差匹配',
+}
+
 const loading = ref(false)
 const list = ref<any[]>([])
 const total = ref(0)
@@ -182,7 +208,7 @@ const query = ref<{ accountId?: number; counterparty?: string; current: number; 
   current: 1, size: 20,
 })
 
-const recommendDrawerVisible = ref(false)
+const recommendDialogVisible = ref(false)
 const recommendLoading = ref(false)
 const recommendResult = ref<ReconciliationRecommendResult | null>(null)
 const drawerTitle = ref('')
@@ -192,6 +218,8 @@ const preCheckDialogVisible = ref(false)
 const preCheckLoading = ref(false)
 const preCheckResult = ref<PreCheckResult | null>(null)
 const preCheckTarget = ref<RecommendItem | null>(null)
+
+const batchReconciling = ref(false)
 
 function matchLevelType(level: string) {
   switch (level) {
@@ -204,6 +232,76 @@ function matchLevelType(level: string) {
   }
 }
 
+function isConfirmed(status: string): boolean {
+  return ['classified', 'voucher_generated', 'payment_created', 'approved', 'CONFIRMED'].includes(status || '')
+}
+
+function countExactMatches(): number {
+  if (!recommendResult.value?.items) return 0
+  return recommendResult.value.items.filter(
+    (it) => it.matchLevel === 'L1' || it.matchLevel === 'L2' || it.matchLevel === 'L3'
+  ).length
+}
+
+function buildPeriod(): string {
+  const d = currentStatement.value?.txDate
+  if (!d) {
+    const now = new Date()
+    return `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}`
+  }
+  // txDate 可能是 "2024-07-29" 或 ISO 格式
+  const s = String(d)
+  if (s.length >= 7) return s.substring(0, 4) + s.substring(5, 7)
+  return `${new Date().getFullYear()}${String(new Date().getMonth() + 1).padStart(2, '0')}`
+}
+
+async function onBatchReconcile() {
+  if (!currentStatement.value || !recommendResult.value?.items) return
+  const exacts = recommendResult.value.items.filter(
+    (it) => it.matchLevel === 'L1' || it.matchLevel === 'L2' || it.matchLevel === 'L3'
+  )
+  if (exacts.length === 0) {
+    ElMessage.warning('没有可自动核销的精确匹配项')
+    return
+  }
+  batchReconciling.value = true
+  const period = buildPeriod()
+  let okCount = 0
+  let failCount = 0
+  for (const item of exacts) {
+    try {
+      await executeReconciliation({
+        sourceDocType: 'bank_txn',
+        sourceDocId: currentStatement.value.id,
+        targetDocType: item.targetDocType,
+        targetDocId: item.targetDocId,
+        amount: item.suggestedAmount,
+        matchScore: item.matchScore,
+        matchMethod: 'AUTO_BATCH',
+        period,
+      } as any)
+      okCount++
+    } catch (e: any) {
+      failCount++
+      console.warn(`自动核销失败: targetId=${item.targetDocId}`, e)
+    }
+  }
+  batchReconciling.value = false
+  if (failCount === 0) {
+    ElMessage.success(`已自动核销 ${okCount} 项精确匹配`)
+  } else {
+    ElMessage.warning(`核销完成: 成功 ${okCount} 项, 失败 ${failCount} 项`)
+  }
+  recommendDialogVisible.value = false
+  await fetchData()
+}
+
+function canShowRecommend(row: any): boolean {
+  if (isConfirmed(row.reviewStatus)) return true
+  if (row.generatedDocId || row.generatedVoucherId) return true
+  return false
+}
+
 function fmtAmount(v: number) {
   return v == null ? '' : Number(v).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
@@ -214,6 +312,7 @@ async function fetchData() {
     const params: any = {
       accountId: query.value.accountId,
       status: 'UNMATCHED',
+      reviewStatus: 'classified,voucher_generated,payment_created,approved',
       current: query.value.current,
       size: query.value.size,
     }
@@ -248,7 +347,7 @@ async function onRefresh() {
 
 async function onRowClick(row: any, column: any) {
   if (column?.type === 'selection') return
-  if (row.reviewStatus === 'CONFIRMED') {
+  if (canShowRecommend(row)) {
     await onShowRecommend(row)
   } else {
     ElMessage.info('请先在银行对账单页面确认该流水分类')
@@ -258,14 +357,14 @@ async function onRowClick(row: any, column: any) {
 async function onShowRecommend(row: any) {
   currentStatement.value = row
   drawerTitle.value = `核销推荐 — ${row.counterAccount || '未知对方'} ¥${fmtAmount(row.amount)}`
-  recommendDrawerVisible.value = true
+  recommendDialogVisible.value = true
   recommendLoading.value = true
   recommendResult.value = null
   try {
     recommendResult.value = await getReconciliationRecommend(row.id)
   } catch (e: any) {
     ElMessage.error(e?.message || '获取核销推荐失败')
-    recommendDrawerVisible.value = false
+    recommendDialogVisible.value = false
   } finally {
     recommendLoading.value = false
   }
@@ -282,9 +381,10 @@ async function onExecuteRecon(item: RecommendItem) {
       amount: item.suggestedAmount,
       matchScore: item.matchScore,
       matchMethod: 'AUTO',
+      period: buildPeriod(),
     })
     ElMessage.success('核销执行成功')
-    recommendDrawerVisible.value = false
+    recommendDialogVisible.value = false
     await fetchData()
   } catch (e: any) {
     ElMessage.error(e?.message || '核销执行失败')

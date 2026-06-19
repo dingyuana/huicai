@@ -70,8 +70,17 @@ export function clearInvoiceRecords(): Promise<{ deleted: number; message: strin
 export function clearVouchers(): Promise<{ deleted: number; message: string }> {
   return request.post('/system/clear-vouchers')
 }
+export function clearBusinessDocs(): Promise<{ deleted: number; message: string }> {
+  return request.post('/system/clear-business-docs')
+}
 export function clearAll(): Promise<{ deleted: number; message: string }> {
   return request.post('/system/clear-all')
+}
+export function clearReceivables(): Promise<{ deleted: number; message: string }> {
+  return request.post('/system/clear-receivables')
+}
+export function clearPayables(): Promise<{ deleted: number; message: string }> {
+  return request.post('/system/clear-payables')
 }
 
 // ==================== Role ====================

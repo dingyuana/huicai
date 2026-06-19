@@ -54,11 +54,18 @@
             <span v-else class="text-muted">默认</span>
           </template>
         </el-table-column>
+        <el-table-column label="类型" width="80" align="center">
+          <template #default="{ row }">
+            <el-tag v-if="row.isSystem" size="small" type="info">系统兜底</el-tag>
+            <span v-else class="text-muted">用户</span>
+          </template>
+        </el-table-column>
         <el-table-column label="状态" width="80" align="center">
           <template #default="{ row }">
             <el-switch
               :model-value="row.isActive"
               :loading="row._toggling"
+              :disabled="row.isSystem"
               @change="(v: any) => toggleActive(row, v)"
               size="small"
             />
@@ -66,8 +73,9 @@
         </el-table-column>
         <el-table-column label="操作" width="140" fixed="right">
           <template #default="{ row }">
-            <el-button text size="small" type="primary" @click="openEdit(row)">编辑</el-button>
-            <el-popconfirm title="确认删除?" @confirm="onDelete(row)">
+            <el-button v-if="!row.isSystem" text size="small" type="primary" @click="openEdit(row)">编辑</el-button>
+            <span v-else class="text-muted" style="font-size:12px">内置规则</span>
+            <el-popconfirm v-if="!row.isSystem" title="确认删除?" @confirm="onDelete(row)">
               <template #reference><el-button text size="small" type="danger">删除</el-button></template>
             </el-popconfirm>
           </template>

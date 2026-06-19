@@ -5,6 +5,12 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.huicai.common.exception.BusinessException;
+import com.huicai.module.arap.entity.PayableEntity;
+import com.huicai.module.arap.entity.ReceivableEntity;
+import com.huicai.module.arap.mapper.CustomerMapper;
+import com.huicai.module.arap.mapper.PayableMapper;
+import com.huicai.module.arap.mapper.ReceivableMapper;
+import com.huicai.module.arap.mapper.VendorMapper;
 import com.huicai.module.arap.service.ReconciliationService;
 import com.huicai.module.finance.entity.BankJournalEntity;
 import com.huicai.module.finance.entity.BankStatementEntity;
@@ -56,6 +62,10 @@ public class BankStatementServiceImpl implements BankStatementService {
     private final ReconciliationService reconciliationService;
     private final VoucherMapper voucherMapper;
     private final BusinessDocMapper businessDocMapper;
+    private final CustomerMapper customerMapper;
+    private final VendorMapper vendorMapper;
+    private final ReceivableMapper receivableMapper;
+    private final PayableMapper payableMapper;
 
     /**
      * 分页查询对账单.
@@ -71,8 +81,17 @@ public class BankStatementServiceImpl implements BankStatementService {
         wrapper.eq(accountId != null, BankStatementEntity::getAccountId, accountId)
                 .eq(shouldFilter(status), BankStatementEntity::getMatchStatus, status)
                 .eq(shouldFilter(classification), BankStatementEntity::getClassification, classification)
-                .eq(shouldFilter(reviewStatus), BankStatementEntity::getReviewStatus, reviewStatus)
                 .orderByDesc(BankStatementEntity::getTxDate);
+        
+        if (shouldFilter(reviewStatus)) {
+            String[] statuses = reviewStatus.split(",");
+            if (statuses.length > 1) {
+                wrapper.in(BankStatementEntity::getReviewStatus, Arrays.asList(statuses));
+            } else {
+                wrapper.eq(BankStatementEntity::getReviewStatus, reviewStatus);
+            }
+        }
+        
         IPage<BankStatementEntity> result = statementMapper.selectPage(page, wrapper);
         // 填充生成结果的非持久化字段
         populateGeneratedRefs(result.getRecords());
@@ -408,18 +427,66 @@ public class BankStatementServiceImpl implements BankStatementService {
                 }
                 break;
             case "B":
-                try {
-                    boolean ok = autoGenerationService.autoGenerateInNewTx(stmt.getId(), stmt.getReviewedBy());
-                    stmt.setReviewStatus(ok ? "payment_created" : "classified");
-                    log.info("B类生单: statementId={}, classification={}, ok={}", statementId, stmt.getClassification(), ok);
-                } catch (Exception e) {
-                    stmt.setReviewStatus("classified");
-                    log.warn("B类生单失败: statementId={}, err={}", statementId, e.getMessage());
+                boolean isSmartClass = "business_receipt".equals(stmt.getClassification())
+                        || "business_payment".equals(stmt.getClassification());
+                if (isSmartClass) {
+                    boolean isReceipt = "business_receipt".equals(stmt.getClassification());
+                    String counterparty = stmt.getCounterAccount();
+                    BigDecimal amount = stmt.getAmount().abs();
+                    List<?> invoices; Long partyId = null;
+                    if (isReceipt) {
+                        var customers = customerMapper.selectList(new LambdaQueryWrapper<com.huicai.module.arap.entity.CustomerEntity>().like(com.huicai.module.arap.entity.CustomerEntity::getName, counterparty).last("LIMIT 1"));
+                        if (!customers.isEmpty()) { partyId = customers.get(0).getId(); invoices = receivableMapper.selectList(new LambdaQueryWrapper<ReceivableEntity>().eq(ReceivableEntity::getCustomerId, partyId)); }
+                        else invoices = List.of();
+                    } else {
+                        var vendors = vendorMapper.selectList(new LambdaQueryWrapper<com.huicai.module.arap.entity.VendorEntity>().like(com.huicai.module.arap.entity.VendorEntity::getName, counterparty).last("LIMIT 1"));
+                        if (!vendors.isEmpty()) { partyId = vendors.get(0).getId(); invoices = payableMapper.selectList(new LambdaQueryWrapper<PayableEntity>().eq(PayableEntity::getVendorId, partyId)); }
+                        else invoices = List.of();
+                    }
+                    List<?> unsettled = invoices.stream().filter(inv -> { BigDecimal ua = inv instanceof ReceivableEntity r ? r.getUnsettledAmount() : inv instanceof PayableEntity p ? p.getUnsettledAmount() : BigDecimal.ZERO; return ua != null && ua.compareTo(BigDecimal.ZERO) > 0; }).collect(Collectors.toList());
+
+                    if (unsettled.size() == 1) {
+                        Object inv = unsettled.get(0);
+                        BigDecimal ua = inv instanceof ReceivableEntity r ? r.getUnsettledAmount() : inv instanceof PayableEntity p ? p.getUnsettledAmount() : BigDecimal.ZERO;
+                        if (ua.compareTo(amount) == 0) {
+                            // 精确匹配 → 生单, 核销交给用户在核销工作台完成(避免嵌套事务问题)
+                            try {
+                                boolean ok = autoGenerationService.autoGenerateInNewTx(stmt.getId(), userId);
+                                if (ok) {
+                                    stmt = statementMapper.selectById(stmt.getId());
+                                    stmt.setReviewStatus("payment_created");
+                                    stmt.setAiSuggestedAction("RECONCILE_HINT:" + (inv instanceof ReceivableEntity ? ((ReceivableEntity) inv).getId() : ((PayableEntity) inv).getId()));
+                                    log.info("智能路由-精确匹配生单(待人工核销): statementId={}, partyId={}, amount={}", statementId, partyId, amount);
+                                } else { stmt.setReviewStatus("classified"); }
+                            } catch (Exception e) { stmt.setReviewStatus("classified"); log.warn("智能路由-精确匹配生单失败: statementId={}, err={}", statementId, e.getMessage()); }
+                        } else { stmt.setReviewStatus("classified"); log.info("智能路由-金额不匹配: statementId={}, unsettled={}, amount={}", statementId, ua, amount); }
+                    } else {
+                        // 无匹配/多条/无客商 → 仍然尝试生单, 不自动核销
+                        try {
+                            boolean ok = autoGenerationService.autoGenerateInNewTx(stmt.getId(), userId);
+                            if (ok) { stmt = statementMapper.selectById(stmt.getId()); }
+                            stmt.setReviewStatus(ok ? "payment_created" : "classified");
+                            log.info("智能路由-生单(无精确匹配): statementId={}, unsettledCount={}, partyId={}, ok={}", statementId, unsettled.size(), partyId, ok);
+                        } catch (Exception e) {
+                            stmt.setReviewStatus("classified");
+                            log.warn("智能路由-生单失败: statementId={}", statementId, e);
+                        }
+                    }
+                } else {
+                    // 其他B类(如 internal_transfer, salary_payment) 保持原有行为
+                    try {
+                        boolean ok = autoGenerationService.autoGenerateInNewTx(stmt.getId(), stmt.getReviewedBy());
+                        stmt.setReviewStatus(ok ? "payment_created" : "classified");
+                        log.info("B类生单: statementId={}, classification={}, ok={}", statementId, stmt.getClassification(), ok);
+                    } catch (Exception e) {
+                        stmt.setReviewStatus("classified");
+                        log.warn("B类生单失败: statementId={}", statementId, e);
+                    }
                 }
                 break;
             default:
-                stmt.setReviewStatus("manual_pending");
-                log.info("C类待人工: statementId={}, classification={}", statementId, stmt.getClassification());
+                stmt.setReviewStatus("classified");
+                log.info("出纳确认: statementId={}, classification={}", statementId, stmt.getClassification());
                 break;
         }
 

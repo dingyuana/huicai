@@ -47,6 +47,9 @@ public class ClassificationRuleEntity {
     /** A/B/C路由类型: A-直接制证, B-生单后制证, C-待人工 */
     private String routeType;
 
+    /** 是否系统内置兜底规则 (前端只读) */
+    private Boolean isSystem;
+
     /** 借方科目 ID (自动凭证) */
     private Long debitSubjectId;
 
