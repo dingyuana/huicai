@@ -2,9 +2,11 @@ package com.huicai.module.arap.mapper;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.huicai.module.arap.entity.ReceivableEntity;
+import org.apache.ibatis.annotations.Delete;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
+import org.apache.ibatis.annotations.Update;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -52,4 +54,10 @@ public interface ReceivableMapper extends BaseMapper<ReceivableEntity> {
         GROUP BY aging_bucket
     """)
     List<Map<String, Object>> agingByCustomer(@Param("customerId") Long customerId);
+
+    @Update("UPDATE t_receivable SET doc_id = NULL WHERE doc_id IS NOT NULL")
+    int nullOutBusinessDocId();
+
+    @Delete("DELETE FROM t_receivable")
+    int physicalDeleteAll();
 }

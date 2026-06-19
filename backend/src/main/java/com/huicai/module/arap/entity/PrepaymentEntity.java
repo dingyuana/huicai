@@ -9,7 +9,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 
 /**
- * 预付款实体 - 供应商预付账款
+ * 预付款/预收款实体 — 供应商预付或客户预收.
  */
 @Data
 @TableName("t_prepayment")
@@ -21,6 +21,8 @@ public class PrepaymentEntity implements Serializable {
     private Long tenantId;
 
     private Long vendorId;
+
+    private Long customerId;
 
     private Long docId;
 

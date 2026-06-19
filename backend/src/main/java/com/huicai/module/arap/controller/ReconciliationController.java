@@ -2,6 +2,7 @@ package com.huicai.module.arap.controller;
 
 import cn.hutool.core.util.StrUtil;
 import com.huicai.common.response.R;
+import com.huicai.module.arap.entity.ReconciliationExceptionEntity;
 import com.huicai.module.arap.entity.ReconciliationLogEntity;
 import com.huicai.module.arap.service.ReconciliationService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -102,10 +103,10 @@ public class ReconciliationController {
         return R.ok(reconciliationService.pageLogs(sourceDocType, current, size));
     }
 
-    @Operation(summary = "反核销")
+    @Operation(summary = "反核销 (需原因)")
     @PostMapping("/{id}/reverse")
-    public R<Void> reverse(@PathVariable Long id) {
-        reconciliationService.reverse(id);
+    public R<Void> reverse(@PathVariable Long id, @RequestParam String reason) {
+        reconciliationService.reverse(id, reason);
         return R.ok();
     }
 
@@ -120,5 +121,90 @@ public class ReconciliationController {
     public R<Void> reject(@PathVariable Long id, @RequestParam(required = false) String reason) {
         reconciliationService.reject(id, reason);
         return R.ok();
+    }
+
+    // ==================== 异常池管理 ====================
+
+    @Operation(summary = "分页查询核销异常池")
+    @GetMapping("/exceptions/page")
+    public R<com.baomidou.mybatisplus.core.metadata.IPage<ReconciliationExceptionEntity>> pageExceptions(
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String exceptionType,
+            @RequestParam(defaultValue = "1") Integer current,
+            @RequestParam(defaultValue = "20") Integer size) {
+        return R.ok(reconciliationService.pageExceptions(status, exceptionType, current, size));
+    }
+
+    @Operation(summary = "解决异常 (OPEN → RESOLVED)")
+    @PostMapping("/exceptions/{id}/resolve")
+    public R<Void> resolveException(@PathVariable Long id,
+                                    @RequestParam(defaultValue = "0") Long userId,
+                                    @RequestParam(required = false) String remark) {
+        reconciliationService.resolveException(id, userId, remark);
+        return R.ok();
+    }
+
+    @Operation(summary = "忽略异常 (OPEN → IGNORED)")
+    @PostMapping("/exceptions/{id}/ignore")
+    public R<Void> ignoreException(@PathVariable Long id,
+                                    @RequestParam(defaultValue = "0") Long userId,
+                                    @RequestParam String reason) {
+        reconciliationService.ignoreException(id, userId, reason);
+        return R.ok();
+    }
+
+    @Operation(summary = "重试异常核销 (重新执行核销)")
+    @PostMapping("/exceptions/{id}/retry")
+    public R<ReconciliationLogEntity> retryException(@PathVariable Long id,
+                                                      @RequestParam(defaultValue = "0") Long userId) {
+        return R.ok(reconciliationService.retryException(id, userId));
+    }
+
+    // ==================== 多对多核销拓扑 ====================
+
+    @Operation(summary = "FIFO 自动核销 — 按到期日优先核销最早未结清单据")
+    @PostMapping("/auto-fifo")
+    public R<List<ReconciliationLogEntity>> autoReconcileFifo(
+            @RequestParam Long partyId,
+            @RequestParam String targetDocType,
+            @RequestParam BigDecimal amount,
+            @RequestParam String sourceDocType,
+            @RequestParam Long sourceDocId,
+            @RequestParam(required = false) String period,
+            @RequestParam(required = false) String summary) {
+        return R.ok(reconciliationService.autoReconcileFifo(
+                partyId, targetDocType, amount, sourceDocType, sourceDocId, period, summary));
+    }
+
+    @Operation(summary = "拆分核销 — 一笔来源拆分核销多张目标单据")
+    @PostMapping("/split-allocate")
+    public R<List<ReconciliationLogEntity>> splitAllocate(
+            @RequestParam String sourceDocType,
+            @RequestParam Long sourceDocId,
+            @RequestParam(required = false) Long customerId,
+            @RequestParam(required = false) Long vendorId,
+            @RequestParam BigDecimal totalAmount,
+            @RequestBody List<ReconciliationService.AllocationItem> allocations,
+            @RequestParam(required = false) String period,
+            @RequestParam(required = false) String summary) {
+        return R.ok(reconciliationService.splitAllocate(
+                sourceDocType, sourceDocId, customerId, vendorId,
+                totalAmount, allocations, period, summary));
+    }
+
+    @Operation(summary = "智能最优匹配 — 自动 N:M 分配核销")
+    @PostMapping("/smart-allocate")
+    public R<List<ReconciliationLogEntity>> smartAllocate(
+            @RequestParam String sourceDocType,
+            @RequestParam Long sourceDocId,
+            @RequestParam Long partyId,
+            @RequestParam String partyType,
+            @RequestParam String targetDocType,
+            @RequestParam BigDecimal amount,
+            @RequestParam(required = false) String period,
+            @RequestParam(required = false) String summary) {
+        return R.ok(reconciliationService.smartAllocate(
+                sourceDocType, sourceDocId, partyId, partyType,
+                targetDocType, amount, period, summary));
     }
 }

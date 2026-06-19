@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.huicai.common.exception.BusinessException;
+import com.huicai.module.arap.constant.ArapStatus;
 import com.huicai.module.arap.entity.BadDebtProvisionEntity;
 import com.huicai.module.arap.entity.ReceivableEntity;
 import com.huicai.module.arap.mapper.BadDebtProvisionMapper;
@@ -75,7 +76,7 @@ public class BadDebtServiceImpl implements BadDebtService {
         entity.setMethod("AGING_RATIO");
         entity.setProvisionDate(today);
         entity.setTotalAmount(total);
-        entity.setStatus("DRAFT");
+        entity.setStatus(ArapStatus.DRAFT);
         entity.setRemark("账龄比例法: " + ratios);
         mapper.insert(entity);
         return entity;
@@ -99,7 +100,7 @@ public class BadDebtServiceImpl implements BadDebtService {
         entity.setMethod("PERCENTAGE");
         entity.setProvisionDate(LocalDate.now());
         entity.setTotalAmount(provision);
-        entity.setStatus("DRAFT");
+        entity.setStatus(ArapStatus.DRAFT);
         entity.setRemark("余额百分比法: " + ratio);
         mapper.insert(entity);
         return entity;
@@ -108,10 +109,10 @@ public class BadDebtServiceImpl implements BadDebtService {
     @Override
     public BadDebtProvisionEntity confirm(Long id) {
         BadDebtProvisionEntity entity = getById(id);
-        if (!"DRAFT".equals(entity.getStatus())) {
+        if (!ArapStatus.isDraft(entity.getStatus())) {
             throw new BusinessException("仅草稿状态可确认");
         }
-        entity.setStatus("CONFIRMED");
+        entity.setStatus(ArapStatus.CONFIRMED);
         mapper.updateById(entity);
         return entity;
     }
@@ -119,7 +120,7 @@ public class BadDebtServiceImpl implements BadDebtService {
     @Override
     public void delete(Long id) {
         BadDebtProvisionEntity entity = getById(id);
-        if (!"DRAFT".equals(entity.getStatus())) {
+        if (!ArapStatus.isDraft(entity.getStatus())) {
             throw new BusinessException("仅草稿状态可删除");
         }
         mapper.deleteById(id);

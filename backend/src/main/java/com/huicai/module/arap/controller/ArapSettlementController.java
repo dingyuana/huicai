@@ -47,6 +47,20 @@ public class ArapSettlementController {
         return R.ok(service.confirm(id));
     }
 
+    @Operation(summary = "生成凭证 — CONFIRMED → VOUCHERED")
+    @PostMapping("/{id}/generate-voucher")
+    public R<Void> generateVoucher(@PathVariable Long id) {
+        service.generateVoucher(id);
+        return R.ok();
+    }
+
+    @Operation(summary = "反核销 — CONFIRMED → REVERSED")
+    @PostMapping("/{id}/reverse")
+    public R<Void> reverse(@PathVariable Long id) {
+        service.reverse(id);
+        return R.ok();
+    }
+
     @Operation(summary = "删除")
     @DeleteMapping("/{id}")
     public R<Void> delete(@PathVariable Long id) {

@@ -11,4 +11,13 @@ public interface PayableService {
     PayableVO getById(Long id);
     PayableEntity create(PayableEntity entity);
     Map<String, Object> agingAnalysis(Long vendorId);
+
+    /** 确认应付单（草稿→已确认） */
+    void confirm(Long id, Long userId);
+
+    /** 标记为已结清（unsettled_amount=0 时调用） */
+    void markSettled(Long id, Long userId);
+
+    /** 反核销/冲销（CONFIRMED/SETTLED→REVERSED） */
+    void reverse(Long id, Long userId);
 }

@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.huicai.common.exception.BusinessException;
+import com.huicai.module.arap.constant.ArapStatus;
 import com.huicai.module.arap.dto.ReceivableVO;
 import com.huicai.module.arap.entity.ReceivableEntity;
 import com.huicai.module.arap.mapper.CustomerMapper;
@@ -16,6 +17,9 @@ import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.util.Collections;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.transaction.annotation.Transactional;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -25,6 +29,8 @@ import java.util.stream.Collectors;
 @Service
 @RequiredArgsConstructor
 public class ReceivableServiceImpl implements ReceivableService {
+
+    private static final Logger log = LoggerFactory.getLogger(ReceivableServiceImpl.class);
 
     private final ReceivableMapper mapper;
     private final CustomerMapper customerMapper;
@@ -75,8 +81,54 @@ public class ReceivableServiceImpl implements ReceivableService {
     public ReceivableEntity create(ReceivableEntity entity) {
         if (entity.getSettledAmount() == null) entity.setSettledAmount(BigDecimal.ZERO);
         entity.setUnsettledAmount(entity.getAmount().subtract(entity.getSettledAmount()));
+        if (entity.getStatus() == null) entity.setStatus(ArapStatus.CONFIRMED);
         mapper.insert(entity);
         return entity;
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void confirm(Long id, Long userId) {
+        ReceivableEntity entity = mapper.selectById(id);
+        if (entity == null) throw new BusinessException("应收单不存在");
+        if (!ArapStatus.isDraft(entity.getStatus())) {
+            throw new BusinessException("仅草稿状态的应收单可确认, 当前: " + entity.getStatus());
+        }
+        entity.setStatus(ArapStatus.CONFIRMED);
+        entity.setVersion(null);
+        mapper.updateById(entity);
+        log.info("应收单确认: id={}, userId={}", id, userId);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void markSettled(Long id, Long userId) {
+        ReceivableEntity entity = mapper.selectById(id);
+        if (entity == null) throw new BusinessException("应收单不存在");
+        if (!ArapStatus.isConfirmed(entity.getStatus())) {
+            throw new BusinessException("仅已确认状态的应收单可标记结清, 当前: " + entity.getStatus());
+        }
+        if (entity.getUnsettledAmount().compareTo(BigDecimal.ZERO) != 0) {
+            throw new BusinessException("应收单未结清余额不为零, 不可标记结清");
+        }
+        entity.setStatus(ArapStatus.SETTLED);
+        entity.setVersion(null);
+        mapper.updateById(entity);
+        log.info("应收单结清: id={}, userId={}", id, userId);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void reverse(Long id, Long userId) {
+        ReceivableEntity entity = mapper.selectById(id);
+        if (entity == null) throw new BusinessException("应收单不存在");
+        if (!ArapStatus.isReversible(entity.getStatus())) {
+            throw new BusinessException("仅已确认或已结清的应收单可冲销, 当前: " + entity.getStatus());
+        }
+        entity.setStatus(ArapStatus.REVERSED);
+        entity.setVersion(null);
+        mapper.updateById(entity);
+        log.info("应收单冲销: id={}, userId={}", id, userId);
     }
 
     @Override

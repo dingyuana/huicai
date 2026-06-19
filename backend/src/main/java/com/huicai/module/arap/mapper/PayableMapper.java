@@ -2,9 +2,11 @@ package com.huicai.module.arap.mapper;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.huicai.module.arap.entity.PayableEntity;
+import org.apache.ibatis.annotations.Delete;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
+import org.apache.ibatis.annotations.Update;
 
 import java.util.List;
 import java.util.Map;
@@ -39,4 +41,10 @@ public interface PayableMapper extends BaseMapper<PayableEntity> {
         GROUP BY aging_bucket
     """)
     List<Map<String, Object>> agingByVendor(@Param("vendorId") Long vendorId);
+
+    @Update("UPDATE t_payable SET doc_id = NULL WHERE doc_id IS NOT NULL")
+    int nullOutBusinessDocId();
+
+    @Delete("DELETE FROM t_payable")
+    int physicalDeleteAll();
 }

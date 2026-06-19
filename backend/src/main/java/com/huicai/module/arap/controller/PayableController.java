@@ -42,6 +42,20 @@ public class PayableController {
         return R.ok(service.create(entity));
     }
 
+    @Operation(summary = "确认应付单（草稿→已确认）")
+    @PostMapping("/{id}/confirm")
+    public R<Void> confirm(@PathVariable Long id) {
+        service.confirm(id, 0L);
+        return R.ok();
+    }
+
+    @Operation(summary = "冲销应付单（CONFIRMED/SETTLED→REVERSED）")
+    @PostMapping("/{id}/reverse")
+    public R<Void> reverse(@PathVariable Long id) {
+        service.reverse(id, 0L);
+        return R.ok();
+    }
+
     @Operation(summary = "供应商账龄分析")
     @GetMapping("/aging")
     public R<Map<String, Object>> aging(@RequestParam(required = false) Long vendorId) {

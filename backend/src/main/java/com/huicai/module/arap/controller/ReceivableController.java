@@ -43,6 +43,20 @@ public class ReceivableController {
         return R.ok(service.create(entity));
     }
 
+    @Operation(summary = "确认应收单（草稿→已确认）")
+    @PostMapping("/{id}/confirm")
+    public R<Void> confirm(@PathVariable Long id) {
+        service.confirm(id, 0L);
+        return R.ok();
+    }
+
+    @Operation(summary = "冲销应收单（CONFIRMED/SETTLED→REVERSED）")
+    @PostMapping("/{id}/reverse")
+    public R<Void> reverse(@PathVariable Long id) {
+        service.reverse(id, 0L);
+        return R.ok();
+    }
+
     @Operation(summary = "逾期应收列表")
     @GetMapping("/overdue")
     public R<List<Map<String, Object>>> overdue() {
