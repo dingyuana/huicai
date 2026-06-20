@@ -402,6 +402,13 @@ public class ReconciliationServiceImpl implements ReconciliationService {
         // G12: 核销完成后自动生成草稿凭证 (仅当来源单据尚无凭证时)
         if ("bank_txn".equals(request.sourceDocType())) {
             try {
+                // 将银行流水标记为已核销, 不再出现在核销工作台
+                com.huicai.module.finance.entity.BankStatementEntity stmt =
+                        bankStatementMapper.selectById(request.sourceDocId());
+                if (stmt != null && "UNMATCHED".equals(stmt.getMatchStatus())) {
+                    stmt.setMatchStatus("MATCHED");
+                    bankStatementMapper.updateById(stmt);
+                }
                 createReconciliationVoucher(request, reconLog);
             } catch (Exception e) {
                 log.warn("核销自动制证失败(不影响核销): {}", e.getMessage());

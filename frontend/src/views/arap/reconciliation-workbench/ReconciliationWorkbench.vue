@@ -72,7 +72,7 @@
     </el-card>
 
     <!-- 核销推荐弹窗 -->
-    <el-dialog v-model="recommendDialogVisible" :title="drawerTitle" width="650px" destroy-on-close>
+    <el-dialog v-model="recommendDialogVisible" :title="drawerTitle" width="800px" destroy-on-close>
       <template v-if="recommendLoading">
         <div style="text-align:center;padding:40px">
           <el-icon class="is-loading" :size="32"><Loading /></el-icon>
@@ -108,7 +108,7 @@
           <el-table-column label="建议核销" width="120" align="right">
             <template #default="{ row }">{{ fmtAmount(row.suggestedAmount) }}</template>
           </el-table-column>
-          <el-table-column label="操作" width="160" align="center">
+          <el-table-column label="操作" width="160" align="center" fixed="right">
             <template #default="{ row }">
               <el-button text size="small" type="primary" @click="onPreCheck(row)">
                 预检查
@@ -136,6 +136,13 @@
               :loading="batchReconciling"
               @click="onBatchReconcile">
               自动核销精确匹配 ({{ countExactMatches() }})
+            </el-button>
+            <el-button
+              type="primary"
+              :disabled="!recommendResult?.items?.length || batchReconcilingAll"
+              :loading="batchReconcilingAll"
+              @click="onBatchReconcileAll">
+              一键核销全部 ({{ recommendResult?.items?.length || 0 }})
             </el-button>
           </div>
         </div>
@@ -221,6 +228,7 @@ const preCheckResult = ref<PreCheckResult | null>(null)
 const preCheckTarget = ref<RecommendItem | null>(null)
 
 const batchReconciling = ref(false)
+const batchReconcilingAll = ref(false)
 
 function matchLevelType(level: string) {
   switch (level) {
@@ -291,6 +299,41 @@ async function onBatchReconcile() {
   batchReconciling.value = false
   if (failCount === 0) {
     ElMessage.success(`已自动核销 ${okCount} 项精确匹配`)
+  } else {
+    ElMessage.warning(`核销完成: 成功 ${okCount} 项, 失败 ${failCount} 项`)
+  }
+  recommendDialogVisible.value = false
+  await fetchData()
+}
+
+async function onBatchReconcileAll() {
+  if (!currentStatement.value || !recommendResult.value?.items?.length) return
+  const allItems = recommendResult.value.items
+  batchReconcilingAll.value = true
+  const period = buildPeriod()
+  let okCount = 0
+  let failCount = 0
+  for (const item of allItems) {
+    try {
+      await executeReconciliation({
+        sourceDocType: 'bank_txn',
+        sourceDocId: currentStatement.value.id,
+        targetDocType: item.targetDocType,
+        targetDocId: item.targetDocId,
+        amount: item.suggestedAmount,
+        matchScore: item.matchScore,
+        matchMethod: 'MANUAL',
+        period,
+      } as any)
+      okCount++
+    } catch (e: any) {
+      failCount++
+      console.warn(`核销失败: targetId=${item.targetDocId}`, e)
+    }
+  }
+  batchReconcilingAll.value = false
+  if (failCount === 0) {
+    ElMessage.success(`已核销全部 ${okCount} 项`)
   } else {
     ElMessage.warning(`核销完成: 成功 ${okCount} 项, 失败 ${failCount} 项`)
   }
