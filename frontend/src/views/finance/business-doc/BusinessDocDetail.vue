@@ -153,7 +153,14 @@ function statusType(s: string) {
 }
 
 function matchLevelType(level: string) {
-  return level === 'L1' ? 'success' : level === 'L2' || level === 'L3' ? 'primary' : level === 'L4' ? 'warning' : 'danger'
+  switch (level) {
+    case 'L1': return 'success'
+    case 'L2': case 'L3': return 'primary'
+    case 'L4': return 'warning'
+    case 'L5': return 'danger'
+    case 'L6': return 'info'
+    default: return 'info'
+  }
 }
 
 function fmtAmount(v?: number) {

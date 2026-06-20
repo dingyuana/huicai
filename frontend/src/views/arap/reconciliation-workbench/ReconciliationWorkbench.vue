@@ -197,6 +197,7 @@ const MATCH_LEVEL_LABELS: Record<string, string> = {
   L3: 'L3 金额+日期匹配',
   L4: 'L4 金额精确匹配',
   L5: 'L5 容差匹配',
+  L6: 'L6 同客商其他未结单据',
 }
 
 const loading = ref(false)
@@ -228,6 +229,7 @@ function matchLevelType(level: string) {
     case 'L3': return 'primary'
     case 'L4': return 'warning'
     case 'L5': return 'danger'
+    case 'L6': return 'info'
     default: return 'info'
   }
 }

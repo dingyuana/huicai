@@ -161,13 +161,15 @@ public class ReconciliationServiceImpl implements ReconciliationService {
             // 确定 L1-L5 匹配级别
             String matchLevel = determineMatchLevel(amount, unsettledAmount, summary, invoiceSummary,
                     counterpartyName, externalNo, invoiceNo, txDate, invoiceTxDate);
-            if (matchLevel == null) continue; // 未达到最低匹配标准
 
-            // 连续分: 同类级别内排序用
-            BigDecimal matchScore = calculateScore(amount, unsettledAmount, summary, invoiceSummary, counterpartyName, invoiceCustomerName);
-            BigDecimal suggestedAmount = amount.min(unsettledAmount);
-
-            items.add(new RecommendItem(targetDocId, invoiceNo, targetDocType, amount, unsettledAmount, matchScore, matchLevel, suggestedAmount));
+            if (matchLevel != null) {
+                BigDecimal matchScore = calculateScore(amount, unsettledAmount, summary, invoiceSummary, counterpartyName, invoiceCustomerName);
+                BigDecimal suggestedAmount = amount.min(unsettledAmount);
+                items.add(new RecommendItem(targetDocId, invoiceNo, targetDocType, amount, unsettledAmount, matchScore, matchLevel, suggestedAmount));
+            } else {
+                BigDecimal suggestedAmount = amount.min(unsettledAmount);
+                items.add(new RecommendItem(targetDocId, invoiceNo, targetDocType, amount, unsettledAmount, BigDecimal.ZERO, "L6", suggestedAmount));
+            }
         }
 
         items.sort((a, b) -> {
