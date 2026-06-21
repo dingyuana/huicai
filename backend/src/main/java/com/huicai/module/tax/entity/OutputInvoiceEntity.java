@@ -26,8 +26,9 @@ public class OutputInvoiceEntity {
     private String invoiceType;
     /**
      * 状态: PENDING_CONFIRM / PENDING_REVIEW / CONFIRMED / VOUCHERED /
-     *       FULLY_RECONCILED / PARTIALLY_RECONCILED / VOIDED
+     *       FULLY_RECONCILED / PARTIALLY_RECONCILED / VOIDED / REVERSED
      * 详见 com.huicai.module.tax.constant.InvoiceStatus
+     * 状态机详见 docs/specs/P21-sales-invoice-state-machine.md
      */
     private String status;
     private Long docId;
