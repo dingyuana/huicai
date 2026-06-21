@@ -24,6 +24,11 @@ public class OutputInvoiceEntity {
     private BigDecimal taxAmount;
     private BigDecimal totalAmount;
     private String invoiceType;
+    /**
+     * 状态: PENDING_CONFIRM / PENDING_REVIEW / CONFIRMED / VOUCHERED /
+     *       FULLY_RECONCILED / PARTIALLY_RECONCILED / VOIDED
+     * 详见 com.huicai.module.tax.constant.InvoiceStatus
+     */
     private String status;
     private Long docId;
     private Long voucherId;
