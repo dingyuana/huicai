@@ -327,3 +327,57 @@ if (entity.getStatus() == null) entity.setStatus(ArapStatus.DRAFT);
 - ❌ 不做三单匹配（PO-GRN-Invoice）
 - ❌ 不做付款审批流
 - ❌ 不创建 ReceivableController / PayableController（仅加 Service 方法）
+
+---
+
+## 10. 与发票/凭证状态机的对齐说明（2026-06-21）
+
+> **背景**：`docs/需求分析书_发票与凭证状态机_V1.0.md` 发布后，本 SPEC（P20）的状态枚举与之交叉引用，需明确边界，避免后续 SPEC 出现命名/语义冲突。
+
+### 10.1 命名一致性
+
+| 本 SPEC 状态 | 发票文档对应状态 | 关系 |
+|:---|:---|:---|
+| `ArapStatus.VOUCHERED`（核销单）| 发票 `VOUCHERED`（已生成凭证）| **同名同语义**，命名风格统一 |
+| `ArapStatus.REVERSED`（应收/应付/核销单）| 凭证 `REVERSED`（被红字冲销）| **同名同语义**，命名风格统一 |
+| `ArapStatus.SETTLED`（应收/应付单）| 发票 `FULLY_RECONCILED` | **语义等价但命名不同**——保留 SETTLED，P20 已落地 |
+| Receivable/Payable `CONFIRMED` | 发票 `CONFIRMED` | **同名但语义不同**：应收"已确认"=等待核销；发票"已确认"=等待生成凭证。是上下游关系 |
+| — | 发票 `VOIDED` | P20 不涉及，作废在发票侧处理 |
+| — | 发票 `PARTIALLY_RECONCILED` | P20 通过 `unsettled_amount > 0` 隐式表达；发票文档新增显式状态（前端可按 status 过滤）|
+
+### 10.2 P20 立场
+
+- **本 SPEC 状态枚举保持不变**（已落地，避免破坏现有数据）
+- 未来 SPEC（P21 发票状态机、P22 凭证状态机、P24 审计追踪）需引用本 SPEC 时，统一使用：
+  - `ArapStatus.VOUCHERED` / `ArapStatus.REVERSED`（同名同语义）
+  - `ArapStatus.SETTLED`（语义等价，但命名不统一，需在引用处注明映射）
+- 新模块（发票、凭证）状态机由 P21/P22 独立定义，不复用 `ArapStatus` 类（不同领域）
+
+### 10.3 与 P21/P22/P24 的边界
+
+| 边界 | P20 范围 | P21/P22/P24 范围 |
+|:---|:---|:---|
+| 应收/应付单状态 | ✅ 本 SPEC 定义 | 不动 |
+| 核销单状态 | ✅ 本 SPEC 定义 | 不动 |
+| 预付款状态 | ✅ 本 SPEC 定义 | 不动 |
+| **发票**状态 | ❌ 不涉及 | **P21 发票状态机 SPEC** |
+| **凭证**状态 | ❌ 不涉及 | **P22 凭证状态机 SPEC** |
+| **审计日志** | ❌ 不涉及 | **P24 审计追踪 SPEC** |
+| 状态变更的审计 | ❌ 不涉及 | **P24 审计追踪 SPEC 统一实现** |
+
+### 10.4 上下游数据流（参考）
+
+```
+发票 P21: PENDING_CONFIRM → PENDING_REVIEW → CONFIRMED → VOUCHERED
+                                                    ↓
+                                          生成 ReceivableEntity (status=CONFIRMED, P20)
+                                                    ↓
+                                          核销扣减 unsettled_amount
+                                                    ↓
+                                          unsettled=0 → ReceivableEntity.status=SETTLED (P20)
+                                          unsettled>0 → 发票.status=PARTIALLY_RECONCILED (P21)
+
+凭证 P22: DRAFT → PENDING_REVIEW → APPROVED → POSTED → REVERSED
+                                            ↓
+                                      audit_log 记录每次变更 (P24)
+```
