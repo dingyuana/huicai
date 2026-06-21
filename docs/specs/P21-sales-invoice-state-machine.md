@@ -14,7 +14,7 @@
 |---|------|------|------|
 | 1 | 创建 `InvoiceStatus` 枚举常量类 | `backend/.../tax/constant/InvoiceStatus.java` | ✅ 低 |
 | 2 | `OutputInvoiceEntity` 新增 status 字段约束（已存在 String 字段，补注释 + 常量）| Entity 文件 | ✅ 低 |
-| 3 | V38 迁移: `t_output_invoice.status` 加 CHECK 约束 + 索引 | Flyway | 🟡 中 |
+| 3 | **V45** 迁移: `t_output_invoice.status` 数据迁移 4→8 + 新 CHECK 约束 + 索引 | Flyway | 🟡 中 |
 | 4 | 创建 `OutputInvoiceStateMachineService`（状态机 Service）| Service 文件 | 🟡 中 |
 | 5 | `OutputInvoiceServiceImpl` 适配新状态机（替换 magic string）| Service 文件 | 🟡 中 |
 | 6 | `SalesInvoiceImportService` / `AutoGenerationService` 调用方适配 | 调用方 | 🟡 中 |
@@ -55,6 +55,9 @@ public final class InvoiceStatus {
     // ====== 终止 ======
     public static final String VOIDED = "VOIDED";
 
+    // ====== 冲销（2026-06-21 V45 迁移加入，承接旧 RED_INK 数据）======
+    public static final String REVERSED = "REVERSED";
+
     // ====== 检查方法 ======
     public static boolean isPendingConfirm(String status) {
         return PENDING_CONFIRM.equals(status);
@@ -72,12 +75,17 @@ public final class InvoiceStatus {
         return FULLY_RECONCILED.equals(status) || PARTIALLY_RECONCILED.equals(status);
     }
     public static boolean isVoidable(String status) {
-        // 任何非终态都可作废
-        return !VOIDED.equals(status) && !FULLY_RECONCILED.equals(status);
+        // 任何非终态都可作废（VOIDED/REVERSED/FULLY_RECONCILED 不可作废）
+        return !VOIDED.equals(status)
+            && !REVERSED.equals(status)
+            && !FULLY_RECONCILED.equals(status);
     }
     public static boolean isModifiable(String status) {
         // 仅 PENDING_CONFIRM / PENDING_REVIEW 可修改
         return PENDING_CONFIRM.equals(status) || PENDING_REVIEW.equals(status);
+    }
+    public static boolean isReversed(String status) {
+        return REVERSED.equals(status);
     }
 }
 ```
@@ -103,47 +111,140 @@ private String status;
 
 ---
 
-## 3. Flyway 迁移（V38）
+## 3. Flyway 迁移（V45）
+
+> **重要变更（2026-06-21）**：起草本 SPEC 时未考虑 V8 已有 CHECK 约束
+> `chk_output_invoice_status CHECK (status IN ('DRAFT', 'ISSUED', 'VOID', 'RED_INK'))`。
+> V45 必须先做**数据迁移**（4 旧状态 → 7 新状态），再 DROP/ADD CHECK 约束。
+>
+> **状态值映射**（2026-06-21 老丁拍板）：
+> | 旧状态 (V8) | 新状态 (V45) | 语义说明 |
+> |:---|:---|:---|
+> | `DRAFT` | `PENDING_CONFIRM` | 草稿 = 待确认 |
+> | `ISSUED` | `CONFIRMED` | **已开票 = 已确认**（注意：旧 ISSUED 不一定有 voucher_id，业务上 voucher_id 为空的 CONFIRMED 视为"待生成凭证"，详见 §3.2 注释） |
+> | `VOID` | `VOIDED` | 已作废 |
+> | `RED_INK` | `REVERSED` | 红字冲销（已生成凭证后被冲销） |
+> | `NULL` | `PENDING_CONFIRM` | 未设置状态的回退到待确认 |
+>
+> **新增状态**：V45 引入的 `PENDING_REVIEW` / `VOUCHERED` / `FULLY_RECONCILED` / `PARTIALLY_RECONCILED` 4 个状态，
+> V45 数据迁移时无旧值映射，所有现有记录 status 都不在这 4 个状态里。
+
+### 3.1 完整 V45 SQL
 
 ```sql
--- V38__add_invoice_status_constraint.sql
+-- V45__migrate_output_invoice_status_to_7_states.sql
 
--- 1. t_output_invoice.status 加 CHECK 约束
+-- ============================================================
+-- Step 1: 数据迁移（4 旧状态 → 7 新状态）
+-- ============================================================
+
+-- 1.1 NULL → PENDING_CONFIRM
+UPDATE t_output_invoice
+SET status = 'PENDING_CONFIRM'
+WHERE status IS NULL;
+
+-- 1.2 DRAFT → PENDING_CONFIRM
+UPDATE t_output_invoice
+SET status = 'PENDING_CONFIRM'
+WHERE status = 'DRAFT';
+
+-- 1.3 ISSUED → CONFIRMED
+UPDATE t_output_invoice
+SET status = 'CONFIRMED'
+WHERE status = 'ISSUED';
+
+-- 1.4 VOID → VOIDED
+UPDATE t_output_invoice
+SET status = 'VOIDED'
+WHERE status = 'VOID';
+
+-- 1.5 RED_INK → REVERSED
+UPDATE t_output_invoice
+SET status = 'REVERSED'
+WHERE status = 'RED_INK';
+
+-- ============================================================
+-- Step 2: DROP 旧 CHECK 约束，加新 CHECK 约束
+-- ============================================================
+
 ALTER TABLE t_output_invoice
     DROP CONSTRAINT IF EXISTS t_output_invoice_status_check;
+
 ALTER TABLE t_output_invoice
     ADD CONSTRAINT t_output_invoice_status_check
     CHECK (status IN (
         'PENDING_CONFIRM', 'PENDING_REVIEW', 'CONFIRMED',
-        'VOUCHERED', 'FULLY_RECONCILED', 'PARTIALLY_RECONCILED', 'VOIDED'
+        'VOUCHERED', 'FULLY_RECONCILED', 'PARTIALLY_RECONCILED', 'VOIDED',
+        'REVERSED'  -- 保留 REVERSED 状态（语义：被红字冲销的发票）
     ));
 
--- 2. status 字段索引（前端按状态过滤）
+-- ============================================================
+-- Step 3: status 字段索引（前端按状态过滤）
+-- ============================================================
+
 CREATE INDEX IF NOT EXISTS idx_t_output_invoice_status
     ON t_output_invoice(status);
 
--- 3. 已有数据校验（确保没有非法状态）
-DO $$
-DECLARE
-    invalid_count INTEGER;
-BEGIN
-    SELECT COUNT(*) INTO invalid_count
-    FROM t_output_invoice
-    WHERE status IS NOT NULL
-      AND status NOT IN (
-        'PENDING_CONFIRM', 'PENDING_REVIEW', 'CONFIRMED',
-        'VOUCHERED', 'FULLY_RECONCILED', 'PARTIALLY_RECONCILED', 'VOIDED'
-    );
-    IF invalid_count > 0 THEN
-        RAISE EXCEPTION 't_output_invoice.status 存在 % 条非法值，迁移前请人工修正', invalid_count;
-    END IF;
-END $$;
+-- ============================================================
+-- Step 4: COMMENT 更新
+-- ============================================================
 
 COMMENT ON COLUMN t_output_invoice.status IS
-    '状态: PENDING_CONFIRM/PENDING_REVIEW/CONFIRMED/VOUCHERED/FULLY_RECONCILED/PARTIALLY_RECONCILED/VOIDED';
+    '状态: PENDING_CONFIRM/PENDING_REVIEW/CONFIRMED/VOUCHERED/FULLY_RECONCILED/PARTIALLY_RECONCILED/VOIDED/REVERSED (2026-06-21 由 V8 旧 4 状态迁移)';
+
+-- ============================================================
+-- Step 5: 迁移结果审计（输出统计，供人工核对）
+-- ============================================================
+
+DO $$
+DECLARE
+    rec RECORD;
+BEGIN
+    FOR rec IN
+        SELECT status, COUNT(*) AS cnt
+        FROM t_output_invoice
+        GROUP BY status
+        ORDER BY status
+    LOOP
+        RAISE NOTICE 'V45 迁移结果: status=%, count=%', rec.status, rec.cnt;
+    END LOOP;
+END $$;
 ```
 
-**P21-b 采购发票迁移（V39）见独立 SPEC，本文件不重复**。
+### 3.2 ISSUED→CONFIRMED 的业务语义说明
+
+旧 `ISSUED`（"已开票"）迁移到新 `CONFIRMED`（"已确认"），但**部分记录的 voucher_id 为空**：
+
+- 旧业务流：销售发票开出去 → 可能立即生成凭证 → 也可能延后（赊销未收货款）
+- 新状态机：`CONFIRMED → VOUCHERED`（生成凭证后转 VOUCHERED）
+
+**业务规则**（前端 / 报表实现）：
+- `status = CONFIRMED` 且 `voucher_id IS NOT NULL` → "已确认且已生成凭证"（实际显示为已生凭证）
+- `status = CONFIRMED` 且 `voucher_id IS NULL` → "已确认但待生成凭证"（需要补凭证）
+- 前端列表页应**额外显示 voucher_id 是否为空**，辅助业务判断
+
+**数据迁移后预期**：
+- 所有旧 `ISSUED` 记录 → `CONFIRMED` + 业务上分两类（有/无 voucher_id）
+- 需要人工/批量任务补凭证（**不在本 SPEC 范围**）
+
+### 3.3 REVERSED 状态的特殊处理
+
+旧 `RED_INK`（红字）迁移到新 `REVERSED`，**继续保留在 7+1 状态枚举里**（CHECK 约束已包含 REVERSED）。
+
+原因：
+- 需求文档 §3.1 设计的 7 状态不含 REVERSED
+- 但实际生产数据有 RED_INK 记录，必须有状态承接
+- 妥协方案：在枚举里加 REVERSED 作 8 状态（与文档略有差异，详见 §3.4）
+
+### 3.4 需求文档 §3.1 与 V45 实施的差异说明
+
+| 项 | 需求文档 §3.1 设计 | V45 实施 | 差异原因 |
+|:---|:---|:---|:---|
+| 发票状态数 | 7 个 | 8 个（+ REVERSED）| 旧数据 RED_INK 需承接 |
+| REVERSED 语义 | 未列 | 已生成凭证后被冲销 | 与 V8 旧 RED_INK 等价 |
+| 未来清理 | — | 待所有 RED_INK 记录归档后，移除 REVERSED 状态 | 长期收敛 |
+
+**P21-b 采购发票迁移（V46）见独立 SPEC，结构对称。**
 
 ---
 
