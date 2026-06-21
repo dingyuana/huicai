@@ -145,7 +145,8 @@ public class BusinessDocServiceImpl implements BusinessDocService {
     }
 
     private void populateSettlementAmounts(BusinessDocVO vo, BusinessDocEntity entity) {
-        if ("RECEIPT".equals(entity.getDocType())) {
+        String docType = entity.getDocType();
+        if ("RECEIPT".equals(docType) || "INVOICE_OUT".equals(docType)) {
             List<ReceivableEntity> recvList = receivableMapper.selectList(
                     new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<ReceivableEntity>()
                             .eq(ReceivableEntity::getDocId, entity.getId()));
@@ -157,7 +158,7 @@ public class BusinessDocServiceImpl implements BusinessDocService {
             }
             vo.setSettledAmount(totalSettled);
             vo.setUnsettledAmount(totalAmount.subtract(totalSettled));
-        } else if ("PAYMENT".equals(entity.getDocType())) {
+        } else if ("PAYMENT".equals(docType) || "INVOICE_IN".equals(docType)) {
             List<PayableEntity> payList = payableMapper.selectList(
                     new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<PayableEntity>()
                             .eq(PayableEntity::getDocId, entity.getId()));
