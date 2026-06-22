@@ -383,6 +383,36 @@ public class SalesInvoiceImportService {
             }
         }
 
+        // 后处理2：没有originalInvoiceNo的红冲发票，按金额+客户匹配蓝字
+        for (ParsedInvoiceRow row : rows) {
+            if (!row.isPositive && StrUtil.isBlank(row.originalInvoiceNo)
+                    && StrUtil.isNotBlank(row.invoiceNo)
+                    && existingSet.contains(row.invoiceNo)) {
+                try {
+                    BigDecimal absAmount = row.amount.abs();
+                    String period = row.invoiceDate.format(DateTimeFormatter.ofPattern("yyyyMM"));
+                    List<OutputInvoiceEntity> candidates = outputInvoiceMapper.selectList(
+                            new LambdaQueryWrapper<OutputInvoiceEntity>()
+                                    .eq(OutputInvoiceEntity::getAmount, absAmount)
+                                    .eq(OutputInvoiceEntity::getCustomerName, row.buyerName)
+                                    .ne(OutputInvoiceEntity::getStatus, InvoiceStatus.REVERSED)
+                                    .ne(OutputInvoiceEntity::getStatus, InvoiceStatus.VOIDED)
+                                    .last("LIMIT 1"));
+                    if (!candidates.isEmpty()) {
+                        OutputInvoiceEntity blue = candidates.get(0);
+                        handleRedFlushReversal(blue.getInvoiceNo(), null, period);
+                        log.info("红冲金额匹配: redInvoice={}, blueInvoice={}, amount={}",
+                                row.invoiceNo, blue.getInvoiceNo(), absAmount);
+                    } else {
+                        log.info("红冲金额匹配未找到: invoiceNo={}, amount={}, buyer={}",
+                                row.invoiceNo, absAmount, row.buyerName);
+                    }
+                } catch (Exception e) {
+                    log.warn("红冲金额匹配后处理失败 row={}: {}", row.rowNum, e.getMessage());
+                }
+            }
+        }
+
         return Map.of(
                 "total", rows.size(), "success", success,
                 "docCreated", docCreated, "voucherCreated", voucherCreated,
@@ -658,7 +688,8 @@ public class SalesInvoiceImportService {
             return;
         }
         original.setStatus(InvoiceStatus.REVERSED);
-        String note = "被" + redDoc.getDocNo() + "红冲(" + period + ")";
+        String docRef = redDoc != null ? redDoc.getDocNo() : "外部导入";
+        String note = "被" + docRef + "红冲(" + period + ")";
         if (original.getRemark() != null && !original.getRemark().isBlank()) {
             original.setRemark(original.getRemark() + " | " + note);
         } else {
