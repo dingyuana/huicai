@@ -213,6 +213,11 @@ public class TaxServiceImpl implements TaxService {
     }
 
     @Override
+    public void deleteOutput(Long id) {
+        outputMapper.deleteById(id);
+    }
+
+    @Override
     public Map<String, Object> outputSummary(String period) {
         return outputMapper.summaryByPeriod(period);
     }

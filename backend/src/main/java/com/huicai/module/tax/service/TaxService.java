@@ -28,6 +28,7 @@ public interface TaxService {
     IPage<OutputInvoiceEntity> pageQueryOutput(String customerName, String period, String status, Integer current, Integer size);
     OutputInvoiceEntity getOutputById(Long id);
     OutputInvoiceEntity createOutput(OutputInvoiceEntity entity);
+    void deleteOutput(Long id);
     Map<String, Object> outputSummary(String period);
     List<Map<String, Object>> outputByTaxRate(String period);
 

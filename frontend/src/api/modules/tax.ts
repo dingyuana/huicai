@@ -84,6 +84,10 @@ export function getOutputInvoice(id: number): Promise<OutputInvoice> {
   return request.get(`/tax/output-invoices/${id}`)
 }
 
+export function deleteOutputInvoice(id: number): Promise<void> {
+  return request.delete(`/tax/output-invoices/${id}`)
+}
+
 export function createOutputInvoice(data: OutputInvoice): Promise<OutputInvoice> {
   return request.post('/tax/output-invoices', data)
 }

@@ -34,6 +34,12 @@
         <el-table-column prop="taxRate" label="税率" width="80" align="center">
           <template #default="{ row }">{{ Number(row.taxRate).toFixed(2) }}%</template>
         </el-table-column>
+        <el-table-column label="发票类型" width="100" align="center">
+          <template #default="{ row }">
+            <el-tag v-if="Number(row.amount) < 0" type="danger" size="small">红字发票</el-tag>
+            <span v-else>{{ row.invoiceType === 'SPECIAL' ? '专用发票' : row.invoiceType === 'PLAIN' ? '普通发票' : row.invoiceType }}</span>
+          </template>
+        </el-table-column>
         <el-table-column label="状态" width="100" align="center">
           <template #default="{ row }">
             <el-tag :type="(STATUS_TAG_MAP[row.status] || 'info') as any" size="small">
@@ -187,6 +193,7 @@
         </el-descriptions>
       </template>
       <template #footer>
+        <el-button type="danger" @click="onDelete(detail)" :loading="deleting">删除</el-button>
         <el-button @click="detailVisible = false">关闭</el-button>
       </template>
     </el-dialog>
@@ -197,17 +204,29 @@
 import { onMounted, reactive, ref } from 'vue'
 import { ElMessage, type FormInstance } from 'element-plus'
 import { UploadFilled } from '@element-plus/icons-vue'
-import { pageOutputInvoice, createOutputInvoice, getOutputInvoice } from '@/api/modules/tax'
+import { pageOutputInvoice, createOutputInvoice, getOutputInvoice, deleteOutputInvoice } from '@/api/modules/tax'
 import { previewSalesInvoices, confirmSalesInvoicesImport } from '@/api/modules/salesInvoice'
 
 const detailVisible = ref(false)
 const detail = ref<any>(null)
+const deleting = ref(false)
 
 const showDetail = async (row: any) => {
   try {
     detail.value = await getOutputInvoice(row.id)
     detailVisible.value = true
   } catch { detail.value = row; detailVisible.value = true }
+}
+
+const onDelete = async (row: any) => {
+  if (!row?.id) return
+  deleting.value = true
+  try {
+    await deleteOutputInvoice(row.id)
+    ElMessage.success('删除成功')
+    detailVisible.value = false
+    fetchData()
+  } finally { deleting.value = false }
 }
 
 const STATUS_MAP: Record<string, string> = {

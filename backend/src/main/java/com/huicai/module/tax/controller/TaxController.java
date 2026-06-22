@@ -6,7 +6,9 @@ import com.huicai.module.tax.entity.InputInvoiceEntity;
 import com.huicai.module.tax.entity.OutputInvoiceEntity;
 import com.huicai.module.tax.entity.TaxDeclarationEntity;
 import com.huicai.module.tax.entity.TaxTypeEntity;
+import com.huicai.module.tax.service.OutputInvoiceStateMachineService;
 import com.huicai.module.tax.service.TaxService;
+import com.huicai.module.system.util.SecurityUtils;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
@@ -22,6 +24,7 @@ import java.util.Map;
 public class TaxController {
 
     private final TaxService service;
+    private final OutputInvoiceStateMachineService stateMachineService;
 
     // ========== 税种管理 ==========
     @Operation(summary = "税种分页查询")
@@ -120,6 +123,13 @@ public class TaxController {
         return R.ok(service.createOutput(entity));
     }
 
+    @Operation(summary = "删除销项发票（逻辑删除）")
+    @DeleteMapping("/output-invoices/{id}")
+    public R<Void> deleteOutput(@PathVariable Long id) {
+        service.deleteOutput(id);
+        return R.ok();
+    }
+
     @Operation(summary = "销项汇总")
     @GetMapping("/output-invoices/summary")
     public R<Map<String, Object>> outputSummary(@RequestParam String period) {
@@ -130,6 +140,54 @@ public class TaxController {
     @GetMapping("/output-invoices/by-tax-rate")
     public R<List<Map<String, Object>>> outputByTaxRate(@RequestParam String period) {
         return R.ok(service.outputByTaxRate(period));
+    }
+
+    // ========== 销项发票状态机 (P21-a) ==========
+    @Operation(summary = "提交审核 (PENDING_CONFIRM → PENDING_REVIEW)")
+    @PostMapping("/output-invoices/{id}/submit-review")
+    public R<Void> submitReview(@PathVariable Long id,
+            @RequestParam(required = false) Long userId) {
+        stateMachineService.submitForReview(id, orDefault(userId));
+        return R.ok();
+    }
+
+    @Operation(summary = "审核通过 (PENDING_REVIEW → CONFIRMED)")
+    @PostMapping("/output-invoices/{id}/confirm")
+    public R<Void> confirm(@PathVariable Long id,
+            @RequestParam(required = false) Long userId) {
+        stateMachineService.confirm(id, orDefault(userId));
+        return R.ok();
+    }
+
+    @Operation(summary = "审核驳回 (PENDING_REVIEW → PENDING_CONFIRM)")
+    @PostMapping("/output-invoices/{id}/reject")
+    public R<Void> reject(@PathVariable Long id,
+            @RequestParam String reason,
+            @RequestParam(required = false) Long userId) {
+        stateMachineService.reject(id, orDefault(userId), reason);
+        return R.ok();
+    }
+
+    @Operation(summary = "回退到待审核 (CONFIRMED → PENDING_REVIEW)")
+    @PostMapping("/output-invoices/{id}/revert")
+    public R<Void> revert(@PathVariable Long id,
+            @RequestParam(required = false) Long userId) {
+        stateMachineService.revertToReview(id, orDefault(userId));
+        return R.ok();
+    }
+
+    @Operation(summary = "作废 (任意非终态 → VOIDED)")
+    @PostMapping("/output-invoices/{id}/void")
+    public R<Void> voidInvoice(@PathVariable Long id,
+            @RequestParam String reason,
+            @RequestParam(required = false) Long userId) {
+        stateMachineService.voidInvoice(id, orDefault(userId), reason);
+        return R.ok();
+    }
+
+    private Long orDefault(Long userId) {
+        if (userId != null) return userId;
+        try { return SecurityUtils.getCurrentUserId(); } catch (Exception e) { return 1L; }
     }
 
     // ========== 增值税计算 ==========
