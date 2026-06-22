@@ -259,7 +259,47 @@ public class SalesInvoiceImportService {
             row.isPositive = true;
         }
 
+        // 解析备注/摘要字段（用于红冲关联）
+        Integer summaryIdx = mapping.getFieldToColumnIndex().get(ColumnMappingResolver.Field.SUMMARY);
+        if (summaryIdx != null) {
+            row.remark = rowMap.getOrDefault(summaryIdx, "").trim();
+        } else {
+            // 退而求其次用商品名称当备注
+            Integer goodsIdx2 = mapping.getFieldToColumnIndex().get(ColumnMappingResolver.Field.GOODS_NAME);
+            if (goodsIdx2 != null) {
+                row.remark = rowMap.getOrDefault(goodsIdx2, "").trim();
+            }
+        }
+
+        // 红冲发票提取原始发票号
+        if (!row.isPositive && StrUtil.isNotBlank(row.remark)) {
+            row.originalInvoiceNo = extractOriginalInvoiceNo(row.remark);
+        }
+
         return row;
+    }
+
+    /**
+     * 从备注文本中提取被红冲的原始发票号.
+     * 支持格式: "被红冲蓝字发票号码：12345678" / "红冲自 INV-2026-001" /
+     *           "原发票号: 12345678" / 直接包含发票号模式
+     */
+    private String extractOriginalInvoiceNo(String remark) {
+        if (StrUtil.isBlank(remark)) return null;
+        // 匹配 "发票号码[：:]\s*(\S+)" 或 "号码[：:]\s*(\S+)" 或 "发票号[：:]\s*(\S+)"
+        java.util.regex.Pattern p = java.util.regex.Pattern.compile(
+                "(?:发票号码|发票号|号码|原发票)[：:]\\s*(\\S+)");
+        java.util.regex.Matcher m = p.matcher(remark);
+        if (m.find()) {
+            return m.group(1).trim();
+        }
+        // 匹配 "红冲自\s*(\S+)"
+        p = java.util.regex.Pattern.compile("红冲自\\s*(\\S+)");
+        m = p.matcher(remark);
+        if (m.find()) {
+            return m.group(1).trim();
+        }
+        return null;
     }
 
     private LocalDate parseInvoiceDate(String dateStr) {
@@ -315,6 +355,10 @@ public class SalesInvoiceImportService {
                 createVoucher(doc, row, customerId, period);
                 insertOutputInvoice(row, customerId, period, doc);
                 createReceivableFromInvoice(doc, row, customerId, period);
+                // 红冲发票: 找到原蓝字发票标记为 REVERSED
+                if (!row.isPositive && StrUtil.isNotBlank(row.originalInvoiceNo)) {
+                    handleRedFlushReversal(row.originalInvoiceNo, doc, period);
+                }
                 success++; docCreated++; voucherCreated++;
             } catch (Exception e) {
                 log.warn("处理发票行失败 row={}: {}", row.rowNum, e.getMessage());
@@ -479,6 +523,7 @@ public class SalesInvoiceImportService {
         inv.setStatus(InvoiceStatus.PENDING_CONFIRM);
         inv.setDocId(doc.getId());
         inv.setVoucherId(doc.getVoucherId());
+        inv.setRemark(row.remark);
         inv.setCreatedBy(DEFAULT_USER_ID);
         inv.setUpdatedAt(LocalDateTime.now());
         try {
@@ -581,6 +626,35 @@ public class SalesInvoiceImportService {
                 customerId, doc.getId(), row.totalAmount);
     }
 
+    /**
+     * 红冲关联：根据被红冲的蓝字发票号，找到对应发票并标记为 REVERSED，同时更新备注。
+     */
+    @Transactional
+    protected void handleRedFlushReversal(String originalInvoiceNo, BusinessDocEntity redDoc, String period) {
+        List<OutputInvoiceEntity> originals = outputInvoiceMapper.selectList(
+                new LambdaQueryWrapper<OutputInvoiceEntity>()
+                        .eq(OutputInvoiceEntity::getInvoiceNo, originalInvoiceNo)
+                        .last("LIMIT 1"));
+        if (originals.isEmpty()) {
+            log.warn("红冲关联未找到原发票: invoiceNo={}, 跳过标记", originalInvoiceNo);
+            return;
+        }
+        OutputInvoiceEntity original = originals.get(0);
+        if (InvoiceStatus.isTerminal(original.getStatus())) {
+            log.warn("原发票已是终态，跳过: id={}, status={}", original.getId(), original.getStatus());
+            return;
+        }
+        original.setStatus(InvoiceStatus.REVERSED);
+        String note = "被" + redDoc.getDocNo() + "红冲(" + period + ")";
+        if (original.getRemark() != null && !original.getRemark().isBlank()) {
+            original.setRemark(original.getRemark() + " | " + note);
+        } else {
+            original.setRemark(note);
+        }
+        outputInvoiceMapper.updateById(original);
+        log.info("红冲关联成功: originalInvoiceNo={}, newStatus=REVERSED", originalInvoiceNo);
+    }
+
     static class ParsedInvoiceRow {
         int rowNum;
         String invoiceNo;
@@ -595,5 +669,7 @@ public class SalesInvoiceImportService {
         BigDecimal taxAmount = BigDecimal.ZERO;
         BigDecimal totalAmount = BigDecimal.ZERO;
         boolean isPositive = true;
+        String remark;
+        String originalInvoiceNo; // 红冲关联的原蓝字发票号
     }
 }
