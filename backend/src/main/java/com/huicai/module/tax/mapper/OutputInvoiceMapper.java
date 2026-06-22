@@ -16,19 +16,36 @@ public interface OutputInvoiceMapper extends BaseMapper<OutputInvoiceEntity> {
 
     @Select("""
         SELECT
-          SUM(amount) AS amount,
-          SUM(tax_amount) AS tax,
-          SUM(total_amount) AS total,
-          COUNT(*) AS count
+          COUNT(*) AS totalCount,
+          SUM(amount) AS totalAmount,
+          SUM(CASE WHEN amount < 0 THEN 1 ELSE 0 END) AS redCount,
+          SUM(CASE WHEN status = 'VOIDED' THEN 1 ELSE 0 END) AS voidedCount,
+          SUM(CASE WHEN status = 'REVERSED' THEN 1 ELSE 0 END) AS reversedCount,
+          SUM(CASE WHEN amount >= 0 THEN amount ELSE 0 END) AS blueAmount,
+          SUM(CASE WHEN amount < 0 THEN amount ELSE 0 END) AS redAmount
         FROM t_output_invoice
-        WHERE deleted = 0 AND period = #{period} AND status = 'ISSUED'
+        WHERE deleted = 0
+    """)
+    Map<String, Object> summaryAll();
+
+    @Select("""
+        SELECT
+          COUNT(*) AS totalCount,
+          SUM(amount) AS totalAmount,
+          SUM(CASE WHEN amount < 0 THEN 1 ELSE 0 END) AS redCount,
+          SUM(CASE WHEN status = 'VOIDED' THEN 1 ELSE 0 END) AS voidedCount,
+          SUM(CASE WHEN status = 'REVERSED' THEN 1 ELSE 0 END) AS reversedCount,
+          SUM(CASE WHEN amount >= 0 THEN amount ELSE 0 END) AS blueAmount,
+          SUM(CASE WHEN amount < 0 THEN amount ELSE 0 END) AS redAmount
+        FROM t_output_invoice
+        WHERE deleted = 0 AND period = #{period}
     """)
     Map<String, Object> summaryByPeriod(@Param("period") String period);
 
     @Select("""
         SELECT tax_rate, SUM(tax_amount) AS amount, COUNT(*) AS count
         FROM t_output_invoice
-        WHERE deleted = 0 AND period = #{period} AND status = 'ISSUED'
+        WHERE deleted = 0 AND period = #{period}
         GROUP BY tax_rate
     """)
     List<Map<String, Object>> byTaxRate(@Param("period") String period);

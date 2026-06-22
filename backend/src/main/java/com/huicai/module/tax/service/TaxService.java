@@ -30,6 +30,7 @@ public interface TaxService {
     OutputInvoiceEntity createOutput(OutputInvoiceEntity entity);
     void deleteOutput(Long id);
     Map<String, Object> outputSummary(String period);
+    Map<String, Object> outputSummaryAll();
     List<Map<String, Object>> outputByTaxRate(String period);
 
     // 增值税计算

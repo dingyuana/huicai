@@ -223,6 +223,11 @@ public class TaxServiceImpl implements TaxService {
     }
 
     @Override
+    public Map<String, Object> outputSummaryAll() {
+        return outputMapper.summaryAll();
+    }
+
+    @Override
     public List<Map<String, Object>> outputByTaxRate(String period) {
         return outputMapper.byTaxRate(period);
     }

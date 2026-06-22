@@ -9,6 +9,16 @@
         </el-space>
       </div>
 
+      <!-- 统计栏 -->
+      <el-row :gutter="16" style="margin-bottom:16px">
+        <el-col :span="4"><el-statistic title="总发票数" :value="stats.totalCount || 0" /></el-col>
+        <el-col :span="5"><el-statistic title="蓝字总金额" :value="fmtAmount(stats.blueAmount)" /></el-col>
+        <el-col :span="5"><el-statistic title="红字金额" :value="fmtAmount(stats.redAmount)" /></el-col>
+        <el-col :span="3"><el-statistic title="红字数" :value="stats.redCount || 0" /></el-col>
+        <el-col :span="3"><el-statistic title="已冲销" :value="stats.reversedCount || 0" /></el-col>
+        <el-col :span="4"><el-statistic title="已作废" :value="stats.voidedCount || 0" /></el-col>
+      </el-row>
+
       <el-form :model="query" inline class="filter-form">
         <el-form-item label="客户">
           <el-input v-model="query.customerName" clearable style="width:180px" />
@@ -233,6 +243,7 @@ import { onMounted, reactive, ref } from 'vue'
 import { ElMessage, type FormInstance } from 'element-plus'
 import { UploadFilled } from '@element-plus/icons-vue'
 import { pageOutputInvoice, createOutputInvoice, getOutputInvoice, deleteOutputInvoice,
+  outputInvoiceSummary,
   submitForReview, confirmOutputInvoice, rejectOutputInvoice, revertOutputInvoice, voidOutputInvoice } from '@/api/modules/tax'
 import { previewSalesInvoices, confirmSalesInvoicesImport } from '@/api/modules/salesInvoice'
 
@@ -254,7 +265,7 @@ const onDelete = async (row: any) => {
     await deleteOutputInvoice(row.id)
     ElMessage.success('删除成功')
     detailVisible.value = false
-    fetchData()
+    fetchData(); fetchStats()
   } finally { deleting.value = false }
 }
 
@@ -273,19 +284,19 @@ const doAction = async (row: any, action: string) => {
       else await voidOutputInvoice(id, reason)
       ElMessage.success(`${label}成功`)
       detailVisible.value = false
-      fetchData()
+      fetchData(); fetchStats()
     } catch { /* backend handles error msg */ }
     return
   }
 
-  try {
-    if (action === 'submitReview') await submitForReview(id)
-    else if (action === 'confirm') await confirmOutputInvoice(id)
-    else if (action === 'revert') await revertOutputInvoice(id)
-    ElMessage.success(`${label}成功`)
-    detailVisible.value = false
-    fetchData()
-  } catch { /* backend handles error msg */ }
+try {
+      if (action === 'submitReview') await submitForReview(id)
+      else if (action === 'confirm') await confirmOutputInvoice(id)
+      else if (action === 'revert') await revertOutputInvoice(id)
+      ElMessage.success(`${label}成功`)
+      detailVisible.value = false
+      fetchData(); fetchStats()
+    } catch { /* backend handles error msg */ }
 }
 
 const STATUS_MAP: Record<string, string> = {
@@ -303,6 +314,7 @@ const query = reactive({ customerName: '', period: '', current: 1, size: 20 })
 const list = ref<any[]>([])
 const total = ref(0)
 const loading = ref(false)
+const stats = ref<any>({})
 const dialogVisible = ref(false)
 const formRef = ref<FormInstance>()
 const form = reactive<any>({ invoiceType: 'SPECIAL', taxRate: 13 })
@@ -334,6 +346,10 @@ const fetchData = async () => {
   }
 }
 
+const fetchStats = async () => {
+  try { stats.value = await outputInvoiceSummary() } catch {}
+}
+
 const openEdit = () => {
   Object.assign(form, {
     id: undefined, invoiceNo: '', invoiceDate: '', customerName: '',
@@ -349,11 +365,11 @@ const onSubmit = async () => {
     await createOutputInvoice(form)
     ElMessage.success('创建成功')
     dialogVisible.value = false
-    fetchData()
+    fetchData(); fetchStats()
   })
 }
 
-onMounted(fetchData)
+onMounted(() => { fetchData(); fetchStats() })
 
 // ====== 发票导入 ======
 const importVisible = ref(false)
@@ -398,7 +414,7 @@ const onImportConfirm = async () => {
     importVisible.value = false
     importPreview.value = null
     importFile.value = null
-    fetchData()
+    fetchData(); fetchStats()
   } finally { importConfirming.value = false }
 }
 </script>

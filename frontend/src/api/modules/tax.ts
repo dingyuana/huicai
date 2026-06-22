@@ -113,8 +113,10 @@ export function createOutputInvoice(data: OutputInvoice): Promise<OutputInvoice>
   return request.post('/tax/output-invoices', data)
 }
 
-export function outputInvoiceSummary(period: string): Promise<any> {
-  return request.get('/tax/output-invoices/summary', { params: { period } })
+export function outputInvoiceSummary(period?: string): Promise<any> {
+  const params: any = {}
+  if (period) params.period = period
+  return request.get('/tax/output-invoices/summary', { params })
 }
 
 export function calculateVat(period: string): Promise<any> {

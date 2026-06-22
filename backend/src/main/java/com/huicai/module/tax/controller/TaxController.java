@@ -132,8 +132,10 @@ public class TaxController {
 
     @Operation(summary = "销项汇总")
     @GetMapping("/output-invoices/summary")
-    public R<Map<String, Object>> outputSummary(@RequestParam String period) {
-        return R.ok(service.outputSummary(period));
+    public R<Map<String, Object>> outputSummary(
+            @RequestParam(required = false) String period) {
+        if (period != null) return R.ok(service.outputSummary(period));
+        return R.ok(service.outputSummaryAll());
     }
 
     @Operation(summary = "销项按税率分组")
