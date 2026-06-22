@@ -1039,3 +1039,169 @@ RBAC 模型，权限格式：`module:resource:action`
 > - `docs/specs/P22-voucher-state-machine.md` — 凭证状态机 SPEC
 > - `docs/specs/P24-audit-tracking.md` — 审计追踪 SPEC
 > - `docs/开发计划书.md` — 开发计划
+#### 按钮状态控制
+
+```vue
+<!-- VoucherList.vue -->
+<el-button v-if="row.status === 'DRAFT'" @click="onSubmit(row)">提交</el-button>
+<el-button v-if="row.status === 'SUBMITTED'" @click="onAudit(row)">审核</el-button>
+<el-button v-if="row.status === 'AUDITED'" @click="onPost(row)">记账</el-button>
+<el-button v-if="row.status === 'POSTED' || row.status === 'AUDITED'" @click="onReverse(row)">红冲</el-button>
+```
+
+#### 批量操作计算属性
+
+```typescript
+const canBatchSubmit = computed(() => selectedRows.value.some((r) => r.status === 'DRAFT'))
+const canBatchAudit = computed(() => selectedRows.value.some((r) => r.status === 'SUBMITTED'))
+const canBatchPost = computed(() => selectedRows.value.some((r) => r.status === 'AUDITED'))
+```
+
+### 18.3 银行流水状态机前端集成
+
+**文件**: `frontend/src/api/modules/bankStatement.ts` + `frontend/src/views/finance/bank-statement/BankStatementView.vue`
+
+#### 状态变更 API
+
+| 方法 | 路径 | 说明 |
+|:-----|:-----|:-----|
+| POST | `/bank-statements/{id}/classify` | 分类 |
+| POST | `/bank-statements/{id}/review` | 确认/驳回 |
+| POST | `/bank-statements/batch-review` | 批量确认 |
+
+### 18.4 销售发票状态机前端集成
+
+**文件**: `frontend/src/api/modules/salesInvoice.ts` + `frontend/src/views/finance/sales-invoice/SalesInvoiceImportView.vue`
+
+#### 状态变更 API
+
+| 方法 | 路径 | 说明 |
+|:-----|:-----|:-----|
+| POST | `/output-invoices/{id}/submit-review` | 提交审核 |
+| POST | `/output-invoices/{id}/confirm` | 审核通过 |
+| POST | `/output-invoices/{id}/reject` | 审核驳回 |
+| POST | `/output-invoices/{id}/void` | 作废 |
+
+### 18.5 前端状态机集成原则
+
+| 原则 | 说明 |
+|:-----|:-----|
+| **状态驱动 UI** | 所有按钮显示/禁用完全由后端返回的 status 字段控制 |
+| **禁止前端判断** | 不允许前端猜测状态转换，必须调用后端 API |
+| **统一状态映射** | 状态显示名称统一在 API 模块层定义，禁止在视图中硬编码 |
+| **即时刷新** | 状态变更成功后立即刷新列表，确保 UI 状态与后端一致 |
+| **批量操作校验** | 批量操作前计算属性检查是否有符合条件的记录 |
+
+---
+
+## 19. 测试覆盖率
+
+### 19.1 单元测试统计
+
+| 模块 | Service 文件 | 测试文件 | 测试用例数 | 代码行数 |
+|:-----|:------------|:--------|:---------:|:-------:|
+| finance | VoucherServiceImpl.java | VoucherServiceTest.java | 12 | ~300 |
+| finance | BankStatementServiceImpl.java | - | - | 744 |
+| finance | AutoGenerationService.java | - | - | 665 |
+| finance | BusinessDocServiceImpl.java | - | - | 520 |
+| arap | ReconciliationServiceImpl.java | - | - | 1109 |
+| arap | ReceivableServiceImpl.java | - | - | ~200 |
+| arap | PayableServiceImpl.java | - | - | ~200 |
+| arap | ExpenseReimbursementServiceImpl.java | - | - | ~250 |
+| system | UserServiceImpl.java | - | - | ~150 |
+
+### 19.2 已覆盖场景
+
+**凭证模块（12 单测）**：
+
+| 测试场景 | 方法名 |
+|:---------|:-------|
+| 创建凭证 | `testCreateVoucher` |
+| 修改凭证 | `testUpdateVoucher` |
+| 提交凭证 | `testSubmitVoucher` |
+| 审核凭证 | `testAuditVoucher` |
+| 记账凭证 | `testPostVoucher` |
+| 红冲凭证 | `testReverseVoucher` |
+| 批量提交 | `testBatchSubmit` |
+| 批量审核 | `testBatchAudit` |
+| 批量记账 | `testBatchPost` |
+| 凭证编号生成 | `testGenerateVoucherNo` |
+| 科目余额更新 | `testUpdateSubjectBalance` |
+| 期间校验 | `testPeriodValidation` |
+
+### 19.3 测试技术栈
+
+| 组件 | 技术 |
+|:-----|:-----|
+| 测试框架 | Spring Boot Test + JUnit 5 |
+| Mock | Mockito |
+| 数据库 | H2 (内存数据库) |
+| 断言 | AssertJ |
+
+### 19.4 测试覆盖率目标
+
+| 模块 | 当前覆盖率 | 目标覆盖率 |
+|:-----|:---------:|:---------:|
+| 凭证管理 | ~80% | 90% |
+| 银行流水 | 0% | 70% |
+| 往来核销 | 0% | 70% |
+| 销售发票 | 0% | 70% |
+| 业务单据 | 0% | 60% |
+
+---
+
+## 20. 实现状态总览
+
+### 20.1 已实现（✅）
+
+| 模块 | 子模块 | 关键文件 |
+|:-----|:-------|:---------|
+| 项目骨架 | 前端/后端/DB/CI | pom.xml, docker-compose, 47 个迁移 |
+| 系统管理 | 科目/期间/凭证类型/摘要/配置 | system module 全 |
+| RBAC | 用户/角色/菜单/权限/审计日志 | system module 全 |
+| 凭证管理 | 创建/审核/记账/红冲/查询 | VoucherService + Controller + 12 单测 |
+| 凭证状态机 | VoucherStateMachineService | ✅ 4态守卫, V47 迁移 |
+| 银行流水 | 导入/列名映射/分类/工作台/A/B/C路由 | BankStatementService(744行) + AutoGenerationService(665行) |
+| 分类规则 | 8种子规则/CRUD/优先级/匹配引擎 | ClassificationRuleService |
+| 智能分类 | 规则引擎+兜底启发式+AI异步 | FallbackHeuristicService + AiRabbitMQ |
+| 业务单据 | 7单据类型/凭证生成/编号 | BusinessDocService(520行) |
+| 往来核销 | L1-L6匹配/FIFO/容差/预收预付 | ReconciliationService(1109行) |
+| 销售发票基础设施 | InvoiceStatus 常量/V46迁移/Entity注解 | 已完成 |
+| 费用报销 | 员工档案/报销单/自动匹配/凭证生成 | ExpenseReimbursementService |
+| 前端框架 | 路由/布局/权限指令/API封装 | 12视图目录, 50+路由 |
+
+### 20.2 部分实现（⚠️）
+
+| 模块 | 缺什么 |
+|:-----|:-------|
+| 销售发票状态机Service | `OutputInvoiceStateMachineService` 未实现（仅常量+Entity+迁移） |
+| P24 审计追踪 | `StatusChangeAspect` 已创建但仅标注 2 个 Entity，尚缺 `ReceivableEntity`/`PayableEntity` 等 |
+| P20 AR/AP Service | `ArapStatus` 常量和迁移已落地，但 `ReceivableService.confirm()` / `markSettled()` / `reverse()` 未实现 |
+| 期初建账 | 前端有 `beginning-balance/` 视图目录，但后端 Service 未完整实现 |
+| 期末结账 | `PeriodCloseService` 存在但结账检查项未完整 |
+| 数据权限 | `DataPermissionInterceptor` 是个 scaffolding，未注入 SQL |
+| AI 服务 | Python FastAPI 骨架存在，RabbitMQ 集成存在，但实际 OCR/embedding 未上线 |
+| 税务申报 P18 | `approveDeclaration` / `rejectDeclaration` 存在但申报→凭证自动生成未实现 |
+| 银企对账 P14 | 匹配/确认端点存在，余额调节表未完整实现 |
+
+### 20.3 未启动（❌）
+
+| 模块 | 说明 |
+|:-----|:------|
+| P23 强制校验 | 统一拦截器未立项 |
+| P25 账期控制 | 跨期标记 + 账期逻辑未立项 |
+| 预算控制 | 单据保存时执行预算检查未实现 |
+| 报表导出 | 仅有基础结构，EasyExcel 导出未实现 |
+| 财务报表物化视图 | PostgreSQL 物化视图未创建 |
+
+---
+
+> **引用文档索引**：
+> - `基于Web财务软件的项目说明书.md` — 主项目说明书，高层架构
+> - `docs/需求分析书_发票与凭证状态机_V1.0.md` — 发票/凭证状态机需求
+> - `docs/需求分析书_银行流水导入分类_V1.0.md` — 银行流水导入需求
+> - `docs/specs/P20-arap-state-machine-spec.md` — AR/AP 状态机 SPEC
+> - `docs/specs/P21-sales-invoice-state-machine.md` — 销售发票状态机 SPEC
+> - `docs/specs/P22-voucher-state-machine.md` — 凭证状态机 SPEC
+> - `docs/specs/P24-audit-tracking.md` — 审计追踪 SPEC
+> - `docs/开发计划书.md` — 开发计划

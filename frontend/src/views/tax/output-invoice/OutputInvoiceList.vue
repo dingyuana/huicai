@@ -47,9 +47,22 @@
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="100" fixed="right">
+        <el-table-column label="操作" width="200" fixed="right">
           <template #default="{ row }">
             <el-button link type="primary" size="small" @click="showDetail(row)">详情</el-button>
+            <template v-if="row.status === 'PENDING_CONFIRM'">
+              <el-button link type="primary" size="small" @click="doAction(row, 'submitReview')">提交审核</el-button>
+              <el-button link type="danger" size="small" @click="doAction(row, 'void')">作废</el-button>
+            </template>
+            <template v-else-if="row.status === 'PENDING_REVIEW'">
+              <el-button link type="primary" size="small" @click="doAction(row, 'confirm')">通过</el-button>
+              <el-button link type="warning" size="small" @click="doAction(row, 'reject')">驳回</el-button>
+              <el-button link type="danger" size="small" @click="doAction(row, 'void')">作废</el-button>
+            </template>
+            <template v-else-if="row.status === 'CONFIRMED'">
+              <el-button link type="warning" size="small" @click="doAction(row, 'revert')">回退</el-button>
+              <el-button link type="danger" size="small" @click="doAction(row, 'void')">作废</el-button>
+            </template>
           </template>
         </el-table-column>
       </el-table>
@@ -193,8 +206,23 @@
         </el-descriptions>
       </template>
       <template #footer>
-        <el-button type="danger" @click="onDelete(detail)" :loading="deleting">删除</el-button>
-        <el-button @click="detailVisible = false">关闭</el-button>
+        <el-space>
+          <template v-if="detail?.status === 'PENDING_CONFIRM'">
+            <el-button type="primary" size="small" @click="doAction(detail, 'submitReview')">提交审核</el-button>
+            <el-button type="danger" size="small" @click="doAction(detail, 'void')">作废</el-button>
+          </template>
+          <template v-else-if="detail?.status === 'PENDING_REVIEW'">
+            <el-button type="primary" size="small" @click="doAction(detail, 'confirm')">审核通过</el-button>
+            <el-button type="warning" size="small" @click="doAction(detail, 'reject')">驳回</el-button>
+            <el-button type="danger" size="small" @click="doAction(detail, 'void')">作废</el-button>
+          </template>
+          <template v-else-if="detail?.status === 'CONFIRMED'">
+            <el-button type="warning" size="small" @click="doAction(detail, 'revert')">回退到待审核</el-button>
+            <el-button type="danger" size="small" @click="doAction(detail, 'void')">作废</el-button>
+          </template>
+          <el-button type="danger" @click="onDelete(detail)" :loading="deleting">删除</el-button>
+          <el-button @click="detailVisible = false">关闭</el-button>
+        </el-space>
       </template>
     </el-dialog>
   </div>
@@ -204,7 +232,8 @@
 import { onMounted, reactive, ref } from 'vue'
 import { ElMessage, type FormInstance } from 'element-plus'
 import { UploadFilled } from '@element-plus/icons-vue'
-import { pageOutputInvoice, createOutputInvoice, getOutputInvoice, deleteOutputInvoice } from '@/api/modules/tax'
+import { pageOutputInvoice, createOutputInvoice, getOutputInvoice, deleteOutputInvoice,
+  submitForReview, confirmOutputInvoice, rejectOutputInvoice, revertOutputInvoice, voidOutputInvoice } from '@/api/modules/tax'
 import { previewSalesInvoices, confirmSalesInvoicesImport } from '@/api/modules/salesInvoice'
 
 const detailVisible = ref(false)
@@ -227,6 +256,36 @@ const onDelete = async (row: any) => {
     detailVisible.value = false
     fetchData()
   } finally { deleting.value = false }
+}
+
+const doAction = async (row: any, action: string) => {
+  const id = row?.id
+  if (!id) return
+  const label = ({ submitReview: '提交审核', confirm: '审核通过', reject: '驳回', revert: '回退', void: '作废' } as any)[action] || action
+
+  if (action === 'reject' || action === 'void') {
+    const { value: reason } = await (await import('element-plus')).ElMessageBox.prompt(
+      `请输入${label}原因`, label, { inputType: 'textarea', inputValidator: (v: string) => !!v?.trim(), inputErrorMessage: '原因不能为空' }
+    ).catch(() => ({ value: null }))
+    if (!reason) return
+    try {
+      if (action === 'reject') await rejectOutputInvoice(id, reason)
+      else await voidOutputInvoice(id, reason)
+      ElMessage.success(`${label}成功`)
+      detailVisible.value = false
+      fetchData()
+    } catch { /* backend handles error msg */ }
+    return
+  }
+
+  try {
+    if (action === 'submitReview') await submitForReview(id)
+    else if (action === 'confirm') await confirmOutputInvoice(id)
+    else if (action === 'revert') await revertOutputInvoice(id)
+    ElMessage.success(`${label}成功`)
+    detailVisible.value = false
+    fetchData()
+  } catch { /* backend handles error msg */ }
 }
 
 const STATUS_MAP: Record<string, string> = {

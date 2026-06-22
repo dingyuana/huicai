@@ -88,6 +88,27 @@ export function deleteOutputInvoice(id: number): Promise<void> {
   return request.delete(`/tax/output-invoices/${id}`)
 }
 
+// ====== 销项发票状态机 (P21-a) ======
+export function submitForReview(id: number): Promise<void> {
+  return request.post(`/tax/output-invoices/${id}/submit-review`)
+}
+
+export function confirmOutputInvoice(id: number): Promise<void> {
+  return request.post(`/tax/output-invoices/${id}/confirm`)
+}
+
+export function rejectOutputInvoice(id: number, reason: string): Promise<void> {
+  return request.post(`/tax/output-invoices/${id}/reject`, null, { params: { reason } })
+}
+
+export function revertOutputInvoice(id: number): Promise<void> {
+  return request.post(`/tax/output-invoices/${id}/revert`)
+}
+
+export function voidOutputInvoice(id: number, reason: string): Promise<void> {
+  return request.post(`/tax/output-invoices/${id}/void`, null, { params: { reason } })
+}
+
 export function createOutputInvoice(data: OutputInvoice): Promise<OutputInvoice> {
   return request.post('/tax/output-invoices', data)
 }
