@@ -354,14 +354,15 @@ public class SalesInvoiceImportService {
                 }
                 String period = row.invoiceDate.format(DateTimeFormatter.ofPattern("yyyyMM"));
                 BusinessDocEntity doc = createBusinessDoc(row, customerId, period, batchId);
-                createVoucher(doc, row, customerId, period);
+                // 不创建凭证 — 按状态机设计，导入只写数据，等 CONFIRMED 后人工点"生成凭证"
+                // createVoucher(doc, row, customerId, period);
                 insertOutputInvoice(row, customerId, period, doc);
                 createReceivableFromInvoice(doc, row, customerId, period);
                 // 红冲发票: 找到原蓝字发票标记为 REVERSED
                 if (!row.isPositive && StrUtil.isNotBlank(row.originalInvoiceNo)) {
                     handleRedFlushReversal(row.originalInvoiceNo, doc, period);
                 }
-                success++; docCreated++; voucherCreated++;
+                success++; docCreated++;
             } catch (Exception e) {
                 log.warn("处理发票行失败 row={}: {}", row.rowNum, e.getMessage());
                 java.util.Map<String, Object> err = new java.util.LinkedHashMap<>();
