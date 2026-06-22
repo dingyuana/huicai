@@ -1,6 +1,7 @@
 package com.huicai.module.finance.entity;
 
 import com.baomidou.mybatisplus.annotation.*;
+import com.huicai.common.annotation.StatusChangeable;
 import lombok.Data;
 
 import java.math.BigDecimal;
@@ -26,6 +27,7 @@ public class VoucherEntity {
     private Long voucherTypeId;
 
     /** 状态: DRAFT-草稿, SUBMITTED-已提交, AUDITED-已审核, POSTED-已记账 */
+    @StatusChangeable(entity = "VOUCHER", fieldName = "status")
     private String status;
 
     /** 借方总金额 */

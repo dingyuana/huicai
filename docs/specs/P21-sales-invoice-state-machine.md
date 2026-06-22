@@ -1,10 +1,10 @@
 # P21-a SPEC — 销售发票状态机实现规格书
 
-> 状态：待实现 | 优先级：高（P21-a）
+> 状态：**已实施** | 优先级：高（P21-a）
 > 依据：`docs/需求分析书_发票与凭证状态机_V1.0.md` §3.1 发票状态机
-> 目标：为 `OutputInvoiceEntity`（销售发票）建立完整 7 状态机，消除 magic string
+> 目标：为 `OutputInvoiceEntity`（销售发票）建立完整 8 状态机，消除 magic string
 > 工期：单批交付，3 个 commit
-> 拆分说明：原 P21 拆分为 P21-a（销售发票，本文件）+ P21-b（采购发票，InputInvoiceEntity 对称实现）
+> 拆分说明：原 P21 拆分为 P21-a（销售发票，本文件）+ P21-b（采购发票，已废弃）
 
 ---
 
@@ -14,7 +14,7 @@
 |---|------|------|------|
 | 1 | 创建 `InvoiceStatus` 枚举常量类 | `backend/.../tax/constant/InvoiceStatus.java` | ✅ 低 |
 | 2 | `OutputInvoiceEntity` 新增 status 字段约束（已存在 String 字段，补注释 + 常量）| Entity 文件 | ✅ 低 |
-| 3 | **V45** 迁移: `t_output_invoice.status` 数据迁移 4→8 + 新 CHECK 约束 + 索引 | Flyway | 🟡 中 |
+| 3 | **V46** 迁移: `t_output_invoice.status` 数据迁移 4→8 + 新 CHECK 约束 + 索引 | Flyway | ✅ 低 |
 | 4 | 创建 `OutputInvoiceStateMachineService`（状态机 Service）| Service 文件 | 🟡 中 |
 | 5 | `OutputInvoiceServiceImpl` 适配新状态机（替换 magic string）| Service 文件 | 🟡 中 |
 | 6 | `SalesInvoiceImportService` / `AutoGenerationService` 调用方适配 | 调用方 | 🟡 中 |
@@ -55,12 +55,15 @@ public final class InvoiceStatus {
     // ====== 终止 ======
     public static final String VOIDED = "VOIDED";
 
-    // ====== 冲销（2026-06-21 V45 迁移加入，承接旧 RED_INK 数据）======
+    // ====== 冲销（V46 迁移加入，承接旧 RED_INK 数据）======
     public static final String REVERSED = "REVERSED";
 
     // ====== 检查方法 ======
     public static boolean isPendingConfirm(String status) {
         return PENDING_CONFIRM.equals(status);
+    }
+    public static boolean isPendingReview(String status) {
+        return PENDING_REVIEW.equals(status);
     }
     public static boolean isConfirmed(String status) {
         return CONFIRMED.equals(status);
@@ -87,6 +90,12 @@ public final class InvoiceStatus {
     public static boolean isReversed(String status) {
         return REVERSED.equals(status);
     }
+    public static boolean isTerminal(String status) {
+        // 终态：VOIDED / REVERSED / FULLY_RECONCILED
+        return VOIDED.equals(status)
+            || REVERSED.equals(status)
+            || FULLY_RECONCILED.equals(status);
+    }
 }
 ```
 
@@ -96,14 +105,14 @@ public final class InvoiceStatus {
 
 ### 2.1 `OutputInvoiceEntity` 注释更新
 
-**现状**：`status` 字段是 String，无注释和约束。
+**现状**：`status` 字段是 String，无注释。
 
 **改动**：
 
 ```java
 /**
  * 状态: PENDING_CONFIRM / PENDING_REVIEW / CONFIRMED / VOUCHERED /
- *       FULLY_RECONCILED / PARTIALLY_RECONCILED / VOIDED
+ *       FULLY_RECONCILED / PARTIALLY_RECONCILED / VOIDED / REVERSED
  * 详见 com.huicai.module.tax.constant.InvoiceStatus
  */
 private String status;
@@ -111,14 +120,14 @@ private String status;
 
 ---
 
-## 3. Flyway 迁移（V45）
+## 3. Flyway 迁移（V46）
 
-> **重要变更（2026-06-21）**：起草本 SPEC 时未考虑 V8 已有 CHECK 约束
+> **重要变更（2026-06-22）**：起草本 SPEC 时未考虑 V8 已有 CHECK 约束
 > `chk_output_invoice_status CHECK (status IN ('DRAFT', 'ISSUED', 'VOID', 'RED_INK'))`。
-> V45 必须先做**数据迁移**（4 旧状态 → 7 新状态），再 DROP/ADD CHECK 约束。
+> V46 必须先 DROP 旧 CHECK 再 UPDATE 旧数据最后 ADD 新 CHECK（V45 初版因顺序错误导致 PG check_violation 回滚，详见 V46 注释）。
 >
-> **状态值映射**（2026-06-21 老丁拍板）：
-> | 旧状态 (V8) | 新状态 (V45) | 语义说明 |
+> **状态值映射**（2026-06-22 老丁拍板）：
+> | 旧状态 (V8) | 新状态 (V46) | 语义说明 |
 > |:---|:---|:---|
 > | `DRAFT` | `PENDING_CONFIRM` | 草稿 = 待确认 |
 > | `ISSUED` | `CONFIRMED` | **已开票 = 已确认**（注意：旧 ISSUED 不一定有 voucher_id，业务上 voucher_id 为空的 CONFIRMED 视为"待生成凭证"，详见 §3.2 注释） |
@@ -126,74 +135,82 @@ private String status;
 > | `RED_INK` | `REVERSED` | 红字冲销（已生成凭证后被冲销） |
 > | `NULL` | `PENDING_CONFIRM` | 未设置状态的回退到待确认 |
 >
-> **新增状态**：V45 引入的 `PENDING_REVIEW` / `VOUCHERED` / `FULLY_RECONCILED` / `PARTIALLY_RECONCILED` 4 个状态，
-> V45 数据迁移时无旧值映射，所有现有记录 status 都不在这 4 个状态里。
+> **新增状态**：V46 引入的 `PENDING_REVIEW` / `VOUCHERED` / `FULLY_RECONCILED` / `PARTIALLY_RECONCILED` 4 个状态，
+> V46 数据迁移时无旧值映射，所有现有记录 status 都不在这 4 个状态里。
 
-### 3.1 完整 V45 SQL
+### 3.1 完整 V46 SQL
 
 ```sql
--- V45__migrate_output_invoice_status_to_7_states.sql
+-- V46__migrate_output_invoice_status_to_8_states.sql
+-- 2026-06-22 P21-a-1 修复版
+-- 修复历史: V45 顺序 bug（先 UPDATE 再 DROP 旧 CHECK → 23514 check_violation），V46 修正为先 DROP 再 UPDATE 再 ADD
 
 -- ============================================================
--- Step 1: 数据迁移（4 旧状态 → 7 新状态）
+-- Step 1: DROP V8 旧 CHECK 约束（chk_output_invoice_status 4 状态）
 -- ============================================================
 
--- 1.1 NULL → PENDING_CONFIRM
+ALTER TABLE t_output_invoice
+    DROP CONSTRAINT IF EXISTS chk_output_invoice_status;
+
+-- ============================================================
+-- Step 2: 数据迁移（4 旧状态 → 8 新状态）
+-- ============================================================
+
+-- 2.1 NULL → PENDING_CONFIRM（未设置状态视为待确认）
 UPDATE t_output_invoice
 SET status = 'PENDING_CONFIRM'
 WHERE status IS NULL;
 
--- 1.2 DRAFT → PENDING_CONFIRM
+-- 2.2 DRAFT → PENDING_CONFIRM（草稿 = 待确认）
 UPDATE t_output_invoice
 SET status = 'PENDING_CONFIRM'
 WHERE status = 'DRAFT';
 
--- 1.3 ISSUED → CONFIRMED
+-- 2.3 ISSUED → CONFIRMED（已开票 = 已确认）
+-- 注意: 旧 ISSUED 记录中部分 voucher_id 为空,
+--       业务上 voucher_id 为空的 CONFIRMED 视为"待生成凭证"
 UPDATE t_output_invoice
 SET status = 'CONFIRMED'
 WHERE status = 'ISSUED';
 
--- 1.4 VOID → VOIDED
+-- 2.4 VOID → VOIDED（已作废）
 UPDATE t_output_invoice
 SET status = 'VOIDED'
 WHERE status = 'VOID';
 
--- 1.5 RED_INK → REVERSED
+-- 2.5 RED_INK → REVERSED（红字冲销）
 UPDATE t_output_invoice
 SET status = 'REVERSED'
 WHERE status = 'RED_INK';
 
 -- ============================================================
--- Step 2: DROP 旧 CHECK 约束，加新 CHECK 约束
+-- Step 3: ADD 新 CHECK 约束（8 状态）
 -- ============================================================
 
 ALTER TABLE t_output_invoice
-    DROP CONSTRAINT IF EXISTS t_output_invoice_status_check;
-
-ALTER TABLE t_output_invoice
-    ADD CONSTRAINT t_output_invoice_status_check
+    ADD CONSTRAINT chk_output_invoice_status
     CHECK (status IN (
         'PENDING_CONFIRM', 'PENDING_REVIEW', 'CONFIRMED',
         'VOUCHERED', 'FULLY_RECONCILED', 'PARTIALLY_RECONCILED', 'VOIDED',
-        'REVERSED'  -- 保留 REVERSED 状态（语义：被红字冲销的发票）
+        'REVERSED'
     ));
 
 -- ============================================================
--- Step 3: status 字段索引（前端按状态过滤）
+-- Step 4: status 字段索引（前端按状态过滤，幂等）
 -- ============================================================
 
 CREATE INDEX IF NOT EXISTS idx_t_output_invoice_status
     ON t_output_invoice(status);
 
 -- ============================================================
--- Step 4: COMMENT 更新
+-- Step 5: COMMENT 更新
 -- ============================================================
 
 COMMENT ON COLUMN t_output_invoice.status IS
-    '状态: PENDING_CONFIRM/PENDING_REVIEW/CONFIRMED/VOUCHERED/FULLY_RECONCILED/PARTIALLY_RECONCILED/VOIDED/REVERSED (2026-06-21 由 V8 旧 4 状态迁移)';
+    '状态: PENDING_CONFIRM/PENDING_REVIEW/CONFIRMED/VOUCHERED/FULLY_RECONCILED/PARTIALLY_RECONCILED/VOIDED/REVERSED (2026-06-22 由 V8 旧 4 状态经 V46 迁移)';
 
 -- ============================================================
--- Step 5: 迁移结果审计（输出统计，供人工核对）
+-- Step 6: 迁移结果审计（输出统计，供人工核对）
 -- ============================================================
 
 DO $$
@@ -206,7 +223,7 @@ BEGIN
         GROUP BY status
         ORDER BY status
     LOOP
-        RAISE NOTICE 'V45 迁移结果: status=%, count=%', rec.status, rec.cnt;
+        RAISE NOTICE 'V46 迁移结果: status=%, count=%', rec.status, rec.cnt;
     END LOOP;
 END $$;
 ```
@@ -236,15 +253,15 @@ END $$;
 - 但实际生产数据有 RED_INK 记录，必须有状态承接
 - 妥协方案：在枚举里加 REVERSED 作 8 状态（与文档略有差异，详见 §3.4）
 
-### 3.4 需求文档 §3.1 与 V45 实施的差异说明
+### 3.4 需求文档 §3.1 与 V46 实施的差异说明
 
-| 项 | 需求文档 §3.1 设计 | V45 实施 | 差异原因 |
+| 项 | 需求文档 §3.1 设计 | V46 实施 | 差异原因 |
 |:---|:---|:---|:---|
 | 发票状态数 | 7 个 | 8 个（+ REVERSED）| 旧数据 RED_INK 需承接 |
 | REVERSED 语义 | 未列 | 已生成凭证后被冲销 | 与 V8 旧 RED_INK 等价 |
 | 未来清理 | — | 待所有 RED_INK 记录归档后，移除 REVERSED 状态 | 长期收敛 |
 
-**P21-b 采购发票迁移（V46）见独立 SPEC，结构对称。**
+**P21-b 采购发票迁移见独立 SPEC（已废弃），不再同步更新。**
 
 ---
 

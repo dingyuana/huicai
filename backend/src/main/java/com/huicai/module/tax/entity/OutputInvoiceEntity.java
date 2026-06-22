@@ -1,6 +1,7 @@
 package com.huicai.module.tax.entity;
 
 import com.baomidou.mybatisplus.annotation.*;
+import com.huicai.common.annotation.StatusChangeable;
 import lombok.Data;
 
 import java.math.BigDecimal;
@@ -30,6 +31,7 @@ public class OutputInvoiceEntity {
      * 详见 com.huicai.module.tax.constant.InvoiceStatus
      * 状态机详见 docs/specs/P21-sales-invoice-state-machine.md
      */
+    @StatusChangeable(entity = "OUTPUT_INVOICE", fieldName = "status")
     private String status;
     private Long docId;
     private Long voucherId;

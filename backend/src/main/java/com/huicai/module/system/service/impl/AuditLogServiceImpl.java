@@ -7,9 +7,19 @@ import com.huicai.module.system.entity.AuditLogEntity;
 import com.huicai.module.system.mapper.AuditLogMapper;
 import com.huicai.module.system.service.AuditLogService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
+
+@Slf4j
+@Service
+@RequiredArgsConstructor
+public class AuditLogServiceImpl implements AuditLogService {
+
+    private final AuditLogMapper auditLogMapper;
 
 @Service
 @RequiredArgsConstructor
@@ -46,5 +56,23 @@ public class AuditLogServiceImpl implements AuditLogService {
     @Async
     public void saveAsync(AuditLogEntity auditLog) {
         auditLogMapper.insert(auditLog);
+    }
+
+    @Override
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void recordStatusChange(String entityType, Long entityId,
+                                   String fieldName, String oldValue, String newValue) {
+        AuditLogEntity log = new AuditLogEntity();
+        log.setModule(entityType);
+        log.setOperation("STATUS_CHANGE");
+        log.setMethod(entityType + ".updateStatus");
+        log.setRequestParams("entityId=" + entityId + ", field=" + fieldName);
+        log.setResponseResult("newValue=" + newValue);
+        log.setOldSnapshot("{\"" + fieldName + "\":\"" + (oldValue == null ? "" : oldValue) + "\"}");
+        log.setNewSnapshot("{\"" + fieldName + "\":\"" + (newValue == null ? "" : newValue) + "\"}");
+        log.setStatus("SUCCESS");
+        auditLogMapper.insert(log);
+        log.info("状态变更审计: entity={}, id={}, field={}, {} → {}",
+                entityType, entityId, fieldName, oldValue, newValue);
     }
 }

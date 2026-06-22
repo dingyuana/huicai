@@ -154,8 +154,6 @@ BEGIN
 END $$;
 
 COMMENT ON COLUMN t_voucher.rejected_reason IS '驳回原因';
-COMMENT ON COLUMN t_voucher.reversed_voucher_id IS '红字凭证 ID（双向绑定）';
-COMMENT ON COLUMN t_voucher.reversal_pair_id IS '冲销对 ID（双方共享）';
 ```
 
 ---
