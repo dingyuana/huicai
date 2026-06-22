@@ -19,6 +19,7 @@ import com.huicai.module.finance.mapper.VoucherMapper;
 import com.huicai.module.finance.service.SubjectBalanceService;
 import com.huicai.module.finance.service.VoucherNoService;
 import com.huicai.module.finance.service.VoucherService;
+import com.huicai.module.finance.service.VoucherStateMachineService;
 import com.huicai.module.system.entity.PeriodEntity;
 import com.huicai.module.system.entity.Subject;
 import com.huicai.module.system.entity.UserEntity;
@@ -57,6 +58,7 @@ public class VoucherServiceImpl extends ServiceImpl<VoucherMapper, VoucherEntity
     private final SubjectService subjectService;
     private final PeriodService periodService;
     private final UserMapper userMapper;
+    private final VoucherStateMachineService voucherStateMachineService;
 
     @Override
     public IPage<VoucherVO> pageQuery(VoucherQueryDTO queryDTO) {
@@ -215,7 +217,7 @@ public class VoucherServiceImpl extends ServiceImpl<VoucherMapper, VoucherEntity
     @Transactional
     public void submit(Long id, Long userId) {
         VoucherEntity entity = getValidVoucher(id);
-        assertStatus(entity, "DRAFT");
+        voucherStateMachineService.assertSubmittable(entity);
         assertPeriodOpen(entity.getPeriod());
         voucherMapper.batchUpdateStatus(Collections.singletonList(id), "SUBMITTED", userId);
         log.info("提交凭证: id={}, userId={}", id, userId);
@@ -237,7 +239,7 @@ public class VoucherServiceImpl extends ServiceImpl<VoucherMapper, VoucherEntity
     @Transactional
     public void audit(Long id, Long userId) {
         VoucherEntity entity = getValidVoucher(id);
-        assertStatus(entity, "SUBMITTED");
+        voucherStateMachineService.assertAuditable(entity);
         assertPeriodOpen(entity.getPeriod());
         voucherMapper.batchUpdateStatus(Collections.singletonList(id), "AUDITED", userId);
         log.info("审核凭证: id={}, userId={}", id, userId);
@@ -259,7 +261,7 @@ public class VoucherServiceImpl extends ServiceImpl<VoucherMapper, VoucherEntity
     @Transactional
     public void post(Long id, Long userId) {
         VoucherEntity entity = getValidVoucher(id);
-        assertStatus(entity, "AUDITED");
+        voucherStateMachineService.assertPostable(entity);
         assertPeriodOpen(entity.getPeriod());
 
         // 更新状态
