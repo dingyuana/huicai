@@ -29,6 +29,8 @@ public interface TaxService {
     OutputInvoiceEntity getOutputById(Long id);
     OutputInvoiceEntity createOutput(OutputInvoiceEntity entity);
     void deleteOutput(Long id);
+    /** CONFIRMED → 生成凭证(含科目分录) → VOUCHERED */
+    void generateVoucherFromInvoice(Long invoiceId, Long userId);
     Map<String, Object> outputSummary(String period);
     Map<String, Object> outputSummaryAll();
     List<Map<String, Object>> outputByTaxRate(String period);

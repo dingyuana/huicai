@@ -5,6 +5,14 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.huicai.common.exception.BusinessException;
+import com.huicai.module.finance.entity.VoucherEntity;
+import com.huicai.module.finance.entity.VoucherEntryEntity;
+import com.huicai.module.finance.mapper.VoucherEntryMapper;
+import com.huicai.module.finance.mapper.VoucherMapper;
+import com.huicai.module.finance.service.VoucherNoService;
+import com.huicai.module.system.entity.Subject;
+import com.huicai.module.system.mapper.SubjectMapper;
+import com.huicai.module.tax.constant.InvoiceStatus;
 import com.huicai.module.tax.entity.InputInvoiceEntity;
 import com.huicai.module.tax.entity.OutputInvoiceEntity;
 import com.huicai.module.tax.entity.TaxDeclarationEntity;
@@ -13,6 +21,7 @@ import com.huicai.module.tax.mapper.InputInvoiceMapper;
 import com.huicai.module.tax.mapper.OutputInvoiceMapper;
 import com.huicai.module.tax.mapper.TaxDeclarationMapper;
 import com.huicai.module.tax.mapper.TaxTypeMapper;
+import com.huicai.module.tax.service.OutputInvoiceStateMachineService;
 import com.huicai.module.tax.service.TaxService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -34,6 +43,11 @@ public class TaxServiceImpl implements TaxService {
     private final InputInvoiceMapper inputMapper;
     private final OutputInvoiceMapper outputMapper;
     private final TaxDeclarationMapper declarationMapper;
+    private final VoucherMapper voucherMapper;
+    private final VoucherEntryMapper voucherEntryMapper;
+    private final VoucherNoService voucherNoService;
+    private final SubjectMapper subjectMapper;
+    private final OutputInvoiceStateMachineService stateMachineService;
 
     // ========== 税种 ==========
     @Override
@@ -215,6 +229,83 @@ public class TaxServiceImpl implements TaxService {
     @Override
     public void deleteOutput(Long id) {
         outputMapper.deleteById(id);
+    }
+
+    private static final long VOUCHER_TYPE_ID = 1L;
+
+    @Override
+    @Transactional
+    public void generateVoucherFromInvoice(Long invoiceId, Long userId) {
+        OutputInvoiceEntity inv = outputMapper.selectById(invoiceId);
+        if (inv == null) throw BusinessException.notFound("发票不存在");
+        if (!InvoiceStatus.isVoucherable(inv.getStatus())) {
+            throw BusinessException.badRequest("仅已确认状态可生成凭证，当前: " + inv.getStatus());
+        }
+        String voucherNo = voucherNoService.generateNextNo(inv.getPeriod(), VOUCHER_TYPE_ID);
+        Subject subjectAr = findSubject("1122");
+        Subject subjectRevenue = findSubject("5001");
+        Subject subjectOutputTax = findSubject("2221.01");
+        if (subjectAr == null || subjectRevenue == null) {
+            throw new BusinessException(500, "缺少基础科目配置(1122/5001)");
+        }
+
+        BigDecimal exclTax = inv.getAmount() != null ? inv.getAmount() : BigDecimal.ZERO;
+        BigDecimal taxAmt = inv.getTaxAmount() != null ? inv.getTaxAmount() : BigDecimal.ZERO;
+        BigDecimal totalAmt = inv.getTotalAmount() != null ? inv.getTotalAmount() : exclTax.add(taxAmt);
+
+        VoucherEntity voucher = new VoucherEntity();
+        voucher.setVoucherNo(voucherNo);
+        voucher.setPeriod(inv.getPeriod());
+        voucher.setVoucherTypeId(VOUCHER_TYPE_ID);
+        voucher.setStatus("DRAFT");
+        voucher.setSource("GENERATED");
+        voucher.setSummary("发票转凭证: " + inv.getInvoiceNo());
+        voucher.setTotalDebit(totalAmt);
+        voucher.setTotalCredit(totalAmt);
+        voucher.setCreatedBy(userId);
+        voucherMapper.insert(voucher);
+
+        int sort = 1;
+        // 借：应收账款 1122
+        VoucherEntryEntity dr = new VoucherEntryEntity();
+        dr.setVoucherId(voucher.getId());
+        dr.setSubjectId(subjectAr.getId());
+        dr.setDebit(totalAmt);
+        dr.setCredit(BigDecimal.ZERO);
+        dr.setSummary(inv.getCustomerName());
+        dr.setSortOrder(sort++);
+        voucherEntryMapper.insert(dr);
+
+        // 贷：主营业务收入 5001
+        VoucherEntryEntity cr1 = new VoucherEntryEntity();
+        cr1.setVoucherId(voucher.getId());
+        cr1.setSubjectId(subjectRevenue.getId());
+        cr1.setDebit(BigDecimal.ZERO);
+        cr1.setCredit(exclTax);
+        cr1.setSummary(inv.getCustomerName());
+        cr1.setSortOrder(sort++);
+        voucherEntryMapper.insert(cr1);
+
+        // 贷：销项税 2221.01
+        if (subjectOutputTax != null && taxAmt.compareTo(BigDecimal.ZERO) != 0) {
+            VoucherEntryEntity cr2 = new VoucherEntryEntity();
+            cr2.setVoucherId(voucher.getId());
+            cr2.setSubjectId(subjectOutputTax.getId());
+            cr2.setDebit(BigDecimal.ZERO);
+            cr2.setCredit(taxAmt);
+            cr2.setSummary(inv.getCustomerName());
+            cr2.setSortOrder(sort++);
+            voucherEntryMapper.insert(cr2);
+        }
+
+        stateMachineService.markVouchered(invoiceId, voucher.getId(), userId);
+        log.info("发票生成凭证: invoiceId={}, voucherId={}, voucherNo={}", invoiceId, voucher.getId(), voucherNo);
+    }
+
+    private Subject findSubject(String code) {
+        List<Subject> list = subjectMapper.selectList(
+                new LambdaQueryWrapper<Subject>().eq(Subject::getCode, code).last("LIMIT 1"));
+        return list.isEmpty() ? null : list.get(0);
     }
 
     @Override
