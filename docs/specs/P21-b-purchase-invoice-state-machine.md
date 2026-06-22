@@ -1,11 +1,22 @@
 # P21-b SPEC — 采购发票状态机实现规格书
 
-> 状态：待实现 | 优先级：高（P21-b）
+> 状态：**❌ 已废弃（2026-06-22 老丁拍板）** | 优先级：N/A
 > 依据：`docs/需求分析书_发票与凭证状态机_V1.0.md` §4.2 采购发票 + §3.1 发票状态机
 > 目标：为 `InputInvoiceEntity`（采购发票）建立完整 7 状态机
-> 工期：单批交付，3 个 commit
+> 工期：N/A
 > 拆分说明：与 P21-a（销售发票）对称实现，复用 `InvoiceStatus` 常量类
-> Migration 编号：本 SPEC 使用 V40（P21-a 已占 V38；P21-a 之后若有 V39 留给其他工单）
+> Migration 编号：N/A
+>
+> **废弃原因（2026-06-22 实施前置实测发现）**：
+> - P21-b SPEC 假设 `t_input_invoice.status` 字段存在 + 旧 4 状态 CHECK 约束
+> - **实测**：t_input_invoice **无 status 字段**，用 `certification_status`（4 态：UNCERTIFIED/CERTIFIED/INVALID/CANCELLED）
+> - 现有 `voucher_id` 字段已能标识"已生成凭证"业务
+> - **P21-b 整段状态机概念错位**——SPEC 起草时违反 R5 铁律（未实测 schema）
+>
+> **后续处理**：
+> - 不实施 P21-b，跳 P22 凭证状态机
+> - 采购发票状态机若需扩展，独立开新工单 P21-c（先实测 + 重写 SPEC）
+> - 保留本文档作历史参考，**不**删除
 
 ---
 
