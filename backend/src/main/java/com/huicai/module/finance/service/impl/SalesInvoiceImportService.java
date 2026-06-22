@@ -699,6 +699,47 @@ public class SalesInvoiceImportService {
         log.info("红冲关联成功: originalInvoiceNo={}, newStatus=REVERSED", originalInvoiceNo);
     }
 
+    /**
+     * 批量扫描已存在的红字发票，按金额+客户名匹配蓝字发票并建立红冲关联。
+     * 用于处理已导入数据的历史红冲关联。
+     * 使用直接SQL更新绕过 AOP 审计切面（批量操作不需要逐条审计日志）。
+     */
+    public Map<String, Object> batchLinkRedFlushInvoices() {
+        // 查找所有金额为负且状态非终态的发票（潜在红字发票）
+        List<OutputInvoiceEntity> redInvoices = outputInvoiceMapper.selectList(
+                new LambdaQueryWrapper<OutputInvoiceEntity>()
+                        .lt(OutputInvoiceEntity::getAmount, BigDecimal.ZERO)
+                        .ne(OutputInvoiceEntity::getStatus, InvoiceStatus.VOIDED)
+                        .ne(OutputInvoiceEntity::getStatus, InvoiceStatus.REVERSED)
+                        .eq(OutputInvoiceEntity::getDeleted, 0));
+
+        int matched = 0, skipped = 0;
+        for (OutputInvoiceEntity red : redInvoices) {
+            BigDecimal absAmount = red.getAmount().abs();
+            // 按金额+客户名找匹配的蓝字发票
+            List<OutputInvoiceEntity> blues = outputInvoiceMapper.selectList(
+                    new LambdaQueryWrapper<OutputInvoiceEntity>()
+                            .eq(OutputInvoiceEntity::getAmount, absAmount)
+                            .eq(OutputInvoiceEntity::getCustomerName, red.getCustomerName())
+                            .ne(OutputInvoiceEntity::getStatus, InvoiceStatus.REVERSED)
+                            .ne(OutputInvoiceEntity::getStatus, InvoiceStatus.VOIDED)
+                            .eq(OutputInvoiceEntity::getDeleted, 0)
+                            .last("LIMIT 1"));
+            if (!blues.isEmpty()) {
+                OutputInvoiceEntity blue = blues.get(0);
+                // 直接用SQL更新，绕过 AOP 审计切面
+                outputInvoiceMapper.updateStatusDirect(blue.getId(), InvoiceStatus.REVERSED,
+                        (blue.getRemark() != null ? blue.getRemark() + " | " : "")
+                                + "被" + red.getInvoiceNo() + "红冲(" + red.getPeriod() + ")");
+                matched++;
+                log.info("批量红冲关联: red={}, blue={}, amount={}", red.getInvoiceNo(), blue.getInvoiceNo(), absAmount);
+            } else {
+                skipped++;
+            }
+        }
+        return Map.of("matched", matched, "skipped", skipped, "total", redInvoices.size());
+    }
+
     static class ParsedInvoiceRow {
         int rowNum;
         String invoiceNo;

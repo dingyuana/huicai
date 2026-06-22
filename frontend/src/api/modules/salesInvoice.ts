@@ -39,3 +39,7 @@ export function importSalesInvoices(file: File): Promise<{
     headers: { 'Content-Type': 'multipart/form-data' },
   })
 }
+
+export function batchLinkRedFlush(): Promise<{ matched: number; skipped: number; total: number }> {
+  return request.post('/sales-invoices/batch-link-red-flush')
+}

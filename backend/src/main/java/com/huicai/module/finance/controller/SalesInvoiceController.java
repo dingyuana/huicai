@@ -43,4 +43,10 @@ public class SalesInvoiceController {
             @RequestParam(defaultValue = "20") Integer size) {
         return R.ok(Map.of("message", "请通过 /api/v1/business-docs/page?docType=INVOICE_OUT&source=INVOICE_IMPORT 查看"));
     }
+
+    @Operation(summary = "批量红冲关联: 扫描现有红字发票, 按金额+客户名匹配蓝字并标记REVERSED")
+    @PostMapping("/batch-link-red-flush")
+    public R<Map<String, Object>> batchLinkRedFlush() {
+        return R.ok(importService.batchLinkRedFlushInvoices());
+    }
 }

@@ -16,13 +16,13 @@ public interface OutputInvoiceMapper extends BaseMapper<OutputInvoiceEntity> {
 
     @Select("""
         SELECT
-          COUNT(*) AS totalCount,
-          SUM(amount) AS totalAmount,
-          SUM(CASE WHEN amount < 0 THEN 1 ELSE 0 END) AS redCount,
-          SUM(CASE WHEN status = 'VOIDED' THEN 1 ELSE 0 END) AS voidedCount,
-          SUM(CASE WHEN status = 'REVERSED' THEN 1 ELSE 0 END) AS reversedCount,
-          SUM(CASE WHEN amount >= 0 THEN amount ELSE 0 END) AS blueAmount,
-          SUM(CASE WHEN amount < 0 THEN amount ELSE 0 END) AS redAmount
+          COUNT(*) AS "totalCount",
+          SUM(amount) AS "totalAmount",
+          SUM(CASE WHEN amount < 0 THEN 1 ELSE 0 END) AS "redCount",
+          SUM(CASE WHEN status = 'VOIDED' THEN 1 ELSE 0 END) AS "voidedCount",
+          SUM(CASE WHEN status = 'REVERSED' THEN 1 ELSE 0 END) AS "reversedCount",
+          SUM(CASE WHEN amount >= 0 THEN amount ELSE 0 END) AS "blueAmount",
+          SUM(CASE WHEN amount < 0 THEN amount ELSE 0 END) AS "redAmount"
         FROM t_output_invoice
         WHERE deleted = 0
     """)
@@ -30,13 +30,13 @@ public interface OutputInvoiceMapper extends BaseMapper<OutputInvoiceEntity> {
 
     @Select("""
         SELECT
-          COUNT(*) AS totalCount,
-          SUM(amount) AS totalAmount,
-          SUM(CASE WHEN amount < 0 THEN 1 ELSE 0 END) AS redCount,
-          SUM(CASE WHEN status = 'VOIDED' THEN 1 ELSE 0 END) AS voidedCount,
-          SUM(CASE WHEN status = 'REVERSED' THEN 1 ELSE 0 END) AS reversedCount,
-          SUM(CASE WHEN amount >= 0 THEN amount ELSE 0 END) AS blueAmount,
-          SUM(CASE WHEN amount < 0 THEN amount ELSE 0 END) AS redAmount
+          COUNT(*) AS "totalCount",
+          SUM(amount) AS "totalAmount",
+          SUM(CASE WHEN amount < 0 THEN 1 ELSE 0 END) AS "redCount",
+          SUM(CASE WHEN status = 'VOIDED' THEN 1 ELSE 0 END) AS "voidedCount",
+          SUM(CASE WHEN status = 'REVERSED' THEN 1 ELSE 0 END) AS "reversedCount",
+          SUM(CASE WHEN amount >= 0 THEN amount ELSE 0 END) AS "blueAmount",
+          SUM(CASE WHEN amount < 0 THEN amount ELSE 0 END) AS "redAmount"
         FROM t_output_invoice
         WHERE deleted = 0 AND period = #{period}
     """)
@@ -49,6 +49,9 @@ public interface OutputInvoiceMapper extends BaseMapper<OutputInvoiceEntity> {
         GROUP BY tax_rate
     """)
     List<Map<String, Object>> byTaxRate(@Param("period") String period);
+
+    @Update("UPDATE t_output_invoice SET status = #{status}, remark = #{remark}, updated_at = now() WHERE id = #{id} AND deleted = 0")
+    int updateStatusDirect(@Param("id") Long id, @Param("status") String status, @Param("remark") String remark);
 
     @Delete("DELETE FROM t_output_invoice")
     int physicalDeleteAll();

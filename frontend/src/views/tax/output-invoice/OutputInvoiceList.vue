@@ -18,6 +18,9 @@
         <el-col :span="3"><el-statistic title="已冲销" :value="stats.reversedCount || 0" /></el-col>
         <el-col :span="4"><el-statistic title="已作废" :value="stats.voidedCount || 0" /></el-col>
       </el-row>
+      <el-row style="margin-bottom:12px">
+        <el-button size="small" @click="onBatchLinkRedFlush" :loading="linkingRedFlush">批量红冲关联</el-button>
+      </el-row>
 
       <el-form :model="query" inline class="filter-form">
         <el-form-item label="客户">
@@ -245,11 +248,22 @@ import { UploadFilled } from '@element-plus/icons-vue'
 import { pageOutputInvoice, createOutputInvoice, getOutputInvoice, deleteOutputInvoice,
   outputInvoiceSummary,
   submitForReview, confirmOutputInvoice, rejectOutputInvoice, revertOutputInvoice, voidOutputInvoice } from '@/api/modules/tax'
-import { previewSalesInvoices, confirmSalesInvoicesImport } from '@/api/modules/salesInvoice'
+import { previewSalesInvoices, confirmSalesInvoicesImport, batchLinkRedFlush } from '@/api/modules/salesInvoice'
 
 const detailVisible = ref(false)
 const detail = ref<any>(null)
 const deleting = ref(false)
+const linkingRedFlush = ref(false)
+
+const onBatchLinkRedFlush = async () => {
+  linkingRedFlush.value = true
+  try {
+    const res = await batchLinkRedFlush()
+    ElMessage.success(`红冲关联完成: 匹配 ${res.matched} 对, 跳过 ${res.skipped} 条`)
+    fetchData(); fetchStats()
+  } catch { /* */ }
+  finally { linkingRedFlush.value = false }
+}
 
 const showDetail = async (row: any) => {
   try {
