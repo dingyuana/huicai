@@ -41,6 +41,11 @@
             </el-tag>
           </template>
         </el-table-column>
+        <el-table-column label="操作" width="100" fixed="right">
+          <template #default="{ row }">
+            <el-button link type="primary" size="small" @click="showDetail(row)">详情</el-button>
+          </template>
+        </el-table-column>
       </el-table>
 
       <div class="page-pagination">
@@ -157,6 +162,34 @@
         </div>
       </template>
     </el-dialog>
+
+    <!-- 发票详情 -->
+    <el-dialog v-model="detailVisible" title="发票详情" width="640px">
+      <template v-if="detail">
+        <el-descriptions :column="2" border>
+          <el-descriptions-item label="发票号" span="2">{{ detail.invoiceNo }}</el-descriptions-item>
+          <el-descriptions-item label="开票日期">{{ detail.invoiceDate }}</el-descriptions-item>
+          <el-descriptions-item label="期间">{{ detail.period }}</el-descriptions-item>
+          <el-descriptions-item label="客户名称" span="2">{{ detail.customerName }}</el-descriptions-item>
+          <el-descriptions-item label="金额(不含税)">{{ fmtAmount(detail.amount) }}</el-descriptions-item>
+          <el-descriptions-item label="税额">{{ fmtAmount(detail.taxAmount) }}</el-descriptions-item>
+          <el-descriptions-item label="价税合计">{{ fmtAmount(detail.totalAmount) }}</el-descriptions-item>
+          <el-descriptions-item label="税率">{{ Number(detail.taxRate || 0).toFixed(2) }}%</el-descriptions-item>
+          <el-descriptions-item label="发票类型">{{ detail.invoiceType === 'SPECIAL' ? '增值税专用发票' : '普通发票' }}</el-descriptions-item>
+          <el-descriptions-item label="状态">
+            <el-tag :type="(STATUS_TAG_MAP[detail.status] || 'info') as any" size="small">
+              {{ STATUS_MAP[detail.status] || detail.status }}
+            </el-tag>
+          </el-descriptions-item>
+          <el-descriptions-item label="关联单据ID">{{ detail.docId || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="关联凭证ID">{{ detail.voucherId || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="备注" span="2">{{ detail.remark || '-' }}</el-descriptions-item>
+        </el-descriptions>
+      </template>
+      <template #footer>
+        <el-button @click="detailVisible = false">关闭</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -164,8 +197,18 @@
 import { onMounted, reactive, ref } from 'vue'
 import { ElMessage, type FormInstance } from 'element-plus'
 import { UploadFilled } from '@element-plus/icons-vue'
-import { pageOutputInvoice, createOutputInvoice } from '@/api/modules/tax'
+import { pageOutputInvoice, createOutputInvoice, getOutputInvoice } from '@/api/modules/tax'
 import { previewSalesInvoices, confirmSalesInvoicesImport } from '@/api/modules/salesInvoice'
+
+const detailVisible = ref(false)
+const detail = ref<any>(null)
+
+const showDetail = async (row: any) => {
+  try {
+    detail.value = await getOutputInvoice(row.id)
+    detailVisible.value = true
+  } catch { detail.value = row; detailVisible.value = true }
+}
 
 const STATUS_MAP: Record<string, string> = {
   PENDING_CONFIRM: '待确认', PENDING_REVIEW: '待审核', CONFIRMED: '已确认',

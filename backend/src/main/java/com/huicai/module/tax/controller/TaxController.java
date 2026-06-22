@@ -108,6 +108,12 @@ public class TaxController {
         return R.ok(service.pageQueryOutput(customerName, period, status, current, size));
     }
 
+    @Operation(summary = "销项发票详情")
+    @GetMapping("/output-invoices/{id}")
+    public R<OutputInvoiceEntity> getOutput(@PathVariable Long id) {
+        return R.ok(service.getOutputById(id));
+    }
+
     @Operation(summary = "创建销项发票")
     @PostMapping("/output-invoices")
     public R<OutputInvoiceEntity> createOutput(@RequestBody OutputInvoiceEntity entity) {

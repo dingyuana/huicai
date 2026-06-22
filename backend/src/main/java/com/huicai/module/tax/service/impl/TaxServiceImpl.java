@@ -184,6 +184,11 @@ public class TaxServiceImpl implements TaxService {
     }
 
     @Override
+    public OutputInvoiceEntity getOutputById(Long id) {
+        return outputMapper.selectById(id);
+    }
+
+    @Override
     public OutputInvoiceEntity createOutput(OutputInvoiceEntity entity) {
         if (entity.getAmount() == null || entity.getTaxRate() == null) {
             throw new BusinessException("金额和税率不能为空");

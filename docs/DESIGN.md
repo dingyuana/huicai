@@ -183,10 +183,10 @@
 | AR Payable | 4 | ❌ | ✅ArapStatus | ⚠️ Service方法 | ❌ | ⚠️ 部分 |
 | Settlement | 4 | ✅V7 | ✅ArapStatus | ⚠️ Service方法 | ❌ | ⚠️ 部分 |
 | Prepayment | 3 | ❌ | ✅ArapStatus | ❌ | ❌ | ⚠️ 部分 |
-| BusinessDoc | 6 | ✅V5 | ❌ | ❌ | ❌ | ⚠️ 未封装 |
+| BusinessDoc | 6 | ✅V5 | ✅BusinessDocService | ✅AutoGenerationService | ❌ | ✅ 已实现 |
 | TaxDeclaration | 4 | ✅V8 | ❌ | ⚠️ 部分P18 | ❌ | ⚠️ 部分 |
-| ExpenseReimbursement | 5 | ❌ | ❌ | ❌ | ❌ | ⚠️ 未封装 |
-| BankStatement | 7 | ✅V27 | ❌ | ❌ | ❌ | ⚠️ 未封装 |
+| ExpenseReimbursement | 5 | ✅V34 | ✅ExpenseReimbursementService | ✅AutoGenerationService | ❌ | ✅ 已实现 |
+| BankStatement | 7 | ✅V27 | ✅BankStatementService | ✅AutoGenerationService | ❌ | ✅ 已实现 |
 | AssetCard | 4 | ✅V6 | ❌ | ❌ | ❌ | ⚠️ 未封装 |
 | AssetInventory | 4 | ✅V6 | ❌ | ❌ | ❌ | ⚠️ 未封装 |
 | AssetDisposal | 3 | ✅V6 | ❌ | ❌ | ❌ | ⚠️ 未封装 |
@@ -984,9 +984,9 @@ RBAC 模型，权限格式：`module:resource:action`
 
 ---
 
-## 18. 实现状态总览
+## 18. 前端状态机集成
 
-### 18.1 已实现（✅）
+### 20.1 已实现（✅）
 
 | 模块 | 子模块 | 关键文件 |
 |:-----|:-------|:---------|
@@ -1004,7 +1004,7 @@ RBAC 模型，权限格式：`module:resource:action`
 | 费用报销 | 员工档案/报销单/自动匹配/凭证生成 | ExpenseReimbursementService |
 | 前端框架 | 路由/布局/权限指令/API封装 | 12视图目录, 50+路由 |
 
-### 18.2 部分实现（⚠️）
+### 20.2 部分实现（⚠️）
 
 | 模块 | 缺什么 |
 |:-----|:-------|
@@ -1018,7 +1018,7 @@ RBAC 模型，权限格式：`module:resource:action`
 | 税务申报 P18 | `approveDeclaration` / `rejectDeclaration` 存在但申报→凭证自动生成未实现 |
 | 银企对账 P14 | 匹配/确认端点存在，余额调节表未完整实现 |
 
-### 18.3 未启动（❌）
+### 20.3 未启动（❌）
 
 | 模块 | 说明 |
 |:-----|:------|

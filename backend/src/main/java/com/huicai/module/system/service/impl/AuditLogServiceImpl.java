@@ -21,12 +21,6 @@ public class AuditLogServiceImpl implements AuditLogService {
 
     private final AuditLogMapper auditLogMapper;
 
-@Service
-@RequiredArgsConstructor
-public class AuditLogServiceImpl implements AuditLogService {
-
-    private final AuditLogMapper auditLogMapper;
-
     @Override
     public IPage<AuditLogEntity> pageLog(long page, long size, String module, String status,
                                          String startDate, String endDate) {
@@ -62,16 +56,16 @@ public class AuditLogServiceImpl implements AuditLogService {
     @Transactional(propagation = Propagation.MANDATORY)
     public void recordStatusChange(String entityType, Long entityId,
                                    String fieldName, String oldValue, String newValue) {
-        AuditLogEntity log = new AuditLogEntity();
-        log.setModule(entityType);
-        log.setOperation("STATUS_CHANGE");
-        log.setMethod(entityType + ".updateStatus");
-        log.setRequestParams("entityId=" + entityId + ", field=" + fieldName);
-        log.setResponseResult("newValue=" + newValue);
-        log.setOldSnapshot("{\"" + fieldName + "\":\"" + (oldValue == null ? "" : oldValue) + "\"}");
-        log.setNewSnapshot("{\"" + fieldName + "\":\"" + (newValue == null ? "" : newValue) + "\"}");
-        log.setStatus("SUCCESS");
-        auditLogMapper.insert(log);
+        AuditLogEntity record = new AuditLogEntity();
+        record.setModule(entityType);
+        record.setOperation("STATUS_CHANGE");
+        record.setMethod(entityType + ".updateStatus");
+        record.setRequestParams("entityId=" + entityId + ", field=" + fieldName);
+        record.setResponseResult("newValue=" + newValue);
+        record.setOldSnapshot("{\"" + fieldName + "\":\"" + (oldValue == null ? "" : oldValue) + "\"}");
+        record.setNewSnapshot("{\"" + fieldName + "\":\"" + (newValue == null ? "" : newValue) + "\"}");
+        record.setStatus("SUCCESS");
+        auditLogMapper.insert(record);
         log.info("状态变更审计: entity={}, id={}, field={}, {} → {}",
                 entityType, entityId, fieldName, oldValue, newValue);
     }

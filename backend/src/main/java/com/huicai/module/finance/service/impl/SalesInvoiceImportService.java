@@ -19,6 +19,7 @@ import com.huicai.module.finance.service.VoucherNoService;
 import com.huicai.module.system.entity.Subject;
 import com.huicai.module.system.mapper.SubjectMapper;
 import com.huicai.module.tax.constant.InvoiceStatus;
+import com.huicai.module.tax.entity.OutputInvoiceEntity;
 import com.huicai.module.tax.mapper.OutputInvoiceMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
