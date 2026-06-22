@@ -23,6 +23,7 @@ import com.huicai.module.tax.entity.OutputInvoiceEntity;
 import com.huicai.module.tax.mapper.OutputInvoiceMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -55,6 +56,7 @@ public class SalesInvoiceImportService {
     private final OutputInvoiceMapper outputInvoiceMapper;
     private final ReceivableMapper receivableMapper;
     private final ColumnMappingResolver columnMappingResolver;
+    private final StringRedisTemplate redisTemplate;
 
     private final Map<String, List<ParsedInvoiceRow>> batchCache = new ConcurrentHashMap<>();
 
@@ -613,11 +615,9 @@ public class SalesInvoiceImportService {
 
     private String generateInvoiceDocNo(String period) {
         String key = "doc:no:INVOICE_OUT:" + period;
-        Long seq = com.huicai.module.finance.service.impl.SalesInvoiceImportService.seqCounter.incrementAndGet();
+        Long seq = redisTemplate.opsForValue().increment(key);
         return "FPS" + period + String.format("%04d", seq);
     }
-
-    private static final java.util.concurrent.atomic.AtomicLong seqCounter = new java.util.concurrent.atomic.AtomicLong(0);
 
     private Subject findSubjectByCode(String code) {
         List<Subject> list = subjectMapper.selectList(
