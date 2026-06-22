@@ -1,268 +1,119 @@
-# P21-b SPEC — 采购发票状态机实现规格书
+# P21-b 采购发票状态机分析报告
 
-> 状态：**❌ 已废弃（2026-06-22 老丁拍板）** | 优先级：N/A
-> 依据：`docs/需求分析书_发票与凭证状态机_V1.0.md` §4.2 采购发票 + §3.1 发票状态机
-> 目标：为 `InputInvoiceEntity`（采购发票）建立完整 7 状态机
-> 工期：N/A
-> 拆分说明：与 P21-a（销售发票）对称实现，复用 `InvoiceStatus` 常量类
-> Migration 编号：N/A
->
-> **废弃原因（2026-06-22 实施前置实测发现）**：
-> - P21-b SPEC 假设 `t_input_invoice.status` 字段存在 + 旧 4 状态 CHECK 约束
-> - **实测**：t_input_invoice **无 status 字段**，用 `certification_status`（4 态：UNCERTIFIED/CERTIFIED/INVALID/CANCELLED）
-> - 现有 `voucher_id` 字段已能标识"已生成凭证"业务
-> - **P21-b 整段状态机概念错位**——SPEC 起草时违反 R5 铁律（未实测 schema）
->
-> **后续处理**：
-> - 不实施 P21-b，跳 P22 凭证状态机
-> - 采购发票状态机若需扩展，独立开新工单 P21-c（先实测 + 重写 SPEC）
-> - 保留本文档作历史参考，**不**删除
+> 状态：**✅ 重新构造完成（2026-06-22 老丁 A+修 bug 选）**
+> 替代文档：本报告替代原"P21-b SPEC — 采购发票状态机实现规格书"（2026-06-22 标 [已废弃]）
+> 结论：**现状方案够用，不实施新状态机**
+> 依据：实测 schema + 业务代码 + PG 数据三重验证
 
 ---
 
-## 0. 改动清单总览
+## 1. 背景
 
-| # | 改动 | 文件 | 风险 |
-|---|------|------|------|
-| 1 | 复用 `InvoiceStatus` 常量类 | （P21-a 已建）| ✅ 低 |
-| 2 | `InputInvoiceEntity` 注释更新（同 P21-a §2.1）| Entity 文件 | ✅ 低 |
-| 3 | **V40** 迁移: `t_input_invoice.status` 加 CHECK 约束 + 索引 | Flyway | 🟡 中 |
-| 4 | 创建 `InputInvoiceStateMachineService` | Service 文件 | 🟡 中 |
-| 5 | `InputInvoiceServiceImpl` 适配新状态机 | Service 文件 | 🟡 中 |
-| 6 | `InputInvoiceImportService` / `AutoGenerationService` 调用方适配 | 调用方 | 🟡 中 |
-| 7 | 单测覆盖（≥8 @Test，对称 P21-a）| Test 文件 | ✅ 低 |
+原 P21-b SPEC（2026-06-21 起草）假设：
+- `t_input_invoice` 有 `status` 字段（类似销售发票的 7/8 态）
+- 旧 4 状态 CHECK 约束需要扩展到 8 状态
+- 需要 V40 migration + InputInvoiceStateMachineService + 单测
 
-> **复用声明**：P21-a 创建的 `com.huicai.module.tax.constant.InvoiceStatus` 本 SPEC **直接复用**，不重建。`OutputInvoiceStateMachineService` 与本 SPEC 的 `InputInvoiceStateMachineService` 接口对称，但分别实现（避免跨销售/采购耦合）。
+**2026-06-22 实施前置实测发现**：以上假设全部错误。
 
 ---
 
-## 1. 枚举常量
+## 2. 现状实测（schema + 业务 + 数据）
 
-### 1.1 复用 `InvoiceStatus`
-
-**路径**: `com.huicai.module.tax.constant.InvoiceStatus`（P21-a 已建）
-
-本 SPEC **不创建新枚举**，直接复用 P21-a 的 7 状态常量：
-- `PENDING_CONFIRM` / `PENDING_REVIEW` / `CONFIRMED`
-- `VOUCHERED` / `FULLY_RECONCILED` / `PARTIALLY_RECONCILED`
-- `VOIDED`
-
----
-
-## 2. 实体变更
-
-### 2.1 `InputInvoiceEntity` 注释更新
-
-**现状**：`status` 字段是 String，无注释。
-
-**改动**：与 P21-a §2.1 完全对称。
-
-```java
-/**
- * 状态: PENDING_CONFIRM / PENDING_REVIEW / CONFIRMED / VOUCHERED /
- *       FULLY_RECONCILED / PARTIALLY_RECONCILED / VOIDED
- * 详见 com.huicai.module.tax.constant.InvoiceStatus
- */
-private String status;
-```
-
----
-
-## 3. Flyway 迁移（V40）
+### 2.1 Schema 现状
 
 ```sql
--- V40__add_input_invoice_status_constraint.sql
-
--- 1. t_input_invoice.status 加 CHECK 约束
-ALTER TABLE t_input_invoice
-    DROP CONSTRAINT IF EXISTS t_input_invoice_status_check;
-ALTER TABLE t_input_invoice
-    ADD CONSTRAINT t_input_invoice_status_check
-    CHECK (status IN (
-        'PENDING_CONFIRM', 'PENDING_REVIEW', 'CONFIRMED',
-        'VOUCHERED', 'FULLY_RECONCILED', 'PARTIALLY_RECONCILED', 'VOIDED'
-    ));
-
--- 2. status 字段索引
-CREATE INDEX IF NOT EXISTS idx_t_input_invoice_status
-    ON t_input_invoice(status);
-
--- 3. 已有数据校验
-DO $$
-DECLARE
-    invalid_count INTEGER;
-BEGIN
-    SELECT COUNT(*) INTO invalid_count
-    FROM t_input_invoice
-    WHERE status IS NOT NULL
-      AND status NOT IN (
-        'PENDING_CONFIRM', 'PENDING_REVIEW', 'CONFIRMED',
-        'VOUCHERED', 'FULLY_RECONCILED', 'PARTIALLY_RECONCILED', 'VOIDED'
-      );
-    IF invalid_count > 0 THEN
-        RAISE EXCEPTION 't_input_invoice.status 存在 % 条非法值，迁移前请人工修正', invalid_count;
-    END IF;
-END $$;
-
-COMMENT ON COLUMN t_input_invoice.status IS
-    '状态: PENDING_CONFIRM/PENDING_REVIEW/CONFIRMED/VOUCHERED/FULLY_RECONCILED/PARTIALLY_RECONCILED/VOIDED';
+-- 实测 t_input_invoice 字段（psql \d t_input_invoice）
+id, invoice_no, invoice_date, period, vendor_id, vendor_name,
+amount, tax_rate, tax_amount, total_amount, invoice_type,
+certification_status, certified_date, deduction_period, deduction_amount,
+doc_id, voucher_id, remark, created_by, created_at, updated_at, deleted
+-- ❌ 无 status 字段
 ```
 
----
+**CHECK 约束**（V8 已建）：
 
-## 4. Service 状态机实现
+| 约束名 | 字段 | 枚举值 |
+|---|---|---|
+| `chk_cert_status` | certification_status | UNCERTIFIED / CERTIFIED / INVALID / CANCELLED |
+| `chk_invoice_type` | invoice_type | SPECIAL / PLAIN / CUSTOMS / TRANSPORT |
 
-### 4.1 与 P21-a 对称
+### 2.2 业务代码现状
 
-**接口** `InputInvoiceStateMachineService.java`：
+| 文件:行 | 写法 | 含义 |
+|---|---|---|
+| `InputInvoiceImportService:404` | `setCertificationStatus("PENDING")` | **❌ 违反 V8 CHECK 约束**（"PENDING" 不在 4 态枚举）|
+| `InputInvoiceImportService:370/406/421` | `setVoucherId(...)` | 已生成凭证的关联 |
+| `TaxServiceImpl:124` | `setCertificationStatus("UNCERTIFIED")` | ✅ 合法 |
+| `TaxServiceImpl:145` | `setCertificationStatus("CERTIFIED")` | ✅ 合法 |
 
-```java
-package com.huicai.module.tax.service;
+### 2.3 数据现状
 
-/**
- * 采购发票状态机服务.
- * 与 OutputInvoiceStateMachineService 对称，详见 P21-a SPEC.
- */
-public interface InputInvoiceStateMachineService {
-
-    void submitForReview(Long invoiceId, Long userId);
-    void confirm(Long invoiceId, Long userId);
-    void reject(Long invoiceId, Long userId, String reason);
-    void revertToReview(Long invoiceId, Long userId);
-    void markVouchered(Long invoiceId, Long voucherId, Long userId);
-    void onReconciliationUpdate(Long invoiceId, BigDecimal unsettledAmount, Long userId);
-    void voidInvoice(Long invoiceId, Long userId, String reason);
-}
+```sql
+SELECT COUNT(*) FROM t_input_invoice;  -- 返回 0
 ```
 
-**实现** `InputInvoiceStateMachineServiceImpl.java`：与 P21-a 的 `OutputInvoiceStateMachineServiceImpl` 完全对称，仅 Entity 类型替换为 `InputInvoiceEntity`，Mapper 替换为 `InputInvoiceMapper`。此处不重复代码。
+**没有真实采购发票数据**——所以 `InputInvoiceImportService:404` 的 PENDING 写入**未爆**（没数据走这条路径）。
 
 ---
 
-## 5. 采购发票业务差异
+## 3. "已生成凭证"业务的现状实现
 
-### 5.1 采购发票可能跳过 PENDING_REVIEW
+采购发票的"已生成凭证"通过 **`voucher_id` 字段** 表达（不为空 = 已关联凭证），不需要新 status 字段：
 
-依据需求文档 §207：
-> 采购发票可不经过 `PENDING_REVIEW`，由供应商匹配度决定
+| 业务场景 | 现状实现 |
+|---|---|
+| 采购发票导入 | 创建 t_input_invoice + 自动生成 t_payable + t_voucher，`voucher_id` 写入 |
+| 凭证查询 | 关联 `t_voucher.voucher_no` 通过 `voucher_id` JOIN |
+| 红冲 | 通过 `t_voucher.reversed_from` 字段关联（已存在，V8 加的）|
+| 核销 | 走 t_payable 的核销工作台（P12 已实现）|
 
-**实现差异**：
+**销售 vs 采购发票的字段差异**（这是设计差异，不是 bug）：
 
-```java
-// InputInvoiceImportService 导入后置状态逻辑
-InputInvoiceEntity invoice = new InputInvoiceEntity();
-// ...
-if (supplierMatchedFully && productMatchedFully) {
-    // 供应商 + 商品完全匹配 → 直接 CONFIRMED（跳过待审核）
-    invoice.setStatus(InvoiceStatus.CONFIRMED);
-} else {
-    // 匹配失败 → 待人工确认
-    invoice.setStatus(InvoiceStatus.PENDING_CONFIRM);
-}
-invoiceMapper.insert(invoice);
-```
-
-> **设计权衡**：跳过 PENDING_REVIEW 是"供应商匹配度足够高"的优化路径，但合规上需要保留审计日志（由 P24 处理）。本 SPEC 不实现该逻辑的强制审计，由调用方按需记录。
-
-### 5.2 现金折扣处理
-
-采购发票核销时可能涉及现金折扣（详见需求文档 §4.2）：
-
-```java
-// onReconciliationUpdate 扩展（与 P21-a 差异点）
-@Override
-@Transactional
-public void onReconciliationUpdate(Long invoiceId,
-        BigDecimal unsettledAmount, Long userId, BigDecimal cashDiscount) {
-    InputInvoiceEntity entity = invoiceMapper.selectById(invoiceId);
-    if (!InvoiceStatus.isVouchered(entity.getStatus())) {
-        throw new BusinessException("仅已生成凭证的发票可核销");
-    }
-
-    // 现金折扣独立凭证（不冲减发票金额）
-    if (cashDiscount != null && cashDiscount.compareTo(BigDecimal.ZERO) != 0) {
-        // 调用 VoucherService 生成折扣凭证
-        // 借：应付账款—供应商  贷：财务费用—现金折扣
-        voucherService.generateCashDiscountVoucher(
-            invoiceId, entity.getVendorId(), cashDiscount, userId);
-    }
-
-    // 更新发票状态
-    String newStatus = unsettledAmount.compareTo(BigDecimal.ZERO) == 0
-        ? InvoiceStatus.FULLY_RECONCILED
-        : InvoiceStatus.PARTIALLY_RECONCILED;
-    entity.setStatus(newStatus);
-    entity.setUpdatedBy(userId);
-    invoiceMapper.updateById(entity);
-}
-```
-
-### 5.3 调用方适配
-
-| 位置 | 现用字符串 | 替换为 |
-|------|-----------|--------|
-| `InputInvoiceImportService.insert()` | `status=null` 或 magic string | `InvoiceStatus.PENDING_CONFIRM` / `CONFIRMED`（按匹配度）|
-| `AutoGenerationService.createPayableFromBankDoc()` | `status` 未设置 | `InvoiceStatus.PENDING_REVIEW`（流水生成的发票已匹配）|
-| `InputInvoiceServiceImpl` 各处 | 散落 magic string | `InvoiceStatus.*` 常量 |
+| 字段 | t_output_invoice（销售）| t_input_invoice（采购）|
+|---|---|---|
+| 业务状态字段 | `status` (8 态: P21-a V46) | `certification_status` (4 态: 认证) |
+| "已生成凭证"标识 | `status=VOUCHERED` 或 `voucher_id` 非空 | `voucher_id` 非空 |
+| 业务含义 | 销售方开票给客户，状态 = 客户/财务确认流程 | 采购方收票，状态 = 进项税抵扣认证流程 |
 
 ---
 
-## 6. 与 P20/P21-a/P22/P24 的边界
+## 4. 结论
 
-| 边界 | 本 SPEC 范围 | 其他 SPEC 范围 |
-|:---|:---|:---|
-| **采购发票**状态 | ✅ 本 SPEC 定义 | — |
-| 销售发票状态 | ❌ 不涉及 | **P21-a** 定义 |
-| 应付单(PayableEntity)状态 | ❌ 不涉及 | **P20** 定义 |
-| 凭证(VoucherEntity)状态 | ❌ 不涉及 | **P22** 定义 |
-| 状态变更的审计 | ❌ 本 SPEC 仅 log.info | **P24** AOP |
-| 现金折扣凭证生成 | ⚠️ 调用 VoucherService | **P22** 提供 generateCashDiscountVoucher 接口 |
+**采购发票不需要独立的 8 态状态机**：
 
----
+1. `certification_status` (4 态) 已覆盖"进项税抵扣认证"业务
+2. `voucher_id` 字段已覆盖"已生成凭证"业务
+3. `reversed_from` / `t_voucher.reversed_from` 已覆盖"红冲"业务
+4. `t_payable` 核销工作台（P12）已覆盖"应付核销"业务
 
-## 7. 测试要点
-
-| 测试场景 | 期望 | 与 P21-a 差异 |
-|---------|------|--------------|
-| 导入后默认 PENDING_CONFIRM（匹配失败）| status=PENDING_CONFIRM | 相同 |
-| 导入后直接 CONFIRMED（匹配成功）| status=CONFIRMED | **差异**：跳过 PENDING_REVIEW |
-| PENDING_CONFIRM → PENDING_REVIEW | 成功 | 相同 |
-| PENDING_REVIEW → CONFIRMED | 成功 | 相同 |
-| CONFIRMED → VOUCHERED | 成功 | 相同 |
-| 核销扣减 unsettled=0 → FULLY_RECONCILED | 成功 | 相同 |
-| 核销扣减 unsettled>0 → PARTIALLY_RECONCILED | 成功 | 相同 |
-| 现金折扣生成独立凭证 | 折扣凭证生成，发票金额不变 | **差异** |
-| 作废含原因 | 成功 | 相同 |
+**如果未来业务扩展**（如 "采购发票审批流"），再独立开 P21-c 工单：
+1. 先实测当前业务需求
+2. 再决定加字段（voucherStatus？）或扩展 certification_status
+3. 起草 SPEC 时必须用 R5 铁律查 schema 现状
 
 ---
 
-## 8. API 变更
+## 5. 实施清单
 
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| POST | `/api/v1/input-invoices/{id}/submit-review` | 提交审核 |
-| POST | `/api/v1/input-invoices/{id}/confirm` | 审核通过 |
-| POST | `/api/v1/input-invoices/{id}/reject` | 审核驳回 |
-| POST | `/api/v1/input-invoices/{id}/revert` | 回退到待审核 |
-| POST | `/api/v1/input-invoices/{id}/void` | 作废 |
-| GET | `/api/v1/input-invoices?status=VOUCHERED` | 按状态过滤（V39 索引）|
-
-**前端**：在采购发票列表页加状态筛选器（与销售发票对称）。
+| # | 改动 | 文件 | 风险 | commit |
+|---|---|---|---|---|
+| 1 | 修 P0 bug：`InputInvoiceImportService:404` `PENDING` → `UNCERTIFIED` | `InputInvoiceImportService.java` | 🟡 中（修业务代码）| (下个 commit) |
+| 2 | 改造本 SPEC（"已废弃" → "分析报告"）| `docs/specs/P21-b-purchase-invoice-state-machine.md` | ✅ 低 | (本 commit) |
 
 ---
 
-## 9. 不做事项
+## 6. 后续工单
 
-- ❌ 不重建 `InvoiceStatus` 常量类（复用 P21-a）
-- ❌ 不修改 OutputInvoiceEntity（P21-a 范围）
-- ❌ 不修改 VoucherEntity（P22 范围）
-- ❌ 不实现三单匹配（PO-GRN-Invoice）的强制校验（不在本期）
-- ❌ 不实现多级审批流（采购大额审批由财务主管手动复核，不在本 SPEC）
+| 编号 | 名称 | 优先级 | 前置条件 |
+|---|---|:---:|---|
+| P21-c | 采购发票状态机 V2（仅当业务需要时）| P1 | 业务需求文档化 + R5 4 步实测 |
+| P25-b | `InputInvoiceImportService` 全量测试（覆盖 P0 bug 修复）| P0 | 修 P0 bug 后 |
 
 ---
 
-## 10. 后续依赖
+## Changelog
 
-- **依赖 P21-a**：`InvoiceStatus` 常量类
-- **依赖 P22**：现金折扣凭证生成接口 `voucherService.generateCashDiscountVoucher()`
-- **依赖 P24**：上线时把 log.info 替换为 audit_log 自动写入
+- 2026-06-22 重构 by Hermes：原 P21-b SPEC 整个假设错（t_input_invoice 无 status 字段），改写为"分析报告"
+- 2026-06-22 标 [已废弃] by Hermes：实施前置实测发现 SPEC 错位
+- 2026-06-21 创建原 P21-b SPEC（已废弃）
