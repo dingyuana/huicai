@@ -370,6 +370,19 @@ public class SalesInvoiceImportService {
             }
         }
 
+        // 后处理：已存在的红冲发票也尝试关联（去重跳过的行）
+        for (ParsedInvoiceRow row : rows) {
+            if (!row.isPositive && StrUtil.isNotBlank(row.originalInvoiceNo)
+                    && StrUtil.isNotBlank(row.invoiceNo)
+                    && existingSet.contains(row.invoiceNo)) {
+                try {
+                    handleRedFlushReversal(row.originalInvoiceNo, null, row.invoiceDate.format(DateTimeFormatter.ofPattern("yyyyMM")));
+                } catch (Exception e) {
+                    log.warn("红冲后处理失败 row={}: {}", row.rowNum, e.getMessage());
+                }
+            }
+        }
+
         return Map.of(
                 "total", rows.size(), "success", success,
                 "docCreated", docCreated, "voucherCreated", voucherCreated,
