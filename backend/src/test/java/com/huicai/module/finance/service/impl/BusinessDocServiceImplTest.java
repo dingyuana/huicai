@@ -3,6 +3,8 @@ package com.huicai.module.finance.service.impl;
 import com.huicai.common.exception.BusinessException;
 import com.huicai.module.arap.entity.VendorEntity;
 import com.huicai.module.arap.mapper.CustomerMapper;
+import com.huicai.module.arap.mapper.PayableMapper;
+import com.huicai.module.arap.mapper.ReceivableMapper;
 import com.huicai.module.arap.mapper.VendorMapper;
 import com.huicai.module.finance.dto.BusinessDocDTO;
 import com.huicai.module.finance.dto.BusinessDocVO;
@@ -63,6 +65,8 @@ class BusinessDocServiceImplTest {
     @Mock private CustomerMapper customerMapper;
     @Mock private VendorMapper vendorMapper;
     @Mock private UserMapper userMapper;
+    @Mock private ReceivableMapper receivableMapper;
+    @Mock private PayableMapper payableMapper;
 
     @org.mockito.InjectMocks private BusinessDocServiceImpl service;
 
@@ -87,6 +91,10 @@ class BusinessDocServiceImplTest {
         // docEntryMapper 路径
         when(docEntryMapper.deleteByDocId(anyLong())).thenReturn(0);
         when(docEntryMapper.selectByDocId(anyLong())).thenReturn(Collections.emptyList());
+
+        // populateSettlementAmounts 路径 (P20 应收/应付状态机 + 业务闭环 P12)
+        when(receivableMapper.selectList(any())).thenReturn(Collections.emptyList());
+        when(payableMapper.selectList(any())).thenReturn(Collections.emptyList());
     }
 
     private BusinessDocEntity stubDrafDoc() {
