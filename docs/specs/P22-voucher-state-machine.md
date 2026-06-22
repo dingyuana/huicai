@@ -1,10 +1,17 @@
 # P22 SPEC — 凭证状态机扩展规格书
 
-> 状态：待实现 | 优先级：高（P22）
+> 状态：**已修订（2026-06-22 老丁 A 选）** | 优先级：高（P22）
 > 依据：`docs/需求分析书_发票与凭证状态机_V1.0.md` §3.2 凭证状态机
-> 目标：扩展 `VoucherEntity` 增加 REVERSED/REJECTED 字段，不破坏现有 4 状态数据
+> 目标：扩展 `VoucherEntity` 增加 rejected_reason/reverse_reason 字段，不破坏现有 4 状态数据
 > 工期：单批交付，3 个 commit
-> 核心决策：保持现有 `VoucherEntity.status` 4 状态（DRAFT/SUBMITTED/AUDITED/POSTED），REVERSED/REJECTED 作为**附属字段**（详见需求文档 §3.2 决议）
+> 核心决策：保持现有 `VoucherEntity.status` 4 状态（DRAFT/SUBMITTED/AUDITED/POSTED），REJECTED/REVERSED 作为**附属字段**（详见需求文档 §3.2 决议）
+>
+> **2026-06-22 修订内容**：
+> - V41 → V47（V41-V44 + V46 已被占用）
+> - 删 `reversed_voucher_id`（用现 `reversedFrom` 字段）
+> - 删 `reversal_pair_id`（业务无需求，代码无引用）
+> - 加 `reverse_reason`（红冲原因，便于审计）
+> - 保留 `rejected_reason`（驳回原因）
 
 ---
 
@@ -12,9 +19,9 @@
 
 | # | 改动 | 文件 | 风险 |
 |---|------|------|------|
-| 1 | 创建 `VoucherStatus` 常量类（封装 4 状态 + 2 附属）| `backend/.../finance/constant/VoucherStatus.java` | ✅ 低 |
-| 2 | `VoucherEntity` 新增 3 字段：`rejected_reason` / `reversed_voucher_id` / `reversal_pair_id` | Entity 文件 | 🟡 中 |
-| 3 | V41 迁移: t_voucher 加 3 字段 + CHECK 约束 | Flyway | 🟡 中 |
+| 1 | 创建 `VoucherStatus` 常量类（封装 4 状态 + 2 附属检查）| `backend/.../finance/constant/VoucherStatus.java` | ✅ 低 |
+| 2 | `VoucherEntity` 新增 2 字段：`rejected_reason` / `reverse_reason`（`reversedFrom` 已存在不新增）| Entity 文件 | 🟡 中 |
+| 3 | V47 迁移: t_voucher 加 2 字段（无 CHECK 约束，2 字段都是 nullable text）| Flyway | 🟡 中 |
 | 4 | 创建 `VoucherStateMachineService`（含反向/驳回/红冲方法）| Service 文件 | 🟡 中 |
 | 5 | `VoucherServiceImpl` 适配新字段（替换 magic string）| Service 文件 | 🟡 中 |
 | 6 | 红字冲销调用方（BusinessDocServiceImpl 等）适配 | 调用方 | 🟡 中 |
@@ -86,22 +93,16 @@ public final class VoucherStatus {
 **位置**：现有 87 行后追加（不破坏现有字段）。
 
 ```java
-// ========== P22 新增字段（2026-06-21 起）==========
+// ========== P22 新增字段（2026-06-22 修订：只加 2 字段）==========
 
 /** 驳回原因（仅在 SUBMITTED → DRAFT 反向时记录） */
 private String rejectedReason;
 
-/** 红字凭证 ID（指向关联的红字凭证；POSTED 后唯一修正路径） */
-private Long reversedVoucherId;
+/** 红冲原因（生成红字凭证时记录，便于审计） */
+private String reverseReason;
 
-/** 冲销对 ID（双向绑定，原凭证与红字凭证共享同一 ID） */
-private Long reversalPairId;
-
-/** 驳回时间 */
-private LocalDateTime rejectedAt;
-
-/** 驳回操作人 */
-private Long rejectedBy;
+// 注：reversedFrom 字段已存在 (V41 之前已加), 不再新增
+// 注：rejectedAt / rejectedBy / reversedVoucherId / reversalPairId 在 2026-06-22 修订中删除（业务无需求）
 ```
 
 ### 2.2 字段语义说明
@@ -109,40 +110,35 @@ private Long rejectedBy;
 | 字段 | 何时写入 | 与 status 关系 |
 |:---|:---|:---|
 | `rejectedReason` | SUBMITTED 驳回时 | status 从 SUBMITTED 回退到 DRAFT |
-| `rejectedAt` / `rejectedBy` | 同上 | 同上 |
-| `reversedVoucherId` | 生成红字凭证时（双向）| 双方 status 都保持 POSTED |
-| `reversalPairId` | 同上 | 双方共享同一 UUID/ID |
+| `reverseReason` | 生成红字凭证时 | 红字凭证 status=DRAFT, source=REVERSAL |
+| `reversedFrom` | 生成红字凭证时（已有字段）| 红字凭证 reversedFrom 指向原凭证 |
 
 ---
 
-## 3. Flyway 迁移（V41）
+## 3. Flyway 迁移（V47）
 
 ```sql
--- V41__add_voucher_state_machine_fields.sql
+-- V47__add_voucher_rejected_reverse_reason.sql
+-- 2026-06-22 P22 实施 (修订版: 只加 2 字段, 不动 status CHECK 约束)
+-- 依据: docs/specs/P22-voucher-state-machine.md (2026-06-22 修订)
 
--- 1. 加 5 个新字段
+-- 1. 加 2 个新字段 (text 类型, nullable)
 ALTER TABLE t_voucher ADD COLUMN IF NOT EXISTS rejected_reason VARCHAR(500);
-ALTER TABLE t_voucher ADD COLUMN IF NOT EXISTS rejected_at TIMESTAMP;
-ALTER TABLE t_voucher ADD COLUMN IF NOT EXISTS rejected_by BIGINT;
-ALTER TABLE t_voucher ADD COLUMN IF NOT EXISTS reversed_voucher_id BIGINT;
-ALTER TABLE t_voucher ADD COLUMN IF NOT EXISTS reversal_pair_id BIGINT;
+ALTER TABLE t_voucher ADD COLUMN IF NOT EXISTS reverse_reason VARCHAR(500);
 
--- 2. CHECK 约束：status 字段仅允许 4 状态值
-ALTER TABLE t_voucher
-    DROP CONSTRAINT IF EXISTS t_voucher_status_check;
-ALTER TABLE t_voucher
-    ADD CONSTRAINT t_voucher_status_check
-    CHECK (status IN ('DRAFT', 'SUBMITTED', 'AUDITED', 'POSTED'));
+-- 注: status 字段 CHECK 约束不变 (4 状态 DRAFT/SUBMITTED/AUDITED/POSTED, V8 已建)
+-- 注: reversedFrom 字段已存在 (V41 之前已加), 不动
 
--- 3. 索引
-CREATE INDEX IF NOT EXISTS idx_t_voucher_reversal_pair_id
-    ON t_voucher(reversal_pair_id) WHERE reversal_pair_id IS NOT NULL;
-CREATE INDEX IF NOT EXISTS idx_t_voucher_reversed_voucher_id
-    ON t_voucher(reversed_voucher_id) WHERE reversed_voucher_id IS NOT NULL;
-CREATE INDEX IF NOT EXISTS idx_t_voucher_status
-    ON t_voucher(status);
+-- 2. 索引 (前端按驳回原因/红冲原因查询场景罕见, 不加索引, 避免冗余)
+-- 如未来查询压力大再加: CREATE INDEX idx_t_voucher_rejected_reason ON t_voucher(rejected_reason) WHERE rejected_reason IS NOT NULL;
 
--- 4. 已有数据校验
+-- 3. COMMENT 更新
+COMMENT ON COLUMN t_voucher.rejected_reason IS
+    '驳回原因: SUBMITTED 驳回时记录, status 回退到 DRAFT (2026-06-22 P22)';
+COMMENT ON COLUMN t_voucher.reverse_reason IS
+    '红冲原因: 生成红字凭证时记录, 红字凭证 source=REVERSAL (2026-06-22 P22)';
+
+-- 4. 校验已有数据
 DO $$
 DECLARE
     invalid_status_count INTEGER;
