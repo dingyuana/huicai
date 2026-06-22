@@ -60,7 +60,7 @@
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="200" fixed="right">
+        <el-table-column label="操作" width="220" fixed="right">
           <template #default="{ row }">
             <el-button link type="primary" size="small" @click="showDetail(row)">详情</el-button>
             <template v-if="row.status === 'PENDING_CONFIRM'">
@@ -73,6 +73,7 @@
               <el-button link type="danger" size="small" @click="doAction(row, 'void')">作废</el-button>
             </template>
             <template v-else-if="row.status === 'CONFIRMED'">
+              <el-button link type="primary" size="small" @click="doAction(row, 'markVouchered')">生成凭证</el-button>
               <el-button link type="warning" size="small" @click="doAction(row, 'revert')">回退</el-button>
               <el-button link type="danger" size="small" @click="doAction(row, 'void')">作废</el-button>
             </template>
@@ -230,6 +231,7 @@
             <el-button type="danger" size="small" @click="doAction(detail, 'void')">作废</el-button>
           </template>
           <template v-else-if="detail?.status === 'CONFIRMED'">
+            <el-button type="primary" size="small" @click="doAction(detail, 'markVouchered')">生成凭证</el-button>
             <el-button type="warning" size="small" @click="doAction(detail, 'revert')">回退到待审核</el-button>
             <el-button type="danger" size="small" @click="doAction(detail, 'void')">作废</el-button>
           </template>
@@ -247,7 +249,7 @@ import { ElMessage, type FormInstance } from 'element-plus'
 import { UploadFilled } from '@element-plus/icons-vue'
 import { pageOutputInvoice, createOutputInvoice, getOutputInvoice, deleteOutputInvoice,
   outputInvoiceSummary,
-  submitForReview, confirmOutputInvoice, rejectOutputInvoice, revertOutputInvoice, voidOutputInvoice } from '@/api/modules/tax'
+  submitForReview, confirmOutputInvoice, rejectOutputInvoice, revertOutputInvoice, voidOutputInvoice, markVouchered } from '@/api/modules/tax'
 import { previewSalesInvoices, confirmSalesInvoicesImport, batchLinkRedFlush } from '@/api/modules/salesInvoice'
 
 const detailVisible = ref(false)
@@ -286,7 +288,7 @@ const onDelete = async (row: any) => {
 const doAction = async (row: any, action: string) => {
   const id = row?.id
   if (!id) return
-  const label = ({ submitReview: '提交审核', confirm: '审核通过', reject: '驳回', revert: '回退', void: '作废' } as any)[action] || action
+  const label = ({ submitReview: '提交审核', confirm: '审核通过', reject: '驳回', revert: '回退', void: '作废', markVouchered: '生成凭证' } as any)[action] || action
 
   if (action === 'reject' || action === 'void') {
     const { value: reason } = await (await import('element-plus')).ElMessageBox.prompt(
@@ -303,14 +305,15 @@ const doAction = async (row: any, action: string) => {
     return
   }
 
-try {
-      if (action === 'submitReview') await submitForReview(id)
-      else if (action === 'confirm') await confirmOutputInvoice(id)
-      else if (action === 'revert') await revertOutputInvoice(id)
-      ElMessage.success(`${label}成功`)
-      detailVisible.value = false
-      fetchData(); fetchStats()
-    } catch { /* backend handles error msg */ }
+  try {
+    if (action === 'submitReview') await submitForReview(id)
+    else if (action === 'confirm') await confirmOutputInvoice(id)
+    else if (action === 'revert') await revertOutputInvoice(id)
+    else if (action === 'markVouchered') await markVouchered(id, 0)
+    ElMessage.success(`${label}成功`)
+    detailVisible.value = false
+    fetchData(); fetchStats()
+  } catch { /* backend handles error msg */ }
 }
 
 const STATUS_MAP: Record<string, string> = {

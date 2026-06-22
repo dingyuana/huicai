@@ -109,6 +109,10 @@ export function voidOutputInvoice(id: number, reason: string): Promise<void> {
   return request.post(`/tax/output-invoices/${id}/void`, null, { params: { reason } })
 }
 
+export function markVouchered(id: number, voucherId: number): Promise<void> {
+  return request.post(`/tax/output-invoices/${id}/mark-vouchered`, null, { params: { voucherId } })
+}
+
 export function createOutputInvoice(data: OutputInvoice): Promise<OutputInvoice> {
   return request.post('/tax/output-invoices', data)
 }

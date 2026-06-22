@@ -178,6 +178,15 @@ public class TaxController {
         return R.ok();
     }
 
+    @Operation(summary = "标记已生成凭证 (CONFIRMED → VOUCHERED, 记录voucherId)")
+    @PostMapping("/output-invoices/{id}/mark-vouchered")
+    public R<Void> markVouchered(@PathVariable Long id,
+            @RequestParam Long voucherId,
+            @RequestParam(required = false) Long userId) {
+        stateMachineService.markVouchered(id, voucherId, orDefault(userId));
+        return R.ok();
+    }
+
     @Operation(summary = "作废 (任意非终态 → VOIDED)")
     @PostMapping("/output-invoices/{id}/void")
     public R<Void> voidInvoice(@PathVariable Long id,
