@@ -81,6 +81,12 @@ public class VoucherEntity {
     /** 被红冲凭证ID */
     private Long reversedFrom;
 
+    /** 驳回原因 (P22, 2026-06-22 新增) */
+    private String rejectedReason;
+
+    /** 红冲原因 (P22, 2026-06-22 新增) */
+    private String reverseReason;
+
     /** 逻辑删除(0-未删,1-已删) */
     @TableLogic
     private Integer deleted;
