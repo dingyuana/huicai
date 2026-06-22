@@ -299,7 +299,8 @@ class InputInvoiceImportServiceTest {
         assertEquals("供应商A", captured.getVendorName());
         assertEquals(200L, captured.getDocId());
         assertEquals(300L, captured.getVoucherId());
-        assertEquals("PENDING", captured.getCertificationStatus());
+        // P21-b 重构 2026-06-22 修 P0 bug: PENDING → UNCERTIFIED (符合 V8 CHECK 约束)
+        assertEquals("UNCERTIFIED", captured.getCertificationStatus());
     }
 
     // ==================== parseInvoiceDate 反射测试 ====================

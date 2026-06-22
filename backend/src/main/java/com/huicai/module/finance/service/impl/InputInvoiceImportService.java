@@ -401,7 +401,8 @@ public class InputInvoiceImportService {
         inv.setTaxAmount(row.taxAmount);
         inv.setTotalAmount(row.totalAmount);
         inv.setInvoiceType("SPECIAL");
-        inv.setCertificationStatus("PENDING");
+        // P21-b 重构 2026-06-22 修 P0 bug: 原 PENDING 违反 V8 CHECK 约束 (chk_cert_status 仅允许 UNCERTIFIED/CERTIFIED/INVALID/CANCELLED)
+        inv.setCertificationStatus("UNCERTIFIED");
         inv.setDocId(doc.getId());
         inv.setVoucherId(doc.getVoucherId());
         inv.setCreatedBy(DEFAULT_USER_ID);
