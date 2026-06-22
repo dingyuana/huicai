@@ -167,8 +167,16 @@ import { UploadFilled } from '@element-plus/icons-vue'
 import { pageOutputInvoice, createOutputInvoice } from '@/api/modules/tax'
 import { previewSalesInvoices, confirmSalesInvoicesImport } from '@/api/modules/salesInvoice'
 
-const STATUS_MAP: Record<string, string> = { DRAFT: '草稿', ISSUED: '已开具', VOID: '已作废', RED_INK: '红字' }
-const STATUS_TAG_MAP: Record<string, string> = { DRAFT: 'info', ISSUED: 'success', VOID: 'warning', RED_INK: 'danger' }
+const STATUS_MAP: Record<string, string> = {
+  PENDING_CONFIRM: '待确认', PENDING_REVIEW: '待审核', CONFIRMED: '已确认',
+  VOUCHERED: '已生成凭证', FULLY_RECONCILED: '已核销', PARTIALLY_RECONCILED: '部分核销',
+  VOIDED: '已作废', REVERSED: '已冲销',
+}
+const STATUS_TAG_MAP: Record<string, string> = {
+  PENDING_CONFIRM: 'warning', PENDING_REVIEW: 'info', CONFIRMED: 'success',
+  VOUCHERED: '', FULLY_RECONCILED: 'success', PARTIALLY_RECONCILED: '',
+  VOIDED: 'danger', REVERSED: 'danger',
+}
 
 const query = reactive({ customerName: '', period: '', current: 1, size: 20 })
 const list = ref<any[]>([])
