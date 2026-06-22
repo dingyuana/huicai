@@ -158,3 +158,13 @@ export function batchPostVouchers(data: VoucherStatusDTO): Promise<void> {
 export function reverseVoucher(id: number): Promise<VoucherVO> {
   return request.post(`/vouchers/${id}/reverse`)
 }
+
+/** 驳回凭证 (SUBMITTED → DRAFT) */
+export function rejectVoucher(id: number, reason: string): Promise<void> {
+  return request.post(`/vouchers/${id}/reject`, null, { params: { reason } })
+}
+
+/** 反过账 (POSTED → AUDITED) */
+export function unpostVoucher(id: number): Promise<void> {
+  return request.post(`/vouchers/${id}/unpost`)
+}

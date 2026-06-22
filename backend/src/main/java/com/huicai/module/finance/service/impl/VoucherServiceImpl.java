@@ -259,6 +259,34 @@ public class VoucherServiceImpl extends ServiceImpl<VoucherMapper, VoucherEntity
 
     @Override
     @Transactional
+    public void reject(Long id, Long userId, String reason) {
+        if (reason == null || reason.trim().isEmpty()) {
+            throw BusinessException.badRequest("驳回必须填写原因");
+        }
+        VoucherEntity entity = getValidVoucher(id);
+        voucherStateMachineService.assertAuditable(entity);
+        assertPeriodOpen(entity.getPeriod());
+        entity.setStatus("DRAFT");
+        entity.setRejectedReason(reason);
+        entity.setUpdatedBy(userId);
+        voucherMapper.updateById(entity);
+        log.info("驳回凭证: id={}, userId={}, reason={}", id, userId, reason);
+    }
+
+    @Override
+    @Transactional
+    public void unpost(Long id, Long userId) {
+        VoucherEntity entity = getValidVoucher(id);
+        if (!"POSTED".equals(entity.getStatus())) {
+            throw BusinessException.badRequest("仅已记账凭证可反过账");
+        }
+        assertPeriodOpen(entity.getPeriod());
+        voucherMapper.batchUpdateStatus(Collections.singletonList(id), "AUDITED", userId);
+        log.info("反过账凭证: id={}, userId={}", id, userId);
+    }
+
+    @Override
+    @Transactional
     public void post(Long id, Long userId) {
         VoucherEntity entity = getValidVoucher(id);
         voucherStateMachineService.assertPostable(entity);

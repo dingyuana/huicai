@@ -60,13 +60,15 @@
         </el-table-column>
         <el-table-column prop="createdByName" label="制单人" width="80" align="center" />
         <el-table-column prop="createdAt" label="制单时间" width="160" />
-        <el-table-column label="操作" width="320" fixed="right">
+        <el-table-column label="操作" width="380" fixed="right">
           <template #default="{ row }">
             <el-button text size="small" @click="goDetail(row)">查看</el-button>
             <el-button text size="small" v-if="row.status === 'DRAFT'" @click="goEdit(row)">编辑</el-button>
             <el-button text size="small" v-if="row.status === 'DRAFT'" type="success" @click="onSubmit(row)">提交</el-button>
             <el-button text size="small" v-if="row.status === 'SUBMITTED'" type="primary" @click="onAudit(row)">审核</el-button>
+            <el-button text size="small" v-if="row.status === 'SUBMITTED'" type="warning" @click="onReject(row)">驳回</el-button>
             <el-button text size="small" v-if="row.status === 'AUDITED'" type="warning" @click="onPost(row)">记账</el-button>
+            <el-button text size="small" v-if="row.status === 'POSTED'" type="warning" @click="onUnpost(row)">反过账</el-button>
             <el-button text size="small" v-if="row.status === 'POSTED' || row.status === 'AUDITED'" type="danger" @click="onReverse(row)">红冲</el-button>
             <el-popconfirm v-if="row.status === 'DRAFT'" title="确认删除此凭证？" @confirm="onDelete(row)">
               <template #reference>
@@ -101,6 +103,8 @@ import {
   postVoucher,
   deleteVoucher,
   reverseVoucher,
+  rejectVoucher,
+  unpostVoucher,
   batchSubmitVouchers,
   batchAuditVouchers,
   batchPostVouchers,
@@ -208,6 +212,22 @@ async function onDelete(row: VoucherVO) {
 async function onReverse(row: VoucherVO) {
   await reverseVoucher(row.id)
   ElMessage.success('红冲成功，请前往草稿提交')
+  await fetchData()
+}
+
+async function onReject(row: VoucherVO) {
+  const { value: reason } = await (await import('element-plus')).ElMessageBox.prompt(
+    '请输入驳回原因', '驳回凭证', { inputType: 'textarea', inputValidator: (v: string) => !!v?.trim(), inputErrorMessage: '原因不能为空' }
+  ).catch(() => ({ value: null }))
+  if (!reason) return
+  await rejectVoucher(row.id, reason)
+  ElMessage.success('驳回成功')
+  await fetchData()
+}
+
+async function onUnpost(row: VoucherVO) {
+  await unpostVoucher(row.id)
+  ElMessage.success('反过账成功')
   await fetchData()
 }
 

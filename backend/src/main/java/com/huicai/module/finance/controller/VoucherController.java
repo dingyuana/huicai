@@ -103,4 +103,18 @@ public class VoucherController {
     public R<VoucherVO> reverse(@PathVariable Long id) {
         return R.ok(voucherService.reverse(id, SecurityUtils.getCurrentUserId()));
     }
+
+    @Operation(summary = "驳回凭证 (SUBMITTED → DRAFT, reason必填)")
+    @PostMapping("/{id}/reject")
+    public R<Void> reject(@PathVariable Long id, @RequestParam String reason) {
+        voucherService.reject(id, SecurityUtils.getCurrentUserId(), reason);
+        return R.ok();
+    }
+
+    @Operation(summary = "反过账 (POSTED → AUDITED, 仅纠错)")
+    @PostMapping("/{id}/unpost")
+    public R<Void> unpost(@PathVariable Long id) {
+        voucherService.unpost(id, SecurityUtils.getCurrentUserId());
+        return R.ok();
+    }
 }

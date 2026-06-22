@@ -72,4 +72,14 @@ public interface VoucherService {
      * 红冲(生成红字凭证)
      */
     VoucherVO reverse(Long id, Long userId);
+
+    /**
+     * 驳回(SUBMITTED → DRAFT, 记录驳回原因)
+     */
+    void reject(Long id, Long userId, String reason);
+
+    /**
+     * 反过账(POSTED → AUDITED, 仅纠错用)
+     */
+    void unpost(Long id, Long userId);
 }
