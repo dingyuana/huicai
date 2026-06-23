@@ -1,6 +1,6 @@
 # 慧财财务系统 — 综合设计文档
 
-> 版本：V2.0 | 日期：2026-06-22
+> 版本：V2.1 | 日期：2026-06-23
 > 本文件综合了 `基于Web财务软件的项目说明书.md`、`docs/需求分析书_*` 系列、`docs/specs/P*` 系列以及实际代码的实现情况。
 >
 > **规范**：多模块单库，MySQL风格PostgreSQL，严格状态机驱动。
@@ -28,7 +28,8 @@
 17. [关键技术决策](#17-关键技术决策)
 18. [前端状态机集成](#18-前端状态机集成)
 19. [测试覆盖率](#19-测试覆盖率)
-20. [实现状态总览](#20-实现状态总览)
+20. [凭证模板系统](#20-凭证模板系统)
+21. [实现状态总览](#21-实现状态总览)
 
 ---
 
@@ -1006,29 +1007,6 @@ RBAC 模型，权限格式：`module:resource:action`
 | 费用报销 | 员工档案/报销单/自动匹配/凭证生成 | ExpenseReimbursementService |
 | 前端框架 | 路由/布局/权限指令/API封装 | 12视图目录, 50+路由 |
 
-### 20.2 部分实现（⚠️）
-
-| 模块 | 缺什么 |
-|:-----|:-------|
-| 销售发票状态机Service | `OutputInvoiceStateMachineService` 未实现（仅常量+Entity+迁移） |
-| P24 审计追踪 | `StatusChangeAspect` 已创建但仅标注 2 个 Entity，尚缺 `ReceivableEntity`/`PayableEntity` 等 |
-| P20 AR/AP Service | `ArapStatus` 常量和迁移已落地，但 `ReceivableService.confirm()` / `markSettled()` / `reverse()` 未实现 |
-| 期初建账 | 前端有 `beginning-balance/` 视图目录，但后端 Service 未完整实现 |
-| 期末结账 | `PeriodCloseService` 存在但结账检查项未完整 |
-| 数据权限 | `DataPermissionInterceptor` 是个 scaffolding，未注入 SQL |
-| AI 服务 | Python FastAPI 骨架存在，RabbitMQ 集成存在，但实际 OCR/embedding 未上线 |
-| 税务申报 P18 | `approveDeclaration` / `rejectDeclaration` 存在但申报→凭证自动生成未实现 |
-| 银企对账 P14 | 匹配/确认端点存在，余额调节表未完整实现 |
-
-### 20.3 未启动（❌）
-
-| 模块 | 说明 |
-|:-----|:------|
-| P23 强制校验 | 统一拦截器未立项 |
-| P25 账期控制 | 跨期标记 + 账期逻辑未立项 |
-| 预算控制 | 单据保存时执行预算检查未实现 |
-| 报表导出 | 仅有基础结构，EasyExcel 导出未实现 |
-| 财务报表物化视图 | PostgreSQL 物化视图未创建 |
 
 ---
 
@@ -1152,9 +1130,199 @@ const canBatchPost = computed(() => selectedRows.value.some((r) => r.status === 
 
 ---
 
-## 20. 实现状态总览
+## 20. 凭证模板系统
 
-### 20.1 已实现（✅）
+### 20.1 概述
+
+凭证模板系统用于将凭证分录的科目映射从硬编码剥离为配置驱动，使新增业务场景无需改代码。目前**模板的"壳"已就绪，但核心引擎和大部分接入点未实现**。
+
+### 20.2 现有基础（✅）
+
+| 组件 | 文件 | 说明 |
+|:-----|:-----|:------|
+| `VoucherTemplateEntity` | `finance/entity/` | 主表：name, classification, numberPrefix, isActive |
+| `VoucherTemplateLineEntity` | `finance/entity/` | 分录行：subjectId, dr/crAmountTemplate, summaryTemplate, direction |
+| `VoucherTemplateService` | `finance/service/` | CRUD + `matchByClassification()` |
+| `VoucherTemplateController` | `finance/controller/` | 完整 REST API |
+| 前端模板管理页 | `views/finance/voucher-template/` | 模板列表 + CRUD 弹窗 |
+| V23 迁移 | `db/migration/V23__...` | t_voucher_template + t_voucher_template_line + 5 条种子模板 |
+| V40 迁移 | `db/migration/V40__...` | 核销场景模板（reconciliation_receipt/payment） |
+| V42 迁移 | `db/migration/V42__...` | 结算场景模板（settlement_receivable/payment） |
+| `AutoGenerationService` 接入 | `finance/service/impl/` | A 类制证先查模板，无匹配降级硬编码 |
+| `ReconciliationServiceImpl` 接入 | `arap/service/impl/` | 核销制证使用模板 |
+| `ArapSettlementServiceImpl` 接入 | `arap/service/impl/` | 结算制证使用模板 + `{{settlementNo}}` 变量 |
+
+### 20.3 变量系统（现有）
+
+| 变量 | 支持位置 | 来源 |
+|:-----|:---------|:-----|
+| `{{amount}}` | dr/crAmountTemplate, summaryTemplate | 交易金额 |
+| `{{summary}}` | summaryTemplate | 流水摘要 |
+| `{{counterAccount}}` | summaryTemplate | 对方户名 |
+| `{{settlementNo}}` | summaryTemplate | 结算单号 |
+| `{{taxAmount}}` | dr/crAmountTemplate | 税额（占位，返回 0）|
+
+### 20.4 差距分析
+
+| 需求 | 现状 | 状态 |
+|:-----|:-----|:----:|
+| **多维度匹配**（source+businessType+direction） | 仅按 classification 一对一匹配 | ❌ |
+| **业务变量**（`{客户名称}` / `{供应商名称}` / `{月份}` 等）| 仅 `{{amount}}` / `{{summary}}` 等 4 个 | ❌ |
+| **金额表达式**（`{{amount}} - {{taxAmount}}`） | 只有直接取数 | ❌ |
+| **辅助核算挂载**（客户/供应商/部门/员工） | BusinessDocServiceImpl 手动复制 assistJson，模板引擎未支持 | ❌ |
+| **辅助核算强校验** | 无 | ❌ |
+| **BusinessDocServiceImpl 接入** | 7 种单据硬编码 `DOC_VOUCHER_SUBJECTS` | ❌ |
+| **TaxService 生成凭证接入** | `generateVoucherFromInvoice` 硬编码 1122/5001/2221.01 | ❌ |
+| **期末自动结转模板**（损益/增值税/汇兑） | 不存在 | ❌ |
+| **种子模板覆盖** | 仅 9 条（A 类 5 + 核销 2 + 结算 2） | ⚠️ 部分 |
+
+### 20.5 模板匹配引擎设计
+
+#### 匹配维度（目标）
+
+```
+匹配优先级:
+  1. source + businessType + direction  (精确匹配)
+  2. source + businessType              (业务类型匹配)
+  3. classification                      (银行流水分类，兼容现有)
+  4. 兜底: 固定科目映射                  (种子模板)
+```
+
+#### TemplateContext
+
+```java
+class TemplateContext {
+    String source;          // BANK_STMT / BUSINESS_DOC / INVOICE / PERIOD_CLOSE
+    String businessType;    // RECEIPT / PAYMENT / EXPENSE / INVOICE_OUT / ...
+    String direction;       // in / out
+    String classification;  // bank_fee / interest_income / ...
+    Long customerId;        // 客户 ID（辅助核算用）
+    Long vendorId;          // 供应商 ID
+    Long deptId;            // 部门 ID
+    Long employeeId;        // 员工 ID
+    BigDecimal amount;
+    BigDecimal taxAmount;
+    String period;          // YYYYMM
+    String counterpartyName;
+    String summary;
+    Map<String, Object> variables;  // 扩展变量
+}
+```
+
+#### Entity 扩展字段
+
+```sql
+-- t_voucher_template 新增
+ALTER TABLE t_voucher_template ADD COLUMN source VARCHAR(30);
+ALTER TABLE t_voucher_template ADD COLUMN business_type VARCHAR(30);
+ALTER TABLE t_voucher_template ADD COLUMN direction VARCHAR(10);
+ALTER TABLE t_voucher_template ADD COLUMN match_priority INT DEFAULT 0;
+
+-- t_voucher_template_line 新增
+ALTER TABLE t_voucher_template_line ADD COLUMN assist_type VARCHAR(30);
+ALTER TABLE t_voucher_template_line ADD COLUMN assist_required BOOLEAN DEFAULT FALSE;
+```
+
+### 20.6 五类模板匹配规则
+
+#### 20.6.1 资金与出纳类（source=BANK_STMT）
+
+| 场景 | 匹配条件 | 借方科目 | 贷方科目 |
+|:-----|:---------|:---------|:---------|
+| 客户收款 | classification=business_receipt | 1002 银行存款 | 1122 应收账款 |
+| 支付供应商 | classification=business_payment | 2202 应付账款 | 1002 银行存款 |
+| 内部调拨 | classification=internal_transfer | 1002-目标户 | 1002-源户 |
+| 银行手续费 | classification=bank_fee | 6602.01 财务费用 | 1002 银行存款 |
+| 利息收入 | classification=interest_income | 1002 银行存款 | 6602.02 利息收入 |
+| 缴税 | classification=tax_payment | 2221 应交税费 | 1002 银行存款 |
+| 社保缴费 | classification=social_security | 2211 应付职工薪酬 | 1002 银行存款 |
+| 保险费用 | classification=insurance_fee | 6602.06 保险费 | 1002 银行存款 |
+
+#### 20.6.2 往来与结算类（source=BUSINESS_DOC）
+
+| 场景 | businessType | 借方科目 | 贷方科目 |
+|:-----|:-------------|:---------|:---------|
+| 收款单 | RECEIPT | 1002 银行存款 | 1122 应收账款 |
+| 付款单 | PAYMENT | 2202 应付账款 | 1002 银行存款 |
+| 报销单 | EXPENSE | 6602 费用 | 1002 银行存款 |
+| 采购发票 | INVOICE_IN | 1403 库存商品 | 2202 应付账款 |
+| 销售发票 | INVOICE_OUT | 1122 应收账款 | 6001 主营业务收入 |
+| 其他应收 | OTHER_RECEIVABLE | 1221 其他应收款 | 1002 银行存款 |
+| 其他应付 | OTHER_PAYABLE | 1002 银行存款 | 2241 其他应付款 |
+
+#### 20.6.3 费用与薪酬类（source=PERIOD_CLOSE + BUSINESS_DOC）
+
+| 场景 | 触发 | 借方科目 | 贷方科目 |
+|:-----|:-----|:---------|:---------|
+| 费用报销 | businessType=EXPENSE + 员工匹配 | 管理/销售费用 | 其他应付款/银行存款 |
+| 计提工资 | 结账触发 | 管理/销售费用-工资 | 应付职工薪酬-工资 |
+| 计提社保 | 结账触发 | 管理/销售费用-社保/公积金 | 应付职工薪酬-社保/公积金 |
+| 缴纳税金 | 结账触发 | 应交税费-未交增值税等 | 银行存款 |
+
+#### 20.6.4 资产与摊销类（source=PERIOD_CLOSE）
+
+| 场景 | 触发 | 借方科目 | 贷方科目 |
+|:-----|:-----|:---------|:---------|
+| 固定资产折旧 | 结账→折旧步骤 | 管理/销售费用-折旧费 | 累计折旧 |
+| 无形资产摊销 | 结账→摊销步骤 | 管理费用-无形资产摊销 | 累计摊销 |
+| 长期待摊摊销 | 结账→摊销步骤 | 管理/销售费用 | 长期待摊费用 |
+
+#### 20.6.5 期末自动化结转（source=PERIOD_CLOSE）
+
+| 场景 | businessType | 逻辑 |
+|:-----|:-------------|:-----|
+| 损益结转 | PROFIT_LOSS_CLOSE | 取各收入/费用科目余额，反向结转至本年利润 |
+| 增值税结转 | VAT_CLOSE | 销项-进项-已交，正数结转至未交增值税 |
+| 汇兑损益 | FX_CLOSE | 按期末汇率重估外币余额，差额入财务费用 |
+
+### 20.7 架构调用关系
+
+```
+BankStatementService
+  └─autoGenerate()
+      └─AutoGenerationService.autoGenerate()
+          └─ TemplateMatcher.match(context)
+              └─ VoucherTemplateService.matchByClassification()
+                  └─ generateVoucherFromTemplate(template, lines, context)
+                      ├─ TemplateEngine.resolveSummary("付{供应商名称}货款", context)
+                      ├─ TemplateEngine.resolveAmount("{{amount}} - {{taxAmount}}", context)
+                      └─ 分录插入 + 辅助核算挂载
+
+BusinessDocServiceImpl
+  └─generateVoucher()
+      └─ TemplateMatcher.match(source=BUSINESS_DOC, businessType=RECEIPT)
+          └─ (同上模板引擎)            [待实现]
+
+TaxService
+  └─generateVoucherFromInvoice()
+      └─ TemplateMatcher.match(source=INVOICE, businessType=INVOICE_OUT)
+          └─ (同上模板引擎)            [待实现]
+
+PeriodCloseService
+  └─close()
+      └─ TemplateMatcher.match(source=PERIOD_CLOSE, businessType=PROFIT_LOSS_CLOSE)
+          └─ (同上模板引擎)            [待实现]
+```
+
+### 20.8 实施路径
+
+| 批次 | 任务 | 工时 | 优先级 |
+|:-----|:-----|:----:|:------:|
+| **P0-1** | `TemplateEngine` 变量替换引擎 + `AmountExpressionResolver` 四则运算 | 6h | P0 |
+| **P0-2** | `TemplateMatcher` 多维匹配引擎 | 4h | P0 |
+| **P0-3** | Entity 扩展字段 + V48 迁移 | 2h | P0 |
+| **P0-4** | `AutoGenerationService.resolveAmount/resolveSummary` 改用新引擎 | 2h | P0 |
+| **P1-1** | `BusinessDocServiceImpl.generateVoucher()` 改为查模板 | 4h | P1 |
+| **P1-2** | `TaxService.generateVoucherFromInvoice()` 改为查模板 | 2h | P1 |
+| **P1-3** | 前端模板编辑支持 source/businessType/assistType | 3h | P1 |
+| **P1-4** | 辅助核算写入 + 强校验拦截 | 3h | P1 |
+| **P2-1** | 新增 15+ 种子模板（V49 迁移） | 2h | P2 |
+| **P2-2** | 期末结账触发模板制证 | 3h | P2 |
+| **P2-3** | 删除所有残留硬编码 | 1h | P2 |
+
+## 21. 实现状态总览
+
+### 21.1 已实现（✅）
 
 | 模块 | 子模块 | 关键文件 |
 |:-----|:-------|:---------|
@@ -1172,7 +1340,7 @@ const canBatchPost = computed(() => selectedRows.value.some((r) => r.status === 
 | 费用报销 | 员工档案/报销单/自动匹配/凭证生成 | ExpenseReimbursementService |
 | 前端框架 | 路由/布局/权限指令/API封装 | 12视图目录, 50+路由 |
 
-### 20.2 部分实现（⚠️）
+### 21.2 部分实现（⚠️）
 
 | 模块 | 缺什么 |
 |:-----|:-------|
@@ -1186,7 +1354,7 @@ const canBatchPost = computed(() => selectedRows.value.some((r) => r.status === 
 | 税务申报 P18 | `approveDeclaration` / `rejectDeclaration` 存在但申报→凭证自动生成未实现 |
 | 银企对账 P14 | 匹配/确认端点存在，余额调节表未完整实现 |
 
-### 20.3 未启动（❌）
+### 21.3 未启动（❌）
 
 | 模块 | 说明 |
 |:-----|:------|
