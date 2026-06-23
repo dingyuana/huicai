@@ -406,8 +406,8 @@ public class TaxServiceImpl implements TaxService {
         voucher.setTotalCredit(maxAmt);
         voucherMapper.updateById(voucher);
 
-        stateMachineService.markVouchered(invoiceId, voucher.getId(), userId);
-        log.info("发票模板制证: invoiceId={}, voucherId={}, templateId={}", invoiceId, voucher.getId(), template.getId());
+        stateMachineService.markVouchered(inv.getId(), voucher.getId(), userId);
+        log.info("发票模板制证: invoiceId={}, voucherId={}, templateId={}", inv.getId(), voucher.getId(), template.getId());
     }
 
     private Subject findSubject(String code) {

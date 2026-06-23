@@ -313,9 +313,19 @@ public class BusinessDocServiceImpl implements BusinessDocService {
                 .setBusinessType(entity.getDocType())
                 .setAmount(entity.getAmount())
                 .setPeriod(entity.getPeriod());
-        // 设置客户/供应商名称
-        if (StrUtil.isNotBlank(entity.getCustomerName())) ctx.setCustomerName(entity.getCustomerName());
-        if (StrUtil.isNotBlank(entity.getSupplierName())) ctx.setVendorName(entity.getSupplierName());
+        // 设置客户/供应商名称（§91 B 方案：通过 customerId/supplierId 关联查 name，软失败）
+        if (entity.getCustomerId() != null) {
+            CustomerEntity customer = customerMapper.selectById(entity.getCustomerId());
+            if (customer != null && StrUtil.isNotBlank(customer.getName())) {
+                ctx.setCustomerName(customer.getName());
+            }
+        }
+        if (entity.getSupplierId() != null) {
+            VendorEntity vendor = vendorMapper.selectById(entity.getSupplierId());
+            if (vendor != null && StrUtil.isNotBlank(vendor.getName())) {
+                ctx.setVendorName(vendor.getName());
+            }
+        }
         ctx.getVariables().put("docNo", entity.getDocNo());
 
         VoucherTemplateEntity template = templateMatcher.match(ctx);
