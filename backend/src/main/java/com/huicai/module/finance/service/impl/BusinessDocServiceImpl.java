@@ -12,12 +12,18 @@ import com.huicai.module.finance.entity.BusinessDocEntity;
 import com.huicai.module.finance.entity.BusinessDocEntryEntity;
 import com.huicai.module.finance.entity.VoucherEntity;
 import com.huicai.module.finance.entity.VoucherEntryEntity;
+import com.huicai.module.finance.entity.VoucherTemplateEntity;
+import com.huicai.module.finance.entity.VoucherTemplateLineEntity;
 import com.huicai.module.finance.mapper.BusinessDocEntryMapper;
 import com.huicai.module.finance.mapper.BusinessDocMapper;
 import com.huicai.module.finance.mapper.VoucherEntryMapper;
 import com.huicai.module.finance.mapper.VoucherMapper;
 import com.huicai.module.finance.service.BusinessDocService;
 import com.huicai.module.finance.service.VoucherNoService;
+import com.huicai.module.finance.service.VoucherTemplateService;
+import com.huicai.module.finance.service.TemplateMatcher;
+import com.huicai.common.util.TemplateEngine;
+import com.huicai.common.util.TemplateContext;
 import com.huicai.module.system.entity.PeriodEntity;
 import com.huicai.module.system.entity.Subject;
 import com.huicai.module.system.mapper.SubjectMapper;
@@ -94,6 +100,8 @@ public class BusinessDocServiceImpl implements BusinessDocService {
     private final ReceivableMapper receivableMapper;
     private final PayableMapper payableMapper;
     private final UserMapper userMapper;
+    private final TemplateMatcher templateMatcher;
+    private final VoucherTemplateService voucherTemplateService;
 
     @Override
     public IPage<BusinessDocVO> pageQuery(BusinessDocQueryDTO q) {
@@ -298,7 +306,27 @@ public class BusinessDocServiceImpl implements BusinessDocService {
         if (entity.getVoucherId() != null) {
             throw BusinessException.badRequest("该单据已生成凭证");
         }
-        // 根据 docType 查找科目映射 (硬编码降级)
+
+        // 1. 按模板生成（配置驱动）
+        TemplateContext ctx = new TemplateContext()
+                .setSource("BUSINESS_DOC")
+                .setBusinessType(entity.getDocType())
+                .setAmount(entity.getAmount())
+                .setPeriod(entity.getPeriod());
+        // 设置客户/供应商名称
+        if (StrUtil.isNotBlank(entity.getCustomerName())) ctx.setCustomerName(entity.getCustomerName());
+        if (StrUtil.isNotBlank(entity.getSupplierName())) ctx.setVendorName(entity.getSupplierName());
+        ctx.getVariables().put("docNo", entity.getDocNo());
+
+        VoucherTemplateEntity template = templateMatcher.match(ctx);
+        if (template != null) {
+            List<VoucherTemplateLineEntity> tplLines = voucherTemplateService.getLines(template.getId());
+            if (tplLines != null && !tplLines.isEmpty()) {
+                return generateFromTemplate(entity, template, tplLines, ctx, userId);
+            }
+        }
+
+        // 2. 降级: 硬编码科目映射
         List<String[]> subjectPairs = DOC_VOUCHER_SUBJECTS.get(entity.getDocType());
         if (subjectPairs == null || subjectPairs.isEmpty()) {
             throw BusinessException.badRequest("未找到 " + entity.getDocType() + " 对应的凭证科目映射, 请先配置模板");
@@ -414,6 +442,86 @@ public class BusinessDocServiceImpl implements BusinessDocService {
             docEntryMapper.insert(dup);
         }
         return getDetail(reverse.getId());
+    }
+
+    /**
+     * 按模板生成凭证（替代硬编码 DOC_VOUCHER_SUBJECTS）.
+     */
+    private BusinessDocVO generateFromTemplate(BusinessDocEntity entity,
+                                                VoucherTemplateEntity template,
+                                                List<VoucherTemplateLineEntity> tplLines,
+                                                TemplateContext ctx,
+                                                Long userId) {
+        List<BusinessDocEntryEntity> docEntries = docEntryMapper.selectByDocId(entity.getId());
+        String enrichedSummary = enrichSummary(entity);
+
+        VoucherEntity voucher = new VoucherEntity();
+        voucher.setVoucherNo(voucherNoService.generateNextNo(entity.getPeriod(), 1L));
+        voucher.setPeriod(entity.getPeriod());
+        voucher.setVoucherTypeId(1L);
+        voucher.setStatus("DRAFT");
+        voucher.setSource("GENERATED");
+        voucher.setSummary(enrichedSummary);
+        voucher.setTemplateId(template.getId());
+        voucher.setCreatedBy(userId);
+        voucherMapper.insert(voucher);
+
+        int sortOrder = 1;
+        for (BusinessDocEntryEntity docEntry : docEntries) {
+            BigDecimal amt = docEntry.getAmount() != null ? docEntry.getAmount() : entity.getAmount();
+            // 用 TemplateContext 设当前分录金额
+            ctx.setAmount(amt);
+            if (docEntry.getSummary() != null) ctx.setSummary(docEntry.getSummary());
+            else ctx.setSummary(enrichedSummary);
+
+            for (VoucherTemplateLineEntity tplLine : tplLines) {
+                BigDecimal dr = TemplateEngine.renderAmount(tplLine.getDrAmountTemplate(), ctx);
+                BigDecimal cr = TemplateEngine.renderAmount(tplLine.getCrAmountTemplate(), ctx);
+                if (dr == null) dr = BigDecimal.ZERO;
+                if (cr == null) cr = BigDecimal.ZERO;
+
+                if ("debit".equals(tplLine.getDirection())) {
+                    if (dr.compareTo(BigDecimal.ZERO) == 0 && cr.compareTo(BigDecimal.ZERO) > 0) { dr = cr; cr = BigDecimal.ZERO; }
+                    else { cr = BigDecimal.ZERO; }
+                } else if ("credit".equals(tplLine.getDirection())) {
+                    if (cr.compareTo(BigDecimal.ZERO) == 0 && dr.compareTo(BigDecimal.ZERO) > 0) { cr = dr; dr = BigDecimal.ZERO; }
+                    else { dr = BigDecimal.ZERO; }
+                }
+                if (dr.compareTo(BigDecimal.ZERO) == 0 && cr.compareTo(BigDecimal.ZERO) == 0) continue;
+
+                String summary = TemplateEngine.renderSummary(tplLine.getSummaryTemplate(), ctx);
+
+                VoucherEntryEntity ve = new VoucherEntryEntity();
+                ve.setVoucherId(voucher.getId());
+                ve.setSubjectId(tplLine.getSubjectId());
+                ve.setDebit(dr); ve.setCredit(cr);
+                ve.setSummary(summary);
+                ve.setAssistJson(docEntry.getAssistJson());
+                ve.setSortOrder(sortOrder++);
+                voucherEntryMapper.insert(ve);
+            }
+        }
+
+        // 更新借贷合计
+        List<VoucherEntryEntity> allEntries = voucherEntryMapper.selectByVoucherId(voucher.getId());
+        BigDecimal totalD = BigDecimal.ZERO, totalC = BigDecimal.ZERO;
+        for (VoucherEntryEntity e : allEntries) {
+            if (e.getDebit() != null) totalD = totalD.add(e.getDebit());
+            if (e.getCredit() != null) totalC = totalC.add(e.getCredit());
+        }
+        BigDecimal maxAmt = totalD.max(totalC);
+        voucher.setTotalDebit(maxAmt);
+        voucher.setTotalCredit(maxAmt);
+        voucherMapper.updateById(voucher);
+
+        entity.setVoucherId(voucher.getId());
+        entity.setStatus("VOUCHERED");
+        entity.setUpdatedBy(userId);
+        entity.setUpdatedAt(LocalDateTime.now());
+        docMapper.updateById(entity);
+
+        log.info("单据模板制证: docId={}, voucherId={}, templateId={}", entity.getId(), voucher.getId(), template.getId());
+        return getDetail(entity.getId());
     }
 
     @Override

@@ -23,6 +23,12 @@ import com.huicai.module.tax.mapper.TaxDeclarationMapper;
 import com.huicai.module.tax.mapper.TaxTypeMapper;
 import com.huicai.module.tax.service.OutputInvoiceStateMachineService;
 import com.huicai.module.tax.service.TaxService;
+import com.huicai.module.finance.service.TemplateMatcher;
+import com.huicai.common.util.TemplateEngine;
+import com.huicai.common.util.TemplateContext;
+import com.huicai.module.finance.entity.VoucherTemplateEntity;
+import com.huicai.module.finance.entity.VoucherTemplateLineEntity;
+import com.huicai.module.finance.service.VoucherTemplateService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -48,6 +54,8 @@ public class TaxServiceImpl implements TaxService {
     private final VoucherNoService voucherNoService;
     private final SubjectMapper subjectMapper;
     private final OutputInvoiceStateMachineService stateMachineService;
+    private final TemplateMatcher templateMatcher;
+    private final VoucherTemplateService voucherTemplateService;
 
     // ========== 税种 ==========
     @Override
@@ -264,6 +272,26 @@ public class TaxServiceImpl implements TaxService {
         if (!InvoiceStatus.isVoucherable(inv.getStatus())) {
             throw BusinessException.badRequest("仅已确认状态可生成凭证，当前: " + inv.getStatus());
         }
+
+        // 1. 按模板生成
+        TemplateContext ctx = new TemplateContext()
+                .setSource("INVOICE")
+                .setBusinessType("INVOICE_OUT")
+                .setAmount(inv.getAmount())
+                .setTaxAmount(inv.getTaxAmount())
+                .setTotalAmount(inv.getTotalAmount())
+                .setPeriod(inv.getPeriod())
+                .setCustomerName(inv.getCustomerName());
+        VoucherTemplateEntity template = templateMatcher.match(ctx);
+        if (template != null) {
+            List<VoucherTemplateLineEntity> tplLines = voucherTemplateService.getLines(template.getId());
+            if (tplLines != null && !tplLines.isEmpty()) {
+                generateFromTemplate(inv, template, tplLines, ctx, userId);
+                return;
+            }
+        }
+
+        // 2. 降级: 硬编码科目
         String voucherNo = voucherNoService.generateNextNo(inv.getPeriod(), VOUCHER_TYPE_ID);
         Subject subjectAr = findSubject("1122");
         Subject subjectRevenue = findSubject("5001");
@@ -323,6 +351,63 @@ public class TaxServiceImpl implements TaxService {
 
         stateMachineService.markVouchered(invoiceId, voucher.getId(), userId);
         log.info("发票生成凭证: invoiceId={}, voucherId={}, voucherNo={}", invoiceId, voucher.getId(), voucherNo);
+    }
+
+    /**
+     * 按模板生成发票凭证.
+     */
+    private void generateFromTemplate(OutputInvoiceEntity inv,
+                                       VoucherTemplateEntity template,
+                                       List<VoucherTemplateLineEntity> tplLines,
+                                       TemplateContext ctx,
+                                       Long userId) {
+        String voucherNo = voucherNoService.generateNextNo(inv.getPeriod(), VOUCHER_TYPE_ID);
+        VoucherEntity voucher = new VoucherEntity();
+        voucher.setVoucherNo(voucherNo);
+        voucher.setPeriod(inv.getPeriod());
+        voucher.setVoucherTypeId(VOUCHER_TYPE_ID);
+        voucher.setStatus("DRAFT");
+        voucher.setSource("GENERATED");
+        voucher.setSummary(TemplateEngine.renderSummary("发票转凭证: {客户名称}", ctx));
+        voucher.setTemplateId(template.getId());
+        voucher.setCreatedBy(userId);
+        voucherMapper.insert(voucher);
+
+        BigDecimal totalD = BigDecimal.ZERO, totalC = BigDecimal.ZERO;
+        int sort = 1;
+        for (VoucherTemplateLineEntity tplLine : tplLines) {
+            BigDecimal dr = TemplateEngine.renderAmount(tplLine.getDrAmountTemplate(), ctx);
+            BigDecimal cr = TemplateEngine.renderAmount(tplLine.getCrAmountTemplate(), ctx);
+            if (dr == null) dr = BigDecimal.ZERO;
+            if (cr == null) cr = BigDecimal.ZERO;
+
+            if ("debit".equals(tplLine.getDirection())) {
+                if (dr.compareTo(BigDecimal.ZERO) == 0 && cr.compareTo(BigDecimal.ZERO) > 0) { dr = cr; cr = BigDecimal.ZERO; }
+                else { cr = BigDecimal.ZERO; }
+            } else if ("credit".equals(tplLine.getDirection())) {
+                if (cr.compareTo(BigDecimal.ZERO) == 0 && dr.compareTo(BigDecimal.ZERO) > 0) { cr = dr; dr = BigDecimal.ZERO; }
+                else { dr = BigDecimal.ZERO; }
+            }
+            if (dr.compareTo(BigDecimal.ZERO) == 0 && cr.compareTo(BigDecimal.ZERO) == 0) continue;
+
+            String summary = TemplateEngine.renderSummary(tplLine.getSummaryTemplate(), ctx);
+            VoucherEntryEntity ve = new VoucherEntryEntity();
+            ve.setVoucherId(voucher.getId());
+            ve.setSubjectId(tplLine.getSubjectId());
+            ve.setDebit(dr); ve.setCredit(cr);
+            ve.setSummary(summary);
+            ve.setSortOrder(sort++);
+            voucherEntryMapper.insert(ve);
+            totalD = totalD.add(dr); totalC = totalC.add(cr);
+        }
+
+        BigDecimal maxAmt = totalD.max(totalC);
+        voucher.setTotalDebit(maxAmt);
+        voucher.setTotalCredit(maxAmt);
+        voucherMapper.updateById(voucher);
+
+        stateMachineService.markVouchered(invoiceId, voucher.getId(), userId);
+        log.info("发票模板制证: invoiceId={}, voucherId={}, templateId={}", invoiceId, voucher.getId(), template.getId());
     }
 
     private Subject findSubject(String code) {
