@@ -359,8 +359,13 @@ public class SalesInvoiceImportService {
                 insertOutputInvoice(row, customerId, period, doc);
                 createReceivableFromInvoice(doc, row, customerId, period);
                 // 红冲发票: 找到原蓝字发票标记为 REVERSED
-                if (!row.isPositive && StrUtil.isNotBlank(row.originalInvoiceNo)) {
-                    handleRedFlushReversal(row.originalInvoiceNo, doc, period);
+                if (!row.isPositive) {
+                    if (StrUtil.isNotBlank(row.originalInvoiceNo)) {
+                        handleRedFlushReversal(row.originalInvoiceNo, doc, period);
+                    } else {
+                        // 没有备注原发票号，按金额+客户名匹配
+                        matchAndReverseByAmount(row, period);
+                    }
                 }
                 success++; docCreated++;
             } catch (Exception e) {
@@ -668,6 +673,31 @@ public class SalesInvoiceImportService {
         receivableMapper.insert(recv);
         log.info("P10-1 销售发票应收单生成: customerId={}, docId={}, amount={}",
                 customerId, doc.getId(), row.totalAmount);
+    }
+
+    /**
+     * 按金额+客户名匹配蓝字发票并标记 REVERSED（红字发票备注中无原发票号时兜底）。
+     */
+    private void matchAndReverseByAmount(ParsedInvoiceRow row, String period) {
+        BigDecimal absAmount = row.amount.abs();
+        List<OutputInvoiceEntity> blues = outputInvoiceMapper.selectList(
+                new LambdaQueryWrapper<OutputInvoiceEntity>()
+                        .eq(OutputInvoiceEntity::getAmount, absAmount)
+                        .eq(OutputInvoiceEntity::getCustomerName, row.buyerName)
+                        .ne(OutputInvoiceEntity::getStatus, InvoiceStatus.REVERSED)
+                        .ne(OutputInvoiceEntity::getStatus, InvoiceStatus.VOIDED)
+                        .eq(OutputInvoiceEntity::getDeleted, 0)
+                        .last("LIMIT 1"));
+        if (!blues.isEmpty()) {
+            OutputInvoiceEntity blue = blues.get(0);
+            blue.setStatus(InvoiceStatus.REVERSED);
+            String note = "被" + row.invoiceNo + "红冲(" + period + ")";
+            blue.setRemark(blue.getRemark() != null ? blue.getRemark() + " | " + note : note);
+            outputInvoiceMapper.updateById(blue);
+            log.info("红冲金额匹配(导入时): red={}, blue={}, amount={}", row.invoiceNo, blue.getInvoiceNo(), absAmount);
+        } else {
+            log.info("红冲金额匹配无结果: invoiceNo={}, amount={}, buyer={}", row.invoiceNo, absAmount, row.buyerName);
+        }
     }
 
     /**
