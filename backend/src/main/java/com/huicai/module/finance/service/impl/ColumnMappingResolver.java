@@ -28,7 +28,7 @@ public class ColumnMappingResolver {
                 "交易金额", "价税合计", "不含税金额"),
         COUNTER_ACCOUNT("对方账户", "对方名称", "对手方", "对方账号", "counterparty", "counter account", "counter_account"),
         SUMMARY("摘要", "备注", "附言", "description", "summary", "memo", "remark",
-                "reference"),
+                "reference", "备注信息", "备注说明", "红冲备注", "备注内容", "发票备注"),
         PURPOSE("用途", "purpose"),
         TRANSACTION_REMARK("交易附言", "附言", "remark", "transaction_remark", "transaction remark"),
         EXTERNAL_NO("交易流水号", "凭证号", "流水号", "external no", "external_no", "trace no",

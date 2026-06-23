@@ -288,9 +288,9 @@ public class SalesInvoiceImportService {
      */
     private String extractOriginalInvoiceNo(String remark) {
         if (StrUtil.isBlank(remark)) return null;
-        // 匹配 "发票号码[：:]\s*(\S+)" 或 "号码[：:]\s*(\S+)" 或 "发票号[：:]\s*(\S+)"
+        // 匹配各种格式: "被红冲蓝字数电发票号码：xxx" / "原发票号：xxx" / "红冲自 xxx" / "发票号码：xxx"
         java.util.regex.Pattern p = java.util.regex.Pattern.compile(
-                "(?:发票号码|发票号|号码|原发票)[：:]\\s*(\\S+)");
+                "(?:被红冲|原|蓝字)?(?:发票号码|发票号|数电发票号码|号码)[：:]\\s*(\\S+)");
         java.util.regex.Matcher m = p.matcher(remark);
         if (m.find()) {
             return m.group(1).trim();
