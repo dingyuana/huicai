@@ -15,6 +15,9 @@ import com.huicai.module.finance.entity.*;
 import com.huicai.module.finance.mapper.*;
 import com.huicai.module.finance.service.VoucherNoService;
 import com.huicai.module.finance.service.VoucherTemplateService;
+import com.huicai.module.finance.service.TemplateMatcher;
+import com.huicai.common.util.TemplateEngine;
+import com.huicai.common.util.TemplateContext;
 import com.huicai.module.system.entity.Subject;
 import com.huicai.module.system.mapper.SubjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -26,12 +29,11 @@ import org.springframework.util.StringUtils;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
-import java.util.List;
-
-import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 银行流水自动生成单据与凭证 — 实现 4.13 章节设计的自动生单管道.
@@ -66,6 +68,7 @@ public class AutoGenerationService {
     private final ReconciliationService reconciliationService;
     private final EmployeeService employeeService;
     private final ExpenseReimbursementService expenseReimbursementService;
+    private final TemplateMatcher templateMatcher;
 
     /**
      * 对已确认分类的银行流水执行自动生单/制证.
@@ -150,22 +153,27 @@ public class AutoGenerationService {
         String direction = stmt.getDirection();
         String period = stmt.getTxDate().format(DateTimeFormatter.ofPattern("yyyyMM"));
 
-        // 1. 尝试按模板生成 (配置驱动)
-        VoucherTemplateEntity template = voucherTemplateService.matchByClassification(stmt.getClassification());
+        // 1. 按模板生成（配置驱动）
+        TemplateContext ctx = new TemplateContext()
+                .setSource("BANK_STMT")
+                .setClassification(stmt.getClassification())
+                .setDirection(stmt.getDirection())
+                .setAmount(amount)
+                .setPeriod(period)
+                .setSummary(stmt.getSummary())
+                .setCounterpartyName(stmt.getCounterAccount());
+        VoucherTemplateEntity template = templateMatcher.match(ctx);
         if (template != null) {
             List<VoucherTemplateLineEntity> lines = voucherTemplateService.getLines(template.getId());
             if (lines != null && !lines.isEmpty()) {
-                generateVoucherFromTemplate(template, lines, stmt, period, amount, userId);
-                log.info("模板制证: statementId={}, templateId={}, classification={}",
-                        stmt.getId(), template.getId(), stmt.getClassification());
+                generateVoucherFromTemplate(template, lines, ctx, stmt, userId);
+                log.info("模板制证: statementId={}, templateId={}", stmt.getId(), template.getId());
                 return;
             }
         }
 
-        // 2. 降级: 硬编码逻辑 (向后兼容)
+        // 2. 降级: 硬编码
         log.warn("流水分类 {} 无激活模板, 回退硬编码", stmt.getClassification());
-
-        // 查找科目
         Subject bankAcct = findSubjectByCode("1002");
 
         Subject debitAcct = null;
@@ -239,6 +247,60 @@ public class AutoGenerationService {
 
     /**
      * 根据模板 + 分录行生成凭证.
+     */
+    private void generateVoucherFromTemplate(VoucherTemplateEntity template,
+                                              List<VoucherTemplateLineEntity> lines,
+                                              TemplateContext ctx,
+                                              BankStatementEntity stmt,
+                                              Long userId) {
+        VoucherEntity voucher = createVoucher(stmt, ctx.getPeriod(), ctx.getAmount(), userId);
+        voucher.setTemplateId(template.getId());
+        voucherMapper.updateById(voucher);
+
+        BigDecimal totalDebit = BigDecimal.ZERO;
+        BigDecimal totalCredit = BigDecimal.ZERO;
+        int sort = 1;
+
+        for (VoucherTemplateLineEntity line : lines) {
+            BigDecimal dr = TemplateEngine.renderAmount(line.getDrAmountTemplate(), ctx);
+            BigDecimal cr = TemplateEngine.renderAmount(line.getCrAmountTemplate(), ctx);
+            if (dr == null) dr = BigDecimal.ZERO;
+            if (cr == null) cr = BigDecimal.ZERO;
+
+            if ("debit".equals(line.getDirection())) {
+                if (dr.compareTo(BigDecimal.ZERO) == 0 && cr.compareTo(BigDecimal.ZERO) > 0) { dr = cr; cr = BigDecimal.ZERO; }
+                else { cr = BigDecimal.ZERO; }
+            } else if ("credit".equals(line.getDirection())) {
+                if (cr.compareTo(BigDecimal.ZERO) == 0 && dr.compareTo(BigDecimal.ZERO) > 0) { cr = dr; dr = BigDecimal.ZERO; }
+                else { dr = BigDecimal.ZERO; }
+            }
+
+            if (dr.compareTo(BigDecimal.ZERO) == 0 && cr.compareTo(BigDecimal.ZERO) == 0) continue;
+
+            String summary = TemplateEngine.renderSummary(line.getSummaryTemplate(), ctx);
+
+            VoucherEntryEntity entry = new VoucherEntryEntity();
+            entry.setVoucherId(voucher.getId());
+            entry.setSubjectId(line.getSubjectId());
+            entry.setDebit(dr); entry.setCredit(cr);
+            entry.setSummary(summary);
+            entry.setSortOrder(sort++);
+            voucherEntryMapper.insert(entry);
+            totalDebit = totalDebit.add(dr);
+            totalCredit = totalCredit.add(cr);
+        }
+
+        BigDecimal maxAmt = totalDebit.max(totalCredit);
+        voucher.setTotalDebit(maxAmt);
+        voucher.setTotalCredit(maxAmt);
+        voucherMapper.updateById(voucher);
+        stmt.setGeneratedVoucherId(voucher.getId());
+        log.info("模板制证(ctx): statementId={}, voucherId={}, templateId={}",
+                stmt.getId(), voucher.getId(), template.getId());
+    }
+
+    /**
+     * 根据模板 + 分录行生成凭证 (旧版, 兼容 generateDocThenVoucher).
      */
     private void generateVoucherFromTemplate(VoucherTemplateEntity template,
                                               List<VoucherTemplateLineEntity> lines,
