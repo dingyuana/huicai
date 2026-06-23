@@ -199,7 +199,30 @@ public class TaxServiceImpl implements TaxService {
 
     @Override
     public OutputInvoiceEntity getOutputById(Long id) {
-        return outputMapper.selectById(id);
+        OutputInvoiceEntity invoice = outputMapper.selectById(id);
+        if (invoice == null) {
+            return null;
+        }
+        
+        if (StrUtil.isNotBlank(invoice.getOriginalInvoiceNo())) {
+            OutputInvoiceEntity original = outputMapper.selectOne(
+                    new LambdaQueryWrapper<OutputInvoiceEntity>()
+                            .eq(OutputInvoiceEntity::getInvoiceNo, invoice.getOriginalInvoiceNo())
+                            .last("LIMIT 1")
+            );
+            if (original != null) {
+                invoice.setOriginalInvoiceId(original.getId());
+            }
+        }
+        
+        if (invoice.getReversedByInvoiceId() != null) {
+            OutputInvoiceEntity redInvoice = outputMapper.selectById(invoice.getReversedByInvoiceId());
+            if (redInvoice != null) {
+                invoice.setReversedByInvoiceNo(redInvoice.getInvoiceNo());
+            }
+        }
+        
+        return invoice;
     }
 
     @Override

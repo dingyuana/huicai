@@ -356,15 +356,15 @@ public class SalesInvoiceImportService {
                 BusinessDocEntity doc = createBusinessDoc(row, customerId, period, batchId);
                 // 不创建凭证 — 按状态机设计，导入只写数据，等 CONFIRMED 后人工点"生成凭证"
                 // createVoucher(doc, row, customerId, period);
-                insertOutputInvoice(row, customerId, period, doc);
+                OutputInvoiceEntity invoice = insertOutputInvoice(row, customerId, period, doc);
                 createReceivableFromInvoice(doc, row, customerId, period);
                 // 红冲发票: 找到原蓝字发票标记为 REVERSED
                 if (!row.isPositive) {
                     if (StrUtil.isNotBlank(row.originalInvoiceNo)) {
-                        handleRedFlushReversal(row.originalInvoiceNo, doc, period);
+                        handleRedFlushReversal(row.originalInvoiceNo, doc, period, invoice.getId(), invoice.getInvoiceNo());
                     } else {
                         // 没有备注原发票号，按金额+客户名匹配
-                        matchAndReverseByAmount(row, period);
+                        matchAndReverseByAmount(row, period, invoice.getId(), invoice.getInvoiceNo());
                     }
                 }
                 success++; docCreated++;
@@ -384,7 +384,12 @@ public class SalesInvoiceImportService {
                     && StrUtil.isNotBlank(row.invoiceNo)
                     && existingSet.contains(row.invoiceNo)) {
                 try {
-                    handleRedFlushReversal(row.originalInvoiceNo, null, row.invoiceDate.format(DateTimeFormatter.ofPattern("yyyyMM")));
+                    List<OutputInvoiceEntity> redInvs = outputInvoiceMapper.selectList(
+                            new LambdaQueryWrapper<OutputInvoiceEntity>()
+                                    .eq(OutputInvoiceEntity::getInvoiceNo, row.invoiceNo)
+                                    .last("LIMIT 1"));
+                    Long redId = redInvs.isEmpty() ? null : redInvs.get(0).getId();
+                    handleRedFlushReversal(row.originalInvoiceNo, null, row.invoiceDate.format(DateTimeFormatter.ofPattern("yyyyMM")), redId, row.invoiceNo);
                 } catch (Exception e) {
                     log.warn("红冲后处理失败 row={}: {}", row.rowNum, e.getMessage());
                 }
@@ -408,7 +413,12 @@ public class SalesInvoiceImportService {
                                     .last("LIMIT 1"));
                     if (!candidates.isEmpty()) {
                         OutputInvoiceEntity blue = candidates.get(0);
-                        handleRedFlushReversal(blue.getInvoiceNo(), null, period);
+                        List<OutputInvoiceEntity> redInvs = outputInvoiceMapper.selectList(
+                                new LambdaQueryWrapper<OutputInvoiceEntity>()
+                                        .eq(OutputInvoiceEntity::getInvoiceNo, row.invoiceNo)
+                                        .last("LIMIT 1"));
+                        Long redId = redInvs.isEmpty() ? null : redInvs.get(0).getId();
+                        handleRedFlushReversal(blue.getInvoiceNo(), null, period, redId, row.invoiceNo);
                         log.info("红冲金额匹配: redInvoice={}, blueInvoice={}, amount={}",
                                 row.invoiceNo, blue.getInvoiceNo(), absAmount);
                     } else {
@@ -553,7 +563,7 @@ public class SalesInvoiceImportService {
         log.info("自动创建科目: {} {}", code, name);
     }
 
-    private void insertOutputInvoice(ParsedInvoiceRow row, Long customerId, String period, BusinessDocEntity doc) {
+    private OutputInvoiceEntity insertOutputInvoice(ParsedInvoiceRow row, Long customerId, String period, BusinessDocEntity doc) {
         OutputInvoiceEntity inv = new OutputInvoiceEntity();
         inv.setInvoiceNo(row.invoiceNo);
         inv.setInvoiceDate(row.invoiceDate);
@@ -577,13 +587,17 @@ public class SalesInvoiceImportService {
         inv.setRemark(row.remark);
         inv.setCreatedBy(DEFAULT_USER_ID);
         inv.setUpdatedAt(LocalDateTime.now());
+        if (StrUtil.isNotBlank(row.originalInvoiceNo)) {
+            inv.setOriginalInvoiceNo(row.originalInvoiceNo);
+        }
         try {
             outputInvoiceMapper.insert(inv);
         } catch (Exception e) {
             log.error("写入销项发票失败: invoiceNo={}", row.invoiceNo, e);
             throw new RuntimeException("写入销项发票失败: " + e.getMessage(), e);
         }
-        log.debug("写入销项发票: invoiceNo={}", row.invoiceNo);
+        log.debug("写入销项发票: invoiceNo={}, id={}", row.invoiceNo, inv.getId());
+        return inv;
     }
 
     Long matchOrCreateCustomer(ParsedInvoiceRow row) {
@@ -678,7 +692,7 @@ public class SalesInvoiceImportService {
     /**
      * 按金额+客户名匹配蓝字发票并标记 REVERSED（红字发票备注中无原发票号时兜底）。
      */
-    private void matchAndReverseByAmount(ParsedInvoiceRow row, String period) {
+    private void matchAndReverseByAmount(ParsedInvoiceRow row, String period, Long redInvoiceId, String redInvoiceNo) {
         BigDecimal absAmount = row.amount.abs();
         List<OutputInvoiceEntity> blues = outputInvoiceMapper.selectList(
                 new LambdaQueryWrapper<OutputInvoiceEntity>()
@@ -691,20 +705,31 @@ public class SalesInvoiceImportService {
         if (!blues.isEmpty()) {
             OutputInvoiceEntity blue = blues.get(0);
             blue.setStatus(InvoiceStatus.REVERSED);
-            String note = "被" + row.invoiceNo + "红冲(" + period + ")";
+            if (redInvoiceId != null) {
+                blue.setReversedByInvoiceId(redInvoiceId);
+            }
+            String note = "被" + (redInvoiceNo != null ? redInvoiceNo : row.invoiceNo) + "红冲(" + period + ")";
             blue.setRemark(blue.getRemark() != null ? blue.getRemark() + " | " + note : note);
             outputInvoiceMapper.updateById(blue);
-            log.info("红冲金额匹配(导入时): red={}, blue={}, amount={}", row.invoiceNo, blue.getInvoiceNo(), absAmount);
+            log.info("红冲金额匹配(导入时): red={}, blue={}, amount={}", redInvoiceNo != null ? redInvoiceNo : row.invoiceNo, blue.getInvoiceNo(), absAmount);
+            
+            if (redInvoiceId != null && blue.getInvoiceNo() != null) {
+                OutputInvoiceEntity redInvoice = outputInvoiceMapper.selectById(redInvoiceId);
+                if (redInvoice != null) {
+                    redInvoice.setOriginalInvoiceNo(blue.getInvoiceNo());
+                    outputInvoiceMapper.updateById(redInvoice);
+                }
+            }
         } else {
             log.info("红冲金额匹配无结果: invoiceNo={}, amount={}, buyer={}", row.invoiceNo, absAmount, row.buyerName);
         }
     }
 
     /**
-     * 红冲关联：根据被红冲的蓝字发票号，找到对应发票并标记为 REVERSED，同时更新备注。
+     * 红冲关联：根据被红冲的蓝字发票号，找到对应发票并标记为 REVERSED，同时更新备注和关联字段。
      */
     @Transactional
-    protected void handleRedFlushReversal(String originalInvoiceNo, BusinessDocEntity redDoc, String period) {
+    protected void handleRedFlushReversal(String originalInvoiceNo, BusinessDocEntity redDoc, String period, Long redInvoiceId, String redInvoiceNo) {
         List<OutputInvoiceEntity> originals = outputInvoiceMapper.selectList(
                 new LambdaQueryWrapper<OutputInvoiceEntity>()
                         .eq(OutputInvoiceEntity::getInvoiceNo, originalInvoiceNo)
@@ -719,7 +744,10 @@ public class SalesInvoiceImportService {
             return;
         }
         original.setStatus(InvoiceStatus.REVERSED);
-        String docRef = redDoc != null ? redDoc.getDocNo() : "外部导入";
+        if (redInvoiceId != null) {
+            original.setReversedByInvoiceId(redInvoiceId);
+        }
+        String docRef = redDoc != null ? redDoc.getDocNo() : (redInvoiceNo != null ? redInvoiceNo : "外部导入");
         String note = "被" + docRef + "红冲(" + period + ")";
         if (original.getRemark() != null && !original.getRemark().isBlank()) {
             original.setRemark(original.getRemark() + " | " + note);
@@ -727,7 +755,16 @@ public class SalesInvoiceImportService {
             original.setRemark(note);
         }
         outputInvoiceMapper.updateById(original);
-        log.info("红冲关联成功: originalInvoiceNo={}, newStatus=REVERSED", originalInvoiceNo);
+        log.info("红冲关联成功: originalInvoiceNo={}, newStatus=REVERSED, reversedBy={}", originalInvoiceNo, redInvoiceNo);
+        
+        if (redInvoiceId != null && StrUtil.isNotBlank(originalInvoiceNo)) {
+            OutputInvoiceEntity redInvoice = outputInvoiceMapper.selectById(redInvoiceId);
+            if (redInvoice != null) {
+                redInvoice.setOriginalInvoiceNo(originalInvoiceNo);
+                outputInvoiceMapper.updateById(redInvoice);
+                log.info("红字发票设置原发票号: redInvoiceNo={}, originalInvoiceNo={}", redInvoice.getInvoiceNo(), originalInvoiceNo);
+            }
+        }
     }
 
     /**

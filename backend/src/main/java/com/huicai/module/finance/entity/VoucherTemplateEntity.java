@@ -25,6 +25,18 @@ public class VoucherTemplateEntity {
     /** 绑定的分类: bank_fee / interest_income / tax_payment / ... */
     private String classification;
 
+    /** 来源: BANK_STMT / BUSINESS_DOC / INVOICE / PERIOD_CLOSE */
+    private String source;
+
+    /** 业务类型: RECEIPT / PAYMENT / EXPENSE / INVOICE_OUT / ... */
+    private String businessType;
+
+    /** 方向: in(收/入) / out(付/出) / 空(双向) */
+    private String direction;
+
+    /** 匹配优先级（越小越优先，默认 0） */
+    private Integer matchPriority;
+
     /** 凭证前缀, 如 JZ / CD / FPS */
     private String numberPrefix;
 

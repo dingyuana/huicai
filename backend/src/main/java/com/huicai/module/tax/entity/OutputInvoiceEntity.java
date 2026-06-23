@@ -37,6 +37,29 @@ public class OutputInvoiceEntity {
     private Long voucherId;
     private String remark;
     private Long createdBy;
+
+    /**
+     * 被哪张红字发票红冲（指向红字发票ID）
+     */
+    private Long reversedByInvoiceId;
+
+    /**
+     * 原蓝字发票号码（红字发票专用）
+     */
+    private String originalInvoiceNo;
+
+    /**
+     * 原蓝字发票ID（红字发票专用，非数据库字段）
+     */
+    @TableField(exist = false)
+    private Long originalInvoiceId;
+
+    /**
+     * 冲销此发票的红字发票号码（非数据库字段）
+     */
+    @TableField(exist = false)
+    private String reversedByInvoiceNo;
+
     @TableField(exist = false)
     private Long updatedBy;
 

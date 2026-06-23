@@ -34,6 +34,12 @@ public class VoucherTemplateLineEntity {
     /** 方向: debit / credit */
     private String direction;
 
+    /** 辅助核算类型: CUSTOMER / VENDOR / DEPT / EMPLOYEE / PROJECT */
+    private String assistType;
+
+    /** 是否必填辅助核算（强校验）*/
+    private Boolean assistRequired;
+
     /** 排序号 */
     private Integer lineOrder;
 

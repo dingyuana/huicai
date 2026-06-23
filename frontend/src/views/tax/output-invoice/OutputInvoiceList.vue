@@ -288,6 +288,18 @@
           </el-descriptions-item>
           <el-descriptions-item label="关联单据ID">{{ detail.docId || '-' }}</el-descriptions-item>
           <el-descriptions-item label="关联凭证ID">{{ detail.voucherId || '-' }}</el-descriptions-item>
+          <template v-if="detail.originalInvoiceNo">
+            <el-descriptions-item label="红冲发票">
+              <el-tag type="danger" size="small">红字发票</el-tag>
+              <span style="margin-left:8px">冲销蓝字发票: <a href="#" @click.prevent="jumpToOriginalInvoice(detail)" style="color:#409EFF">{{ detail.originalInvoiceNo }}</a></span>
+            </el-descriptions-item>
+          </template>
+          <template v-if="detail.reversedByInvoiceId && detail.reversedByInvoiceNo">
+            <el-descriptions-item label="被红冲">
+              <el-tag type="warning" size="small">已冲销</el-tag>
+              <span style="margin-left:8px">被红字发票冲销: <a href="#" @click.prevent="jumpToRedInvoice(detail)" style="color:#F56C6C">{{ detail.reversedByInvoiceNo }}</a></span>
+            </el-descriptions-item>
+          </template>
           <el-descriptions-item label="备注" span="2">{{ detail.remark || '-' }}</el-descriptions-item>
         </el-descriptions>
       </template>
@@ -355,6 +367,24 @@ const onDelete = async (row: any) => {
     detailVisible.value = false
     fetchData(); fetchStats()
   } finally { deleting.value = false }
+}
+
+const jumpToOriginalInvoice = async (invoice: any) => {
+  if (!invoice.originalInvoiceId) return
+  try {
+    detail.value = await getOutputInvoice(invoice.originalInvoiceId)
+  } catch {
+    ElMessage.warning('未找到被冲销的蓝字发票')
+  }
+}
+
+const jumpToRedInvoice = async (invoice: any) => {
+  if (!invoice.reversedByInvoiceId) return
+  try {
+    detail.value = await getOutputInvoice(invoice.reversedByInvoiceId)
+  } catch {
+    ElMessage.warning('未找到红字发票')
+  }
 }
 
 const doAction = async (row: any, action: string) => {
