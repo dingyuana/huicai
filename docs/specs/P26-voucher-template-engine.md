@@ -24,7 +24,7 @@
 | 11 | 前端模板编辑页支持 source/businessType/assistType | Vue 文件 | ✅ 低 | P1 |
 | 12 | 辅助核算写入（模板行生成时挂载 assistJson）| 各生成点 | 🟡 中 | P1 |
 | 13 | 辅助核算强校验拦截 | 拦截器 | ✅ 低 | P1 |
-| 14 | V50 迁移: 15+ 种子模板 | Flyway | ✅ 低 | P2 |
+| 14 | **（已废 2026-06-24 P28）** 种子模板迁移：实际由 V23/V40/V42 业务功能分批插入，无独立 migration | — | — | — |
 | 15 | 期末结账触发模板制证（损益/增值税/汇兑）| PeriodCloseService | 🟡 中 | P2 |
 | 16 | 删除 AutoGenerationService / BusinessDocServiceImpl 残留硬编码 | 清理 | ✅ 低 | P2 |
 
@@ -492,9 +492,15 @@ if (StrUtil.isNotBlank(line.getAssistType())) {
 
 ---
 
-## 11. 种子模板（V50 迁移）
+## 11. 种子模板（V50 迁移）  [🚫 已废 — 2026-06-24 P28]
 
-> 以下模板在 V50 迁移中以 SQL 形式写入，分类覆盖 5 大类。
+> **废弃原因**：P26 设计时假设种子模板需要独立 V50 迁移，实际 15+ 模板分散在以下 migration：
+> - V23 `add_voucher_template_tables.sql`：银行类基础模板 + E2E 测试插入
+> - V40 `add_reconciliation_voucher_templates.sql`：收款/付款核销模板
+> - V42 `add_settlement_voucher_templates.sql`：结算模板
+>
+> **保留原因**：P27b 已用 customerId/supplierId 关联查绕开 V50 字段，V50 字段实际为冗余/死列
+> **本节内容保留作为历史参考，不实施**（11.1 资金与出纳类、11.2 往来与结算类模板已在 V23/V40/V42 落地，11.3 期末结转类为 P2 阶段任务——见 §0 第 15 行）
 
 ### 11.1 资金与出纳类（source=BANK_STMT）
 
