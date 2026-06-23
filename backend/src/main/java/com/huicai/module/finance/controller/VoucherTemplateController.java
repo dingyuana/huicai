@@ -128,6 +128,10 @@ public class VoucherTemplateController {
         private String name;
         private String description;
         private String classification;
+        private String source;
+        private String businessType;
+        private String direction;
+        private Integer matchPriority;
         private String numberPrefix;
         private Boolean isActive;
         private List<VoucherTemplateLineEntity> lines;
@@ -137,6 +141,10 @@ public class VoucherTemplateController {
             e.setName(name);
             e.setDescription(description);
             e.setClassification(classification);
+            e.setSource(source);
+            e.setBusinessType(businessType);
+            e.setDirection(direction);
+            e.setMatchPriority(matchPriority);
             e.setNumberPrefix(numberPrefix != null ? numberPrefix : "JZ");
             e.setIsActive(isActive != null ? isActive : true);
             return e;

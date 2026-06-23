@@ -10,6 +10,8 @@ export interface TemplateLineVO {
   crAmountTemplate?: string
   summaryTemplate?: string
   direction: string
+  assistType?: string
+  assistRequired?: boolean
   lineOrder: number
 }
 
@@ -19,6 +21,10 @@ export interface VoucherTemplateVO {
   name: string
   description?: string
   classification?: string
+  source?: string
+  businessType?: string
+  direction?: string
+  matchPriority?: number
   numberPrefix: string
   isActive: boolean
   createdAt: string
@@ -31,6 +37,10 @@ export interface VoucherTemplateCreateRequest {
   name: string
   description?: string
   classification?: string
+  source?: string
+  businessType?: string
+  direction?: string
+  matchPriority?: number
   numberPrefix?: string
   isActive?: boolean
   lines: TemplateLineVO[]
@@ -54,7 +64,11 @@ export function createTemplate(data: VoucherTemplateCreateRequest) {
 }
 
 /** 更新模板基本信息 */
-export function updateTemplate(id: number, data: { name?: string; description?: string; classification?: string; numberPrefix?: string }) {
+export function updateTemplate(id: number, data: {
+  name?: string; description?: string; classification?: string;
+  source?: string; businessType?: string; direction?: string; matchPriority?: number;
+  numberPrefix?: string;
+}) {
   return request.put(`/voucher-templates/${id}`, data)
 }
 

@@ -8,6 +8,12 @@
     <el-table :data="templates" stripe v-loading="loading" style="width: 100%">
       <el-table-column prop="name" label="模板名称" min-width="140" />
       <el-table-column prop="classification" label="分类" width="120" />
+      <el-table-column label="来源" width="100">
+        <template #default="{ row }">{{ row.source || '-' }}</template>
+      </el-table-column>
+      <el-table-column label="业务类型" width="100">
+        <template #default="{ row }">{{ row.businessType || '-' }}</template>
+      </el-table-column>
       <el-table-column label="分录" min-width="200">
         <template #default="{ row }">
           <span v-if="row.lines && row.lines.length > 0" class="line-preview">
@@ -72,14 +78,33 @@
           </el-col>
         </el-row>
         <el-row :gutter="20">
-          <el-col :span="12">
-            <el-form-item label="凭证前缀">
-              <el-input v-model="form.numberPrefix" placeholder="JZ" />
+          <el-col :span="8">
+            <el-form-item label="来源">
+              <el-select v-model="form.source" placeholder="来源" clearable>
+                <el-option label="银行流水" value="BANK_STMT" />
+                <el-option label="业务单据" value="BUSINESS_DOC" />
+                <el-option label="发票" value="INVOICE" />
+                <el-option label="期末结转" value="PERIOD_CLOSE" />
+              </el-select>
             </el-form-item>
           </el-col>
-          <el-col :span="12">
-            <el-form-item label="激活">
-              <el-switch v-model="form.isActive" />
+          <el-col :span="8">
+            <el-form-item label="业务类型">
+              <el-input v-model="form.businessType" placeholder="如: RECEIPT" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="4">
+            <el-form-item label="方向">
+              <el-select v-model="form.direction" placeholder="方向" clearable>
+                <el-option label="入/in" value="in" />
+                <el-option label="出/out" value="out" />
+                <el-option label="双向" value="" />
+              </el-select>
+            </el-form-item>
+          </el-col>
+          <el-col :span="4">
+            <el-form-item label="优先级">
+              <el-input-number v-model="form.matchPriority" :min="0" :max="99" style="width:100%" />
             </el-form-item>
           </el-col>
         </el-row>
@@ -96,25 +121,32 @@
                 {{ line.direction === 'debit' ? '借' : '贷' }}
               </el-tag>
             </el-col>
-            <el-col :span="8">
+            <el-col :span="6">
               <el-tree-select
                 v-model="line.subjectId"
                 :data="subjectTree"
                 :props="{ label: 'name', value: 'id', children: 'children' }"
                 placeholder="选择科目"
-                filterable
-                clearable
-                style="width: 100%"
-                @change="() => handleLineChange(idx)"
+                filterable clearable style="width: 100%"
               />
             </el-col>
-            <el-col :span="5">
-              <el-input v-model="line.drAmountTemplate" placeholder="借金额模板" size="small" />
-            </el-col>
-            <el-col :span="5">
-              <el-input v-model="line.crAmountTemplate" placeholder="贷金额模板" size="small" />
-            </el-col>
+            <el-col :span="4"><el-input v-model="line.drAmountTemplate" placeholder="借金额" size="small" /></el-col>
+            <el-col :span="4"><el-input v-model="line.crAmountTemplate" placeholder="贷金额" size="small" /></el-col>
             <el-col :span="3">
+              <el-select v-model="line.assistType" placeholder="辅助核算" clearable size="small" style="width:100%">
+                <el-option label="客户" value="CUSTOMER" />
+                <el-option label="供应商" value="VENDOR" />
+                <el-option label="部门" value="DEPT" />
+                <el-option label="员工" value="EMPLOYEE" />
+                <el-option label="项目" value="PROJECT" />
+              </el-select>
+            </el-col>
+            <el-col :span="1">
+              <el-tooltip content="必填辅助核算">
+                <el-checkbox v-model="line.assistRequired" size="small" />
+              </el-tooltip>
+            </el-col>
+            <el-col :span="2">
               <el-button circle size="small" type="danger" :icon="Remove" @click="removeLine(idx)" />
             </el-col>
           </el-row>
@@ -168,6 +200,10 @@ const form = ref<{
   name: string
   description: string
   classification: string
+  source: string
+  businessType: string
+  direction: string
+  matchPriority: number
   numberPrefix: string
   isActive: boolean
   lines: TemplateLineVO[]
@@ -175,6 +211,10 @@ const form = ref<{
   name: '',
   description: '',
   classification: '',
+  source: '',
+  businessType: '',
+  direction: '',
+  matchPriority: 0,
   numberPrefix: 'JZ',
   isActive: true,
   lines: [],
@@ -204,7 +244,7 @@ async function fetchSubjectTree() {
 function handleAdd() {
   isEditing.value = false
   editId.value = null
-  form.value = { name: '', description: '', classification: '', numberPrefix: 'JZ', isActive: true, lines: [] }
+  form.value = { name: '', description: '', classification: '', source: '', businessType: '', direction: '', matchPriority: 0, numberPrefix: 'JZ', isActive: true, lines: [] }
   dialogVisible.value = true
 }
 
@@ -215,6 +255,10 @@ async function handleEdit(row: VoucherTemplateVO) {
     name: row.name,
     description: row.description || '',
     classification: row.classification || '',
+    source: row.source || '',
+    businessType: row.businessType || '',
+    direction: row.direction || '',
+    matchPriority: row.matchPriority || 0,
     numberPrefix: row.numberPrefix || 'JZ',
     isActive: row.isActive,
     lines: (row.lines || []).map(l => ({ ...l })),
@@ -233,6 +277,8 @@ function addLine(direction: string) {
     drAmountTemplate: '',
     crAmountTemplate: '',
     summaryTemplate: '',
+    assistType: undefined,
+    assistRequired: false,
     lineOrder: form.value.lines.length + 1,
   })
 }
@@ -241,10 +287,6 @@ function removeLine(idx: number) {
   form.value.lines.splice(idx, 1)
   // re-index
   form.value.lines.forEach((l, i) => (l.lineOrder = i + 1))
-}
-
-function handleLineChange(idx: number) {
-  // placeholder for future enrichment
 }
 
 async function handleSave() {
@@ -259,11 +301,14 @@ async function handleSave() {
     form.value.lines.forEach((l, i) => (l.lineOrder = i + 1))
 
     if (isEditing.value && editId.value) {
-      // Update basic info
       await updateTemplate(editId.value, {
         name: form.value.name,
         description: form.value.description,
         classification: form.value.classification || undefined,
+        source: form.value.source || undefined,
+        businessType: form.value.businessType || undefined,
+        direction: form.value.direction || undefined,
+        matchPriority: form.value.matchPriority,
         numberPrefix: form.value.numberPrefix,
       })
       // Update lines
@@ -280,6 +325,10 @@ async function handleSave() {
         name: form.value.name,
         description: form.value.description || undefined,
         classification: form.value.classification || undefined,
+        source: form.value.source || undefined,
+        businessType: form.value.businessType || undefined,
+        direction: form.value.direction || undefined,
+        matchPriority: form.value.matchPriority,
         numberPrefix: form.value.numberPrefix,
         isActive: form.value.isActive,
         lines: form.value.lines,
