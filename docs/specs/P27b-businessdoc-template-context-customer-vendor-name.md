@@ -61,6 +61,8 @@ P27 起草过 A 方案（Entity 加冗余 customerName/supplierName 字段 + V50
 | C3 | `BusinessDocServiceImpl.java` | line 316-318 | 替换 customerName/supplierName 设置逻辑为 mapper 反查 | ~10 |
 | C4 | `BusinessDocServiceImplTest.java` | line 56-69 | 新增 `@Mock TemplateMatcher templateMatcher;` + `@Mock VoucherTemplateService voucherTemplateService;`（P26 P1-1 引入的依赖，测试漏 mock） | +2 |
 | C5 | `BusinessDocServiceImplTest.java` | `stubApprovedPayDoc` helper | supplierId=2L 对应 `when(vendorMapper.selectById(2L)).thenReturn(...supplier)`，设置 supplierName 用于 verify | ~6 |
+| C6 | `TaxServiceImpl.java` | line 409 + line 410 | `stateMachineService.markVouchered(invoiceId, ...)` 和 `log.info(...invoiceId...)` 都改为 `inv.getId()`（方法签名无 invoiceId 参数） | ~2 |
+| C7 | `BusinessDocServiceImplTest.java` | 末尾新增测试 | `generateVoucher_应将customerName注入模板上下文` + `generateVoucher_应将supplierName注入模板上下文`（覆盖 P27 修复点） | ~40 |
 
 ### 3.2 关键代码（仅 SPEC，正式实施由 OpenCode 写）
 
@@ -144,9 +146,9 @@ when(vendorMapper.selectById(2L)).thenReturn(
 | # | 验收项 | 命令 | 期望 |
 |---|---|---|---|
 | V1 | 编译通过 | `mvn clean compile` | BUILD SUCCESS |
-| V2 | 单文件测试 | `mvn test -Dtest=BusinessDocServiceImplTest` | 19/0/0（4 fail 修好，零新 ERROR） |
-| V3 | 全量测试 | `mvn test` | 390/0/0（恢复到 P27 起草前状态，不引入新 fail） |
-| V4 | 工作树变更 | `git diff --stat` | 仅 2 个文件（ServiceImpl + Test） |
+| V2 | 单文件测试 | `mvn test -Dtest=BusinessDocServiceImplTest` | 21/0/0（19 原有 + 2 新增 C7 测试，4 fail 修好） |
+| V3 | 全量测试 | `mvn test` | 392/0/0（390 原有 + 2 新增 C7 测试，不出现新 ERROR） |
+| V4 | 工作树变更 | `git diff --stat` | 仅 3 个文件（ServiceImpl + TaxServiceImpl + Test） |
 | V5 | Entity 无新字段 | `git diff BusinessDocEntity.java` | 空 |
 | V6 | 无新 migration | `git status --short db/migration/` | 无新增 |
 
@@ -174,23 +176,27 @@ when(vendorMapper.selectById(2L)).thenReturn(
 
 ## 6. 委派计划（OpenCode）
 
+**D 选项已拍板**：单 commit 合并所有改动（C1-C7）。
+
 ```
-Phase 1: C1+C2+C3（ServiceImpl 改动）
-  - OpenCode 委派
+Phase 1: 全部代码 + 测试改动（C1+C2+C3+C4+C5+C6+C7）
+  - OpenCode 委派一次性完成
   - 验收: mvn clean compile 通过
 
-Phase 2: C4+C5（测试 mock 补齐）
-  - OpenCode 委派
-  - 验收: mvn test -Dtest=BusinessDocServiceImplTest 全绿
+Phase 2: 单文件测试
+  - mvn test -Dtest=BusinessDocServiceImplTest
+  - 验收: 21/0/0（19 原有 + 2 新增 C7 测试全绿，4 fail 修好）
 
-Phase 3: 全量验证
-  - mvn test 全量
-  - 验收: 390/0/0
+Phase 3: 全量测试
+  - mvn test
+  - 验收: 392/0/0（390 原有 + 2 新增 C7）
 
-Phase 4: commit + push
-  - git add (指定路径，不用 -A)
-  - commit message: "fix(P27b): generateVoucher 关联查 customerId/supplierId 注入模板上下文"
-  - commit message: "test(P27b): 补 generateVoucher 模板依赖 mock"
+Phase 4: 单 commit + push
+  - git add 指定路径（不用 -A）
+    git add backend/src/main/java/com/huicai/module/finance/service/impl/BusinessDocServiceImpl.java
+    git add backend/src/main/java/com/huicai/module/tax/service/impl/TaxServiceImpl.java
+    git add backend/src/test/java/com/huicai/module/finance/service/impl/BusinessDocServiceImplTest.java
+  - commit message: "fix(P27b): generateVoucher 关联查客户/供应商名 + TaxService 模板制证参数修正"
   - push origin main
 ```
 
@@ -203,10 +209,9 @@ Phase 4: commit + push
 | D3：是否加新单测（验证 ctx.setCustomerName 被调用） | **是**（覆盖 P27 修复点） | D 选项"覆盖最广" |
 | D4：commit 粒度 | **1 commit 合并**（D 选项文案字面） | ⚠️ 老丁未确认与"覆盖最广"语义冲突，已 clarify 超时，按默认 STOP |
 
-## 8. STOP 状态说明
+## 8. 实施状态
 
-- 2026-06-23 老丁确认 D 选项（覆盖最广）后，Hermes 已 clarify 询问 D4 commit 粒度（"1 commit 合并" vs §29 默认"代码+测试分 2 commit"）
-- 老丁 10 分钟内未答复（§17 clarify 超时默认 STOP）
-- **不动手，等老丁下次明确 commit 粒度再开 OpenCode 委派**
-- 当前 HEAD: `1f7401a`（P27 docs，未 push），工作树干净
-- 本 SPEC commit 计划：作为 P27b docs commit，单独一个 docs commit，不混入 P27 docs `1f7401a`
+- 2026-06-23 老丁确认 D 选项 + D4=单 commit
+- 改动清单从 5 项扩展到 7 项（C6 修 TaxServiceImpl 2 处 invoiceId；C7 加 2 个新单测）
+- 验收目标更新：21/0/0（单文件）+ 392/0/0（全量）+ 3 个文件改动（ServiceImpl + TaxServiceImpl + Test）
+- 下一步：OpenCode 串行委派 Phase 1 实施 C1-C7
