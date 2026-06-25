@@ -24,10 +24,6 @@ export interface ReconciliationRecommendResult {
   items: RecommendItem[]
 }
 
-export function getReconciliationRecommend(statementId: number): Promise<ReconciliationRecommendResult> {
-  return request.get(`/bank-statements/${statementId}/reconciliation-recommend`)
-}
-
 export function executeReconciliation(data: {
   sourceDocType: string
   sourceDocId: number

@@ -64,9 +64,6 @@ public interface ReconciliationService {
     /** 付款核销推荐 */
     RecommendResult recommendPayment(Long paymentId, Long vendorId, BigDecimal amount, String summary, String counterpartyName);
 
-    /** 银行流水自动推荐 (L1-L5 级匹配) */
-    RecommendResult recommendForStatement(Long statementId, Long accountId, String direction, BigDecimal amount, String counterpartyName, String summary, LocalDate txDate, String externalNo);
-
     /** 执行单笔核销 */
     ReconciliationLogEntity execute(ExecuteRequest request);
 

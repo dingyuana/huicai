@@ -182,12 +182,6 @@ public class BankStatementController {
         return R.ok();
     }
 
-    @Operation(summary = "P5.2 获取核销推荐 (仅 business_receipt/payment)")
-    @GetMapping("/{id}/reconciliation-recommend")
-    public R<BankStatementService.ReconciliationRecommendResult> reconciliationRecommend(@PathVariable Long id) {
-        return R.ok(service.reconciliationRecommend(id));
-    }
-
     @Operation(summary = "手动修改流水分类")
     @PutMapping("/{id}/classification")
     public R<BankStatementEntity> updateClassification(

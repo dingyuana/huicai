@@ -677,33 +677,6 @@ public class BankStatementServiceImpl implements BankStatementService {
         return result;
     }
 
-    @Override
-    public ReconciliationRecommendResult reconciliationRecommend(Long statementId) {
-        BankStatementEntity stmt = statementMapper.selectById(statementId);
-        if (stmt == null) {
-            return new ReconciliationRecommendResult("对账单记录不存在", List.of());
-        }
-        if (stmt.getClassification() == null) {
-            return new ReconciliationRecommendResult("流水尚未分类", List.of());
-        }
-        String cls = stmt.getClassification();
-        if (!"business_receipt".equals(cls) && !"business_payment".equals(cls)) {
-            return new ReconciliationRecommendResult("当前分类(" + cls + ")不支持核销推荐", List.of());
-        }
-        String direction = "business_receipt".equals(cls) ? "in" : "out";
-        String counterpartyName = stmt.getCounterAccount() != null ? stmt.getCounterAccount() : "";
-        String summary = stmt.getSummary() != null ? stmt.getSummary() : "";
-
-        ReconciliationService.RecommendResult recommend = reconciliationService.recommendForStatement(
-                stmt.getId(), stmt.getAccountId(), direction, stmt.getAmount(),
-                counterpartyName, summary, stmt.getTxDate(), stmt.getExternalNo());
-
-        if (recommend.items() == null || recommend.items().isEmpty()) {
-            return new ReconciliationRecommendResult("未找到匹配的应收/应付记录", List.of());
-        }
-        return new ReconciliationRecommendResult("推荐" + recommend.items().size() + "条核销项", recommend.items());
-    }
-
     /** 判断对方户名是否为商业公司 (用于社保关键词防误判) */
     private static boolean isCommercialEntity(String name) {
         return name.contains("有限公司")

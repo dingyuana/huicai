@@ -74,23 +74,6 @@ public class ReconciliationServiceImpl implements ReconciliationService {
         return recommend(null, vendorId, amount, summary, counterpartyName, false, "payment", paymentId, null, null);
     }
 
-    @Override
-    public RecommendResult recommendForStatement(Long statementId, Long accountId, String direction, BigDecimal amount, String counterpartyName, String summary, LocalDate txDate, String externalNo) {
-        boolean isReceipt = "in".equalsIgnoreCase(direction);
-        String customerName = counterpartyName;
-        Long partyId = null;
-        if (isReceipt) {
-            List<CustomerEntity> customers = customerMapper.selectList(
-                    new LambdaQueryWrapper<CustomerEntity>().like(CustomerEntity::getName, counterpartyName).last("LIMIT 1"));
-            if (!customers.isEmpty()) partyId = customers.get(0).getId();
-        } else {
-            List<VendorEntity> vendors = vendorMapper.selectList(
-                    new LambdaQueryWrapper<VendorEntity>().like(VendorEntity::getName, counterpartyName).last("LIMIT 1"));
-            if (!vendors.isEmpty()) partyId = vendors.get(0).getId();
-        }
-        return recommend(isReceipt ? partyId : null, isReceipt ? null : partyId, amount, summary, counterpartyName, isReceipt, "bank_txn", statementId, txDate, externalNo);
-    }
-
     private RecommendResult recommend(Long customerId, Long vendorId, BigDecimal amount, String summary, String counterpartyName, boolean isReceipt, String sourceType, Long sourceId, LocalDate txDate, String externalNo) {
         List<RecommendItem> items = new ArrayList<>();
         List<?> invoices;

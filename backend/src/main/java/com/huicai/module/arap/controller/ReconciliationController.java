@@ -1,6 +1,5 @@
 package com.huicai.module.arap.controller;
 
-import cn.hutool.core.util.StrUtil;
 import com.huicai.common.response.R;
 import com.huicai.module.arap.entity.ReconciliationExceptionEntity;
 import com.huicai.module.arap.entity.ReconciliationLogEntity;
@@ -11,7 +10,6 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
-import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 
@@ -43,21 +41,6 @@ public class ReconciliationController {
             @RequestParam(required = false) String summary,
             @RequestParam(required = false) String counterpartyName) {
         return R.ok(reconciliationService.recommendPayment(paymentId, vendorId, amount, summary, counterpartyName));
-    }
-
-    @Operation(summary = "银行流水自动核销推荐 (L1-L5 级匹配)")
-    @PostMapping("/auto-recommend/{statementId}")
-    public R<ReconciliationService.RecommendResult> recommendForStatement(
-            @PathVariable Long statementId,
-            @RequestParam Long accountId,
-            @RequestParam String direction,
-            @RequestParam BigDecimal amount,
-            @RequestParam(required = false) String counterpartyName,
-            @RequestParam(required = false) String summary,
-            @RequestParam(required = false) String txDate,
-            @RequestParam(required = false) String externalNo) {
-        LocalDate date = StrUtil.isNotBlank(txDate) ? LocalDate.parse(txDate) : null;
-        return R.ok(reconciliationService.recommendForStatement(statementId, accountId, direction, amount, counterpartyName, summary, date, externalNo));
     }
 
     @Operation(summary = "核销前预检查 (5项检查)")

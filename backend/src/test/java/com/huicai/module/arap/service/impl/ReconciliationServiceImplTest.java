@@ -109,18 +109,6 @@ class ReconciliationServiceImplTest {
     }
 
     @Test
-    void recommendForStatement_带externalNo_触发L1() {
-        when(customerMapper.selectList(any())).thenReturn(List.of(stubCustomer(5L, "客户A")));
-        when(receivableMapper.selectList(any())).thenReturn(List.of(
-                stubReceivable(777L, 5L, new BigDecimal("500"), new BigDecimal("500"))
-        ));
-        RecommendResult r = service.recommendForStatement(
-                1L, 1L, "in", new BigDecimal("500"), "客户A", "摘要", LocalDate.now(), "777");
-        assertEquals(1, r.items().size());
-        assertEquals("L1", r.items().get(0).matchLevel());
-    }
-
-    @Test
     void recommendReceipt_2张应收_按L级别排序() {
         // 第 1 张 L4（金额精确无 externalNo），第 2 张 L5（容差）
         ReceivableEntity r4 = stubReceivable(1L, 1L, new BigDecimal("100"), new BigDecimal("100"));
@@ -147,24 +135,6 @@ class ReconciliationServiceImplTest {
         ));
         RecommendResult r = service.recommendPayment(1L, 1L, new BigDecimal("100"), "摘要", "供应商A");
         assertTrue(r.items().isEmpty());
-    }
-
-    // ==================== recommendForStatement ====================
-
-    @Test
-    void recommendForStatement_收款方向_查客户表() {
-        when(customerMapper.selectList(any())).thenReturn(List.of(stubCustomer(5L, "客户A")));
-        service.recommendForStatement(1L, 1L, "in", new BigDecimal("100"), "客户A", "摘要", LocalDate.now(), null);
-        verify(customerMapper, atLeastOnce()).selectList(any());
-        verifyNoInteractions(vendorMapper);
-    }
-
-    @Test
-    void recommendForStatement_付款方向_查供应商表() {
-        when(vendorMapper.selectList(any())).thenReturn(List.of(stubVendor(5L, "供应商A")));
-        service.recommendForStatement(1L, 1L, "out", new BigDecimal("100"), "供应商A", "摘要", LocalDate.now(), null);
-        verify(vendorMapper, atLeastOnce()).selectList(any());
-        verifyNoInteractions(customerMapper);
     }
 
     // ==================== execute ====================
