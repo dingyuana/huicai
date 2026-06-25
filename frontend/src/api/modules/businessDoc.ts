@@ -76,8 +76,8 @@ export const DOC_TYPE_LABELS: Record<string, string> = {
   RECEIPT: '收款单',
   PAYMENT: '付款单',
   EXPENSE: '费用报销单',
-  INVOICE_IN: '采购发票',
-  INVOICE_OUT: '销售发票',
+  INVOICE_IN: '应付单（采购）',
+  INVOICE_OUT: '应收单（销售）',
   OTHER_RECEIVABLE: '其他应收单',
   OTHER_PAYABLE: '其他应付单',
 }
