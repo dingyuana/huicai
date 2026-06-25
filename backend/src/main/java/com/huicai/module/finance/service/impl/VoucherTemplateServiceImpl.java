@@ -29,11 +29,6 @@ public class VoucherTemplateServiceImpl implements VoucherTemplateService {
     }
 
     @Override
-    public VoucherTemplateEntity getWithLines(Long id) {
-        return templateMapper.selectById(id);
-    }
-
-    @Override
     public List<VoucherTemplateEntity> listAllActive() {
         return templateMapper.selectList(
                 new LambdaQueryWrapper<VoucherTemplateEntity>()

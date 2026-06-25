@@ -3,7 +3,9 @@ package com.huicai.module;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.huicai.module.arap.dto.ExpenseReimbursementVO;
 import com.huicai.module.arap.service.ExpenseReimbursementService;
+import com.huicai.module.arap.service.ReceivableStateMachineService;
 import com.huicai.module.finance.service.BankReconciliationService;
+import com.huicai.module.finance.service.BusinessDocService;
 import com.huicai.module.tax.service.TaxService;
 import com.huicai.module.tax.entity.TaxDeclarationEntity;
 import org.junit.jupiter.api.Test;
@@ -46,6 +48,8 @@ class HuicaiE2EIntegrationTest {
     @MockBean private BankReconciliationService bankReconciliationService;
     @MockBean private ExpenseReimbursementService expenseReimbursementService;
     @MockBean private TaxService taxService;
+    @MockBean private BusinessDocService businessDocService;
+    @MockBean private ReceivableStateMachineService receivableStateMachineService;
 
     // ==================== 1. 银行流水对账 E2E (P14-1) ====================
 

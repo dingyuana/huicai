@@ -70,10 +70,10 @@ public class ReceivableStateMachineServiceImpl implements ReceivableStateMachine
             throw BusinessException.badRequest("当前状态不可冲销: " + entity.getStatus());
         }
         entity.setStatus(ArapStatus.REVERSED);
-        // 追加冲销原因到备注
-        String newRemark = entity.getRemark() == null ? "" : entity.getRemark() + " | ";
+        // 追加冲销原因到摘要
+        String newRemark = entity.getSummary() == null ? "" : entity.getSummary() + " | ";
         newRemark += "[" + userId + "] 冲销原因: " + reason;
-        entity.setRemark(newRemark);
+        entity.setSummary(newRemark);
         entity.setUpdatedAt(LocalDateTime.now());
         receivableMapper.updateById(entity);
         log.info("应收单冲销: id={}, userId={}, reason={}", receivableId, userId, reason);

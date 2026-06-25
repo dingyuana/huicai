@@ -400,7 +400,7 @@ type ElTagType = 'success' | 'warning' | 'info' | 'primary' | 'danger'
 
 function reviewStatusTagType(status: string): ElTagType {
   if (!status || status === 'PENDING' || status === 'classified') return 'warning'
-  if (status === 'voucher_generated' || status === 'payment_created') return 'success'
+  if (status === 'voucher_generated' || status === 'payment_created' || status === 'CONFIRMED') return 'success'
   if (status === 'approved') return 'primary'
   if (status === 'manual_pending') return 'info'
   return 'warning'
@@ -409,7 +409,7 @@ function reviewStatusTagType(status: string): ElTagType {
 function canReview(row: any): boolean {
   const s = row.reviewStatus
   return row.classification && row.classification !== 'pending'
-    && (!s || s === 'PENDING' || s === 'classified' || s === 'RECLASSIFIED')
+    && (!s || s === 'PENDING' || s === 'classified' || s === 'CONFIRMED' || s === 'manual_pending' || s === 'RECLASSIFIED')
 }
 
 function canApprove(row: any): boolean {
@@ -629,7 +629,7 @@ async function onReview(row: BankStatementVO) {
     await reviewStatement(row.id)
     ElMessage.success('确认完成')
     // 如果当前有筛选待确认状态，清空筛选后刷新
-    if (query.value.reviewStatus === 'PENDING') {
+    if (query.value.reviewStatus === 'PENDING' || query.value.reviewStatus === 'classified') {
       query.value.reviewStatus = undefined
     }
     await refreshAll()
@@ -672,7 +672,7 @@ async function onBatchConfirm() {
     batchConfirmed.value = await batchConfirmStatements(selectedIds.value)
     resultDialogVisible.value = true
     // 如果当前有筛选待确认状态，清空筛选后刷新
-    if (query.value.reviewStatus === 'PENDING') {
+    if (query.value.reviewStatus === 'PENDING' || query.value.reviewStatus === 'classified') {
       query.value.reviewStatus = undefined
     }
     await refreshAll()

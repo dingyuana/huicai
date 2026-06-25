@@ -106,9 +106,10 @@ public class TaxController {
             @RequestParam(required = false) String customerName,
             @RequestParam(required = false) String period,
             @RequestParam(required = false) String status,
+            @RequestParam(required = false) String invoiceType,
             @RequestParam(defaultValue = "1") Integer current,
             @RequestParam(defaultValue = "20") Integer size) {
-        return R.ok(service.pageQueryOutput(customerName, period, status, current, size));
+        return R.ok(service.pageQueryOutput(customerName, period, status, invoiceType, current, size));
     }
 
     @Operation(summary = "销项发票详情")

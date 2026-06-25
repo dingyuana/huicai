@@ -37,6 +37,10 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.List;
 import java.util.Map;
 
@@ -186,7 +190,7 @@ public class TaxServiceImpl implements TaxService {
     // ========== 销项发票 ==========
     @Override
     public IPage<OutputInvoiceEntity> pageQueryOutput(String customerName, String period, String status,
-                                                       Integer current, Integer size) {
+                                                       String invoiceType, Integer current, Integer size) {
         Page<OutputInvoiceEntity> page = new Page<>(
                 current == null ? 1 : current,
                 size == null ? 20 : size
@@ -200,6 +204,21 @@ public class TaxServiceImpl implements TaxService {
         }
         if (StrUtil.isNotBlank(status)) {
             wrapper.eq(OutputInvoiceEntity::getStatus, status);
+        }
+        if (StrUtil.isNotBlank(invoiceType)) {
+            if ("RED".equals(invoiceType)) {
+                // 红字发票：金额<0 或 有原蓝字发票号(红冲关联字段)
+                wrapper.and(w -> w
+                        .lt(OutputInvoiceEntity::getAmount, BigDecimal.ZERO)
+                        .or()
+                        .isNotNull(OutputInvoiceEntity::getOriginalInvoiceNo));
+            } else {
+                // 专用/普通发票：排除红字(金额<0)、红冲关联(originalInvoiceNo非空)、已冲销(status=REVERSED)
+                wrapper.eq(OutputInvoiceEntity::getInvoiceType, invoiceType)
+                       .ge(OutputInvoiceEntity::getAmount, BigDecimal.ZERO)
+                       .isNull(OutputInvoiceEntity::getOriginalInvoiceNo)
+                       .ne(OutputInvoiceEntity::getStatus, InvoiceStatus.REVERSED);
+            }
         }
         wrapper.orderByDesc(OutputInvoiceEntity::getInvoiceDate);
         return outputMapper.selectPage(page, wrapper);
@@ -291,11 +310,12 @@ public class TaxServiceImpl implements TaxService {
             }
         }
 
-        // 2. 降级: 硬编码科目
+        // 2. 降级: 硬编码科目 — 1 次批量查询替代 3 次串行查询
         String voucherNo = voucherNoService.generateNextNo(inv.getPeriod(), VOUCHER_TYPE_ID);
-        Subject subjectAr = findSubject("1122");
-        Subject subjectRevenue = findSubject("5001");
-        Subject subjectOutputTax = findSubject("2221.01");
+        java.util.Map<String, Subject> subjects = findSubjectsByCodes(java.util.List.of("1122", "5001", "2221.01"));
+        Subject subjectAr = subjects.get("1122");
+        Subject subjectRevenue = subjects.get("5001");
+        Subject subjectOutputTax = subjects.get("2221.01");
         if (subjectAr == null || subjectRevenue == null) {
             throw new BusinessException(500, "缺少基础科目配置(1122/5001)");
         }
@@ -414,6 +434,15 @@ public class TaxServiceImpl implements TaxService {
         List<Subject> list = subjectMapper.selectList(
                 new LambdaQueryWrapper<Subject>().eq(Subject::getCode, code).last("LIMIT 1"));
         return list.isEmpty() ? null : list.get(0);
+    }
+
+    private Map<String, Subject> findSubjectsByCodes(List<String> codes) {
+        if (codes == null || codes.isEmpty()) return Collections.emptyMap();
+        List<Subject> list = subjectMapper.selectList(
+                new LambdaQueryWrapper<Subject>().in(Subject::getCode, codes));
+        Map<String, Subject> result = new HashMap<>(list.size() * 2);
+        for (Subject s : list) result.put(s.getCode(), s);
+        return result;
     }
 
     @Override

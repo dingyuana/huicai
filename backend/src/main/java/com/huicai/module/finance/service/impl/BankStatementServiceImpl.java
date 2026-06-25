@@ -390,11 +390,13 @@ public class BankStatementServiceImpl implements BankStatementService {
             throw BusinessException.badRequest("流水尚未分类, 请先调用 classifySingle");
         }
 
-        // 检查当前状态是否可以复审 (classified/PENDING/旧 CONFIRMED 均可继续推进)
+        // 检查当前状态是否可以复审 (classified/PENDING/CONFIRMED/manual_pending 均可继续推进)
         String curStatus = stmt.getReviewStatus();
         boolean canReview = curStatus == null
                 || "PENDING".equals(curStatus)
                 || "classified".equals(curStatus)
+                || "CONFIRMED".equals(curStatus)
+                || "manual_pending".equals(curStatus)
                 || "RECLASSIFIED".equals(curStatus);
         if (!canReview) {
             throw BusinessException.badRequest("当前状态 " + curStatus + " 无法复审, 请先撤回或等待审批");
@@ -459,7 +461,7 @@ public class BankStatementServiceImpl implements BankStatementService {
                                     log.info("智能路由-精确匹配生单(待人工核销): statementId={}, partyId={}, amount={}", statementId, partyId, amount);
                                 } else { stmt.setReviewStatus("classified"); }
                             } catch (Exception e) { stmt.setReviewStatus("classified"); log.warn("智能路由-精确匹配生单失败: statementId={}, err={}", statementId, e.getMessage()); }
-                        } else { stmt.setReviewStatus("classified"); log.info("智能路由-金额不匹配: statementId={}, unsettled={}, amount={}", statementId, ua, amount); }
+                        } else { stmt.setReviewStatus("classified"); log.info("智能路由-金额不匹配(终态): statementId={}, unsettled={}, amount={}", statementId, ua, amount); }
                     } else {
                         // 无匹配/多条/无客商 → 仍然尝试生单, 不自动核销
                         try {
@@ -485,8 +487,8 @@ public class BankStatementServiceImpl implements BankStatementService {
                 }
                 break;
             default:
-                stmt.setReviewStatus("classified");
-                log.info("出纳确认: statementId={}, classification={}", statementId, stmt.getClassification());
+                stmt.setReviewStatus("manual_pending");
+                log.info("C类待人工处理: statementId={}, classification={}", statementId, stmt.getClassification());
                 break;
         }
 

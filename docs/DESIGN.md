@@ -555,30 +555,49 @@ CONSTRAINT chk_stmt_review_status CHECK (review_status IN (
 
 ### 10.2 有效转换
 
+> **2026-06-25 修订**：B 类业务收付款智能路由在**未匹配到应收应付单**时直接落终态 `CONFIRMED`（已确认），不再停留在中间态 `classified`；C 类默认路由同样直接落 `CONFIRMED`。前端 `CONFIRMED` 显示为绿色终态标签。
+
 ```
 PENDING ──classify()──→ classified
 classified ──A类路由──→ voucher_generated  (bank_fee/interest/tax/social_security/insurance_fee)
-classified ──B类路由──→ payment_created    (business_receipt/payment/internal_transfer)
-classified ──C类路由──→ manual_pending     (pending/不明确)
-voucher_generated/payment_created ──review(confirm)──→ CONFIRMED
+classified ──B类路由精确匹配──→ payment_created    (业务收付款+未/应结清单金额一致)
+classified ──B类路由无匹配/生单失败──→ CONFIRMED  (业务收付款+无应收应付单，或金额不匹配)
+classified ──B类其他分类路由──→ payment_created    (internal_transfer/salary_payment 等)
+classified ──C类路由──→ CONFIRMED               (pending/不明确 → 直接落已确认)
+voucher_generated/payment_created ──approve()──→ approved
 payment_created ──review(reclassify)──→ RECLASSIFIED
-CONFIRMED ──→ approved (审核确认，可选)
 ```
+
+**终态判定**（前端绿色标签）：
+- `voucher_generated` — A 类已制证
+- `payment_created`  — B 类已生单
+- `CONFIRMED`        — 已确认（业务收付款无匹配/C 类直接确认）
+- `approved`         — 已核准过账
+
+**中间态**（橙色标签，可再次进入 confirm 流程）：
+- `PENDING` — 待确认
+- `classified` — 已分类未确认
+- `RECLASSIFIED` — 已重分类待复核
+- `manual_pending` — 待人工处理（兼容旧数据）
 
 ### 10.3 A/B/C 分类路由（AutoGenerationService）
 
-| 分类 | 类型 | 自动动作 |
-|:-----|:-----|:---------|
-| `bank_fee` | A | 直接生成凭证（借:6602.01 财务费用-手续费 / 贷:1002 银行存款） |
-| `interest_income` | A | 直接生成凭证（借:1002 银行存款 / 贷:6602.02 财务费用-利息收入） |
-| `tax_payment` | A | 直接生成凭证（借:2221 应交税费 / 贷:1002 银行存款） |
-| `social_security` | A | 直接生成凭证（借:2211 应付职工薪酬-社保 / 贷:1002） |
-| `insurance_fee` | A | 直接生成凭证（借:6602 管理费用-保险费 / 贷:1002） |
-| `business_receipt` | B | 生成收款单 → 推荐核销发票 |
-| `business_payment` | B | 生成付款单 → 推荐核销发票 |
-| `internal_transfer` | B | 生成银行转账单 |
-| `salary_payment` | B | 生成付款单（关联员工）→ 费用报销 |
-| `pending` | C | 归入待处理池 → 人工指定类型 |
+| 分类 | 类型 | 自动动作 | 终态 |
+|:-----|:-----|:---------|:-----|
+| `bank_fee` | A | 直接生成凭证（借:6602.01 财务费用-手续费 / 贷:1002 银行存款） | `voucher_generated` |
+| `interest_income` | A | 直接生成凭证（借:1002 银行存款 / 贷:6602.02 财务费用-利息收入） | `voucher_generated` |
+| `tax_payment` | A | 直接生成凭证（借:2221 应交税费 / 贷:1002 银行存款） | `voucher_generated` |
+| `social_security` | A | 直接生成凭证（借:2211 应付职工薪酬-社保 / 贷:1002） | `voucher_generated` |
+| `insurance_fee` | A | 直接生成凭证（借:6602 管理费用-保险费 / 贷:1002） | `voucher_generated` |
+| `business_receipt` | B | 智能路由：精确匹配应收单 → 生单 + 核销提示（payment_created）；无匹配/生单失败 → CONFIRMED | `payment_created` / `CONFIRMED` |
+| `business_payment` | B | 智能路由：精确匹配应付单 → 生单 + 核销提示（payment_created）；无未结清应付单 → 自动走预付款路径（payment_created）；生单失败 → CONFIRMED | `payment_created` / `CONFIRMED` |
+| `internal_transfer` | B | 生成银行转账单 | `payment_created` |
+| `salary_payment` | B | 生成付款单（关联员工）→ 费用报销 | `payment_created` |
+| `pending` / 不明确 | C | 兜底分类 → 不再生单，直接落 CONFIRMED 由用户后续手工处理 | `CONFIRMED` |
+
+> **2026-06-25 修订**：B 类业务收付款的"未匹配应收应付单"分支、C 类兜底分支的终态由 `classified`/`manual_pending` 改为 `CONFIRMED`，避免状态长期卡在中间态导致用户"点了确认但状态没变"的体感。
+>
+> **2026-06-25 重要发现**：`t_audit_log.id` 列缺 IDENTITY（V2__init_rbac_tables.sql 只写了 `BIGINT PRIMARY KEY`），StatusChangeAspect 在 `BaseMapper.updateById` 后插入审计日志时会因 `null value in column "id"` 抛 `DataIntegrityViolationException`，**整个 outer 事务回滚**，导致 B 类生单流程看似"成功"实际所有 doc/voucher/prepayment 全部丢失，对账单状态假象变 `CONFIRMED`。**V52 迁移修复**（与 V28 同一模式）：给 `t_audit_log.id` 加 `GENERATED ALWAYS AS IDENTITY (START WITH max_id+1)`。后续建表务必遵循 V52 设计规范（见 §10.5）。
 
 ### 10.4 三层分类引擎
 
@@ -592,6 +611,60 @@ CONFIRMED ──→ approved (审核确认，可选)
 - **规则引擎**：8 条种子规则（keyword/keyword_regex/counterparty_match），按 priority 排序，第一命中即停
 - **AI 语义**：Python 文本嵌入服务，摘要向量化 → pgvector 余弦相似度匹配（需 RabbitMQ 异步）
 - **兜底启发式**：10 级关键词分组（银行费用→利息→保险→税务→社保→工资→内部转账→收款→付款）
+
+### 10.5 主表 IDENTITY 必装规范（V28 + V52 沉淀）
+
+> **强约束**：Entity 用 `IdType.AUTO` 的表，PG 建表 DDL **必须** 把 `id` 列声明为 `BIGINT GENERATED ALWAYS AS IDENTITY`，**绝不能**只写 `BIGINT PRIMARY KEY`。
+
+**原因**：
+- MyBatis-Plus `IdType.AUTO` 在 MySQL 下读取 `AUTO_INCREMENT`，但在 PostgreSQL 下需要列本身带 `GENERATED ALWAYS AS IDENTITY`，否则 INSERT 时 id 字段为 NULL → `not-null constraint` 异常 → **整个事务回滚**，且错误信息具有误导性（看似是业务问题，实际是 schema 问题）。
+- `StatusChangeAspect` 拦截 `BaseMapper.updateById` 后**同事务**写 `t_audit_log`，任何状态变更都会触发审计日志写入。如果 `t_audit_log` 自身的 IDENTITY 缺失，会**反向回滚**所有上游业务写入，造成"代码看成功、数据全丢"的诡异故障。
+
+**正确写法**：
+```sql
+CREATE TABLE t_xxx (
+    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,  -- ✅ 必须带 IDENTITY
+    ...
+);
+```
+
+**错误写法**（V1/V2/V4/V5 历史问题）：
+```sql
+CREATE TABLE t_xxx (
+    id BIGINT PRIMARY KEY,  -- ❌ 缺 IDENTITY, IdType.AUTO 必爆
+    ...
+);
+```
+
+**修复范式**（V28、V52 模板）：
+```sql
+-- 空表：START WITH 1
+ALTER TABLE t_xxx ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (START WITH 1);
+
+-- 有历史数据：START WITH max(id)+1, 避免 IDENTITY 与 snowflake 历史值冲突
+ALTER TABLE t_xxx ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (START WITH <max_id + 1>);
+```
+
+**已修复历史表**：
+- V28：`t_voucher` / `t_business_doc` / `t_voucher_entry` / `t_subject`（2026-06-15）
+- V52：`t_audit_log`（2026-06-25，本次新增）
+
+**核查 SQL**（新表上线前必跑）：
+```sql
+SELECT table_name
+FROM information_schema.columns
+WHERE table_schema = 'public'
+  AND column_name = 'id'
+  AND is_nullable = 'NO'
+  AND column_default IS NULL
+  AND identity_generation IS NULL;
+-- 返回 0 行才算合规
+```
+
+**当前合规情况（2026-06-25）**：
+- ✅ 已修复：`t_voucher` / `t_business_doc` / `t_voucher_entry` / `t_subject`（V28，2026-06-15）
+- ✅ 已修复：`t_audit_log`（V52，2026-06-25，本次）
+- ⚠️ 待修复（43 张 `IdType.AUTO` 表未装 IDENTITY）：`t_ai_anomaly_tag`、`t_ai_feedback_log`、`t_ai_task`、`t_alert_rule`、`t_asset_card`、`t_asset_category`、`t_asset_change`、`t_asset_depreciation`、`t_asset_disposal`、`t_asset_inventory`、`t_asset_inventory_entry`、`t_attachment`、`t_bad_debt_provision`、`t_bank_account`、`t_bank_journal`、`t_budget`、`t_budget_adjustment`、`t_budget_entry`、`t_business_doc_entry`、`t_cash_flow_rule`、`t_cash_journal`、`t_classification_rule`、`t_customer`、`t_dept`、`t_employee`、`t_expense_reimbursement`、`t_financial_metric`、`t_input_invoice`、`t_menu`、`t_output_invoice`、`t_period`、`t_reconciliation_exception`、`t_reconciliation_log`、`t_report_template`、`t_role`、`t_role_menu`、`t_subject_balance`、`t_summary_lib`、`t_sys_config`、`t_tax_declaration`、`t_tax_type`、`t_ticket`、`t_ticket_transaction`、`t_user`、`t_user_role`、`t_vendor` —— 建议分批在 V53+ 统一修复，避免后续功能踩雷。
 
 ---
 

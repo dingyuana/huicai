@@ -16,7 +16,7 @@
             <div class="stat-content">
               <div class="stat-info">
                 <span class="stat-label">总发票数</span>
-                <span class="stat-value">{{ stats.totalCount || 0 }}</span>
+                <span class="stat-value">{{ fmtNum(stats.totalCount || 0) }}</span>
               </div>
               <div class="stat-icon icon-total">
                 <el-icon><Document /></el-icon>
@@ -55,7 +55,7 @@
             <div class="stat-content">
               <div class="stat-info">
                 <span class="stat-label">红字数</span>
-                <span class="stat-value">{{ stats.redCount || 0 }}</span>
+                <span class="stat-value">{{ fmtNum(stats.redCount || 0) }}</span>
               </div>
               <div class="stat-icon icon-red-count">
                 <el-icon><Warning /></el-icon>
@@ -68,7 +68,7 @@
             <div class="stat-content">
               <div class="stat-info">
                 <span class="stat-label">已冲销</span>
-                <span class="stat-value">{{ stats.reversedCount || 0 }}</span>
+                <span class="stat-value">{{ fmtNum(stats.reversedCount || 0) }}</span>
               </div>
               <div class="stat-icon icon-reversed">
                 <el-icon><Refresh /></el-icon>
@@ -81,7 +81,7 @@
             <div class="stat-content">
               <div class="stat-info">
                 <span class="stat-label">已作废</span>
-                <span class="stat-value">{{ stats.voidedCount || 0 }}</span>
+                <span class="stat-value">{{ fmtNum(stats.voidedCount || 0) }}</span>
               </div>
               <div class="stat-icon icon-voided">
                 <el-icon><Delete /></el-icon>
@@ -90,9 +90,14 @@
           </el-card>
         </el-col>
       </el-row>
-      <el-row style="margin-bottom:12px">
-        <el-button size="small" @click="onBatchLinkRedFlush" :loading="linkingRedFlush">批量红冲关联</el-button>
-      </el-row>
+
+      <!-- 分类标签 -->
+      <el-radio-group v-model="tabType" style="margin-bottom:12px" @change="onTabChange">
+        <el-radio-button value="">全部</el-radio-button>
+        <el-radio-button value="SPECIAL">专用发票</el-radio-button>
+        <el-radio-button value="PLAIN">普通发票</el-radio-button>
+        <el-radio-button value="RED">红字发票</el-radio-button>
+      </el-radio-group>
 
       <el-form :model="query" inline class="filter-form">
         <el-form-item label="客户">
@@ -121,7 +126,7 @@
         </el-table-column>
         <el-table-column label="发票类型" width="100" align="center">
           <template #default="{ row }">
-            <el-tag v-if="Number(row.amount) < 0" type="danger" size="small">红字发票</el-tag>
+            <el-tag v-if="Number(row.amount) < 0 || row.originalInvoiceNo" type="danger" size="small">红字发票</el-tag>
             <span v-else>{{ row.invoiceType === 'SPECIAL' ? '专用发票' : row.invoiceType === 'PLAIN' ? '普通发票' : row.invoiceType }}</span>
           </template>
         </el-table-column>
@@ -207,7 +212,7 @@
     <el-dialog v-model="importVisible" title="导入销售发票" width="720px" destroy-on-close>
       <template v-if="!importPreview">
         <el-alert type="info" :closable="false" style="margin-bottom:12px">
-          上传销售发票 Excel，系统自动识别列名、匹配客户、生成应收单据和凭证。
+          上传销售发票 Excel，系统自动识别列名、匹配客户、生成应收单据。
         </el-alert>
         <el-upload drag :auto-upload="false" :limit="1" accept=".xlsx,.xls" @change="onImportFileChange" ref="importUploadRef">
           <el-icon class="el-icon--upload" style="font-size:48px"><upload-filled /></el-icon>
@@ -224,14 +229,14 @@
 
       <template v-else>
         <el-descriptions :column="4" border size="small" style="margin-bottom:12px">
-          <el-descriptions-item label="总行数">{{ importPreview.total }}</el-descriptions-item>
-          <el-descriptions-item label="有效行数">{{ importPreview.valid }}</el-descriptions-item>
+          <el-descriptions-item label="总行数">{{ fmtNum(importPreview.total) }}</el-descriptions-item>
+          <el-descriptions-item label="有效行数">{{ fmtNum(importPreview.valid) }}</el-descriptions-item>
           <el-descriptions-item label="已有">
-            <el-tag v-if="importPreview.existing" type="warning">{{ importPreview.existing }}</el-tag>
+            <el-tag v-if="importPreview.existing" type="warning">{{ fmtNum(importPreview.existing) }}</el-tag>
             <el-tag v-else type="success">0</el-tag>
           </el-descriptions-item>
           <el-descriptions-item label="错误">
-            <el-tag v-if="importPreview.errors?.length" type="danger">{{ importPreview.errors.length }}</el-tag>
+            <el-tag v-if="importPreview.errors?.length" type="danger">{{ fmtNum(importPreview.errors.length) }}</el-tag>
             <el-tag v-else type="success">0</el-tag>
           </el-descriptions-item>
         </el-descriptions>
@@ -262,7 +267,7 @@
           <el-button type="primary" :loading="importConfirming"
             :disabled="!importPreview.valid || (importPreview.valid - (importPreview.existing || 0)) <= 0"
             @click="onImportConfirm">
-            确认导入 {{ Math.max(0, importPreview.valid - (importPreview.existing || 0)) }} 条
+            确认导入 {{ fmtNum(Math.max(0, importPreview.valid - (importPreview.existing || 0))) }} 条
           </el-button>
         </div>
       </template>
@@ -334,21 +339,18 @@ import { UploadFilled, Document, Money, Minus, Warning, Refresh, Delete } from '
 import { pageOutputInvoice, createOutputInvoice, getOutputInvoice, deleteOutputInvoice,
   outputInvoiceSummary,
   submitForReview, confirmOutputInvoice, rejectOutputInvoice, revertOutputInvoice, voidOutputInvoice, markVouchered } from '@/api/modules/tax'
-import { previewSalesInvoices, confirmSalesInvoicesImport, batchLinkRedFlush } from '@/api/modules/salesInvoice'
+import { previewSalesInvoices, confirmSalesInvoicesImport } from '@/api/modules/salesInvoice'
 
 const detailVisible = ref(false)
 const detail = ref<any>(null)
 const deleting = ref(false)
-const linkingRedFlush = ref(false)
 
-const onBatchLinkRedFlush = async () => {
-  linkingRedFlush.value = true
-  try {
-    const res = await batchLinkRedFlush()
-    ElMessage.success(`红冲关联完成: 匹配 ${res.matched} 对, 跳过 ${res.skipped} 条`)
-    fetchData(); fetchStats()
-  } catch { /* */ }
-  finally { linkingRedFlush.value = false }
+// 分类标签
+const tabType = ref('')
+
+const onTabChange = () => {
+  query.current = 1
+  fetchData()
 }
 
 const showDetail = async (row: any) => {
@@ -429,7 +431,7 @@ const STATUS_TAG_MAP: Record<string, string> = {
   VOIDED: 'danger', REVERSED: 'danger',
 }
 
-const query = reactive({ customerName: '', period: '', current: 1, size: 20 })
+const query = reactive({ customerName: '', period: '', invoiceType: '', current: 1, size: 20 })
 const list = ref<any[]>([])
 const total = ref(0)
 const loading = ref(false)
@@ -446,7 +448,17 @@ const rules = {
   invoiceType: [{ required: true, message: '请选择发票类型', trigger: 'change' }],
 }
 
-const fmtAmount = (v: any) => Number(v || 0).toFixed(2)
+/** 金额格式：千分位 + 2 位小数 */
+const fmtAmount = (v: any) => {
+  const n = Number(v || 0)
+  return n.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+
+/** 数字格式：千分位，无小数 */
+const fmtNum = (v: any) => {
+  const n = Number(v || 0)
+  return n.toLocaleString('zh-CN')
+}
 
 const recalcTax = () => {
   if (form.amount && form.taxRate != null) {
@@ -457,7 +469,11 @@ const recalcTax = () => {
 const fetchData = async () => {
   loading.value = true
   try {
-    const res: any = await pageOutputInvoice(query)
+    const params: any = { current: query.current, size: query.size }
+    if (query.customerName) params.customerName = query.customerName
+    if (query.period) params.period = query.period
+    if (tabType.value) params.invoiceType = tabType.value
+    const res: any = await pageOutputInvoice(params)
     list.value = res.records || []
     total.value = res.total || 0
   } finally {
@@ -527,8 +543,8 @@ const onImportConfirm = async () => {
   importConfirming.value = true
   try {
     const res = await confirmSalesInvoicesImport(importPreview.value.batchId)
-    let msg = `导入 ${res.success} 张发票，生成 ${res.voucherCreated} 张凭证`
-    if (res.duplicateSkipped) msg += `，${res.duplicateSkipped} 张重复已跳过`
+    let msg = `导入 ${fmtNum(res.success)} 张发票`
+    if (res.duplicateSkipped) msg += `，${fmtNum(res.duplicateSkipped)} 张重复已跳过`
     ElMessage.success(msg)
     importVisible.value = false
     importPreview.value = null
@@ -598,55 +614,100 @@ const onImportConfirm = async () => {
   align-items: center;
 }
 
-.stat-info {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.stat-label {
-  font-size: 13px;
-  color: #909399;
-}
-
-.stat-value {
-  font-size: 22px;
-  font-weight: 600;
-  color: #303133;
-}
-
+/* 统计图标：彩色渐变背景 + 白图标 */
 .stat-icon {
-  width: 48px;
-  height: 48px;
-  border-radius: 50%;
+  width: 56px;
+  height: 56px;
+  border-radius: 12px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 24px;
+  flex-shrink: 0;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  transition: all 0.3s ease;
+}
+.stat-icon .el-icon {
+  font-size: 28px;
   color: #fff;
 }
+.stat-card:hover .stat-icon {
+  transform: scale(1.08) rotate(-5deg);
+}
 
+/* 数字：与logo同色渐变 + 大字号 + 现代风格 */
+.stat-info {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.stat-label {
+  font-size: 13px;
+  color: #909399;
+  font-weight: 500;
+  letter-spacing: 0.3px;
+}
+.stat-value {
+  font-size: 30px;
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: -0.5px;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  transition: all 0.3s ease;
+}
+
+/* 总发票数 - 蓝色渐变文字 */
+.icon-total ~ * .stat-value,
+.stat-card:has(.icon-total) .stat-value {
+  background-image: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+}
+/* 蓝字总金额 - 绿色 */
+.stat-card:has(.icon-blue) .stat-value {
+  background-image: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);
+}
+/* 红字金额 - 粉黄 */
+.stat-card:has(.icon-red) .stat-value {
+  background-image: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
+}
+/* 红字数 - 橙粉 */
+.stat-card:has(.icon-red-count) .stat-value {
+  background-image: linear-gradient(135deg, #ff9a44 0%, #fc6076 100%);
+}
+/* 已冲销 - 紫粉 */
+.stat-card:has(.icon-reversed) .stat-value {
+  background-image: linear-gradient(135deg, #a18cd1 0%, #fbc2eb 100%);
+}
+/* 已作废 - 灰蓝 */
+.stat-card:has(.icon-voided) .stat-value {
+  background-image: linear-gradient(135deg, #8e9eab 0%, #5a6a7e 100%);
+}
+
+/* 总发票数 - 蓝色 */
 .icon-total {
-  background: linear-gradient(135deg, #409EFF, #66b1ff);
+  background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
 }
-
+/* 蓝字总金额 - 绿色 */
 .icon-blue {
-  background: linear-gradient(135deg, #67C23A, #85ce61);
+  background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);
 }
-
+/* 红字金额 - 红色 */
 .icon-red {
-  background: linear-gradient(135deg, #F56C6C, #f89898);
+  background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
 }
-
+/* 红字数 - 橙色 */
 .icon-red-count {
-  background: linear-gradient(135deg, #E6A23C, #ebb563);
+  background: linear-gradient(135deg, #ff9a44 0%, #fc6076 100%);
 }
-
+/* 已冲销 - 紫色 */
 .icon-reversed {
-  background: linear-gradient(135deg, #909399, #a6a9ad);
+  background: linear-gradient(135deg, #a18cd1 0%, #fbc2eb 100%);
 }
-
+/* 已作废 - 灰色 */
 .icon-voided {
-  background: linear-gradient(135deg, #c71585, #db5fa6);
+  background: linear-gradient(135deg, #8e9eab 0%, #eef2f3 100%);
+}
+.icon-voided .el-icon {
+  color: #5a6a7e;
 }
 </style>

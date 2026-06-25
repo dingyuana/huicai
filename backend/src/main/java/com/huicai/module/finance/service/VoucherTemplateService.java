@@ -12,11 +12,8 @@ public interface VoucherTemplateService {
 
     // ─── 查询 ───
 
-    /** 根据 ID 查询模板 (含分录行) */
+    /** 根据 ID 查询模板 */
     VoucherTemplateEntity getById(Long id);
-
-    /** 根据 ID 查询模板 (含分录行) */
-    VoucherTemplateEntity getWithLines(Long id);
 
     /** 查询所有激活模板 (含分录行) */
     List<VoucherTemplateEntity> listAllActive();

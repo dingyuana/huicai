@@ -23,13 +23,17 @@ public interface VoucherTemplateMapper extends BaseMapper<VoucherTemplateEntity>
 
     /**
      * 按 source + businessType + direction 查激活模板（无视方向时传 null）.
+     * 用 CAST 显式声明参数类型, 避免 PostgreSQL "could not determine data type of parameter" 错误.
      */
     @Select("""
         SELECT * FROM t_voucher_template
         WHERE is_active = true
           AND source = #{source}
           AND business_type = #{businessType}
-          AND (#{direction} IS NULL OR direction IS NULL OR direction = '' OR direction = #{direction})
+          AND (CAST(#{direction} AS VARCHAR) IS NULL
+               OR direction IS NULL
+               OR direction = ''
+               OR direction = #{direction})
         ORDER BY match_priority ASC, id ASC
         LIMIT 1
     """)

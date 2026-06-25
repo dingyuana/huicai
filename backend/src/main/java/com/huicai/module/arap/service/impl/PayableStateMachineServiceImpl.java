@@ -35,7 +35,6 @@ public class PayableStateMachineServiceImpl implements PayableStateMachineServic
             throw BusinessException.badRequest("仅草稿状态可确认，当前: " + entity.getStatus());
         }
         entity.setStatus(ArapStatus.CONFIRMED);
-        entity.setUpdatedBy(userId);
         entity.setUpdatedAt(LocalDateTime.now());
         payableMapper.updateById(entity);
         log.info("应付单确认: id={}, userId={}", payableId, userId);
@@ -55,7 +54,6 @@ public class PayableStateMachineServiceImpl implements PayableStateMachineServic
                 ? ArapStatus.SETTLED
                 : ArapStatus.CONFIRMED;
         entity.setStatus(newStatus);
-        entity.setUpdatedBy(userId);
         entity.setUpdatedAt(LocalDateTime.now());
         payableMapper.updateById(entity);
         log.info("应付单核销更新: id={}, status={}, unsettledAmount={}", payableId, newStatus, unsettledAmount);
@@ -72,11 +70,10 @@ public class PayableStateMachineServiceImpl implements PayableStateMachineServic
             throw BusinessException.badRequest("当前状态不可冲销: " + entity.getStatus());
         }
         entity.setStatus(ArapStatus.REVERSED);
-        // 追加冲销原因到备注
-        String newRemark = entity.getRemark() == null ? "" : entity.getRemark() + " | ";
+        // 追加冲销原因到摘要
+        String newRemark = entity.getSummary() == null ? "" : entity.getSummary() + " | ";
         newRemark += "[" + userId + "] 冲销原因: " + reason;
-        entity.setRemark(newRemark);
-        entity.setUpdatedBy(userId);
+        entity.setSummary(newRemark);
         entity.setUpdatedAt(LocalDateTime.now());
         payableMapper.updateById(entity);
         log.info("应付单冲销: id={}, userId={}, reason={}", payableId, userId, reason);
