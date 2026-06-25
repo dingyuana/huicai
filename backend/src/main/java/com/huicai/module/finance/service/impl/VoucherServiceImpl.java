@@ -33,12 +33,12 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.stream.Collectors;
 
 /**
@@ -59,6 +59,7 @@ public class VoucherServiceImpl extends ServiceImpl<VoucherMapper, VoucherEntity
     private final PeriodService periodService;
     private final UserMapper userMapper;
     private final VoucherStateMachineService voucherStateMachineService;
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Override
     public IPage<VoucherVO> pageQuery(VoucherQueryDTO queryDTO) {
@@ -107,6 +108,8 @@ public class VoucherServiceImpl extends ServiceImpl<VoucherMapper, VoucherEntity
         // 校验分录: 至少2条、借贷平衡、金额非负、末级科目
         validateEntries(dto.getEntries());
         validateLeafSubjects(dto.getEntries());
+        // P1-4: 辅助核算强校验拦截
+        validateAssistJson(dto.getEntries());
 
         // 生成凭证号
         String voucherNo = voucherNoService.generateNextNo(dto.getPeriod(), dto.getVoucherTypeId());
@@ -169,6 +172,8 @@ public class VoucherServiceImpl extends ServiceImpl<VoucherMapper, VoucherEntity
         // 校验分录
         validateEntries(dto.getEntries());
         validateLeafSubjects(dto.getEntries());
+        // P1-4: 辅助核算强校验拦截
+        validateAssistJson(dto.getEntries());
 
         // 更新凭证主表
         entity.setSummary(dto.getSummary());
@@ -483,6 +488,51 @@ public class VoucherServiceImpl extends ServiceImpl<VoucherMapper, VoucherEntity
             if (!Boolean.TRUE.equals(subject.getIsLeaf())) {
                 throw BusinessException.badRequest(
                         "第" + (i + 1) + "条分录科目非末级科目, 不可直接记账: " + subject.getCode() + " - " + subject.getName());
+            }
+        }
+    }
+
+    /**
+     * P1-4: 辅助核算强校验拦截 — 若科目配置了 auxCalcType, 则 assistJson 必须包含对应字段.
+     */
+    private void validateAssistJson(List<EntryDTO> entries) {
+        for (int i = 0; i < entries.size(); i++) {
+            EntryDTO entry = entries.get(i);
+            Subject subject = subjectService.getById(entry.getSubjectId());
+            if (subject == null) continue;
+            String auxCalcType = subject.getAuxCalcType();
+            if (auxCalcType == null || auxCalcType.isBlank()) continue;
+
+            String assistJson = entry.getAssistJson();
+            if (assistJson == null || assistJson.isBlank()) {
+                throw BusinessException.badRequest(
+                        "第" + (i + 1) + "条分录科目(" + subject.getCode() + ")启用了[" + auxCalcType + "]辅助核算, 必须填写辅助核算信息");
+            }
+
+            String requiredField;
+            switch (auxCalcType) {
+                case "customer":   requiredField = "customerId"; break;
+                case "vendor":     requiredField = "vendorId";   break;
+                case "department": requiredField = "deptId";     break;
+                case "project":    requiredField = "projectId";  break;
+                case "employee":   requiredField = "employeeId"; break;
+                default:
+                    throw BusinessException.badRequest("不支持的辅助核算类型: " + auxCalcType);
+            }
+
+            try {
+                Map<String, Object> assistMap = objectMapper.readValue(assistJson,
+                        new TypeReference<Map<String, Object>>() {});
+                Object val = assistMap.get(requiredField);
+                if (val == null || (val instanceof String && ((String) val).isBlank())) {
+                    throw BusinessException.badRequest(
+                            "第" + (i + 1) + "条分录科目(" + subject.getCode() + ")启用了[" + auxCalcType + "]辅助核算, 缺少字段: " + requiredField);
+                }
+            } catch (BusinessException e) {
+                throw e;
+            } catch (Exception e) {
+                throw BusinessException.badRequest(
+                        "第" + (i + 1) + "条分录辅助核算JSON格式错误: " + e.getMessage());
             }
         }
     }

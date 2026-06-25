@@ -1,6 +1,7 @@
 package com.huicai.module.tax.entity;
 
 import com.baomidou.mybatisplus.annotation.*;
+import com.huicai.common.annotation.StatusChangeable;
 import lombok.Data;
 
 import java.math.BigDecimal;
@@ -18,10 +19,12 @@ public class TaxDeclarationEntity {
     private String taxType;
     private java.time.LocalDate declaredDate;
     private BigDecimal payableAmount;
+    @StatusChangeable(entity = "TAX_DECLARATION", fieldName = "status")
     private String status;
     private Long voucherId;
     private String remark;
     private Long createdBy;
+    @TableField(exist = false)
     private Long updatedBy;
 
     @TableField(fill = FieldFill.INSERT)

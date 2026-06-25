@@ -32,6 +32,7 @@ public class InputInvoiceEntity {
     private Long voucherId;
     private String remark;
     private Long createdBy;
+    @TableField(exist = false)
     private Long updatedBy;
 
     @TableField(fill = FieldFill.INSERT)

@@ -1,6 +1,7 @@
 package com.huicai.module.asset.entity;
 
 import com.baomidou.mybatisplus.annotation.*;
+import com.huicai.common.annotation.StatusChangeable;
 import lombok.Data;
 
 import java.math.BigDecimal;
@@ -25,6 +26,7 @@ public class AssetCardEntity {
     private BigDecimal residualValue;
     private Integer usefulLife;
     private String depreciationMethod;
+    @StatusChangeable(entity = "ASSET_CARD", fieldName = "status")
     private String status;
     private String location;
     private String serialNo;

@@ -1,6 +1,7 @@
 package com.huicai.module.ai.entity;
 
 import com.baomidou.mybatisplus.annotation.*;
+import com.huicai.common.annotation.StatusChangeable;
 import lombok.Data;
 
 import java.time.LocalDateTime;
@@ -16,6 +17,7 @@ public class AiTaskEntity {
     private String taskType;
     private String bizType;
     private Long bizId;
+    @StatusChangeable(entity = "AI_TASK", fieldName = "status")
     private String status;
     private String inputData;
     private String outputData;

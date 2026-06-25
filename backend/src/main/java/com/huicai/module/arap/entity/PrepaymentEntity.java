@@ -1,8 +1,11 @@
 package com.huicai.module.arap.entity;
 
-import com.baomidou.mybatisplus.annotation.IdType;
-import com.baomidou.mybatisplus.annotation.TableId;
-import com.baomidou.mybatisplus.annotation.TableName;
+import com.baomidou.mybatisplus.annotation.*;
+import com.huicai.common.annotation.StatusChangeable;
+import com.baomidou.mybatisplus.annotation.*;
+import com.huicai.common.annotation.StatusChangeable;
+import com.baomidou.mybatisplus.annotation.*;
+import com.huicai.common.annotation.StatusChangeable;
 import lombok.Data;
 import java.io.Serializable;
 import java.math.BigDecimal;
@@ -45,6 +48,7 @@ public class PrepaymentEntity implements Serializable {
     private String summary;
 
     /** 状态: DRAFT / SUBMITTED / AUDITED / POSTED */
+    @StatusChangeable(entity = "PREPAYMENT", fieldName = "status")
     private String status;
 
     /** 关联单据类型 (如 bank_txn) */

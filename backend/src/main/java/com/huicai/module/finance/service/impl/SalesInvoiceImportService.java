@@ -358,15 +358,6 @@ public class SalesInvoiceImportService {
                 // createVoucher(doc, row, customerId, period);
                 OutputInvoiceEntity invoice = insertOutputInvoice(row, customerId, period, doc);
                 createReceivableFromInvoice(doc, row, customerId, period);
-                // 红冲发票: 找到原蓝字发票标记为 REVERSED
-                if (!row.isPositive) {
-                    if (StrUtil.isNotBlank(row.originalInvoiceNo)) {
-                        handleRedFlushReversal(row.originalInvoiceNo, doc, period, invoice.getId(), invoice.getInvoiceNo());
-                    } else {
-                        // 没有备注原发票号，按金额+客户名匹配
-                        matchAndReverseByAmount(row, period, invoice.getId(), invoice.getInvoiceNo());
-                    }
-                }
                 success++; docCreated++;
             } catch (Exception e) {
                 log.warn("处理发票行失败 row={}: {}", row.rowNum, e.getMessage());
@@ -378,57 +369,13 @@ public class SalesInvoiceImportService {
             }
         }
 
-        // 后处理：已存在的红冲发票也尝试关联（去重跳过的行）
-        for (ParsedInvoiceRow row : rows) {
-            if (!row.isPositive && StrUtil.isNotBlank(row.originalInvoiceNo)
-                    && StrUtil.isNotBlank(row.invoiceNo)
-                    && existingSet.contains(row.invoiceNo)) {
-                try {
-                    List<OutputInvoiceEntity> redInvs = outputInvoiceMapper.selectList(
-                            new LambdaQueryWrapper<OutputInvoiceEntity>()
-                                    .eq(OutputInvoiceEntity::getInvoiceNo, row.invoiceNo)
-                                    .last("LIMIT 1"));
-                    Long redId = redInvs.isEmpty() ? null : redInvs.get(0).getId();
-                    handleRedFlushReversal(row.originalInvoiceNo, null, row.invoiceDate.format(DateTimeFormatter.ofPattern("yyyyMM")), redId, row.invoiceNo);
-                } catch (Exception e) {
-                    log.warn("红冲后处理失败 row={}: {}", row.rowNum, e.getMessage());
-                }
-            }
-        }
-
-        // 后处理2：没有originalInvoiceNo的红冲发票，按金额+客户匹配蓝字
-        for (ParsedInvoiceRow row : rows) {
-            if (!row.isPositive && StrUtil.isBlank(row.originalInvoiceNo)
-                    && StrUtil.isNotBlank(row.invoiceNo)
-                    && existingSet.contains(row.invoiceNo)) {
-                try {
-                    BigDecimal absAmount = row.amount.abs();
-                    String period = row.invoiceDate.format(DateTimeFormatter.ofPattern("yyyyMM"));
-                    List<OutputInvoiceEntity> candidates = outputInvoiceMapper.selectList(
-                            new LambdaQueryWrapper<OutputInvoiceEntity>()
-                                    .eq(OutputInvoiceEntity::getAmount, absAmount)
-                                    .eq(OutputInvoiceEntity::getCustomerName, row.buyerName)
-                                    .ne(OutputInvoiceEntity::getStatus, InvoiceStatus.REVERSED)
-                                    .ne(OutputInvoiceEntity::getStatus, InvoiceStatus.VOIDED)
-                                    .last("LIMIT 1"));
-                    if (!candidates.isEmpty()) {
-                        OutputInvoiceEntity blue = candidates.get(0);
-                        List<OutputInvoiceEntity> redInvs = outputInvoiceMapper.selectList(
-                                new LambdaQueryWrapper<OutputInvoiceEntity>()
-                                        .eq(OutputInvoiceEntity::getInvoiceNo, row.invoiceNo)
-                                        .last("LIMIT 1"));
-                        Long redId = redInvs.isEmpty() ? null : redInvs.get(0).getId();
-                        handleRedFlushReversal(blue.getInvoiceNo(), null, period, redId, row.invoiceNo);
-                        log.info("红冲金额匹配: redInvoice={}, blueInvoice={}, amount={}",
-                                row.invoiceNo, blue.getInvoiceNo(), absAmount);
-                    } else {
-                        log.info("红冲金额匹配未找到: invoiceNo={}, amount={}, buyer={}",
-                                row.invoiceNo, absAmount, row.buyerName);
-                    }
-                } catch (Exception e) {
-                    log.warn("红冲金额匹配后处理失败 row={}: {}", row.rowNum, e.getMessage());
-                }
-            }
+        // 后处理：所有发票导入完成后，统一执行红冲关联（复用已验证的 batchLinkRedFlushInvoices 逻辑）
+        // 在全库中扫描金额为负的红字发票，按金额+客户名匹配蓝字发票标记 REVERSED
+        // 避免红字在前、蓝字在后导致匹配失败
+        Map<String, Object> redResult = batchLinkRedFlushInvoices();
+        int redMatched = ((Number) redResult.getOrDefault("matched", 0)).intValue();
+        if (redMatched > 0) {
+            log.info("导入后红冲关联完成: matched={}, batchId={}", redMatched, batchId);
         }
 
         return Map.of(

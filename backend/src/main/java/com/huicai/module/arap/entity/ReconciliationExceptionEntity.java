@@ -1,6 +1,7 @@
 package com.huicai.module.arap.entity;
 
 import com.baomidou.mybatisplus.annotation.*;
+import com.huicai.common.annotation.StatusChangeable;
 import lombok.Data;
 
 import java.math.BigDecimal;
@@ -59,6 +60,7 @@ public class ReconciliationExceptionEntity {
     private String matchSuggestion;
 
     /** 状态: OPEN / RESOLVED / IGNORED */
+    @StatusChangeable(entity = "RECONCILIATION_EXCEPTION", fieldName = "status")
     private String status;
 
     /** 重试次数 */

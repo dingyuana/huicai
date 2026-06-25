@@ -497,6 +497,7 @@ public class TaxServiceImpl implements TaxService {
     // ─── P18-1: 申报审批 / 驳回 ───
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public TaxDeclarationEntity approveDeclaration(Long id, String approver) {
         TaxDeclarationEntity entity = declarationMapper.selectById(id);
         if (entity == null) {
@@ -506,10 +507,19 @@ public class TaxServiceImpl implements TaxService {
             throw new BusinessException("仅已提交状态可审批: 当前=" + entity.getStatus());
         }
         entity.setStatus("APPROVED");
-        entity.setUpdatedBy(approver == null ? null : Long.valueOf(approver.hashCode() & 0x7FFFFFFF));
+        Long userId = approver == null ? null : Long.valueOf(approver.hashCode() & 0x7FFFFFFF);
+        entity.setUpdatedBy(userId);
         declarationMapper.updateById(entity);
         log.info("P18-1 申报审批通过: id={}, approver={}", id, approver);
-        return entity;
+
+        // P1: 审批通过后自动生成缴税凭证
+        try {
+            generateVoucherFromDeclaration(id, userId != null ? userId : 0L);
+            log.info("P18-1 申报自动生成凭证成功: declarationId={}", id);
+        } catch (Exception e) {
+            log.error("P18-1 申报自动生成凭证失败, 可手工调用 generateVoucherFromDeclaration: declarationId={}, error={}", id, e.getMessage());
+        }
+        return declarationMapper.selectById(id);
     }
 
     @Override
@@ -529,6 +539,147 @@ public class TaxServiceImpl implements TaxService {
         declarationMapper.updateById(entity);
         log.info("P18-1 申报驳回: id={}, approver={}, reason={}", id, approver, reason);
         return entity;
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void generateVoucherFromDeclaration(Long declarationId, Long userId) {
+        TaxDeclarationEntity entity = declarationMapper.selectById(declarationId);
+        if (entity == null) {
+            throw new BusinessException("申报记录不存在");
+        }
+        if (!"APPROVED".equals(entity.getStatus())) {
+            throw new BusinessException("仅已审批(APPROVED)的申报可生成凭证, 当前=" + entity.getStatus());
+        }
+        if (entity.getVoucherId() != null) {
+            throw new BusinessException("该申报已生成凭证, voucherId=" + entity.getVoucherId());
+        }
+
+        String period = entity.getPeriod() != null ? entity.getPeriod()
+                : LocalDate.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyyMM"));
+        String voucherNo = voucherNoService.generateNextNo(period, VOUCHER_TYPE_ID);
+
+        // 尝试按模板匹配
+        TemplateContext ctx = new TemplateContext()
+                .setSource("TAX_DECLARATION")
+                .setBusinessType("TAX_PAYMENT")
+                .setAmount(entity.getPayableAmount())
+                .setTaxAmount(entity.getPayableAmount())
+                .setTotalAmount(entity.getPayableAmount())
+                .setPeriod(period)
+                .setCustomerName(entity.getTaxType());
+        VoucherTemplateEntity template = templateMatcher.match(ctx);
+        if (template != null) {
+            List<VoucherTemplateLineEntity> tplLines = voucherTemplateService.getLines(template.getId());
+            if (tplLines != null && !tplLines.isEmpty()) {
+                generateDeclarationVoucherFromTemplate(entity, template, tplLines, ctx, userId, period, voucherNo);
+                return;
+            }
+        }
+
+        // 降级: 硬编码科目 — 借:应交税费(2221) 贷:银行存款(1002)
+        Subject subjectTaxPayable = findSubject("2221");
+        Subject subjectBank = findSubject("1002");
+        if (subjectTaxPayable == null || subjectBank == null) {
+            throw new BusinessException(500, "缺少基础科目配置(2221/1002)");
+        }
+
+        BigDecimal amount = entity.getPayableAmount() != null ? entity.getPayableAmount() : BigDecimal.ZERO;
+
+        VoucherEntity voucher = new VoucherEntity();
+        voucher.setVoucherNo(voucherNo);
+        voucher.setPeriod(period);
+        voucher.setVoucherTypeId(VOUCHER_TYPE_ID);
+        voucher.setStatus("DRAFT");
+        voucher.setSource("GENERATED");
+        voucher.setSummary("缴税: " + (entity.getTaxType() != null ? entity.getTaxType() : "") + " " + entity.getPeriod());
+        voucher.setTotalDebit(amount);
+        voucher.setTotalCredit(amount);
+        voucher.setCreatedBy(userId);
+        voucherMapper.insert(voucher);
+
+        int sort = 1;
+        VoucherEntryEntity dr = new VoucherEntryEntity();
+        dr.setVoucherId(voucher.getId());
+        dr.setSubjectId(subjectTaxPayable.getId());
+        dr.setDebit(amount);
+        dr.setCredit(BigDecimal.ZERO);
+        dr.setSummary("缴纳税款-" + entity.getPeriod());
+        dr.setSortOrder(sort++);
+        voucherEntryMapper.insert(dr);
+
+        VoucherEntryEntity cr = new VoucherEntryEntity();
+        cr.setVoucherId(voucher.getId());
+        cr.setSubjectId(subjectBank.getId());
+        cr.setDebit(BigDecimal.ZERO);
+        cr.setCredit(amount);
+        cr.setSummary("缴纳税款-" + entity.getPeriod());
+        cr.setSortOrder(sort);
+        voucherEntryMapper.insert(cr);
+
+        entity.setVoucherId(voucher.getId());
+        declarationMapper.updateById(entity);
+
+        log.info("申报生成凭证: declarationId={}, voucherId={}, voucherNo={}, amount={}",
+                declarationId, voucher.getId(), voucherNo, amount);
+    }
+
+    private void generateDeclarationVoucherFromTemplate(TaxDeclarationEntity entity,
+                                                         VoucherTemplateEntity template,
+                                                         List<VoucherTemplateLineEntity> tplLines,
+                                                         TemplateContext ctx,
+                                                         Long userId,
+                                                         String period,
+                                                         String voucherNo) {
+        VoucherEntity voucher = new VoucherEntity();
+        voucher.setVoucherNo(voucherNo);
+        voucher.setPeriod(period);
+        voucher.setVoucherTypeId(VOUCHER_TYPE_ID);
+        voucher.setStatus("DRAFT");
+        voucher.setSource("GENERATED");
+        voucher.setSummary("缴税: " + (entity.getTaxType() != null ? entity.getTaxType() : ""));
+        voucher.setTemplateId(template.getId());
+        voucher.setCreatedBy(userId);
+        voucherMapper.insert(voucher);
+
+        BigDecimal totalD = BigDecimal.ZERO, totalC = BigDecimal.ZERO;
+        int sort = 1;
+        for (VoucherTemplateLineEntity tplLine : tplLines) {
+            BigDecimal dr = TemplateEngine.renderAmount(tplLine.getDrAmountTemplate(), ctx);
+            BigDecimal cr = TemplateEngine.renderAmount(tplLine.getCrAmountTemplate(), ctx);
+            if (dr == null) dr = BigDecimal.ZERO;
+            if (cr == null) cr = BigDecimal.ZERO;
+
+            if ("debit".equals(tplLine.getDirection())) {
+                if (dr.compareTo(BigDecimal.ZERO) == 0 && cr.compareTo(BigDecimal.ZERO) > 0) { dr = cr; cr = BigDecimal.ZERO; }
+                else { cr = BigDecimal.ZERO; }
+            } else if ("credit".equals(tplLine.getDirection())) {
+                if (cr.compareTo(BigDecimal.ZERO) == 0 && dr.compareTo(BigDecimal.ZERO) > 0) { cr = dr; dr = BigDecimal.ZERO; }
+                else { dr = BigDecimal.ZERO; }
+            }
+            if (dr.compareTo(BigDecimal.ZERO) == 0 && cr.compareTo(BigDecimal.ZERO) == 0) continue;
+
+            String summary = TemplateEngine.renderSummary(tplLine.getSummaryTemplate(), ctx);
+            VoucherEntryEntity ve = new VoucherEntryEntity();
+            ve.setVoucherId(voucher.getId());
+            ve.setSubjectId(tplLine.getSubjectId());
+            ve.setDebit(dr); ve.setCredit(cr);
+            ve.setSummary(summary);
+            ve.setSortOrder(sort++);
+            voucherEntryMapper.insert(ve);
+            totalD = totalD.add(dr); totalC = totalC.add(cr);
+        }
+
+        BigDecimal maxAmt = totalD.max(totalC);
+        voucher.setTotalDebit(maxAmt);
+        voucher.setTotalCredit(maxAmt);
+        voucherMapper.updateById(voucher);
+
+        entity.setVoucherId(voucher.getId());
+        declarationMapper.updateById(entity);
+
+        log.info("申报模板制证: declarationId={}, voucherId={}, templateId={}",
+                entity.getId(), voucher.getId(), template.getId());
     }
 
     private BigDecimal toBigDecimal(Object o) {

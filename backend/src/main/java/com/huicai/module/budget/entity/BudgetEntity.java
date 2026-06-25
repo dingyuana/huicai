@@ -1,6 +1,7 @@
 package com.huicai.module.budget.entity;
 
 import com.baomidou.mybatisplus.annotation.*;
+import com.huicai.common.annotation.StatusChangeable;
 import lombok.Data;
 
 import java.math.BigDecimal;
@@ -17,6 +18,7 @@ public class BudgetEntity {
     private String period;
     private String budgetType;
     private BigDecimal totalAmount;
+    @StatusChangeable(entity = "BUDGET", fieldName = "status")
     private String status;
     private Long approvedBy;
     private LocalDateTime approvedAt;

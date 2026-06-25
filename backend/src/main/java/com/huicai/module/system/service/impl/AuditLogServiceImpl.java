@@ -64,7 +64,7 @@ public class AuditLogServiceImpl implements AuditLogService {
         record.setResponseResult("newValue=" + newValue);
         record.setOldSnapshot("{\"" + fieldName + "\":\"" + (oldValue == null ? "" : oldValue) + "\"}");
         record.setNewSnapshot("{\"" + fieldName + "\":\"" + (newValue == null ? "" : newValue) + "\"}");
-        record.setStatus("SUCCESS");
+        record.setStatus("success");
         auditLogMapper.insert(record);
         log.info("状态变更审计: entity={}, id={}, field={}, {} → {}",
                 entityType, entityId, fieldName, oldValue, newValue);

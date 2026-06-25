@@ -1,6 +1,7 @@
 package com.huicai.module.arap.entity;
 
 import com.baomidou.mybatisplus.annotation.*;
+import com.huicai.common.annotation.StatusChangeable;
 import lombok.Data;
 
 import java.math.BigDecimal;
@@ -29,6 +30,7 @@ public class ExpenseReimbursementEntity {
     private String summary;
 
     /** DRAFT/SUBMITTED/APPROVED/REJECTED/VOUCHERED */
+    @StatusChangeable(entity = "EXPENSE_REIMBURSEMENT", fieldName = "status")
     private String status;
 
     private Long docId;

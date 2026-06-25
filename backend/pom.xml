@@ -137,6 +137,13 @@
             <version>3.3.4</version>
         </dependency>
 
+        <!-- JSqlParser — 用于数据权限SQL注入的SQL解析 -->
+        <dependency>
+            <groupId>com.github.jsqlparser</groupId>
+            <artifactId>jsqlparser</artifactId>
+            <version>4.9</version>
+        </dependency>
+
         <!-- DevTools (hot reload, dev only) -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

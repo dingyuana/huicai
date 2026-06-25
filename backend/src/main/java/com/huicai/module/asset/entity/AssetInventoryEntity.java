@@ -1,6 +1,7 @@
 package com.huicai.module.asset.entity;
 
 import com.baomidou.mybatisplus.annotation.*;
+import com.huicai.common.annotation.StatusChangeable;
 import lombok.Data;
 
 import java.time.LocalDate;
@@ -16,12 +17,14 @@ public class AssetInventoryEntity {
     private String inventoryNo;
     private LocalDate inventoryDate;
     private String period;
+    @StatusChangeable(entity = "ASSET_INVENTORY", fieldName = "status")
     private String status;
     private Integer totalCount;
     private Integer profitCount;
     private Integer lossCount;
     private Long voucherId;
     private Long createdBy;
+    @TableField(exist = false)
     private Long updatedBy;
 
     @TableField(fill = FieldFill.INSERT)

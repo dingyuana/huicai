@@ -1,6 +1,7 @@
 package com.huicai.module.arap.entity;
 
 import com.baomidou.mybatisplus.annotation.*;
+import com.huicai.common.annotation.StatusChangeable;
 import lombok.Data;
 
 import java.math.BigDecimal;
@@ -40,6 +41,7 @@ public class ReconciliationLogEntity {
     private String matchMethod;
 
     /** 状态: CONFIRMED / EXECUTED / REJECTED / CANCELLED */
+    @StatusChangeable(entity = "RECONCILIATION_LOG", fieldName = "status")
     private String status;
 
     /** 备注 */

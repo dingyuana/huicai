@@ -1,6 +1,7 @@
 package com.huicai.module.finance.entity;
 
 import com.baomidou.mybatisplus.annotation.*;
+import com.huicai.common.annotation.StatusChangeable;
 import lombok.Data;
 
 import java.math.BigDecimal;
@@ -35,6 +36,7 @@ public class BankStatementEntity {
     private Integer aiConfidence;         // AI 置信度 0-100
     private String aiSuggestedAction;     // AI 建议分类
     private String aiBusinessScene;       // AI 业务场景
+    @StatusChangeable(entity = "BANK_STATEMENT", fieldName = "reviewStatus")
     private String reviewStatus;          // 出纳确认状态
     private Long reviewedBy;              // 审核人
     private LocalDateTime reviewedAt;     // 审核时间

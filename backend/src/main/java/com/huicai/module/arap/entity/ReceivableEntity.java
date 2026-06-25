@@ -1,6 +1,7 @@
 package com.huicai.module.arap.entity;
 
 import com.baomidou.mybatisplus.annotation.*;
+import com.huicai.common.annotation.StatusChangeable;
 import lombok.Data;
 
 import java.math.BigDecimal;
@@ -25,6 +26,7 @@ public class ReceivableEntity {
     private LocalDate dueDate;
     private String summary;
     /** 状态: DRAFT/CONFIRMED/SETTLED/REVERSED，默认 CONFIRMED */
+    @StatusChangeable(entity = "RECEIVABLE", fieldName = "status")
     private String status;
 
     @TableField(fill = FieldFill.INSERT)

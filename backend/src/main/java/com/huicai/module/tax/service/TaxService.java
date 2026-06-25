@@ -46,4 +46,7 @@ public interface TaxService {
     TaxDeclarationEntity approveDeclaration(Long id, String approver);
     /** P18-1: 驳回 (SUBMITTED → REJECTED) */
     TaxDeclarationEntity rejectDeclaration(Long id, String approver, String reason);
+
+    /** P1: 申报审批通过后自动生成缴税凭证 (APPROVED → voucher created) */
+    void generateVoucherFromDeclaration(Long declarationId, Long userId);
 }

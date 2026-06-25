@@ -1,6 +1,7 @@
 package com.huicai.module.arap.entity;
 
 import com.baomidou.mybatisplus.annotation.*;
+import com.huicai.common.annotation.StatusChangeable;
 import lombok.Data;
 
 import java.math.BigDecimal;
@@ -19,9 +20,11 @@ public class BadDebtProvisionEntity {
     private LocalDate provisionDate;
     private BigDecimal totalAmount;
     private Long voucherId;
+    @StatusChangeable(entity = "BAD_DEBT_PROVISION", fieldName = "status")
     private String status;
     private String remark;
     private Long createdBy;
+    @TableField(exist = false)
     private Long updatedBy;
 
     @TableField(fill = FieldFill.INSERT)

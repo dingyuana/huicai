@@ -151,6 +151,14 @@ public class ExpenseReimbursementServiceImpl implements ExpenseReimbursementServ
         e.setApprovedAt(LocalDateTime.now());
         e.setApprovedBy(approver);
         mapper.updateById(e);
+
+        // P11-4: 审批通过后自动生成凭证(APPROVED → VOUCHERED)
+        try {
+            generateVoucherForApproved(id);
+            log.info("P11-4 报销单审批通过自动生成凭证: reimbId={}", id);
+        } catch (Exception ex) {
+            log.error("P11-4 报销单自动生成凭证失败, 可手工调用 generateVoucherForApproved: reimbId={}, error={}", id, ex.getMessage());
+        }
         return getById(id);
     }
 

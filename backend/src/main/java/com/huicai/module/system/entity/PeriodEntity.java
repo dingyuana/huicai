@@ -1,6 +1,7 @@
 package com.huicai.module.system.entity;
 
 import com.baomidou.mybatisplus.annotation.*;
+import com.huicai.common.annotation.StatusChangeable;
 import lombok.Data;
 
 import java.time.LocalDate;
@@ -32,6 +33,7 @@ public class PeriodEntity {
     private LocalDate endDate;
 
     /** 状态: open-开启, closed-已结账, locked-已锁定 */
+    @StatusChangeable(entity = "PERIOD", fieldName = "status")
     private String status;
 
     /** 创建人 */

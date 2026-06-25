@@ -1,6 +1,7 @@
 package com.huicai.module.finance.entity;
 
 import com.baomidou.mybatisplus.annotation.*;
+import com.huicai.common.annotation.StatusChangeable;
 import lombok.Data;
 
 import java.math.BigDecimal;
@@ -33,6 +34,7 @@ public class TicketEntity {
 
     private LocalDate expireDate;
 
+    @StatusChangeable(entity = "TICKET", fieldName = "status")
     private String status;
 
     private String remark;
