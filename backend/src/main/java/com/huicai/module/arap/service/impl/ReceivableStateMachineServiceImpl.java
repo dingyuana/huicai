@@ -35,7 +35,6 @@ public class ReceivableStateMachineServiceImpl implements ReceivableStateMachine
             throw BusinessException.badRequest("仅草稿状态可确认，当前: " + entity.getStatus());
         }
         entity.setStatus(ArapStatus.CONFIRMED);
-        entity.setUpdatedBy(userId);
         entity.setUpdatedAt(LocalDateTime.now());
         receivableMapper.updateById(entity);
         log.info("应收单确认: id={}, userId={}", receivableId, userId);
@@ -55,7 +54,6 @@ public class ReceivableStateMachineServiceImpl implements ReceivableStateMachine
                 ? ArapStatus.SETTLED
                 : ArapStatus.CONFIRMED;
         entity.setStatus(newStatus);
-        entity.setUpdatedBy(userId);
         entity.setUpdatedAt(LocalDateTime.now());
         receivableMapper.updateById(entity);
         log.info("应收单核销更新: id={}, status={}, unsettledAmount={}", receivableId, newStatus, unsettledAmount);
@@ -76,7 +74,6 @@ public class ReceivableStateMachineServiceImpl implements ReceivableStateMachine
         String newRemark = entity.getRemark() == null ? "" : entity.getRemark() + " | ";
         newRemark += "[" + userId + "] 冲销原因: " + reason;
         entity.setRemark(newRemark);
-        entity.setUpdatedBy(userId);
         entity.setUpdatedAt(LocalDateTime.now());
         receivableMapper.updateById(entity);
         log.info("应收单冲销: id={}, userId={}, reason={}", receivableId, userId, reason);
