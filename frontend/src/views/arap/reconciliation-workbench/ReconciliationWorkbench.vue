@@ -88,10 +88,10 @@
       </template>
 
       <template v-else-if="recommendResult">
-        <el-alert :title="recommendResult.message || `共 ${recommendResult.items?.length || 0} 项匹配`"
-          :type="recommendResult.items?.length ? 'success' : 'info'" :closable="false" style="margin-bottom:16px" />
+        <el-alert :title="recommendResult.message || `共 ${(recommendResult.items && recommendResult.items.length) || 0} 项匹配`"
+          :type="recommendResult.items && recommendResult.items.length ? 'success' : 'info'" :closable="false" style="margin-bottom:16px" />
 
-        <el-table v-if="recommendResult.items?.length" :data="recommendResult.items" border stripe size="small">
+        <el-table v-if="recommendResult.items && recommendResult.items.length" :data="recommendResult.items" border stripe size="small">
           <el-table-column label="目标类型" width="100" align="center">
             <template #default="{ row }">
               <el-tag :type="row.targetDocType === 'INVOICE_OUT' ? 'success' : 'warning'" size="small">
@@ -118,8 +118,8 @@
           </el-table-column>
           <el-table-column label="操作" width="160" align="center" fixed="right">
             <template #default="{ row }">
-              <el-button text size="small" type="primary" @click="onPreCheck(row)">预检查</el-button>
-              <el-button text size="small" type="primary" @click="onExecuteRecon(row)">执行核销</el-button>
+              <el-button text size="small" type="primary" @click="onPreCheck(row as any)">预检查</el-button>
+              <el-button text size="small" type="primary" @click="onExecuteRecon(row as any)">执行核销</el-button>
             </template>
           </el-table-column>
         </el-table>
@@ -129,7 +129,7 @@
       <template #footer>
         <div style="display:flex;justify-content:space-between;align-items:center;width:100%">
           <span v-if="recommendResult" style="color:#909399;font-size:12px">
-            共 {{ recommendResult.items?.length || 0 }} 项，精确匹配 {{ countExactMatches() }} 项 (L1/L2/L3)
+            共 {{ (recommendResult.items && recommendResult.items.length) || 0 }} 项，精确匹配 {{ countExactMatches() }} 项 (L1/L2/L3)
           </span>
           <div>
             <el-button @click="recommendDialogVisible = false">关闭</el-button>
@@ -142,10 +142,10 @@
             </el-button>
             <el-button
               type="primary"
-              :disabled="!recommendResult?.items?.length || batchReconcilingAll"
+              :disabled="!(recommendResult && recommendResult.items && recommendResult.items.length) || batchReconcilingAll"
               :loading="batchReconcilingAll"
               @click="onBatchReconcileAll">
-              一键核销全部 ({{ recommendResult?.items?.length || 0 }})
+              一键核销全部 ({{ (recommendResult && recommendResult.items && recommendResult.items.length) || 0 }})
             </el-button>
           </div>
         </div>
@@ -190,7 +190,7 @@ import { Loading } from '@element-plus/icons-vue'
 import { getBusinessDocPage, type BusinessDocVO, type BusinessDocQuery } from '@/api/modules/businessDoc'
 import {
   getReceiptRecommend, getPaymentRecommend, executeReconciliation, preCheckReconciliation,
-  type RecommendItem, type PreCheckResult,
+  type PreCheckResult,
 } from '@/api/modules/reconciliation'
 
 const activeTab = ref('RECEIPT')
@@ -220,7 +220,7 @@ function matchLevelType(level: string) {
 
 function countExactMatches(): number {
   if (!recommendResult.value?.items) return 0
-  return recommendResult.value.items.filter((it) => it.matchLevel === 'L1' || it.matchLevel === 'L2' || it.matchLevel === 'L3').length
+  return recommendResult.value.items.filter((it: any) => it.matchLevel === 'L1' || it.matchLevel === 'L2' || it.matchLevel === 'L3').length
 }
 
 function fmtAmount(v: number | null | undefined) {
@@ -269,7 +269,7 @@ function buildPeriod(doc: BusinessDocVO): string {
   return `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}`
 }
 
-async function onRowClick(row: BusinessDocVO) {
+async function onRowClick(row: any) {
   if ((row.unsettledAmount || 0) > 0) {
     await onShowRecommend(row)
   } else {
@@ -277,7 +277,7 @@ async function onRowClick(row: BusinessDocVO) {
   }
 }
 
-async function onShowRecommend(row: BusinessDocVO) {
+async function onShowRecommend(row: any) {
   currentDoc.value = row
   const partyName = activeTab.value === 'RECEIPT' ? row.customerName : row.supplierName
   drawerTitle.value = `核销推荐 — ${partyName || '未知'} ¥${fmtAmount(row.amount)}`
@@ -307,6 +307,7 @@ async function onShowRecommend(row: BusinessDocVO) {
         summary: row.summary,
         counterpartyName: row.supplierName,
       })
+    }
   } catch (e: any) {
     ElMessage.error(e?.message || '获取核销推荐失败')
     recommendDialogVisible.value = false
@@ -315,7 +316,7 @@ async function onShowRecommend(row: BusinessDocVO) {
   }
 }
 
-async function onExecuteRecon(item: RecommendItem) {
+async function onExecuteRecon(item: any) {
   if (!currentDoc.value) return
   try {
     await executeReconciliation({
@@ -339,7 +340,7 @@ async function onExecuteRecon(item: RecommendItem) {
 // 批量核销 - 精确匹配 (L1/L2/L3)
 async function onBatchReconcile() {
   if (!currentDoc.value || !recommendResult.value?.items) return
-  const exacts = recommendResult.value.items.filter((it: RecommendItem) =>
+  const exacts = recommendResult.value.items.filter((it: any) =>
     it.matchLevel === 'L1' || it.matchLevel === 'L2' || it.matchLevel === 'L3')
   if (exacts.length === 0) { ElMessage.warning('没有可自动核销的精确匹配项'); return }
   batchReconciling.value = true
@@ -398,7 +399,7 @@ const preCheckDialogVisible = ref(false)
 const preCheckLoading = ref(false)
 const preCheckResult = ref<PreCheckResult | null>(null)
 
-async function onPreCheck(item: RecommendItem) {
+async function onPreCheck(item: any) {
   if (!currentDoc.value) return
   preCheckResult.value = null
   preCheckLoading.value = true
