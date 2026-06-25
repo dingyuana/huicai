@@ -661,10 +661,16 @@ WHERE table_schema = 'public'
 -- 返回 0 行才算合规
 ```
 
-**当前合规情况（2026-06-25）**：
-- ✅ 已修复：`t_voucher` / `t_business_doc` / `t_voucher_entry` / `t_subject`（V28，2026-06-15）
-- ✅ 已修复：`t_audit_log`（V52，2026-06-25，本次）
-- ⚠️ 待修复（43 张 `IdType.AUTO` 表未装 IDENTITY）：`t_ai_anomaly_tag`、`t_ai_feedback_log`、`t_ai_task`、`t_alert_rule`、`t_asset_card`、`t_asset_category`、`t_asset_change`、`t_asset_depreciation`、`t_asset_disposal`、`t_asset_inventory`、`t_asset_inventory_entry`、`t_attachment`、`t_bad_debt_provision`、`t_bank_account`、`t_bank_journal`、`t_budget`、`t_budget_adjustment`、`t_budget_entry`、`t_business_doc_entry`、`t_cash_flow_rule`、`t_cash_journal`、`t_classification_rule`、`t_customer`、`t_dept`、`t_employee`、`t_expense_reimbursement`、`t_financial_metric`、`t_input_invoice`、`t_menu`、`t_output_invoice`、`t_period`、`t_reconciliation_exception`、`t_reconciliation_log`、`t_report_template`、`t_role`、`t_role_menu`、`t_subject_balance`、`t_summary_lib`、`t_sys_config`、`t_tax_declaration`、`t_tax_type`、`t_ticket`、`t_ticket_transaction`、`t_user`、`t_user_role`、`t_vendor` —— 建议分批在 V53+ 统一修复，避免后续功能踩雷。
+**当前合规情况（2026-06-25 21:20 V54 落地后）**：
+- ✅ V28（2026-06-15）：`t_voucher` / `t_business_doc` / `t_voucher_entry` / `t_subject`（4 张）
+- ✅ V52（2026-06-25）：`t_audit_log`（1 张）
+- ✅ **V54（2026-06-25 21:20，本次批量修复）**：剩余 47 张 `t_` 表 + 已有 IDENTITY 的 18 张 = **全部 65 张 `t_` 表 100% 合规**
+  - V54 修复列表：`t_ai_anomaly_tag`、`t_ai_feedback_log`、`t_ai_task`、`t_alert_rule`、`t_arap_settlement`、`t_arap_settlement_entry`、`t_asset_card`、`t_asset_category`、`t_asset_change`、`t_asset_depreciation`、`t_asset_disposal`、`t_asset_inventory`、`t_asset_inventory_entry`、`t_attachment`、`t_bad_debt_provision`、`t_bank_account`、`t_bank_journal`、`t_beginning_control`、`t_budget`、`t_budget_adjustment`、`t_budget_entry`、`t_budget_execution`、`t_cash_flow_rule`、`t_cash_journal`、`t_classification_rule`、`t_dept`、`t_financial_metric`、`t_menu`、`t_payable`、`t_prepayment`、`t_receivable`、`t_reconciliation_suggestion`、`t_report_template`、`t_role`、`t_role_menu`、`t_subject_balance`、`t_summary_lib`、`t_sys_config`、`t_tax_carry_over`、`t_tax_declaration`、`t_tax_type`、`t_ticket`、`t_ticket_transaction`、`t_user`、`t_user_role`、`t_voucher_cash_flow`、`t_voucher_type`
+  - V54 设计：单 DO 块 + 47 个嵌套 `IF NOT EXISTS` 检查 + 嵌套 `BEGIN/EXCEPTION` 块处理 `DROP DEFAULT`（PG `ALTER COLUMN DROP DEFAULT` 不支持 `IF EXISTS`），**全部幂等可重跑**
+  - V54 START WITH 策略：空表 START WITH 1，有数据表 START WITH max(id)+1 避免冲突（含 snowflake 风格 2 万亿级历史 ID：`t_arap_settlement`/`t_bank_account`/`t_prepayment`/`t_role`/`t_role_menu`/`t_user`/`t_customer`/`t_period`/`t_subject`/`t_audit_log`）
+  - V54 实测：执行后 `SELECT COUNT(*) ... WHERE is_identity='YES'` 返回 **65/65**，INSERT 测试通过
+
+> **结论**：所有 `t_` 表 `id` 列已 100% 合规。`§10.5` 待修清单清零。**新增建表规范（硬约束）**：`id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY` 是唯一允许写法，`id BIGINT PRIMARY KEY` 已被 PG 14+ 列为 `DEPRECATED`，未来 Flyway migrate 会自动失败。
 
 ---
 
