@@ -628,6 +628,10 @@ async function onReview(row: BankStatementVO) {
   try {
     await reviewStatement(row.id)
     ElMessage.success('确认完成')
+    // 如果当前有筛选待确认状态，清空筛选后刷新
+    if (query.value.reviewStatus === 'PENDING') {
+      query.value.reviewStatus = undefined
+    }
     await refreshAll()
   } catch (e: any) {
     ElMessage.error(e?.message || '确认失败')
@@ -667,6 +671,10 @@ async function onBatchConfirm() {
   try {
     batchConfirmed.value = await batchConfirmStatements(selectedIds.value)
     resultDialogVisible.value = true
+    // 如果当前有筛选待确认状态，清空筛选后刷新
+    if (query.value.reviewStatus === 'PENDING') {
+      query.value.reviewStatus = undefined
+    }
     await refreshAll()
   } catch { /* handled */ }
 }
