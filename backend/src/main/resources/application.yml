@@ -91,3 +91,9 @@ ai:
   enabled: true
   ocr-enabled: false
   embedding-enabled: false
+
+# P31: 发票导入后自动执行全流程 (审核发票→审核业务单→生凭证)
+# 默认 false (不影响现有流程), 开启后导入完成立即异步处理
+# 人仍是凭证审核的最终负责人 (凭证状态 PENDING_REVIEW 等待人工终审)
+invoice:
+  auto-flow-after-import: false

@@ -25,3 +25,8 @@ spring:
     multipart:
       max-file-size: 50MB
       max-request-size: 100MB
+
+# P31: dev 环境开启发票导入后自动全流程 (审核发票→审核业务单→生凭证)
+# 人仍是凭证审核的最终负责人 (凭证状态 PENDING_REVIEW 等待人工终审)
+invoice:
+  auto-flow-after-import: true
