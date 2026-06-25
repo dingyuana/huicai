@@ -103,7 +103,7 @@ ALTER TABLE t_bank_statement ADD COLUMN IF NOT EXISTS ai_suggested_action VARCHA
 ALTER TABLE t_bank_statement ADD COLUMN IF NOT EXISTS ai_business_scene VARCHAR(100);
 
 -- P1 出纳确认相关（review_status 独立于 match_status）
-ALTER TABLE t_bank_statement ADD COLUMN IF NOT EXISTS review_status VARCHAR(20) DEFAULT 'PENDING';
+ALTER TABLE t_bank_statement ADD COLUMN IF NOT EXISTS review_status VARCHAR(20) DEFAULT 'classified';
 ALTER TABLE t_bank_statement ADD COLUMN IF NOT EXISTS reviewed_by BIGINT;
 ALTER TABLE t_bank_statement ADD COLUMN IF NOT EXISTS reviewed_at TIMESTAMP;
 
