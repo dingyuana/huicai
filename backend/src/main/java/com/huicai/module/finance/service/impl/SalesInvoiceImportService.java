@@ -10,6 +10,7 @@ import com.huicai.module.arap.mapper.CustomerMapper;
 import com.huicai.module.arap.mapper.ReceivableMapper;
 import com.huicai.module.arap.service.ReceivableStateMachineService;
 import com.huicai.module.finance.entity.BusinessDocEntity;
+import com.huicai.module.finance.entity.BusinessDocEntryEntity;
 import com.huicai.module.finance.entity.VoucherEntity;
 import com.huicai.module.finance.entity.VoucherEntryEntity;
 import com.huicai.module.finance.mapper.BusinessDocEntryMapper;
@@ -365,13 +366,10 @@ public class SalesInvoiceImportService {
                     continue;
                 }
                 String period = row.invoiceDate.format(DateTimeFormatter.ofPattern("yyyyMM"));
-                BusinessDocEntity doc = createBusinessDoc(row, customerId, period, batchId);
-                // 不创建凭证 — 按状态机设计，导入只写数据，等 CONFIRMED 后人工点"生成凭证"
-                // createVoucher(doc, row, customerId, period);
-                OutputInvoiceEntity invoice = insertOutputInvoice(row, customerId, period, doc);
-                createReceivableFromInvoice(doc, row, customerId, period);
+                // P31 修正: 导入时只创建发票，业务单和应收单在审核后才生成
+                OutputInvoiceEntity invoice = insertOutputInvoice(row, customerId, period);
                 importedInvoiceIds.add(invoice.getId());
-                success++; docCreated++;
+                success++;
             } catch (Exception e) {
                 log.warn("处理发票行失败 row={}: {}", row.rowNum, e.getMessage());
                 java.util.Map<String, Object> err = new java.util.LinkedHashMap<>();
@@ -391,114 +389,13 @@ public class SalesInvoiceImportService {
             log.info("导入后红冲关联完成: matched={}, batchId={}", redMatched, batchId);
         }
 
-        // P31: 配置开启时，异步执行全流程 (审核发票→审核业务单→生凭证)
-        if (autoFlowAfterImport && !importedInvoiceIds.isEmpty()) {
-            postProcessBatchAsync(batchId, importedInvoiceIds);
-        }
-
         return Map.of(
                 "total", rows.size(), "success", success,
                 "docCreated", docCreated, "voucherCreated", voucherCreated,
                 "duplicateSkipped", duplicateSkipped,
                 "autoFlowEnabled", autoFlowAfterImport,
-                "postProcessTriggered", autoFlowAfterImport && !importedInvoiceIds.isEmpty(),
                 "errors", errors, "batchId", batchId
         );
-    }
-
-    /**
-     * P31: 异步执行导入批次后处理. 流程:
-     * 1. 批量提交+审核发票 (PENDING_CONFIRM → PENDING_REVIEW → CONFIRMED)
-     * 2. 批量提交+审核业务单 (DRAFT → SUBMITTED → APPROVED)
-     * 2.5 批量审核应收单 (DRAFT → CONFIRMED, 业务单 APPROVED 后同步确认)
-     * 3. 批量生成凭证 (APPROVED → VOUCHERED, 凭证状态为 PENDING_REVIEW 等待人工终审)
-     * 异常情况: 记录失败明细到日志, 不影响批次整体结果.
-     */
-    @Async
-    public void postProcessBatchAsync(String batchId, List<Long> invoiceIds) {
-        log.info("P31 异步后处理开始: batchId={}, invoiceCount={}", batchId, invoiceIds.size());
-        int invoiceOk = 0, invoiceFail = 0;
-        int docOk = 0, docFail = 0;
-        int receivableOk = 0, receivableFail = 0;
-        int voucherOk = 0, voucherFail = 0;
-        List<String> failureDetails = new ArrayList<>();
-
-        // Step 1: 审核发票
-        for (Long invoiceId : invoiceIds) {
-            try {
-                invoiceStateMachineService.submitForReview(invoiceId, DEFAULT_USER_ID);
-                invoiceStateMachineService.confirm(invoiceId, DEFAULT_USER_ID);
-                invoiceOk++;
-            } catch (Exception e) {
-                invoiceFail++;
-                failureDetails.add("发票#" + invoiceId + " 审核失败: " + e.getMessage());
-                log.warn("P31 发票审核失败: invoiceId={}, err={}", invoiceId, e.getMessage());
-            }
-        }
-
-        // Step 2: 审核业务单 (根据当前批次下所有 doc, 状态为 DRAFT 的)
-        List<BusinessDocEntity> batchDocs = docMapper.selectList(
-                new LambdaQueryWrapper<BusinessDocEntity>().eq(BusinessDocEntity::getSource, "INVOICE_IMPORT")
-                        .eq(BusinessDocEntity::getStatus, "DRAFT")
-                        .last("LIMIT " + invoiceIds.size() * 2)
-        );
-        for (BusinessDocEntity doc : batchDocs) {
-            try {
-                businessDocService.submit(doc.getId(), DEFAULT_USER_ID);
-                businessDocService.approve(doc.getId(), DEFAULT_USER_ID);
-                docOk++;
-            } catch (Exception e) {
-                docFail++;
-                failureDetails.add("业务单#" + doc.getId() + " 审核失败: " + e.getMessage());
-                log.warn("P31 业务单审核失败: docId={}, err={}", doc.getId(), e.getMessage());
-            }
-        }
-
-        // Step 2.5: 审核应收单 (业务单 APPROVED 后，同步确认应收单)
-        for (BusinessDocEntity doc : batchDocs) {
-            try {
-                // 重新查状态, 跳过未审核通过的
-                BusinessDocEntity fresh = docMapper.selectById(doc.getId());
-                if (fresh == null || !"APPROVED".equals(fresh.getStatus())) {
-                    continue;
-                }
-                // 根据业务单 ID 查询对应的应收单
-                List<ReceivableEntity> receivables = receivableMapper.selectList(
-                        new LambdaQueryWrapper<ReceivableEntity>().eq(ReceivableEntity::getDocId, doc.getId())
-                );
-                for (ReceivableEntity recv : receivables) {
-                    receivableStateMachineService.confirm(recv.getId(), DEFAULT_USER_ID);
-                    receivableOk++;
-                }
-            } catch (Exception e) {
-                receivableFail++;
-                failureDetails.add("业务单#" + doc.getId() + " 应收单审核失败: " + e.getMessage());
-                log.warn("P31 应收单审核失败: docId={}, err={}", doc.getId(), e.getMessage());
-            }
-        }
-
-        // Step 3: 生成凭证
-        for (BusinessDocEntity doc : batchDocs) {
-            try {
-                // 重新查状态, 跳过未审核通过的
-                BusinessDocEntity fresh = docMapper.selectById(doc.getId());
-                if (fresh == null || !"APPROVED".equals(fresh.getStatus())) {
-                    continue;
-                }
-                businessDocService.generateVoucher(doc.getId(), DEFAULT_USER_ID);
-                voucherOk++;
-            } catch (Exception e) {
-                voucherFail++;
-                failureDetails.add("业务单#" + doc.getId() + " 生凭证失败: " + e.getMessage());
-                log.warn("P31 生凭证失败: docId={}, err={}", doc.getId(), e.getMessage());
-            }
-        }
-
-        log.info("P31 异步后处理完成: batchId={}, 发票审核={}/{}, 业务单审核={}/{}, 应收单审核={}/{}, 生凭证={}/{}",
-                batchId, invoiceOk, invoiceIds.size(), docOk, docFail, receivableOk, receivableFail, voucherOk, voucherFail);
-        if (!failureDetails.isEmpty()) {
-            log.warn("P31 失败明细 (batchId={}):\n{}", batchId, String.join("\n", failureDetails));
-        }
     }
 
     public Map<String, Object> importInvoices(MultipartFile file) {
@@ -523,6 +420,15 @@ public class SalesInvoiceImportService {
         doc.setSource("INVOICE_IMPORT");
         doc.setCreatedBy(DEFAULT_USER_ID);
         docMapper.insert(doc);
+
+        // P31: 创建业务单分录（供 generateVoucher 使用）
+        BusinessDocEntryEntity entry = new BusinessDocEntryEntity();
+        entry.setDocId(doc.getId());
+        entry.setAmount(row.totalAmount);
+        entry.setSummary(row.goodsName);
+        entry.setSortOrder(1);
+        docEntryMapper.insert(entry);
+
         return doc;
     }
 
@@ -625,7 +531,7 @@ public class SalesInvoiceImportService {
         log.info("自动创建科目: {} {}", code, name);
     }
 
-    private OutputInvoiceEntity insertOutputInvoice(ParsedInvoiceRow row, Long customerId, String period, BusinessDocEntity doc) {
+    private OutputInvoiceEntity insertOutputInvoice(ParsedInvoiceRow row, Long customerId, String period) {
         OutputInvoiceEntity inv = new OutputInvoiceEntity();
         inv.setInvoiceNo(row.invoiceNo);
         inv.setInvoiceDate(row.invoiceDate);
@@ -644,8 +550,9 @@ public class SalesInvoiceImportService {
         inv.setTotalAmount(row.totalAmount);
         inv.setInvoiceType("SPECIAL");
         inv.setStatus(InvoiceStatus.PENDING_CONFIRM);
-        inv.setDocId(doc.getId());
-        inv.setVoucherId(doc.getVoucherId());
+        // P31 修正: 导入时不关联业务单，审核后才创建
+        inv.setDocId(null);
+        inv.setVoucherId(null);
         inv.setRemark(row.remark);
         inv.setCreatedBy(DEFAULT_USER_ID);
         inv.setUpdatedAt(LocalDateTime.now());
