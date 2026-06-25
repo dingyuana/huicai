@@ -154,7 +154,7 @@ public class TaxController {
         return R.ok();
     }
 
-    @Operation(summary = "审核通过 (PENDING_REVIEW → CONFIRMED)")
+    @Operation(summary = "审核通过 (PENDING_REVIEW → CONFIRMED → P31 自动创建应收单+凭证)")
     @PostMapping("/output-invoices/{id}/confirm")
     public R<Void> confirm(@PathVariable Long id,
             @RequestParam(required = false) Long userId) {

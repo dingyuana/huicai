@@ -26,6 +26,8 @@ import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Lazy;
 
 /**
  * 销售发票状态机实现.
@@ -49,6 +51,13 @@ public class OutputInvoiceStateMachineServiceImpl implements OutputInvoiceStateM
 
     @Value("${invoice.auto-flow-after-import:false}")
     private boolean autoFlowAfterImport;
+
+    /**
+     * 自注入实现 AOP 代理调用, 使 @Async / @Transactional 生效.
+     */
+    @Lazy
+    @Autowired
+    private OutputInvoiceStateMachineServiceImpl self;
 
     @Override
     @Transactional
@@ -75,10 +84,8 @@ public class OutputInvoiceStateMachineServiceImpl implements OutputInvoiceStateM
         invoiceMapper.updateById(entity);
         log.info("销售发票审核通过: id={}, userId={}", invoiceId, userId);
 
-        // P31: 发票审核通过后，异步执行后续流程 (审核业务单→审核应收单→生凭证)
-        if (autoFlowAfterImport) {
-            postProcessAfterInvoiceConfirm(invoiceId, userId);
-        }
+        // P31: 通过自注入调用 AOP 代理, 确保 @Async 在独立事务中执行业务单→应收单→凭证全流程
+        self.postProcessAfterInvoiceConfirm(invoiceId, userId);
     }
 
     @Override
