@@ -1,0 +1,76 @@
+name: Full Stack Test
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  backend-test:
+    name: 后端测试 + 覆盖率检查
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 设置 JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: maven
+
+      - name: 运行 Maven 测试 + JaCoCo 覆盖率检查
+        run: cd backend && mvn test
+
+      - name: 上传覆盖率报告
+        uses: actions/upload-artifact@v4
+        with:
+          name: jacoco-report
+          path: backend/target/site/jacoco/
+
+  api-coverage-check:
+    name: 接口覆盖检测
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 设置 Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: 运行接口覆盖检测
+        run: python scripts/check_api_coverage.py
+
+  route-coverage-check:
+    name: 路由覆盖检测
+    runs-on: ubuntu-latest
+    needs: api-coverage-check
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 设置 Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: 运行路由覆盖检测
+        run: python scripts/check_route_coverage.py
+
+  build-check:
+    name: 构建验证
+    runs-on: ubuntu-latest
+    needs: backend-test
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 设置 JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: maven
+
+      - name: 后端构建验证
+        run: cd backend && mvn package -DskipTests
