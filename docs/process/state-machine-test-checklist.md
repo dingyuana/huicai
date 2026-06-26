@@ -138,6 +138,51 @@ void confirm_wrongStatus_shouldThrowAndNotCreateVoucher() {
 
 ---
 
+## 前端测试模式
+
+前端同样适用"正向 + 负向断言"模式，分三层：
+
+| 层 | 工具 | 负向断言方式 |
+|----|------|-------------|
+| **API 单元** | Vitest + `vi.mock(request)` | `assertApiNotCalled(spy, 'mark-vouchered')` |
+| **组件单元** | Vue Test Utils + Vitest | `assertElementNotExists(wrapper, '[data-action=...]')` |
+| **e2e** | Playwright | `expect(voucherCountAfter).toBe(voucherCountBefore)` |
+
+### 前端状态机测试模板
+
+```typescript
+// ===== API 层 =====
+test('confirmOutputInvoice 不应误调 markVouchered', async () => {
+  mockRequest.post.mockResolvedValue(undefined)
+  await taxApi.confirmOutputInvoice(1)
+
+  // 正向：confirm 端点被调用
+  StateMachineTestHelper.assertApiCalled(mockRequest.post, '/confirm')
+  // 负向：mark-vouchered 端点未被调用
+  StateMachineTestHelper.assertApiNotCalled(mockRequest.post, 'mark-vouchered')
+})
+
+// ===== 组件层 =====
+test('PENDING_REVIEW 状态不应显示"生成凭证"按钮', async () => {
+  const wrapper = mount(OutputInvoiceList, { props: { /* status=PENDING_REVIEW */ } })
+  // 负向：生成凭证按钮不应该存在
+  StateMachineTestHelper.assertElementNotExists(wrapper, '[data-action="markVouchered"]')
+})
+
+// ===== e2e 层 =====
+test('审核通过后凭证数不应增加', async ({ page }) => {
+  const countBefore = await page.locator('.voucher-row').count()
+  await page.click('text=审核通过')
+  await page.waitForResponse('**/confirm')
+  // 负向：凭证数不变
+  await expect(page.locator('.voucher-row')).toHaveCount(countBefore)
+})
+```
+
+### 相关文件
+
+- `src/__tests__/helper/StateMachineTestHelper.ts` — 前端状态机负向断言辅助类
+
 ## 相关文件
 
 - `src/test/java/com/huicai/common/test/StateMachineTestHelper.java` — 负向断言辅助类
