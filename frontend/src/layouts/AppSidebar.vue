@@ -74,6 +74,7 @@
         </template>
         <el-menu-item index="/finance/voucher">凭证管理</el-menu-item>
         <el-menu-item index="/finance/voucher-template">凭证模板</el-menu-item>
+        <el-menu-item index="/finance/voucher-setup">凭证设置</el-menu-item>
         <el-menu-item index="/finance/ledger">账簿查询</el-menu-item>
         <el-menu-item index="/finance/period-close">期末结账</el-menu-item>
         <el-menu-item index="/finance/business-doc">业务单据</el-menu-item>
@@ -81,6 +82,7 @@
         <el-menu-item index="/finance/bank-journal">银行日记账</el-menu-item>
         <el-menu-item index="/finance/bank-statement">银行对账单</el-menu-item>
         <el-menu-item index="/finance/bank-reconciliation">银行对账</el-menu-item>
+        <el-menu-item index="/finance/pending-pool">待处理流水</el-menu-item>
         <el-menu-item index="/finance/cash-journal">现金日记账</el-menu-item>
         <el-menu-item index="/finance/ticket">票据管理</el-menu-item>
         <el-menu-item index="/finance/beginning-balance">期初建账</el-menu-item>
@@ -110,6 +112,9 @@
         <el-menu-item index="/arap/receivable">应收明细</el-menu-item>
         <el-menu-item index="/arap/payable">应付明细</el-menu-item>
         <el-menu-item index="/arap/bad-debt">坏账准备</el-menu-item>
+        <el-menu-item index="/arap/prepayment">预收/预付管理</el-menu-item>
+        <el-menu-item index="/arap/aging">账龄分析</el-menu-item>
+        <el-menu-item index="/arap/settlement">核销单</el-menu-item>
         <el-menu-item index="/arap/reconciliation-workbench">往来核销</el-menu-item>
       </el-sub-menu>
 

@@ -44,10 +44,8 @@ import static org.mockito.Mockito.*;
  * <p>覆盖全部 7 个状态转换方法，每个方法同时包含正向断言（该做的做了）
  * 和负向断言（不该做的没做）。
  *
- * <p>关键设计：confirm() 的负向断言验证了 confirm() 只做状态变更，
- * 不创建业务单/应收单/凭证。此前 confirm() 调用了
- * postProcessAfterInvoiceConfirm() 导致副作用泄漏，已修复。
- * 修复后这些测试全部通过。
+ * <p>关键设计：confirm() 的正向断言验证了 confirm() 既变更状态，
+ * 也自动创建业务单(DRAFT) + 应收单(DRAFT)（P31 修正）。
  *
  * @see <a href="file://docs/process/state-machine-test-checklist.md">状态机测试契约检查清单</a>
  */
@@ -189,11 +187,12 @@ class OutputInvoiceStateMachineServiceImplTest {
     // ====================================================================
 
     @Test
-    @DisplayName("confirm_正向_状态变更正确")
+    @DisplayName("confirm_正向_状态变更+创建业务单和应收单")
     void confirm_positive_statusChanged() {
         // given
         OutputInvoiceEntity inv = invoice(InvoiceStatus.PENDING_REVIEW);
         when(invoiceMapper.selectById(INVOICE_ID)).thenReturn(inv);
+        lenient().when(valueOps.increment(anyString())).thenReturn(1L);
 
         // when
         service.confirm(INVOICE_ID, USER_ID);
@@ -201,49 +200,11 @@ class OutputInvoiceStateMachineServiceImplTest {
         // then — 正向：状态变更
         assertEquals(InvoiceStatus.CONFIRMED, inv.getStatus());
         assertEquals(USER_ID, inv.getUpdatedBy());
-        verify(invoiceMapper, atLeastOnce()).updateById(any(OutputInvoiceEntity.class));
-    }
-
-    @Test
-    @DisplayName("confirm_负向_不应创建凭证")
-    void confirm_negative_noVoucherCreated() {
-        // given
-        OutputInvoiceEntity inv = invoice(InvoiceStatus.PENDING_REVIEW);
-        when(invoiceMapper.selectById(INVOICE_ID)).thenReturn(inv);
-
-        // when
-        service.confirm(INVOICE_ID, USER_ID);
-
-        // then — 负向：确认阶段不应创建凭证
-        StateMachineTestHelper.verifyNoVoucherCreated(voucherMapper, voucherEntryMapper);
-    }
-
-    @Test
-    @DisplayName("confirm_负向_不应创建业务单")
-    void confirm_negative_noDocumentCreated() {
-        // given
-        OutputInvoiceEntity inv = invoice(InvoiceStatus.PENDING_REVIEW);
-        when(invoiceMapper.selectById(INVOICE_ID)).thenReturn(inv);
-
-        // when
-        service.confirm(INVOICE_ID, USER_ID);
-
-        // then — 负向：确认阶段不应创建业务单
-        StateMachineTestHelper.verifyNoDocumentCreated(docMapper, docEntryMapper);
-    }
-
-    @Test
-    @DisplayName("confirm_负向_不应创建应收单")
-    void confirm_negative_noReceivableCreated() {
-        // given
-        OutputInvoiceEntity inv = invoice(InvoiceStatus.PENDING_REVIEW);
-        when(invoiceMapper.selectById(INVOICE_ID)).thenReturn(inv);
-
-        // when
-        service.confirm(INVOICE_ID, USER_ID);
-
-        // then — 负向：确认阶段不应创建应收单
-        StateMachineTestHelper.verifyNoReceivableCreated(receivableMapper);
+        // then — 正向：创建业务单
+        verify(docMapper).insert(any(BusinessDocEntity.class));
+        verify(docEntryMapper).insert(any(BusinessDocEntryEntity.class));
+        // then — 正向：创建应收单
+        verify(receivableMapper).insert(any(ReceivableEntity.class));
     }
 
     @Test

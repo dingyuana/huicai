@@ -87,6 +87,9 @@ public class OutputInvoiceStateMachineServiceImpl implements OutputInvoiceStateM
         entity.setUpdatedBy(userId);
         invoiceMapper.updateById(entity);
         log.info("销售发票审核通过: id={}, userId={}", invoiceId, userId);
+
+        // P31: 审核后自动生成业务单(DRAFT) + 应收单(DRAFT)
+        createBusinessDocAndReceivableAfterConfirm(invoiceId, userId);
     }
 
     @Override

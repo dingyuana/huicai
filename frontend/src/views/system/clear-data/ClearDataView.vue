@@ -131,32 +131,30 @@ import { getVoucherPage } from '@/api/modules/voucher'
 import { pageReceivable, pagePayable } from '@/api/modules/arap'
 
 const stats = ref({ statements: 0, invoices: 0, receivables: 0, payables: 0, businessDocs: 0, vouchers: 0 })
+const loadErrors = ref<string[]>([])
 
 async function fetchStats() {
-  try {
-    const stmts = await getBankStatementPage({ current: 1, size: 1 }) as any
-    stats.value.statements = stmts.total || 0
-  } catch { /* ignore */ }
-  try {
-    const docs = await getBusinessDocPage({ docType: 'INVOICE_OUT', current: 1, size: 1 }) as any
-    stats.value.invoices = docs.total || 0
-  } catch { /* ignore */ }
-  try {
-    const docs = await getBusinessDocPage({ current: 1, size: 1 }) as any
-    stats.value.businessDocs = docs.total || 0
-  } catch { /* ignore */ }
-  try {
-    const vchs = await getVoucherPage({ current: 1, size: 1 }) as any
-    stats.value.vouchers = vchs.total || 0
-  } catch { /* ignore */ }
-  try {
-    const recv = await pageReceivable({ current: 1, size: 1 }) as any
-    stats.value.receivables = recv.total || 0
-  } catch { /* ignore */ }
-  try {
-    const pay = await pagePayable({ current: 1, size: 1 }) as any
-    stats.value.payables = pay.total || 0
-  } catch { /* ignore */ }
+  loadErrors.value = []
+  const tryFetch = async (label: string, fn: () => Promise<any>, setter: (v: number) => void) => {
+    try {
+      const res = await fn()
+      setter(res.total || 0)
+    } catch (e: any) {
+      loadErrors.value.push(`${label}: ${e?.message || '请求失败'}`)
+    }
+  }
+  await Promise.all([
+    tryFetch('银行流水', () => getBankStatementPage({ current: 1, size: 1 }), v => stats.value.statements = v),
+    tryFetch('发票记录', () => getBusinessDocPage({ docType: 'INVOICE_OUT', current: 1, size: 1 }), v => stats.value.invoices = v),
+    tryFetch('业务单据', () => getBusinessDocPage({ current: 1, size: 1 }), v => stats.value.businessDocs = v),
+    tryFetch('凭证', () => getVoucherPage({ current: 1, size: 1 }), v => stats.value.vouchers = v),
+    tryFetch('应收明细', () => pageReceivable({ current: 1, size: 1 }), v => stats.value.receivables = v),
+    tryFetch('应付明细', () => pagePayable({ current: 1, size: 1 }), v => stats.value.payables = v),
+  ])
+  if (loadErrors.value.length > 0) {
+    ElMessage.warning(`部分统计数据加载失败 (${loadErrors.value.length} 项)`)
+    console.warn('数据维护-统计加载异常:', loadErrors.value)
+  }
 }
 
 async function onClear(type: string) {

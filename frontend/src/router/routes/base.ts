@@ -117,6 +117,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '凭证模板', permission: 'voucher:template:list', keepAlive: true },
       },
       {
+        path: 'finance/voucher-setup',
+        name: 'VoucherSetupView',
+        component: () => import('@/views/finance/voucher-setup/VoucherSetupView.vue'),
+        meta: { title: '凭证设置', permission: 'voucher:type:list', keepAlive: true },
+      },
+      {
         path: 'finance/voucher/edit',
         name: 'VoucherEdit',
         component: () => import('@/views/finance/voucher/VoucherEdit.vue'),
@@ -282,7 +288,9 @@ const routes: RouteRecordRaw[] = [
       },
       {
         path: 'arap/settlement',
-        redirect: 'arap/reconciliation-workbench',
+        name: 'SettlementList',
+        component: () => import('@/views/arap/settlement/SettlementList.vue'),
+        meta: { title: '核销单', permission: 'arap:settlement:list', keepAlive: true },
       },
       {
         path: 'finance/arap/reconciliation-workbench',
