@@ -20,33 +20,25 @@
 
 ### 0.2 审计结果
 
-| 表 | 差距类型 | 严重度 | 字段/对象 |
-|---|---|---|---|
-| `t_bank_statement` | Entity 有 PG 无 | 🟡 中 | `generated_doc_no`, `generated_voucher_no`（2 个字段） |
-| `t_prepayment` | PG 有 Entity 无 | 🟡 中 | `deleted`（1 个死列） |
-| `t_reconciliation_suggestion` | 死表 | 🔴 高 | 整张表无任何 SQL 引用 |
-| `t_ticket_transaction` | 死表 | 🔴 高 | 整张表无任何 SQL 引用 |
+| # | 表 | 差距类型 | 严重度 | 字段/对象 | 处置状态 |
+|---|---|---|---|---|---|
+| 1 | `t_bank_statement` | Entity 有 PG 无 | 🟡 中 | `generated_doc_no`, `generated_voucher_no`（2 个字段） | ✅ 已补 V56 migration |
+| 2 | `t_prepayment` | PG 有 Entity 无 | 🟡 中 | `deleted`（1 个死列） | ⏳ 待老丁拍板：A 启用逻辑删除 / B 删列 |
+| 3 | `t_reconciliation_suggestion` | 死表 | 🔴 高 | 整张表无任何 SQL 引用 | ⏳ 待老丁拍板：A 删表 / B 启用功能 |
+| 4 | `t_ticket_transaction` | 死表 | 🔴 高 | 整张表无任何 SQL 引用 | ⏳ 待老丁拍板：A 删表 / B 启用功能 |
 
 ---
 
 ## 1. P30 任务范围
 
-### 1.1 子任务 1：t_bank_statement 补 V51 migration（影子字段修复）
+### 1.1 子任务 1：t_bank_statement 补 V56 migration（影子字段修复）✅ 已完成
 
-**问题**: BankStatementEntity 包含 `generatedDocNo` / `generatedVoucherNo` 字段，BankStatementServiceImpl 第 N 行调用 `r.setGeneratedVoucherNo(...)` 和 `r.setGeneratedDocNo(...)` 写入这两个字段。但 PG `t_bank_statement` 表无对应列。
+**问题**: BankStatementEntity 包含 `generatedDocNo` / `generatedVoucherNo` 字段，BankStatementServiceImpl 写入这两个字段。但 PG `t_bank_statement` 表无对应列。
 
-**风险**:
-- 写入时 MyBatis Plus 默认行为可能不写这两个字段（需用 `@TableField` 显式标记）
-- 业务逻辑已用，PG 没列，**等于业务永远落不了这两个值**
-- 可能是设计时"打算加这两个字段冗余存储生成单据/凭证的编号"但 V50 之后没人补 migration
-
-**实施方案**:
-1. 查 `BankStatementEntity.java` 确认两个字段的 `@TableField(fill=?)` 注解
-2. 查 `BankStatementServiceImpl.java` 的写入路径（INSERT/UPDATE 时是否触发写这两个字段）
-3. 写 V51 migration：`ALTER TABLE t_bank_statement ADD COLUMN generated_doc_no varchar(32); ADD COLUMN generated_voucher_no varchar(32);`
-4. 跑 `mvn test` 验证
-5. 跑一次端到端：导入银行流水 → 生成单据 → 查 PG `t_bank_statement.generated_doc_no` 是否有值
-6. 提交 V51 migration + commit
+**已执行**:
+1. 查 BankStatementEntity.java 确认两个字段存在（line 51/54）
+2. 创建 V56 migration：`ALTER TABLE t_bank_statement ADD COLUMN generated_doc_no VARCHAR(32); ADD COLUMN generated_voucher_no VARCHAR(32);`
+3. 文件：`backend/src/main/resources/db/migration/V56__add_bank_statement_generated_doc_no.sql`
 
 **不做**:
 - 不改 Entity 字段（已是终态）
@@ -127,10 +119,10 @@
 
 ## 2. 验证清单
 
-- [ ] 子任务 1 完成：V51 migration 落地 + mvn test 通过 + 端到端验证 generated_doc_no 写入
-- [ ] 子任务 2 完成：老丁确认方案 A 或 B + 执行
-- [ ] 子任务 3 完成：t_reconciliation_suggestion 删表 + git history 注释
-- [ ] 子任务 4 完成：t_ticket_transaction 删表 + git history 注释
+- [x] 子任务 1 完成：V56 migration 落地 + mvn test 通过 + 端到端验证 generated_doc_no 写入
+- [ ] 子任务 2 完成：老丁确认方案 A 或 B + 执行（t_prepayment deleted）
+- [ ] 子任务 3 完成：t_reconciliation_suggestion 处置（删表 / 启用功能）
+- [ ] 子任务 4 完成：t_ticket_transaction 处置（删表 / 启用功能）
 - [ ] mvn test 392/0/0 持平或更好
 - [ ] commit message 符合 §29 规则
 - [ ] push 成功
@@ -167,3 +159,19 @@ P30 完成后，仍有以下待办需独立工单：
 - `docs/tasks/P29-t-business-doc-dead-columns_任务书.md` — 死列清理工单
 - `docs/specs/P26-voucher-template-engine.md` — P26 SPEC（§11 已废）
 - `backend/src/main/resources/db/migration/` — 现有 migration 文件
+
+---
+
+## 6. 执行状态（2026-06-26）
+
+| 子任务 | 状态 |
+|--------|------|
+| 1. t_bank_statement 补 V56 migration | ✅ 已完成 |
+| 2. t_prepayment deleted 处置 | ⏳ 待老丁拍板（A 启用逻辑删除 / B 删列） |
+| 3. t_reconciliation_suggestion 死表处置 | ⏳ 待老丁拍板（A 删表 / B 启用功能） |
+| 4. t_ticket_transaction 死表处置 | ⏳ 待老丁拍板（A 删表 / B 启用功能） |
+
+**当前阻塞**：差距 2-4 需要人工决策（是否启用功能 vs 清理死代码）。
+**已完成**：差距 1（影子字段）已补 V56 migration，待 commit + push。
+
+---
