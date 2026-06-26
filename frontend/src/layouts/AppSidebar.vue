@@ -61,7 +61,6 @@
         </template>
         <el-menu-item index="/basis/subject">科目管理</el-menu-item>
         <el-menu-item index="/basis/period">会计期间</el-menu-item>
-        <el-menu-item index="/basis/voucher-type">凭证类型</el-menu-item>
         <el-menu-item index="/basis/summary-lib">常用摘要</el-menu-item>
         <el-menu-item index="/basis/config">系统参数</el-menu-item>
       </el-sub-menu>
@@ -73,7 +72,6 @@
           <span>财务核心</span>
         </template>
         <el-menu-item index="/finance/voucher">凭证管理</el-menu-item>
-        <el-menu-item index="/finance/voucher-template">凭证模板</el-menu-item>
         <el-menu-item index="/finance/voucher-setup">凭证设置</el-menu-item>
         <el-menu-item index="/finance/ledger">账簿查询</el-menu-item>
         <el-menu-item index="/finance/period-close">期末结账</el-menu-item>
@@ -87,7 +85,6 @@
         <el-menu-item index="/finance/ticket">票据管理</el-menu-item>
         <el-menu-item index="/finance/beginning-balance">期初建账</el-menu-item>
         <el-menu-item index="/finance/carryover-guide">结转向导</el-menu-item>
-        <el-menu-item index="/finance/sales-invoice-import">销售发票导入</el-menu-item>
       </el-sub-menu>
 
       <!-- 固定资产 -->

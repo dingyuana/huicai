@@ -87,12 +87,6 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '会计期间', permission: 'periods:manage', keepAlive: true },
       },
       {
-        path: 'basis/voucher-type',
-        name: 'VoucherTypeList',
-        component: () => import('@/views/system/voucher-type/VoucherTypeList.vue'),
-        meta: { title: '凭证类型', permission: 'voucher:type:list', keepAlive: true },
-      },
-      {
         path: 'basis/summary-lib',
         name: 'SummaryLibList',
         component: () => import('@/views/system/summary-lib/SummaryLibList.vue'),
@@ -109,12 +103,6 @@ const routes: RouteRecordRaw[] = [
         name: 'VoucherList',
         component: () => import('@/views/finance/voucher/VoucherList.vue'),
         meta: { title: '凭证管理', permission: 'voucher:list', keepAlive: true },
-      },
-      {
-        path: 'finance/voucher-template',
-        name: 'VoucherTemplateList',
-        component: () => import('@/views/finance/voucher-template/VoucherTemplateView.vue'),
-        meta: { title: '凭证模板', permission: 'voucher:template:list', keepAlive: true },
       },
       {
         path: 'finance/voucher-setup',
@@ -217,12 +205,6 @@ const routes: RouteRecordRaw[] = [
         name: 'BeginningBalanceView',
         component: () => import('@/views/finance/beginning-balance/BeginningBalanceView.vue'),
         meta: { title: '期初建账', permission: 'beginning:balance:init', keepAlive: true },
-      },
-      {
-        path: 'finance/sales-invoice-import',
-        name: 'SalesInvoiceImport',
-        component: () => import('@/views/finance/sales-invoice/SalesInvoiceImportView.vue'),
-        meta: { title: '销售发票导入', permission: 'sales:invoice:import', keepAlive: true },
       },
       // 固定资产
       {
