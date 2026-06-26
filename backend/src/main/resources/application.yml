@@ -91,6 +91,17 @@ ai:
   enabled: true
   ocr-enabled: false
   embedding-enabled: false
+  # NVIDIA API 配置 (minimaxai/minimax-m3 多模态模型)
+  nvidia:
+    enabled: true
+    api-key: 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
+    base-url: https://integrate.api.nvidia.com/v1
+    model: minimaxai/minimax-m3
+    max-tokens: 8192
+    temperature: 1.00
+    top-p: 0.95
+    connect-timeout: 30
+    read-timeout: 120
 
 # P31: 发票导入后自动执行全流程 (审核发票→审核业务单→生凭证)
 # 默认 false (不影响现有流程), 开启后导入完成立即异步处理
