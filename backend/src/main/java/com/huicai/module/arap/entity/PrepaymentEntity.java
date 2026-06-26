@@ -2,10 +2,6 @@ package com.huicai.module.arap.entity;
 
 import com.baomidou.mybatisplus.annotation.*;
 import com.huicai.common.annotation.StatusChangeable;
-import com.baomidou.mybatisplus.annotation.*;
-import com.huicai.common.annotation.StatusChangeable;
-import com.baomidou.mybatisplus.annotation.*;
-import com.huicai.common.annotation.StatusChangeable;
 import lombok.Data;
 import java.io.Serializable;
 import java.math.BigDecimal;
@@ -18,10 +14,13 @@ import java.time.LocalDate;
 @TableName("t_prepayment")
 public class PrepaymentEntity implements Serializable {
 
-    @TableId(type = IdType.ASSIGN_ID)
+    @TableId(type = IdType.AUTO)
     private Long id;
 
     private Long tenantId;
+
+    @TableLogic
+    private Integer deleted;
 
     private Long vendorId;
 
