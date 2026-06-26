@@ -8,15 +8,20 @@ import com.fasterxml.jackson.databind.JsonDeserializer;
 import com.fasterxml.jackson.databind.JsonSerializer;
 import com.fasterxml.jackson.databind.SerializerProvider;
 import com.fasterxml.jackson.databind.module.SimpleModule;
+import com.fasterxml.jackson.datatype.jsr310.ser.LocalDateTimeSerializer;
+import com.fasterxml.jackson.datatype.jsr310.deser.LocalDateTimeDeserializer;
+import org.springframework.boot.autoconfigure.jackson.Jackson2ObjectMapperBuilderCustomizer;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 import java.io.IOException;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 
 /**
  * Jackson 全局配置
- * 将 Long 类型序列化为字符串，避免前端 JavaScript 处理 19 位 Snowflake ID 时精度丢失
- * 反序列化时兼容数字和字符串两种格式
+ * 1. 将 Long 类型序列化为字符串，避免前端 JavaScript 处理 19 位 Snowflake ID 时精度丢失
+ * 2. LocalDateTime 统一格式化为 yyyy-MM-dd'T'HH:mm:ss（秒级精度，去除微秒）
  */
 @Configuration
 public class JacksonConfig {
@@ -48,5 +53,14 @@ public class JacksonConfig {
             }
         });
         return module;
+    }
+
+    @Bean
+    public Jackson2ObjectMapperBuilderCustomizer localDateTimeCustomizer() {
+        DateTimeFormatter fmt = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss");
+        return builder -> {
+            builder.serializerByType(LocalDateTime.class, new LocalDateTimeSerializer(fmt));
+            builder.deserializerByType(LocalDateTime.class, new LocalDateTimeDeserializer(fmt));
+        };
     }
 }

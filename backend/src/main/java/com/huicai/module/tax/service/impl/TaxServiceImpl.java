@@ -301,6 +301,7 @@ public class TaxServiceImpl implements TaxService {
                 .setTotalAmount(inv.getTotalAmount())
                 .setPeriod(inv.getPeriod())
                 .setCustomerName(inv.getCustomerName());
+        ctx.getVariables().put("发票号", inv.getInvoiceNo() != null ? inv.getInvoiceNo() : "");
         VoucherTemplateEntity template = templateMatcher.match(ctx);
         if (template != null) {
             List<VoucherTemplateLineEntity> tplLines = voucherTemplateService.getLines(template.getId());
@@ -330,12 +331,14 @@ public class TaxServiceImpl implements TaxService {
         voucher.setVoucherTypeId(VOUCHER_TYPE_ID);
         voucher.setStatus("DRAFT");
         voucher.setSource("GENERATED");
-        voucher.setSummary("发票转凭证: " + inv.getInvoiceNo());
+        String summaryBase = "发票转凭证: " + (inv.getInvoiceNo() != null ? inv.getInvoiceNo() : "") + " - " + (inv.getCustomerName() != null ? inv.getCustomerName() : "");
+        voucher.setSummary(summaryBase);
         voucher.setTotalDebit(totalAmt);
         voucher.setTotalCredit(totalAmt);
         voucher.setCreatedBy(userId);
         voucherMapper.insert(voucher);
 
+        String entrySummary = (inv.getInvoiceNo() != null ? inv.getInvoiceNo() : "") + " " + (inv.getCustomerName() != null ? inv.getCustomerName() : "");
         int sort = 1;
         // 借：应收账款 1122
         VoucherEntryEntity dr = new VoucherEntryEntity();
@@ -343,7 +346,7 @@ public class TaxServiceImpl implements TaxService {
         dr.setSubjectId(subjectAr.getId());
         dr.setDebit(totalAmt);
         dr.setCredit(BigDecimal.ZERO);
-        dr.setSummary(inv.getCustomerName());
+        dr.setSummary(entrySummary);
         dr.setSortOrder(sort++);
         voucherEntryMapper.insert(dr);
 
@@ -353,7 +356,7 @@ public class TaxServiceImpl implements TaxService {
         cr1.setSubjectId(subjectRevenue.getId());
         cr1.setDebit(BigDecimal.ZERO);
         cr1.setCredit(exclTax);
-        cr1.setSummary(inv.getCustomerName());
+        cr1.setSummary(entrySummary);
         cr1.setSortOrder(sort++);
         voucherEntryMapper.insert(cr1);
 
@@ -364,7 +367,7 @@ public class TaxServiceImpl implements TaxService {
             cr2.setSubjectId(subjectOutputTax.getId());
             cr2.setDebit(BigDecimal.ZERO);
             cr2.setCredit(taxAmt);
-            cr2.setSummary(inv.getCustomerName());
+            cr2.setSummary(entrySummary);
             cr2.setSortOrder(sort++);
             voucherEntryMapper.insert(cr2);
         }
@@ -388,7 +391,7 @@ public class TaxServiceImpl implements TaxService {
         voucher.setVoucherTypeId(VOUCHER_TYPE_ID);
         voucher.setStatus("DRAFT");
         voucher.setSource("GENERATED");
-        voucher.setSummary(TemplateEngine.renderSummary("发票转凭证: {客户名称}", ctx));
+        voucher.setSummary(TemplateEngine.renderSummary("发票转凭证: {发票号} - {客户名称}", ctx));
         voucher.setTemplateId(template.getId());
         voucher.setCreatedBy(userId);
         voucherMapper.insert(voucher);
