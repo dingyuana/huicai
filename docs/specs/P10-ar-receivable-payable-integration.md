@@ -22,7 +22,7 @@
 
 | 入口 | 现状 | 是否写 t_receivable/payable |
 |---|---|---|
-| 销售发票 Excel 导入 (`SalesInvoiceImportService.confirmImport`) | 写 `t_business_doc`(INVOICE_OUT) + 凭证 + `t_output_invoice` | ❌ **不写** |
+| 销售发票 Excel 导入 (`SalesInvoiceImportService.confirmImport`) | 写 `t_output_invoice`（PENDING_CONFIRM）+ `t_business_doc`(INVOICE_OUT, DRAFT) + 应收单(DRAFT) + 凭证(DRAFT) — 全部在 `confirm()` 审核通过时一次性生成 | ✅ **写（P31）** |
 | 采购发票 Excel 导入 | **整个 ImportService 不存在** | ❌ **完全不接** |
 | 银行流水 B 类确认 (`AutoGenerationService.generateDocThenVoucher`) | 写 `t_business_doc`(RECEIPT/PAYMENT) + 凭证 | ❌ **不写也不核销** |
 
@@ -55,44 +55,27 @@
 
 ### P10-1：销售发票导入补写应收单
 
-**改动文件**：
-- `SalesInvoiceImportService.java` — 注入 `ReceivableService` + `ReceivableMapper`
-- 新建 `t_receivable` 写入逻辑
+**P31 修正（2026-06-26）**：销售发票导入的流程已从"导入时直接生成全部"改为"导入→人工审核→自动生成"。
+应收单和凭证不再在导入时生成，而是在 `confirm()` 审核通过后的 `postProcessAfterInvoiceConfirm()` 中统一生成。
 
-**改动点**（行 309-311 增加 1 步）：
-
-```java
-// 现有 3 步
-BusinessDocEntity doc = createBusinessDoc(row, customerId, period, batchId);  // 309
-createVoucher(doc, row, customerId, period);                                  // 310
-insertOutputInvoice(row, customerId, period, doc);                           // 311
-// 新增第 4 步
-createReceivableFromInvoice(doc, row, customerId, period);                   // 312
+**当前流程**：
+```
+导入 → PENDING_CONFIRM → 提交审核 → PENDING_REVIEW → 人工审核(confirm) 
+  → 自动生成业务单(DRAFT) + 应收单(DRAFT) + 凭证(DRAFT) 
+  → 发票状态=VOUCHERED → 凭证人工审核(凭证管理页面)
 ```
 
-**应收单创建逻辑**（新增方法）：
-```java
-private void createReceivableFromInvoice(BusinessDocEntity doc, ParsedInvoiceRow row,
-                                          Long customerId, String period) {
-    ReceivableEntity recv = new ReceivableEntity();
-    recv.setCustomerId(customerId);
-    recv.setDocId(doc.getId());              // 关联 t_business_doc
-    recv.setVoucherId(doc.getVoucherId());   // 关联凭证
-    recv.setPeriod(period);
-    recv.setTxDate(row.invoiceDate);
-    recv.setAmount(row.totalAmount);
-    recv.setSettledAmount(BigDecimal.ZERO);
-    recv.setUnsettledAmount(row.totalAmount);  // 关键：未结清 = 全额
-    recv.setSummary(row.goodsName);
-    receivableMapper.insert(recv);
-}
-```
+**改动位置**：`OutputInvoiceStateMachineServiceImpl.postProcessAfterInvoiceConfirm()`，统一管理
+- `createBusinessDocFromInvoice()` — 创建业务单 + 分录
+- `createReceivableFromInvoice()` — 创建应收单（关联 docId）
+- `taxService.generateVoucherFromInvoice()` — 创建凭证
+- 最后同步 `voucherId` 到业务单和应收单
 
-**单测**（在 P7 已有 `SalesInvoiceImportServiceTest` 上加）：
-- `confirmImport_应收单已生成`：mock 应收 mapper，断言 insert 1 次
-- `confirmImport_部分重复_应收单只生成新增部分`：复用 P7 已有去重测试
+**单测**（P31 新增）：
+- `confirm_应当自动生成业务单_应收单_凭证`：mock 各 mapper，断言 insert 和 update 次数正确
+- `confirm_模板匹配失败_走硬编码降级`：验证降级路径
 
-**Commit**：`feat(finance): 销售发票导入自动生成应收单`
+**Commit**：`P31: 销售发票确认后自动生成应收单+凭证`
 
 ---
 

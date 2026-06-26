@@ -1,10 +1,13 @@
 # P21-a SPEC — 销售发票状态机实现规格书
 
-> 状态：**已实施** | 优先级：高（P21-a）
+> 状态：**已实施（P31修正）** | 优先级：高（P21-a）
 > 依据：`docs/需求分析书_发票与凭证状态机_V1.0.md` §3.1 发票状态机
 > 目标：为 `OutputInvoiceEntity`（销售发票）建立完整 8 状态机，消除 magic string
 > 工期：单批交付，3 个 commit
 > 拆分说明：原 P21 拆分为 P21-a（销售发票，本文件）+ P21-b（采购发票，已废弃）
+>
+> **P31 修正（2026-06-26）**：`confirm()` 现在自动生成应收单 + 凭证。
+> 流程变更为：发票导入 → 人工审核(confirm) → 自动生成应收单据和凭证 → 人工审核(凭证)。
 
 ---
 
@@ -283,7 +286,13 @@ public interface OutputInvoiceStateMachineService {
     /** 提交审核 (PENDING_CONFIRM → PENDING_REVIEW) */
     void submitForReview(Long invoiceId, Long userId);
 
-    /** 审核通过 (PENDING_REVIEW → CONFIRMED) */
+    /**
+     * 审核通过 (PENDING_REVIEW → CONFIRMED).
+     *
+     * P31: 审核通过后自动触发 postProcessAfterInvoiceConfirm,
+     * 直接生成业务单(DRAFT) + 应收单(DRAFT) + 凭证(DRAFT).
+     * 发票状态变为 VOUCHERED；无需中间的业务单审批环节。
+     */
     void confirm(Long invoiceId, Long userId);
 
     /** 审核驳回 (PENDING_REVIEW → PENDING_CONFIRM, 记录驳回原因) */
@@ -292,7 +301,11 @@ public interface OutputInvoiceStateMachineService {
     /** 回退到待审核 (CONFIRMED → PENDING_REVIEW, 选错结算状态) */
     void revertToReview(Long invoiceId, Long userId);
 
-    /** 标记已生成凭证 (CONFIRMED → VOUCHERED, 记录 voucherId) */
+    /**
+     * 标记已生成凭证 (CONFIRMED → VOUCHERED, 记录 voucherId).
+     * P31: 该方法仅由 TaxService.generateVoucherFromInvoice 内部调用，
+     * 前端不再直接调用此接口。
+     */
     void markVouchered(Long invoiceId, Long voucherId, Long userId);
 
     /** 核销扣减后更新状态 (VOUCHERED → FULLY_RECONCILED / PARTIALLY_RECONCILED) */
@@ -303,7 +316,7 @@ public interface OutputInvoiceStateMachineService {
 }
 ```
 
-**实现** `OutputInvoiceStateMachineServiceImpl.java`（关键骨架）：
+**实现** `OutputInvoiceStateMachineServiceImpl.java`（关键骨架，P31修正后）：
 
 ```java
 package com.huicai.module.tax.service.impl;
@@ -311,6 +324,12 @@ package com.huicai.module.tax.service.impl;
 import com.huicai.module.tax.constant.InvoiceStatus;
 import com.huicai.module.tax.entity.OutputInvoiceEntity;
 import com.huicai.module.tax.mapper.OutputInvoiceMapper;
+import com.huicai.module.tax.service.TaxService;
+import com.huicai.module.finance.mapper.BusinessDocMapper;
+import com.huicai.module.finance.mapper.BusinessDocEntryMapper;
+import com.huicai.module.arap.mapper.ReceivableMapper;
+import com.huicai.module.finance.entity.BusinessDocEntity;
+import com.huicai.module.arap.entity.ReceivableEntity;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -318,12 +337,25 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class OutputInvoiceStateMachineServiceImpl
         implements OutputInvoiceStateMachineService {
 
     private final OutputInvoiceMapper invoiceMapper;
+    private final BusinessDocMapper docMapper;
+    private final BusinessDocEntryMapper docEntryMapper;
+    private final ReceivableMapper receivableMapper;
+    private final StringRedisTemplate redisTemplate;
 
+    @Lazy
+    @Autowired
+    private TaxService taxService;
+
+    /**
+     * 审核通过 (PENDING_REVIEW → CONFIRMED).
+     *
+     * P31: 审核通过后自动触发 postProcessAfterInvoiceConfirm,
+     * 直接创建业务单 + 应收单 + 凭证，发票状态变为 VOUCHERED。
+     */
     @Override
     @Transactional
     public void confirm(Long invoiceId, Long userId) {
@@ -339,61 +371,97 @@ public class OutputInvoiceStateMachineServiceImpl
         entity.setUpdatedBy(userId);
         invoiceMapper.updateById(entity);
         log.info("销售发票确认: id={}, userId={}", invoiceId, userId);
+
+        // P31: 审核后自动生成业务单 + 应收单 + 凭证
+        postProcessAfterInvoiceConfirm(invoiceId, userId);
     }
 
-    @Override
+    /**
+     * 发票审核通过后自动生成：业务单(DRAFT) + 应收单(DRAFT) + 凭证(DRAFT)。
+     *
+     * 流程：发票审核 → 生成应收单据和凭证（无需中间的业务单审批环节）。
+     * 业务单仅作为追溯记录，无需手动审批。
+     */
     @Transactional
-    public void markVouchered(Long invoiceId, Long voucherId, Long userId) {
-        OutputInvoiceEntity entity = invoiceMapper.selectById(invoiceId);
-        if (!InvoiceStatus.isVoucherable(entity.getStatus())) {
-            throw new BusinessException(
-                "仅已确认状态可生成凭证，当前: " + entity.getStatus());
+    public void postProcessAfterInvoiceConfirm(Long invoiceId, Long userId) {
+        OutputInvoiceEntity invoice = invoiceMapper.selectById(invoiceId);
+        if (invoice == null) {
+            log.warn("发票不存在: invoiceId={}", invoiceId);
+            return;
         }
-        entity.setStatus(InvoiceStatus.VOUCHERED);
-        entity.setVoucherId(voucherId);
-        entity.setUpdatedBy(userId);
-        invoiceMapper.updateById(entity);
-        log.info("销售发票已生成凭证: invoiceId={}, voucherId={}",
-            invoiceId, voucherId);
+
+        // 1) 创建业务单（DRAFT）
+        BusinessDocEntity doc = createBusinessDocFromInvoice(invoice, userId);
+
+        // 2) 创建应收单（DRAFT）
+        createReceivableFromInvoice(doc, invoice, userId);
+
+        // 3) 直接生成凭证（模板匹配 or 硬编码科目）
+        taxService.generateVoucherFromInvoice(invoiceId, userId);
+
+        // 4) 同步 voucherId 到业务单和应收单
+        OutputInvoiceEntity updated = invoiceMapper.selectById(invoiceId);
+        if (updated != null && updated.getVoucherId() != null) {
+            doc.setVoucherId(updated.getVoucherId());
+            docMapper.updateById(doc);
+
+            ReceivableEntity recv = receivableMapper.selectOne(
+                new LambdaQueryWrapper<ReceivableEntity>()
+                    .eq(ReceivableEntity::getDocId, doc.getId()));
+            if (recv != null) {
+                recv.setVoucherId(updated.getVoucherId());
+                receivableMapper.updateById(recv);
+            }
+        }
+        log.info("发票审核后自动生成凭证完成: invoiceId={}", invoiceId);
     }
 
-    @Override
-    @Transactional
-    public void onReconciliationUpdate(Long invoiceId,
-            BigDecimal unsettledAmount, Long userId) {
-        OutputInvoiceEntity entity = invoiceMapper.selectById(invoiceId);
-        if (!InvoiceStatus.isVouchered(entity.getStatus())) {
-            // 未生成凭证的发票不可能进入核销流程
-            throw new BusinessException("仅已生成凭证的发票可核销");
-        }
-        String newStatus = unsettledAmount.compareTo(BigDecimal.ZERO) == 0
-            ? InvoiceStatus.FULLY_RECONCILED
-            : InvoiceStatus.PARTIALLY_RECONCILED;
-        entity.setStatus(newStatus);
-        entity.setUpdatedBy(userId);
-        invoiceMapper.updateById(entity);
-        log.info("销售发票核销更新: id={}, status={}", invoiceId, newStatus);
+    private BusinessDocEntity createBusinessDocFromInvoice(
+            OutputInvoiceEntity invoice, Long userId) {
+        BusinessDocEntity doc = new BusinessDocEntity();
+        doc.setDocNo(generateDocNo(invoice.getPeriod()));
+        doc.setDocType("INVOICE_OUT");
+        doc.setDocDate(invoice.getInvoiceDate());
+        doc.setPeriod(invoice.getPeriod());
+        doc.setAmount(invoice.getTotalAmount());
+        doc.setCustomerId(invoice.getCustomerId());
+        doc.setSummary(invoice.getCustomerName());
+        doc.setInvoiceNo(invoice.getInvoiceNo());
+        doc.setStatus("DRAFT");
+        doc.setSource("INVOICE_IMPORT");
+        doc.setCreatedBy(userId != null ? userId : 1L);
+        docMapper.insert(doc);
+
+        BusinessDocEntryEntity entry = new BusinessDocEntryEntity();
+        entry.setDocId(doc.getId());
+        entry.setAmount(invoice.getTotalAmount());
+        entry.setInvoiceNo(invoice.getInvoiceNo());
+        entry.setSummary(invoice.getCustomerName());
+        entry.setSortOrder(1);
+        docEntryMapper.insert(entry);
+
+        invoice.setDocId(doc.getId());
+        invoiceMapper.updateById(invoice);
+        return doc;
     }
 
-    @Override
-    @Transactional
-    public void voidInvoice(Long invoiceId, Long userId, String reason) {
-        OutputInvoiceEntity entity = invoiceMapper.selectById(invoiceId);
-        if (!InvoiceStatus.isVoidable(entity.getStatus())) {
-            throw new BusinessException("当前状态不可作废: " + entity.getStatus());
-        }
-        if (reason == null || reason.trim().isEmpty()) {
-            throw new BusinessException("作废必须填写原因");
-        }
-        entity.setStatus(InvoiceStatus.VOIDED);
-        entity.setRemark(appendReason(entity.getRemark(), reason, userId));
-        entity.setUpdatedBy(userId);
-        invoiceMapper.updateById(entity);
-        log.info("销售发票作废: id={}, userId={}, reason={}",
-            invoiceId, userId, reason);
+    private void createReceivableFromInvoice(
+            BusinessDocEntity doc, OutputInvoiceEntity invoice, Long userId) {
+        ReceivableEntity recv = new ReceivableEntity();
+        recv.setCustomerId(invoice.getCustomerId());
+        recv.setDocId(doc.getId());
+        recv.setVoucherId(doc.getVoucherId());
+        recv.setPeriod(invoice.getPeriod());
+        recv.setTxDate(invoice.getInvoiceDate());
+        recv.setAmount(invoice.getTotalAmount());
+        recv.setSettledAmount(BigDecimal.ZERO);
+        recv.setUnsettledAmount(invoice.getTotalAmount());
+        recv.setSummary(invoice.getCustomerName());
+        recv.setStatus(ArapStatus.DRAFT);
+        receivableMapper.insert(recv);
     }
 
-    // submitForReview / reject / revertToReview 实现类似，省略
+    // markVouchered / onReconciliationUpdate / voidInvoice / ... 同前，略
 }
 ```
 
@@ -447,8 +515,12 @@ invoice.setStatus(InvoiceStatus.PENDING_REVIEW);
 | 状态变更的审计日志 | ❌ 本 SPEC 仅 log.info | **P24 AOP 自动捕获** |
 | 与客户档案联动 | ❌ 不涉及 | 现有 P13/P10 |
 
-**关键调用关系**：
-- 本 SPEC `markVouchered` 调用后，触发 VoucherService 生成凭证（由 P22 范围）
+**关键调用关系（P31修正）**：
+- 本 SPEC `confirm` 审核通过后，自动调用 `postProcessAfterInvoiceConfirm`
+  → 创建 `BusinessDocEntity`（DRAFT，业务单）
+  → 创建 `ReceivableEntity`（DRAFT，应收单，P20 范围）
+  → 调用 `TaxService.generateVoucherFromInvoice` 创建 `VoucherEntity`（DRAFT，凭证，P22 范围）
+  → 内部调用 `markVouchered` 将发票状态变为 VOUCHERED
 - 本 SPEC `onReconciliationUpdate` 由 `ReconciliationServiceImpl.execute()` 调用（已存在）
 
 ---
@@ -461,6 +533,7 @@ invoice.setStatus(InvoiceStatus.PENDING_REVIEW);
 | PENDING_CONFIRM → PENDING_REVIEW | `testSubmitForReview()` | submitForReview 成功 |
 | 非 PENDING_CONFIRM 提交失败 | `testSubmitForReviewInvalid()` | 抛 BusinessException |
 | PENDING_REVIEW → CONFIRMED | `testConfirm()` | confirm 成功 |
+| **P31: confirm 后自动生业务单+应收单+凭证** | `testConfirmAutoGeneratesVoucher()` | doc/receivable/voucher 各 insert 1 次，发票状态=VOUCHERED |
 | CONFIRMED → VOUCHERED | `testMarkVouchered()` | markVouchered 成功 |
 | VOUCHERED + unsettled=0 → FULLY_RECONCILED | `testFullyReconciled()` | status=FULLY_RECONCILED |
 | VOUCHERED + unsettled>0 → PARTIALLY_RECONCILED | `testPartiallyReconciled()` | status=PARTIALLY_RECONCILED |
@@ -480,13 +553,20 @@ invoice.setStatus(InvoiceStatus.PENDING_REVIEW);
 | 方法 | 路径 | 说明 |
 |------|------|------|
 | POST | `/api/v1/output-invoices/{id}/submit-review` | 提交审核 |
-| POST | `/api/v1/output-invoices/{id}/confirm` | 审核通过 |
+| POST | `/api/v1/output-invoices/{id}/confirm` | **审核通过（P31：自动触发生成业务单+应收单+凭证）** |
 | POST | `/api/v1/output-invoices/{id}/reject` | 审核驳回 |
 | POST | `/api/v1/output-invoices/{id}/revert` | 回退到待审核 |
 | POST | `/api/v1/output-invoices/{id}/void` | 作废 |
 | GET | `/api/v1/output-invoices?status=VOUCHERED` | 按状态过滤（V38 索引）|
 
+**P31 变更**：
+- `mark-vouchered`（生成凭证）不再是独立前端按钮，凭证由 `confirm` 审核通过后自动生成
+- `POST /api/v1/output-invoices/{id}/mark-vouchered` 仍保留（可用于异常重试），但不对外暴露
+- 凭证生成后状态会变为 VOUCHERED，前端不会再显示"生成凭证"按钮
+
 **前端**：在销售发票列表页加状态筛选器 + 操作按钮（按状态显示可用操作）。
+- confirm 成功后，前端应刷新列表显示 VOUCHERED 状态
+- 凭证的"人工审核"在凭证管理页面完成（P22）
 
 ---
 
