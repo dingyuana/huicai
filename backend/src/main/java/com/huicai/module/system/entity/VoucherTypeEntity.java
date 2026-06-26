@@ -27,9 +27,6 @@ public class VoucherTypeEntity {
     /** 编号规则 */
     private String numberingRule;
 
-    /** 默认绑定的凭证模板 (选此类型时自动加载分录行) */
-    private Long templateId;
-
     /** 是否启用 */
     private Boolean isActive;
 

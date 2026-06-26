@@ -295,12 +295,9 @@ public class VoucherServiceImpl extends ServiceImpl<VoucherMapper, VoucherEntity
 
     @Override
     public VoucherTemplateVO getTemplateByVoucherType(Long voucherTypeId) {
-        if (voucherTypeId == null) return null;
-        VoucherTypeEntity type = voucherTypeService.getById(voucherTypeId);
-        if (type == null || type.getTemplateId() == null) return null;
-        var template = voucherTemplateService.getById(type.getTemplateId());
-        if (template == null || Boolean.FALSE.equals(template.getIsActive())) return null;
-        return VoucherTemplateVO.fromEntity(template, voucherTemplateService.getLines(template.getId()));
+        // 凭证类型与模板已解耦，不再自动加载模板。
+        // 自动制证场景由模板匹配引擎（source + businessType + direction）接管。
+        return null;
     }
 
     @Override

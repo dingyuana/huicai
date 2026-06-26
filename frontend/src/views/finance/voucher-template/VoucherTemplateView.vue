@@ -28,21 +28,6 @@
         </template>
       </el-table-column>
       <el-table-column prop="numberPrefix" label="凭证前缀" width="100" />
-      <el-table-column label="已绑凭证类型" min-width="160">
-        <template #default="{ row }">
-          <el-tag
-            v-for="vt in row.boundVoucherTypes || []"
-            :key="vt.id"
-            size="small"
-            type="success"
-            effect="light"
-            style="margin-right:4px"
-          >
-            {{ vt.name }}
-          </el-tag>
-          <span v-if="!row.boundVoucherTypes?.length" class="text-muted">未绑定</span>
-        </template>
-      </el-table-column>
       <el-table-column label="状态" width="80">
         <template #default="{ row }">
           <el-switch
