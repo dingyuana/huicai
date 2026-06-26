@@ -421,11 +421,12 @@ public class SalesInvoiceImportService {
         doc.setCreatedBy(DEFAULT_USER_ID);
         docMapper.insert(doc);
 
-        // P31: 创建业务单分录（供 generateVoucher 使用）
+        // P31: 创建业务单分录（供 generateVoucher 使用），带入发票号
         BusinessDocEntryEntity entry = new BusinessDocEntryEntity();
         entry.setDocId(doc.getId());
         entry.setAmount(row.totalAmount);
         entry.setSummary(row.goodsName);
+        entry.setInvoiceNo(row.invoiceNo);
         entry.setSortOrder(1);
         docEntryMapper.insert(entry);
 

@@ -8,6 +8,7 @@ import com.huicai.common.exception.BusinessException;
 import com.huicai.module.finance.dto.VoucherCreateDTO;
 import com.huicai.module.finance.dto.VoucherCreateDTO.EntryDTO;
 import com.huicai.module.finance.dto.VoucherQueryDTO;
+import com.huicai.module.finance.dto.VoucherTemplateVO;
 import com.huicai.module.finance.dto.VoucherVO;
 import com.huicai.module.finance.dto.VoucherVO.EntryVO;
 import com.huicai.module.finance.entity.SubjectBalanceEntity;
@@ -20,6 +21,7 @@ import com.huicai.module.finance.service.SubjectBalanceService;
 import com.huicai.module.finance.service.VoucherNoService;
 import com.huicai.module.finance.service.VoucherService;
 import com.huicai.module.finance.service.VoucherStateMachineService;
+import com.huicai.module.finance.service.VoucherTemplateService;
 import com.huicai.module.system.entity.PeriodEntity;
 import com.huicai.module.system.entity.Subject;
 import com.huicai.module.system.entity.UserEntity;
@@ -55,6 +57,7 @@ public class VoucherServiceImpl extends ServiceImpl<VoucherMapper, VoucherEntity
     private final VoucherNoService voucherNoService;
     private final SubjectBalanceService subjectBalanceService;
     private final VoucherTypeService voucherTypeService;
+    private final VoucherTemplateService voucherTemplateService;
     private final SubjectService subjectService;
     private final PeriodService periodService;
     private final UserMapper userMapper;
@@ -288,6 +291,16 @@ public class VoucherServiceImpl extends ServiceImpl<VoucherMapper, VoucherEntity
         assertPeriodOpen(entity.getPeriod());
         voucherMapper.batchUpdateStatus(Collections.singletonList(id), "AUDITED", userId);
         log.info("反过账凭证: id={}, userId={}", id, userId);
+    }
+
+    @Override
+    public VoucherTemplateVO getTemplateByVoucherType(Long voucherTypeId) {
+        if (voucherTypeId == null) return null;
+        VoucherTypeEntity type = voucherTypeService.getById(voucherTypeId);
+        if (type == null || type.getTemplateId() == null) return null;
+        var template = voucherTemplateService.getById(type.getTemplateId());
+        if (template == null || Boolean.FALSE.equals(template.getIsActive())) return null;
+        return VoucherTemplateVO.fromEntity(template, voucherTemplateService.getLines(template.getId()));
     }
 
     @Override

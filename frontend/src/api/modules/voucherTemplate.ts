@@ -15,6 +15,13 @@ export interface TemplateLineVO {
   lineOrder: number
 }
 
+/** 已绑定的凭证类型 */
+export interface BoundVoucherTypeVO {
+  id: number
+  name: string
+  code?: string
+}
+
 /** 凭证模板VO */
 export interface VoucherTemplateVO {
   id: number
@@ -30,6 +37,7 @@ export interface VoucherTemplateVO {
   createdAt: string
   updatedAt: string
   lines: TemplateLineVO[]
+  boundVoucherTypes?: BoundVoucherTypeVO[]
 }
 
 /** 创建请求 */

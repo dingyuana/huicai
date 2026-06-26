@@ -33,8 +33,9 @@
           <span v-else>-</span>
         </el-descriptions-item>
         <el-descriptions-item label="摘要" :span="3">{{ doc.enrichedSummary || doc.summary || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="凭证ID">
-          <span v-if="doc.voucherId">#{{ doc.voucherId }}</span>
+        <el-descriptions-item label="凭证号">
+          <span v-if="doc.voucherNo">{{ doc.voucherNo }}</span>
+          <span v-else-if="doc.voucherId">#{{ doc.voucherId }}</span>
           <span v-else style="color:#909399">未生成</span>
         </el-descriptions-item>
         <el-descriptions-item label="制单人">{{ doc.createdByName || '-' }}</el-descriptions-item>

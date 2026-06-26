@@ -5,6 +5,7 @@ import com.huicai.common.response.R;
 import com.huicai.module.finance.dto.VoucherCreateDTO;
 import com.huicai.module.finance.dto.VoucherQueryDTO;
 import com.huicai.module.finance.dto.VoucherStatusDTO;
+import com.huicai.module.finance.dto.VoucherTemplateVO;
 import com.huicai.module.finance.dto.VoucherVO;
 import com.huicai.module.finance.service.VoucherService;
 import com.huicai.module.system.util.SecurityUtils;
@@ -116,5 +117,11 @@ public class VoucherController {
     public R<Void> unpost(@PathVariable Long id) {
         voucherService.unpost(id, SecurityUtils.getCurrentUserId());
         return R.ok();
+    }
+
+    @Operation(summary = "获取凭证类型绑定的模板 (用于手工新增凭证预填分录)")
+    @GetMapping("/template-by-type/{typeId}")
+    public R<VoucherTemplateVO> getTemplateByVoucherType(@PathVariable Long typeId) {
+        return R.ok(voucherService.getTemplateByVoucherType(typeId));
     }
 }

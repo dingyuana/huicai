@@ -6,7 +6,9 @@ import com.huicai.module.finance.entity.VoucherTemplateEntity;
 import com.huicai.module.finance.entity.VoucherTemplateLineEntity;
 import com.huicai.module.finance.service.VoucherTemplateService;
 import com.huicai.module.system.entity.Subject;
+import com.huicai.module.system.entity.VoucherTypeEntity;
 import com.huicai.module.system.mapper.SubjectMapper;
+import com.huicai.module.system.service.VoucherTypeService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
@@ -26,6 +28,7 @@ public class VoucherTemplateController {
 
     private final VoucherTemplateService templateService;
     private final SubjectMapper subjectMapper;
+    private final VoucherTypeService voucherTypeService;
 
     @Operation(summary = "模板列表 (含分录行)")
     @GetMapping
@@ -42,7 +45,7 @@ public class VoucherTemplateController {
         }
 
         List<VoucherTemplateVO> vos = templates.stream()
-                .map(t -> enrichLines(VoucherTemplateVO.fromEntity(t, templateService.getLines(t.getId()))))
+                .map(t -> enrichBoundTypes(enrichLines(VoucherTemplateVO.fromEntity(t, templateService.getLines(t.getId())))))
                 .collect(Collectors.toList());
         return R.ok(vos);
     }
@@ -52,7 +55,7 @@ public class VoucherTemplateController {
     public R<List<VoucherTemplateVO>> listAll() {
         List<VoucherTemplateEntity> templates = templateService.listAllActive();
         List<VoucherTemplateVO> vos = templates.stream()
-                .map(t -> enrichLines(VoucherTemplateVO.fromEntity(t, templateService.getLines(t.getId()))))
+                .map(t -> enrichBoundTypes(enrichLines(VoucherTemplateVO.fromEntity(t, templateService.getLines(t.getId())))))
                 .collect(Collectors.toList());
         return R.ok(vos);
     }
@@ -64,14 +67,14 @@ public class VoucherTemplateController {
         if (template == null) {
             return R.badRequest("模板不存在");
         }
-        return R.ok(enrichLines(VoucherTemplateVO.fromEntity(template, templateService.getLines(id))));
+        return R.ok(enrichBoundTypes(enrichLines(VoucherTemplateVO.fromEntity(template, templateService.getLines(id)))));
     }
 
     @Operation(summary = "创建模板 (含分录行)")
     @PostMapping
     public R<VoucherTemplateVO> create(@RequestBody VoucherTemplateCreateRequest request) {
         VoucherTemplateEntity template = templateService.create(request.toEntity(), request.getLines());
-        return R.ok(enrichLines(VoucherTemplateVO.fromEntity(template, templateService.getLines(template.getId()))));
+        return R.ok(enrichBoundTypes(enrichLines(VoucherTemplateVO.fromEntity(template, templateService.getLines(template.getId())))));
     }
 
     @Operation(summary = "更新模板基本信息")
@@ -117,6 +120,25 @@ public class VoucherTemplateController {
                     }
                 }
             }
+        }
+        return vo;
+    }
+
+    /** 填充已绑定的凭证类型 */
+    private VoucherTemplateVO enrichBoundTypes(VoucherTemplateVO vo) {
+        List<VoucherTypeEntity> types = voucherTypeService.lambdaQuery()
+                .eq(VoucherTypeEntity::getTemplateId, vo.getId())
+                .list();
+        if (types != null && !types.isEmpty()) {
+            vo.setBoundVoucherTypes(types.stream().map(t -> {
+                VoucherTemplateVO.BoundVoucherTypeVO b = new VoucherTemplateVO.BoundVoucherTypeVO();
+                b.setId(t.getId());
+                b.setName(t.getName());
+                b.setCode(t.getCode());
+                return b;
+            }).collect(Collectors.toList()));
+        } else {
+            vo.setBoundVoucherTypes(List.of());
         }
         return vo;
     }

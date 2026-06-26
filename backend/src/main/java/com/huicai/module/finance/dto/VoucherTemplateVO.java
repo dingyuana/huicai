@@ -28,6 +28,14 @@ public class VoucherTemplateVO {
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
     private List<LineVO> lines;
+    private List<BoundVoucherTypeVO> boundVoucherTypes;
+
+    @Data
+    public static class BoundVoucherTypeVO {
+        private Long id;
+        private String name;
+        private String code;
+    }
 
     @Data
     public static class LineVO {

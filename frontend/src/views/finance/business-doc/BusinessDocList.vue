@@ -62,9 +62,10 @@
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="凭证ID" width="100" align="center">
+        <el-table-column label="凭证号" width="140" align="center">
           <template #default="{ row }">
-            <span v-if="row.voucherId">#{{ row.voucherId }}</span>
+            <span v-if="row.voucherNo">{{ row.voucherNo }}</span>
+            <span v-else-if="row.voucherId">#{{ row.voucherId }}</span>
             <span v-else>-</span>
           </template>
         </el-table-column>

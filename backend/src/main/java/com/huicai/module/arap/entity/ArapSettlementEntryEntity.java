@@ -10,7 +10,7 @@ import java.time.LocalDateTime;
 @TableName("t_arap_settlement_entry")
 public class ArapSettlementEntryEntity {
 
-    @TableId(type = IdType.ASSIGN_ID)
+    @TableId(type = IdType.AUTO)
     private Long id;
 
     private Long settlementId;

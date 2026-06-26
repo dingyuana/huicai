@@ -3,6 +3,7 @@ package com.huicai.module.finance.service;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.huicai.module.finance.dto.VoucherCreateDTO;
 import com.huicai.module.finance.dto.VoucherQueryDTO;
+import com.huicai.module.finance.dto.VoucherTemplateVO;
 import com.huicai.module.finance.dto.VoucherVO;
 import com.huicai.module.finance.entity.VoucherEntity;
 
@@ -82,4 +83,9 @@ public interface VoucherService {
      * 反过账(POSTED → AUDITED, 仅纠错用)
      */
     void unpost(Long id, Long userId);
+
+    /**
+     * 根据凭证类型 ID 获取绑定的模板 (含分录行), 无绑定返回 null
+     */
+    VoucherTemplateVO getTemplateByVoucherType(Long voucherTypeId);
 }

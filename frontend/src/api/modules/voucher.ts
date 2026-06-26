@@ -1,5 +1,6 @@
 import request from '@/api/request'
 import type { PageResult } from '@/types/api'
+import type { VoucherTemplateVO } from './voucherTemplate'
 
 /** 分录视图 */
 export interface EntryVO {
@@ -167,4 +168,9 @@ export function rejectVoucher(id: number, reason: string): Promise<void> {
 /** 反过账 (POSTED → AUDITED) */
 export function unpostVoucher(id: number): Promise<void> {
   return request.post(`/vouchers/${id}/unpost`)
+}
+
+/** 根据凭证类型 ID 获取绑定的模板 (用于手工新增凭证预填分录) */
+export function getTemplateByVoucherType(typeId: number): Promise<VoucherTemplateVO | null> {
+  return request.get(`/vouchers/template-by-type/${typeId}`)
 }

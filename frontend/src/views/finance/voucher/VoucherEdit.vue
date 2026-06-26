@@ -18,6 +18,18 @@
           <el-select v-model="form.voucherTypeId" placeholder="选择类型" style="width:180px" filterable>
             <el-option v-for="t in voucherTypes" :key="t.id" :label="t.name" :value="t.id" />
           </el-select>
+          <el-button
+            v-if="!isEdit && form.voucherTypeId"
+            link
+            type="primary"
+            style="margin-left:8px"
+            @click="tryLoadTemplate()"
+          >
+            应用模板
+          </el-button>
+          <span v-if="templateApplied" class="template-hint">
+            已加载: {{ boundTemplateName }}
+          </span>
         </el-form-item>
         <el-form-item label="摘要" prop="summary">
           <el-input v-model="form.summary" placeholder="凭证摘要" style="width:340px" maxlength="500" show-word-limit />
@@ -99,7 +111,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import type { FormInstance } from 'element-plus'
@@ -108,6 +120,7 @@ import {
   createVoucher,
   updateVoucher,
   submitVoucher,
+  getTemplateByVoucherType,
   type VoucherCreateDTO,
 } from '@/api/modules/voucher'
 import { getAllVoucherTypes, type VoucherTypeVO } from '@/api/modules/voucherType'
@@ -135,6 +148,9 @@ const form = ref<VoucherCreateDTO>({
     { subjectId: undefined as unknown as number, debit: 0, credit: 0, summary: '' },
   ],
 })
+
+const templateApplied = ref(false)
+const boundTemplateName = ref<string>('')
 
 const formRules = {
   period: [{ required: true, message: '请输入会计期间', trigger: 'blur' }],
@@ -223,6 +239,54 @@ async function loadSubjectTree() {
   }
 }
 
+function parseAmount(tpl?: string): number {
+  if (!tpl) return 0
+  const s = String(tpl).trim()
+  if (!s || s === '0') return 0
+  const num = parseFloat(s)
+  return Number.isFinite(num) ? num : 0
+}
+
+function applyTemplate(template: { name: string; lines: any[] }) {
+  if (!template?.lines?.length) return
+  const lines = [...template.lines].sort((a, b) => (a.lineOrder ?? 0) - (b.lineOrder ?? 0))
+  form.value.entries = lines.map((l: any) => ({
+    subjectId: l.subjectId,
+    debit: parseAmount(l.drAmountTemplate),
+    credit: parseAmount(l.crAmountTemplate),
+    summary: l.summaryTemplate || '',
+    sortOrder: l.lineOrder,
+  }))
+  for (const e of form.value.entries) onSubjectChange(e)
+  boundTemplateName.value = template.name
+  templateApplied.value = true
+  ElMessage.success(`已应用模板「${template.name}」，共 ${lines.length} 条分录`)
+}
+
+async function tryLoadTemplate(typeId?: number) {
+  const id = typeId ?? form.value.voucherTypeId
+  if (!id) return
+  boundTemplateName.value = ''
+  templateApplied.value = false
+  try {
+    const tpl = await getTemplateByVoucherType(id)
+    if (tpl?.lines?.length) {
+      applyTemplate(tpl)
+    }
+  } catch {
+    // ignore
+  }
+}
+
+watch(
+  () => form.value.voucherTypeId,
+  (newId, oldId) => {
+    if (newId && newId !== oldId && !isEdit) {
+      tryLoadTemplate(newId)
+    }
+  },
+)
+
 async function loadVoucher() {
   if (!editId) return
   const v = await getVoucher(editId)
@@ -294,7 +358,11 @@ async function onSave(submitAfter: boolean) {
 
 onMounted(async () => {
   await Promise.all([loadVoucherTypes(), loadSubjectTree()])
-  if (isEdit) await loadVoucher()
+  if (isEdit) {
+    await loadVoucher()
+  } else if (form.value.voucherTypeId) {
+    await tryLoadTemplate(form.value.voucherTypeId)
+  }
 })
 </script>
 
@@ -340,5 +408,10 @@ onMounted(async () => {
   font-size: 12px;
   color: #909399;
   margin-top: 2px;
+}
+.template-hint {
+  margin-left: 12px;
+  font-size: 12px;
+  color: #67c23a;
 }
 </style>

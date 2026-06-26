@@ -122,6 +122,7 @@ public class BusinessDocServiceImpl implements BusinessDocService {
         List<BusinessDocVO> vos = entities.stream().map(BusinessDocVO::fromEntity).toList();
         populatePartyNames(vos);
         populateUserNames(vos);
+        populateVoucherNos(vos);
         for (int i = 0; i < entities.size(); i++) {
             vos.get(i).setEnrichedSummary(enrichSummary(entities.get(i)));
         }
@@ -147,6 +148,7 @@ public class BusinessDocServiceImpl implements BusinessDocService {
         }
         populatePartyNames(List.of(vo));
         populateUserNames(List.of(vo));
+        populateVoucherNos(List.of(vo));
         vo.setEnrichedSummary(enrichSummary(entity));
         populateSettlementAmounts(vo, entity);
         return vo;
@@ -627,6 +629,26 @@ public class BusinessDocServiceImpl implements BusinessDocService {
             if (vo.getCreatedBy() != null) vo.setCreatedByName(userNameMap.get(vo.getCreatedBy()));
             if (vo.getSubmittedBy() != null) vo.setSubmittedByName(userNameMap.get(vo.getSubmittedBy()));
             if (vo.getApprovedBy() != null) vo.setApprovedByName(userNameMap.get(vo.getApprovedBy()));
+        }
+    }
+
+    /**
+     * 批量填充凭证号: 根据 voucherId 查询 t_voucher 获取 voucherNo
+     */
+    private void populateVoucherNos(List<BusinessDocVO> vos) {
+        if (vos.isEmpty()) return;
+        List<Long> voucherIds = vos.stream()
+                .map(BusinessDocVO::getVoucherId)
+                .filter(java.util.Objects::nonNull)
+                .distinct()
+                .toList();
+        if (voucherIds.isEmpty()) return;
+        Map<Long, String> voucherNoMap = voucherMapper.selectBatchIds(voucherIds).stream()
+                .collect(Collectors.toMap(VoucherEntity::getId, VoucherEntity::getVoucherNo));
+        for (BusinessDocVO vo : vos) {
+            if (vo.getVoucherId() != null) {
+                vo.setVoucherNo(voucherNoMap.get(vo.getVoucherId()));
+            }
         }
     }
 

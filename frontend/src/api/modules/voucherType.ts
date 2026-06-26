@@ -7,6 +7,7 @@ export interface VoucherTypeVO {
   name: string
   sortOrder: number
   numberingRule: string
+  templateId?: number
   isActive: boolean
   remark: string
   createdAt: string
