@@ -212,6 +212,12 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/finance/beginning-balance/BeginningBalanceView.vue'),
         meta: { title: '期初建账', permission: 'beginning:balance:init', keepAlive: true },
       },
+      {
+        path: 'finance/sales-invoice-import',
+        name: 'SalesInvoiceImport',
+        component: () => import('@/views/finance/sales-invoice/SalesInvoiceImportView.vue'),
+        meta: { title: '销售发票导入', permission: 'sales:invoice:import', keepAlive: true },
+      },
       // 固定资产
       {
         path: 'asset/category',

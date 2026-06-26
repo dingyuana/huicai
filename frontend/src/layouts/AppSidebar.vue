@@ -85,6 +85,7 @@
         <el-menu-item index="/finance/ticket">票据管理</el-menu-item>
         <el-menu-item index="/finance/beginning-balance">期初建账</el-menu-item>
         <el-menu-item index="/finance/carryover-guide">结转向导</el-menu-item>
+        <el-menu-item index="/finance/sales-invoice-import">销售发票导入</el-menu-item>
       </el-sub-menu>
 
       <!-- 固定资产 -->

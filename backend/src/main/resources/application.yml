@@ -35,6 +35,7 @@ spring:
     baseline-on-migrate: true
     baseline-version: 1
     table: flyway_schema_history
+    out-of-order: true
 
   jackson:
     date-format: yyyy-MM-dd HH:mm:ss

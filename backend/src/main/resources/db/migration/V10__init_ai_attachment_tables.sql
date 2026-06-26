@@ -16,7 +16,7 @@ CREATE TABLE IF NOT EXISTS t_attachment (
     content_type    VARCHAR(128),
     file_hash       VARCHAR(128),
     ocr_data        JSONB,
-    vector          VECTOR(768),
+    vector          public.vector(768),
     uploaded_by     BIGINT,
     created_at      TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
     deleted         INTEGER      NOT NULL DEFAULT 0
