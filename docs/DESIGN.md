@@ -1245,18 +1245,25 @@ const canBatchPost = computed(() => selectedRows.value.some((r) => r.status === 
 
 凭证模板系统用于将凭证分录的科目映射从硬编码剥离为配置驱动，使新增业务场景无需改代码。目前**模板的"壳"已就绪，但核心引擎和大部分接入点未实现**。
 
+**凭证类型与模板已解耦**（2026-06-26，commit `e81b19b`）：
+- `VoucherTypeEntity.templateId` 已删除（V57 migration）
+- 手工制证选类型时**不再自动加载模板**，只决定凭证编号规则
+- 自动制证场景完全由模板匹配引擎（`source + businessType + direction + classification`）接管
+- 概念清晰：凭证类型 = 分类标签 + 编号规则；凭证模板 = 科目映射配置
+
 ### 20.2 现有基础（✅）
 
 | 组件 | 文件 | 说明 |
 |:-----|:-----|:------|
-| `VoucherTemplateEntity` | `finance/entity/` | 主表：name, classification, numberPrefix, isActive |
-| `VoucherTemplateLineEntity` | `finance/entity/` | 分录行：subjectId, dr/crAmountTemplate, summaryTemplate, direction |
+| `VoucherTemplateEntity` | `finance/entity/` | 主表：name, classification, source, businessType, direction, matchPriority, numberPrefix, isActive |
+| `VoucherTemplateLineEntity` | `finance/entity/` | 分录行：subjectId, dr/crAmountTemplate, summaryTemplate, direction, assistType, assistRequired |
 | `VoucherTemplateService` | `finance/service/` | CRUD + `matchByClassification()` |
-| `VoucherTemplateController` | `finance/controller/` | 完整 REST API |
-| 前端模板管理页 | `views/finance/voucher-template/` | 模板列表 + CRUD 弹窗 |
+| `VoucherTemplateController` | `finance/controller/` | 完整 REST API（已移除 enrichBoundTypes 耦合逻辑） |
+| 前端模板管理页 | `views/finance/voucher-template/` | 模板列表 + CRUD 弹窗（已移除"已绑凭证类型"列） |
 | V23 迁移 | `db/migration/V23__...` | t_voucher_template + t_voucher_template_line + 5 条种子模板 |
 | V40 迁移 | `db/migration/V40__...` | 核销场景模板（reconciliation_receipt/payment） |
 | V42 迁移 | `db/migration/V42__...` | 结算场景模板（settlement_receivable/payment） |
+| V57 迁移 | `db/migration/V57__...` | 删除 t_voucher_type.template_id（类型与模板解耦） |
 | `AutoGenerationService` 接入 | `finance/service/impl/` | A 类制证先查模板，无匹配降级硬编码 |
 | `ReconciliationServiceImpl` 接入 | `arap/service/impl/` | 核销制证使用模板 |
 | `ArapSettlementServiceImpl` 接入 | `arap/service/impl/` | 结算制证使用模板 + `{{settlementNo}}` 变量 |
