@@ -1,0 +1,34 @@
+# 测试环境：使用 H2 内存数据库，PostgreSQL 兼容模式
+spring:
+  datasource:
+    url: jdbc:h2:mem:testdb;MODE=PostgreSQL;DB_CLOSE_DELAY=-1;IGNORECASE=TRUE;
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+
+  flyway:
+    enabled: false  # H2 不完全兼容 PostgreSQL 语法，跳过 Flyway
+
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      database: 1
+
+# JWT 配置 - 至少 256 bits (32 bytes)
+jwt:
+  secret: test-secret-key-for-jwt-signing-this-is-long-enough-256-bits
+  access-token-expiration: 3600000
+  refresh-token-expiration: 86400000
+
+# 禁用 Redis 缓存
+cache:
+  redis:
+    enabled: false
+
+mybatis-plus:
+  global-config:
+    db-config:
+      id-type: auto
+  configuration:
+    map-underscore-to-camel-case: true
