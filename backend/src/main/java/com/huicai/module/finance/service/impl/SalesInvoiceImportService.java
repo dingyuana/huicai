@@ -418,6 +418,7 @@ public class SalesInvoiceImportService {
         doc.setSummary(row.goodsName);
         doc.setStatus("DRAFT");
         doc.setSource("INVOICE_IMPORT");
+        doc.setInvoiceNo(row.invoiceNo);
         doc.setCreatedBy(DEFAULT_USER_ID);
         docMapper.insert(doc);
 

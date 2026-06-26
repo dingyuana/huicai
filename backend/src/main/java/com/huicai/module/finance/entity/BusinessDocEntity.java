@@ -55,6 +55,9 @@ public class BusinessDocEntity {
     /** 来源: MANUAL/OCR/IMPORTED */
     private String source;
 
+    /** 发票号（从发票导入时记录） */
+    private String invoiceNo;
+
     /** OCR 数据 (JSONB) */
     private String ocrData;
 

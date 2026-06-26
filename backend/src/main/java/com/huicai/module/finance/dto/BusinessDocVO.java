@@ -30,6 +30,7 @@ public class BusinessDocVO {
     private String attachmentIds;
     private Long voucherId;
     private String voucherNo;
+    private String invoiceNo;
     private BigDecimal settledAmount;
     private BigDecimal unsettledAmount;
     private Long createdBy;
@@ -73,6 +74,7 @@ public class BusinessDocVO {
         vo.setSource(e.getSource());
         vo.setAttachmentIds(e.getAttachmentIds());
         vo.setVoucherId(e.getVoucherId());
+        vo.setInvoiceNo(e.getInvoiceNo());
         vo.setCreatedBy(e.getCreatedBy());
         vo.setCreatedAt(e.getCreatedAt());
         vo.setSubmittedBy(e.getSubmittedBy());
