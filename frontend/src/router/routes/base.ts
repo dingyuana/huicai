@@ -156,7 +156,7 @@ const routes: RouteRecordRaw[] = [
         path: 'finance/business-doc/edit',
         name: 'BusinessDocEdit',
         component: () => import('@/views/finance/business-doc/BusinessDocEdit.vue'),
-        meta: { title: '编辑单据', permission: 'doc:edit' },
+        meta: { title: '编辑单据', permission: 'doc:list' },
       },
       {
         path: 'finance/business-doc/detail',

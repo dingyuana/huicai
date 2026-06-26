@@ -14,7 +14,7 @@ import com.huicai.module.finance.entity.BusinessDocEntity;
 import com.huicai.module.finance.entity.BusinessDocEntryEntity;
 import com.huicai.module.arap.entity.ReceivableEntity;
 import com.huicai.module.arap.constant.ArapStatus;
-import org.springframework.scheduling.annotation.Async;
+import com.huicai.module.tax.service.TaxService;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import lombok.RequiredArgsConstructor;
@@ -53,11 +53,15 @@ public class OutputInvoiceStateMachineServiceImpl implements OutputInvoiceStateM
     private boolean autoFlowAfterImport;
 
     /**
-     * 自注入实现 AOP 代理调用, 使 @Async / @Transactional 生效.
+     * 自注入实现 AOP 代理调用, 使 @Transactional 生效.
      */
     @Lazy
     @Autowired
     private OutputInvoiceStateMachineServiceImpl self;
+
+    @Lazy
+    @Autowired
+    private TaxService taxService;
 
     @Override
     @Transactional
@@ -83,9 +87,6 @@ public class OutputInvoiceStateMachineServiceImpl implements OutputInvoiceStateM
         entity.setUpdatedBy(userId);
         invoiceMapper.updateById(entity);
         log.info("销售发票审核通过: id={}, userId={}", invoiceId, userId);
-
-        // P31: 通过自注入调用 AOP 代理, 确保 @Async 在独立事务中执行业务单→应收单→凭证全流程
-        self.postProcessAfterInvoiceConfirm(invoiceId, userId);
     }
 
     @Override
@@ -166,94 +167,40 @@ public class OutputInvoiceStateMachineServiceImpl implements OutputInvoiceStateM
     }
 
     /**
-     * P31: 发票审核通过后异步执行后续流程. 流程:
-     * 1. 创建业务单 (INVOICE_OUT, DRAFT) + 业务单分录
-     * 2. 创建应收单 (DRAFT)
-     * 3. 审核业务单 (DRAFT → SUBMITTED → APPROVED)
-     * 4. 审核应收单 (DRAFT → CONFIRMED)
-     * 5. 生成凭证 (APPROVED → VOUCHERED, 凭证状态为 PENDING_REVIEW 等待人工终审)
-     * 异常情况: 记录失败明细到日志, 不影响批次整体结果.
+     * 发票审核通过后自动生成：业务单(DRAFT) + 应收单(DRAFT) + 凭证。
+     *
+     * 流程：发票审核 → 生成应收单据和凭证（无需中间的业务单审批环节）。
+     * 业务单仅作为追溯记录，无需手动审批。
      */
-    @Async
     public void postProcessAfterInvoiceConfirm(Long invoiceId, Long userId) {
-        log.info("P31 发票审核后异步流程开始: invoiceId={}", invoiceId);
-        int docOk = 0, docFail = 0;
-        int receivableOk = 0, receivableFail = 0;
-        int voucherOk = 0, voucherFail = 0;
-        List<String> failureDetails = new ArrayList<>();
-
         OutputInvoiceEntity invoice = invoiceMapper.selectById(invoiceId);
         if (invoice == null) {
-            log.warn("P31 发票不存在: invoiceId={}", invoiceId);
+            log.warn("发票不存在: invoiceId={}", invoiceId);
             return;
         }
 
-        // Step 1: 创建业务单
-        BusinessDocEntity doc = null;
-        try {
-            doc = createBusinessDocFromInvoice(invoice, userId);
-            docOk++;
-        } catch (Exception e) {
-            docFail++;
-            failureDetails.add("发票#" + invoiceId + " 创建业务单失败: " + e.getMessage());
-            log.warn("P31 创建业务单失败: invoiceId={}, err={}", invoiceId, e.getMessage());
-            return;
-        }
+        BusinessDocEntity doc = createBusinessDocFromInvoice(invoice, userId);
+        log.info("发票审核后创建业务单: invoiceId={}, docId={}", invoiceId, doc.getId());
 
-        // Step 2: 创建应收单
-        try {
-            createReceivableFromInvoice(doc, invoice, userId);
-            receivableOk++;
-        } catch (Exception e) {
-            receivableFail++;
-            failureDetails.add("发票#" + invoiceId + " 创建应收单失败: " + e.getMessage());
-            log.warn("P31 创建应收单失败: invoiceId={}, err={}", invoiceId, e.getMessage());
-            return;
-        }
+        createReceivableFromInvoice(doc, invoice, userId);
+        log.info("发票审核后创建应收单完成: invoiceId={}, docId={}", invoiceId, doc.getId());
 
-        // Step 3: 审核业务单
-        try {
-            businessDocService.submit(doc.getId(), userId);
-            businessDocService.approve(doc.getId(), userId);
-            log.info("P31 业务单审核通过: docId={}", doc.getId());
-        } catch (Exception e) {
-            docFail++;
-            failureDetails.add("业务单#" + doc.getId() + " 审核失败: " + e.getMessage());
-            log.warn("P31 业务单审核失败: docId={}, err={}", doc.getId(), e.getMessage());
-            return;
-        }
+        taxService.generateVoucherFromInvoice(invoiceId, userId);
 
-        // Step 4: 审核应收单
-        try {
-            List<ReceivableEntity> receivables = receivableMapper.selectList(
-                    new LambdaQueryWrapper<ReceivableEntity>().eq(ReceivableEntity::getDocId, doc.getId())
-            );
-            for (ReceivableEntity recv : receivables) {
-                receivableStateMachineService.confirm(recv.getId(), userId);
-                receivableOk++;
+        OutputInvoiceEntity updated = invoiceMapper.selectById(invoiceId);
+        if (updated != null && updated.getVoucherId() != null) {
+            doc.setVoucherId(updated.getVoucherId());
+            docMapper.updateById(doc);
+
+            ReceivableEntity recv = receivableMapper.selectOne(
+                    new LambdaQueryWrapper<ReceivableEntity>()
+                            .eq(ReceivableEntity::getDocId, doc.getId()));
+            if (recv != null) {
+                recv.setVoucherId(updated.getVoucherId());
+                receivableMapper.updateById(recv);
             }
-        } catch (Exception e) {
-            receivableFail++;
-            failureDetails.add("业务单#" + doc.getId() + " 应收单审核失败: " + e.getMessage());
-            log.warn("P31 应收单审核失败: docId={}, err={}", doc.getId(), e.getMessage());
-            return;
         }
-
-        // Step 5: 生成凭证
-        try {
-            businessDocService.generateVoucher(doc.getId(), userId);
-            voucherOk++;
-        } catch (Exception e) {
-            voucherFail++;
-            failureDetails.add("业务单#" + doc.getId() + " 生凭证失败: " + e.getMessage());
-            log.warn("P31 生凭证失败: docId={}, err={}", doc.getId(), e.getMessage());
-        }
-
-        log.info("P31 发票审核后异步流程完成: invoiceId={}, 业务单={}/{}, 应收单={}/{}, 生凭证={}/{}",
-                invoiceId, docOk, docFail, receivableOk, receivableFail, voucherOk, voucherFail);
-        if (!failureDetails.isEmpty()) {
-            log.warn("P31 失败明细 (invoiceId={}):\n{}", invoiceId, String.join("\n", failureDetails));
-        }
+        log.info("发票审核后自动生成凭证完成: invoiceId={}", invoiceId);
     }
 
     private static final long DEFAULT_USER_ID = 1L;
@@ -270,6 +217,7 @@ public class OutputInvoiceStateMachineServiceImpl implements OutputInvoiceStateM
         doc.setAmount(invoice.getTotalAmount());
         doc.setCustomerId(invoice.getCustomerId());
         doc.setSummary(invoice.getCustomerName());
+        doc.setInvoiceNo(invoice.getInvoiceNo());
         doc.setStatus("DRAFT");
         doc.setSource("INVOICE_IMPORT");
         doc.setCreatedBy(DEFAULT_USER_ID);
@@ -279,6 +227,7 @@ public class OutputInvoiceStateMachineServiceImpl implements OutputInvoiceStateM
         BusinessDocEntryEntity entry = new BusinessDocEntryEntity();
         entry.setDocId(doc.getId());
         entry.setAmount(invoice.getTotalAmount());
+        entry.setInvoiceNo(invoice.getInvoiceNo());
         entry.setSummary(invoice.getCustomerName());
         entry.setSortOrder(1);
         docEntryMapper.insert(entry);
