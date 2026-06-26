@@ -44,10 +44,10 @@ import static org.mockito.Mockito.*;
  * <p>覆盖全部 7 个状态转换方法，每个方法同时包含正向断言（该做的做了）
  * 和负向断言（不该做的没做）。
  *
- * <p>关键设计：confirm() 的负向断言会暴露当前代码的副作用泄漏问题——
- * confirm() 不应创建业务单/应收单/凭证，但当前实现调用了
- * postProcessAfterInvoiceConfirm() 导致这些副作用发生。
- * 修复后这些测试应全部通过。
+ * <p>关键设计：confirm() 的负向断言验证了 confirm() 只做状态变更，
+ * 不创建业务单/应收单/凭证。此前 confirm() 调用了
+ * postProcessAfterInvoiceConfirm() 导致副作用泄漏，已修复。
+ * 修复后这些测试全部通过。
  *
  * @see <a href="file://docs/process/state-machine-test-checklist.md">状态机测试契约检查清单</a>
  */
@@ -96,7 +96,7 @@ class OutputInvoiceStateMachineServiceImplTest {
         service = new OutputInvoiceStateMachineServiceImpl(
                 invoiceMapper, businessDocService, receivableStateMachineService,
                 docMapper, docEntryMapper, receivableMapper, redisTemplate);
-        // 注入 lazy 依赖（用于 postProcessAfterInvoiceConfirm 中的 taxService 调用）
+        // 注入 lazy 依赖（用于 createBusinessDocAndReceivableAfterConfirm 中的 taxService 调用）
         try {
             var field = OutputInvoiceStateMachineServiceImpl.class.getDeclaredField("taxService");
             field.setAccessible(true);

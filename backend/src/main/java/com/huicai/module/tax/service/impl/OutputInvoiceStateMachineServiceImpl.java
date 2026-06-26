@@ -167,12 +167,14 @@ public class OutputInvoiceStateMachineServiceImpl implements OutputInvoiceStateM
     }
 
     /**
-     * 发票审核通过后自动生成：业务单(DRAFT) + 应收单(DRAFT) + 凭证。
+     * 发票审核通过后异步创建：业务单(DRAFT) + 应收单(DRAFT)。
      *
-     * 流程：发票审核 → 生成应收单据和凭证（无需中间的业务单审批环节）。
-     * 业务单仅作为追溯记录，无需手动审批。
+     * <p>注意：此方法不再生成凭证。凭证生成由用户手动点击「生成凭证」按钮触发
+     * （调用 markVouchered()），符合「人是唯一审核主体」原则。
+     *
+     * <p>调用时机：confirm() 完成后异步调用，或前端显式调用。
      */
-    public void postProcessAfterInvoiceConfirm(Long invoiceId, Long userId) {
+    public void createBusinessDocAndReceivableAfterConfirm(Long invoiceId, Long userId) {
         OutputInvoiceEntity invoice = invoiceMapper.selectById(invoiceId);
         if (invoice == null) {
             log.warn("发票不存在: invoiceId={}", invoiceId);
@@ -184,23 +186,6 @@ public class OutputInvoiceStateMachineServiceImpl implements OutputInvoiceStateM
 
         createReceivableFromInvoice(doc, invoice, userId);
         log.info("发票审核后创建应收单完成: invoiceId={}, docId={}", invoiceId, doc.getId());
-
-        taxService.generateVoucherFromInvoice(invoiceId, userId);
-
-        OutputInvoiceEntity updated = invoiceMapper.selectById(invoiceId);
-        if (updated != null && updated.getVoucherId() != null) {
-            doc.setVoucherId(updated.getVoucherId());
-            docMapper.updateById(doc);
-
-            ReceivableEntity recv = receivableMapper.selectOne(
-                    new LambdaQueryWrapper<ReceivableEntity>()
-                            .eq(ReceivableEntity::getDocId, doc.getId()));
-            if (recv != null) {
-                recv.setVoucherId(updated.getVoucherId());
-                receivableMapper.updateById(recv);
-            }
-        }
-        log.info("发票审核后自动生成凭证完成: invoiceId={}", invoiceId);
     }
 
     private static final long DEFAULT_USER_ID = 1L;
