@@ -80,8 +80,60 @@ export function pageReceivable(params: any): Promise<any> {
   return request.get('/receivables/page', { params })
 }
 
+export function getReceivable(id: number): Promise<any> {
+  return request.get(`/receivables/${id}`)
+}
+
+export function createReceivable(data: any): Promise<any> {
+  return request.post('/receivables', data)
+}
+
+export function confirmReceivable(id: number): Promise<any> {
+  return request.post(`/receivables/${id}/confirm`)
+}
+
+export function reverseReceivable(id: number): Promise<any> {
+  return request.post(`/receivables/${id}/reverse`)
+}
+
+export function overdueReceivables(): Promise<any> {
+  return request.get('/receivables/overdue')
+}
+
+export function getCustomer(id: number): Promise<any> {
+  return request.get(`/customers/${id}`)
+}
+
+export function customerUnsettledSummary(): Promise<any> {
+  return request.get('/customers/unsettled-summary')
+}
+
 export function pagePayable(params: any): Promise<any> {
   return request.get('/payables/page', { params })
+}
+
+export function getPayable(id: number): Promise<any> {
+  return request.get(`/payables/${id}`)
+}
+
+export function createPayable(data: any): Promise<any> {
+  return request.post('/payables', data)
+}
+
+export function confirmPayable(id: number): Promise<any> {
+  return request.post(`/payables/${id}/confirm`)
+}
+
+export function reversePayable(id: number): Promise<any> {
+  return request.post(`/payables/${id}/reverse`)
+}
+
+export function getVendor(id: number): Promise<any> {
+  return request.get(`/vendors/${id}`)
+}
+
+export function vendorUnsettledSummary(): Promise<any> {
+  return request.get('/vendors/unsettled-summary')
 }
 
 export function receivableAging(customerId?: number): Promise<any> {
@@ -90,6 +142,26 @@ export function receivableAging(customerId?: number): Promise<any> {
 
 export function payableAging(vendorId: number): Promise<any> {
   return request.get('/payables/aging', { params: { vendorId } })
+}
+
+export function pageBadDebt(params: any): Promise<any> {
+  return request.get('/bad-debts/page', { params })
+}
+
+export function getBadDebt(id: number): Promise<any> {
+  return request.get(`/bad-debts/${id}`)
+}
+
+export function provisionBadDebtPercentage(data: any): Promise<any> {
+  return request.post('/bad-debts/provision/percentage', data)
+}
+
+export function confirmBadDebt(id: number): Promise<any> {
+  return request.post(`/bad-debts/${id}/confirm`)
+}
+
+export function deleteBadDebt(id: number): Promise<void> {
+  return request.delete(`/bad-debts/${id}`)
 }
 
 export function provisionBadDebtAging(period: string, ratios: Record<string, number>): Promise<any> {

@@ -4,16 +4,16 @@
 
 ## §0 项目状态（硬数字，每次 commit 后更新）
 
-> **更新基准**：commit `29e1cde` (2026-06-27)
+> **更新基准**：提交后更新
 
 | 维度 | 数据 |
 |---|---|
-| 后端代码 | 327 Java 文件 / 27,000+ 行 |
-| 前端代码 | Vue 3 + Element Plus + ECharts / 60+ 组件 |
-| 数据库 | PostgreSQL 16 / V1-V60 Flyway migration 已应用 |
-| 测试基线 | 391 个用例 / 0 fail / 16 个 H2 IntegrationTest 历史 error |
-| API 覆盖 | 后端 292 端点 / 前端 90 调用 / 覆盖率 72% |
-| 已完成模块 | 系统管理、用户权限、凭证、业务单据、发票、应收应付、核销、银行对账、固定资产、预算、报表 |
+| 后端代码 | 401 Java 文件 / 38,000+ 行 |
+| 前端代码 | Vue 3 + Element Plus + ECharts / 66 组件 |
+| 数据库 | PostgreSQL 16 / V1-V62 Flyway migration 已应用 |
+| 测试基线 | 507 个用例 / 0 fail / 16 个 H2 IntegrationTest 历史 error |
+| API 覆盖 | 后端 384 端点 / 前端 329 调用 |
+| 已完成模块 | 系统管理、用户权限、凭证、业务单据、发票、应收应付、核销、银行对账、固定资产、预算、报表、AI 任务 |
 | 技术栈 | Spring Boot 3.x + MyBatis-Plus + Redis 7 + MinIO + RabbitMQ |
 
 ---

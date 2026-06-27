@@ -224,7 +224,7 @@ async function fetchTemplates() {
   loading.value = true
   try {
     const res = await listTemplates()
-    templates.value = res.data || []
+    templates.value = res || []
   } catch (e: any) {
     ElMessage.error('加载模板列表失败: ' + (e.message || ''))
   } finally {

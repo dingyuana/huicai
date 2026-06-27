@@ -91,3 +91,76 @@ export function depreciateOne(id: number, period: string): Promise<void> {
 export function recentAssetCards(limit = 10): Promise<any[]> {
   return request.get('/asset-cards/recent', { params: { limit } })
 }
+
+export function getAssetCategory(id: number): Promise<AssetCategory> {
+  return request.get(`/asset-categories/${id}`)
+}
+
+// ==================== 资产处置 ====================
+
+export interface AssetDisposal {
+  id?: number
+  assetCardId: number
+  disposalType?: string
+  disposalDate: string
+  disposalValue?: number
+  netBookValue?: number
+  gainLoss?: number
+  reason?: string
+  status?: string
+}
+
+export function pageAssetDisposal(params: any): Promise<any> {
+  return request.get('/asset-disposals/page', { params })
+}
+
+export function getAssetDisposal(id: number): Promise<AssetDisposal> {
+  return request.get(`/asset-disposals/${id}`)
+}
+
+export function createAssetDisposal(data: AssetDisposal): Promise<AssetDisposal> {
+  return request.post('/asset-disposals', data)
+}
+
+export function approveAssetDisposal(id: number): Promise<AssetDisposal> {
+  return request.post(`/asset-disposals/${id}/approve`)
+}
+
+export function deleteAssetDisposal(id: number): Promise<void> {
+  return request.delete(`/asset-disposals/${id}`)
+}
+
+// ==================== 资产盘点 ====================
+
+export interface AssetInventory {
+  id?: number
+  inventoryNo?: string
+  planName: string
+  inventoryDate: string
+  status?: string
+  totalCount?: number
+  matchedCount?: number
+  surplusCount?: number
+  lossCount?: number
+  remark?: string
+}
+
+export function pageAssetInventory(params: any): Promise<any> {
+  return request.get('/asset-inventories/page', { params })
+}
+
+export function getAssetInventory(id: number): Promise<AssetInventory> {
+  return request.get(`/asset-inventories/${id}`)
+}
+
+export function createAssetInventory(data: AssetInventory): Promise<AssetInventory> {
+  return request.post('/asset-inventories', data)
+}
+
+export function completeAssetInventory(id: number): Promise<AssetInventory> {
+  return request.post(`/asset-inventories/${id}/complete`)
+}
+
+export function deleteAssetInventory(id: number): Promise<void> {
+  return request.delete(`/asset-inventories/${id}`)
+}
