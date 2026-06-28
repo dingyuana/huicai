@@ -36,7 +36,7 @@ class PayableServiceImplTest {
     void pageQuery_带vendorId和period_调selectPage() {
         Page<PayableEntity> emptyPage = new Page<>(1, 20, 0);
         when(mapper.selectPage(any(), any())).thenReturn(emptyPage);
-        IPage<PayableVO> r = service.pageQuery(1L, "202606", 1, 20);
+        IPage<PayableVO> r = service.pageQuery(1L, "202606", null, null, null, 1, 20);
         assertNotNull(r);
         assertEquals(0, r.getTotal());
         verify(mapper).selectPage(any(), any());
@@ -46,7 +46,7 @@ class PayableServiceImplTest {
     void pageQuery_无参_走默认值() {
         Page<PayableEntity> emptyPage = new Page<>(1, 20, 0);
         when(mapper.selectPage(any(), any())).thenReturn(emptyPage);
-        IPage<PayableVO> r = service.pageQuery(null, null, null, null);
+        IPage<PayableVO> r = service.pageQuery(null, null, null, null, null, 1, 20);
         assertNotNull(r);
         assertEquals(0, r.getTotal());
         verify(mapper).selectPage(any(), any());

@@ -35,7 +35,7 @@ class ArapSettlementServiceImplTest {
     @Test
     void pageQuery_带status_调selectPage() {
         when(mapper.selectPage(any(), any())).thenReturn(null);
-        IPage<ArapSettlementEntity> r = service.pageQuery("DRAFT", 1, 20);
+        IPage<ArapSettlementEntity> r = service.pageQuery("DRAFT", null, 1, 20);
         assertNull(r);
         verify(mapper).selectPage(any(), any());
     }

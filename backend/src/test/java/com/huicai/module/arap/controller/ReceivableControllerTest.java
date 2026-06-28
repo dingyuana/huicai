@@ -47,14 +47,14 @@ class ReceivableControllerTest {
     void page_defaultParams_passedCorrectly() throws Exception {
         // given
         IPage<ReceivableVO> page = new Page<>(1, 20);
-        when(service.pageQuery(isNull(), isNull(), eq(1), eq(20))).thenReturn(page);
+        when(service.pageQuery(isNull(), isNull(), isNull(), isNull(), isNull(), eq(1), eq(20))).thenReturn(page);
 
         // when & then
         mvc.perform(get("/api/v1/receivables/page"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(200));
 
-        verify(service).pageQuery(isNull(), isNull(), eq(1), eq(20));
+        verify(service).pageQuery(isNull(), isNull(), isNull(), isNull(), isNull(), eq(1), eq(20));
     }
 
     @Test
@@ -62,7 +62,7 @@ class ReceivableControllerTest {
     void page_allParams_boundCorrectly() throws Exception {
         // given
         IPage<ReceivableVO> page = new Page<>(2, 50);
-        when(service.pageQuery(eq(10L), eq("202606"), eq(2), eq(50))).thenReturn(page);
+        when(service.pageQuery(eq(10L), eq("202606"), isNull(), isNull(), isNull(), eq(2), eq(50))).thenReturn(page);
 
         // when & then
         mvc.perform(get("/api/v1/receivables/page")
@@ -72,7 +72,7 @@ class ReceivableControllerTest {
                         .param("size", "50"))
                 .andExpect(status().isOk());
 
-        verify(service).pageQuery(eq(10L), eq("202606"), eq(2), eq(50));
+        verify(service).pageQuery(eq(10L), eq("202606"), isNull(), isNull(), isNull(), eq(2), eq(50));
     }
 
     @Test

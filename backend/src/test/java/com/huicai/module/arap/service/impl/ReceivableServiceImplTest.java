@@ -46,7 +46,7 @@ class ReceivableServiceImplTest {
     void pageQuery_带customer和period_调selectPage() {
         Page<ReceivableEntity> emptyPage = new Page<>(1, 20, 0);
         when(mapper.selectPage(any(), any())).thenReturn(emptyPage);
-        IPage<ReceivableVO> r = service.pageQuery(1L, "202606", 1, 20);
+        IPage<ReceivableVO> r = service.pageQuery(1L, "202606", null, null, null, 1, 20);
         assertNotNull(r);
         assertEquals(0, r.getTotal());
         verify(mapper).selectPage(any(), any());
