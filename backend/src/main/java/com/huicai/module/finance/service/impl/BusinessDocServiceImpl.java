@@ -112,6 +112,8 @@ public class BusinessDocServiceImpl implements BusinessDocService {
                 .eq(StrUtil.isNotBlank(q.getPeriod()), BusinessDocEntity::getPeriod, q.getPeriod())
                 .and(StrUtil.isNotBlank(q.getKeyword()), w -> w
                         .like(BusinessDocEntity::getDocNo, q.getKeyword())
+                        .or().like(BusinessDocEntity::getVoucherNo, q.getKeyword())
+                        .or().like(BusinessDocEntity::getInvoiceNo, q.getKeyword())
                         .or().like(BusinessDocEntity::getSummary, q.getKeyword()))
                 .eq(StrUtil.isNotBlank(q.getVoucherNo()), BusinessDocEntity::getVoucherNo, q.getVoucherNo())
                 .orderByDesc(BusinessDocEntity::getDocDate)

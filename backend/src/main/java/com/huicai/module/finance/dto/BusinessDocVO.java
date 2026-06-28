@@ -74,6 +74,7 @@ public class BusinessDocVO {
         vo.setSource(e.getSource());
         vo.setAttachmentIds(e.getAttachmentIds());
         vo.setVoucherId(e.getVoucherId());
+        vo.setVoucherNo(e.getVoucherNo());
         vo.setInvoiceNo(e.getInvoiceNo());
         vo.setCreatedBy(e.getCreatedBy());
         vo.setCreatedAt(e.getCreatedAt());

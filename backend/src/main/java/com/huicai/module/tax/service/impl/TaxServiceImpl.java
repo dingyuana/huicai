@@ -132,7 +132,24 @@ public class TaxServiceImpl implements TaxService {
             wrapper.eq(InputInvoiceEntity::getCertificationStatus, certStatus);
         }
         wrapper.orderByDesc(InputInvoiceEntity::getInvoiceDate);
-        return inputMapper.selectPage(page, wrapper);
+        IPage<InputInvoiceEntity> result = inputMapper.selectPage(page, wrapper);
+        // 回填关联编号（docNo / voucherNo）
+        for (InputInvoiceEntity inv : result.getRecords()) {
+            fillInputInvoiceNumbers(inv);
+        }
+        return result;
+    }
+
+    /** 回填进项发票的关联编号 */
+    private void fillInputInvoiceNumbers(InputInvoiceEntity inv) {
+        if (inv.getDocId() != null) {
+            var doc = businessDocMapper.selectById(inv.getDocId());
+            if (doc != null) inv.setDocNo(doc.getDocNo());
+        }
+        if (inv.getVoucherId() != null) {
+            var voucher = voucherMapper.selectById(inv.getVoucherId());
+            if (voucher != null) inv.setVoucherNo(voucher.getVoucherNo());
+        }
     }
 
     @Override
@@ -217,13 +234,18 @@ public class TaxServiceImpl implements TaxService {
             } else {
                 // 专用/普通发票：排除红字(金额<0)、红冲关联(originalInvoiceNo非空)、已冲销(status=REVERSED)
                 wrapper.eq(OutputInvoiceEntity::getInvoiceType, invoiceType)
-                       .ge(OutputInvoiceEntity::getAmount, BigDecimal.ZERO)
-                       .isNull(OutputInvoiceEntity::getOriginalInvoiceNo)
-                       .ne(OutputInvoiceEntity::getStatus, InvoiceStatus.REVERSED);
+                        .ge(OutputInvoiceEntity::getAmount, BigDecimal.ZERO)
+                        .isNull(OutputInvoiceEntity::getOriginalInvoiceNo)
+                        .ne(OutputInvoiceEntity::getStatus, InvoiceStatus.REVERSED);
             }
         }
         wrapper.orderByDesc(OutputInvoiceEntity::getInvoiceDate);
-        return outputMapper.selectPage(page, wrapper);
+        IPage<OutputInvoiceEntity> result = outputMapper.selectPage(page, wrapper);
+        // 回填关联编号（docNo / voucherNo）+ 红冲关联信息
+        for (OutputInvoiceEntity inv : result.getRecords()) {
+            fillOutputInvoiceDetails(inv);
+        }
+        return result;
     }
 
     @Override
@@ -232,40 +254,43 @@ public class TaxServiceImpl implements TaxService {
         if (invoice == null) {
             return null;
         }
-        
-        if (StrUtil.isNotBlank(invoice.getOriginalInvoiceNo())) {
+        fillOutputInvoiceDetails(invoice);
+        return invoice;
+    }
+
+    /** 回填销项发票的关联编号和红冲信息 */
+    private void fillOutputInvoiceDetails(OutputInvoiceEntity inv) {
+        if (StrUtil.isNotBlank(inv.getOriginalInvoiceNo())) {
             OutputInvoiceEntity original = outputMapper.selectOne(
                     new LambdaQueryWrapper<OutputInvoiceEntity>()
-                            .eq(OutputInvoiceEntity::getInvoiceNo, invoice.getOriginalInvoiceNo())
+                            .eq(OutputInvoiceEntity::getInvoiceNo, inv.getOriginalInvoiceNo())
                             .last("LIMIT 1")
             );
             if (original != null) {
-                invoice.setOriginalInvoiceId(original.getId());
+                inv.setOriginalInvoiceId(original.getId());
             }
         }
         
-if (invoice.getReversedByInvoiceId() != null) {
-            OutputInvoiceEntity redInvoice = outputMapper.selectById(invoice.getReversedByInvoiceId());
+        if (inv.getReversedByInvoiceId() != null) {
+            OutputInvoiceEntity redInvoice = outputMapper.selectById(inv.getReversedByInvoiceId());
             if (redInvoice != null) {
-                invoice.setReversedByInvoiceNo(redInvoice.getInvoiceNo());
+                inv.setReversedByInvoiceNo(redInvoice.getInvoiceNo());
             }
         }
 
-        // 回填关联单据号和凭证号（替代内部数据库 ID）
-        if (invoice.getDocId() != null) {
-            var doc = businessDocMapper.selectById(invoice.getDocId());
+        // 回填关联单据号和凭证号
+        if (inv.getDocId() != null) {
+            var doc = businessDocMapper.selectById(inv.getDocId());
             if (doc != null) {
-                invoice.setDocNo(doc.getDocNo());
+                inv.setDocNo(doc.getDocNo());
             }
         }
-        if (invoice.getVoucherId() != null) {
-            var voucher = voucherMapper.selectById(invoice.getVoucherId());
+        if (inv.getVoucherId() != null) {
+            var voucher = voucherMapper.selectById(inv.getVoucherId());
             if (voucher != null) {
-                invoice.setVoucherNo(voucher.getVoucherNo());
+                inv.setVoucherNo(voucher.getVoucherNo());
             }
         }
-
-        return invoice;
     }
 
     @Override
