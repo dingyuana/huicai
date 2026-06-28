@@ -65,7 +65,7 @@ const routes: RouteRecordRaw[] = [
         path: 'system/clear-data',
         name: 'ClearDataView',
         component: () => import('@/views/system/clear-data/ClearDataView.vue'),
-        meta: { title: '数据维护', permission: 'system:clear-data:list', keepAlive: true },
+        meta: { title: '数据维护', keepAlive: true },
       },
       {
         path: 'system/classification-rule',

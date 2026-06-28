@@ -1,9 +1,9 @@
 # 慧财财务系统 — 综合设计文档
 
-> 版本：V2.1 | 日期：2026-06-23
+> 版本：V2.2 | 日期：2026-06-27
 > 本文件综合了 `基于Web财务软件的项目说明书.md`、`docs/需求分析书_*` 系列、`docs/specs/P*` 系列以及实际代码的实现情况。
 >
-> **规范**：多模块单库，MySQL风格PostgreSQL，严格状态机驱动。
+> **规范**：多模块单库，MySQL风格PostgreSQL，严格状态机驱动，乐观锁并发控制。
 
 ---
 
@@ -23,13 +23,14 @@
 12. [其他状态机](#12-其他状态机)
 13. [核心业务流程](#13-核心业务流程)
 14. [审计追踪机制](#14-审计追踪机制p24)
-15. [AI 集成架构](#15-ai-集成架构)
-16. [安全架构](#16-安全架构)
-17. [关键技术决策](#17-关键技术决策)
-18. [前端状态机集成](#18-前端状态机集成)
-19. [测试覆盖率](#19-测试覆盖率)
-20. [凭证模板系统](#20-凭证模板系统)
-21. [实现状态总览](#21-实现状态总览)
+15. [数据完整性与并发控制](#15-数据完整性与并发控制p32)
+16. [AI 集成架构](#16-ai-集成架构)
+17. [安全架构](#17-安全架构)
+18. [关键技术决策](#18-关键技术决策)
+19. [前端状态机集成](#19-前端状态机集成)
+20. [测试覆盖率](#20-测试覆盖率)
+21. [凭证模板系统](#21-凭证模板系统)
+22. [实现状态总览](#22-实现状态总览)
 
 ---
 
@@ -556,14 +557,15 @@ CONSTRAINT chk_stmt_review_status CHECK (review_status IN (
 ### 10.2 有效转换
 
 > **2026-06-25 修订**：B 类业务收付款智能路由在**未匹配到应收应付单**时直接落终态 `CONFIRMED`（已确认），不再停留在中间态 `classified`；C 类默认路由同样直接落 `CONFIRMED`。前端 `CONFIRMED` 显示为绿色终态标签。
+>
+> **2026-06-27 修订（P32）**：`audit()` 与 `autoGenerate` 合并，不再有单独的 `generateVoucher()` 步骤。主管审核一步完成，直接从 `CONFIRMED` 跳转至 `voucher_generated` / `payment_created`。原 `AUDITED` 中间态已废弃。
 
 ```
 PENDING ──classify()──→ classified
-classified ──A类路由──→ voucher_generated  (bank_fee/interest/tax/social_security/insurance_fee)
-classified ──B类路由精确匹配──→ payment_created    (业务收付款+未/应结清单金额一致)
-classified ──B类路由无匹配/生单失败──→ CONFIRMED  (业务收付款+无应收应付单，或金额不匹配)
-classified ──B类其他分类路由──→ payment_created    (internal_transfer/salary_payment 等)
-classified ──C类路由──→ CONFIRMED               (pending/不明确 → 直接落已确认)
+classified ──review()──→ CONFIRMED  ←──出纳确认
+  CONFIRMED ──audit()──→ voucher_generated  (A类: 银行费用/利息/税务/社保/保险)
+  CONFIRMED ──audit()──→ payment_created    (B类: 业务收付款/内部转账/工资发放)
+  CONFIRMED ──audit()──→ CONFIRMED          (B类无匹配应收应付单 / C类兜底)
 voucher_generated/payment_created ──approve()──→ approved
 payment_created ──review(reclassify)──→ RECLASSIFIED
 ```
@@ -579,6 +581,9 @@ payment_created ──review(reclassify)──→ RECLASSIFIED
 - `classified` — 已分类未确认
 - `RECLASSIFIED` — 已重分类待复核
 - `manual_pending` — 待人工处理（兼容旧数据）
+
+**废弃状态**：
+- `AUDITED` — 已废弃，不再作为中间态（2026-06-27 P32 合并 audit+autoGenerate 后移除）
 
 ### 10.3 A/B/C 分类路由（AutoGenerationService）
 
@@ -944,7 +949,133 @@ PENDING ──→ CONFIRMED / REJECTED
 
 ---
 
-## 15. AI 集成架构
+## 15. 数据完整性与并发控制（P32）
+
+### 15.1 乐观锁机制 (MyBatis-Plus @Version)
+
+**实现日期**: 2026-06-27
+**设计原则**: 并发冲突概率低 → 乐观锁性能优于悲观锁
+
+#### 加锁 Entity
+
+| Entity | 表名 | version 字段 | Flyway | 冲突影响 |
+|:-------|:-----|:------------:|:------:|:---------|
+| `OutputInvoiceEntity` | `t_output_invoice` | ✅ 已加 | V63 | 重复生成应收/凭证 |
+| `BusinessDocEntity` | `t_business_doc` | ✅ 已加 | V63 | 重复生成凭证 |
+| `VoucherEntity` | `t_voucher` | ✅ 已加 | V63 | 借贷不平, 重复记账 |
+| `BankStatementEntity` | `t_bank_statement` | ✅ 已加 | V63 | 重复生成凭证 |
+| `ReceivableEntity` | `t_receivable` | ✅ 原有 | V37 | 超核销金额 |
+| `PayableEntity` | `t_payable` | ✅ 原有 | V37 | 超核销金额 |
+
+#### 乐观锁工作原理
+
+```java
+// @Version 注解字段, int/Integer/long/Long 均可
+@Version
+private Integer version;
+
+// MyBatis-Plus updateById 自动在 SQL 中追加
+WHERE id = #{id} AND version = #{version}
+
+// 更新成功: version++ (UPDATE ..., version = version + 1)
+// 更新失败: 返回 0 → 抛出 OptimisticLockingFailureException
+```
+
+#### 冲突处理策略
+
+```java
+// Service 层捕获并重试（幂等操作）
+try {
+    mapper.updateById(entity);
+} catch (OptimisticLockingFailureException e) {
+    // 重新读取最新数据后重试（通常重试1-2次即可）
+    entity = mapper.selectById(entity.getId());
+    // ... 重新执行业务逻辑
+}
+```
+
+### 15.2 凭证摘要增强：发票号追溯
+
+**设计动机**: 财务审计时需要从凭证快速追溯到原始发票。
+
+#### 摘要格式规范
+
+```
+收/付{对方单位名称}-{业务摘要}[发票号码]
+```
+
+**示例**: `收深圳华为技术有限公司-1月服务费[FP20260100123]`
+
+#### 实现位置
+
+**文件**: `BusinessDocServiceImpl.enrichSummary()`
+
+```java
+// 有发票号时自动追加 [发票号] 后缀
+if (entity.getInvoiceNo() != null && !entity.getInvoiceNo().isBlank()) {
+    base += "[" + entity.getInvoiceNo() + "]";
+}
+```
+
+#### SQL 查询支持
+
+```sql
+-- 按发票号快速查凭证
+SELECT v.id, v.voucher_no, v.summary
+FROM t_voucher v
+JOIN t_voucher_entry ve ON v.id = ve.voucher_id
+WHERE ve.summary LIKE '%[FP20260100123]%'
+```
+
+### 15.3 数据一致性健康检查 API
+
+**端点**: `POST /api/v1/finance/health/integrity`
+
+**文件**: `FinanceIntegrityService.java` + `FinanceHealthController.java`
+
+#### 6 项数据一致性检查
+
+| 检查ID | 检查名称 | SQL 逻辑 | 严重程度 |
+|:-------|:---------|:--------:|:--------:|
+| CHK-001 | 发票状态与凭证一致性 | `SELECT * FROM t_output_invoice WHERE status IN ('VOUCHERED', ...) AND voucher_id IS NULL` | 🔴 P0 |
+| CHK-002 | 业务单据状态与凭证一致性 | `SELECT * FROM t_business_doc WHERE status = 'VOUCHERED' AND voucher_id IS NULL` | 🔴 P0 |
+| CHK-003 | 应收金额与已核销/未核销一致性 | `amount = settled_amount + unsettled_amount` | 🟠 P1 |
+| CHK-004 | 凭证借贷平衡检查 | `debit_total ≈ credit_total` | 🟠 P1 |
+| CHK-005 | 发票号唯一性校验 | 同发票号 > 1 条记录 | 🟠 P1 |
+| CHK-006 | 银行流水状态与生成结果一致性 | `SELECT * FROM t_bank_statement WHERE review_status = generated AND generated_voucher_id IS NULL` | 🟡 P2 |
+
+#### 响应格式
+
+```json
+{
+  "totalChecks": 6,
+  "passed": 6,
+  "failed": 0,
+  "checkResults": [{
+    "checkId": "CHK-001",
+    "checkName": "发票状态与凭证一致性",
+    "status": "PASSED",
+    "severity": "P0",
+    "affectedRows": 0,
+    "details": []
+  }],
+  "checkTime": "2026-06-27T14:30:00",
+  "durationMs": 245
+}
+```
+
+#### 检查时机建议
+
+| 场景 | 触发方式 | 频率 |
+|:-----|:--------|:---:|
+| 日终批处理 | Cron Job | 1次/天 |
+| 发版后验证 | 手动调用 | 按需 |
+| 审计追溯前 | 手动调用 | 按需 |
+| 用户报告数据异常 | 支持 / Debug | 按需 |
+
+---
+
+## 17. AI 集成架构
 
 ### 15.1 通信机制
 
@@ -1146,17 +1277,31 @@ const canBatchAudit = computed(() => selectedRows.value.some((r) => r.status ===
 const canBatchPost = computed(() => selectedRows.value.some((r) => r.status === 'AUDITED'))
 ```
 
-### 18.3 银行流水状态机前端集成
+### 19.3 银行流水状态机前端集成
 
 **文件**: `frontend/src/api/modules/bankStatement.ts` + `frontend/src/views/finance/bank-statement/BankStatementView.vue`
 
-#### 状态变更 API
+#### 状态变更 API（2026-06-27 P32 修订）
 
 | 方法 | 路径 | 说明 |
 |:-----|:-----|:-----|
 | POST | `/bank-statements/{id}/classify` | 分类 |
-| POST | `/bank-statements/{id}/review` | 确认/驳回 |
+| POST | `/bank-statements/{id}/review` | 出纳确认 → CONFIRMED |
 | POST | `/bank-statements/batch-review` | 批量确认 |
+| POST | `/bank-statements/{id}/audit` | 主管审核 + 自动生成凭证/单据 → voucher_generated / payment_created |
+| POST | `/bank-statements/batch-audit` | 批量审核 |
+| POST | `/bank-statements/{id}/approve` | 核准过账 → approved |
+
+> **P32 变更**：`audit()` 现在内部调用 `autoGenerateService.autoGenerateInNewTx()`，生成凭证/单据一步完成。原独立的 `generateVoucher()` 保留为数据修复/重试备用接口，但前端按钮已移除。
+
+#### 按钮显示规则
+
+| 按钮 | 显示条件 |
+|:-----|:---------|
+| 确认 | `reviewStatus ∈ {null, PENDING, classified, manual_pending, RECLASSIFIED}` |
+| 审核 | `reviewStatus = CONFIRMED` |
+| 核准 | `reviewStatus ∈ {voucher_generated, payment_created}` |
+| 生成凭证 | **已移除**（audit 已包含） |
 
 ### 18.4 销售发票状态机前端集成
 

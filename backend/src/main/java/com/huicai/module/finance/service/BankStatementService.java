@@ -38,6 +38,27 @@ public interface BankStatementService {
     int batchReview(List<Long> statementIds, Long userId);
 
     /**
+     * 主管审核：CONFIRMED → AUDITED（审核后才能生成凭证）
+     */
+    BankStatementEntity audit(Long statementId, Long userId);
+
+    /**
+     * 批量审核
+     */
+    int batchAudit(List<Long> statementIds, Long userId);
+
+    /**
+     * 审核通过后生成凭证/单据（独立于审核，审核→生成两步骤分离）
+     * 状态守卫：仅允许 AUDITED 状态执行
+     */
+    BankStatementEntity generateVoucher(Long statementId, Long userId);
+
+    /**
+     * 批量生成凭证/单据
+     */
+    int batchGenerateVouchers(List<Long> statementIds, Long userId);
+
+    /**
      * 核准过账. 仅允许 voucher_generated / payment_created 状态推进到 approved.
      */
     void approve(Long statementId);

@@ -12,7 +12,11 @@ import org.testcontainers.junit.jupiter.Testcontainers;
  * Mapper 层真实 DB 测试基类
  * 使用 Testcontainers 启动真实 PostgreSQL 16，Flyway 自动迁移
  * 每个测试方法独立事务，执行后自动回滚
+ *
+ * ⚠️ 属于慢测试（@SlowTest），需要 Docker 环境
+ * 本地开发默认跳过，CI/CD 每晚执行全量
  */
+@SlowTest
 @SpringBootTest
 @Testcontainers
 @Transactional

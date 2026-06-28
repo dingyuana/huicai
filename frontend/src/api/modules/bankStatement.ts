@@ -128,6 +128,12 @@ export function batchReviewStatements(ids: number[]): Promise<number> {
 export function batchConfirmStatements(ids: number[]): Promise<number> {
   return request.post('/bank-statements/batch-review', ids)
 }
+export function auditStatement(id: number): Promise<BankStatementVO> {
+  return request.post(`/bank-statements/${id}/audit`)
+}
+export function batchAuditStatements(ids: number[]): Promise<number> {
+  return request.post('/bank-statements/batch-audit', ids)
+}
 export function approveStatement(id: number): Promise<void> {
   return request.post(`/bank-statements/${id}/approve`)
 }

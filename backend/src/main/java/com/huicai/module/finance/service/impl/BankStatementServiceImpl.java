@@ -390,111 +390,125 @@ public class BankStatementServiceImpl implements BankStatementService {
             throw BusinessException.badRequest("流水尚未分类, 请先调用 classifySingle");
         }
 
-        // 检查当前状态是否可以复审 (classified/PENDING/CONFIRMED/manual_pending 均可继续推进)
         String curStatus = stmt.getReviewStatus();
         boolean canReview = curStatus == null
                 || "PENDING".equals(curStatus)
                 || "classified".equals(curStatus)
-                || "CONFIRMED".equals(curStatus)
                 || "manual_pending".equals(curStatus)
                 || "RECLASSIFIED".equals(curStatus);
         if (!canReview) {
             throw BusinessException.badRequest("当前状态 " + curStatus + " 无法复审, 请先撤回或等待审批");
         }
 
-        // 确定 A/B/C 路由类型: 优先命中规则的 route_type, 其次使用分类硬编码映射
-        String type = null;
-        if (stmt.getRuleId() != null) {
-            ClassificationRuleEntity rule = classificationRuleMapper.selectById(stmt.getRuleId());
-            if (rule != null && StrUtil.isNotBlank(rule.getRouteType())) {
-                type = rule.getRouteType();
-            }
-        }
-        if (type == null) {
-            type = AutoGenerationService.classifyType(stmt.getClassification());
-        }
-
+        // review() 只做审核确认，不生成凭证
         stmt.setReviewedBy(userId);
         stmt.setReviewedAt(LocalDateTime.now());
-
-        switch (type) {
-            case "A":
-                try {
-                    boolean ok = autoGenerationService.autoGenerateInNewTx(stmt.getId(), stmt.getReviewedBy());
-                    stmt.setReviewStatus(ok ? "voucher_generated" : "classified");
-                    log.info("A类制证: statementId={}, classification={}, ok={}", statementId, stmt.getClassification(), ok);
-                } catch (Exception e) {
-                    stmt.setReviewStatus("classified");
-                    log.warn("A类制证失败: statementId={}, err={}", statementId, e.getMessage());
-                }
-                break;
-            case "B":
-                boolean isSmartClass = "business_receipt".equals(stmt.getClassification())
-                        || "business_payment".equals(stmt.getClassification());
-                if (isSmartClass) {
-                    boolean isReceipt = "business_receipt".equals(stmt.getClassification());
-                    String counterparty = stmt.getCounterAccount();
-                    BigDecimal amount = stmt.getAmount().abs();
-                    List<?> invoices; Long partyId = null;
-                    if (isReceipt) {
-                        var customers = customerMapper.selectList(new LambdaQueryWrapper<com.huicai.module.arap.entity.CustomerEntity>().like(com.huicai.module.arap.entity.CustomerEntity::getName, counterparty).last("LIMIT 1"));
-                        if (!customers.isEmpty()) { partyId = customers.get(0).getId(); invoices = receivableMapper.selectList(new LambdaQueryWrapper<ReceivableEntity>().eq(ReceivableEntity::getCustomerId, partyId)); }
-                        else invoices = List.of();
-                    } else {
-                        var vendors = vendorMapper.selectList(new LambdaQueryWrapper<com.huicai.module.arap.entity.VendorEntity>().like(com.huicai.module.arap.entity.VendorEntity::getName, counterparty).last("LIMIT 1"));
-                        if (!vendors.isEmpty()) { partyId = vendors.get(0).getId(); invoices = payableMapper.selectList(new LambdaQueryWrapper<PayableEntity>().eq(PayableEntity::getVendorId, partyId)); }
-                        else invoices = List.of();
-                    }
-                    List<?> unsettled = invoices.stream().filter(inv -> { BigDecimal ua = inv instanceof ReceivableEntity r ? r.getUnsettledAmount() : inv instanceof PayableEntity p ? p.getUnsettledAmount() : BigDecimal.ZERO; return ua != null && ua.compareTo(BigDecimal.ZERO) > 0; }).collect(Collectors.toList());
-
-                    if (unsettled.size() == 1) {
-                        Object inv = unsettled.get(0);
-                        BigDecimal ua = inv instanceof ReceivableEntity r ? r.getUnsettledAmount() : inv instanceof PayableEntity p ? p.getUnsettledAmount() : BigDecimal.ZERO;
-                        if (ua.compareTo(amount) == 0) {
-                            // 精确匹配 → 生单, 核销交给用户在核销工作台完成(避免嵌套事务问题)
-                            try {
-                                boolean ok = autoGenerationService.autoGenerateInNewTx(stmt.getId(), userId);
-                                if (ok) {
-                                    stmt = statementMapper.selectById(stmt.getId());
-                                    stmt.setReviewStatus("payment_created");
-                                    stmt.setAiSuggestedAction("RECONCILE_HINT:" + (inv instanceof ReceivableEntity ? ((ReceivableEntity) inv).getId() : ((PayableEntity) inv).getId()));
-                                    log.info("智能路由-精确匹配生单(待人工核销): statementId={}, partyId={}, amount={}", statementId, partyId, amount);
-                                } else { stmt.setReviewStatus("classified"); }
-                            } catch (Exception e) { stmt.setReviewStatus("classified"); log.warn("智能路由-精确匹配生单失败: statementId={}, err={}", statementId, e.getMessage()); }
-                        } else { stmt.setReviewStatus("classified"); log.info("智能路由-金额不匹配(终态): statementId={}, unsettled={}, amount={}", statementId, ua, amount); }
-                    } else {
-                        // 无匹配/多条/无客商 → 仍然尝试生单, 不自动核销
-                        try {
-                            boolean ok = autoGenerationService.autoGenerateInNewTx(stmt.getId(), userId);
-                            if (ok) { stmt = statementMapper.selectById(stmt.getId()); }
-                            stmt.setReviewStatus(ok ? "payment_created" : "classified");
-                            log.info("智能路由-生单(无精确匹配): statementId={}, unsettledCount={}, partyId={}, ok={}", statementId, unsettled.size(), partyId, ok);
-                        } catch (Exception e) {
-                            stmt.setReviewStatus("classified");
-                            log.warn("智能路由-生单失败: statementId={}", statementId, e);
-                        }
-                    }
-                } else {
-                    // 其他B类(如 internal_transfer, salary_payment) 保持原有行为
-                    try {
-                        boolean ok = autoGenerationService.autoGenerateInNewTx(stmt.getId(), stmt.getReviewedBy());
-                        stmt.setReviewStatus(ok ? "payment_created" : "classified");
-                        log.info("B类生单: statementId={}, classification={}, ok={}", statementId, stmt.getClassification(), ok);
-                    } catch (Exception e) {
-                        stmt.setReviewStatus("classified");
-                        log.warn("B类生单失败: statementId={}", statementId, e);
-                    }
-                }
-                break;
-            default:
-                stmt.setReviewStatus("manual_pending");
-                log.info("C类待人工处理: statementId={}, classification={}", statementId, stmt.getClassification());
-                break;
-        }
+        stmt.setReviewStatus("CONFIRMED");
 
         statementMapper.updateById(stmt);
-        log.info("出纳确认: statementId={}, status={}", statementId, stmt.getReviewStatus());
+        log.info("出纳确认: statementId={}, status=CONFIRMED", statementId);
         return stmt;
+    }
+
+    @Override
+    @Transactional
+    public BankStatementEntity audit(Long statementId, Long userId) {
+        BankStatementEntity stmt = statementMapper.selectById(statementId);
+        if (stmt == null) {
+            throw BusinessException.notFound("对账单记录不存在");
+        }
+        if (!"CONFIRMED".equals(stmt.getReviewStatus())) {
+            throw BusinessException.badRequest(
+                "当前状态 " + stmt.getReviewStatus() + " 无法审核，请先完成出纳确认");
+        }
+
+        // 获取分类路由类型
+        String type = resolveRouteType(stmt);
+
+        // 自动生成凭证+单据（均为草稿状态）
+        boolean ok = autoGenerationService.autoGenerateInNewTx(stmt.getId(), userId);
+        if (!ok) {
+            throw BusinessException.badRequest("自动制证失败, classification=" + stmt.getClassification());
+        }
+
+        // 重新查询获取生成后的数据
+        stmt = statementMapper.selectById(stmt.getId());
+        String newStatus = "A".equals(type) ? "voucher_generated" : "payment_created";
+        stmt.setReviewStatus(newStatus);
+        statementMapper.updateById(stmt);
+
+        log.info("主管审核+制证: statementId={}, classification={}, status={}",
+                statementId, stmt.getClassification(), newStatus);
+        return stmt;
+    }
+
+    @Override
+    @Transactional
+    public int batchAudit(List<Long> statementIds, Long userId) {
+        if (statementIds == null || statementIds.isEmpty()) {
+            throw BusinessException.badRequest("ID 列表为空");
+        }
+        int audited = 0;
+        for (Long id : statementIds) {
+            try {
+                audit(id, userId);
+                audited++;
+            } catch (Exception e) {
+                log.warn("批量审核失败: statementId={}, err={}", id, e.getMessage());
+            }
+        }
+        log.info("批量审核: 总数={}, 成功={}", statementIds.size(), audited);
+        return audited;
+    }
+
+    @Override
+    @Transactional
+    public BankStatementEntity generateVoucher(Long statementId, Long userId) {
+        BankStatementEntity stmt = statementMapper.selectById(statementId);
+        if (stmt == null) {
+            throw BusinessException.notFound("对账单记录不存在");
+        }
+        // 允许 CONFIRMED（重试场景）或 AUDITED（旧数据过渡兼容）
+        String curStatus = stmt.getReviewStatus();
+        if (!"AUDITED".equals(curStatus) && !"CONFIRMED".equals(curStatus)) {
+            throw BusinessException.badRequest(
+                "当前状态 " + curStatus + " 无法生成凭证，请先完成主管审核");
+        }
+
+        String type = resolveRouteType(stmt);
+
+        boolean ok = autoGenerationService.autoGenerateInNewTx(stmt.getId(), userId);
+        if (!ok) {
+            throw BusinessException.badRequest("自动制证失败, classification=" + stmt.getClassification());
+        }
+
+        stmt = statementMapper.selectById(stmt.getId());
+        String newStatus = "A".equals(type) ? "voucher_generated" : "payment_created";
+        stmt.setReviewStatus(newStatus);
+        statementMapper.updateById(stmt);
+
+        log.info("制证完成: statementId={}, classification={}, status={}",
+                statementId, stmt.getClassification(), newStatus);
+        return stmt;
+    }
+
+    @Override
+    @Transactional
+    public int batchGenerateVouchers(List<Long> statementIds, Long userId) {
+        if (statementIds == null || statementIds.isEmpty()) {
+            throw BusinessException.badRequest("ID 列表为空");
+        }
+        int generated = 0;
+        for (Long id : statementIds) {
+            try {
+                generateVoucher(id, userId);
+                generated++;
+            } catch (Exception e) {
+                log.warn("批量制证失败: statementId={}, err={}", id, e.getMessage());
+            }
+        }
+        log.info("批量制证: 总数={}, 成功={}", statementIds.size(), generated);
+        return generated;
     }
 
     @Override
@@ -648,6 +662,10 @@ public class BankStatementServiceImpl implements BankStatementService {
     public void deleteStatement(Long id) {
         BankStatementEntity entity = statementMapper.selectById(id);
         if (entity == null) throw BusinessException.notFound("对账单记录不存在");
+        if (isLocked(entity.getReviewStatus())) {
+            throw BusinessException.badRequest(
+                "当前状态 " + entity.getReviewStatus() + " 不允许删除，请先撤回");
+        }
         statementMapper.deleteById(id);
         log.info("删除对账单: id={}", id);
     }
@@ -656,6 +674,10 @@ public class BankStatementServiceImpl implements BankStatementService {
     public BankStatementEntity updateClassification(Long id, String classification) {
         BankStatementEntity stmt = statementMapper.selectById(id);
         if (stmt == null) throw BusinessException.notFound("对账单记录不存在");
+        if (isLocked(stmt.getReviewStatus())) {
+            throw BusinessException.badRequest(
+                "当前状态 " + stmt.getReviewStatus() + " 不允许修改分类，请先撤回");
+        }
         stmt.setClassification(classification);
         stmt.setRuleId(null);
         stmt.setAiBusinessScene("MANUAL");
@@ -677,6 +699,29 @@ public class BankStatementServiceImpl implements BankStatementService {
             result.put(cls, cnt == null ? 0 : cnt.intValue());
         }
         return result;
+    }
+
+    /** 判断状态是否已锁定（不可删除/修改分类） */
+    private static boolean isLocked(String reviewStatus) {
+        return "CONFIRMED".equals(reviewStatus)
+            || "voucher_generated".equals(reviewStatus)
+            || "payment_created".equals(reviewStatus)
+            || "approved".equals(reviewStatus);
+    }
+
+    /** 解析路由类型 A/B/C：优先取匹配规则中的 routeType，其次按 classification 默认推断 */
+    private String resolveRouteType(BankStatementEntity stmt) {
+        String type = null;
+        if (stmt.getRuleId() != null) {
+            ClassificationRuleEntity rule = classificationRuleMapper.selectById(stmt.getRuleId());
+            if (rule != null && StrUtil.isNotBlank(rule.getRouteType())) {
+                type = rule.getRouteType();
+            }
+        }
+        if (type == null) {
+            type = AutoGenerationService.classifyType(stmt.getClassification());
+        }
+        return type;
     }
 
     /** 判断对方户名是否为商业公司 (用于社保关键词防误判) */

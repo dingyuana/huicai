@@ -113,6 +113,7 @@ public class BusinessDocServiceImpl implements BusinessDocService {
                 .and(StrUtil.isNotBlank(q.getKeyword()), w -> w
                         .like(BusinessDocEntity::getDocNo, q.getKeyword())
                         .or().like(BusinessDocEntity::getSummary, q.getKeyword()))
+                .eq(StrUtil.isNotBlank(q.getVoucherNo()), BusinessDocEntity::getVoucherNo, q.getVoucherNo())
                 .orderByDesc(BusinessDocEntity::getDocDate)
                 .orderByDesc(BusinessDocEntity::getId);
         IPage<BusinessDocEntity> entityPage = docMapper.selectPage(page, wrapper);

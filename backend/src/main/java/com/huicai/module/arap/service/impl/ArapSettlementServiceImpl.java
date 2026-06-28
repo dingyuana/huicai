@@ -51,7 +51,7 @@ public class ArapSettlementServiceImpl implements ArapSettlementService {
     private final VoucherNoService voucherNoService;
 
     @Override
-    public IPage<ArapSettlementEntity> pageQuery(String status, Integer current, Integer size) {
+    public IPage<ArapSettlementEntity> pageQuery(String status, String voucherNo, Integer current, Integer size) {
         Page<ArapSettlementEntity> page = new Page<>(
                 current == null ? 1 : current,
                 size == null ? 20 : size
@@ -59,6 +59,9 @@ public class ArapSettlementServiceImpl implements ArapSettlementService {
         LambdaQueryWrapper<ArapSettlementEntity> wrapper = new LambdaQueryWrapper<>();
         if (StrUtil.isNotBlank(status)) {
             wrapper.eq(ArapSettlementEntity::getStatus, status);
+        }
+        if (StrUtil.isNotBlank(voucherNo)) {
+            wrapper.eq(ArapSettlementEntity::getVoucherNo, voucherNo);
         }
         wrapper.orderByDesc(ArapSettlementEntity::getCreatedAt);
         return mapper.selectPage(page, wrapper);

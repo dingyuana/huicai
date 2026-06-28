@@ -16,6 +16,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.Collections;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -42,7 +43,7 @@ public class ReceivableServiceImpl implements ReceivableService {
     );
 
     @Override
-    public IPage<ReceivableVO> pageQuery(Long customerId, String period, Integer current, Integer size) {
+    public IPage<ReceivableVO> pageQuery(Long customerId, String period, String docNo, String invoiceNo, String voucherNo, Integer current, Integer size) {
         Page<ReceivableEntity> page = new Page<>(
                 current == null ? 1 : current,
                 size == null ? 20 : size
@@ -53,6 +54,15 @@ public class ReceivableServiceImpl implements ReceivableService {
         }
         if (period != null && !period.isBlank()) {
             wrapper.eq(ReceivableEntity::getPeriod, period);
+        }
+        if (docNo != null && !docNo.isBlank()) {
+            wrapper.eq(ReceivableEntity::getDocNo, docNo);
+        }
+        if (invoiceNo != null && !invoiceNo.isBlank()) {
+            wrapper.eq(ReceivableEntity::getInvoiceNo, invoiceNo);
+        }
+        if (voucherNo != null && !voucherNo.isBlank()) {
+            wrapper.eq(ReceivableEntity::getVoucherNo, voucherNo);
         }
         wrapper.gt(ReceivableEntity::getUnsettledAmount, BigDecimal.ZERO);
         wrapper.orderByDesc(ReceivableEntity::getTxDate);
@@ -95,6 +105,8 @@ public class ReceivableServiceImpl implements ReceivableService {
             throw new BusinessException("仅草稿状态的应收单可确认, 当前: " + entity.getStatus());
         }
         entity.setStatus(ArapStatus.CONFIRMED);
+        entity.setAuditedBy(userId);       // 记录审核人
+        entity.setAuditedAt(LocalDateTime.now());  // 记录审核时间
         entity.setVersion(null);
         mapper.updateById(entity);
         log.info("应收单确认: id={}, userId={}", id, userId);

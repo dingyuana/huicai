@@ -291,8 +291,8 @@
               {{ STATUS_MAP[detail.status] || detail.status }}
             </el-tag>
           </el-descriptions-item>
-          <el-descriptions-item label="关联单据ID">{{ detail.docId || '-' }}</el-descriptions-item>
-          <el-descriptions-item label="关联凭证ID">{{ detail.voucherId || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="关联单据">{{ detail.docNo || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="关联凭证">{{ detail.voucherNo || '-' }}</el-descriptions-item>
           <template v-if="detail.originalInvoiceNo">
             <el-descriptions-item label="红冲发票">
               <el-tag type="danger" size="small">红字发票</el-tag>

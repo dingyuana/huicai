@@ -39,4 +39,15 @@ public interface BankStatementMapper extends BaseMapper<BankStatementEntity> {
           + "GROUP BY classification")
     List<Map<String, Object>> countByClassificationByReview(@Param("accountId") Long accountId,
                                                             @Param("reviewStatus") String reviewStatus);
+
+    @Select("""
+        SELECT id, tx_date, amount, review_status, classification
+        FROM t_bank_statement
+        WHERE deleted = 0
+          AND review_status IN ('voucher_generated', 'payment_created')
+          AND generated_voucher_id IS NULL
+          AND generated_doc_id IS NULL
+        LIMIT 50
+    """)
+    List<Map<String, Object>> findStatusGeneratedMismatch();
 }

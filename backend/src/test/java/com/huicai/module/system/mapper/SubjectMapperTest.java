@@ -19,9 +19,9 @@ public class SubjectMapperTest extends AbstractMapperTest {
     @Test
     void insert_shouldReturnId() {
         Subject entity = new Subject();
-        entity.setCode("1001");
+        entity.setCode("9999.0001");
         entity.setName("测试科目");
-        entity.setDirection("DEBIT");
+        entity.setDirection("debit");
         entity.setLevel(1);
         entity.setIsActive(true);
         entity.setIsLeaf(true);
@@ -37,9 +37,9 @@ public class SubjectMapperTest extends AbstractMapperTest {
     void selectById_shouldReturnCorrectData() {
         // 先插入
         Subject entity = new Subject();
-        entity.setCode("1002");
+        entity.setCode("9999.0002");
         entity.setName("测试科目2");
-        entity.setDirection("DEBIT");
+        entity.setDirection("debit");
         entity.setLevel(1);
         entity.setIsActive(true);
         entity.setIsLeaf(true);
@@ -50,18 +50,18 @@ public class SubjectMapperTest extends AbstractMapperTest {
         Subject found = subjectMapper.selectById(entity.getId());
 
         assertNotNull(found);
-        assertEquals("1002", found.getCode());
+        assertEquals("9999.0002", found.getCode());
         assertEquals("测试科目2", found.getName());
-        assertEquals("DEBIT", found.getDirection());
+        assertEquals("debit", found.getDirection());
     }
 
     @Test
     void updateById_shouldUpdateCorrectly() {
         // 先插入
         Subject entity = new Subject();
-        entity.setCode("1003");
+        entity.setCode("9999.0003");
         entity.setName("测试科目3");
-        entity.setDirection("DEBIT");
+        entity.setDirection("debit");
         entity.setLevel(1);
         entity.setIsActive(true);
         entity.setIsLeaf(true);
@@ -83,9 +83,9 @@ public class SubjectMapperTest extends AbstractMapperTest {
     void deleteById_shouldDeleteCorrectly() {
         // 先插入
         Subject entity = new Subject();
-        entity.setCode("1004");
+        entity.setCode("9999.0004");
         entity.setName("测试科目4");
-        entity.setDirection("DEBIT");
+        entity.setDirection("debit");
         entity.setLevel(1);
         entity.setIsActive(true);
         entity.setIsLeaf(true);

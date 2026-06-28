@@ -21,8 +21,8 @@ public interface OutputInvoiceStateMachineService {
     /** 回退到待审核 (CONFIRMED → PENDING_REVIEW, 选错结算状态) */
     void revertToReview(Long invoiceId, Long userId);
 
-    /** 标记已生成凭证 (CONFIRMED → VOUCHERED, 记录 voucherId) */
-    void markVouchered(Long invoiceId, Long voucherId, Long userId);
+    /** 标记已生成凭证 (CONFIRMED → VOUCHERED, 记录 voucherId + voucherNo) */
+    void markVouchered(Long invoiceId, Long voucherId, String voucherNo, Long userId);
 
     /** 核销扣减后更新状态 (VOUCHERED → FULLY_RECONCILED / PARTIALLY_RECONCILED) */
     void onReconciliationUpdate(Long invoiceId, BigDecimal unsettledAmount, Long userId);

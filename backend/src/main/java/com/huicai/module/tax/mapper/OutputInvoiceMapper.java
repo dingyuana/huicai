@@ -58,4 +58,24 @@ public interface OutputInvoiceMapper extends BaseMapper<OutputInvoiceEntity> {
 
     @Update("UPDATE t_output_invoice SET voucher_id = NULL WHERE voucher_id IS NOT NULL")
     int nullOutVoucherIds();
+
+    @Select("""
+        SELECT id, invoice_no, status, customer_name
+        FROM t_output_invoice
+        WHERE deleted = 0
+          AND status IN ('VOUCHERED', 'FULLY_RECONCILED', 'PARTIALLY_RECONCILED')
+          AND voucher_id IS NULL
+        LIMIT 100
+    """)
+    List<Map<String, Object>> findStatusVoucherIdMismatch();
+
+    @Select("""
+        SELECT invoice_no, COUNT(*) AS cnt
+        FROM t_output_invoice
+        WHERE deleted = 0
+        GROUP BY invoice_no
+        HAVING COUNT(*) > 1
+        LIMIT 50
+    """)
+    List<Map<String, Object>> findDuplicateInvoiceNos();
 }

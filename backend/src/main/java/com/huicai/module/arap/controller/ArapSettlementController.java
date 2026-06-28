@@ -24,9 +24,10 @@ public class ArapSettlementController {
     @GetMapping("/page")
     public R<IPage<ArapSettlementEntity>> page(
             @RequestParam(required = false) String status,
+            @RequestParam(required = false) String voucherNo,
             @RequestParam(defaultValue = "1") Integer current,
             @RequestParam(defaultValue = "20") Integer size) {
-        return R.ok(service.pageQuery(status, current, size));
+        return R.ok(service.pageQuery(status, voucherNo, current, size));
     }
 
     @Operation(summary = "详情")

@@ -5,7 +5,11 @@ import com.huicai.module.finance.entity.BusinessDocEntity;
 import org.apache.ibatis.annotations.Delete;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
+import org.apache.ibatis.annotations.Select;
 import org.apache.ibatis.annotations.Update;
+
+import java.util.List;
+import java.util.Map;
 
 @Mapper
 public interface BusinessDocMapper extends BaseMapper<BusinessDocEntity> {
@@ -17,4 +21,12 @@ public interface BusinessDocMapper extends BaseMapper<BusinessDocEntity> {
 
     @Delete("DELETE FROM t_business_doc")
     int physicalDeleteAll();
+
+    @Select("""
+        SELECT id, doc_no, status, customer_id, supplier_id
+        FROM t_business_doc
+        WHERE deleted = 0 AND status = 'VOUCHERED' AND voucher_id IS NULL
+        LIMIT 100
+    """)
+    List<Map<String, Object>> findStatusVoucherIdMismatch();
 }

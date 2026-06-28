@@ -84,6 +84,18 @@ public class AutoGenerationService {
         if (stmt == null) {
             throw BusinessException.notFound("银行流水不存在: " + statementId);
         }
+
+        // 状态守卫：上层调用方（generateVoucher/processManual）已做前置校验;
+        // 这里只拦截明确不允许制证的非法状态
+        String revStatus = stmt.getReviewStatus();
+        if ("PENDING".equals(revStatus)) {
+            log.warn("流水 {} 状态为 PENDING, 跳过自动生成", statementId);
+            return false;
+        }
+        if ("approved".equals(revStatus)) {
+            log.warn("流水 {} 已过账, 禁止重复制证, reviewStatus={}", statementId, revStatus);
+            return false;
+        }
         if (stmt.getGeneratedVoucherId() != null) {
             log.warn("流水 {} 已生成凭证, 跳过", statementId);
             return false;

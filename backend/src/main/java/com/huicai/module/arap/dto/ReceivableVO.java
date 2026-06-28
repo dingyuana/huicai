@@ -13,7 +13,10 @@ public class ReceivableVO {
     private Long customerId;
     private String customerName;
     private Long docId;
+    private String docNo;
+    private String invoiceNo;
     private Long voucherId;
+    private String voucherNo;
     private String period;
     private LocalDate txDate;
     private BigDecimal amount;
@@ -30,7 +33,10 @@ public class ReceivableVO {
         vo.setId(e.getId());
         vo.setCustomerId(e.getCustomerId());
         vo.setDocId(e.getDocId());
+        vo.setDocNo(e.getDocNo());
+        vo.setInvoiceNo(e.getInvoiceNo());
         vo.setVoucherId(e.getVoucherId());
+        vo.setVoucherNo(e.getVoucherNo());
         vo.setPeriod(e.getPeriod());
         vo.setTxDate(e.getTxDate());
         vo.setAmount(e.getAmount());

@@ -42,6 +42,12 @@
             AND (v.voucher_no LIKE CONCAT('%', #{keyword}, '%')
             OR v.summary LIKE CONCAT('%', #{keyword}, '%'))
         </if>
+        <if test="voucherNo != null and voucherNo != ''">
+            AND v.voucher_no = #{voucherNo}
+        </if>
+        <if test="sourceDocNo != null and sourceDocNo != ''">
+            AND v.source_doc_no LIKE CONCAT('%', #{sourceDocNo}, '%')
+        </if>
         ORDER BY v.period DESC, v.voucher_no DESC
     </select>
 

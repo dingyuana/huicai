@@ -154,18 +154,46 @@ public class BankStatementController {
         return R.ok(service.classifySingle(id));
     }
 
-    @Operation(summary = "出纳单条确认分类 (确认后自动生成单据与凭证, 状态机推进)")
+    @Operation(summary = "出纳单条审核确认（仅改状态，不生成凭证）")
     @PostMapping("/{id}/review")
     public R<BankStatementEntity> review(@PathVariable Long id) {
         return R.ok(service.review(id, SecurityUtils.getCurrentUserId()));
     }
 
-    @Operation(summary = "批量确认分类 (状态机推进)")
+    @Operation(summary = "批量审核确认")
     @PostMapping("/batch-review")
     public R<Integer> batchReview(@RequestBody List<Long> ids) {
         int confirmed = service.batchReview(ids, SecurityUtils.getCurrentUserId());
-        logger.info("批量确认: confirmed={}", confirmed);
+        logger.info("批量审核确认: confirmed={}", confirmed);
         return R.ok(confirmed);
+    }
+
+    @Operation(summary = "主管审核（CONFIRMED → AUDITED）")
+    @PostMapping("/{id}/audit")
+    public R<BankStatementEntity> audit(@PathVariable Long id) {
+        return R.ok(service.audit(id, SecurityUtils.getCurrentUserId()));
+    }
+
+    @Operation(summary = "批量主管审核")
+    @PostMapping("/batch-audit")
+    public R<Integer> batchAudit(@RequestBody List<Long> ids) {
+        int audited = service.batchAudit(ids, SecurityUtils.getCurrentUserId());
+        logger.info("批量审核: audited={}", audited);
+        return R.ok(audited);
+    }
+
+    @Operation(summary = "审核通过后生成凭证（仅允许 AUDITED 状态执行）")
+    @PostMapping("/{id}/generate")
+    public R<BankStatementEntity> generate(@PathVariable Long id) {
+        return R.ok(service.generateVoucher(id, SecurityUtils.getCurrentUserId()));
+    }
+
+    @Operation(summary = "批量生成凭证")
+    @PostMapping("/batch-generate")
+    public R<Integer> batchGenerate(@RequestBody List<Long> ids) {
+        int generated = service.batchGenerateVouchers(ids, SecurityUtils.getCurrentUserId());
+        logger.info("批量制证: generated={}", generated);
+        return R.ok(generated);
     }
 
     @Operation(summary = "核准过账 (仅 voucher_generated/payment_created → approved)")

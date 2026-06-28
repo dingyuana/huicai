@@ -10,6 +10,9 @@ public class BusinessDocQueryDTO {
     private String status;
     private String period;
     private String keyword;
+
+    /** 凭证号过滤 */
+    private String voucherNo;
     private LocalDate startDate;
     private LocalDate endDate;
     private Integer current = 1;

@@ -26,9 +26,12 @@ public class ReceivableController {
     public R<IPage<ReceivableVO>> page(
             @RequestParam(required = false) Long customerId,
             @RequestParam(required = false) String period,
+            @RequestParam(required = false) String docNo,
+            @RequestParam(required = false) String invoiceNo,
+            @RequestParam(required = false) String voucherNo,
             @RequestParam(defaultValue = "1") Integer current,
             @RequestParam(defaultValue = "20") Integer size) {
-        return R.ok(service.pageQuery(customerId, period, current, size));
+        return R.ok(service.pageQuery(customerId, period, docNo, invoiceNo, voucherNo, current, size));
     }
 
     @Operation(summary = "详情")

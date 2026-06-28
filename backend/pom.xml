@@ -170,6 +170,13 @@
             <version>1.19.7</version>
             <scope>test</scope>
         </dependency>
+        <!-- JUnit 5 Suite 支持 -->
+        <dependency>
+            <groupId>org.junit.platform</groupId>
+            <artifactId>junit-platform-suite</artifactId>
+            <version>1.10.2</version>
+            <scope>test</scope>
+        </dependency>
         <dependency>
             <groupId>org.testcontainers</groupId>
             <artifactId>postgresql</artifactId>
@@ -201,7 +208,7 @@
                     </excludes>
                 </configuration>
             </plugin>
-            <!-- 测试执行插件：统一测试行为，排除历史遗留失败测试 -->
+            <!-- 测试执行插件：统一测试行为，分组执行 -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
@@ -211,8 +218,14 @@
                     <excludes>
                         <exclude>**/HuicaiE2EIntegrationTest.java</exclude>
                     </excludes>
+                    <!-- 测试分组配置：默认跳过慢测试（需要 Docker） -->
+                    <!-- 如需执行完整测试，请使用：mvn test -DexcludedGroups="" -->
+                    <excludedGroups></excludedGroups>
                     <!-- 测试失败立即停止构建 -->
                     <testFailureIgnore>false</testFailureIgnore>
+                    <!-- 禁用并行执行 - Testcontainers 容器共享需要顺序执行 -->
+                    <forkCount>1</forkCount>
+                    <reuseForks>true</reuseForks>
                 </configuration>
             </plugin>
             <!-- JaCoCo 代码覆盖率插件：设置最低覆盖率门禁 -->

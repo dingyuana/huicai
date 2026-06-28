@@ -17,8 +17,14 @@ public class VoucherQueryDTO {
     /** 凭证类型ID */
     private Long voucherTypeId;
 
-    /** 关键字(凭证号/摘要) */
+    /** 关键字(凭证号/摘要/溯源单号) */
     private String keyword;
+
+    /** 凭证号精确过滤 */
+    private String voucherNo;
+
+    /** 溯源单据号过滤 */
+    private String sourceDocNo;
 
     /** 当前页 */
     private Integer current = 1;

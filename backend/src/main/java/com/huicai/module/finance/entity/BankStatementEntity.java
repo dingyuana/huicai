@@ -58,4 +58,8 @@ public class BankStatementEntity {
 
     @TableLogic
     private Integer deleted;
+
+    /** 乐观锁版本号 */
+    @Version
+    private Integer version;
 }

@@ -39,6 +39,9 @@ public class VoucherVO {
     private String postedByName;
     private LocalDateTime postedAt;
     private Long reversedFrom;
+    private Long sourceDocId;
+    private String sourceDocNo;
+    private String sourceDocType;
     private List<EntryVO> entries;
 
     /**

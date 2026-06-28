@@ -33,11 +33,12 @@
         </el-radio-button>
       </el-radio-group>
 
-      <el-space style="margin-bottom: 12px">
-        <el-button type="primary" @click="openImport">导入对账单</el-button>
-        <el-button :disabled="!selectedIds.length" type="success" @click="onBatchConfirm">批量确认并生成</el-button>
-        <el-button :disabled="!query.accountId" @click="onAutoClassify">自动分类全部</el-button>
-      </el-space>
+        <el-space style="margin-bottom: 12px">
+          <el-button type="primary" @click="openImport">导入对账单</el-button>
+          <el-button :disabled="!selectedIds.length" type="success" @click="onBatchConfirm">批量确认</el-button>
+          <el-button :disabled="!selectedIds.length" type="warning" @click="onBatchAudit">批量审核</el-button>
+          <el-button :disabled="!query.accountId" @click="onAutoClassify">自动分类全部</el-button>
+        </el-space>
 
       <el-table :data="list" v-loading="loading" border stripe @selection-change="onSelectionChange" @row-click="onRowClick" style="cursor:pointer">
         <el-table-column type="selection" width="40" />
@@ -87,6 +88,8 @@
               text size="small" type="primary" @click="onClassify(row)">分类</el-button>
             <el-button v-if="canReview(row)"
               text size="small" type="success" @click.stop="onReview(row)">确认</el-button>
+            <el-button v-if="canAudit(row)"
+              text size="small" type="warning" @click.stop="onAudit(row)">审核</el-button>
             <el-button v-if="row.generatedVoucherId" text size="small" type="primary"
               @click="openVoucher(row.generatedVoucherId!)">查看凭证</el-button>
             <el-button v-if="canApprove(row)"
@@ -331,7 +334,9 @@
           type="primary" @click="onClassify(detailData); detailVisible = false">自动分类</el-button>
         <el-button v-if="!detailEditable && canReview(detailData)"
           type="success" @click="onReview(detailData); detailVisible = false">确认</el-button>
-        <el-button v-if="!detailEditable && canApprove(detailData)"
+        <el-button v-if="!detailEditable && canAudit(detailData)"
+          type="warning" @click="onAudit(detailData); detailVisible = false">审核</el-button>
+          <el-button v-if="!detailEditable && canApprove(detailData)"
           type="primary" @click="onApprove(detailData); detailVisible = false">核准</el-button>
         <el-button v-if="!detailEditable && detailData && detailData.generatedVoucherId" type="primary"
           @click="openVoucher(detailData.generatedVoucherId!); detailVisible = false">查看凭证</el-button>
@@ -348,7 +353,9 @@ import {
   getBankStatementPage, previewStatementExcel, previewStatementExcelWithMapping,
   confirmStatementImport, importStatementCsv, parseExcelHeaders,
   classifyStatement, reviewStatement, approveStatement,
-  batchConfirmStatements, deleteStatement, updateStatementClassification,
+  batchConfirmStatements,
+  auditStatement, batchAuditStatements,
+  deleteStatement, updateStatementClassification,
   getBankStatementDetail, getClassificationCounts,
   CLASSIFICATION_LABELS, REVIEW_STATUS_LABELS,
   type BankStatementVO,
@@ -400,7 +407,8 @@ type ElTagType = 'success' | 'warning' | 'info' | 'primary' | 'danger'
 
 function reviewStatusTagType(status: string): ElTagType {
   if (!status || status === 'PENDING' || status === 'classified') return 'warning'
-  if (status === 'voucher_generated' || status === 'payment_created' || status === 'CONFIRMED') return 'success'
+  if (status === 'CONFIRMED') return 'success'
+  if (status === 'voucher_generated' || status === 'payment_created') return 'success'
   if (status === 'approved') return 'primary'
   if (status === 'manual_pending') return 'info'
   return 'warning'
@@ -409,7 +417,11 @@ function reviewStatusTagType(status: string): ElTagType {
 function canReview(row: any): boolean {
   const s = row.reviewStatus
   return row.classification && row.classification !== 'pending'
-    && (!s || s === 'PENDING' || s === 'classified' || s === 'CONFIRMED' || s === 'manual_pending' || s === 'RECLASSIFIED')
+    && (!s || s === 'PENDING' || s === 'classified' || s === 'manual_pending' || s === 'RECLASSIFIED')
+}
+
+function canAudit(row: any): boolean {
+  return row.reviewStatus === 'CONFIRMED' && !row.generatedVoucherId
 }
 
 function canApprove(row: any): boolean {
@@ -677,6 +689,36 @@ async function onBatchConfirm() {
     }
     await refreshAll()
   } catch { /* handled */ }
+}
+
+async function onAudit(row: BankStatementVO) {
+  try {
+    await auditStatement(row.id)
+    ElMessage.success('审核完成')
+    if (query.value.reviewStatus === 'CONFIRMED') {
+      query.value.reviewStatus = undefined
+    }
+    await refreshAll()
+  } catch (e: any) {
+    ElMessage.error(e?.message || '审核失败')
+  }
+}
+
+async function onBatchAudit() {
+  if (!selectedIds.value.length) {
+    ElMessage.warning('请先选择流水')
+    return
+  }
+  try {
+    const n = await batchAuditStatements(selectedIds.value)
+    ElMessage.success(`已审核 ${n} 条`)
+    if (query.value.reviewStatus === 'CONFIRMED') {
+      query.value.reviewStatus = undefined
+    }
+    await refreshAll()
+  } catch (e: any) {
+    ElMessage.error(e?.message || '批量审核失败')
+  }
 }
 
 function openVoucher(id: number) {

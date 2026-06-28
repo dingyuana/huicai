@@ -76,7 +76,7 @@
             <el-button text size="small" v-if="row.status === 'DRAFT'" type="success" @click="onSubmit(row)">提交</el-button>
             <el-button text size="small" v-if="row.status === 'SUBMITTED'" type="primary" @click="onApprove(row)">审批</el-button>
             <el-button text size="small" v-if="row.status === 'SUBMITTED'" type="danger" @click="onReject(row)">驳回</el-button>
-            <el-button text size="small" v-if="row.status === 'APPROVED' && !row.voucherId" type="warning" @click="onGenerateVoucher(row)">生成凭证</el-button>
+            <el-button text size="small" v-if="row.status === 'APPROVED' && !row.voucherId && row.docType !== 'INVOICE_OUT'" type="warning" @click="onGenerateVoucher(row)">生成凭证</el-button>
             <el-button text size="small" v-if="(row.status === 'APPROVED' || row.status === 'VOUCHERED') && !row.voucherId" type="danger" @click="onReverse(row)">红冲</el-button>
             <el-popconfirm v-if="row.status === 'DRAFT'" title="确认删除？" @confirm="onDelete(row)">
               <template #reference>

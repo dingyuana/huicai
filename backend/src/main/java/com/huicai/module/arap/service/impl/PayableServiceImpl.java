@@ -14,6 +14,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -37,7 +38,7 @@ public class PayableServiceImpl implements PayableService {
     );
 
     @Override
-    public IPage<PayableVO> pageQuery(Long vendorId, String period, Integer current, Integer size) {
+    public IPage<PayableVO> pageQuery(Long vendorId, String period, String docNo, String invoiceNo, String voucherNo, Integer current, Integer size) {
         Page<PayableEntity> page = new Page<>(
                 current == null ? 1 : current,
                 size == null ? 20 : size
@@ -45,6 +46,9 @@ public class PayableServiceImpl implements PayableService {
         LambdaQueryWrapper<PayableEntity> wrapper = new LambdaQueryWrapper<>();
         if (vendorId != null) wrapper.eq(PayableEntity::getVendorId, vendorId);
         if (period != null && !period.isBlank()) wrapper.eq(PayableEntity::getPeriod, period);
+        if (docNo != null && !docNo.isBlank()) wrapper.eq(PayableEntity::getDocNo, docNo);
+        if (invoiceNo != null && !invoiceNo.isBlank()) wrapper.eq(PayableEntity::getInvoiceNo, invoiceNo);
+        if (voucherNo != null && !voucherNo.isBlank()) wrapper.eq(PayableEntity::getVoucherNo, voucherNo);
         wrapper.gt(PayableEntity::getUnsettledAmount, BigDecimal.ZERO);
         wrapper.orderByDesc(PayableEntity::getTxDate);
         IPage<PayableEntity> entityPage = mapper.selectPage(page, wrapper);
@@ -86,6 +90,8 @@ public class PayableServiceImpl implements PayableService {
             throw new BusinessException("仅草稿状态的应付单可确认, 当前: " + entity.getStatus());
         }
         entity.setStatus(ArapStatus.CONFIRMED);
+        entity.setAuditedBy(userId);       // 记录审核人
+        entity.setAuditedAt(LocalDateTime.now());  // 记录审核时间
         entity.setVersion(null);
         mapper.updateById(entity);
         log.info("应付单确认: id={}, userId={}", id, userId);

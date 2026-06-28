@@ -7,8 +7,10 @@ import com.huicai.module.finance.entity.VoucherEntity;
 import org.apache.ibatis.annotations.Delete;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
+import org.apache.ibatis.annotations.Select;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * 凭证 Mapper
@@ -19,11 +21,13 @@ public interface VoucherMapper extends BaseMapper<VoucherEntity> {
     /**
      * 分页查询凭证（含类型名称）
      */
-    IPage<VoucherEntity> selectVoucherPage(Page<VoucherEntity> page,
+    Page<VoucherEntity> selectVoucherPage(Page<VoucherEntity> page,
                                            @Param("period") String period,
                                            @Param("status") String status,
                                            @Param("voucherTypeId") Long voucherTypeId,
-                                           @Param("keyword") String keyword);
+                                           @Param("keyword") String keyword,
+                                           @Param("voucherNo") String voucherNo,
+                                           @Param("sourceDocNo") String sourceDocNo);
 
     /**
      * 按ID查询凭证详情
@@ -34,7 +38,7 @@ public interface VoucherMapper extends BaseMapper<VoucherEntity> {
      * 查询指定期间的最大凭证号
      */
     String selectMaxVoucherNo(@Param("period") String period,
-                              @Param("voucherTypeId") Long voucherTypeId);
+                               @Param("voucherTypeId") Long voucherTypeId);
 
     /**
      * 批量更新凭证状态
@@ -48,4 +52,18 @@ public interface VoucherMapper extends BaseMapper<VoucherEntity> {
 
     @Delete("DELETE FROM t_voucher")
     int deleteAll();
+
+    @Select("""
+        SELECT v.id, v.voucher_no, v.total_debit, v.total_credit,
+               COALESCE(SUM(e.debit), 0) AS actual_debit,
+               COALESCE(SUM(e.credit), 0) AS actual_credit
+        FROM t_voucher v
+        LEFT JOIN t_voucher_entry e ON v.id = e.voucher_id
+        WHERE v.deleted = 0
+        GROUP BY v.id, v.voucher_no, v.total_debit, v.total_credit
+        HAVING ABS(v.total_debit - v.total_credit) > 0.01
+            OR ABS(COALESCE(SUM(e.debit), 0) - COALESCE(SUM(e.credit), 0)) > 0.01
+        LIMIT 50
+    """)
+    List<Map<String, Object>> findUnbalancedVouchers();
 }

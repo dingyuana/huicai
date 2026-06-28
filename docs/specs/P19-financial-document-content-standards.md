@@ -75,21 +75,22 @@
 
 | 级别 | 场景 | 摘要内容 | 示例 |
 |---|---|---|---|
-| 凭证摘要 | 生成自业务单据 | `付/收{对方单位}-{原摘要}` | 付XX科技-生成自单据SK2026060001 |
-| 凭证分录摘要 | 业务单据分录 | `{分录摘要}` 优先，缺省用凭证摘要 | 7月服务费 |
+| 凭证摘要 | 生成自业务单据 | `付/收{对方单位}-{原摘要}[发票号]` | 付XX科技-生成自单据SK2026060001[25922000000054246714] |
+| 凭证分录摘要 | 业务单据分录 | `{分录摘要}[发票号]` 优先，缺省用凭证摘要 | 7月服务费[25922000000054246714] |
 | 业务单据摘要 | 手工录入 | `{对方单位}{业务性质}` | 付XX科技7月服务费 |
-| 业务单据展示摘要 | 列表/详情 | `{单据专用摘要} \|\| enrichedSummary` | 付XX科技-生成自单据FK2026060001 |
+| 业务单据展示摘要 | 列表/详情 | `{单据专用摘要} \|\| enrichedSummary[发票号]` | 付XX科技-生成自单据FK2026060001[25922000000054246714] |
 | 核销摘要 | 核销日志 | `核销{应收/应付单单号}` | 核销SK2026060001 |
 | 红冲摘要 | 红冲单据 | `红冲自 {原单据号}` | 红冲自FK2026060001 |
 
-**enrichedSummary 实现逻辑** (已实现)：
+**enrichedSummary 实现逻辑** (已实现，2026-06-27 新增发票号后缀)：
 ```java
 enrichSummary(BusinessDocEntity entity):
     base = entity.summary != null && !blank ? entity.summary : "生成自单据 " + entity.docNo
     partyName = resolvePartyName(entity)  // 优先 supplier, 其次 customer
-    if partyName == null || blank -> return base
-    prefix = SUPPLIER_DOC_TYPES.contains(entity.docType) ? "付" : "收"
-    return prefix + partyName + "-" + base
+    if partyName != null && !blank -> prefix = SUPPLIER_DOC_TYPES.contains(entity.docType) ? "付" : "收"
+                                     base = prefix + partyName + "-" + base
+    if entity.invoiceNo != null && !blank -> base += "[" + entity.invoiceNo + "]"  // 发票号后缀，审计追溯用
+    return base
 ```
 
 ### 2.3 单据编号规则 (已实现)
@@ -232,9 +233,10 @@ enrichSummary(BusinessDocEntity entity):
 | AC8 | 状态机非法转移拒绝 + 返回明确错误信息 | 全部 | P1 |
 | AC9 | 所有单据编号格式统一：前缀+年月+顺序号 | 全部 | P1 |
 | AC10 | 红冲单据摘要标明"红冲自原单据号" | 业务单据 | P2 |
-| AC11 | 附件张数/链接在详情页可查看 | 全部 | P2 |
-| AC12 | 数据权限：仅可查看本单位（orgId）单据 | 全部 | P3 |
-| AC13 | 审批流完备：制单人≠审批人 | 全部 | P3 |
+| **AC11** | **发票导入生成的凭证/业务单据，摘要包含发票号，格式：[发票号]** | **发票/业务单据/凭证** | **P0** |
+| AC12 | 附件张数/链接在详情页可查看 | 全部 | P2 |
+| AC13 | 数据权限：仅可查看本单位（orgId）单据 | 全部 | P3 |
+| AC14 | 审批流完备：制单人≠审批人 | 全部 | P3 |
 
 ---
 
