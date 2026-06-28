@@ -28,8 +28,26 @@ public class InputInvoiceEntity {
     private LocalDate certifiedDate;
     private String deductionPeriod;
     private BigDecimal deductionAmount;
-    private Long docId;
     private Long voucherId;
+
+    /**
+     * 关联业务单据ID
+     */
+    @TableField("doc_id")
+    private Long docId;
+
+    /**
+     * 业务单据编号（冗余存储，用于快速查询）
+     */
+    @TableField("doc_no")
+    private String docNo;
+
+    /**
+     * 凭证编号（冗余存储，用于快速查询）
+     */
+    @TableField("voucher_no")
+    private String voucherNo;
+
     private String remark;
     private Long createdBy;
     @TableField(exist = false)
@@ -39,6 +57,14 @@ public class InputInvoiceEntity {
     private LocalDateTime createdAt;
     @TableField(fill = FieldFill.INSERT_UPDATE)
     private LocalDateTime updatedAt;
+
+    /** 审核人ID */
+    @TableField(exist = false)
+    private Long auditedBy;
+
+    /** 审核时间 */
+    @TableField(exist = false)
+    private LocalDateTime auditedAt;
 
     @TableLogic
     private Integer deleted;

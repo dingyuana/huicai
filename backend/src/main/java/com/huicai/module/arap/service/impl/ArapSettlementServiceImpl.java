@@ -162,6 +162,12 @@ public class ArapSettlementServiceImpl implements ArapSettlementService {
             throw new BusinessException("该核销单已生成凭证, voucherId=" + entity.getVoucherId());
         }
 
+        // 获取核销明细（用于回写应收/应付单的 voucherNo）
+        List<ArapSettlementEntryEntity> entries = entryMapper.selectList(
+                new LambdaQueryWrapper<ArapSettlementEntryEntity>()
+                        .eq(ArapSettlementEntryEntity::getSettlementId, id)
+        );
+
         String classifySuffix;
         if (entity.getSettlementType() == null) {
             classifySuffix = "receivable";
@@ -190,6 +196,9 @@ public class ArapSettlementServiceImpl implements ArapSettlementService {
         voucher.setSummary("往来核销生成 — " + (entity.getSettlementNo() != null ? entity.getSettlementNo() : ""));
         if (template != null) voucher.setTemplateId(template.getId());
         voucher.setCreatedBy(DEFAULT_USER_ID);
+        // 新增：溯源字段（核销单 → 凭证）
+        voucher.setSourceDocType("SETTLEMENT");
+        voucher.setSourceDocNo(entity.getSettlementNo());
         voucherMapper.insert(voucher);
 
         BigDecimal total = BigDecimal.ZERO;
@@ -226,8 +235,26 @@ public class ArapSettlementServiceImpl implements ArapSettlementService {
         voucherMapper.updateById(voucher);
 
         entity.setVoucherId(voucher.getId());
+        entity.setVoucherNo(voucherNo);      // 新增：回写凭证编号到核销单
         entity.setStatus(ArapStatus.VOUCHERED);
         mapper.updateById(entity);
+
+        // 新增：回写凭证编号到所有核销明细对应的应收/应付单
+        for (ArapSettlementEntryEntity entry : entries) {
+            if (entry.getReceivableId() != null) {
+                ReceivableEntity r = receivableMapper.selectById(entry.getReceivableId());
+                if (r != null && r.getVoucherNo() == null) {
+                    r.setVoucherNo(voucherNo);
+                    receivableMapper.updateById(r);
+                }
+            } else if (entry.getPayableId() != null) {
+                PayableEntity p = payableMapper.selectById(entry.getPayableId());
+                if (p != null && p.getVoucherNo() == null) {
+                    p.setVoucherNo(voucherNo);
+                    payableMapper.updateById(p);
+                }
+            }
+        }
 
         log.info("核销单生成凭证: settlementId={}, voucherId={}, voucherNo={}, amount={}",
                 id, voucher.getId(), voucherNo, entity.getTotalAmount());

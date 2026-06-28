@@ -45,6 +45,24 @@ public class VoucherEntity {
     /** 附件ID列表(逗号分隔) */
     private String attachmentIds;
 
+    /**
+     * 溯源单据ID（生成该凭证的原始单据ID）
+     */
+    @TableField("source_doc_id")
+    private Long sourceDocId;
+
+    /**
+     * 溯源单据编号（冗余存储，用于快速查询）
+     */
+    @TableField("source_doc_no")
+    private String sourceDocNo;
+
+    /**
+     * 溯源单据类型：BUSINESS_DOC, OUTPUT_INVOICE, INPUT_INVOICE, RECEIVABLE, PAYABLE
+     */
+    @TableField("source_doc_type")
+    private String sourceDocType;
+
     /** 制单人 */
     private Long createdBy;
 
@@ -92,4 +110,8 @@ public class VoucherEntity {
     /** 逻辑删除(0-未删,1-已删) */
     @TableLogic
     private Integer deleted;
+
+    /** 乐观锁版本号 */
+    @Version
+    private Integer version;
 }

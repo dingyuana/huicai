@@ -463,6 +463,9 @@ public class SalesInvoiceImportService {
         voucher.setTotalDebit(totalAmount);
         voucher.setTotalCredit(totalAmount);
         voucher.setCreatedBy(DEFAULT_USER_ID);
+        // 新增：溯源字段（销售发票 → 凭证）
+        voucher.setSourceDocType("OUTPUT_INVOICE");
+        voucher.setSourceDocNo(row.invoiceNo);
         voucherMapper.insert(voucher);
 
         int sort = 1;

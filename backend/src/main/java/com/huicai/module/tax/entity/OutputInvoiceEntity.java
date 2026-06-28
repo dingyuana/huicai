@@ -63,10 +63,30 @@ public class OutputInvoiceEntity {
     @TableField(exist = false)
     private Long updatedBy;
 
+    /** 关联单据编号（冗余存储，用于快速查询） */
+    @TableField("doc_no")
+    private String docNo;
+
+    /** 关联凭证编号（冗余存储，用于快速查询） */
+    @TableField("voucher_no")
+    private String voucherNo;
+
     @TableField(fill = FieldFill.INSERT)
     private LocalDateTime createdAt;
     @TableField(fill = FieldFill.INSERT_UPDATE)
     private LocalDateTime updatedAt;
+
+    /** 审核人ID */
+    @TableField(exist = false)
+    private Long auditedBy;
+
+    /** 审核时间 */
+    @TableField(exist = false)
+    private LocalDateTime auditedAt;
+
+    /** 乐观锁版本号 */
+    @Version
+    private Integer version;
 
     @TableLogic
     private Integer deleted;

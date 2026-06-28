@@ -343,7 +343,7 @@ class OutputInvoiceStateMachineServiceImplTest {
         when(invoiceMapper.selectById(INVOICE_ID)).thenReturn(inv);
 
         // when
-        service.markVouchered(INVOICE_ID, 200L, USER_ID);
+        service.markVouchered(INVOICE_ID, 200L, "VCH-TEST-001", USER_ID);
 
         // then — 正向：状态变更 + voucherId 记录
         assertEquals(InvoiceStatus.VOUCHERED, inv.getStatus());
@@ -360,7 +360,7 @@ class OutputInvoiceStateMachineServiceImplTest {
         when(invoiceMapper.selectById(INVOICE_ID)).thenReturn(inv);
 
         // when
-        service.markVouchered(INVOICE_ID, 200L, USER_ID);
+        service.markVouchered(INVOICE_ID, 200L, "VCH-TEST-001", USER_ID);
 
         // then — 负向：标记已生成凭证不应再创建新凭证
         StateMachineTestHelper.verifyNoVoucherCreated(voucherMapper, voucherEntryMapper);
@@ -377,7 +377,7 @@ class OutputInvoiceStateMachineServiceImplTest {
 
         // when/then
         BusinessException ex = assertThrows(BusinessException.class,
-                () -> service.markVouchered(INVOICE_ID, 200L, USER_ID));
+                () -> service.markVouchered(INVOICE_ID, 200L, "VCH-TEST-001", USER_ID));
         StateMachineTestHelper.assertBusinessErrorContains(ex, "仅已确认状态可生成凭证");
     }
 

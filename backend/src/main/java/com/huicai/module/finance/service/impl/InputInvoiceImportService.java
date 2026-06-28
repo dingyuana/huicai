@@ -301,9 +301,9 @@ public class InputInvoiceImportService {
                 }
                 String period = row.invoiceDate.format(DateTimeFormatter.ofPattern("yyyyMM"));
                 BusinessDocEntity doc = createBusinessDoc(row, vendorId, period);
-                createVoucher(doc, row, vendorId, period);
-                insertInputInvoice(row, vendorId, period, doc);
-                createPayableFromInvoice(doc, row, vendorId, period);
+                String voucherNo = createVoucher(doc, row, vendorId, period);
+                insertInputInvoice(row, vendorId, period, doc, voucherNo);
+                createPayableFromInvoice(doc, row, vendorId, period, voucherNo);
                 success++; docCreated++; voucherCreated++;
             } catch (Exception e) {
                 log.warn("处理采购发票行失败 row={}: {}", row.rowNum, e.getMessage());
@@ -361,7 +361,7 @@ public class InputInvoiceImportService {
     }
 
     @Transactional
-    void createVoucher(BusinessDocEntity doc, ParsedInputInvoiceRow row, Long vendorId, String period) {
+    String createVoucher(BusinessDocEntity doc, ParsedInputInvoiceRow row, Long vendorId, String period) {
         String voucherNo = voucherNoService.generateNextNo(period, DEFAULT_VOUCHER_TYPE_ID);
         Subject subjectBank = findSubjectByCode("2202");
         Subject subjectRevenue = findSubjectByCode("5001");
@@ -377,6 +377,9 @@ public class InputInvoiceImportService {
         voucher.setSummary(row.goodsName);
         voucher.setSource("INVOICE_IMPORT");
         voucher.setCreatedBy(DEFAULT_USER_ID);
+        // 新增：溯源字段（采购发票 → 凭证）
+        voucher.setSourceDocType("INPUT_INVOICE");
+        voucher.setSourceDocNo(row.invoiceNo);
         voucherMapper.insert(voucher);
 
         doc.setVoucherId(voucher.getId());
@@ -388,6 +391,8 @@ public class InputInvoiceImportService {
         addVoucherEntry(voucher.getId(), subjectInputTax.getId(), row.taxAmount, BigDecimal.ZERO, row.goodsName, sort++);
         // 贷: 2202 应付账款
         addVoucherEntry(voucher.getId(), subjectBank.getId(), BigDecimal.ZERO, row.totalAmount, row.goodsName, sort++);
+        
+        return voucherNo;
     }
 
     void addVoucherEntry(Long voucherId, Long subjectId, BigDecimal dr, BigDecimal cr, String summary, int sort) {
@@ -402,7 +407,7 @@ public class InputInvoiceImportService {
     }
 
     @Transactional
-    void insertInputInvoice(ParsedInputInvoiceRow row, Long vendorId, String period, BusinessDocEntity doc) {
+    void insertInputInvoice(ParsedInputInvoiceRow row, Long vendorId, String period, BusinessDocEntity doc, String voucherNo) {
         InputInvoiceEntity inv = new InputInvoiceEntity();
         inv.setInvoiceNo(row.invoiceNo);
         inv.setInvoiceDate(row.invoiceDate);
@@ -416,7 +421,9 @@ public class InputInvoiceImportService {
         // P21-b 重构 2026-06-22 修 P0 bug: 原 PENDING 违反 V8 CHECK 约束 (chk_cert_status 仅允许 UNCERTIFIED/CERTIFIED/INVALID/CANCELLED)
         inv.setCertificationStatus("UNCERTIFIED");
         inv.setDocId(doc.getId());
+        inv.setDocNo(doc.getDocNo());           // 新增：业务单据编号冗余
         inv.setVoucherId(doc.getVoucherId());
+        inv.setVoucherNo(voucherNo);            // 新增：凭证编号冗余
         inv.setCreatedBy(DEFAULT_USER_ID);
         inputInvoiceMapper.insert(inv);
     }
@@ -427,11 +434,14 @@ public class InputInvoiceImportService {
      */
     @Transactional
     void createPayableFromInvoice(BusinessDocEntity doc, ParsedInputInvoiceRow row,
-                                  Long vendorId, String period) {
+                                  Long vendorId, String period, String voucherNo) {
         PayableEntity pay = new PayableEntity();
         pay.setVendorId(vendorId);
         pay.setDocId(doc.getId());
+        pay.setDocNo(doc.getDocNo());           // 新增：业务单据编号冗余
+        pay.setInvoiceNo(row.invoiceNo);        // 新增：发票编号冗余
         pay.setVoucherId(doc.getVoucherId());
+        pay.setVoucherNo(voucherNo);            // 新增：凭证编号冗余
         pay.setPeriod(period);
         pay.setTxDate(row.invoiceDate);
         pay.setAmount(row.totalAmount);
@@ -440,8 +450,8 @@ public class InputInvoiceImportService {
         pay.setSummary(row.goodsName);
         pay.setStatus(ArapStatus.CONFIRMED);
         payableMapper.insert(pay);
-        log.info("P10-2 采购发票应付单生成: vendorId={}, docId={}, amount={}",
-                vendorId, doc.getId(), row.totalAmount);
+        log.info("P10-2 采购发票应付单生成: vendorId={}, docId={}, invoiceNo={}, voucherNo={}, amount={}",
+                vendorId, doc.getId(), row.invoiceNo, voucherNo, row.totalAmount);
     }
 
     /**

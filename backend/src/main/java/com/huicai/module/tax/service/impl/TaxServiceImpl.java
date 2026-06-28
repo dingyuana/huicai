@@ -9,6 +9,7 @@ import com.huicai.module.finance.entity.VoucherEntity;
 import com.huicai.module.finance.entity.VoucherEntryEntity;
 import com.huicai.module.finance.mapper.VoucherEntryMapper;
 import com.huicai.module.finance.mapper.VoucherMapper;
+import com.huicai.module.finance.mapper.BusinessDocMapper;
 import com.huicai.module.finance.service.VoucherNoService;
 import com.huicai.module.system.entity.Subject;
 import com.huicai.module.system.mapper.SubjectMapper;
@@ -60,6 +61,7 @@ public class TaxServiceImpl implements TaxService {
     private final OutputInvoiceStateMachineService stateMachineService;
     private final TemplateMatcher templateMatcher;
     private final VoucherTemplateService voucherTemplateService;
+    private final BusinessDocMapper businessDocMapper;
 
     // ========== 税种 ==========
     @Override
@@ -242,13 +244,27 @@ public class TaxServiceImpl implements TaxService {
             }
         }
         
-        if (invoice.getReversedByInvoiceId() != null) {
+if (invoice.getReversedByInvoiceId() != null) {
             OutputInvoiceEntity redInvoice = outputMapper.selectById(invoice.getReversedByInvoiceId());
             if (redInvoice != null) {
                 invoice.setReversedByInvoiceNo(redInvoice.getInvoiceNo());
             }
         }
-        
+
+        // 回填关联单据号和凭证号（替代内部数据库 ID）
+        if (invoice.getDocId() != null) {
+            var doc = businessDocMapper.selectById(invoice.getDocId());
+            if (doc != null) {
+                invoice.setDocNo(doc.getDocNo());
+            }
+        }
+        if (invoice.getVoucherId() != null) {
+            var voucher = voucherMapper.selectById(invoice.getVoucherId());
+            if (voucher != null) {
+                invoice.setVoucherNo(voucher.getVoucherNo());
+            }
+        }
+
         return invoice;
     }
 
@@ -336,6 +352,9 @@ public class TaxServiceImpl implements TaxService {
         voucher.setTotalDebit(totalAmt);
         voucher.setTotalCredit(totalAmt);
         voucher.setCreatedBy(userId);
+        // 新增：溯源字段（销售发票 → 凭证）
+        voucher.setSourceDocType("OUTPUT_INVOICE");
+        voucher.setSourceDocNo(inv.getInvoiceNo());
         voucherMapper.insert(voucher);
 
         String entrySummary = (inv.getInvoiceNo() != null ? inv.getInvoiceNo() : "") + " " + (inv.getCustomerName() != null ? inv.getCustomerName() : "");
@@ -372,7 +391,7 @@ public class TaxServiceImpl implements TaxService {
             voucherEntryMapper.insert(cr2);
         }
 
-        stateMachineService.markVouchered(invoiceId, voucher.getId(), userId);
+        stateMachineService.markVouchered(invoiceId, voucher.getId(), voucherNo, userId);
         log.info("发票生成凭证: invoiceId={}, voucherId={}, voucherNo={}", invoiceId, voucher.getId(), voucherNo);
     }
 
@@ -394,6 +413,9 @@ public class TaxServiceImpl implements TaxService {
         voucher.setSummary(TemplateEngine.renderSummary("发票转凭证: {发票号} - {客户名称}", ctx));
         voucher.setTemplateId(template.getId());
         voucher.setCreatedBy(userId);
+        // 新增：溯源字段（销售发票 → 凭证）
+        voucher.setSourceDocType("OUTPUT_INVOICE");
+        voucher.setSourceDocNo(inv.getInvoiceNo());
         voucherMapper.insert(voucher);
 
         BigDecimal totalD = BigDecimal.ZERO, totalC = BigDecimal.ZERO;
@@ -429,7 +451,7 @@ public class TaxServiceImpl implements TaxService {
         voucher.setTotalCredit(maxAmt);
         voucherMapper.updateById(voucher);
 
-        stateMachineService.markVouchered(inv.getId(), voucher.getId(), userId);
+        stateMachineService.markVouchered(inv.getId(), voucher.getId(), voucherNo, userId);
         log.info("发票模板制证: invoiceId={}, voucherId={}, templateId={}", inv.getId(), voucher.getId(), template.getId());
     }
 
@@ -628,6 +650,9 @@ public class TaxServiceImpl implements TaxService {
         voucher.setTotalDebit(amount);
         voucher.setTotalCredit(amount);
         voucher.setCreatedBy(userId);
+        // 新增：溯源字段（税务申报 → 凭证）
+        voucher.setSourceDocType("TAX_DECLARATION");
+        voucher.setSourceDocNo(entity.getDeclarationNo());
         voucherMapper.insert(voucher);
 
         int sort = 1;
@@ -672,6 +697,9 @@ public class TaxServiceImpl implements TaxService {
         voucher.setSummary("缴税: " + (entity.getTaxType() != null ? entity.getTaxType() : ""));
         voucher.setTemplateId(template.getId());
         voucher.setCreatedBy(userId);
+        // 新增：溯源字段（税务申报 → 凭证）
+        voucher.setSourceDocType("TAX_DECLARATION");
+        voucher.setSourceDocNo(entity.getDeclarationNo());
         voucherMapper.insert(voucher);
 
         BigDecimal totalD = BigDecimal.ZERO, totalC = BigDecimal.ZERO;

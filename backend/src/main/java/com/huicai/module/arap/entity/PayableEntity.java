@@ -18,6 +18,25 @@ public class PayableEntity {
     private Long vendorId;
     private Long docId;
     private Long voucherId;
+
+    /**
+     * 业务单据编号（冗余存储，用于快速查询）
+     */
+    @TableField("doc_no")
+    private String docNo;
+
+    /**
+     * 凭证编号（冗余存储，用于快速查询）
+     */
+    @TableField("voucher_no")
+    private String voucherNo;
+
+    /**
+     * 发票编号（冗余存储，用于快速查询）
+     */
+    @TableField("invoice_no")
+    private String invoiceNo;
+
     private String period;
     private LocalDate txDate;
     private BigDecimal amount;
@@ -37,6 +56,14 @@ public class PayableEntity {
     /** 乐观锁版本号，MyBatis-Plus @Version 自动维护（防并发超核销） */
     @Version
     private Integer version;
+
+    /** 审核人ID */
+    @TableField(exist = false)
+    private Long auditedBy;
+
+    /** 审核时间 */
+    @TableField(exist = false)
+    private LocalDateTime auditedAt;
 
     @TableLogic
     private Integer deleted;

@@ -23,6 +23,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
@@ -84,6 +85,8 @@ public class OutputInvoiceStateMachineServiceImpl implements OutputInvoiceStateM
             throw BusinessException.badRequest("仅待审核状态可确认，当前: " + entity.getStatus());
         }
         entity.setStatus(InvoiceStatus.CONFIRMED);
+        entity.setAuditedBy(userId);       // 记录审核人
+        entity.setAuditedAt(LocalDateTime.now());  // 记录审核时间
         entity.setUpdatedBy(userId);
         invoiceMapper.updateById(entity);
         log.info("销售发票审核通过: id={}, userId={}", invoiceId, userId);
@@ -124,16 +127,17 @@ public class OutputInvoiceStateMachineServiceImpl implements OutputInvoiceStateM
 
     @Override
     @Transactional
-    public void markVouchered(Long invoiceId, Long voucherId, Long userId) {
+    public void markVouchered(Long invoiceId, Long voucherId, String voucherNo, Long userId) {
         OutputInvoiceEntity entity = getEntity(invoiceId);
         if (!InvoiceStatus.isVoucherable(entity.getStatus())) {
             throw BusinessException.badRequest("仅已确认状态可生成凭证，当前: " + entity.getStatus());
         }
         entity.setStatus(InvoiceStatus.VOUCHERED);
         entity.setVoucherId(voucherId);
+        entity.setVoucherNo(voucherNo);      // 新增：凭证编号冗余
         entity.setUpdatedBy(userId);
         invoiceMapper.updateById(entity);
-        log.info("销售发票已生成凭证: invoiceId={}, voucherId={}", invoiceId, voucherId);
+        log.info("销售发票已生成凭证: invoiceId={}, voucherId={}, voucherNo={}", invoiceId, voucherId, voucherNo);
     }
 
     @Override
@@ -195,8 +199,18 @@ public class OutputInvoiceStateMachineServiceImpl implements OutputInvoiceStateM
 
     /**
      * 根据发票信息创建业务单和分录.
+     * 如果发票已有 docId（来自导入流程），不再重复创建。
      */
     private BusinessDocEntity createBusinessDocFromInvoice(OutputInvoiceEntity invoice, Long userId) {
+        // P32: 防重复创建：如果发票已有 docId，直接返回现有单据
+        if (invoice.getDocId() != null) {
+            BusinessDocEntity existing = docMapper.selectById(invoice.getDocId());
+            if (existing != null) {
+                log.info("发票已有业务单: invoiceId={}, docId={}, skip", invoice.getId(), invoice.getDocId());
+                return existing;
+            }
+        }
+
         BusinessDocEntity doc = new BusinessDocEntity();
         doc.setDocNo(generateDocNo(invoice.getPeriod()));
         doc.setDocType("INVOICE_OUT");
@@ -220,8 +234,9 @@ public class OutputInvoiceStateMachineServiceImpl implements OutputInvoiceStateM
         entry.setSortOrder(1);
         docEntryMapper.insert(entry);
 
-        // 更新发票的 docId
+        // 更新发票的 docId 和 docNo（编号冗余）
         invoice.setDocId(doc.getId());
+        invoice.setDocNo(doc.getDocNo());  // 新增：编号冗余存储
         invoiceMapper.updateById(invoice);
 
         return doc;
@@ -231,9 +246,21 @@ public class OutputInvoiceStateMachineServiceImpl implements OutputInvoiceStateM
      * 根据业务单和发票信息创建应收单.
      */
     private void createReceivableFromInvoice(BusinessDocEntity doc, OutputInvoiceEntity invoice, Long userId) {
+        // P32: 防重复创建应收单
+        long existingCount = receivableMapper.selectCount(
+                new LambdaQueryWrapper<ReceivableEntity>()
+                        .eq(ReceivableEntity::getDocId, doc.getId())
+                        .eq(ReceivableEntity::getCustomerId, invoice.getCustomerId()));
+        if (existingCount > 0) {
+            log.info("业务单已有应收单: docId={}, count={}, skip", doc.getId(), existingCount);
+            return;
+        }
+
         ReceivableEntity recv = new ReceivableEntity();
         recv.setCustomerId(invoice.getCustomerId());
         recv.setDocId(doc.getId());
+        recv.setDocNo(doc.getDocNo());          // 新增：业务单据编号冗余
+        recv.setInvoiceNo(invoice.getInvoiceNo());  // 新增：发票编号冗余
         recv.setVoucherId(doc.getVoucherId());
         recv.setPeriod(invoice.getPeriod());
         recv.setTxDate(invoice.getInvoiceDate());

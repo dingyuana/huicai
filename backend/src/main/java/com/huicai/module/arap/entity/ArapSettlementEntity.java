@@ -24,6 +24,11 @@ public class ArapSettlementEntity {
     private BigDecimal totalAmount;
     private BigDecimal discountAmount;
     private Long voucherId;
+    /**
+     * 凭证编号（冗余存储，用于快速查询）
+     */
+    @TableField("voucher_no")
+    private String voucherNo;
     @StatusChangeable(entity = "ARAP_SETTLEMENT", fieldName = "status")
     private String status;
     private Long createdBy;

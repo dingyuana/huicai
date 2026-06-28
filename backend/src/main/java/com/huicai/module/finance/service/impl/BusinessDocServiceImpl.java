@@ -302,6 +302,10 @@ public class BusinessDocServiceImpl implements BusinessDocService {
     @Transactional
     public BusinessDocVO generateVoucher(Long id, Long userId) {
         BusinessDocEntity entity = getValid(id);
+        // INVOICE_OUT（销售发票应收单）不从业务单据生成凭证，应从发票直接生成
+        if ("INVOICE_OUT".equals(entity.getDocType())) {
+            throw BusinessException.badRequest("销售发票应收单不能独立生成凭证，请从发票模块操作");
+        }
         if (!"APPROVED".equals(entity.getStatus())) {
             throw BusinessException.badRequest("仅已审批状态可生成凭证");
         }
@@ -357,6 +361,9 @@ public class BusinessDocServiceImpl implements BusinessDocService {
         voucher.setTotalDebit(BigDecimal.ZERO);
         voucher.setTotalCredit(BigDecimal.ZERO);
         voucher.setCreatedBy(userId);
+        // 新增：溯源字段（业务单据 → 凭证）
+        voucher.setSourceDocType("BUSINESS_DOC");
+        voucher.setSourceDocNo(entity.getDocNo());
         voucherMapper.insert(voucher);
 
         BigDecimal totalD = BigDecimal.ZERO;
@@ -403,6 +410,7 @@ public class BusinessDocServiceImpl implements BusinessDocService {
         voucherMapper.updateById(voucher);
 
         entity.setVoucherId(voucher.getId());
+        entity.setVoucherNo(voucher.getVoucherNo());
         entity.setStatus("VOUCHERED");
         entity.setUpdatedBy(userId);
         entity.setUpdatedAt(LocalDateTime.now());
@@ -476,6 +484,9 @@ public class BusinessDocServiceImpl implements BusinessDocService {
         voucher.setSummary(enrichedSummary);
         voucher.setTemplateId(template.getId());
         voucher.setCreatedBy(userId);
+        // 新增：溯源字段（业务单据 → 凭证）
+        voucher.setSourceDocType("BUSINESS_DOC");
+        voucher.setSourceDocNo(entity.getDocNo());
         voucherMapper.insert(voucher);
 
         int sortOrder = 1;
@@ -527,6 +538,7 @@ public class BusinessDocServiceImpl implements BusinessDocService {
         voucherMapper.updateById(voucher);
 
         entity.setVoucherId(voucher.getId());
+        entity.setVoucherNo(voucher.getVoucherNo());
         entity.setStatus("VOUCHERED");
         entity.setUpdatedBy(userId);
         entity.setUpdatedAt(LocalDateTime.now());
@@ -561,11 +573,15 @@ public class BusinessDocServiceImpl implements BusinessDocService {
                 ? entity.getSummary()
                 : "生成自单据 " + entity.getDocNo();
         String partyName = resolvePartyName(entity);
-        if (partyName == null || partyName.isBlank()) {
-            return base;
+        if (partyName != null && !partyName.isBlank()) {
+            String prefix = SUPPLIER_DOC_TYPES.contains(entity.getDocType()) ? "付" : "收";
+            base = prefix + partyName + "-" + base;
         }
-        String prefix = SUPPLIER_DOC_TYPES.contains(entity.getDocType()) ? "付" : "收";
-        return prefix + partyName + "-" + base;
+        // P32: 发票号后缀，用于审计追溯，支持 SQL LIKE '%发票号%' 查询
+        if (entity.getInvoiceNo() != null && !entity.getInvoiceNo().isBlank()) {
+            base += "[" + entity.getInvoiceNo() + "]";
+        }
+        return base;
     }
 
     private String resolvePartyName(BusinessDocEntity entity) {

@@ -67,6 +67,9 @@ public class BusinessDocEntity {
     /** 生成的凭证ID */
     private Long voucherId;
 
+    /** 生成的凭证编号 */
+    private String voucherNo;
+
     /** 被红冲单据ID */
     private Long reversedFrom;
 
@@ -85,4 +88,8 @@ public class BusinessDocEntity {
 
     @TableLogic
     private Integer deleted;
+
+    /** 乐观锁版本号 */
+    @Version
+    private Integer version;
 }

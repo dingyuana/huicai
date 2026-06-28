@@ -2,11 +2,13 @@ package com.huicai.module.finance.controller;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.huicai.common.response.R;
+import com.huicai.module.finance.dto.NumberingTraceVO;
 import com.huicai.module.finance.dto.VoucherCreateDTO;
 import com.huicai.module.finance.dto.VoucherQueryDTO;
 import com.huicai.module.finance.dto.VoucherStatusDTO;
 import com.huicai.module.finance.dto.VoucherTemplateVO;
 import com.huicai.module.finance.dto.VoucherVO;
+import com.huicai.module.finance.service.NumberingTraceService;
 import com.huicai.module.finance.service.VoucherService;
 import com.huicai.module.system.util.SecurityUtils;
 import io.swagger.v3.oas.annotations.Operation;
@@ -24,6 +26,7 @@ import java.util.List;
 public class VoucherController {
 
     private final VoucherService voucherService;
+    private final NumberingTraceService numberingTraceService;
 
     @Operation(summary = "分页查询凭证")
     @PostMapping("/page")
@@ -123,5 +126,11 @@ public class VoucherController {
     @GetMapping("/template-by-type/{typeId}")
     public R<VoucherTemplateVO> getTemplateByVoucherType(@PathVariable Long typeId) {
         return R.ok(voucherService.getTemplateByVoucherType(typeId));
+    }
+
+    @Operation(summary = "编号关联追溯查询（按任意编号查全链路）")
+    @GetMapping("/trace")
+    public R<NumberingTraceVO> traceByNumber(@RequestParam String no) {
+        return R.ok(numberingTraceService.traceByNumber(no));
     }
 }
