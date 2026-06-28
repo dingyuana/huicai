@@ -8,7 +8,7 @@ import java.util.List;
 import java.util.Map;
 
 public interface ReceivableService {
-    IPage<ReceivableVO> pageQuery(Long customerId, String period, Integer current, Integer size);
+    IPage<ReceivableVO> pageQuery(Long customerId, String period, String docNo, String invoiceNo, String voucherNo, Integer current, Integer size);
     ReceivableVO getById(Long id);
     ReceivableEntity create(ReceivableEntity entity);
     List<Map<String, Object>> overdueList();

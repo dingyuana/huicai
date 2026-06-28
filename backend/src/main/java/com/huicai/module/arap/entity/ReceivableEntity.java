@@ -37,6 +37,12 @@ public class ReceivableEntity {
     @TableField("invoice_no")
     private String invoiceNo;
 
+    /**
+     * 应收单编号（冗余存储，用于快速查询）
+     */
+    @TableField("receivable_no")
+    private String receivableNo;
+
     private String period;
     private LocalDate txDate;
     private BigDecimal amount;

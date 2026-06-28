@@ -259,8 +259,8 @@ public class OutputInvoiceStateMachineServiceImpl implements OutputInvoiceStateM
         ReceivableEntity recv = new ReceivableEntity();
         recv.setCustomerId(invoice.getCustomerId());
         recv.setDocId(doc.getId());
-        recv.setDocNo(doc.getDocNo());          // 新增：业务单据编号冗余
-        recv.setInvoiceNo(invoice.getInvoiceNo());  // 新增：发票编号冗余
+        recv.setDocNo(doc.getDocNo());          // 业务单据编号冗余
+        recv.setInvoiceNo(invoice.getInvoiceNo());  // 发票编号冗余
         recv.setVoucherId(doc.getVoucherId());
         recv.setPeriod(invoice.getPeriod());
         recv.setTxDate(invoice.getInvoiceDate());
@@ -269,9 +269,19 @@ public class OutputInvoiceStateMachineServiceImpl implements OutputInvoiceStateM
         recv.setUnsettledAmount(invoice.getTotalAmount());
         recv.setSummary(invoice.getCustomerName());
         recv.setStatus(ArapStatus.DRAFT);
+
+        // 生成应收单编号: YS + period + 4位序号
+        String receivableNo = generateReceivableNo(invoice.getPeriod());
+        recv.setReceivableNo(receivableNo);
+
         receivableMapper.insert(recv);
-        log.info("P31 销售发票应收单生成: customerId={}, docId={}, amount={}",
-                invoice.getCustomerId(), doc.getId(), invoice.getTotalAmount());
+        log.info("P31 销售发票应收单生成: customerId={}, docId={}, receivableNo={}, amount={}",
+                invoice.getCustomerId(), doc.getId(), receivableNo, invoice.getTotalAmount());
+
+        // 回写发票：应收单 ID 和编号（双向追溯）
+        invoice.setReceivableId(recv.getId());
+        invoice.setReceivableNo(receivableNo);
+        invoiceMapper.updateById(invoice);
     }
 
     /**
@@ -281,6 +291,15 @@ public class OutputInvoiceStateMachineServiceImpl implements OutputInvoiceStateM
         String key = "doc:no:INVOICE_OUT:" + period;
         Long seq = redisTemplate.opsForValue().increment(key);
         return "FPS" + period + String.format("%04d", seq);
+    }
+
+    /**
+     * 生成应收单号 (YS + period + 4位序号).
+     */
+    private String generateReceivableNo(String period) {
+        String key = "receivable:no:" + period;
+        Long seq = redisTemplate.opsForValue().increment(key);
+        return "YS" + period + String.format("%04d", seq);
     }
 
     private OutputInvoiceEntity getEntity(Long id) {

@@ -35,6 +35,7 @@ public class OutputInvoiceEntity {
     private String status;
     private Long docId;
     private Long voucherId;
+    private Long receivableId;
     private String remark;
     private Long createdBy;
 
@@ -70,6 +71,10 @@ public class OutputInvoiceEntity {
     /** 关联凭证编号（冗余存储，用于快速查询） */
     @TableField("voucher_no")
     private String voucherNo;
+
+    /** 关联应收单编号（冗余存储，用于快速查询） */
+    @TableField("receivable_no")
+    private String receivableNo;
 
     @TableField(fill = FieldFill.INSERT)
     private LocalDateTime createdAt;

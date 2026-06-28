@@ -18,6 +18,7 @@ import com.huicai.module.tax.entity.InputInvoiceEntity;
 import com.huicai.module.tax.entity.OutputInvoiceEntity;
 import com.huicai.module.tax.entity.TaxDeclarationEntity;
 import com.huicai.module.tax.entity.TaxTypeEntity;
+import com.huicai.module.arap.mapper.ReceivableMapper;
 import com.huicai.module.tax.mapper.InputInvoiceMapper;
 import com.huicai.module.tax.mapper.OutputInvoiceMapper;
 import com.huicai.module.tax.mapper.TaxDeclarationMapper;
@@ -62,6 +63,7 @@ public class TaxServiceImpl implements TaxService {
     private final TemplateMatcher templateMatcher;
     private final VoucherTemplateService voucherTemplateService;
     private final BusinessDocMapper businessDocMapper;
+    private final ReceivableMapper receivableMapper;
 
     // ========== 税种 ==========
     @Override
@@ -289,6 +291,13 @@ public class TaxServiceImpl implements TaxService {
             var voucher = voucherMapper.selectById(inv.getVoucherId());
             if (voucher != null) {
                 inv.setVoucherNo(voucher.getVoucherNo());
+            }
+        }
+        // 回填应收单编号（通过 receivable_id 查询）
+        if (inv.getReceivableId() != null) {
+            var recv = receivableMapper.selectById(inv.getReceivableId());
+            if (recv != null && recv.getReceivableNo() != null) {
+                inv.setReceivableNo(recv.getReceivableNo());
             }
         }
     }

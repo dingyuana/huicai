@@ -2,7 +2,8 @@
   <div class="receivable-list">
     <el-card shadow="never">
       <div class="page-header">
-        <span class="page-title">应收明细</span>
+        <span class="page-title">应收核销</span>
+        <el-alert title="本页聚焦应收款项的回款状态，如需编辑单据请前往「财务核心 → 业务单据」" type="info" :closable="false" size="small" style="margin-bottom:16px" />
       </div>
 
       <el-form :model="query" inline class="filter-form">
@@ -20,32 +21,45 @@
       </el-form>
 
       <el-table :data="list" v-loading="loading" border :row-class-name="rowClassName">
-        <el-table-column prop="period" label="期间" width="90" align="center" />
-        <el-table-column prop="txDate" label="发生日期" width="120" />
-        <el-table-column label="金额" width="140" align="right">
+        <el-table-column label="核销进度" width="110" align="center">
+          <template #default="{ row }">
+            <el-progress 
+              :percentage="Math.round((Number(row.settledAmount) / Number(row.amount)) * 100)"
+              :color="Number(row.unsettledAmount) > 0 ? '#e6a23c' : '#67c23a'"
+              :stroke-width="10" />
+          </template>
+        </el-table-column>
+        <el-table-column label="应收单编号" width="140">
+          <template #default="{ row }">
+            <span style="font-family:monospace;color:#409EFF">{{ row.receivableNo || ('#' + row.id) }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="发票号" width="180" show-overflow-tooltip>
+          <template #default="{ row }">
+            <span style="font-family:monospace;color:#606266">{{ row.invoiceNo || '-' }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="客户" width="140" show-overflow-tooltip>
+          <template #default="{ row }">{{ row.customerName || row.customerId || '-' }}</template>
+        </el-table-column>
+        <el-table-column label="应收总额" width="120" align="right">
           <template #default="{ row }">{{ fmtAmount(row.amount) }}</template>
         </el-table-column>
-        <el-table-column label="已核销" width="140" align="right">
-          <template #default="{ row }">{{ fmtAmount(row.settledAmount) }}</template>
-        </el-table-column>
-        <el-table-column label="未核销" width="140" align="right">
+        <el-table-column label="已回款" width="120" align="right">
           <template #default="{ row }">
-            <span :style="{ color: Number(row.unsettledAmount) > 0 ? '#f56c6c' : '#67c23a' }">
+            <span style="color:#67c23a">{{ fmtAmount(row.settledAmount) }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="待回款" width="120" align="right">
+          <template #default="{ row }">
+            <span :style="{ color: Number(row.unsettledAmount) > 0 ? '#f56c6c' : '#67c23a', fontWeight: Number(row.unsettledAmount) > 0 ? '600' : 'normal' }">
               {{ fmtAmount(row.unsettledAmount) }}
             </span>
           </template>
         </el-table-column>
         <el-table-column prop="dueDate" label="到期日" width="120" />
-        <el-table-column label="客户" width="140" show-overflow-tooltip>
-          <template #default="{ row }">{{ row.customerName || row.customerId || '-' }}</template>
-        </el-table-column>
-        <el-table-column label="摘要" min-width="180" show-overflow-tooltip>
+        <el-table-column label="摘要" min-width="150" show-overflow-tooltip>
           <template #default="{ row }">{{ row.enrichedSummary || row.summary || '-' }}</template>
-        </el-table-column>
-        <el-table-column label="操作" width="80" fixed="right">
-          <template #default="{ row }">
-            <el-button text size="small" type="primary" @click="openDetail(row)">详情</el-button>
-          </template>
         </el-table-column>
       </el-table>
 
@@ -63,7 +77,7 @@
     </el-card>
 
     <!-- 详情对话框 -->
-    <el-dialog v-model="detailVisible" title="应收明细" width="640px">
+    <el-dialog v-model="detailVisible" title="应收核销详情" width="640px">
       <template v-if="detail">
         <el-descriptions :column="2" border>
           <el-descriptions-item label="ID" :span="2">{{ detail.id }}</el-descriptions-item>

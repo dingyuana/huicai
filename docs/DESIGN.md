@@ -1,3 +1,18 @@
+---
+## 📌 Changelog (2026-06-29)
+
+### 🔴 Major Change — 2026-06-29
+- **Change type**: scope expansion + business flow change + architecture adjustment
+- **Summary**: P32 编号关联体系 + 财务数据完整性与并发控制上线；银行流水状态机重构（audit+autoGenerate 合并）
+- **Trigger**: P32 编号关联体系 V64 Migration + 全链路追溯 + 前端接口补齐
+- **Impact**: 银行流水状态机、乐观锁机制、凭证摘要增强、数据一致性健康检查 API、编号关联体系
+- **Details**:
+  - 新增第15章「数据完整性与并发控制」：6 个核心实体乐观锁 (@Version)、凭证摘要发票号追溯、6 项数据一致性健康检查 API
+  - 银行流水状态机重构：audit() 与 autoGenerate() 合并，废弃 AUDITED 中间态
+  - 编号关联体系 V64 Migration 落地（6 个模块 100% 实现，46/46 测试通过）
+  - VERSION 升级 V2.1 → V2.2
+- **Corresponding commits**: ebd7281, a89706a, 6411248, a7b1157, af0f5c6, bf50f36
+
 # 慧财财务系统 — 综合设计文档
 
 > 版本：V2.2 | 日期：2026-06-27

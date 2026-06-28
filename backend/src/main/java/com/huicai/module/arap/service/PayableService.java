@@ -7,7 +7,7 @@ import com.huicai.module.arap.entity.PayableEntity;
 import java.util.Map;
 
 public interface PayableService {
-    IPage<PayableVO> pageQuery(Long vendorId, String period, Integer current, Integer size);
+    IPage<PayableVO> pageQuery(Long vendorId, String period, String docNo, String invoiceNo, String voucherNo, Integer current, Integer size);
     PayableVO getById(Long id);
     PayableEntity create(PayableEntity entity);
     Map<String, Object> agingAnalysis(Long vendorId);

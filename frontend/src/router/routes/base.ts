@@ -248,13 +248,13 @@ const routes: RouteRecordRaw[] = [
         path: 'arap/receivable',
         name: 'ReceivableList',
         component: () => import('@/views/arap/receivable/ReceivableList.vue'),
-        meta: { title: '应收明细', permission: 'receivable:list', keepAlive: true },
+        meta: { title: '应收核销', permission: 'receivable:list', keepAlive: true },
       },
       {
         path: 'arap/payable',
         name: 'PayableList',
         component: () => import('@/views/arap/payable/PayableList.vue'),
-        meta: { title: '应付明细', permission: 'payable:list', keepAlive: true },
+        meta: { title: '应付核销', permission: 'payable:list', keepAlive: true },
       },
       {
         path: 'arap/bad-debt',

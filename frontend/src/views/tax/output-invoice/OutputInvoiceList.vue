@@ -291,8 +291,37 @@
               {{ STATUS_MAP[detail.status] || detail.status }}
             </el-tag>
           </el-descriptions-item>
-          <el-descriptions-item label="关联单据">{{ detail.docNo || '-' }}</el-descriptions-item>
-          <el-descriptions-item label="关联凭证">{{ detail.voucherNo || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="业务流程" span="2">
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+              <!-- 销售发票 -->
+              <el-tag type="primary" effect="dark" size="small">销售发票</el-tag>
+              <span style="font-family:monospace">{{ detail.invoiceNo }}</span>
+              
+              <template v-if="detail.docNo || detail.receivableNo || detail.voucherNo">
+                <el-icon color="#409EFF"><ArrowRight /></el-icon>
+                
+                <!-- 业务单据 -->
+                <template v-if="detail.docNo">
+                  <el-tag type="success" size="small">业务单</el-tag>
+                  <span style="font-family:monospace">{{ detail.docNo }}</span>
+                </template>
+                
+                <!-- 应收单据 -->
+                <template v-if="detail.receivableNo">
+                  <el-icon color="#409EFF"><ArrowRight /></el-icon>
+                  <el-tag type="warning" size="small">应收单</el-tag>
+                  <span style="font-family:monospace">{{ detail.receivableNo }}</span>
+                </template>
+                
+                <!-- 记账凭证 -->
+                <template v-if="detail.voucherNo">
+                  <el-icon color="#409EFF"><ArrowRight /></el-icon>
+                  <el-tag type="info" size="small">凭证</el-tag>
+                  <span style="font-family:monospace">{{ detail.voucherNo }}</span>
+                </template>
+              </template>
+            </div>
+          </el-descriptions-item>
           <template v-if="detail.originalInvoiceNo">
             <el-descriptions-item label="红冲发票">
               <el-tag type="danger" size="small">红字发票</el-tag>
@@ -335,7 +364,7 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue'
 import { ElMessage, type FormInstance } from 'element-plus'
-import { UploadFilled, Document, Money, Minus, Warning, Refresh, Delete } from '@element-plus/icons-vue'
+import { UploadFilled, Document, Money, Minus, Warning, Refresh, Delete, ArrowRight } from '@element-plus/icons-vue'
 import { pageOutputInvoice, createOutputInvoice, getOutputInvoice, deleteOutputInvoice,
   outputInvoiceSummary,
   submitForReview, confirmOutputInvoice, rejectOutputInvoice, revertOutputInvoice, voidOutputInvoice, markVouchered } from '@/api/modules/tax'
