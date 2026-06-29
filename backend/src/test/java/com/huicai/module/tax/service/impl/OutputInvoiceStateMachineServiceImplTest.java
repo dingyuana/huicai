@@ -172,7 +172,7 @@ class OutputInvoiceStateMachineServiceImplTest {
     // ====================================================================
 
     @Test
-    @DisplayName("confirm_正向_状态变更+创建应收单")
+    @DisplayName("confirm_正向_状态变更+创建应收单+创建凭证")
     void confirm_positive_statusChanged() {
         // given
         OutputInvoiceEntity inv = invoice(InvoiceStatus.PENDING_REVIEW);
@@ -187,6 +187,8 @@ class OutputInvoiceStateMachineServiceImplTest {
         assertEquals(USER_ID, inv.getUpdatedBy());
         // then — 正向：创建应收单（P33 简化：不再创建业务单）
         verify(receivableMapper).insert(any(ReceivableEntity.class));
+        // then — 正向：调用 taxService 生成凭证
+        verify(taxService).generateVoucherFromInvoice(eq(INVOICE_ID), eq(USER_ID));
         // 负向：不创建业务单
         // (docMapper 已不存在，无需验证)
     }

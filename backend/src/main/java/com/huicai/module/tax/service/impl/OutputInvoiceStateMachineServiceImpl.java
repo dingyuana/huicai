@@ -81,8 +81,9 @@ public class OutputInvoiceStateMachineServiceImpl implements OutputInvoiceStateM
         invoiceMapper.updateById(entity);
         log.info("销售发票审核通过: id={}, userId={}", invoiceId, userId);
 
-        // P33: 审核后直接创建应收单（不再经过业务单）
+        // P33: 审核后直接创建应收单 + 凭证（不再经过业务单）
         createReceivableFromInvoiceDirect(invoiceId, userId);
+        generateVoucherFromInvoiceDirect(invoiceId, userId);
     }
 
     @Override
@@ -223,6 +224,20 @@ public class OutputInvoiceStateMachineServiceImpl implements OutputInvoiceStateM
         String key = "receivable:no:" + period;
         Long seq = redisTemplate.opsForValue().increment(key);
         return "YS" + period + String.format("%04d", seq);
+    }
+
+    /**
+     * P33 简化：发票审核后直接创建凭证（DRAFT 状态，等待人工审核）。
+     * 凭证生成逻辑复用 TaxService 的模板匹配 + 硬编码降级。
+     */
+    private void generateVoucherFromInvoiceDirect(Long invoiceId, Long userId) {
+        try {
+            taxService.generateVoucherFromInvoice(invoiceId, userId);
+            log.info("P33 销售发票凭证直连生成: invoiceId={}", invoiceId);
+        } catch (Exception e) {
+            log.error("P33 销售发票凭证生成失败: invoiceId={}, error={}", invoiceId, e.getMessage());
+            // 凭证生成失败不影响发票审核通过，记录日志供人工处理
+        }
     }
 
     // ==================== 工具方法 ====================

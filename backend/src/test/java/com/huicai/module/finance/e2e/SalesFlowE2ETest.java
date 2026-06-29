@@ -98,8 +98,8 @@ public class SalesFlowE2ETest extends AbstractMapperTest {
     }
 
     /**
-     * 场景 3：审核后自动生成应收单验证
-     * 验证：应收单自动创建、金额与发票一致、关联关系正确
+     * 场景 3：审核后自动生成应收单验证（P33 简化：直连发票，不经业务单）
+     * 验证：应收单自动创建、金额与发票一致、invoice_id 关联关系正确
      */
     @Test
     void step3_afterAudit_shouldCreateReceivable() {
@@ -120,26 +120,28 @@ public class SalesFlowE2ETest extends AbstractMapperTest {
         invoice.setDeleted(0);
         outputInvoiceMapper.insert(invoice);
 
-        // 模拟应收单自动生成（实际由异步任务触发）
+        // 模拟应收单自动生成（P33 简化：直接关联 invoiceId）
         ReceivableEntity receivable = new ReceivableEntity();
         receivable.setCustomerId(invoice.getCustomerId());
-        receivable.setDocId(invoice.getId());
+        receivable.setInvoiceId(invoice.getId());      // P33: 直接关联发票ID
+        receivable.setInvoiceNo(invoice.getInvoiceNo()); // 发票编号冗余
         receivable.setPeriod("202606");
         receivable.setTxDate(invoice.getInvoiceDate());
         receivable.setAmount(invoice.getTotalAmount());
         receivable.setSettledAmount(BigDecimal.ZERO);
         receivable.setUnsettledAmount(invoice.getTotalAmount());
         receivable.setDueDate(LocalDate.now().plusDays(30));
-        receivable.setStatus("UNSETTLED");
+        receivable.setStatus("DRAFT");
         receivable.setDeleted(0);
         receivable.setVersion(0);
         receivableMapper.insert(receivable);
 
         // 验证应收单
         assertNotNull(receivable.getId());
-        assertEquals(invoice.getId(), receivable.getDocId());
+        assertEquals(invoice.getId(), receivable.getInvoiceId());  // P33: 验证 invoiceId 关联
+        assertEquals(invoice.getInvoiceNo(), receivable.getInvoiceNo());
         assertEquals(0, invoice.getTotalAmount().compareTo(receivable.getAmount()));
-        assertEquals("UNSETTLED", receivable.getStatus());
+        assertEquals("DRAFT", receivable.getStatus());
     }
 
     /**

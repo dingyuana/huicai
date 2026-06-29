@@ -11,3 +11,15 @@ COMMENT ON COLUMN t_receivable.invoice_id IS '关联销售发票ID（P33 简化�
 
 -- 2. 创建索引
 CREATE INDEX idx_receivable_invoice_id ON t_receivable(invoice_id);
+
+-- 3. 历史数据补全：通过 invoice_no 关联补全 invoice_id
+-- 注意：只补全 invoice_no 非空且 invoice_id 为空的记录
+UPDATE t_receivable r
+SET invoice_id = (
+    SELECT i.id 
+    FROM t_output_invoice i 
+    WHERE i.invoice_no = r.invoice_no 
+    LIMIT 1
+)
+WHERE r.invoice_id IS NULL 
+  AND r.invoice_no IS NOT NULL;
