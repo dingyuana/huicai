@@ -9,6 +9,10 @@
         </div>
       </div>
 
+      <el-alert
+        title="销售发票流程已简化：新销售发票审核后直接生成应收单和凭证，不再经过业务单据。历史数据保留可查。"
+        type="warning" show-icon :closable="false" style="margin-bottom: 12px;" />
+
       <el-form :model="query" inline class="filter-form">
         <el-form-item label="状态">
           <el-select v-model="query.status" placeholder="全部" clearable style="width:130px">
@@ -30,10 +34,10 @@
       <el-radio-group v-model="query.docType" class="doc-type-tabs" @change="onSearch">
         <el-radio-button :value="''">全部 ({{ totalCount }})</el-radio-button>
         <el-radio-button
-          v-for="(label, value) in DOC_TYPE_LABELS"
-          :key="value"
-          :value="value">
-          {{ label }} ({{ docTypeCounts[value] || 0 }})
+          v-for="(label, value) in Object.entries(DOC_TYPE_LABELS).filter(([k]) => k !== 'INVOICE_OUT')"
+          :key="value[0]"
+          :value="value[0]">
+          {{ value[1] }} ({{ docTypeCounts[value[0]] || 0 }})
         </el-radio-button>
       </el-radio-group>
 
@@ -147,7 +151,7 @@ async function fetchCounts() {
     const all = await getBusinessDocPage({ current: 1, size: 1 }) as any
     totalCount.value = all.total || 0
     const counts: Record<string, number> = {}
-    for (const key of Object.keys(DOC_TYPE_LABELS)) {
+    for (const key of Object.keys(DOC_TYPE_LABELS).filter(k => k !== 'INVOICE_OUT')) {
       const res = await getBusinessDocPage({ docType: key, current: 1, size: 1 }) as any
       counts[key] = res.total || 0
     }
