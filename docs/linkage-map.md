@@ -11,10 +11,10 @@
 |---|---|---|
 | t_output_invoice | L1, L1b | ✅ (V29) |
 | t_input_invoice | L2 | ✅ (V29) |
-| t_business_doc | L1, L2, L3, L5 | ✅ (V28) |
-| **t_business_doc_entry** | **L1, L2** | **V61 修复** |
-| t_receivable | L1 | ✅ (V54) |
-| t_payable | L2 | ✅ (V54) |
+| t_business_doc | L2, L3, L5 | ✅ (V28) |
+| **t_business_doc_entry** | **L2** | **V61 修复** |
+| t_receivable | L1, L6 | ✅ (V54) |
+| t_payable | L2, L6 | ✅ (V54) |
 | t_voucher | L3, L4 | ✅ (V28) |
 | t_voucher_entry | L3 | ✅ (V28) |
 | t_voucher_cash_flow | L3 | ✅ (V54) |
@@ -32,13 +32,15 @@
 
 ---
 
-## L1: 销售发票审核通过
+## L1: 销售发票审核通过（P33 简化：直连应收单+凭证，不经业务单）
 
 **状态流**：`PENDING_REVIEW → CONFIRMED`
 
 **路径**：`/api/v1/tax/output-invoices/{id}/confirm` → `OutputInvoiceStateMachineServiceImpl.confirm()`
 
-**涉及表**：t_output_invoice → t_business_doc → t_business_doc_entry → t_receivable
+**涉及表**：t_output_invoice → t_receivable → t_voucher
+
+**P33 变更**：2026-06-29 移除 BusinessDoc 中间环节。发票审核通过后，直接生成应收单 + 凭证，不再创建业务单。
 
 **验证脚本**（curl + psql）：
 
@@ -62,20 +64,18 @@ echo "=== 验证 ==="
 # 1. 发票状态 CONFIRMED
 docker exec huicai-postgres psql -U huicai -d huicai -tc "
 SELECT '1. invoice status: ' || status FROM t_output_invoice WHERE id=$ID;"
-# 2. 业务单已创建 (doc_type='INVOICE_OUT')
+# 2. 应收单已创建 (DRAFT) — P33 简化：直接关联发票
 docker exec huicai-postgres psql -U huicai -d huicai -tc "
-SELECT '2. doc: ' || id || ' status=' || status FROM t_business_doc
+SELECT '2. receivable: id=' || id || ' status=' || status || ' invoice_id=' || invoice_id || ' amount=' || amount
+FROM t_receivable WHERE invoice_id=$ID;"
+# 3. 凭证已创建 (DRAFT) — P33 简化：直接关联发票
+docker exec huicai-postgres psql -U huicai -d huicai -tc "
+SELECT '3. voucher: id=' || id || ' voucher_no=' || voucher_no || ' status=' || status
+FROM t_voucher WHERE source_doc_id=$ID AND source_doc_type='OUTPUT_INVOICE';"
+# 4. 验证没有创建业务单（P33 简化）
+docker exec huicai-postgres psql -U huicai -d huicai -tc "
+SELECT '4. business_doc count: ' || count(*) FROM t_business_doc
 WHERE invoice_no=(SELECT invoice_no FROM t_output_invoice WHERE id=$ID);"
-# 3. 业务单分录已创建 (id 非空 = IDENTITY 生效)
-docker exec huicai-postgres psql -U huicai -d huicai -tc "
-SELECT '3. entry: id=' || id || ' amount=' || amount FROM t_business_doc_entry
-WHERE doc_id=(SELECT id FROM t_business_doc
-  WHERE invoice_no=(SELECT invoice_no FROM t_output_invoice WHERE id=$ID));"
-# 4. 应收单已创建 (DRAFT)
-docker exec huicai-postgres psql -U huicai -d huicai -tc "
-SELECT '4. receivable: id=' || id || ' status=' || status || ' amount=' || amount
-FROM t_receivable WHERE doc_id=(SELECT id FROM t_business_doc
-  WHERE invoice_no=(SELECT invoice_no FROM t_output_invoice WHERE id=$ID));"
 echo "=== L1 OK ==="
 ```
 

@@ -387,6 +387,7 @@ public class TaxServiceImpl implements TaxService {
         voucher.setTotalCredit(totalAmt);
         voucher.setCreatedBy(userId);
         // 新增：溯源字段（销售发票 → 凭证）
+        voucher.setSourceDocId(inv.getId());           // P33 补充
         voucher.setSourceDocType("OUTPUT_INVOICE");
         voucher.setSourceDocNo(inv.getInvoiceNo());
         voucherMapper.insert(voucher);
@@ -448,6 +449,7 @@ public class TaxServiceImpl implements TaxService {
         voucher.setTemplateId(template.getId());
         voucher.setCreatedBy(userId);
         // 新增：溯源字段（销售发票 → 凭证）
+        voucher.setSourceDocId(inv.getId());           // P33 补充
         voucher.setSourceDocType("OUTPUT_INVOICE");
         voucher.setSourceDocNo(inv.getInvoiceNo());
         voucherMapper.insert(voucher);

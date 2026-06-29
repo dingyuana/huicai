@@ -1,8 +1,9 @@
 # 编号关联体系设计文档
 
-**版本**: v1.7  
-**日期**: 2026-06-28  
-**状态**: 全部实现完成，46/46 测试通过
+**版本**: v1.8  
+**日期**: 2026-06-29  
+**状态**: 全部实现完成，46/46 测试通过  
+**P33 修正**: 2026-06-29 销售发票链路移除业务单中间环节，发票→应收单→凭证直连
 
 ---
 
@@ -28,17 +29,11 @@
 
 ```
 ┌─────────────────┐
-│  业务单据        │  BusinessDoc
-│  business_doc   │
+│  销售发票        │  OutputInvoice
+│  output_invoice │
 └────────┬────────┘
          │
          ▼
-┌─────────────────┐     ┌─────────────────┐
-│  销售发票        │     │  采购发票        │
-│  output_invoice │     │  input_invoice  │
-└────────┬────────┘     └────────┬────────┘
-         │                        │
-         ▼                        ▼
 ┌─────────────────┐     ┌─────────────────┐
 │  应收单          │     │  应付单          │
 │  receivable     │     │  payable        │
@@ -53,20 +48,25 @@
           └─────────────────┘
 ```
 
+> **P33 简化（2026-06-29）**：销售发票链路不再经过业务单中间层。  
+> 旧链路：销售发票 → 业务单 → 应收单 → 凭证  
+> 新链路：销售发票 → 应收单 → 凭证
+
 ### 2.2 关联矩阵
 
-| 源表 → 目标表 | BusinessDoc | OutputInvoice | InputInvoice | Receivable | Payable | Voucher |
-|--------------|-------------|---------------|--------------|------------|---------|---------|
-| BusinessDoc  | - | docId + docNo | docId + docNo | docId + docNo | docId + docNo | ⭕ |
-| OutputInvoice | ⭕ | - | ⭕ | invoiceId + invoiceNo | ⭕ | voucherId + voucherNo |
-| InputInvoice | ⭕ | ⭕ | - | ⭕ | invoiceId + invoiceNo | voucherId + voucherNo |
-| Receivable | ⭕ | ⭕ | ⭕ | - | ⭕ | voucherId + voucherNo |
-| Payable | ⭕ | ⭕ | ⭕ | ⭕ | - | voucherId + voucherNo |
-| Voucher | sourceDocId + sourceDocNo | sourceDocId + sourceDocNo | sourceDocId + sourceDocNo | sourceDocId + sourceDocNo | sourceDocId + sourceDocNo | - |
+| 源表 → 目标表 | OutputInvoice | InputInvoice | Receivable | Payable | Voucher |
+|--------------|---------------|--------------|------------|---------|---------|
+| OutputInvoice | - | ⭕ | `invoice_id` + `invoice_no` + `receivable_id` + `receivable_no` | ⭕ | `voucher_id` + `voucher_no` |
+| InputInvoice | ⭕ | - | ⭕ | `invoice_id` + `invoice_no` | `voucher_id` + `voucher_no` |
+| Receivable | `receivable_id` + `receivable_no` | ⭕ | - | ⭕ | `voucher_id` + `voucher_no` |
+| Payable | ⭕ | `invoice_id` + `invoice_no` | ⭕ | - | `voucher_id` + `voucher_no` |
+| Voucher | `source_doc_id` + `source_doc_no` + `source_doc_type` | `source_doc_id` + `source_doc_no` + `source_doc_type` | `source_doc_id` + `source_doc_no` + `source_doc_type` | `source_doc_id` + `source_doc_no` + `source_doc_type` | - |
 
 **图例**:
 - `Id + No`: ID外键关联 + 编号字段冗余
 - `⭕`: 无直接关联，通过中间表关联
+
+> **P33 变更（2026-06-29）**：销售发票链路不再经过 BusinessDoc，`t_output_invoice` 与 `t_receivable` 之间建立直接关联（`invoice_id` + `receivable_id`）。
 
 ---
 
@@ -76,14 +76,16 @@
 
 | 表名 | 关联字段 | 状态 | 备注 |
 |------|---------|------|------|
-| **t_output_invoice** | `doc_id`, `doc_no` | ✅ 已实现 | 关联业务单据 |
+| **t_output_invoice** | `receivable_id`, `receivable_no` | ✅ 已实现 | P33 新增（V65） |
 | | `voucher_id`, `voucher_no` | ✅ 已实现 | 关联会计凭证 |
 | | `original_invoice_id`, `original_invoice_no` | ✅ 已实现 | 红冲关联 |
 | | `reversed_by_invoice_id`, `reversed_by_invoice_no` | ✅ 已实现 | 被红冲关联 |
+| | `doc_id`, `doc_no` | ⚠️ 保留 | P33 简化后不再写入，历史数据保留 |
 | **t_input_invoice** | `doc_id` | ✅ 已实现 | 关联业务单据 |
 | | `voucher_id` | ✅ 已实现 | 关联会计凭证 |
 | | `doc_no`, `voucher_no` | ✅ 已实现 | V64 补充编号冗余 |
-| **t_receivable** | `doc_id` | ✅ 已实现 | 关联业务单据 |
+| **t_receivable** | `invoice_id` | ✅ 已实现 | P33 新增（V65） |
+| | `doc_id` | ⚠️ 保留 | P33 简化后不再写入，历史数据保留 |
 | | `voucher_id` | ✅ 已实现 | 关联会计凭证 |
 | | `doc_no`, `voucher_no`, `invoice_no` | ✅ 已实现 | V64 补充 |
 | **t_payable** | `doc_id` | ✅ 已实现 | 关联业务单据 |
@@ -92,6 +94,8 @@
 | **t_business_doc** | `voucher_id`, `voucher_no` | ✅ 已实现 | V64 补充 |
 | **t_voucher** | `source_doc_id`, `source_doc_no` | ✅ 已实现 | V64 补充 |
 | | `source_doc_type` | ✅ 已实现 | V64 补充 |
+
+> **P33 变更（2026-06-29）**：销售发票链路不再创建业务单，`t_output_invoice` 与 `t_receivable` 之间建立直接关联。`doc_id/doc_no` 字段保留但不写入，历史数据仍可查询。
 
 ### 3.2 实现完成度统计
 

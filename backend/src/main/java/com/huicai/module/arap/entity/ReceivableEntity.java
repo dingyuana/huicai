@@ -20,6 +20,11 @@ public class ReceivableEntity {
     private Long voucherId;
 
     /**
+     * 关联销售发票ID（P33 简化：直接关联，不经过业务单）
+     */
+    private Long invoiceId;
+
+    /**
      * 业务单据编号（冗余存储，用于快速查询）
      */
     @TableField("doc_no")

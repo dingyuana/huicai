@@ -16,7 +16,9 @@ import com.huicai.module.finance.mapper.VoucherMapper;
 import com.huicai.module.finance.service.NumberingTraceService;
 import com.huicai.module.finance.service.VoucherService;
 import com.huicai.module.tax.entity.InputInvoiceEntity;
+import com.huicai.module.tax.entity.OutputInvoiceEntity;
 import com.huicai.module.tax.mapper.InputInvoiceMapper;
+import com.huicai.module.tax.mapper.OutputInvoiceMapper;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -39,6 +41,7 @@ public class NumberingTraceServiceImpl implements NumberingTraceService {
     private final VoucherMapper voucherMapper;
     private final BusinessDocMapper businessDocMapper;
     private final InputInvoiceMapper inputInvoiceMapper;
+    private final OutputInvoiceMapper outputInvoiceMapper;
     private final ReceivableMapper receivableMapper;
     private final PayableMapper payableMapper;
     private final ArapSettlementMapper arapSettlementMapper;
@@ -102,19 +105,21 @@ public class NumberingTraceServiceImpl implements NumberingTraceService {
             return buildInputInvoiceNode(inv);
         }
 
-        // 4. 查应收单
+        // 4. 查应收单（P33: 增加 receivableNo 匹配）
         LambdaQueryWrapper<com.huicai.module.arap.entity.ReceivableEntity> recQ = new LambdaQueryWrapper<>();
         recQ.eq(com.huicai.module.arap.entity.ReceivableEntity::getDocNo, traceNo)
-            .or().eq(com.huicai.module.arap.entity.ReceivableEntity::getVoucherNo, traceNo);
+            .or().eq(com.huicai.module.arap.entity.ReceivableEntity::getVoucherNo, traceNo)
+            .or().eq(com.huicai.module.arap.entity.ReceivableEntity::getReceivableNo, traceNo);
         com.huicai.module.arap.entity.ReceivableEntity rec = receivableMapper.selectOne(recQ);
         if (rec != null) {
             return buildReceivableNode(rec);
         }
 
-        // 5. 查应付单
+        // 5. 查应付单（P33: 增加 payableNo 匹配）
         LambdaQueryWrapper<PayableEntity> payQ = new LambdaQueryWrapper<>();
         payQ.eq(PayableEntity::getDocNo, traceNo)
-            .or().eq(PayableEntity::getVoucherNo, traceNo);
+            .or().eq(PayableEntity::getVoucherNo, traceNo)
+            .or().eq(PayableEntity::getPayableNo, traceNo);
         PayableEntity pay = payableMapper.selectOne(payQ);
         if (pay != null) {
             return buildPayableNode(pay);
@@ -169,14 +174,28 @@ public class NumberingTraceServiceImpl implements NumberingTraceService {
         return node;
     }
 
+    private NumberingTraceVO.TraceNode buildOutputInvoiceNode(OutputInvoiceEntity inv) {
+        NumberingTraceVO.TraceNode node = new NumberingTraceVO.TraceNode();
+        node.setNodeType("OUTPUT_INVOICE");
+        node.setNodeNo(inv.getInvoiceNo());
+        node.setSummary("销项发票: " + (inv.getCustomerName() != null ? inv.getCustomerName() : ""));
+        node.setAmount(inv.getTotalAmount());
+        node.setStatus(inv.getStatus());
+        node.setVoucherNo(inv.getVoucherNo());
+        node.setInvoiceNo(inv.getInvoiceNo());
+        node.setCreatedAt(inv.getCreatedAt());
+        return node;
+    }
+
     private NumberingTraceVO.TraceNode buildReceivableNode(com.huicai.module.arap.entity.ReceivableEntity r) {
         NumberingTraceVO.TraceNode node = new NumberingTraceVO.TraceNode();
         node.setNodeType("RECEIVABLE");
-        node.setNodeNo(r.getDocNo());
+        node.setNodeNo(r.getReceivableNo() != null ? r.getReceivableNo() : r.getDocNo());
         node.setSummary(r.getSummary());
         node.setAmount(r.getAmount());
         node.setStatus(r.getStatus());
         node.setVoucherNo(r.getVoucherNo());
+        node.setInvoiceNo(r.getInvoiceNo());  // P33: 填充发票编号
         node.setCreatedAt(r.getCreatedAt());
         return node;
     }
@@ -250,7 +269,7 @@ public class NumberingTraceServiceImpl implements NumberingTraceService {
 
     private NumberingTraceVO.TraceNode buildNextDownstreamForInvoice(String invoiceNo, boolean isSales) {
         if (isSales) {
-            // 销售发票 → 应收单（通过 invoiceNo 字段）
+            // 销售发票 → 应收单（P33: 通过 invoiceNo 或 invoiceId 查找）
             LambdaQueryWrapper<com.huicai.module.arap.entity.ReceivableEntity> q = new LambdaQueryWrapper<>();
             q.eq(com.huicai.module.arap.entity.ReceivableEntity::getInvoiceNo, invoiceNo);
             com.huicai.module.arap.entity.ReceivableEntity rec = receivableMapper.selectOne(q);
@@ -392,7 +411,7 @@ public class NumberingTraceServiceImpl implements NumberingTraceService {
         return switch (srcType) {
             case "BUSINESS_DOC" -> buildDocNode(findDocByNo(srcNo));
             case "SETTLEMENT" -> buildSettlementNode(findSettlementByNo(srcNo));
-            case "OUTPUT_INVOICE" -> buildInputInvoiceNode(findInputInvByNo(srcNo)); // 复用
+            case "OUTPUT_INVOICE" -> buildOutputInvoiceNode(findOutputInvByNo(srcNo));  // P33: 改为销售发票
             case "INPUT_INVOICE" -> buildInputInvoiceNode(findInputInvByNo(srcNo));
             case "TAX_DECLARATION" -> null; // 税务申报无上游
             default -> null;
@@ -401,12 +420,17 @@ public class NumberingTraceServiceImpl implements NumberingTraceService {
 
     private NumberingTraceVO.TraceNode buildInvoiceUpstream(String docNo, boolean isReceivable) {
         if (isReceivable) {
+            // P33: 应收单 → 销售发票（通过 receivableNo 查找应收单，再通过 invoiceNo 查找销售发票）
             LambdaQueryWrapper<com.huicai.module.arap.entity.ReceivableEntity> q = new LambdaQueryWrapper<>();
-            q.eq(com.huicai.module.arap.entity.ReceivableEntity::getDocNo, docNo);
+            q.eq(com.huicai.module.arap.entity.ReceivableEntity::getReceivableNo, docNo)
+                .or().eq(com.huicai.module.arap.entity.ReceivableEntity::getDocNo, docNo);
             com.huicai.module.arap.entity.ReceivableEntity rec = receivableMapper.selectOne(q);
             if (rec != null && rec.getInvoiceNo() != null) {
-                // 应收单的 invoiceNo 指向销售发票（实际上可能没有直接的销售发票表，这里用业务单据表示）
-                return null;
+                // 通过 invoiceNo 查找销售发票
+                LambdaQueryWrapper<OutputInvoiceEntity> iq = new LambdaQueryWrapper<>();
+                iq.eq(OutputInvoiceEntity::getInvoiceNo, rec.getInvoiceNo());
+                OutputInvoiceEntity inv = outputInvoiceMapper.selectOne(iq);
+                if (inv != null) return buildOutputInvoiceNode(inv);
             }
         } else {
             LambdaQueryWrapper<PayableEntity> q = new LambdaQueryWrapper<>();
@@ -476,5 +500,11 @@ public class NumberingTraceServiceImpl implements NumberingTraceService {
         LambdaQueryWrapper<InputInvoiceEntity> q = new LambdaQueryWrapper<>();
         q.eq(InputInvoiceEntity::getInvoiceNo, invoiceNo);
         return inputInvoiceMapper.selectOne(q);
+    }
+
+    private OutputInvoiceEntity findOutputInvByNo(String invoiceNo) {
+        LambdaQueryWrapper<OutputInvoiceEntity> q = new LambdaQueryWrapper<>();
+        q.eq(OutputInvoiceEntity::getInvoiceNo, invoiceNo);
+        return outputInvoiceMapper.selectOne(q);
     }
 }

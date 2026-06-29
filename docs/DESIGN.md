@@ -161,11 +161,11 @@
   │                                                          │
   │  ┌──────────┐    ┌──────────┐    ┌──────────┐           │
   │  │ 凭证(P22) │    │ 发票(P21)│    │ 单据     │           │
-  │  │4主+2附属  │◄───│ 8状态    │───►│ 6状态    │           │
+  │  │4主+2附属  │◄───│ 8状态    │    │ 6状态    │           │
   │  │ DRAFT→    │    │ PENDING→ │    │ DRAFT→   │           │
   │  │ POSTED    │    │ VOIDED   │    │ CLOSED   │           │
   │  └────┬─────┘    └────┬─────┘    └──────────┘           │
-  │       │               │                                  │
+  │       │               │ (仅银行流水/报销等场景使用)       │
   │       │               ▼ (生成应收/应付)                   │
   │       │    ┌──────────────────────┐                      │
   │       │    │  AR/AP (P20)         │                      │
@@ -180,6 +180,10 @@
   │            │  →REVERSED/CANCELLED  │                      │
   │            └──────────────────────┘                      │
   └──────────────────────────────────────────────────────────┘
+
+  P33 简化（2026-06-29）：销售发票审核通过后，直接生成应收单+凭证，
+  不再经过业务单（BusinessDoc）中间环节。业务单仅保留给银行流水B类、
+  费用报销等非发票场景使用。
 
   ┌──────────────────────────────────────────────────────────┐
   │                    辅助状态机                              │
@@ -846,15 +850,15 @@ PENDING ──→ CONFIRMED / REJECTED
 ┌──────────────────────────────────────────────────────────────────┐
 │ Phase 1.5: 审核确认（人工操作）                                     │
 │  PENDING_CONFIRM → PENDING_REVIEW → CONFIRMED                      │
-│  发票审核通过后，异步创建业务单+应收单+审核+生凭证                    │
+│  发票审核通过后，直接创建应收单 + 凭证（不再经过业务单）              │
 │  （配置 invoice.auto-flow-after-import 开启时自动执行）             │
-│  硬约束: 凭证生成后状态为 PENDING_REVIEW，等待人工终审               │
+│  硬约束: 凭证生成后状态为 DRAFT，等待人工终审                       │
 └──────────────────────────────────────────────────────────────────┘
                             ↓ 审核通过
 ┌──────────────────────────────────────────────────────────────────┐
-│ Phase 2: 生成凭证（业务单已审核通过）                                │
+│ Phase 2: 生成凭证（P33 简化：发票直连应收单→凭证）                   │
 │  发票状态: CONFIRMED → VOUCHERED                                    │
-│  业务单: APPROVED → 生成凭证(DRAFT)                                 │
+│  应收单: DRAFT → CONFIRMED                                          │
 │  凭证: DRAFT → SUBMITTED → AUDITED → POSTED                        │
 │  结算状态:                                                       │
 │    A未收款(赊销) → 借:应收账款 贷:收入+销项税                        │
@@ -890,7 +894,7 @@ PENDING ──→ CONFIRMED / REJECTED
 ```
 销售发票导入:
   t_output_invoice (PENDING_CONFIRM→PENDING_REVIEW→CONFIRMED→VOUCHERED)
-    → 生成 t_receivable (CONFIRMED) + t_business_doc (VOUCHERED)
+    → 生成 t_receivable (DRAFT→CONFIRMED)
     → 生成 t_voucher (DRAFT→SUBMITTED→AUDITED→POSTED)
     → 核销: t_receivable (SETTLED) + t_output_invoice (FULLY_RECONCILED)
     → t_arap_settlement (CONFIRMED→VOUCHERED)

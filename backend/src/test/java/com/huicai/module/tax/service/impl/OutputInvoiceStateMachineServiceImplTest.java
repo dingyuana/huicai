@@ -6,15 +6,10 @@ import com.huicai.module.arap.constant.ArapStatus;
 import com.huicai.module.arap.entity.ReceivableEntity;
 import com.huicai.module.arap.mapper.ReceivableMapper;
 import com.huicai.module.arap.service.ReceivableStateMachineService;
-import com.huicai.module.finance.entity.BusinessDocEntity;
-import com.huicai.module.finance.entity.BusinessDocEntryEntity;
 import com.huicai.module.finance.entity.VoucherEntity;
 import com.huicai.module.finance.entity.VoucherEntryEntity;
-import com.huicai.module.finance.mapper.BusinessDocEntryMapper;
-import com.huicai.module.finance.mapper.BusinessDocMapper;
 import com.huicai.module.finance.mapper.VoucherEntryMapper;
 import com.huicai.module.finance.mapper.VoucherMapper;
-import com.huicai.module.finance.service.BusinessDocService;
 import com.huicai.module.tax.constant.InvoiceStatus;
 import com.huicai.module.tax.entity.OutputInvoiceEntity;
 import com.huicai.module.tax.mapper.OutputInvoiceMapper;
@@ -56,16 +51,7 @@ class OutputInvoiceStateMachineServiceImplTest {
     private OutputInvoiceMapper invoiceMapper;
 
     @Mock
-    private BusinessDocService businessDocService;
-
-    @Mock
     private ReceivableStateMachineService receivableStateMachineService;
-
-    @Mock
-    private BusinessDocMapper docMapper;
-
-    @Mock
-    private BusinessDocEntryMapper docEntryMapper;
 
     @Mock
     private ReceivableMapper receivableMapper;
@@ -92,9 +78,8 @@ class OutputInvoiceStateMachineServiceImplTest {
     @BeforeEach
     void setup() {
         service = new OutputInvoiceStateMachineServiceImpl(
-                invoiceMapper, businessDocService, receivableStateMachineService,
-                docMapper, docEntryMapper, receivableMapper, redisTemplate);
-        // 注入 lazy 依赖（用于 createBusinessDocAndReceivableAfterConfirm 中的 taxService 调用）
+                invoiceMapper, receivableStateMachineService, receivableMapper, redisTemplate);
+        // 注入 lazy 依赖
         try {
             var field = OutputInvoiceStateMachineServiceImpl.class.getDeclaredField("taxService");
             field.setAccessible(true);
@@ -153,7 +138,7 @@ class OutputInvoiceStateMachineServiceImplTest {
 
         // then — 负向：不该做的没做
         StateMachineTestHelper.verifyNoVoucherCreated(voucherMapper, voucherEntryMapper);
-        StateMachineTestHelper.verifyNoDocumentCreated(docMapper, docEntryMapper);
+        StateMachineTestHelper.verifyNoDocumentCreated(null, null);
         StateMachineTestHelper.verifyNoReceivableCreated(receivableMapper);
     }
 
@@ -187,7 +172,7 @@ class OutputInvoiceStateMachineServiceImplTest {
     // ====================================================================
 
     @Test
-    @DisplayName("confirm_正向_状态变更+创建业务单和应收单")
+    @DisplayName("confirm_正向_状态变更+创建应收单")
     void confirm_positive_statusChanged() {
         // given
         OutputInvoiceEntity inv = invoice(InvoiceStatus.PENDING_REVIEW);
@@ -200,11 +185,10 @@ class OutputInvoiceStateMachineServiceImplTest {
         // then — 正向：状态变更
         assertEquals(InvoiceStatus.CONFIRMED, inv.getStatus());
         assertEquals(USER_ID, inv.getUpdatedBy());
-        // then — 正向：创建业务单
-        verify(docMapper).insert(any(BusinessDocEntity.class));
-        verify(docEntryMapper).insert(any(BusinessDocEntryEntity.class));
-        // then — 正向：创建应收单
+        // then — 正向：创建应收单（P33 简化：不再创建业务单）
         verify(receivableMapper).insert(any(ReceivableEntity.class));
+        // 负向：不创建业务单
+        // (docMapper 已不存在，无需验证)
     }
 
     @Test
@@ -253,7 +237,7 @@ class OutputInvoiceStateMachineServiceImplTest {
 
         // then — 负向：驳回不应创建任何资源
         StateMachineTestHelper.verifyNoVoucherCreated(voucherMapper, voucherEntryMapper);
-        StateMachineTestHelper.verifyNoDocumentCreated(docMapper, docEntryMapper);
+        StateMachineTestHelper.verifyNoDocumentCreated(null, null);
         StateMachineTestHelper.verifyNoReceivableCreated(receivableMapper);
     }
 
@@ -314,7 +298,7 @@ class OutputInvoiceStateMachineServiceImplTest {
 
         // then — 负向：回退不应创建任何资源
         StateMachineTestHelper.verifyNoVoucherCreated(voucherMapper, voucherEntryMapper);
-        StateMachineTestHelper.verifyNoDocumentCreated(docMapper, docEntryMapper);
+        StateMachineTestHelper.verifyNoDocumentCreated(null, null);
         StateMachineTestHelper.verifyNoReceivableCreated(receivableMapper);
     }
 
@@ -364,7 +348,7 @@ class OutputInvoiceStateMachineServiceImplTest {
 
         // then — 负向：标记已生成凭证不应再创建新凭证
         StateMachineTestHelper.verifyNoVoucherCreated(voucherMapper, voucherEntryMapper);
-        StateMachineTestHelper.verifyNoDocumentCreated(docMapper, docEntryMapper);
+        StateMachineTestHelper.verifyNoDocumentCreated(null, null);
         StateMachineTestHelper.verifyNoReceivableCreated(receivableMapper);
     }
 
@@ -429,7 +413,7 @@ class OutputInvoiceStateMachineServiceImplTest {
 
         // then — 负向：核销更新不应创建任何资源
         StateMachineTestHelper.verifyNoVoucherCreated(voucherMapper, voucherEntryMapper);
-        StateMachineTestHelper.verifyNoDocumentCreated(docMapper, docEntryMapper);
+        StateMachineTestHelper.verifyNoDocumentCreated(null, null);
         StateMachineTestHelper.verifyNoReceivableCreated(receivableMapper);
     }
 
@@ -494,7 +478,7 @@ class OutputInvoiceStateMachineServiceImplTest {
 
         // then — 负向：作废不应创建任何资源
         StateMachineTestHelper.verifyNoVoucherCreated(voucherMapper, voucherEntryMapper);
-        StateMachineTestHelper.verifyNoDocumentCreated(docMapper, docEntryMapper);
+        StateMachineTestHelper.verifyNoDocumentCreated(null, null);
         StateMachineTestHelper.verifyNoReceivableCreated(receivableMapper);
     }
 

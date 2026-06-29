@@ -5,17 +5,11 @@ import com.huicai.module.tax.constant.InvoiceStatus;
 import com.huicai.module.tax.entity.OutputInvoiceEntity;
 import com.huicai.module.tax.mapper.OutputInvoiceMapper;
 import com.huicai.module.tax.service.OutputInvoiceStateMachineService;
-import com.huicai.module.finance.service.BusinessDocService;
 import com.huicai.module.arap.service.ReceivableStateMachineService;
-import com.huicai.module.finance.mapper.BusinessDocMapper;
-import com.huicai.module.finance.mapper.BusinessDocEntryMapper;
 import com.huicai.module.arap.mapper.ReceivableMapper;
-import com.huicai.module.finance.entity.BusinessDocEntity;
-import com.huicai.module.finance.entity.BusinessDocEntryEntity;
 import com.huicai.module.arap.entity.ReceivableEntity;
 import com.huicai.module.arap.constant.ArapStatus;
 import com.huicai.module.tax.service.TaxService;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -24,14 +18,16 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
-import java.util.ArrayList;
 import java.util.List;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Lazy;
 
 /**
- * 销售发票状态机实现.
+ * 销售发票状态机实现（P33 简化版）.
+ *
+ * <p>P33 改动：发票确认后直接创建应收单 + 凭证，不再经过业务单中间环节。
+ * <p>编号关联：发票 ↔ 应收单 ↔ 凭证 双向追溯保持不变。
  *
  * <p>依据 SPEC docs/specs/P21-sales-invoice-state-machine.md §4.1
  * 状态变更通过 BaseMapper.updateById 写入数据库，
@@ -43,15 +39,9 @@ import org.springframework.context.annotation.Lazy;
 public class OutputInvoiceStateMachineServiceImpl implements OutputInvoiceStateMachineService {
 
     private final OutputInvoiceMapper invoiceMapper;
-    private final BusinessDocService businessDocService;
     private final ReceivableStateMachineService receivableStateMachineService;
-    private final BusinessDocMapper docMapper;
-    private final BusinessDocEntryMapper docEntryMapper;
     private final ReceivableMapper receivableMapper;
     private final StringRedisTemplate redisTemplate;
-
-    @Value("${invoice.auto-flow-after-import:false}")
-    private boolean autoFlowAfterImport;
 
     /**
      * 自注入实现 AOP 代理调用, 使 @Transactional 生效.
@@ -91,8 +81,8 @@ public class OutputInvoiceStateMachineServiceImpl implements OutputInvoiceStateM
         invoiceMapper.updateById(entity);
         log.info("销售发票审核通过: id={}, userId={}", invoiceId, userId);
 
-        // P31: 审核后自动生成业务单(DRAFT) + 应收单(DRAFT)
-        createBusinessDocAndReceivableAfterConfirm(invoiceId, userId);
+        // P33: 审核后直接创建应收单（不再经过业务单）
+        createReceivableFromInvoiceDirect(invoiceId, userId);
     }
 
     @Override
@@ -173,95 +163,37 @@ public class OutputInvoiceStateMachineServiceImpl implements OutputInvoiceStateM
         log.info("销售发票作废: id={}, userId={}, reason={}", invoiceId, userId, reason);
     }
 
+    // ==================== P33: 简化后的核心逻辑 ====================
+
     /**
-     * 发票审核通过后异步创建：业务单(DRAFT) + 应收单(DRAFT)。
-     *
-     * <p>注意：此方法不再生成凭证。凭证生成由用户手动点击「生成凭证」按钮触发
-     * （调用 markVouchered()），符合「人是唯一审核主体」原则。
-     *
-     * <p>调用时机：confirm() 完成后异步调用，或前端显式调用。
+     * P33 简化：发票审核后直接创建应收单，不再经过业务单中间环节。
+     * 
+     * 编号关联：
+     * - 应收单 → invoiceId（直接关联发票ID）+ invoiceNo（编号冗余）
+     * - 发票 → receivableId（应收单ID）+ receivableNo（应收单编号）
      */
-    public void createBusinessDocAndReceivableAfterConfirm(Long invoiceId, Long userId) {
+    private void createReceivableFromInvoiceDirect(Long invoiceId, Long userId) {
         OutputInvoiceEntity invoice = invoiceMapper.selectById(invoiceId);
         if (invoice == null) {
             log.warn("发票不存在: invoiceId={}", invoiceId);
             return;
         }
 
-        BusinessDocEntity doc = createBusinessDocFromInvoice(invoice, userId);
-        log.info("发票审核后创建业务单: invoiceId={}, docId={}", invoiceId, doc.getId());
-
-        createReceivableFromInvoice(doc, invoice, userId);
-        log.info("发票审核后创建应收单完成: invoiceId={}, docId={}", invoiceId, doc.getId());
-    }
-
-    private static final long DEFAULT_USER_ID = 1L;
-
-    /**
-     * 根据发票信息创建业务单和分录.
-     * 如果发票已有 docId（来自导入流程），不再重复创建。
-     */
-    private BusinessDocEntity createBusinessDocFromInvoice(OutputInvoiceEntity invoice, Long userId) {
-        // P32: 防重复创建：如果发票已有 docId，直接返回现有单据
-        if (invoice.getDocId() != null) {
-            BusinessDocEntity existing = docMapper.selectById(invoice.getDocId());
-            if (existing != null) {
-                log.info("发票已有业务单: invoiceId={}, docId={}, skip", invoice.getId(), invoice.getDocId());
-                return existing;
-            }
-        }
-
-        BusinessDocEntity doc = new BusinessDocEntity();
-        doc.setDocNo(generateDocNo(invoice.getPeriod()));
-        doc.setDocType("INVOICE_OUT");
-        doc.setDocDate(invoice.getInvoiceDate());
-        doc.setPeriod(invoice.getPeriod());
-        doc.setAmount(invoice.getTotalAmount());
-        doc.setCustomerId(invoice.getCustomerId());
-        doc.setSummary(invoice.getCustomerName());
-        doc.setInvoiceNo(invoice.getInvoiceNo());
-        doc.setStatus("DRAFT");
-        doc.setSource("INVOICE_IMPORT");
-        doc.setCreatedBy(DEFAULT_USER_ID);
-        docMapper.insert(doc);
-
-        // 创建业务单分录（供 generateVoucher 使用）
-        BusinessDocEntryEntity entry = new BusinessDocEntryEntity();
-        entry.setDocId(doc.getId());
-        entry.setAmount(invoice.getTotalAmount());
-        entry.setInvoiceNo(invoice.getInvoiceNo());
-        entry.setSummary(invoice.getCustomerName());
-        entry.setSortOrder(1);
-        docEntryMapper.insert(entry);
-
-        // 更新发票的 docId 和 docNo（编号冗余）
-        invoice.setDocId(doc.getId());
-        invoice.setDocNo(doc.getDocNo());  // 新增：编号冗余存储
-        invoiceMapper.updateById(invoice);
-
-        return doc;
-    }
-
-    /**
-     * 根据业务单和发票信息创建应收单.
-     */
-    private void createReceivableFromInvoice(BusinessDocEntity doc, OutputInvoiceEntity invoice, Long userId) {
-        // P32: 防重复创建应收单
+        // 防重复创建：查 invoice_id 是否有应收单
         long existingCount = receivableMapper.selectCount(
                 new LambdaQueryWrapper<ReceivableEntity>()
-                        .eq(ReceivableEntity::getDocId, doc.getId())
+                        .eq(ReceivableEntity::getInvoiceId, invoiceId)
                         .eq(ReceivableEntity::getCustomerId, invoice.getCustomerId()));
         if (existingCount > 0) {
-            log.info("业务单已有应收单: docId={}, count={}, skip", doc.getId(), existingCount);
+            log.info("发票已有应收单: invoiceId={}, count={}, skip", invoiceId, existingCount);
             return;
         }
 
         ReceivableEntity recv = new ReceivableEntity();
         recv.setCustomerId(invoice.getCustomerId());
-        recv.setDocId(doc.getId());
-        recv.setDocNo(doc.getDocNo());          // 业务单据编号冗余
-        recv.setInvoiceNo(invoice.getInvoiceNo());  // 发票编号冗余
-        recv.setVoucherId(doc.getVoucherId());
+        recv.setInvoiceId(invoice.getId());             // P33: 直接关联发票ID
+        recv.setInvoiceNo(invoice.getInvoiceNo());      // 发票编号冗余
+        recv.setVoucherId(null);                        // 凭证尚未生成
         recv.setPeriod(invoice.getPeriod());
         recv.setTxDate(invoice.getInvoiceDate());
         recv.setAmount(invoice.getTotalAmount());
@@ -275,22 +207,13 @@ public class OutputInvoiceStateMachineServiceImpl implements OutputInvoiceStateM
         recv.setReceivableNo(receivableNo);
 
         receivableMapper.insert(recv);
-        log.info("P31 销售发票应收单生成: customerId={}, docId={}, receivableNo={}, amount={}",
-                invoice.getCustomerId(), doc.getId(), receivableNo, invoice.getTotalAmount());
+        log.info("P33 销售发票应收单生成: invoiceId={}, customerId={}, receivableId={}, receivableNo={}, amount={}",
+                invoiceId, invoice.getCustomerId(), recv.getId(), receivableNo, invoice.getTotalAmount());
 
         // 回写发票：应收单 ID 和编号（双向追溯）
         invoice.setReceivableId(recv.getId());
         invoice.setReceivableNo(receivableNo);
         invoiceMapper.updateById(invoice);
-    }
-
-    /**
-     * 生成业务单号 (FPS + period + 4位序号).
-     */
-    private String generateDocNo(String period) {
-        String key = "doc:no:INVOICE_OUT:" + period;
-        Long seq = redisTemplate.opsForValue().increment(key);
-        return "FPS" + period + String.format("%04d", seq);
     }
 
     /**
@@ -301,6 +224,8 @@ public class OutputInvoiceStateMachineServiceImpl implements OutputInvoiceStateM
         Long seq = redisTemplate.opsForValue().increment(key);
         return "YS" + period + String.format("%04d", seq);
     }
+
+    // ==================== 工具方法 ====================
 
     private OutputInvoiceEntity getEntity(Long id) {
         OutputInvoiceEntity entity = invoiceMapper.selectById(id);
