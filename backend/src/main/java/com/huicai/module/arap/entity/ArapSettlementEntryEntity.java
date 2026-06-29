@@ -16,6 +16,8 @@ public class ArapSettlementEntryEntity {
     private Long settlementId;
     private Long receivableId;
     private Long payableId;
+    /** 业务单据ID（P34 替代 receivableId/payableId） */
+    private Long businessDocId;
     private BigDecimal settledAmount;
     private BigDecimal discountAmount;
 

@@ -58,6 +58,10 @@ public class NumberingTraceVO {
         @Schema(description = "关联凭证编号")
         private String voucherNo;
 
+        /** 发票编号 */
+        @Schema(description = "发票编号")
+        private String invoiceNo;
+
         /** 创建时间 */
         @Schema(description = "创建时间")
         private LocalDateTime createdAt;

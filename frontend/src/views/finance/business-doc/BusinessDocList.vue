@@ -9,10 +9,6 @@
         </div>
       </div>
 
-      <el-alert
-        title="销售发票流程已简化：新销售发票审核后直接生成应收单和凭证，不再经过业务单据。历史数据保留可查。"
-        type="warning" show-icon :closable="false" style="margin-bottom: 12px;" />
-
       <el-form :model="query" inline class="filter-form">
         <el-form-item label="状态">
           <el-select v-model="query.status" placeholder="全部" clearable style="width:130px">
@@ -34,10 +30,10 @@
       <el-radio-group v-model="query.docType" class="doc-type-tabs" @change="onSearch">
         <el-radio-button :value="''">全部 ({{ totalCount }})</el-radio-button>
         <el-radio-button
-          v-for="(label, value) in Object.entries(DOC_TYPE_LABELS).filter(([k]) => k !== 'INVOICE_OUT')"
-          :key="value[0]"
-          :value="value[0]">
-          {{ value[1] }} ({{ docTypeCounts[value[0]] || 0 }})
+          v-for="([docType, typeLabel]) in Object.entries(DOC_TYPE_LABELS)"
+          :key="docType"
+          :value="docType">
+          {{ typeLabel }} ({{ docTypeCounts[docType] || 0 }})
         </el-radio-button>
       </el-radio-group>
 
@@ -59,6 +55,19 @@
         <el-table-column label="金额" width="140" align="right">
           <template #default="{ row }">{{ fmtAmount(row.amount) }}</template>
         </el-table-column>
+        <el-table-column label="已核销" width="120" align="right">
+          <template #default="{ row }">
+            <span style="color:#67c23a">{{ fmtAmount(row.settledAmount) }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="未核销" width="120" align="right">
+          <template #default="{ row }">
+            <span :style="{ color: Number(row.unsettledAmount) > 0 ? '#f56c6c' : '#67c23a', fontWeight: Number(row.unsettledAmount) > 0 ? '600' : 'normal' }">
+              {{ fmtAmount(row.unsettledAmount) }}
+            </span>
+          </template>
+        </el-table-column>
+        <el-table-column label="到期日" width="120" align="center" prop="dueDate" />
         <el-table-column label="状态" width="120" align="center">
           <template #default="{ row }">
             <el-tag :type="statusType(row.status) as 'success' | 'warning' | 'info' | 'primary' | 'danger'" size="small">
@@ -80,7 +89,7 @@
             <el-button text size="small" v-if="row.status === 'DRAFT'" type="success" @click="onSubmit(row)">提交</el-button>
             <el-button text size="small" v-if="row.status === 'SUBMITTED'" type="primary" @click="onApprove(row)">审批</el-button>
             <el-button text size="small" v-if="row.status === 'SUBMITTED'" type="danger" @click="onReject(row)">驳回</el-button>
-            <el-button text size="small" v-if="row.status === 'APPROVED' && !row.voucherId && row.docType !== 'INVOICE_OUT'" type="warning" @click="onGenerateVoucher(row)">生成凭证</el-button>
+            <el-button text size="small" v-if="row.status === 'APPROVED' && !row.voucherId" type="warning" @click="onGenerateVoucher(row)">生成凭证</el-button>
             <el-button text size="small" v-if="(row.status === 'APPROVED' || row.status === 'VOUCHERED') && !row.voucherId" type="danger" @click="onReverse(row)">红冲</el-button>
             <el-popconfirm v-if="row.status === 'DRAFT'" title="确认删除？" @confirm="onDelete(row)">
               <template #reference>
@@ -136,6 +145,9 @@ function statusType(s: string) {
     case 'SUBMITTED': return 'primary'
     case 'APPROVED': return 'warning'
     case 'VOUCHERED': return 'success'
+    case 'PARTIALLY_RECONCILED': return 'warning'
+    case 'FULLY_RECONCILED': return 'success'
+    case 'REVERSED': return 'danger'
     case 'REJECTED': return 'danger'
     case 'CLOSED': return 'info'
     default: return 'info'
@@ -151,7 +163,7 @@ async function fetchCounts() {
     const all = await getBusinessDocPage({ current: 1, size: 1 }) as any
     totalCount.value = all.total || 0
     const counts: Record<string, number> = {}
-    for (const key of Object.keys(DOC_TYPE_LABELS).filter(k => k !== 'INVOICE_OUT')) {
+    for (const key of Object.keys(DOC_TYPE_LABELS)) {
       const res = await getBusinessDocPage({ docType: key, current: 1, size: 1 }) as any
       counts[key] = res.total || 0
     }

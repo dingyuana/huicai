@@ -16,8 +16,10 @@ import com.huicai.module.arap.mapper.ArapSettlementMapper;
 import com.huicai.module.arap.mapper.PayableMapper;
 import com.huicai.module.arap.mapper.ReceivableMapper;
 import com.huicai.module.arap.service.ArapSettlementService;
+import com.huicai.module.finance.entity.BusinessDocEntity;
 import com.huicai.module.finance.entity.VoucherEntity;
 import com.huicai.module.finance.entity.VoucherEntryEntity;
+import com.huicai.module.finance.mapper.BusinessDocMapper;
 import com.huicai.module.finance.mapper.VoucherEntryMapper;
 import com.huicai.module.finance.mapper.VoucherMapper;
 import com.huicai.module.finance.service.VoucherNoService;
@@ -27,6 +29,8 @@ import com.huicai.module.finance.entity.VoucherTemplateLineEntity;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.OptimisticLockingFailureException;
+import org.springframework.retry.annotation.Retryable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -45,6 +49,7 @@ public class ArapSettlementServiceImpl implements ArapSettlementService {
     private final ArapSettlementEntryMapper entryMapper;
     private final ReceivableMapper receivableMapper;
     private final PayableMapper payableMapper;
+    private final BusinessDocMapper businessDocMapper;
     private final VoucherTemplateService voucherTemplateService;
     private final VoucherMapper voucherMapper;
     private final VoucherEntryMapper voucherEntryMapper;
@@ -100,6 +105,7 @@ public class ArapSettlementServiceImpl implements ArapSettlementService {
     }
 
     @Override
+    @Retryable(retryFor = OptimisticLockingFailureException.class, maxAttempts = 3, backoff = @org.springframework.retry.annotation.Backoff(delay = 100))
     @Transactional(rollbackFor = Exception.class)
     public ArapSettlementEntity confirm(Long id) {
         ArapSettlementEntity entity = getById(id);
@@ -112,7 +118,22 @@ public class ArapSettlementServiceImpl implements ArapSettlementService {
                         .eq(ArapSettlementEntryEntity::getSettlementId, id)
         );
         for (ArapSettlementEntryEntity entry : entries) {
-            if (entry.getReceivableId() != null) {
+            // P34: 优先使用 businessDocId（取代 receivableId/payableId）
+            if (entry.getBusinessDocId() != null) {
+                BusinessDocEntity doc = businessDocMapper.selectById(entry.getBusinessDocId());
+                if (doc != null) {
+                    BigDecimal newSettled = doc.getSettledAmount() != null
+                            ? doc.getSettledAmount().add(entry.getSettledAmount())
+                            : entry.getSettledAmount();
+                    doc.setSettledAmount(newSettled);
+                    doc.setUnsettledAmount(doc.getAmount().subtract(newSettled));
+                    doc.setStatus(doc.getUnsettledAmount().compareTo(BigDecimal.ZERO) == 0
+                            ? "FULLY_RECONCILED" : "PARTIALLY_RECONCILED");
+                    if (businessDocMapper.updateById(doc) == 0) {
+                        throw new OptimisticLockingFailureException("BusinessDoc确认版本冲突, id=" + doc.getId());
+                    }
+                }
+            } else if (entry.getReceivableId() != null) {
                 ReceivableEntity r = receivableMapper.selectById(entry.getReceivableId());
                 if (r != null) {
                     BigDecimal newSettled = r.getSettledAmount().add(entry.getSettledAmount());
@@ -242,9 +263,18 @@ public class ArapSettlementServiceImpl implements ArapSettlementService {
         entity.setStatus(ArapStatus.VOUCHERED);
         mapper.updateById(entity);
 
-        // 新增：回写凭证编号到所有核销明细对应的应收/应付单
+        // 新增：回写凭证编号到所有核销明细对应的业务单据/应收/应付单
         for (ArapSettlementEntryEntity entry : entries) {
-            if (entry.getReceivableId() != null) {
+            if (entry.getBusinessDocId() != null) {
+                BusinessDocEntity doc = businessDocMapper.selectById(entry.getBusinessDocId());
+                if (doc != null && doc.getVoucherNo() == null) {
+                    doc.setVoucherNo(voucherNo);
+                    doc.setVoucherId(voucher.getId());
+                    if (businessDocMapper.updateById(doc) == 0) {
+                        throw new OptimisticLockingFailureException("BusinessDoc回写凭证版本冲突, id=" + doc.getId());
+                    }
+                }
+            } else if (entry.getReceivableId() != null) {
                 ReceivableEntity r = receivableMapper.selectById(entry.getReceivableId());
                 if (r != null && r.getVoucherNo() == null) {
                     r.setVoucherNo(voucherNo);
@@ -264,6 +294,7 @@ public class ArapSettlementServiceImpl implements ArapSettlementService {
     }
 
     @Override
+    @Retryable(retryFor = OptimisticLockingFailureException.class, maxAttempts = 3, backoff = @org.springframework.retry.annotation.Backoff(delay = 100))
     @Transactional(rollbackFor = Exception.class)
     public void reverse(Long id) {
         ArapSettlementEntity entity = getById(id);
@@ -282,7 +313,18 @@ public class ArapSettlementServiceImpl implements ArapSettlementService {
     }
 
     private void restoreUnsettledAmount(ArapSettlementEntryEntity entry) {
-        if (entry.getReceivableId() != null) {
+        if (entry.getBusinessDocId() != null) {
+            BusinessDocEntity doc = businessDocMapper.selectById(entry.getBusinessDocId());
+            if (doc != null) {
+                BigDecimal newSettled = doc.getSettledAmount().subtract(entry.getSettledAmount());
+                doc.setSettledAmount(newSettled);
+                doc.setUnsettledAmount(doc.getAmount().subtract(newSettled));
+                doc.setStatus("APPROVED");
+                if (businessDocMapper.updateById(doc) == 0) {
+                    throw new OptimisticLockingFailureException("BusinessDoc反核销版本冲突, id=" + doc.getId());
+                }
+            }
+        } else if (entry.getReceivableId() != null) {
             ReceivableEntity r = receivableMapper.selectById(entry.getReceivableId());
             if (r != null) {
                 BigDecimal newSettled = r.getSettledAmount().subtract(entry.getSettledAmount());

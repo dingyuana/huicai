@@ -33,6 +33,7 @@ public class BusinessDocVO {
     private String invoiceNo;
     private BigDecimal settledAmount;
     private BigDecimal unsettledAmount;
+    private LocalDate dueDate;
     private Long createdBy;
     private String createdByName;
     private LocalDateTime createdAt;
@@ -76,6 +77,10 @@ public class BusinessDocVO {
         vo.setVoucherId(e.getVoucherId());
         vo.setVoucherNo(e.getVoucherNo());
         vo.setInvoiceNo(e.getInvoiceNo());
+        // P34: 结算字段直接来自业务单据实体
+        vo.setSettledAmount(e.getSettledAmount());
+        vo.setUnsettledAmount(e.getUnsettledAmount());
+        vo.setDueDate(e.getDueDate());
         vo.setCreatedBy(e.getCreatedBy());
         vo.setCreatedAt(e.getCreatedAt());
         vo.setSubmittedBy(e.getSubmittedBy());

@@ -21,6 +21,8 @@ import com.huicai.module.finance.service.VoucherNoService;
 import com.huicai.module.finance.service.VoucherTemplateService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.OptimisticLockingFailureException;
+import org.springframework.retry.annotation.Retryable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -33,7 +35,6 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.*;
-import java.util.function.Function;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
@@ -76,68 +77,40 @@ public class ReconciliationServiceImpl implements ReconciliationService {
 
     private RecommendResult recommend(Long customerId, Long vendorId, BigDecimal amount, String summary, String counterpartyName, boolean isReceipt, String sourceType, Long sourceId, LocalDate txDate, String externalNo) {
         List<RecommendItem> items = new ArrayList<>();
-        List<?> invoices;
         String targetDocType = isReceipt ? "INVOICE_OUT" : "INVOICE_IN";
+
+        // P34: 直接查询 BusinessDocEntity（替代 ReceivableEntity/PayableEntity）
+        List<BusinessDocEntity> invoices;
         if (isReceipt && customerId != null) {
-            invoices = receivableMapper.selectList(
-                    new LambdaQueryWrapper<ReceivableEntity>()
-                            .eq(ReceivableEntity::getCustomerId, customerId));
+            invoices = businessDocMapper.selectList(
+                    new LambdaQueryWrapper<BusinessDocEntity>()
+                            .eq(BusinessDocEntity::getCustomerId, customerId)
+                            .eq(BusinessDocEntity::getDocType, "INVOICE_OUT")
+                            .gt(BusinessDocEntity::getUnsettledAmount, BigDecimal.ZERO));
         } else if (!isReceipt && vendorId != null) {
-            invoices = payableMapper.selectList(
-                    new LambdaQueryWrapper<PayableEntity>()
-                            .eq(PayableEntity::getVendorId, vendorId));
+            invoices = businessDocMapper.selectList(
+                    new LambdaQueryWrapper<BusinessDocEntity>()
+                            .eq(BusinessDocEntity::getSupplierId, vendorId)
+                            .eq(BusinessDocEntity::getDocType, "INVOICE_IN")
+                            .gt(BusinessDocEntity::getUnsettledAmount, BigDecimal.ZERO));
         } else {
             return new RecommendResult(sourceType, sourceId, counterpartyName, amount, List.of());
         }
 
-        // Batch load business docs for invoice number display
-        Set<Long> docIds = new HashSet<>();
-        for (Object invoice : invoices) {
-            if (invoice instanceof ReceivableEntity r && r.getDocId() != null) {
-                docIds.add(r.getDocId());
-            } else if (invoice instanceof PayableEntity p && p.getDocId() != null) {
-                docIds.add(p.getDocId());
-            }
-        }
-        Map<Long, BusinessDocEntity> bizDocMap = new HashMap<>();
-        if (!docIds.isEmpty()) {
-            List<BusinessDocEntity> bizDocs = businessDocMapper.selectBatchIds(docIds);
-            bizDocMap = bizDocs.stream().collect(Collectors.toMap(BusinessDocEntity::getId, Function.identity()));
-        }
-
-        for (Object invoice : invoices) {
-            BigDecimal unsettledAmount;
-            String invoiceNo;
-            Long targetDocId;
-            LocalDate invoiceTxDate = null;
-            String invoiceSummary;
-            String invoiceCustomerName = "";
-
-            if (invoice instanceof ReceivableEntity r) {
-                unsettledAmount = r.getUnsettledAmount();
-                BusinessDocEntity doc = r.getDocId() != null ? bizDocMap.get(r.getDocId()) : null;
-                // 跳过由银行流水自动生成的应收(防止自引用循环推荐)
-                if ("bank_txn".equals(sourceType) && doc != null && "FROM_BANK_TXN".equals(doc.getSource())) {
-                    continue;
-                }
-                invoiceNo = doc != null ? doc.getDocNo() : String.valueOf(r.getId());
-                targetDocId = r.getId();
-                invoiceTxDate = r.getTxDate();
-                invoiceSummary = r.getSummary() != null ? r.getSummary() : "";
-            } else if (invoice instanceof PayableEntity p) {
-                unsettledAmount = p.getUnsettledAmount();
-                BusinessDocEntity doc = p.getDocId() != null ? bizDocMap.get(p.getDocId()) : null;
-                // 跳过由银行流水自动生成的应付(防止自引用循环推荐)
-                if ("bank_txn".equals(sourceType) && doc != null && "FROM_BANK_TXN".equals(doc.getSource())) {
-                    continue;
-                }
-                invoiceNo = doc != null ? doc.getDocNo() : String.valueOf(p.getId());
-                targetDocId = p.getId();
-                invoiceTxDate = p.getTxDate();
-                invoiceSummary = p.getSummary() != null ? p.getSummary() : "";
-            } else {
+        for (BusinessDocEntity doc : invoices) {
+            // 跳过由银行流水自动生成的单据(防止自引用循环推荐)
+            if ("bank_txn".equals(sourceType) && "FROM_BANK_TXN".equals(doc.getSource())) {
                 continue;
             }
+
+            BigDecimal unsettledAmount = doc.getUnsettledAmount();
+            if (unsettledAmount == null || unsettledAmount.compareTo(BigDecimal.ZERO) <= 0) continue;
+
+            String invoiceNo = doc.getDocNo();
+            Long targetDocId = doc.getId();
+            LocalDate invoiceTxDate = doc.getDocDate();
+            String invoiceSummary = doc.getSummary() != null ? doc.getSummary() : "";
+            String invoiceCustomerName = "";
 
             if (unsettledAmount == null || unsettledAmount.compareTo(BigDecimal.ZERO) <= 0) continue;
 
@@ -296,6 +269,7 @@ public class ReconciliationServiceImpl implements ReconciliationService {
     }
 
     @Override
+    @Retryable(retryFor = OptimisticLockingFailureException.class, maxAttempts = 3, backoff = @org.springframework.retry.annotation.Backoff(delay = 100))
     @Transactional(propagation = Propagation.REQUIRES_NEW, rollbackFor = Exception.class)
     public ReconciliationLogEntity execute(ExecuteRequest request) {
         if (request.amount() == null || request.amount().compareTo(BigDecimal.ZERO) <= 0) {
@@ -305,31 +279,23 @@ public class ReconciliationServiceImpl implements ReconciliationService {
         Long resolvedCustomerId = request.customerId();
         Long resolvedVendorId = request.vendorId();
 
-        // Update target invoice unsettled amount
-        if ("INVOICE_OUT".equals(request.targetDocType())) {
-            ReceivableEntity r = receivableMapper.selectById(request.targetDocId());
-            if (r == null) throw new BusinessException("应收记录不存在: " + request.targetDocId());
-            if (resolvedCustomerId == null) resolvedCustomerId = r.getCustomerId();
-            BigDecimal newSettled = r.getSettledAmount().add(request.amount());
-            r.setSettledAmount(newSettled);
-            r.setUnsettledAmount(r.getAmount().subtract(newSettled));
-            if (r.getUnsettledAmount().compareTo(BigDecimal.ZERO) == 0
-                    && ArapStatus.isConfirmed(r.getStatus())) {
-                r.setStatus(ArapStatus.SETTLED);
-            }
-            receivableMapper.updateById(r);
-        } else if ("INVOICE_IN".equals(request.targetDocType())) {
-            PayableEntity p = payableMapper.selectById(request.targetDocId());
-            if (p == null) throw new BusinessException("应付记录不存在: " + request.targetDocId());
-            if (resolvedVendorId == null) resolvedVendorId = p.getVendorId();
-            BigDecimal newSettled = p.getSettledAmount().add(request.amount());
-            p.setSettledAmount(newSettled);
-            p.setUnsettledAmount(p.getAmount().subtract(newSettled));
-            if (p.getUnsettledAmount().compareTo(BigDecimal.ZERO) == 0
-                    && ArapStatus.isConfirmed(p.getStatus())) {
-                p.setStatus(ArapStatus.SETTLED);
-            }
-            payableMapper.updateById(p);
+        // P34: Update target business doc unsettled amount
+        BusinessDocEntity doc = businessDocMapper.selectById(request.targetDocId());
+        if (doc == null) throw new BusinessException("业务单据不存在: " + request.targetDocId());
+        if ("INVOICE_OUT".equals(request.targetDocType()) && resolvedCustomerId == null) {
+            resolvedCustomerId = doc.getCustomerId();
+        }
+        if ("INVOICE_IN".equals(request.targetDocType()) && resolvedVendorId == null) {
+            resolvedVendorId = doc.getSupplierId();
+        }
+        BigDecimal newSettled = (doc.getSettledAmount() != null ? doc.getSettledAmount() : BigDecimal.ZERO)
+                .add(request.amount());
+        doc.setSettledAmount(newSettled);
+        doc.setUnsettledAmount(doc.getAmount().subtract(newSettled));
+        doc.setStatus(doc.getUnsettledAmount().compareTo(BigDecimal.ZERO) == 0
+                ? "FULLY_RECONCILED" : "PARTIALLY_RECONCILED");
+        if (businessDocMapper.updateById(doc) == 0) {
+            throw new OptimisticLockingFailureException("BusinessDoc版本冲突, id=" + doc.getId());
         }
 
         // Create reconciliation log
@@ -368,11 +334,7 @@ public class ReconciliationServiceImpl implements ReconciliationService {
                     settlement.setSettlementNo(prefix + "-" + request.period() + "-" + cn.hutool.core.util.IdUtil.fastSimpleUUID().substring(0, 6).toUpperCase());
 
                     ArapSettlementEntryEntity entry = new ArapSettlementEntryEntity();
-                    if ("INVOICE_OUT".equals(request.targetDocType())) {
-                        entry.setReceivableId(request.targetDocId());
-                    } else {
-                        entry.setPayableId(request.targetDocId());
-                    }
+                    entry.setBusinessDocId(request.targetDocId());
                     entry.setSettledAmount(request.amount());
 
                     settlementService.create(settlement, List.of(entry));
@@ -510,29 +472,24 @@ public class ReconciliationServiceImpl implements ReconciliationService {
         // 2. 发票有效: 目标单据存在且未结清
         boolean invoiceExists = false;
         String invoiceMsg;
-        if ("INVOICE_OUT".equals(request.targetDocType())) {
-            ReceivableEntity r = receivableMapper.selectById(request.targetDocId());
-            invoiceExists = r != null && r.getUnsettledAmount().compareTo(BigDecimal.ZERO) > 0;
-            invoiceMsg = invoiceExists ? "应收单据有效" : "应收单据不存在或已结清";
-        } else if ("INVOICE_IN".equals(request.targetDocType())) {
-            PayableEntity p = payableMapper.selectById(request.targetDocId());
-            invoiceExists = p != null && p.getUnsettledAmount().compareTo(BigDecimal.ZERO) > 0;
-            invoiceMsg = invoiceExists ? "应付单据有效" : "应付单据不存在或已结清";
+        BusinessDocEntity checkDoc = businessDocMapper.selectById(request.targetDocId());
+        if (checkDoc != null) {
+            invoiceExists = checkDoc.getUnsettledAmount() != null
+                    && checkDoc.getUnsettledAmount().compareTo(BigDecimal.ZERO) > 0;
+            invoiceMsg = invoiceExists ? "业务单据有效" : "业务单据已结清";
         } else {
-            invoiceMsg = "未知单据类型: " + request.targetDocType();
+            invoiceMsg = "业务单据不存在: " + request.targetDocId();
         }
         checks.add(new PreCheckItem("invoiceValid", invoiceExists, invoiceMsg));
 
         // 3. 客商一致: 来源与目标客商匹配
         boolean partyMatch = false;
         String partyMsg;
-        if ("INVOICE_OUT".equals(request.targetDocType()) && request.customerId() != null) {
-            ReceivableEntity r = receivableMapper.selectById(request.targetDocId());
-            partyMatch = r != null && r.getCustomerId().equals(request.customerId());
+        if (checkDoc != null && "INVOICE_OUT".equals(request.targetDocType()) && request.customerId() != null) {
+            partyMatch = checkDoc.getCustomerId() != null && checkDoc.getCustomerId().equals(request.customerId());
             partyMsg = partyMatch ? "客商一致(客户)" : "客户不匹配";
-        } else if ("INVOICE_IN".equals(request.targetDocType()) && request.vendorId() != null) {
-            PayableEntity p = payableMapper.selectById(request.targetDocId());
-            partyMatch = p != null && p.getVendorId().equals(request.vendorId());
+        } else if (checkDoc != null && "INVOICE_IN".equals(request.targetDocType()) && request.vendorId() != null) {
+            partyMatch = checkDoc.getSupplierId() != null && checkDoc.getSupplierId().equals(request.vendorId());
             partyMsg = partyMatch ? "客商一致(供应商)" : "供应商不匹配";
         } else {
             partyMatch = true;
@@ -541,18 +498,9 @@ public class ReconciliationServiceImpl implements ReconciliationService {
         checks.add(new PreCheckItem("partyMatch", partyMatch, partyMsg));
 
         // 4. 金额充足: 核销金额 ≤ 未结算金额
-        boolean amountValid = false;
-        String amountMsg;
-        BigDecimal unsettled = BigDecimal.ZERO;
-        if ("INVOICE_OUT".equals(request.targetDocType())) {
-            ReceivableEntity r = receivableMapper.selectById(request.targetDocId());
-            unsettled = r != null ? r.getUnsettledAmount() : BigDecimal.ZERO;
-        } else if ("INVOICE_IN".equals(request.targetDocType())) {
-            PayableEntity p = payableMapper.selectById(request.targetDocId());
-            unsettled = p != null ? p.getUnsettledAmount() : BigDecimal.ZERO;
-        }
-        amountValid = request.amount().compareTo(unsettled) <= 0;
-        amountMsg = amountValid ? "核销金额 " + request.amount() + " ≤ 未结算金额 " + unsettled : "核销金额超过未结算余额";
+        BigDecimal unsettled = checkDoc != null ? checkDoc.getUnsettledAmount() : BigDecimal.ZERO;
+        boolean amountValid = request.amount().compareTo(unsettled) <= 0;
+        String amountMsg = amountValid ? "核销金额 " + request.amount() + " ≤ 未结算金额 " + unsettled : "核销金额超过未结算余额";
         checks.add(new PreCheckItem("amountValid", amountValid, amountMsg));
 
         // 5. 期间正常: period 格式校验 (YYYYMM 格式)
@@ -584,6 +532,7 @@ public class ReconciliationServiceImpl implements ReconciliationService {
     }
 
     @Override
+    @Retryable(retryFor = OptimisticLockingFailureException.class, maxAttempts = 3, backoff = @org.springframework.retry.annotation.Backoff(delay = 100))
     @Transactional(rollbackFor = Exception.class)
     public void reverse(Long logId, String reason) {
         ReconciliationLogEntity reconLog = logMapper.selectById(logId);
@@ -595,29 +544,18 @@ public class ReconciliationServiceImpl implements ReconciliationService {
             throw new BusinessException("反核销必须填写原因");
         }
 
-        // Restore target invoice unsettled amount
+        // P34: Restore target business doc unsettled amount
         BigDecimal amount = reconLog.getAllocatedAmount();
-        if ("INVOICE_OUT".equals(reconLog.getTargetDocType())) {
-            ReceivableEntity r = receivableMapper.selectById(reconLog.getTargetDocId());
-            if (r != null) {
-                BigDecimal newSettled = r.getSettledAmount().subtract(amount);
-                r.setSettledAmount(newSettled);
-                r.setUnsettledAmount(r.getAmount().subtract(newSettled));
-                if (ArapStatus.isSettled(r.getStatus())) {
-                    r.setStatus(ArapStatus.CONFIRMED);
-                }
-                receivableMapper.updateById(r);
+        BusinessDocEntity doc = businessDocMapper.selectById(reconLog.getTargetDocId());
+        if (doc != null) {
+            BigDecimal newSettled = doc.getSettledAmount().subtract(amount);
+            doc.setSettledAmount(newSettled);
+            doc.setUnsettledAmount(doc.getAmount().subtract(newSettled));
+            if ("FULLY_RECONCILED".equals(doc.getStatus())) {
+                doc.setStatus("APPROVED");
             }
-        } else if ("INVOICE_IN".equals(reconLog.getTargetDocType())) {
-            PayableEntity p = payableMapper.selectById(reconLog.getTargetDocId());
-            if (p != null) {
-                BigDecimal newSettled = p.getSettledAmount().subtract(amount);
-                p.setSettledAmount(newSettled);
-                p.setUnsettledAmount(p.getAmount().subtract(newSettled));
-                if (ArapStatus.isSettled(p.getStatus())) {
-                    p.setStatus(ArapStatus.CONFIRMED);
-                }
-                payableMapper.updateById(p);
+            if (businessDocMapper.updateById(doc) == 0) {
+                throw new OptimisticLockingFailureException("BusinessDoc反核销版本冲突, id=" + doc.getId());
             }
         }
 
@@ -643,6 +581,7 @@ public class ReconciliationServiceImpl implements ReconciliationService {
     }
 
     @Override
+    @Retryable(retryFor = OptimisticLockingFailureException.class, maxAttempts = 3, backoff = @org.springframework.retry.annotation.Backoff(delay = 100))
     @Transactional(rollbackFor = Exception.class)
     public void reject(Long logId, String reason) {
         ReconciliationLogEntity reconLog = logMapper.selectById(logId);
@@ -650,23 +589,18 @@ public class ReconciliationServiceImpl implements ReconciliationService {
         if (!ArapStatus.isConfirmed(reconLog.getStatus())) {
             throw new BusinessException("仅已确认(CONFIRMED)的核销可驳回, 当前状态: " + reconLog.getStatus());
         }
-        // 恢复应收/应付未结金额（同 reverse 逻辑）
+        // P34: 恢复业务单据未结金额（同 reverse 逻辑）
         BigDecimal amount = reconLog.getAllocatedAmount();
-        if ("INVOICE_OUT".equals(reconLog.getTargetDocType())) {
-            ReceivableEntity r = receivableMapper.selectById(reconLog.getTargetDocId());
-            if (r != null) {
-                BigDecimal newSettled = r.getSettledAmount().subtract(amount);
-                r.setSettledAmount(newSettled);
-                r.setUnsettledAmount(r.getAmount().subtract(newSettled));
-                receivableMapper.updateById(r);
+        BusinessDocEntity doc = businessDocMapper.selectById(reconLog.getTargetDocId());
+        if (doc != null) {
+            BigDecimal newSettled = doc.getSettledAmount().subtract(amount);
+            doc.setSettledAmount(newSettled);
+            doc.setUnsettledAmount(doc.getAmount().subtract(newSettled));
+            if ("FULLY_RECONCILED".equals(doc.getStatus())) {
+                doc.setStatus("APPROVED");
             }
-        } else if ("INVOICE_IN".equals(reconLog.getTargetDocType())) {
-            PayableEntity p = payableMapper.selectById(reconLog.getTargetDocId());
-            if (p != null) {
-                BigDecimal newSettled = p.getSettledAmount().subtract(amount);
-                p.setSettledAmount(newSettled);
-                p.setUnsettledAmount(p.getAmount().subtract(newSettled));
-                payableMapper.updateById(p);
+            if (businessDocMapper.updateById(doc) == 0) {
+                throw new OptimisticLockingFailureException("BusinessDoc驳回版本冲突, id=" + doc.getId());
             }
         }
         reconLog.setStatus(ArapStatus.REJECTED);
@@ -728,22 +662,14 @@ public class ReconciliationServiceImpl implements ReconciliationService {
     @Override
     public boolean hasOpenInvoices(String targetDocType, Long partyId) {
         if (targetDocType == null || partyId == null) return false;
-        if ("INVOICE_OUT".equals(targetDocType)) {
-            List<ReceivableEntity> list = receivableMapper.selectList(
-                    new LambdaQueryWrapper<ReceivableEntity>()
-                            .eq(ReceivableEntity::getCustomerId, partyId)
-                            .gt(ReceivableEntity::getUnsettledAmount, BigDecimal.ZERO)
-                            .last("LIMIT 1"));
-            return !list.isEmpty();
-        } else if ("INVOICE_IN".equals(targetDocType)) {
-            List<PayableEntity> list = payableMapper.selectList(
-                    new LambdaQueryWrapper<PayableEntity>()
-                            .eq(PayableEntity::getVendorId, partyId)
-                            .gt(PayableEntity::getUnsettledAmount, BigDecimal.ZERO)
-                            .last("LIMIT 1"));
-            return !list.isEmpty();
-        }
-        return false;
+        LambdaQueryWrapper<BusinessDocEntity> wrapper = new LambdaQueryWrapper<BusinessDocEntity>()
+                .eq("INVOICE_OUT".equals(targetDocType), BusinessDocEntity::getCustomerId, partyId)
+                .eq("INVOICE_IN".equals(targetDocType), BusinessDocEntity::getSupplierId, partyId)
+                .eq(BusinessDocEntity::getDocType, targetDocType)
+                .gt(BusinessDocEntity::getUnsettledAmount, BigDecimal.ZERO)
+                .in(BusinessDocEntity::getStatus, List.of("APPROVED", "VOUCHERED", "PARTIALLY_RECONCILED"))
+                .last("LIMIT 1");
+        return businessDocMapper.selectCount(wrapper) > 0;
     }
 
     // ==================== FIFO 自动核销策略 ====================
@@ -758,52 +684,31 @@ public class ReconciliationServiceImpl implements ReconciliationService {
 
         BigDecimal remaining = totalAmount;
 
-        if ("INVOICE_OUT".equals(targetDocType)) {
-            // 查询该客户未结清应收, 按到期日升序 (FIFO)
-            List<ReceivableEntity> invoices = receivableMapper.selectList(
-                    new LambdaQueryWrapper<ReceivableEntity>()
-                            .eq(ReceivableEntity::getCustomerId, partyId)
-                            .gt(ReceivableEntity::getUnsettledAmount, BigDecimal.ZERO)
-                            .eq(ReceivableEntity::getStatus, ArapStatus.CONFIRMED)
-                            .orderByAsc(ReceivableEntity::getDueDate, ReceivableEntity::getTxDate)
+        // P34: 统一查询 BusinessDocEntity（替代 ReceivableEntity/PayableEntity FIFO）
+        List<BusinessDocEntity> invoices = businessDocMapper.selectList(
+                new LambdaQueryWrapper<BusinessDocEntity>()
+                        .eq("INVOICE_OUT".equals(targetDocType), BusinessDocEntity::getCustomerId, partyId)
+                        .eq("INVOICE_IN".equals(targetDocType), BusinessDocEntity::getSupplierId, partyId)
+                        .eq(BusinessDocEntity::getDocType, targetDocType)
+                        .gt(BusinessDocEntity::getUnsettledAmount, BigDecimal.ZERO)
+                        .in(BusinessDocEntity::getStatus, List.of("APPROVED", "VOUCHERED", "PARTIALLY_RECONCILED"))
+                        .orderByAsc(BusinessDocEntity::getDueDate)
+        );
+        for (BusinessDocEntity inv : invoices) {
+            if (remaining.compareTo(BigDecimal.ZERO) <= 0) break;
+            BigDecimal alloc = remaining.min(inv.getUnsettledAmount());
+            ExecuteRequest req = new ExecuteRequest(
+                    sourceDocType, sourceDocId,
+                    targetDocType, inv.getId(),
+                    alloc, new BigDecimal("100"),
+                    "AUTO",
+                    "INVOICE_OUT".equals(targetDocType) ? partyId : null,
+                    "INVOICE_IN".equals(targetDocType) ? partyId : null,
+                    period, summary != null ? summary : "FIFO自动核销"
             );
-            for (ReceivableEntity inv : invoices) {
-                if (remaining.compareTo(BigDecimal.ZERO) <= 0) break;
-                BigDecimal alloc = remaining.min(inv.getUnsettledAmount());
-                ExecuteRequest req = new ExecuteRequest(
-                        sourceDocType, sourceDocId,
-                        "INVOICE_OUT", inv.getId(),
-                        alloc, new BigDecimal("100"),
-                        "AUTO", partyId, null,
-                        period, summary != null ? summary : "FIFO自动核销"
-                );
-                ReconciliationLogEntity log = execute(req);
-                logs.add(log);
-                remaining = remaining.subtract(alloc);
-            }
-        } else if ("INVOICE_IN".equals(targetDocType)) {
-            // 查询该供应商未结清应付, 按到期日升序 (FIFO)
-            List<PayableEntity> invoices = payableMapper.selectList(
-                    new LambdaQueryWrapper<PayableEntity>()
-                            .eq(PayableEntity::getVendorId, partyId)
-                            .gt(PayableEntity::getUnsettledAmount, BigDecimal.ZERO)
-                            .eq(PayableEntity::getStatus, ArapStatus.CONFIRMED)
-                            .orderByAsc(PayableEntity::getDueDate, PayableEntity::getTxDate)
-            );
-            for (PayableEntity inv : invoices) {
-                if (remaining.compareTo(BigDecimal.ZERO) <= 0) break;
-                BigDecimal alloc = remaining.min(inv.getUnsettledAmount());
-                ExecuteRequest req = new ExecuteRequest(
-                        sourceDocType, sourceDocId,
-                        "INVOICE_IN", inv.getId(),
-                        alloc, new BigDecimal("100"),
-                        "AUTO", null, partyId,
-                        period, summary != null ? summary : "FIFO自动核销"
-                );
-                ReconciliationLogEntity log = execute(req);
-                logs.add(log);
-                remaining = remaining.subtract(alloc);
-            }
+            ReconciliationLogEntity log = execute(req);
+            logs.add(log);
+            remaining = remaining.subtract(alloc);
         }
 
         // 若还有剩余金额未核销完, 自动转为预收/预付
@@ -819,29 +724,18 @@ public class ReconciliationServiceImpl implements ReconciliationService {
     }
 
     @Override
-    public List<?> getUnsettledInvoicesFifo(String targetDocType, Long partyId, LocalDate dueDateBefore) {
-        if ("INVOICE_OUT".equals(targetDocType)) {
-            LambdaQueryWrapper<ReceivableEntity> wrapper = new LambdaQueryWrapper<ReceivableEntity>()
-                    .eq(ReceivableEntity::getCustomerId, partyId)
-                    .gt(ReceivableEntity::getUnsettledAmount, BigDecimal.ZERO)
-                    .eq(ReceivableEntity::getStatus, ArapStatus.CONFIRMED);
-            if (dueDateBefore != null) {
-                wrapper.le(ReceivableEntity::getDueDate, dueDateBefore);
-            }
-            wrapper.orderByAsc(ReceivableEntity::getDueDate, ReceivableEntity::getTxDate);
-            return receivableMapper.selectList(wrapper);
-        } else if ("INVOICE_IN".equals(targetDocType)) {
-            LambdaQueryWrapper<PayableEntity> wrapper = new LambdaQueryWrapper<PayableEntity>()
-                    .eq(PayableEntity::getVendorId, partyId)
-                    .gt(PayableEntity::getUnsettledAmount, BigDecimal.ZERO)
-                    .eq(PayableEntity::getStatus, ArapStatus.CONFIRMED);
-            if (dueDateBefore != null) {
-                wrapper.le(PayableEntity::getDueDate, dueDateBefore);
-            }
-            wrapper.orderByAsc(PayableEntity::getDueDate, PayableEntity::getTxDate);
-            return payableMapper.selectList(wrapper);
+    public List<BusinessDocEntity> getUnsettledInvoicesFifo(String targetDocType, Long partyId, LocalDate dueDateBefore) {
+        LambdaQueryWrapper<BusinessDocEntity> wrapper = new LambdaQueryWrapper<BusinessDocEntity>()
+                .eq("INVOICE_OUT".equals(targetDocType), BusinessDocEntity::getCustomerId, partyId)
+                .eq("INVOICE_IN".equals(targetDocType), BusinessDocEntity::getSupplierId, partyId)
+                .eq(BusinessDocEntity::getDocType, targetDocType)
+                .gt(BusinessDocEntity::getUnsettledAmount, BigDecimal.ZERO)
+                .in(BusinessDocEntity::getStatus, List.of("APPROVED", "VOUCHERED", "PARTIALLY_RECONCILED"));
+        if (dueDateBefore != null) {
+            wrapper.le(BusinessDocEntity::getDueDate, dueDateBefore);
         }
-        return List.of();
+        wrapper.orderByAsc(BusinessDocEntity::getDueDate);
+        return businessDocMapper.selectList(wrapper);
     }
 
     // ==================== 异常池管理 ====================
@@ -990,14 +884,8 @@ public class ReconciliationServiceImpl implements ReconciliationService {
         List<ReconciliationLogEntity> logs = new ArrayList<>();
 
         for (AllocationItem alloc : allocations) {
-            BigDecimal targetUnsettled = BigDecimal.ZERO;
-            if ("INVOICE_OUT".equals(alloc.targetDocType())) {
-                ReceivableEntity r = receivableMapper.selectById(alloc.targetDocId());
-                if (r != null) targetUnsettled = r.getUnsettledAmount();
-            } else if ("INVOICE_IN".equals(alloc.targetDocType())) {
-                PayableEntity p = payableMapper.selectById(alloc.targetDocId());
-                if (p != null) targetUnsettled = p.getUnsettledAmount();
-            }
+            BusinessDocEntity targetDoc = businessDocMapper.selectById(alloc.targetDocId());
+            BigDecimal targetUnsettled = targetDoc != null ? targetDoc.getUnsettledAmount() : BigDecimal.ZERO;
 
             if (targetUnsettled.compareTo(alloc.amount()) < 0) {
                 throw new BusinessException("目标单据 " + alloc.targetDocId() + " 未结金额不足: required="
@@ -1036,48 +924,30 @@ public class ReconciliationServiceImpl implements ReconciliationService {
         BigDecimal remaining = totalAmount;
         List<ReconciliationLogEntity> logs = new ArrayList<>();
 
-        if ("INVOICE_OUT".equals(targetDocType) && "CUSTOMER".equals(partyType)) {
-            List<ReceivableEntity> invoices = receivableMapper.selectList(
-                    new LambdaQueryWrapper<ReceivableEntity>()
-                            .eq(ReceivableEntity::getCustomerId, partyId)
-                            .gt(ReceivableEntity::getUnsettledAmount, BigDecimal.ZERO)
-                            .eq(ReceivableEntity::getStatus, ArapStatus.CONFIRMED)
-                            .orderByAsc(ReceivableEntity::getDueDate, ReceivableEntity::getTxDate)
+        // P34: 统一查询 BusinessDocEntity
+        List<BusinessDocEntity> invoices = businessDocMapper.selectList(
+                new LambdaQueryWrapper<BusinessDocEntity>()
+                        .eq("INVOICE_OUT".equals(targetDocType), BusinessDocEntity::getCustomerId, partyId)
+                        .eq("INVOICE_IN".equals(targetDocType), BusinessDocEntity::getSupplierId, partyId)
+                        .eq(BusinessDocEntity::getDocType, targetDocType)
+                        .gt(BusinessDocEntity::getUnsettledAmount, BigDecimal.ZERO)
+                        .in(BusinessDocEntity::getStatus, List.of("APPROVED", "VOUCHERED", "PARTIALLY_RECONCILED"))
+                        .orderByAsc(BusinessDocEntity::getDueDate)
+        );
+        for (BusinessDocEntity inv : invoices) {
+            if (remaining.compareTo(BigDecimal.ZERO) <= 0) break;
+            BigDecimal alloc = remaining.min(inv.getUnsettledAmount());
+            ExecuteRequest req = new ExecuteRequest(
+                    sourceDocType, sourceDocId,
+                    targetDocType, inv.getId(),
+                    alloc, BigDecimal.ZERO, "AUTO",
+                    "INVOICE_OUT".equals(targetDocType) ? partyId : null,
+                    "INVOICE_IN".equals(targetDocType) ? partyId : null,
+                    effectivePeriod,
+                    summary != null ? summary : "智能最优匹配核销"
             );
-            for (ReceivableEntity inv : invoices) {
-                if (remaining.compareTo(BigDecimal.ZERO) <= 0) break;
-                BigDecimal alloc = remaining.min(inv.getUnsettledAmount());
-                ExecuteRequest req = new ExecuteRequest(
-                        sourceDocType, sourceDocId,
-                        "INVOICE_OUT", inv.getId(),
-                        alloc, BigDecimal.ZERO, "AUTO",
-                        partyId, null, effectivePeriod,
-                        summary != null ? summary : "智能最优匹配核销"
-                );
-                logs.add(execute(req));
-                remaining = remaining.subtract(alloc);
-            }
-        } else if ("INVOICE_IN".equals(targetDocType) && "VENDOR".equals(partyType)) {
-            List<PayableEntity> invoices = payableMapper.selectList(
-                    new LambdaQueryWrapper<PayableEntity>()
-                            .eq(PayableEntity::getVendorId, partyId)
-                            .gt(PayableEntity::getUnsettledAmount, BigDecimal.ZERO)
-                            .eq(PayableEntity::getStatus, ArapStatus.CONFIRMED)
-                            .orderByAsc(PayableEntity::getDueDate, PayableEntity::getTxDate)
-            );
-            for (PayableEntity inv : invoices) {
-                if (remaining.compareTo(BigDecimal.ZERO) <= 0) break;
-                BigDecimal alloc = remaining.min(inv.getUnsettledAmount());
-                ExecuteRequest req = new ExecuteRequest(
-                        sourceDocType, sourceDocId,
-                        "INVOICE_IN", inv.getId(),
-                        alloc, BigDecimal.ZERO, "AUTO",
-                        null, partyId, effectivePeriod,
-                        summary != null ? summary : "智能最优匹配核销"
-                );
-                logs.add(execute(req));
-                remaining = remaining.subtract(alloc);
-            }
+            logs.add(execute(req));
+            remaining = remaining.subtract(alloc);
         }
 
         if (remaining.compareTo(BigDecimal.ZERO) > 0) {

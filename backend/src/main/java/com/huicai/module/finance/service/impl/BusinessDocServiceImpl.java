@@ -37,12 +37,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.huicai.module.arap.entity.CustomerEntity;
 import com.huicai.module.arap.entity.VendorEntity;
-import com.huicai.module.arap.entity.ReceivableEntity;
-import com.huicai.module.arap.entity.PayableEntity;
 import com.huicai.module.arap.mapper.CustomerMapper;
 import com.huicai.module.arap.mapper.VendorMapper;
-import com.huicai.module.arap.mapper.ReceivableMapper;
-import com.huicai.module.arap.mapper.PayableMapper;
 import com.huicai.module.system.entity.UserEntity;
 import com.huicai.module.system.mapper.UserMapper;
 import java.math.BigDecimal;
@@ -97,8 +93,6 @@ public class BusinessDocServiceImpl implements BusinessDocService {
     private final VoucherTypeService voucherTypeService;
     private final CustomerMapper customerMapper;
     private final VendorMapper vendorMapper;
-    private final ReceivableMapper receivableMapper;
-    private final PayableMapper payableMapper;
     private final UserMapper userMapper;
     private final TemplateMatcher templateMatcher;
     private final VoucherTemplateService voucherTemplateService;
@@ -158,31 +152,14 @@ public class BusinessDocServiceImpl implements BusinessDocService {
     }
 
     private void populateSettlementAmounts(BusinessDocVO vo, BusinessDocEntity entity) {
-        String docType = entity.getDocType();
-        if ("RECEIPT".equals(docType) || "INVOICE_OUT".equals(docType)) {
-            List<ReceivableEntity> recvList = receivableMapper.selectList(
-                    new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<ReceivableEntity>()
-                            .eq(ReceivableEntity::getDocId, entity.getId()));
-            BigDecimal totalSettled = BigDecimal.ZERO;
-            BigDecimal totalAmount = BigDecimal.ZERO;
-            for (ReceivableEntity r : recvList) {
-                totalSettled = totalSettled.add(r.getSettledAmount() != null ? r.getSettledAmount() : BigDecimal.ZERO);
-                totalAmount = totalAmount.add(r.getAmount() != null ? r.getAmount() : BigDecimal.ZERO);
-            }
-            vo.setSettledAmount(totalSettled);
-            vo.setUnsettledAmount(totalAmount.subtract(totalSettled));
-        } else if ("PAYMENT".equals(docType) || "INVOICE_IN".equals(docType)) {
-            List<PayableEntity> payList = payableMapper.selectList(
-                    new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<PayableEntity>()
-                            .eq(PayableEntity::getDocId, entity.getId()));
-            BigDecimal totalSettled = BigDecimal.ZERO;
-            BigDecimal totalAmount = BigDecimal.ZERO;
-            for (PayableEntity p : payList) {
-                totalSettled = totalSettled.add(p.getSettledAmount() != null ? p.getSettledAmount() : BigDecimal.ZERO);
-                totalAmount = totalAmount.add(p.getAmount() != null ? p.getAmount() : BigDecimal.ZERO);
-            }
-            vo.setSettledAmount(totalSettled);
-            vo.setUnsettledAmount(totalAmount.subtract(totalSettled));
+        // P34: 结算金额直接来自业务单据自身字段（INVOICE_OUT / INVOICE_IN）
+        // BusinessDocVO.fromEntity() 已读取 entity 的 settledAmount/unsettledAmount
+        // 这里确保 VO 中的值同步
+        if (entity.getSettledAmount() != null) {
+            vo.setSettledAmount(entity.getSettledAmount());
+        }
+        if (entity.getUnsettledAmount() != null) {
+            vo.setUnsettledAmount(entity.getUnsettledAmount());
         }
     }
 
@@ -305,10 +282,7 @@ public class BusinessDocServiceImpl implements BusinessDocService {
     @Transactional
     public BusinessDocVO generateVoucher(Long id, Long userId) {
         BusinessDocEntity entity = getValid(id);
-        // INVOICE_OUT（销售发票应收单）不从业务单据生成凭证，应从发票直接生成
-        if ("INVOICE_OUT".equals(entity.getDocType())) {
-            throw BusinessException.badRequest("销售发票应收单不能独立生成凭证，请从发票模块操作");
-        }
+        // P34: INVOICE_OUT（销售发票应收单）已合并到业务单据体系，允许从单据列表生成凭证
         if (!"APPROVED".equals(entity.getStatus())) {
             throw BusinessException.badRequest("仅已审批状态可生成凭证");
         }

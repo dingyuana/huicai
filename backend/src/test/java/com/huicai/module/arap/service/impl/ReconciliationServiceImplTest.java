@@ -9,6 +9,8 @@ import com.huicai.module.arap.service.ReconciliationService.AllocationItem;
 import com.huicai.module.arap.service.ReconciliationService.ExecuteRequest;
 import com.huicai.module.arap.service.ReconciliationService.PreCheckResult;
 import com.huicai.module.arap.service.ReconciliationService.RecommendResult;
+import com.huicai.module.finance.entity.BusinessDocEntity;
+import com.huicai.module.finance.mapper.BusinessDocMapper;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -26,8 +28,7 @@ import static org.mockito.Mockito.*;
 @ExtendWith(MockitoExtension.class)
 class ReconciliationServiceImplTest {
 
-    @Mock private ReceivableMapper receivableMapper;
-    @Mock private PayableMapper payableMapper;
+    @Mock private BusinessDocMapper businessDocMapper;
     @Mock private CustomerMapper customerMapper;
     @Mock private VendorMapper vendorMapper;
     @Mock private ReconciliationLogMapper logMapper;
@@ -36,16 +37,19 @@ class ReconciliationServiceImplTest {
 
     @InjectMocks private ReconciliationServiceImpl service;
 
-    private ReceivableEntity stubReceivable(Long id, Long customerId, BigDecimal amount, BigDecimal unsettled) {
-        ReceivableEntity r = new ReceivableEntity();
-        r.setId(id);
-        r.setCustomerId(customerId);
-        r.setAmount(amount);
-        r.setSettledAmount(amount.subtract(unsettled));
-        r.setUnsettledAmount(unsettled);
-        r.setTxDate(LocalDate.of(2026, 6, 10));
-        r.setSummary("应收测试");
-        return r;
+    private BusinessDocEntity stubBusinessDoc(Long id, Long customerId, Long supplierId, String docType, BigDecimal amount, BigDecimal unsettled) {
+        BusinessDocEntity b = new BusinessDocEntity();
+        b.setId(id);
+        b.setCustomerId(customerId);
+        b.setSupplierId(supplierId);
+        b.setDocType(docType);
+        b.setAmount(amount);
+        b.setSettledAmount(amount.subtract(unsettled));
+        b.setUnsettledAmount(unsettled);
+        b.setDocDate(LocalDate.of(2026, 6, 10));
+        b.setSummary(docType.equals("INVOICE_OUT") ? "应收测试" : "应付测试");
+        b.setDueDate(LocalDate.of(2026, 7, 10));
+        return b;
     }
 
     private ReconciliationLogEntity stubLog(Long id, String status) {
@@ -58,18 +62,6 @@ class ReconciliationServiceImplTest {
         l.setSourceDocType("bank_txn");
         l.setSourceDocId(1L);
         return l;
-    }
-
-    private PayableEntity stubPayable(Long id, Long vendorId, BigDecimal amount, BigDecimal unsettled) {
-        PayableEntity p = new PayableEntity();
-        p.setId(id);
-        p.setVendorId(vendorId);
-        p.setAmount(amount);
-        p.setSettledAmount(amount.subtract(unsettled));
-        p.setUnsettledAmount(unsettled);
-        p.setTxDate(LocalDate.of(2026, 6, 10));
-        p.setSummary("应付测试");
-        return p;
     }
 
     private CustomerEntity stubCustomer(Long id, String name) {
@@ -92,28 +84,28 @@ class ReconciliationServiceImplTest {
     void recommendReceipt_无客户ID_返回空items() {
         RecommendResult r = service.recommendReceipt(1L, null, new BigDecimal("100"), "测试", "客户A");
         assertTrue(r.items().isEmpty());
-        verifyNoInteractions(receivableMapper);
+        verifyNoInteractions(businessDocMapper);
     }
 
     @Test
     void recommendReceipt_应收未结清_按L4金额精确() {
         // recommendReceipt/recommendPayment 不传 externalNo/txDate，走 L3-L5 路径
         // 应收 unsettled=500，源金额 500 → L3（金额相等 + 日期近）或 L4
-        when(receivableMapper.selectList(any())).thenReturn(List.of(
-                stubReceivable(100L, 1L, new BigDecimal("500"), new BigDecimal("500"))
+        when(businessDocMapper.selectList(any())).thenReturn(List.of(
+                stubBusinessDoc(100L, 1L, null, "INVOICE_OUT", new BigDecimal("500"), new BigDecimal("500"))
         ));
         RecommendResult r = service.recommendReceipt(1L, 1L, new BigDecimal("500"), "摘要", "客户A");
         assertEquals(1, r.items().size());
-        // L3(金额+日期) 优先于 L4(金额精确) — 但 stubReceivable txDate 是 6-10, 源无日期, 走 L4
+        // L3(金额+日期) 优先于 L4(金额精确) — 但 stubBusinessDoc txDate 是 6-10, 源无日期, 走 L4
         assertTrue(r.items().get(0).matchLevel().equals("L3") || r.items().get(0).matchLevel().equals("L4"));
     }
 
     @Test
     void recommendReceipt_2张应收_按L级别排序() {
         // 第 1 张 L4（金额精确无 externalNo），第 2 张 L5（容差）
-        ReceivableEntity r4 = stubReceivable(1L, 1L, new BigDecimal("100"), new BigDecimal("100"));
-        ReceivableEntity r5 = stubReceivable(2L, 1L, new BigDecimal("100"), new BigDecimal("95"));
-        when(receivableMapper.selectList(any())).thenReturn(List.of(r5, r4));
+        BusinessDocEntity r4 = stubBusinessDoc(1L, 1L, null, "INVOICE_OUT", new BigDecimal("100"), new BigDecimal("100"));
+        BusinessDocEntity r5 = stubBusinessDoc(2L, 1L, null, "INVOICE_OUT", new BigDecimal("100"), new BigDecimal("95"));
+        when(businessDocMapper.selectList(any())).thenReturn(List.of(r5, r4));
         RecommendResult r = service.recommendReceipt(1L, 1L, new BigDecimal("100"), "摘要", "客户A");
         assertEquals(2, r.items().size());
         assertEquals("L4", r.items().get(0).matchLevel());
@@ -130,8 +122,8 @@ class ReconciliationServiceImplTest {
 
     @Test
     void recommendPayment_应付已结清_跳过() {
-        when(payableMapper.selectList(any())).thenReturn(List.of(
-                stubPayable(1L, 1L, new BigDecimal("100"), BigDecimal.ZERO)
+        when(businessDocMapper.selectList(any())).thenReturn(List.of(
+                stubBusinessDoc(1L, null, 1L, "INVOICE_IN", new BigDecimal("100"), BigDecimal.ZERO)
         ));
         RecommendResult r = service.recommendPayment(1L, 1L, new BigDecimal("100"), "摘要", "供应商A");
         assertTrue(r.items().isEmpty());
@@ -148,30 +140,32 @@ class ReconciliationServiceImplTest {
 
     @Test
     void execute_INVOICE_OUT_更新应收并插入日志() {
-        ReceivableEntity r = stubReceivable(1L, 1L, new BigDecimal("1000"), new BigDecimal("500"));
-        when(receivableMapper.selectById(1L)).thenReturn(r);
+        BusinessDocEntity doc = stubBusinessDoc(1L, 1L, null, "INVOICE_OUT", new BigDecimal("1000"), new BigDecimal("500"));
+        when(businessDocMapper.selectById(1L)).thenReturn(doc);
+        when(businessDocMapper.updateById(any(BusinessDocEntity.class))).thenReturn(1);
 
         ExecuteRequest req = new ExecuteRequest("receipt", 1L, "INVOICE_OUT", 1L, new BigDecimal("200"), new BigDecimal("0.95"), "AUTO", 1L, null, null, "");
         ReconciliationLogEntity log = service.execute(req);
 
         assertNotNull(log);
         assertEquals("CONFIRMED", log.getStatus());
-        verify(receivableMapper).updateById(any(ReceivableEntity.class));
+        verify(businessDocMapper).updateById(any(BusinessDocEntity.class));
         verify(logMapper).insert(any(ReconciliationLogEntity.class));
     }
 
     @Test
     void execute_应收不存在_throw() {
-        when(receivableMapper.selectById(99L)).thenReturn(null);
+        when(businessDocMapper.selectById(99L)).thenReturn(null);
         ExecuteRequest req = new ExecuteRequest("receipt", 1L, "INVOICE_OUT", 99L, new BigDecimal("100"), BigDecimal.ZERO, "MANUAL", 1L, null, "202606", "");
         BusinessException ex = assertThrows(BusinessException.class, () -> service.execute(req));
-        assertTrue(ex.getMessage().contains("应收记录不存在"));
+        assertTrue(ex.getMessage().contains("业务单据不存在"));
     }
 
     @Test
     void execute_有period_调用settlementService() {
-        ReceivableEntity r = stubReceivable(1L, 1L, new BigDecimal("1000"), new BigDecimal("500"));
-        when(receivableMapper.selectById(1L)).thenReturn(r);
+        BusinessDocEntity doc = stubBusinessDoc(1L, 1L, null, "INVOICE_OUT", new BigDecimal("1000"), new BigDecimal("500"));
+        when(businessDocMapper.selectById(1L)).thenReturn(doc);
+        when(businessDocMapper.updateById(any(BusinessDocEntity.class))).thenReturn(1);
 
         ExecuteRequest req = new ExecuteRequest("receipt", 1L, "INVOICE_OUT", 1L, new BigDecimal("200"), BigDecimal.ZERO, "MANUAL", 1L, null, "202606", "");
         service.execute(req);
@@ -180,8 +174,9 @@ class ReconciliationServiceImplTest {
 
     @Test
     void execute_无period_跳过settlement() {
-        ReceivableEntity r = stubReceivable(1L, 1L, new BigDecimal("1000"), new BigDecimal("500"));
-        when(receivableMapper.selectById(1L)).thenReturn(r);
+        BusinessDocEntity doc = stubBusinessDoc(1L, 1L, null, "INVOICE_OUT", new BigDecimal("1000"), new BigDecimal("500"));
+        when(businessDocMapper.selectById(1L)).thenReturn(doc);
+        when(businessDocMapper.updateById(any(BusinessDocEntity.class))).thenReturn(1);
 
         ExecuteRequest req = new ExecuteRequest("receipt", 1L, "INVOICE_OUT", 1L, new BigDecimal("200"), BigDecimal.ZERO, "MANUAL", 1L, null, null, "");
         service.execute(req);
@@ -192,8 +187,8 @@ class ReconciliationServiceImplTest {
 
     @Test
     void preCheck_5项全过_allPassedTrue() {
-        ReceivableEntity r = stubReceivable(1L, 5L, new BigDecimal("1000"), new BigDecimal("500"));
-        when(receivableMapper.selectById(1L)).thenReturn(r);
+        BusinessDocEntity doc = stubBusinessDoc(1L, 5L, null, "INVOICE_OUT", new BigDecimal("1000"), new BigDecimal("500"));
+        when(businessDocMapper.selectById(1L)).thenReturn(doc);
 
         ExecuteRequest req = new ExecuteRequest("receipt", 1L, "INVOICE_OUT", 1L, new BigDecimal("300"), new BigDecimal("0.95"), "AUTO", 5L, null, "202606", "");
         PreCheckResult result = service.preCheck(req);
@@ -240,12 +235,13 @@ class ReconciliationServiceImplTest {
         log.setTargetDocId(1L);
         log.setAllocatedAmount(new BigDecimal("200"));
 
-        ReceivableEntity r = stubReceivable(1L, 1L, new BigDecimal("1000"), new BigDecimal("300"));
+        BusinessDocEntity doc = stubBusinessDoc(1L, 1L, null, "INVOICE_OUT", new BigDecimal("1000"), new BigDecimal("300"));
         when(logMapper.selectById(1L)).thenReturn(log);
-        when(receivableMapper.selectById(1L)).thenReturn(r);
+        when(businessDocMapper.selectById(1L)).thenReturn(doc);
+        when(businessDocMapper.updateById(any(BusinessDocEntity.class))).thenReturn(1);
 
         service.reverse(1L, "操作失误");
-        verify(receivableMapper).updateById(any(ReceivableEntity.class));
+        verify(businessDocMapper).updateById(any(BusinessDocEntity.class));
         assertEquals("CANCELLED", log.getStatus());
         verify(logMapper).updateById(log);
     }
@@ -281,8 +277,9 @@ class ReconciliationServiceImplTest {
 
     @Test
     void batchExecute_2个请求_调2次execute() {
-        ReceivableEntity r = stubReceivable(1L, 1L, new BigDecimal("1000"), new BigDecimal("500"));
-        when(receivableMapper.selectById(1L)).thenReturn(r);
+        BusinessDocEntity doc = stubBusinessDoc(1L, 1L, null, "INVOICE_OUT", new BigDecimal("1000"), new BigDecimal("500"));
+        when(businessDocMapper.selectById(1L)).thenReturn(doc);
+        when(businessDocMapper.updateById(any(BusinessDocEntity.class))).thenReturn(1);
 
         ExecuteRequest req1 = new ExecuteRequest("receipt", 1L, "INVOICE_OUT", 1L, new BigDecimal("100"), BigDecimal.ZERO, "MANUAL", 1L, null, null, "");
         ExecuteRequest req2 = new ExecuteRequest("receipt", 2L, "INVOICE_OUT", 1L, new BigDecimal("200"), BigDecimal.ZERO, "MANUAL", 1L, null, null, "");
@@ -321,15 +318,16 @@ class ReconciliationServiceImplTest {
     @Test
     void reject_CONFIRMED状态_恢复应收_变为REJECTED() {
         when(logMapper.selectById(1L)).thenReturn(stubLog(1L, "CONFIRMED"));
-        when(receivableMapper.selectById(100L)).thenReturn(stubReceivable(100L, 5L, new BigDecimal("500"), new BigDecimal("300")));
+        when(businessDocMapper.selectById(100L)).thenReturn(stubBusinessDoc(100L, 5L, null, "INVOICE_OUT", new BigDecimal("500"), new BigDecimal("300")));
+        when(businessDocMapper.updateById(any(BusinessDocEntity.class))).thenReturn(1);
 
         service.reject(1L, "金额有误");
 
         // 应收恢复: settled=500-300=200, 减去100→100; unsettled=500-100=400
-        org.mockito.ArgumentCaptor<ReceivableEntity> captor =
-                org.mockito.ArgumentCaptor.forClass(ReceivableEntity.class);
-        verify(receivableMapper).updateById(captor.capture());
-        ReceivableEntity updated = captor.getValue();
+        org.mockito.ArgumentCaptor<BusinessDocEntity> captor =
+                org.mockito.ArgumentCaptor.forClass(BusinessDocEntity.class);
+        verify(businessDocMapper).updateById(captor.capture());
+        BusinessDocEntity updated = captor.getValue();
         assertEquals(0, updated.getSettledAmount().compareTo(new BigDecimal("100")));
         assertEquals(0, updated.getUnsettledAmount().compareTo(new BigDecimal("400")));
         verify(logMapper, atLeastOnce()).updateById(any(ReconciliationLogEntity.class));
@@ -353,8 +351,9 @@ class ReconciliationServiceImplTest {
 
     @Test
     void executeWithAdjustment_差额0_走普通核销() {
-        ReceivableEntity r = stubReceivable(1L, 1L, new BigDecimal("1000"), new BigDecimal("500"));
-        when(receivableMapper.selectById(1L)).thenReturn(r);
+        BusinessDocEntity doc = stubBusinessDoc(1L, 1L, null, "INVOICE_OUT", new BigDecimal("1000"), new BigDecimal("500"));
+        when(businessDocMapper.selectById(1L)).thenReturn(doc);
+        when(businessDocMapper.updateById(any(BusinessDocEntity.class))).thenReturn(1);
 
         ExecuteRequest req = new ExecuteRequest("receipt", 1L, "INVOICE_OUT", 1L, new BigDecimal("500"), BigDecimal.ZERO, "MANUAL", 1L, null, null, "");
         ReconciliationLogEntity result = service.executeWithAdjustment(req, BigDecimal.ZERO, "FEE", 100L);
@@ -365,8 +364,9 @@ class ReconciliationServiceImplTest {
 
     @Test
     void executeWithAdjustment_有差额_主核销加调整日志() {
-        ReceivableEntity r = stubReceivable(1L, 1L, new BigDecimal("1000"), new BigDecimal("500"));
-        when(receivableMapper.selectById(1L)).thenReturn(r);
+        BusinessDocEntity doc = stubBusinessDoc(1L, 1L, null, "INVOICE_OUT", new BigDecimal("1000"), new BigDecimal("500"));
+        when(businessDocMapper.selectById(1L)).thenReturn(doc);
+        when(businessDocMapper.updateById(any(BusinessDocEntity.class))).thenReturn(1);
 
         // 请求核销 500, 差额 20, 主核销 480
         ExecuteRequest req = new ExecuteRequest("receipt", 1L, "INVOICE_OUT", 1L, new BigDecimal("500"), BigDecimal.ZERO, "MANUAL", 1L, null, "202606", "");
@@ -389,7 +389,7 @@ class ReconciliationServiceImplTest {
 
     @Test
     void hasOpenInvoices_客户有未结清应收_返回true() {
-        when(receivableMapper.selectList(any())).thenReturn(List.of(stubReceivable(1L, 5L, new BigDecimal("500"), new BigDecimal("300"))));
+        when(businessDocMapper.selectCount(any())).thenReturn(1L);
 
         boolean result = service.hasOpenInvoices("INVOICE_OUT", 5L);
 
@@ -398,7 +398,7 @@ class ReconciliationServiceImplTest {
 
     @Test
     void hasOpenInvoices_客户无未结清_返回false() {
-        when(receivableMapper.selectList(any())).thenReturn(List.of());
+        when(businessDocMapper.selectCount(any())).thenReturn(0L);
 
         boolean result = service.hasOpenInvoices("INVOICE_OUT", 5L);
 
@@ -407,7 +407,7 @@ class ReconciliationServiceImplTest {
 
     @Test
     void hasOpenInvoices_供应商有未结清应付_返回true() {
-        when(payableMapper.selectList(any())).thenReturn(List.of(stubPayable(1L, 8L, new BigDecimal("1000"), new BigDecimal("500"))));
+        when(businessDocMapper.selectCount(any())).thenReturn(1L);
 
         boolean result = service.hasOpenInvoices("INVOICE_IN", 8L);
 
@@ -426,22 +426,23 @@ class ReconciliationServiceImplTest {
     void autoReconcileFifo_金额0_返回空列表() {
         List<ReconciliationLogEntity> r = service.autoReconcileFifo(1L, "INVOICE_OUT", BigDecimal.ZERO, "receipt", 1L, "202606", "FIFO测试");
         assertTrue(r.isEmpty());
-        verifyNoInteractions(receivableMapper);
+        verifyNoInteractions(businessDocMapper);
     }
 
     @Test
     void autoReconcileFifo_应收按到期日核销() {
-        ReceivableEntity r1 = stubReceivable(1L, 5L, new BigDecimal("1000"), new BigDecimal("500"));
-        ReceivableEntity r2 = stubReceivable(2L, 5L, new BigDecimal("500"), new BigDecimal("300"));
+        BusinessDocEntity r1 = stubBusinessDoc(1L, 5L, null, "INVOICE_OUT", new BigDecimal("1000"), new BigDecimal("500"));
+        BusinessDocEntity r2 = stubBusinessDoc(2L, 5L, null, "INVOICE_OUT", new BigDecimal("500"), new BigDecimal("300"));
         r1.setDueDate(LocalDate.of(2026, 5, 1));
         r2.setDueDate(LocalDate.of(2026, 6, 1));
-        when(receivableMapper.selectList(any())).thenReturn(List.of(r1, r2));
-        when(receivableMapper.selectById(1L)).thenReturn(r1);
-        when(receivableMapper.selectById(2L)).thenReturn(r2);
+        when(businessDocMapper.selectList(any())).thenReturn(List.of(r1, r2));
+        when(businessDocMapper.selectById(1L)).thenReturn(r1);
+        when(businessDocMapper.selectById(2L)).thenReturn(r2);
+        when(businessDocMapper.updateById(any(BusinessDocEntity.class))).thenReturn(1);
 
         List<ReconciliationLogEntity> logs = service.autoReconcileFifo(5L, "INVOICE_OUT", new BigDecimal("700"), "receipt", 1L, "202606", "FIFO测试");
         assertEquals(2, logs.size());
-        verify(receivableMapper, times(2)).updateById(any(ReceivableEntity.class));
+        verify(businessDocMapper, times(2)).updateById(any(BusinessDocEntity.class));
         verify(logMapper, times(2)).insert(any(ReconciliationLogEntity.class));
     }
 

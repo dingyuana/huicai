@@ -2,6 +2,7 @@ package com.huicai.module.arap.service;
 
 import com.huicai.module.arap.entity.ReconciliationExceptionEntity;
 import com.huicai.module.arap.entity.ReconciliationLogEntity;
+import com.huicai.module.finance.entity.BusinessDocEntity;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -120,7 +121,7 @@ public interface ReconciliationService {
      * @param dueDateBefore 到期日 ≤ 此日期 (null=不过滤)
      * @return 按 dueDate/txDate 升序排列的未结清单据
      */
-    List<?> getUnsettledInvoicesFifo(String targetDocType, Long partyId, LocalDate dueDateBefore);
+    List<BusinessDocEntity> getUnsettledInvoicesFifo(String targetDocType, Long partyId, LocalDate dueDateBefore);
 
     // ==================== 异常池管理 ====================
 

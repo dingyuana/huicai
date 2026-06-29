@@ -2,10 +2,8 @@ package com.huicai.module.tax.service.impl;
 
 import com.huicai.common.exception.BusinessException;
 import com.huicai.common.test.StateMachineTestHelper;
-import com.huicai.module.arap.constant.ArapStatus;
-import com.huicai.module.arap.entity.ReceivableEntity;
-import com.huicai.module.arap.mapper.ReceivableMapper;
-import com.huicai.module.arap.service.ReceivableStateMachineService;
+import com.huicai.module.finance.entity.BusinessDocEntity;
+import com.huicai.module.finance.mapper.BusinessDocMapper;
 import com.huicai.module.finance.entity.VoucherEntity;
 import com.huicai.module.finance.entity.VoucherEntryEntity;
 import com.huicai.module.finance.mapper.VoucherEntryMapper;
@@ -40,7 +38,7 @@ import static org.mockito.Mockito.*;
  * 和负向断言（不该做的没做）。
  *
  * <p>关键设计：confirm() 的正向断言验证了 confirm() 既变更状态，
- * 也自动创建业务单(DRAFT) + 应收单(DRAFT)（P31 修正）。
+ * 也自动创建 INVOICE_OUT 业务单据 + 凭证（P34 恢复）。
  *
  * @see <a href="file://docs/process/state-machine-test-checklist.md">状态机测试契约检查清单</a>
  */
@@ -51,10 +49,7 @@ class OutputInvoiceStateMachineServiceImplTest {
     private OutputInvoiceMapper invoiceMapper;
 
     @Mock
-    private ReceivableStateMachineService receivableStateMachineService;
-
-    @Mock
-    private ReceivableMapper receivableMapper;
+    private BusinessDocMapper businessDocMapper;
 
     @Mock
     private VoucherMapper voucherMapper;
@@ -78,7 +73,7 @@ class OutputInvoiceStateMachineServiceImplTest {
     @BeforeEach
     void setup() {
         service = new OutputInvoiceStateMachineServiceImpl(
-                invoiceMapper, receivableStateMachineService, receivableMapper, redisTemplate);
+                invoiceMapper, businessDocMapper, redisTemplate);
         // 注入 lazy 依赖
         try {
             var field = OutputInvoiceStateMachineServiceImpl.class.getDeclaredField("taxService");
@@ -139,7 +134,7 @@ class OutputInvoiceStateMachineServiceImplTest {
         // then — 负向：不该做的没做
         StateMachineTestHelper.verifyNoVoucherCreated(voucherMapper, voucherEntryMapper);
         StateMachineTestHelper.verifyNoDocumentCreated(null, null);
-        StateMachineTestHelper.verifyNoReceivableCreated(receivableMapper);
+        verify(businessDocMapper, never()).insert(any(BusinessDocEntity.class));
     }
 
     @Test
@@ -185,12 +180,10 @@ class OutputInvoiceStateMachineServiceImplTest {
         // then — 正向：状态变更
         assertEquals(InvoiceStatus.CONFIRMED, inv.getStatus());
         assertEquals(USER_ID, inv.getUpdatedBy());
-        // then — 正向：创建应收单（P33 简化：不再创建业务单）
-        verify(receivableMapper).insert(any(ReceivableEntity.class));
+        // then — 正向：创建 INVOICE_OUT 业务单据（P34 恢复）
+        verify(businessDocMapper).insert(any(BusinessDocEntity.class));
         // then — 正向：调用 taxService 生成凭证
         verify(taxService).generateVoucherFromInvoice(eq(INVOICE_ID), eq(USER_ID));
-        // 负向：不创建业务单
-        // (docMapper 已不存在，无需验证)
     }
 
     @Test
@@ -240,7 +233,7 @@ class OutputInvoiceStateMachineServiceImplTest {
         // then — 负向：驳回不应创建任何资源
         StateMachineTestHelper.verifyNoVoucherCreated(voucherMapper, voucherEntryMapper);
         StateMachineTestHelper.verifyNoDocumentCreated(null, null);
-        StateMachineTestHelper.verifyNoReceivableCreated(receivableMapper);
+        verify(businessDocMapper, never()).insert(any(BusinessDocEntity.class));
     }
 
     @Test
@@ -301,7 +294,7 @@ class OutputInvoiceStateMachineServiceImplTest {
         // then — 负向：回退不应创建任何资源
         StateMachineTestHelper.verifyNoVoucherCreated(voucherMapper, voucherEntryMapper);
         StateMachineTestHelper.verifyNoDocumentCreated(null, null);
-        StateMachineTestHelper.verifyNoReceivableCreated(receivableMapper);
+        verify(businessDocMapper, never()).insert(any(BusinessDocEntity.class));
     }
 
     @Test
@@ -351,7 +344,7 @@ class OutputInvoiceStateMachineServiceImplTest {
         // then — 负向：标记已生成凭证不应再创建新凭证
         StateMachineTestHelper.verifyNoVoucherCreated(voucherMapper, voucherEntryMapper);
         StateMachineTestHelper.verifyNoDocumentCreated(null, null);
-        StateMachineTestHelper.verifyNoReceivableCreated(receivableMapper);
+        verify(businessDocMapper, never()).insert(any(BusinessDocEntity.class));
     }
 
     @Test
@@ -416,7 +409,7 @@ class OutputInvoiceStateMachineServiceImplTest {
         // then — 负向：核销更新不应创建任何资源
         StateMachineTestHelper.verifyNoVoucherCreated(voucherMapper, voucherEntryMapper);
         StateMachineTestHelper.verifyNoDocumentCreated(null, null);
-        StateMachineTestHelper.verifyNoReceivableCreated(receivableMapper);
+        verify(businessDocMapper, never()).insert(any(BusinessDocEntity.class));
     }
 
     @Test
@@ -481,7 +474,7 @@ class OutputInvoiceStateMachineServiceImplTest {
         // then — 负向：作废不应创建任何资源
         StateMachineTestHelper.verifyNoVoucherCreated(voucherMapper, voucherEntryMapper);
         StateMachineTestHelper.verifyNoDocumentCreated(null, null);
-        StateMachineTestHelper.verifyNoReceivableCreated(receivableMapper);
+        verify(businessDocMapper, never()).insert(any(BusinessDocEntity.class));
     }
 
     @Test

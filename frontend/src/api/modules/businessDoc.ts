@@ -36,6 +36,7 @@ export interface BusinessDocVO {
   enrichedSummary?: string
   settledAmount?: number
   unsettledAmount?: number
+  dueDate?: string
   createdByName?: string
   createdAt?: string
   submittedByName?: string
@@ -88,6 +89,9 @@ export const DOC_STATUS_LABELS: Record<string, string> = {
   SUBMITTED: '已提交',
   APPROVED: '已审批',
   VOUCHERED: '已生成凭证',
+  PARTIALLY_RECONCILED: '部分核销',
+  FULLY_RECONCILED: '已核销',
+  REVERSED: '已冲销',
   CLOSED: '已关闭',
   REJECTED: '已驳回',
 }

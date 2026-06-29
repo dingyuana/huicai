@@ -9,7 +9,7 @@
           <el-button v-if="doc?.status === 'DRAFT'" type="success" @click="onSubmit">提交</el-button>
           <el-button v-if="doc?.status === 'SUBMITTED'" type="primary" @click="onApprove">审批</el-button>
           <el-button v-if="doc?.status === 'SUBMITTED'" type="danger" @click="onReject">驳回</el-button>
-          <el-button v-if="doc?.status === 'APPROVED' && !doc?.voucherId && doc?.docType !== 'INVOICE_OUT'" type="warning" @click="onGenerateVoucher">生成凭证</el-button>
+          <el-button v-if="doc?.status === 'APPROVED' && !doc?.voucherId" type="warning" @click="onGenerateVoucher">生成凭证</el-button>
           <el-button v-if="canReconcile" type="primary" @click="onOpenReconcile">去核销</el-button>
         </div>
       </div>

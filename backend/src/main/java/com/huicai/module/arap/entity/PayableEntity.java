@@ -37,6 +37,12 @@ public class PayableEntity {
     @TableField("invoice_no")
     private String invoiceNo;
 
+    /**
+     * 应付单编号
+     */
+    @TableField("payable_no")
+    private String payableNo;
+
     private String period;
     private LocalDate txDate;
     private BigDecimal amount;

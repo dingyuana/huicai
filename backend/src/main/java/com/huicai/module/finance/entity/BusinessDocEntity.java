@@ -89,6 +89,19 @@ public class BusinessDocEntity {
     @TableLogic
     private Integer deleted;
 
+    // ==================== P34 结算字段 ====================
+
+    /** 已核销金额 */
+    private BigDecimal settledAmount;
+
+    /** 未核销金额 */
+    private BigDecimal unsettledAmount;
+
+    /** 到期日 */
+    private LocalDate dueDate;
+
+    // ==================== 乐观锁 ====================
+
     /** 乐观锁版本号 */
     @Version
     private Integer version;

@@ -7,8 +7,10 @@ import com.huicai.module.system.interceptor.DataPermissionInterceptor;
 import org.mybatis.spring.annotation.MapperScan;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.retry.annotation.EnableRetry;
 
 @Configuration
+@EnableRetry
 @MapperScan("com.huicai.**.mapper")
 public class MyBatisPlusConfig {
 
