@@ -3,7 +3,9 @@ package com.huicai.module.tax.service.impl;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.huicai.common.exception.BusinessException;
 import com.huicai.module.finance.entity.BusinessDocEntity;
+import com.huicai.module.finance.entity.VoucherEntity;
 import com.huicai.module.finance.mapper.BusinessDocMapper;
+import com.huicai.module.finance.mapper.VoucherMapper;
 import com.huicai.module.tax.constant.InvoiceStatus;
 import com.huicai.module.tax.entity.OutputInvoiceEntity;
 import com.huicai.module.tax.mapper.OutputInvoiceMapper;
@@ -38,6 +40,7 @@ public class OutputInvoiceStateMachineServiceImpl implements OutputInvoiceStateM
 
     private final OutputInvoiceMapper invoiceMapper;
     private final BusinessDocMapper businessDocMapper;
+    private final VoucherMapper voucherMapper;
     private final StringRedisTemplate redisTemplate;
 
     /**
@@ -214,6 +217,9 @@ public class OutputInvoiceStateMachineServiceImpl implements OutputInvoiceStateM
      * 编号关联：
      * - 业务单据 → invoiceNo（发票编号冗余）
      * - 发票 → docId（业务单据ID）+ docNo（业务单据编号）
+     *
+     * P36 红冲：如果发票是红字发票（金额<0 或 originalInvoiceNo 非空），
+     * 则标记 reversedFrom 指向被红冲的蓝字业务单据。
      */
     private BusinessDocEntity createBusinessDocFromInvoice(Long invoiceId, Long userId) {
         OutputInvoiceEntity invoice = invoiceMapper.selectById(invoiceId);
@@ -221,6 +227,10 @@ public class OutputInvoiceStateMachineServiceImpl implements OutputInvoiceStateM
             log.warn("发票不存在: invoiceId={}", invoiceId);
             return null;
         }
+
+        // P36: 判断是否为红字发票
+        boolean isRedInvoice = invoice.getAmount() != null && invoice.getAmount().compareTo(BigDecimal.ZERO) < 0
+                || invoice.getOriginalInvoiceNo() != null;
 
         // 防重复创建：查 invoiceNo + INVOICE_OUT 是否已有业务单据
         long existingCount = businessDocMapper.selectCount(
@@ -244,13 +254,28 @@ public class OutputInvoiceStateMachineServiceImpl implements OutputInvoiceStateM
         doc.setAmount(invoice.getTotalAmount());
         doc.setStatus("APPROVED");
         doc.setCustomerId(invoice.getCustomerId());
-        doc.setSummary(invoice.getCustomerName());
-        doc.setSource("IMPORTED");
+        doc.setSummary(isRedInvoice ? "红冲: " + invoice.getCustomerName() : invoice.getCustomerName());
+        doc.setSource(isRedInvoice ? "RED_FLUSH" : "IMPORTED");
         doc.setInvoiceNo(invoice.getInvoiceNo());
         doc.setSettledAmount(BigDecimal.ZERO);
         doc.setUnsettledAmount(invoice.getTotalAmount());
         doc.setCreatedBy(userId);
         doc.setSubmittedBy(userId);
+
+        // P36: 红字发票 → 关联被红冲的蓝字业务单据
+        if (isRedInvoice && invoice.getReversedFrom() != null) {
+            // 通过蓝字发票 ID 查找其对应的蓝字业务单据
+            BusinessDocEntity blueDoc = businessDocMapper.selectOne(
+                    new LambdaQueryWrapper<BusinessDocEntity>()
+                            .eq(BusinessDocEntity::getInvoiceNo, getOriginalBlueInvoiceNo(invoice))
+                            .eq(BusinessDocEntity::getDocType, "INVOICE_OUT")
+                            .last("LIMIT 1"));
+            if (blueDoc != null) {
+                doc.setReversedFrom(blueDoc.getId());
+                log.info("P36 红冲业务单据关联原单据: redDocId={}, reversedFrom={}", doc.getId(), blueDoc.getId());
+            }
+        }
+
         businessDocMapper.insert(doc);
         log.info("P34 销售发票业务单据生成: invoiceId={}, docId={}, docNo={}, amount={}",
                 invoiceId, doc.getId(), doc.getDocNo(), invoice.getTotalAmount());
@@ -261,6 +286,21 @@ public class OutputInvoiceStateMachineServiceImpl implements OutputInvoiceStateM
         invoiceMapper.updateById(invoice);
 
         return doc;
+    }
+
+    /**
+     * 从红字发票获取原蓝字发票号。
+     * 红字发票的 originalInvoiceNo 字段保存了蓝字发票号。
+     */
+    private String getOriginalBlueInvoiceNo(OutputInvoiceEntity redInvoice) {
+        if (redInvoice.getOriginalInvoiceNo() != null) {
+            return redInvoice.getOriginalInvoiceNo();
+        }
+        // 兜底：从 remark 中提取（如果 originalInvoiceNo 未设置）
+        if (redInvoice.getRemark() != null) {
+            // remark 格式: "[userId] 原因" — 不从这里提取，直接返回 null
+        }
+        return null;
     }
 
     /**
@@ -276,11 +316,36 @@ public class OutputInvoiceStateMachineServiceImpl implements OutputInvoiceStateM
 
     /**
      * P33 简化：发票审核后直接创建凭证（DRAFT 状态，等待人工审核）。
-     * 凭证生成逻辑复用 TaxService 的模板匹配 + 硬编码降级。
+     *
+     * P36 红冲：如果是红字发票，生成凭证后回填 reversedFrom 指向原凭证。
      */
     private void generateVoucherFromInvoiceDirect(Long invoiceId, Long userId) {
         try {
+            OutputInvoiceEntity invoice = invoiceMapper.selectById(invoiceId);
+            boolean isRedInvoice = invoice != null
+                    && (invoice.getAmount() != null && invoice.getAmount().compareTo(BigDecimal.ZERO) < 0
+                        || invoice.getOriginalInvoiceNo() != null);
+
             taxService.generateVoucherFromInvoice(invoiceId, userId);
+
+            // P36: 红字发票 → 回填凭证 reversedFrom
+            if (isRedInvoice && invoice.getReversedFrom() != null) {
+                // 重新读取发票（markVouchered 已经设置了 voucherId）
+                OutputInvoiceEntity redInv = invoiceMapper.selectById(invoiceId);
+                if (redInv != null && redInv.getVoucherId() != null) {
+                    // 蓝字发票的 voucherId 就是原凭证 ID
+                    OutputInvoiceEntity blueInv = invoiceMapper.selectById(invoice.getReversedFrom());
+                    if (blueInv != null && blueInv.getVoucherId() != null) {
+                        VoucherEntity redVoucher = new VoucherEntity();
+                        redVoucher.setId(redInv.getVoucherId());
+                        redVoucher.setReversedFrom(blueInv.getVoucherId());
+                        voucherMapper.updateById(redVoucher);
+                        log.info("P36 红冲凭证关联: redVoucherId={}, blueVoucherId={}",
+                                redInv.getVoucherId(), blueInv.getVoucherId());
+                    }
+                }
+            }
+
             log.info("P33 销售发票凭证直连生成: invoiceId={}", invoiceId);
         } catch (Exception e) {
             log.error("P33 销售发票凭证生成失败: invoiceId={}, error={}", invoiceId, e.getMessage());

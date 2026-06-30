@@ -73,7 +73,7 @@ class OutputInvoiceStateMachineServiceImplTest {
     @BeforeEach
     void setup() {
         service = new OutputInvoiceStateMachineServiceImpl(
-                invoiceMapper, businessDocMapper, redisTemplate);
+                invoiceMapper, businessDocMapper, voucherMapper, redisTemplate);
         // 注入 lazy 依赖
         try {
             var field = OutputInvoiceStateMachineServiceImpl.class.getDeclaredField("taxService");
@@ -730,5 +730,104 @@ class OutputInvoiceStateMachineServiceImplTest {
         ArgumentCaptor<OutputInvoiceEntity> captor = ArgumentCaptor.forClass(OutputInvoiceEntity.class);
         verify(invoiceMapper).insert(captor.capture());
         assertEquals("TEST001-R", captor.getValue().getInvoiceNo());
+    }
+
+    // ==================== P36: 红字发票级联测试 ====================
+
+    @Test
+    @DisplayName("confirm_红字发票_创建红字业务单据(source=RED_FLUSH)")
+    void confirm_redInvoice_createsRedBusinessDoc() {
+        // given — 红字发票（金额<0）
+        OutputInvoiceEntity redInvoice = invoice(InvoiceStatus.PENDING_REVIEW);
+        redInvoice.setAmount(new BigDecimal("-1000.00"));
+        redInvoice.setTotalAmount(new BigDecimal("-1130.00"));
+        redInvoice.setTaxAmount(new BigDecimal("-130.00"));
+        redInvoice.setTaxRate(new BigDecimal("0.13"));
+        redInvoice.setOriginalInvoiceNo("TEST001");
+        when(invoiceMapper.selectById(INVOICE_ID)).thenReturn(redInvoice);
+        when(businessDocMapper.selectCount(any())).thenReturn(0L);
+        doAnswer(inv -> {
+            BusinessDocEntity d = inv.getArgument(0);
+            d.setId(500L);
+            return null;
+        }).when(businessDocMapper).insert(any(BusinessDocEntity.class));
+        lenient().when(redisTemplate.opsForValue()).thenReturn(valueOps);
+        lenient().when(valueOps.increment(anyString())).thenReturn(1L);
+        doNothing().when(taxService).generateVoucherFromInvoice(anyLong(), anyLong());
+
+        // when
+        service.confirm(INVOICE_ID, USER_ID);
+
+        // then — 业务单据 source=RED_FLUSH
+        ArgumentCaptor<BusinessDocEntity> docCaptor = ArgumentCaptor.forClass(BusinessDocEntity.class);
+        verify(businessDocMapper).insert(docCaptor.capture());
+        BusinessDocEntity doc = docCaptor.getValue();
+        assertEquals("RED_FLUSH", doc.getSource());
+        assertTrue(doc.getSummary().startsWith("红冲:"));
+        assertEquals(new BigDecimal("-1130.00"), doc.getAmount());
+    }
+
+    @Test
+    @DisplayName("confirm_红字发票_关联原业务单据(reversedFrom)")
+    void confirm_redInvoice_linksToOriginalBusinessDoc() {
+        // given — 红字发票有 reversedFrom 指向蓝字发票
+        OutputInvoiceEntity redInvoice = invoice(InvoiceStatus.PENDING_REVIEW);
+        redInvoice.setAmount(new BigDecimal("-1000.00"));
+        redInvoice.setTotalAmount(new BigDecimal("-1130.00"));
+        redInvoice.setTaxRate(new BigDecimal("0.13"));
+        redInvoice.setOriginalInvoiceNo("TEST001");
+        redInvoice.setReversedFrom(99L);  // 指向蓝字发票
+        when(invoiceMapper.selectById(INVOICE_ID)).thenReturn(redInvoice);
+        when(businessDocMapper.selectCount(any())).thenReturn(0L);
+        // 蓝字发票对应的业务单据
+        BusinessDocEntity blueDoc = new BusinessDocEntity();
+        blueDoc.setId(400L);
+        blueDoc.setInvoiceNo("TEST001");
+        when(businessDocMapper.selectOne(any())).thenReturn(blueDoc);
+        doAnswer(inv -> {
+            BusinessDocEntity d = inv.getArgument(0);
+            d.setId(500L);
+            return null;
+        }).when(businessDocMapper).insert(any(BusinessDocEntity.class));
+        lenient().when(redisTemplate.opsForValue()).thenReturn(valueOps);
+        lenient().when(valueOps.increment(anyString())).thenReturn(1L);
+        doNothing().when(taxService).generateVoucherFromInvoice(anyLong(), anyLong());
+
+        // when
+        service.confirm(INVOICE_ID, USER_ID);
+
+        // then — 红字业务单据 reversedFrom 指向蓝字业务单据
+        ArgumentCaptor<BusinessDocEntity> docCaptor = ArgumentCaptor.forClass(BusinessDocEntity.class);
+        verify(businessDocMapper).insert(docCaptor.capture());
+        assertEquals(400L, docCaptor.getValue().getReversedFrom());
+    }
+
+    @Test
+    @DisplayName("confirm_蓝字发票_source=IMPORTED")
+    void confirm_blueInvoice_normalSource() {
+        // given — 正常蓝字发票
+        OutputInvoiceEntity blueInvoice = invoice(InvoiceStatus.PENDING_REVIEW);
+        blueInvoice.setAmount(new BigDecimal("1000.00"));
+        blueInvoice.setTotalAmount(new BigDecimal("1130.00"));
+        blueInvoice.setTaxRate(new BigDecimal("0.13"));
+        when(invoiceMapper.selectById(INVOICE_ID)).thenReturn(blueInvoice);
+        when(businessDocMapper.selectCount(any())).thenReturn(0L);
+        doAnswer(inv -> {
+            BusinessDocEntity d = inv.getArgument(0);
+            d.setId(500L);
+            return null;
+        }).when(businessDocMapper).insert(any(BusinessDocEntity.class));
+        lenient().when(redisTemplate.opsForValue()).thenReturn(valueOps);
+        lenient().when(valueOps.increment(anyString())).thenReturn(1L);
+        doNothing().when(taxService).generateVoucherFromInvoice(anyLong(), anyLong());
+
+        // when
+        service.confirm(INVOICE_ID, USER_ID);
+
+        // then — 正常 source
+        ArgumentCaptor<BusinessDocEntity> docCaptor = ArgumentCaptor.forClass(BusinessDocEntity.class);
+        verify(businessDocMapper).insert(docCaptor.capture());
+        assertEquals("IMPORTED", docCaptor.getValue().getSource());
+        assertFalse(docCaptor.getValue().getSummary().startsWith("红冲:"));
     }
 }
