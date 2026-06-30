@@ -29,4 +29,7 @@ public interface OutputInvoiceStateMachineService {
 
     /** 作废 (任意非终态 → VOIDED, 记录作废原因) */
     void voidInvoice(Long invoiceId, Long userId, String reason);
+
+    /** 红冲 (CONFIRMED/VOUCHERED/PARTIALLY_RECONCILED → 生成红字发票) */
+    Long reverseInvoice(Long invoiceId, Long userId, String reason);
 }

@@ -1,4 +1,20 @@
 ---
+## 📌 Changelog (2026-06-30)
+
+### 🔴 Major Change — 2026-06-30
+- **Change type**: architecture reversal + scope change
+- **Summary**: P34 撤销 P33 简化方案，应收/应付单据恢复为业务单据体系（BusinessDocEntity）
+- **Trigger**: 老丁决策 — 应收/应付应统一走业务单据体系，数据割裂问题需消除
+- **Impact**: 应收/应付模块、核销结算流程、销售/进项发票状态机、数据库表结构
+- **Details**:
+  - 撤销 P33：销售发票审核不再直接创建 ReceivableEntity，改为创建 BusinessDocEntity(INVOICE_OUT)
+  - 采购进项发票不再双写 PayableEntity，仅创建 BusinessDocEntity(INVOICE_IN)
+  - t_receivable/t_payable 数据合并到 t_business_doc，独立应收应付表删除
+  - 核销结算全量改用 BusinessDocEntity，新增 @Retryable 乐观锁重试机制
+  - DB migration V68 添加结算字段，V69/V70 数据迁移+表删除
+  - 前端业务单据列表展示 INVOICE_OUT + 核销列
+- **Corresponding commit**: c86da5a feat: P34 应收/应付单据恢复为业务单据体系
+---
 ## 📌 Changelog (2026-06-29)
 
 ### 🔴 Major Change — 2026-06-29

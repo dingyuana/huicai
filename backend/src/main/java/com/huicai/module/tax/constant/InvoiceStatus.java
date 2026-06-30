@@ -79,4 +79,11 @@ public final class InvoiceStatus {
             || REVERSED.equals(status)
             || FULLY_RECONCILED.equals(status);
     }
+
+    /** 是否可红冲（CONFIRMED / VOUCHERED / PARTIALLY_RECONCILED） */
+    public static boolean isReversible(String status) {
+        return CONFIRMED.equals(status)
+            || VOUCHERED.equals(status)
+            || PARTIALLY_RECONCILED.equals(status);
+    }
 }

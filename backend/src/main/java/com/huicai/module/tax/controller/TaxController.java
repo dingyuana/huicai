@@ -196,6 +196,15 @@ public class TaxController {
         return R.ok();
     }
 
+    @Operation(summary = "红冲 (CONFIRMED/VOUCHERED/PARTIALLY_RECONCILED → 生成红字发票)")
+    @PostMapping("/output-invoices/{id}/reverse")
+    public R<Void> reverseInvoice(@PathVariable Long id,
+            @RequestParam String reason,
+            @RequestParam(required = false) Long userId) {
+        stateMachineService.reverseInvoice(id, orDefault(userId), reason);
+        return R.ok();
+    }
+
     private Long orDefault(Long userId) {
         if (userId != null) return userId;
         try { return SecurityUtils.getCurrentUserId(); } catch (Exception e) { return 1L; }
