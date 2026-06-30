@@ -1,0 +1,33 @@
+name: SPEC Contract Validation
+
+on:
+  push:
+    branches: [ main, develop ]
+    paths:
+      - 'docs/specs/*.md'
+  pull_request:
+    branches: [ main, develop ]
+    paths:
+      - 'docs/specs/*.md'
+
+jobs:
+  validate-spec-contracts:
+    name: 校验 SPEC 契约文件
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 设置 Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: 安装 PyYAML
+        run: pip install pyyaml
+
+      - name: 校验所有 SPEC 契约
+        run: |
+          python scripts/validate_spec_contract.py \
+            --dir docs/specs/ \
+            --check-implementation \
+            --check-tests

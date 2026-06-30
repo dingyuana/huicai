@@ -1,0 +1,14 @@
+repos:
+  - repo: local
+    hooks:
+      - id: spec-contract-validation
+        name: SPEC Contract Validation
+        entry: python scripts/validate_spec_contract.py --check-implementation --check-tests --strict
+        language: system
+        pass_filenames: false
+        stages: [commit]
+        verbose: true
+        additional_dependencies: [pyyaml]
+        # Only run when SPEC files are being committed
+        always_run: false
+        files: 'docs/specs/.*\.md$'
