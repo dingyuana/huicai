@@ -161,6 +161,51 @@ public class OutputInvoiceStateMachineServiceImpl implements OutputInvoiceStateM
         log.info("销售发票作废: id={}, userId={}, reason={}", invoiceId, userId, reason);
     }
 
+    @Override
+    @Transactional
+    public Long reverseInvoice(Long invoiceId, Long userId, String reason) {
+        if (reason == null || reason.trim().isEmpty()) {
+            throw BusinessException.badRequest("红冲必须填写原因");
+        }
+        OutputInvoiceEntity original = getEntity(invoiceId);
+        if (!InvoiceStatus.isReversible(original.getStatus())) {
+            throw BusinessException.badRequest("当前状态不可红冲: " + original.getStatus()
+                    + "，仅 CONFIRMED/VOUCHERED/PARTIALLY_RECONCILED 可红冲");
+        }
+        // 检查是否已被红冲
+        if (original.getReversedFrom() != null) {
+            throw BusinessException.badRequest("该发票已被红冲，不可重复红冲");
+        }
+
+        // 1. 创建红字发票（金额取反，status=DRAFT）
+        OutputInvoiceEntity redInvoice = new OutputInvoiceEntity();
+        redInvoice.setInvoiceNo(original.getInvoiceNo() + "-R");
+        redInvoice.setInvoiceDate(original.getInvoiceDate());
+        redInvoice.setPeriod(original.getPeriod());
+        redInvoice.setCustomerId(original.getCustomerId());
+        redInvoice.setCustomerName(original.getCustomerName());
+        redInvoice.setAmount(original.getAmount().negate());
+        redInvoice.setTaxRate(original.getTaxRate());
+        redInvoice.setTaxAmount(original.getTaxAmount().negate());
+        redInvoice.setTotalAmount(original.getTotalAmount().negate());
+        redInvoice.setInvoiceType(original.getInvoiceType());
+        redInvoice.setStatus(InvoiceStatus.PENDING_CONFIRM);
+        redInvoice.setRemark(appendReason(original.getRemark(), reason, userId));
+        redInvoice.setOriginalInvoiceNo(original.getInvoiceNo());
+        redInvoice.setCreatedBy(userId);
+        invoiceMapper.insert(redInvoice);
+
+        // 2. 原蓝字发票标记为 REVERSED，记录 reversedFrom
+        original.setStatus(InvoiceStatus.REVERSED);
+        original.setReversedFrom(redInvoice.getId());
+        original.setUpdatedBy(userId);
+        invoiceMapper.updateById(original);
+
+        log.info("销售发票红冲: originalId={}, redInvoiceId={}, originalInvoiceNo={}, reason={}",
+                invoiceId, redInvoice.getId(), original.getInvoiceNo(), reason);
+        return redInvoice.getId();
+    }
+
     // ==================== P34: 业务单据核心逻辑 ====================
 
     /**

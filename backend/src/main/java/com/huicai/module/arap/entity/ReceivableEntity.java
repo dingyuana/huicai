@@ -59,6 +59,9 @@ public class ReceivableEntity {
     @StatusChangeable(entity = "RECEIVABLE", fieldName = "status")
     private String status;
 
+    /** 被红冲应收单ID (P36 新增) */
+    private Long reversedFrom;
+
     @TableField(fill = FieldFill.INSERT)
     private LocalDateTime createdAt;
     @TableField(fill = FieldFill.INSERT_UPDATE)

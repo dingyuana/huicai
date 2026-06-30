@@ -542,4 +542,193 @@ class OutputInvoiceStateMachineServiceImplTest {
         // then
         assertEquals("已有备注 | [1] 新增原因", inv.getRemark());
     }
+
+    // ==================== reverseInvoice ====================
+
+    @Test
+    @DisplayName("reverseInvoice_正向_CONFIRMED状态可红冲")
+    void reverseInvoice_positive_confirmed_createsRedInvoice() {
+        // given
+        OutputInvoiceEntity original = invoice(InvoiceStatus.CONFIRMED);
+        original.setTaxRate(new BigDecimal("0.13"));
+        when(invoiceMapper.selectById(INVOICE_ID)).thenReturn(original);
+        doAnswer(invocation -> {
+            OutputInvoiceEntity e = invocation.getArgument(0);
+            e.setId(101L);
+            return null;
+        }).when(invoiceMapper).insert(any(OutputInvoiceEntity.class));
+
+        // when
+        Long redInvoiceId = service.reverseInvoice(INVOICE_ID, USER_ID, "开错金额");
+
+        // then — 原发票状态变为 REVERSED
+        assertEquals(InvoiceStatus.REVERSED, original.getStatus());
+        assertEquals(101L, original.getReversedFrom());
+        verify(invoiceMapper).updateById(original);
+
+        // then — 创建了红字发票
+        ArgumentCaptor<OutputInvoiceEntity> captor = ArgumentCaptor.forClass(OutputInvoiceEntity.class);
+        verify(invoiceMapper).insert(captor.capture());
+        OutputInvoiceEntity red = captor.getValue();
+        assertEquals("-1130.00", red.getTotalAmount().toString());
+        assertEquals(InvoiceStatus.PENDING_CONFIRM, red.getStatus());
+        assertEquals("TEST001", red.getOriginalInvoiceNo());
+        assertEquals("[1] 开错金额", red.getRemark());
+    }
+
+    @Test
+    @DisplayName("reverseInvoice_正向_PARTIALLY_RECONCILED状态可红冲")
+    void reverseInvoice_positive_partiallyReconciled() {
+        // given
+        OutputInvoiceEntity original = invoice(InvoiceStatus.PARTIALLY_RECONCILED);
+        original.setTaxRate(new BigDecimal("0.13"));
+        when(invoiceMapper.selectById(INVOICE_ID)).thenReturn(original);
+        doAnswer(invocation -> {
+            OutputInvoiceEntity e = invocation.getArgument(0);
+            e.setId(200L);
+            return null;
+        }).when(invoiceMapper).insert(any(OutputInvoiceEntity.class));
+
+        // when
+        Long redInvoiceId = service.reverseInvoice(INVOICE_ID, USER_ID, "部分核销后红冲");
+
+        // then
+        assertNotNull(redInvoiceId);
+        assertEquals(InvoiceStatus.REVERSED, original.getStatus());
+    }
+
+    @Test
+    @DisplayName("reverseInvoice_正向_VOUCHERED状态可红冲")
+    void reverseInvoice_positive_vouchered() {
+        // given
+        OutputInvoiceEntity original = invoice(InvoiceStatus.VOUCHERED);
+        original.setTaxRate(new BigDecimal("0.13"));
+        when(invoiceMapper.selectById(INVOICE_ID)).thenReturn(original);
+        doAnswer(invocation -> {
+            OutputInvoiceEntity e = invocation.getArgument(0);
+            e.setId(201L);
+            return null;
+        }).when(invoiceMapper).insert(any(OutputInvoiceEntity.class));
+
+        // when
+        Long redInvoiceId = service.reverseInvoice(INVOICE_ID, USER_ID, "已生成凭证后红冲");
+
+        // then
+        assertNotNull(redInvoiceId);
+        assertEquals(InvoiceStatus.REVERSED, original.getStatus());
+    }
+
+    @Test
+    @DisplayName("reverseInvoice_负向_PENDING_CONFIRM不可红冲")
+    void reverseInvoice_negative_pendingConfirm_throws() {
+        // given
+        when(invoiceMapper.selectById(INVOICE_ID)).thenReturn(invoice(InvoiceStatus.PENDING_CONFIRM));
+
+        // when/then
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> service.reverseInvoice(INVOICE_ID, USER_ID, "原因"));
+        StateMachineTestHelper.assertBusinessErrorContains(ex, "当前状态不可红冲");
+    }
+
+    @Test
+    @DisplayName("reverseInvoice_负向_VOIDED不可红冲")
+    void reverseInvoice_negative_voided_throws() {
+        // given
+        when(invoiceMapper.selectById(INVOICE_ID)).thenReturn(invoice(InvoiceStatus.VOIDED));
+
+        // when/then
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> service.reverseInvoice(INVOICE_ID, USER_ID, "原因"));
+        StateMachineTestHelper.assertBusinessErrorContains(ex, "当前状态不可红冲");
+    }
+
+    @Test
+    @DisplayName("reverseInvoice_负向_FULLY_RECONCILED不可红冲")
+    void reverseInvoice_negative_fullyReconciled_throws() {
+        // given
+        when(invoiceMapper.selectById(INVOICE_ID)).thenReturn(invoice(InvoiceStatus.FULLY_RECONCILED));
+
+        // when/then
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> service.reverseInvoice(INVOICE_ID, USER_ID, "原因"));
+        StateMachineTestHelper.assertBusinessErrorContains(ex, "当前状态不可红冲");
+    }
+
+    @Test
+    @DisplayName("reverseInvoice_负向_原因空字符串抛异常")
+    void reverseInvoice_negative_emptyReason_throws() {
+        // given
+        lenient().when(invoiceMapper.selectById(INVOICE_ID)).thenReturn(invoice(InvoiceStatus.CONFIRMED));
+
+        // when/then
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> service.reverseInvoice(INVOICE_ID, USER_ID, ""));
+        StateMachineTestHelper.assertBusinessErrorContains(ex, "红冲必须填写原因");
+    }
+
+    @Test
+    @DisplayName("reverseInvoice_负向_已被红冲不可重复红冲")
+    void reverseInvoice_negative_alreadyReversed_throws() {
+        // given
+        OutputInvoiceEntity original = invoice(InvoiceStatus.CONFIRMED);
+        original.setReversedFrom(999L);  // 已有红冲记录
+        when(invoiceMapper.selectById(INVOICE_ID)).thenReturn(original);
+
+        // when/then
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> service.reverseInvoice(INVOICE_ID, USER_ID, "原因"));
+        StateMachineTestHelper.assertBusinessErrorContains(ex, "已被红冲");
+    }
+
+    @Test
+    @DisplayName("reverseInvoice_负向_发票不存在抛异常")
+    void reverseInvoice_negative_notFound_throws() {
+        // given
+        when(invoiceMapper.selectById(INVOICE_ID)).thenReturn(null);
+
+        // when/then
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> service.reverseInvoice(INVOICE_ID, USER_ID, "原因"));
+        StateMachineTestHelper.assertBusinessErrorContains(ex, "发票不存在");
+    }
+
+    @Test
+    @DisplayName("reverseInvoice_正向_金额取反正确")
+    void reverseInvoice_positive_amountNegated() {
+        // given
+        OutputInvoiceEntity original = invoice(InvoiceStatus.CONFIRMED);
+        original.setTaxRate(new BigDecimal("0.13"));
+        original.setAmount(new BigDecimal("1000.00"));
+        original.setTaxAmount(new BigDecimal("130.00"));
+        original.setTotalAmount(new BigDecimal("1130.00"));
+        when(invoiceMapper.selectById(INVOICE_ID)).thenReturn(original);
+
+        // when
+        service.reverseInvoice(INVOICE_ID, USER_ID, "金额更正");
+
+        // then
+        ArgumentCaptor<OutputInvoiceEntity> captor = ArgumentCaptor.forClass(OutputInvoiceEntity.class);
+        verify(invoiceMapper).insert(captor.capture());
+        OutputInvoiceEntity red = captor.getValue();
+        assertEquals("-1000.00", red.getAmount().toString());
+        assertEquals("-130.00", red.getTaxAmount().toString());
+        assertEquals("-1130.00", red.getTotalAmount().toString());
+    }
+
+    @Test
+    @DisplayName("reverseInvoice_正向_发票号追加-R后缀")
+    void reverseInvoice_positive_invoiceNoSuffix() {
+        // given
+        OutputInvoiceEntity original = invoice(InvoiceStatus.CONFIRMED);
+        original.setTaxRate(new BigDecimal("0.13"));
+        when(invoiceMapper.selectById(INVOICE_ID)).thenReturn(original);
+
+        // when
+        service.reverseInvoice(INVOICE_ID, USER_ID, "原因");
+
+        // then
+        ArgumentCaptor<OutputInvoiceEntity> captor = ArgumentCaptor.forClass(OutputInvoiceEntity.class);
+        verify(invoiceMapper).insert(captor.capture());
+        assertEquals("TEST001-R", captor.getValue().getInvoiceNo());
+    }
 }

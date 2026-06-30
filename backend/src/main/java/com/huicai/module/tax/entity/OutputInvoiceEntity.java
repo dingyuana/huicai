@@ -45,6 +45,11 @@ public class OutputInvoiceEntity {
     private Long reversedByInvoiceId;
 
     /**
+     * 被哪张蓝字发票红冲（指向蓝字发票 ID，P36 新增）
+     */
+    private Long reversedFrom;
+
+    /**
      * 原蓝字发票号码（红字发票专用）
      */
     private String originalInvoiceNo;
