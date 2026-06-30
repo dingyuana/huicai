@@ -251,3 +251,186 @@ null → review() → CONFIRMED → audit() → AUDITED → generateVoucher() �
 - `audit()` 前置守卫不为 CONFIRMED 则拒
 - `generateVoucher()` 前置守卫不为 AUDITED 则拒
 - 测试中 `verify(autoGenerationService, never()).autoGenerateInNewTx()`
+
+---
+
+# MACHINE-READABLE CONTRACT
+
+```yaml
+contract_version: "1.0"
+spec_file: "P23-bank-statement-state-machine.md"
+spec_id: P23
+entity: BankStatementEntity
+module: bank
+table: t_bank_statement
+last_updated: "2026-06-30"
+implementation_status: implemented
+
+states:
+  PENDING:
+    description: "待确认"
+    initial: true
+    terminal: false
+
+  CONFIRMED:
+    description: "已确认"
+    initial: false
+    terminal: false
+
+  UNCONFIRMED:
+    description: "未确认（需人工处理）"
+    initial: false
+    terminal: false
+
+  DUPLICATE:
+    description: "重复流水"
+    initial: false
+    terminal: true
+
+  MANUAL_PENDING:
+    description: "待人工分类"
+    initial: false
+    terminal: false
+
+  APPROVED:
+    description: "已审批"
+    initial: false
+    terminal: false
+
+  PAYMENT_CREATED:
+    description: "已生成收付款单"
+    initial: false
+    terminal: false
+
+  VOUCHER_GENERATED:
+    description: "已生成凭证"
+    initial: false
+    terminal: false
+
+transitions:
+  - id: T-01
+    from: PENDING
+    to: CONFIRMED
+    trigger: confirm
+    precondition: "status == PENDING"
+    postcondition: "status == CONFIRMED"
+    side_effects: []
+    test_ref: confirm_positive
+
+  - id: T-02
+    from: PENDING
+    to: UNCONFIRMED
+    trigger: unconfirm
+    precondition: "status == PENDING"
+    postcondition: "status == UNCONFIRMED"
+    side_effects: []
+    test_ref: unconfirm_positive
+
+  - id: T-03
+    from: PENDING
+    to: DUPLICATE
+    trigger: markDuplicate
+    precondition: "status == PENDING"
+    postcondition: "status == DUPLICATE"
+    side_effects: []
+    test_ref: mark_duplicate_positive
+
+  - id: T-04
+    from: MANUAL_PENDING
+    to: APPROVED
+    trigger: approve
+    precondition: "status == MANUAL_PENDING"
+    postcondition: "status == APPROVED"
+    side_effects: []
+    test_ref: approve_positive
+
+  - id: T-05
+    from: APPROVED
+    to: PAYMENT_CREATED
+    trigger: generatePayment
+    precondition: "status == APPROVED"
+    postcondition: "status == PAYMENT_CREATED"
+    side_effects:
+      - entity: ArapSettlementEntity
+        action: create
+        status: DRAFT
+    test_ref: generate_payment_positive
+
+  - id: T-06
+    from: PAYMENT_CREATED
+    to: VOUCHER_GENERATED
+    trigger: generateVoucher
+    precondition: "status == PAYMENT_CREATED"
+    postcondition: "status == VOUCHER_GENERATED"
+    side_effects:
+      - entity: VoucherEntity
+        action: create
+        status: DRAFT
+    test_ref: generate_voucher_positive
+
+  - id: T-07
+    from: PENDING
+    to: MANUAL_PENDING
+    trigger: review
+    precondition: "status in (PENDING, CONFIRMED, UNCONFIRMED)"
+    postcondition: "status == MANUAL_PENDING"
+    side_effects: []
+    test_ref: review_positive
+
+constraints:
+  - id: C-01
+    type: database
+    rule: "CHECK constraint on t_bank_statement.status"
+    migration: V48
+
+  - id: C-02
+    type: business
+    rule: "银行流水不应直接参与核销，正确流程：流水→B类路由→收款/付款单→核销"
+    enforcement: "StateMachineService 不直接调用核销"
+
+acceptance_tests:
+  - id: AT-001
+    description: "PENDING → CONFIRMED"
+    method: confirm_positive
+    assertion: "status == CONFIRMED"
+    status: covered
+
+  - id: AT-002
+    description: "PENDING → DUPLICATE"
+    method: mark_duplicate_positive
+    assertion: "status == DUPLICATE"
+    status: covered
+
+  - id: AT-003
+    description: "MANUAL_PENDING → APPROVED"
+    method: approve_positive
+    assertion: "status == APPROVED"
+    status: covered
+
+  - id: AT-004
+    description: "APPROVED → PAYMENT_CREATED"
+    method: generate_payment_positive
+    assertion: "status == PAYMENT_CREATED"
+    status: covered
+
+  - id: AT-005
+    description: "PAYMENT_CREATED → VOUCHER_GENERATED"
+    method: generate_voucher_positive
+    assertion: "status == VOUCHER_GENERATED"
+    status: covered
+
+out_of_scope:
+  - "自动分类逻辑 (P1 范围)"
+  - "AI 异常检测 (AI service 范围)"
+
+dependencies:
+  - spec: P1
+    entity: BankStatementEntity
+    relation: "导入和分类"
+  - spec: P22
+    entity: VoucherEntity
+    relation: "生成凭证"
+  - spec: P5
+    entity: ArapSettlementEntity
+    relation: "核销"
+```

@@ -310,3 +310,162 @@ public Long generateReversalVoucher(Long originalVoucherId, Long userId) {
 - **依赖 P21-b**：`InputInvoiceStateMachineService.onReconciliationUpdate` 调用本 SPEC 的 `generateReversalVoucher` 或 `generateCashDiscountVoucher`
 - **依赖 P24**：上线时把 log.info 替换为 audit_log 自动写入
 - **未来**：账期控制 SPEC 需要校验 `voucher.period` 字段（VoucherEntity 已存在）
+---
+
+# MACHINE-READABLE CONTRACT
+
+```yaml
+contract_version: "1.0"
+spec_file: "P22-voucher-state-machine.md"
+spec_id: P22
+entity: VoucherEntity
+module: finance
+table: t_voucher
+last_updated: "2026-06-30"
+implementation_status: implemented
+
+states:
+  DRAFT:
+    description: "草稿，未提交"
+    initial: true
+    terminal: false
+
+  SUBMITTED:
+    description: "已提交，待审核"
+    initial: false
+    terminal: false
+
+  AUDITED:
+    description: "已审核"
+    initial: false
+    terminal: false
+
+  POSTED:
+    description: "已过账"
+    initial: false
+    terminal: false
+
+transitions:
+  - id: T-01
+    from: DRAFT
+    to: SUBMITTED
+    trigger: submit
+    precondition: "status == DRAFT"
+    postcondition: "status == SUBMITTED"
+    side_effects: []
+    test_ref: submit_positive
+
+  - id: T-02
+    from: SUBMITTED
+    to: AUDITED
+    trigger: audit
+    precondition: "status == SUBMITTED"
+    postcondition: "status == AUDITED; auditedBy = userId; auditedAt = now"
+    side_effects: []
+    test_ref: audit_positive
+
+  - id: T-03
+    from: SUBMITTED
+    to: DRAFT
+    trigger: reject
+    precondition: "status == SUBMITTED"
+    postcondition: "status == DRAFT; reason recorded"
+    side_effects: []
+    test_ref: reject_positive
+
+  - id: T-04
+    from: AUDITED
+    to: POSTED
+    trigger: post
+    precondition: "status == AUDITED"
+    postcondition: "status == POSTED"
+    side_effects: []
+    test_ref: post_positive
+
+  - id: T-05
+    from: POSTED
+    to: POSTED
+    trigger: generateReversalVoucher
+    precondition: "status == POSTED"
+    postcondition: "new reversal voucher created (DRAFT); original voucher stays POSTED"
+    side_effects:
+      - entity: VoucherEntity
+        action: create_reversal
+        status: DRAFT
+    test_ref: generateReversalVoucher_positive
+    note: "This is a creation transition, not a state change. The original voucher remains POSTED."
+
+  - id: T-06
+    from: AUDITED
+    to: SUBMITTED
+    trigger: unpost
+    precondition: "status == AUDITED"
+    postcondition: "status == SUBMITTED"
+    side_effects: []
+    test_ref: unpost_positive
+
+constraints:
+  - id: C-01
+    type: database
+    rule: "CHECK constraint on t_voucher.status"
+    migration: V47
+
+  - id: C-02
+    type: immutability
+    rule: "已过账凭证不可修改，只能红冲"
+    enforcement: "StateMachineService 前置检查"
+
+  - id: C-03
+    type: audit
+    rule: "审核/过账必须记录 auditedBy/auditedAt"
+    enforcement: "State machine service 设置审计字段"
+
+acceptance_tests:
+  - id: AT-001
+    description: "DRAFT → SUBMITTED"
+    method: submit_positive
+    assertion: "status == SUBMITTED"
+    status: covered
+
+  - id: AT-002
+    description: "SUBMITTED → AUDITED"
+    method: audit_positive
+    assertion: "status == AUDITED; auditedBy set"
+    status: covered
+
+  - id: AT-003
+    description: "SUBMITTED → DRAFT (驳回)"
+    method: reject_positive
+    assertion: "status == DRAFT"
+    status: covered
+
+  - id: AT-004
+    description: "AUDITED → POSTED"
+    method: post_positive
+    assertion: "status == POSTED"
+    status: covered
+
+  - id: AT-005
+    description: "POSTED 不可修改，只能红冲"
+    method: modify_posted_voucher_throws
+    assertion: "BusinessException"
+    status: covered
+
+  - id: AT-006
+    description: "红冲生成新凭证 (DRAFT)"
+    method: generateReversalVoucher_positive
+    assertion: "new voucher created with DRAFT status"
+    status: covered
+
+out_of_scope:
+  - "OutputInvoiceEntity 状态机 (P21 范围)"
+  - "ReceivableEntity/PayableEntity 状态机 (P20 范围)"
+
+dependencies:
+  - spec: P21
+    entity: OutputInvoiceEntity
+    relation: "销售发票审核触发凭证创建 (DRAFT)"
+  - spec: P24
+    entity: AuditLog
+    relation: "审计日志"
+```

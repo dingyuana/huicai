@@ -381,3 +381,217 @@ if (entity.getStatus() == null) entity.setStatus(ArapStatus.DRAFT);
                                             ↓
                                       audit_log 记录每次变更 (P24)
 ```
+
+---
+
+# MACHINE-READABLE CONTRACT
+
+```yaml
+contract_version: "1.0"
+spec_file: "P20-arap-state-machine-spec.md"
+spec_id: P20
+entity: ReceivableEntity,PayableEntity
+module: arap
+table: t_receivable,t_payable
+last_updated: "2026-06-30"
+implementation_status: implemented
+
+states:
+  DRAFT:
+    description: "草稿，待提交"
+    initial: true
+    terminal: false
+
+  SUBMITTED:
+    description: "已提交，待审核"
+    initial: false
+    terminal: false
+
+  CONFIRMED:
+    description: "已审核通过"
+    initial: false
+    terminal: false
+
+  VOUCHERED:
+    description: "已生成凭证"
+    initial: false
+    terminal: false
+
+  SETTLED:
+    description: "已核销"
+    initial: false
+    terminal: true
+
+  PARTIALLY_SETTLED:
+    description: "部分核销"
+    initial: false
+    terminal: false
+
+  REJECTED:
+    description: "已驳回"
+    initial: false
+    terminal: false
+
+  CANCELLED:
+    description: "已取消"
+    initial: false
+    terminal: true
+
+  REVERSED:
+    description: "已红冲"
+    initial: false
+    terminal: true
+
+transitions:
+  - id: T-01
+    from: DRAFT
+    to: SUBMITTED
+    trigger: submit
+    precondition: "status == DRAFT"
+    postcondition: "status == SUBMITTED"
+    side_effects: []
+    test_ref: submit_positive
+
+  - id: T-02
+    from: SUBMITTED
+    to: CONFIRMED
+    trigger: confirm
+    precondition: "status == SUBMITTED"
+    postcondition: "status == CONFIRMED; auditedBy = userId"
+    side_effects: []
+    test_ref: confirm_positive
+
+  - id: T-03
+    from: SUBMITTED
+    to: DRAFT
+    trigger: reject
+    precondition: "status == SUBMITTED"
+    postcondition: "status == DRAFT; reason recorded"
+    side_effects: []
+    test_ref: reject_positive
+
+  - id: T-04
+    from: CONFIRMED
+    to: VOUCHERED
+    trigger: generateVoucher
+    precondition: "status == CONFIRMED"
+    postcondition: "status == VOUCHERED; voucherId recorded"
+    side_effects:
+      - entity: VoucherEntity
+        action: create
+        status: DRAFT
+    test_ref: generateVoucher_positive
+
+  - id: T-05
+    from: VOUCHERED
+    to: SETTLED
+    trigger: markSettled
+    precondition: "status == VOUCHERED && unsettledAmount == 0"
+    postcondition: "status == SETTLED"
+    side_effects: []
+    test_ref: markSettled_fully
+
+  - id: T-06
+    from: VOUCHERED
+    to: PARTIALLY_SETTLED
+    trigger: onSettlementUpdate
+    precondition: "status == VOUCHERED && unsettledAmount > 0"
+    postcondition: "status == PARTIALLY_SETTLED"
+    side_effects: []
+    test_ref: onSettlementUpdate_partial
+
+  - id: T-07
+    from: CONFIRMED
+    to: REVERSED
+    trigger: reverse
+    precondition: "status == CONFIRMED || status == VOUCHERED || status == PARTIALLY_SETTLED"
+    postcondition: "status = REVERSED; new reversed AR/AP created"
+    side_effects:
+      - entity: ReceivableEntity/PayableEntity
+        action: create_reversed
+        status: DRAFT
+    test_ref: reverse_positive
+
+  - id: T-08
+    from: DRAFT
+    to: CANCELLED
+    trigger: cancel
+    precondition: "status == DRAFT"
+    postcondition: "status == CANCELLED"
+    side_effects: []
+    test_ref: cancel_positive
+
+constraints:
+  - id: C-01
+    type: database
+    rule: "CHECK constraint on t_receivable/t_payable.status"
+    migration: V37
+
+  - id: C-02
+    type: business
+    rule: "审核必须由人确定"
+    enforcement: "StateMachineService 方法"
+
+  - id: C-03
+    type: immutability
+    rule: "终态不可再转换"
+    enforcement: "InvoiceStatus.isTerminal() 前置检查"
+
+acceptance_tests:
+  - id: AT-001
+    description: "DRAFT → SUBMITTED"
+    method: submit_positive
+    assertion: "status == SUBMITTED"
+    status: covered
+
+  - id: AT-002
+    description: "SUBMITTED → CONFIRMED"
+    method: confirm_positive
+    assertion: "status == CONFIRMED"
+    status: covered
+
+  - id: AT-003
+    description: "SUBMITTED → DRAFT (驳回)"
+    method: reject_positive
+    assertion: "status == DRAFT; reason recorded"
+    status: covered
+
+  - id: AT-004
+    description: "CONFIRMED → VOUCHERED"
+    method: generateVoucher_positive
+    assertion: "status == VOUCHERED; voucherId recorded"
+    status: covered
+
+  - id: AT-005
+    description: "VOUCHERED → SETTLED (全额)"
+    method: markSettled_fully
+    assertion: "status == SETTLED"
+    status: covered
+
+  - id: AT-006
+    description: "VOUCHERED → PARTIALLY_SETTLED (部分)"
+    method: onSettlementUpdate_partial
+    assertion: "status == PARTIALLY_SETTLED"
+    status: covered
+
+  - id: AT-007
+    description: "终态不可再转换"
+    method: transition_from_terminal_state_throws
+    assertion: "BusinessException"
+    status: covered
+
+out_of_scope:
+  - "InputInvoiceEntity (采购发票，P21-b 已废弃)"
+  - "VoucherEntity 状态机 (P22 范围)"
+
+dependencies:
+  - spec: P21
+    entity: OutputInvoiceEntity
+    relation: "销售发票审核创建应收单 (DRAFT)"
+  - spec: P22
+    entity: VoucherEntity
+    relation: "生成凭证"
+  - spec: P36
+    entity: OutputInvoiceEntity
+    relation: "红冲级联"
+```

@@ -586,3 +586,311 @@ invoice.setStatus(InvoiceStatus.PENDING_REVIEW);
 - **依赖 P22 凭证状态机**：`markVouchered` 调用需要 VoucherService 提供"草稿凭证创建"接口
 - **依赖 P24 审计追踪**：上线时把本 SPEC 的 log.info 替换为 audit_log 写入
 - **依赖 P21-b**：采购发票同步实现，业务规则保持一致
+---
+
+# MACHINE-READABLE CONTRACT
+
+> 以下为机器可读的结构化契约，供自动化校验脚本解析。人类读者可忽略此部分。
+> 解析方式：找到 `# MACHINE-READABLE CONTRACT` 标记，提取其后所有 YAML 内容。
+
+```yaml
+contract_version: "1.0"
+spec_file: "P21-sales-invoice-state-machine.md"
+spec_id: P21
+entity: OutputInvoiceEntity
+module: tax
+table: t_output_invoice
+last_updated: "2026-06-30"
+implementation_status: implemented
+p31_modified: true
+
+states:
+  PENDING_CONFIRM:
+    description: "导入后默认状态，待确认"
+    initial: true
+    terminal: false
+
+  PENDING_REVIEW:
+    description: "待审核"
+    initial: false
+    terminal: false
+
+  CONFIRMED:
+    description: "已确认（已开票），可生成凭证"
+    initial: false
+    terminal: false
+
+  VOUCHERED:
+    description: "已生成凭证"
+    initial: false
+    terminal: false
+
+  FULLY_RECONCILED:
+    description: "全额核销"
+    initial: false
+    terminal: true
+
+  PARTIALLY_RECONCILED:
+    description: "部分核销"
+    initial: false
+    terminal: false
+
+  VOIDED:
+    description: "已作废"
+    initial: false
+    terminal: true
+
+  REVERSED:
+    description: "已红冲（承接旧 RED_INK 数据）"
+    initial: false
+    terminal: true
+
+transitions:
+  - id: T-01
+    from: PENDING_CONFIRM
+    to: PENDING_REVIEW
+    trigger: submitForReview
+    precondition: "status == PENDING_CONFIRM"
+    postcondition: "status == PENDING_REVIEW"
+    side_effects: []
+    api_endpoint: "POST /api/v1/output-invoices/{id}/submit-review"
+    test_ref: submitForReview_positive_statusChanged
+
+  - id: T-02
+    from: PENDING_REVIEW
+    to: CONFIRMED
+    trigger: confirm
+    precondition: "status == PENDING_REVIEW"
+    postcondition: "status == CONFIRMED; auditedBy = userId"
+    side_effects:
+      - entity: BusinessDocEntity
+        action: create
+        status: DRAFT
+      - entity: ReceivableEntity
+        action: create
+        status: DRAFT
+      - entity: VoucherEntity
+        action: create
+        status: DRAFT
+    api_endpoint: "POST /api/v1/output-invoices/{id}/confirm"
+    test_ref: confirm_positive_statusChanged
+    negative_assertions:
+      - assertion: "confirm() 不应直接将发票状态设为 VOUCHERED"
+        method: confirm_should_not_directly_set_vouchered
+        test_ref: confirm_should_not_directly_set_vouchered
+
+  - id: T-03
+    from: PENDING_REVIEW
+    to: PENDING_CONFIRM
+    trigger: reject
+    precondition: "status == PENDING_REVIEW"
+    postcondition: "status == PENDING_CONFIRM; reason recorded"
+    side_effects: []
+    api_endpoint: "POST /api/v1/output-invoices/{id}/reject"
+    test_ref: reject_positive_statusRevertedWithReason
+
+  - id: T-04
+    from: CONFIRMED
+    to: PENDING_REVIEW
+    trigger: revertToReview
+    precondition: "status == CONFIRMED"
+    postcondition: "status == PENDING_REVIEW"
+    side_effects: []
+    api_endpoint: "POST /api/v1/output-invoices/{id}/revert"
+    test_ref: revertToReview_positive_statusReverted
+
+  - id: T-05
+    from: CONFIRMED
+    to: VOUCHERED
+    trigger: markVouchered
+    precondition: "status == CONFIRMED"
+    postcondition: "status == VOUCHERED; voucherId + voucherNo recorded"
+    side_effects: []
+    api_endpoint: "POST /api/v1/output-invoices/{id}/mark-vouchered (internal)"
+    test_ref: markVouchered_positive_statusChangedWithVoucherId
+
+  - id: T-06
+    from: VOUCHERED
+    to: FULLY_RECONCILED
+    trigger: onReconciliationUpdate
+    precondition: "status == VOUCHERED && unsettledAmount == 0"
+    postcondition: "status == FULLY_RECONCILED"
+    side_effects: []
+    test_ref: onReconciliationUpdate_positive_fullyReconciled
+
+  - id: T-07
+    from: VOUCHERED
+    to: PARTIALLY_RECONCILED
+    trigger: onReconciliationUpdate
+    precondition: "status == VOUCHERED && unsettledAmount > 0"
+    postcondition: "status == PARTIALLY_RECONCILED"
+    side_effects: []
+    test_ref: onReconciliationUpdate_positive_partiallyReconciled
+
+  - id: T-08
+    from: ANY_NON_TERMINAL
+    to: VOIDED
+    trigger: voidInvoice
+    precondition: "!InvoiceStatus.isTerminal(status)"
+    postcondition: "status == VOIDED; reason recorded"
+    side_effects: []
+    api_endpoint: "POST /api/v1/output-invoices/{id}/void"
+    test_ref: voidInvoice_positive
+
+  - id: T-09
+    from: CONFIRMED
+    to: REVERSED
+    trigger: reverseInvoice
+    precondition: "status in (CONFIRMED, VOUCHERED, PARTIALLY_RECONCILED)"
+    postcondition: "original status = REVERSED; new red invoice created (PENDING_CONFIRM)"
+    side_effects:
+      - entity: OutputInvoiceEntity
+        action: create_red_invoice
+        status: PENDING_CONFIRM
+    test_ref: reverseInvoice_positive
+
+constraints:
+  - id: C-01
+    type: database
+    rule: "CHECK constraint on t_output_invoice.status allows exactly 8 values"
+    migration: V46
+    sql: "CHECK (status IN ('PENDING_CONFIRM','PENDING_REVIEW','CONFIRMED','VOUCHERED','FULLY_RECONCILED','PARTIALLY_RECONCILED','VOIDED','REVERSED'))"
+
+  - id: C-02
+    type: business
+    rule: "审核必须由人确定，系统不允许自动调整状态"
+    enforcement: "所有状态转换通过 StateMachineService 方法，不自动触发"
+
+  - id: C-03
+    type: immutability
+    rule: "终态（VOIDED/REVERSED/FULLY_RECONCILED）不可再转换"
+    enforcement: "InvoiceStatus.isTerminal() 前置检查"
+
+  - id: C-04
+    type: audit
+    rule: "所有状态变更必须记录 auditedBy/auditedAt"
+    enforcement: "StateMachineService 各方法设置 auditedBy/auditedAt"
+
+acceptance_tests:
+  - id: AT-001
+    description: "提交审核：PENDING_CONFIRM → PENDING_REVIEW"
+    method: submitForReview_positive_statusChanged
+    assertion: "status == PENDING_REVIEW after submitForReview()"
+    status: covered
+    test_class: OutputInvoiceStateMachineServiceImplTest
+
+  - id: AT-002
+    description: "非 PENDING_CONFIRM 提交审核应失败"
+    method: submitForReview_negative_wrongStatus_throws
+    assertion: "BusinessException thrown"
+    status: covered
+    test_class: OutputInvoiceStateMachineServiceImplTest
+
+  - id: AT-003
+    description: "审核通过：PENDING_REVIEW → CONFIRMED，自动创建业务单+应收单+凭证"
+    method: confirm_positive_statusChanged
+    assertion: "status == CONFIRMED; BusinessDoc created; Receivable created; Voucher created"
+    status: covered
+    test_class: OutputInvoiceStateMachineServiceImplTest
+
+  - id: AT-004
+    description: "审核通过不应直接设 VOUCHERED 状态"
+    method: confirm_should_not_directly_set_vouchered
+    assertion: "invoice.status != VOUCHERED after confirm()"
+    status: missing
+    test_class: OutputInvoiceStateMachineServiceImplTest
+    note: "SPEC 定义了负断言要求，但测试中暂无对应方法。建议补充。"
+
+  - id: AT-005
+    description: "审核驳回：PENDING_REVIEW → PENDING_CONFIRM"
+    method: reject_positive_statusRevertedWithReason
+    assertion: "status == PENDING_CONFIRM; reason recorded"
+    status: covered
+    test_class: OutputInvoiceStateMachineServiceImplTest
+
+  - id: AT-006
+    description: "驳回必须提供原因"
+    method: reject_negative_emptyReason_throws
+    assertion: "BusinessException when reason is blank"
+    status: covered
+    test_class: OutputInvoiceStateMachineServiceImplTest
+
+  - id: AT-007
+    description: "回退到待审核：CONFIRMED → PENDING_REVIEW"
+    method: revertToReview_positive_statusReverted
+    assertion: "status == PENDING_REVIEW"
+    status: covered
+    test_class: OutputInvoiceStateMachineServiceImplTest
+
+  - id: AT-008
+    description: "标记已生成凭证：CONFIRMED → VOUCHERED"
+    method: markVouchered_positive_statusChangedWithVoucherId
+    assertion: "status == VOUCHERED; voucherId recorded"
+    status: covered
+    test_class: OutputInvoiceStateMachineServiceImplTest
+
+  - id: AT-009
+    description: "全额核销：VOUCHERED → FULLY_RECONCILED"
+    method: onReconciliationUpdate_positive_fullyReconciled
+    assertion: "status == FULLY_RECONCILED when unsettledAmount == 0"
+    status: covered
+    test_class: OutputInvoiceStateMachineServiceImplTest
+
+  - id: AT-010
+    description: "部分核销：VOUCHERED → PARTIALLY_RECONCILED"
+    method: onReconciliationUpdate_positive_partiallyReconciled
+    assertion: "status == PARTIALLY_RECONCILED when unsettledAmount > 0"
+    status: covered
+    test_class: OutputInvoiceStateMachineServiceImplTest
+
+  - id: AT-011
+    description: "作废：任意非终态 → VOIDED"
+    method: voidInvoice_positive
+    assertion: "status == VOIDED"
+    status: covered
+    test_class: OutputInvoiceStateMachineServiceImplTest
+
+  - id: AT-012
+    description: "终态不可作废"
+    method: voidInvoice_negative_terminalState_throws
+    assertion: "BusinessException when voiding VOIDED/REVERSED/FULLY_RECONCILED"
+    status: partial
+    test_class: OutputInvoiceStateMachineServiceImplTest
+    note: "有 voidInvoice_negative_voided_throws 等分项测试，但无统一的 terminalState 测试"
+
+  - id: AT-013
+    description: "红冲：CONFIRMED/VOUCHERED/PARTIALLY_RECONCILED → REVERSED + 新红字发票"
+    method: reverseInvoice_positive
+    assertion: "original status = REVERSED; new invoice created with PENDING_CONFIRM"
+    status: covered
+    test_class: OutputInvoiceStateMachineServiceImplTest
+
+  - id: AT-014
+    description: "V46 migration CHECK 约束包含 8 个状态值"
+    method: n/a (database)
+    assertion: "CHECK constraint matches InvoiceStatus constants"
+    status: covered
+    test_class: n/a
+    migration: V46
+
+out_of_scope:
+  - "InputInvoiceEntity 状态机（P21-b 已废弃）"
+  - "VoucherEntity 状态机（P22 范围）"
+  - "AOP 审计日志（P24 范围）"
+  - "多级审批规则（不在本期）"
+  - "发票打印/导出（不在状态机范围）"
+
+dependencies:
+  - spec: P20
+    entity: ReceivableEntity
+    relation: "confirm() 创建 ReceivableEntity (DRAFT)"
+  - spec: P22
+    entity: VoucherEntity
+    relation: "confirm() 创建 VoucherEntity (DRAFT)"
+  - spec: P24
+    entity: AuditLog
+    relation: "状态变更审计日志由 P24 AOP 接管"
+  - spec: P36
+    entity: OutputInvoiceEntity
+    relation: "红冲级联（发票→业务单→应收→凭证）"
+```

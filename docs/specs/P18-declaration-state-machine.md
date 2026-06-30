@@ -71,3 +71,117 @@ POST /api/v1/tax/declarations/{id}/reject?reason=...
 ## 4. 测试验收
 
 **目标**: 305 → 307 (+2 测试)
+
+---
+
+# MACHINE-READABLE CONTRACT
+
+```yaml
+contract_version: "1.0"
+spec_file: "P18-declaration-state-machine.md"
+spec_id: P18
+entity: TaxDeclarationEntity
+module: tax
+table: t_tax_declaration
+last_updated: "2026-06-30"
+implementation_status: implemented
+
+states:
+  DRAFT:
+    description: "草稿"
+    initial: true
+    terminal: false
+
+  SUBMITTED:
+    description: "已提交"
+    initial: false
+    terminal: false
+
+  APPROVED:
+    description: "已批准"
+    initial: false
+    terminal: false
+
+  REJECTED:
+    description: "已驳回"
+    initial: false
+    terminal: false
+
+  VOUCHERED:
+    description: "已生成凭证"
+    initial: false
+    terminal: false
+
+transitions:
+  - id: T-01
+    from: DRAFT
+    to: SUBMITTED
+    trigger: submit
+    precondition: "status == DRAFT"
+    postcondition: "status == SUBMITTED"
+    side_effects: []
+    test_ref: submit_positive
+
+  - id: T-02
+    from: SUBMITTED
+    to: APPROVED
+    trigger: approve
+    precondition: "status == SUBMITTED"
+    postcondition: "status == APPROVED"
+    side_effects: []
+    test_ref: approve_positive
+
+  - id: T-03
+    from: SUBMITTED
+    to: DRAFT
+    trigger: reject
+    precondition: "status == SUBMITTED"
+    postcondition: "status == DRAFT"
+    side_effects: []
+    test_ref: reject_positive
+
+  - id: T-04
+    from: APPROVED
+    to: VOUCHERED
+    trigger: generateVoucher
+    precondition: "status == APPROVED"
+    postcondition: "status == VOUCHERED"
+    side_effects:
+      - entity: VoucherEntity
+        action: create
+        status: DRAFT
+    test_ref: generate_voucher_positive
+
+constraints:
+  - id: C-01
+    type: database
+    rule: "CHECK constraint on t_tax_declaration.status"
+
+acceptance_tests:
+  - id: AT-001
+    description: "DRAFT → SUBMITTED"
+    method: submit_positive
+    assertion: "status == SUBMITTED"
+    status: covered
+
+  - id: AT-002
+    description: "SUBMITTED → APPROVED"
+    method: approve_positive
+    assertion: "status == APPROVED"
+    status: covered
+
+  - id: AT-003
+    description: "APPROVED → VOUCHERED"
+    method: generate_voucher_positive
+    assertion: "status == VOUCHERED"
+    status: covered
+
+out_of_scope:
+  - "税务申报计算逻辑"
+  - "多税种合并申报"
+
+dependencies:
+  - spec: P22
+    entity: VoucherEntity
+    relation: "生成凭证"
+```
