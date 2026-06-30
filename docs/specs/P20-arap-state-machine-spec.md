@@ -1,9 +1,25 @@
 # P20 SPEC — AR/AP 状态机实现规格书
 
-> 状态：待实现 | 优先级：高（P20）
-> 依据：docs/design/P20-arap-state-machine-design.md
-> 目标：补齐应收/应付/核销单状态机，消除 magic string
-> 工期：单批交付，3 个 commit
+> 状态：**已修订（P34 架构变更）** | 优先级：高（P20）
+> 依据：docs/design/P20-arap-state-machine-design.md + P34 架构整合
+> 目标：应收/应付状态机已部分落地（ReceivableStateMachineService/PayableStateMachineService），
+> 但核心流程已迁移至业务单据体系（P34），应收/应付独立实体逐步合并到 BusinessDocEntity。
+> **注意**：本 SPEC 定义的状态机（9 状态）与当前代码（3 方法）存在显著偏差，详见下方 §1 偏差说明。
+
+---
+
+## 0. P34 架构变更说明
+
+P34 决定将应收/应付合并到业务单据体系：
+- 销售发票审核 → 创建 `BusinessDocEntity(INVOICE_OUT)` + 凭证，**不再创建独立 `ReceivableEntity`**
+- 采购发票导入 → 创建 `BusinessDocEntity(INVOICE_IN)` + `PayableEntity`（**双写，待清理**）
+- 核销结算 → 同时更新 `ReceivableEntity`、`PayableEntity`、`BusinessDocEntity` 三处（**三写，待统一**）
+- V68 migration 已为 `t_business_doc` 增加 `settled_amount/unsettled_amount/due_date` 字段
+
+**当前代码实际状态**：
+- `ReceivableStateMachineService` / `PayableStateMachineService` 存在但功能有限（仅 confirm/onReconciliationUpdate/reverse）
+- `ReceivableEntity` / `PayableEntity` 仍有 16 个生产文件引用，未被移除
+- `t_receivable` / `t_payable` 表仍存在（P34 尚未执行 V71 删除）
 
 ---
 
@@ -75,6 +91,15 @@ public final class ArapStatus {
 }
 ```
 
+### 1.2 ⚠️ 常量类与实际代码偏差
+
+| 问题 | 说明 | 修复建议 |
+|------|------|----------|
+| `PARTIALLY_SETTLED` 未定义 | SPEC 定义了这个状态但常量类中没有 | P34 后应收/应付不再独立管理核销状态，由 BusinessDocEntity 的 `PARTIALLY_RECONCILED` 替代 |
+| `isReversible()` 不包含 `VOUCHERED` | SPEC T-07 说 CONFIRMED/VOUCHERED/PARTIALLY_SETTLED 可冲销 | 当前代码 `isReversible()` 只检查 CONFIRMED/SETTLED。P34 后冲销通过 BusinessDocService 处理 |
+| `CANCELLED` 常量存在但无 `cancel()` 方法 | ArapStatus 定义了 CANCELLED 但 ReceivableServiceImpl/PayableServiceImpl 无此方法 | P34 后取消操作合并到 BusinessDocService.cancel() |
+| `EXECUTED`/`REJECTED`/`APPLIED` 未使用 | 这些是为 ReconciliationLog/Prepayment 预留的状态 | 当前未被任何代码引用 |
+
 ---
 
 ## 2. 实体变更
@@ -116,88 +141,50 @@ COMMENT ON COLUMN t_payable.status IS '状态: DRAFT/CONFIRMED/SETTLED/REVERSED'
 
 ---
 
-## 4. Service 状态机实现
+## 4. Service 状态机实现 — 当前实际 vs SPEC 定义
 
-### 4.1 `ReceivableService` 新增方法
+### 4.1 偏差总览
+
+| SPEC 定义的方法 | 代码实际 | 偏差 |
+|----------------|----------|------|
+| `submit()` (DRAFT→SUBMITTED) | **不存在** | 🔴 |
+| `confirm()` (DRAFT→CONFIRMED) | ✅ `ReceivableStateMachineServiceImpl.confirm()` | ✅ 一致（但跳过了 SUBMITTED） |
+| `reject()` (SUBMITTED→DRAFT) | **不存在** | 🔴 |
+| `generateVoucher()` (CONFIRMED→VOUCHERED) | **不存在** | 🔴 |
+| `markSettled()` (VOUCHERED→SETTLED) | ✅ `ReceivableServiceImpl.markSettled()` | ⚠️  Preconditions 不同：SPEC 要求 VOUCHERED，代码要求 CONFIRMED |
+| `onReconciliationUpdate()` | ✅ `ReceivableStateMachineServiceImpl.onReconciliationUpdate()` | ✅ 一致 |
+| `reverse()` | ✅ `ReceivableStateMachineServiceImpl.reverse()` | ✅ 一致 |
+| `cancel()` (DRAFT→CANCELLED) | **不存在** | 🔴 |
+
+### 4.2 当前实际实现
+
+**`ReceivableStateMachineService`**（3 个方法）：
+- `confirm()` — DRAFT → CONFIRMED（一步到位，跳过 SUBMITTED）
+- `onReconciliationUpdate()` — CONFIRMED/SETTLED → SETTLED（unsettledAmount=0 时）
+- `reverse()` — CONFIRMED/SETTLED → REVERSED
+
+**`ReceivableService`**（额外方法）：
+- `markSettled()` — CONFIRMED → SETTLED（要求 unsettledAmount=0）
+- `confirm()` — 与 StateMachineService 重复实现（DRAFT → CONFIRMED）
+
+**`PayableStateMachineService`** — 与 Receivable 对称，完全相同的方法集合。
+
+### 4.3 核销扣减时同步状态（已实现）
 
 ```java
-// ReceivableService.java (接口)
-
-/** 确认应收单（草稿→已确认） */
-void confirm(Long id, Long userId);
-
-/** 标记为已结清（unsettled_amount=0 时调用） */
-void markSettled(Long id, Long userId);
-
-/** 反核销/冲销（CONFIRMED/SETTLED→REVERSED） */
-void reverse(Long id, Long userId);
-
-/** 核销扣减金额时同步检查状态 */
-void onSettlementUpdate(Long id, BigDecimal settledAmount, Long userId);
+// ReceivableStateMachineServiceImpl.onReconciliationUpdate():
+String newStatus = unsettledAmount.compareTo(BigDecimal.ZERO) == 0
+        ? ArapStatus.SETTLED
+        : ArapStatus.CONFIRMED;
+entity.setStatus(newStatus);
 ```
 
-```java
-// ReceivableServiceImpl.java
+### 4.4 待 P34 完成的事项
 
-@Transactional
-public void confirm(Long id, Long userId) {
-    ReceivableEntity entity = getById(id);
-    if (!ArapStatus.isDraft(entity.getStatus())) {
-        throw new BusinessException("仅草稿状态的应收单可确认");
-    }
-    entity.setStatus(ArapStatus.CONFIRMED);
-    entity.setUpdatedBy(userId);
-    receivableMapper.updateById(entity);
-    log.info("应收单确认: id={}, userId={}", id, userId);
-}
-
-@Transactional
-public void markSettled(Long id, Long userId) {
-    ReceivableEntity entity = getById(id);
-    if (!ArapStatus.isConfirmed(entity.getStatus())) {
-        throw new BusinessException("仅已确认状态的应收单可标记结清");
-    }
-    if (entity.getUnsettledAmount().compareTo(BigDecimal.ZERO) != 0) {
-        throw new BusinessException("应收单未结清余额不为零, 不可标记结清");
-    }
-    entity.setStatus(ArapStatus.SETTLED);
-    entity.setUpdatedBy(userId);
-    receivableMapper.updateById(entity);
-    log.info("应收单结清: id={}, userId={}", id, userId);
-}
-
-@Transactional
-public void reverse(Long id, Long userId) {
-    ReceivableEntity entity = getById(id);
-    if (!ArapStatus.isReversible(entity.getStatus())) {
-        throw new BusinessException("仅已确认或已结清的应收单可冲销");
-    }
-    entity.setStatus(ArapStatus.REVERSED);
-    entity.setUpdatedBy(userId);
-    receivableMapper.updateById(entity);
-    log.info("应收单冲销: id={}, userId={}", id, userId);
-}
-```
-
-`PayableService` 实现完全对称，此处省略。
-
-### 4.2 核销扣减时同步状态
-
-在 `ReconciliationServiceImpl.execute()` 和 `reverse()` 中，更新 `ReceivableEntity` / `PayableEntity` 的 `settledAmount` / `unsettledAmount` **之后**，检查 `unsettledAmount`：
-
-```java
-// 在 receivableMapper.updateById(r) 之后:
-if (r.getUnsettledAmount().compareTo(BigDecimal.ZERO) == 0
-    && ArapStatus.isConfirmed(r.getStatus())) {
-    // unsettled 归零 → 自动标记 SETTLED
-    r.setStatus(ArapStatus.SETTLED);
-    receivableMapper.updateById(r);
-}
-```
-
-### 4.3 `ArapSettlementServiceImpl` 补全
-
-```java
+- [ ] 应收/应付状态机逻辑迁移到 `BusinessDocService`
+- [ ] `ArapSettlementServiceImpl` 统一操作 `BusinessDocEntity`（当前三写：Receivable+Payable+BusinessDoc）
+- [ ] 删除 `ReceivableEntity`/`PayableEntity` 及所有引用
+- [ ] 删除 `t_receivable`/`t_payable` 表（V71 migration）
 @Transactional
 public void generateVoucher(Long id, Long userId) {
     ArapSettlementEntity entity = getById(id);
@@ -390,57 +377,90 @@ if (entity.getStatus() == null) entity.setStatus(ArapStatus.DRAFT);
 contract_version: "1.0"
 spec_file: "P20-arap-state-machine-spec.md"
 spec_id: P20
-entity: ReceivableEntity,PayableEntity
-module: arap
-table: t_receivable,t_payable
-last_updated: "2026-06-30"
-implementation_status: implemented
+entity: ReceivableEntity,PayableEntity,BusinessDocEntity
+module: arap,finance
+table: t_receivable,t_payable,t_business_doc
+last_updated: "2026-07-01"
+implementation_status: partial
+deviation_score: 65%
+
+# P34 架构变更后，应收/应付状态机已部分迁移到 BusinessDocEntity
+# 当前代码中 ReceivableEntity/PayableEntity 仍被 16 个生产文件引用
+# 待 P34 完成后，应收/应付状态机将被 BusinessDoc 状态机取代
+# V68 migration 已为 t_business_doc 增加 settled/unsettled/due_date 字段
+
+deviations:
+  - "T-01/T-03 submit/reject: 未实现，confirm() 一步到位 DRAFT→CONFIRMED"
+  - "T-04 generateVoucher: 未实现，应收单不直接生成凭证"
+  - "T-05 markSettled precondition: 代码为 CONFIRMED，SPEC 为 VOUCHERED"
+  - "T-06 PARTIALLY_SETTLED: 未实现，代码保持 CONFIRMED"
+  - "T-08 cancel: 未实现，取消合并到 BusinessDocService"
+  - "reverse() 不创建新的反向应收单，仅修改自身状态为 REVERSED"
+
+business_doc_integration:
+  - "doc_type: INVOICE_OUT → 销售发票审核后创建，status=APPROVED"
+  - "doc_type: INVOICE_IN → 采购发票导入后创建，status=APPROVED"
+  - "BusinessDocEntity 有独立状态机: DRAFT/SUBMITTED/APPROVED/VOUCHERED/PARTIALLY_RECONCILED/FULLY_RECONCILED/CLOSED/REJECTED/REVERSED"
+  - "核销结算同时更新 ReceivableEntity/PayableEntity/BusinessDocEntity（三写）" 
 
 states:
   DRAFT:
     description: "草稿，待提交"
     initial: true
     terminal: false
+    note: "SPEC 定义，但当前代码中 Receivable/Payable 创建时直接 CONFIRMED，不走 DRAFT"
 
   SUBMITTED:
     description: "已提交，待审核"
     initial: false
     terminal: false
+    note: "⚠️ SPEC 定义但未实现。代码中 confirm() 直接从 DRAFT→CONFIRMED（一步）"
 
   CONFIRMED:
     description: "已审核通过"
     initial: false
     terminal: false
+    note: "✅ 当前实际初始状态。发票导入/流水生成的应收单直接 CONFIRMED"
 
   VOUCHERED:
     description: "已生成凭证"
     initial: false
     terminal: false
+    note: "⚠️ SPEC 定义但未实现。应收/应付不直接生成凭证，由凭证模块独立处理"
 
   SETTLED:
     description: "已核销"
     initial: false
     terminal: true
+    note: "✅ 通过 onReconciliationUpdate(markSettled) 实现，unsettledAmount=0 时自动标记"
 
   PARTIALLY_SETTLED:
     description: "部分核销"
     initial: false
     terminal: false
+    note: "⚠️ SPEC 定义但未实现。代码中 unsettledAmount>0 时保持 CONFIRMED，不切到 PARTIALLY_SETTLED"
 
   REJECTED:
     description: "已驳回"
     initial: false
     terminal: false
+    note: "⚠️ 常量存在但无 reject() 方法。应收单无驳回流程"
 
   CANCELLED:
     description: "已取消"
     initial: false
     terminal: true
+    note: "⚠️ 常量存在但无 cancel() 方法。取消操作合并到 BusinessDocService"
 
   REVERSED:
     description: "已红冲"
     initial: false
     terminal: true
+    note: "✅ 通过 reverse() 实现，需传入 reason 参数"
+
+# P34 架构变更后，应收/应付的状态机已部分迁移到 BusinessDocEntity：
+# BusinessDocEntity 状态: DRAFT/SUBMITTED/APPROVED/VOUCHERED/PARTIALLY_RECONCILED/FULLY_RECONCILED/CLOSED/REJECTED/REVERSED
+# INVOICE_OUT/INVOICE_IN 类型走 BusinessDoc 状态机，不走独立的 Receivable/Payable 状态机
 
 transitions:
   - id: T-01
@@ -451,6 +471,7 @@ transitions:
     postcondition: "status == SUBMITTED"
     side_effects: []
     test_ref: submit_positive
+    deviation: "❌ SPEC 定义但未实现。代码无 submit() 方法。"
 
   - id: T-02
     from: SUBMITTED
@@ -460,6 +481,7 @@ transitions:
     postcondition: "status == CONFIRMED; auditedBy = userId"
     side_effects: []
     test_ref: confirm_positive
+    deviation: "❌ 代码中 confirm() 从 DRAFT 直接到 CONFIRMED，跳过 SUBMITTED"
 
   - id: T-03
     from: SUBMITTED
@@ -469,6 +491,7 @@ transitions:
     postcondition: "status == DRAFT; reason recorded"
     side_effects: []
     test_ref: reject_positive
+    deviation: "❌ SPEC 定义但未实现。应收单无驳回流程。"
 
   - id: T-04
     from: CONFIRMED
@@ -481,6 +504,7 @@ transitions:
         action: create
         status: DRAFT
     test_ref: generateVoucher_positive
+    deviation: "❌ SPEC 定义但未实现。应收单不直接生成凭证，由凭证模块独立处理。"
 
   - id: T-05
     from: VOUCHERED
@@ -490,6 +514,7 @@ transitions:
     postcondition: "status == SETTLED"
     side_effects: []
     test_ref: markSettled_fully
+    deviation: "⚠️ 代码实现为 CONFIRMED→SETTLED，非 VOUCHERED→SETTLED"
 
   - id: T-06
     from: VOUCHERED
@@ -499,6 +524,7 @@ transitions:
     postcondition: "status == PARTIALLY_SETTLED"
     side_effects: []
     test_ref: onSettlementUpdate_partial
+    deviation: "❌ 代码中 unsettledAmount>0 时保持 CONFIRMED，不切到 PARTIALLY_SETTLED"
 
   - id: T-07
     from: CONFIRMED
@@ -511,6 +537,7 @@ transitions:
         action: create_reversed
         status: DRAFT
     test_ref: reverse_positive
+    deviation: "⚠️ 代码实现 CONFIRMED/SETTLED→REVERSED，不创建新的反向应收单"
 
   - id: T-08
     from: DRAFT
@@ -520,6 +547,47 @@ transitions:
     postcondition: "status == CANCELLED"
     side_effects: []
     test_ref: cancel_positive
+    deviation: "❌ SPEC 定义但未实现。取消操作合并到 BusinessDocService"
+
+  - id: T-09 (新)
+    from: DRAFT
+    to: CONFIRMED
+    trigger: confirm
+    precondition: "status == DRAFT"
+    postcondition: "status == CONFIRMED; auditedBy = userId; auditedAt = now()"
+    side_effects: []
+    test_ref: confirm_positive
+    deviation: "✅ 当前代码实际实现（一步到位）"
+
+  - id: T-10 (新)
+    from: CONFIRMED
+    to: SETTLED
+    trigger: markSettled/onReconciliationUpdate
+    precondition: "status == CONFIRMED && unsettledAmount == 0"
+    postcondition: "status == SETTLED"
+    side_effects: []
+    test_ref: markSettled_fully
+    deviation: "✅ 当前代码实际实现"
+
+  - id: T-11 (新)
+    from: CONFIRMED
+    to: REVERSED
+    trigger: reverse
+    precondition: "status == CONFIRMED || status == SETTLED"
+    postcondition: "status == REVERSED"
+    side_effects: []
+    test_ref: reverse_positive
+    deviation: "✅ 当前代码实际实现"
+
+  - id: T-12 (新)
+    from: CONFIRMED
+    to: CONFIRMED
+    trigger: onReconciliationUpdate
+    precondition: "status == CONFIRMED && unsettledAmount > 0"
+    postcondition: "status == CONFIRMED; settledAmount += delta; unsettledAmount -= delta"
+    side_effects: []
+    test_ref: reconciliation_update_partial
+    deviation: "✅ 当前代码实际实现（保持 CONFIRMED，不切 PARTIALLY_SETTLED）" 
 
 constraints:
   - id: C-01
@@ -542,43 +610,71 @@ acceptance_tests:
     description: "DRAFT → SUBMITTED"
     method: submit_positive
     assertion: "status == SUBMITTED"
-    status: covered
+    status: not_implemented
+    deviation: "SPEC 定义但未实现"
 
   - id: AT-002
     description: "SUBMITTED → CONFIRMED"
     method: confirm_positive
     assertion: "status == CONFIRMED"
-    status: covered
+    status: not_implemented
+    deviation: "代码从 DRAFT 直接到 CONFIRMED"
 
   - id: AT-003
     description: "SUBMITTED → DRAFT (驳回)"
     method: reject_positive
     assertion: "status == DRAFT; reason recorded"
-    status: covered
+    status: not_implemented
+    deviation: "应收单无驳回流程"
 
   - id: AT-004
     description: "CONFIRMED → VOUCHERED"
     method: generateVoucher_positive
     assertion: "status == VOUCHERED; voucherId recorded"
-    status: covered
+    status: not_implemented
+    deviation: "应收单不直接生成凭证"
 
   - id: AT-005
-    description: "VOUCHERED → SETTLED (全额)"
+    description: "CONFIRMED → SETTLED (全额)"
     method: markSettled_fully
-    assertion: "status == SETTLED"
+    assertion: "status == SETTLED; unsettledAmount == 0"
     status: covered
+    deviation: "代码实现为 CONFIRMED→SETTLED，非 VOUCHERED→SETTLED"
 
   - id: AT-006
-    description: "VOUCHERED → PARTIALLY_SETTLED (部分)"
-    method: onSettlementUpdate_partial
-    assertion: "status == PARTIALLY_SETTLED"
+    description: "CONFIRMED → CONFIRMED (部分核销)"
+    method: onReconciliationUpdate_partial
+    assertion: "status == CONFIRMED; settledAmount += delta; unsettledAmount -= delta"
     status: covered
+    deviation: "代码保持 CONFIRMED，不切到 PARTIALLY_SETTLED"
 
   - id: AT-007
     description: "终态不可再转换"
     method: transition_from_terminal_state_throws
     assertion: "BusinessException"
     status: covered
+    deviation: "REVERSED 为终态，不可再转换"
+
+  - id: AT-008 (新)
+    description: "CONFIRMED → REVERSED"
+    method: reverse_positive
+    assertion: "status == REVERSED"
+    status: covered
+    deviation: "✅ 当前代码实现"
+
+  - id: AT-009 (新)
+    description: "SETTLED → REVERSED"
+    method: reverse_from_settled
+    assertion: "status == REVERSED"
+    status: covered
+    deviation: "✅ 当前代码实现"
+
+  - id: AT-010 (新)
+    description: "REVERSED 不可再转换"
+    method: reverse_from_reversed_throws
+    assertion: "BusinessException"
+    status: covered
+    deviation: "✅ 当前代码实现" 
 
 out_of_scope:
   - "InputInvoiceEntity (采购发票，P21-b 已废弃)"

@@ -1,6 +1,21 @@
 ---
 ## 📌 Changelog (2026-06-30)
 
+### 🔴 Major Change — 2026-06-30 (P36 发票红冲级联)
+- **Change type**: scope expansion + business flow change
+- **Summary**: 补齐发票层红冲能力，实现"发票红冲 → 业务单红冲 → 应收单红冲 → 凭证红冲"全链路级联
+- **Trigger**: 发票层缺少主动红冲入口，审核/核销后的发票无法红冲
+- **Impact**: 销售发票状态机、业务单据红冲、应收单红冲、凭证红冲、V69 Migration
+- **Details**:
+  - 新增 `reverseInvoice` 接口：支持审核/核销后发票的红冲操作
+  - 红冲不自动改下游状态，而是提示需要红冲的下游对象（人审原则）
+  - 所有红冲产生的新单据/凭证均为 DRAFT，人工审核后生效
+  - 新增 `isReversible` 判断、`reversedFrom` 双向绑定
+  - DB migration V69 添加红冲溯源字段
+  - 前端SPEC文档：`docs/specs/P36-invoice-reverse-chain.md`（新建）
+- **Corresponding commits**: 9f7ae7b, 4df60c5, e0124d9
+## 📌 Changelog (2026-06-30)
+
 ### 🔴 Major Change — 2026-06-30
 - **Change type**: architecture reversal + scope change
 - **Summary**: P34 撤销 P33 简化方案，应收/应付单据恢复为业务单据体系（BusinessDocEntity）

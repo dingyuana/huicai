@@ -661,23 +661,47 @@ transitions:
     to: CONFIRMED
     trigger: confirm
     precondition: "status == PENDING_REVIEW"
-    postcondition: "status == CONFIRMED; auditedBy = userId"
+    postcondition: "status == CONFIRMED; auditedBy = userId; auditedAt = now()"
     side_effects:
+      - entity: OutputInvoiceEntity
+        action: update
+        fields:
+          status: CONFIRMED
+          audited_by: userId
+          audited_at: now()
       - entity: BusinessDocEntity
         action: create
-        status: DRAFT
-      - entity: ReceivableEntity
-        action: create
-        status: DRAFT
+        doc_type: INVOICE_OUT
+        status: APPROVED
+        fields:
+          doc_no: auto-generated
+          amount: totalAmount
+          unsettled_amount: totalAmount
+          settled_amount: 0
+          customer_id: customerId
+          summary: customerName
+          source: IMPORTED
+          invoice_no: invoiceNo
+          doc_id: (backfilled to invoice)
+          doc_no: (backfilled to invoice)
       - entity: VoucherEntity
         action: create
         status: DRAFT
+        fields:
+          voucher_no: auto-generated
+          period: period
+          summary: invoiceNo + "销售"
+          entries: [debit: AR/bank, credit: revenue]
     api_endpoint: "POST /api/v1/output-invoices/{id}/confirm"
     test_ref: confirm_positive_statusChanged
     negative_assertions:
       - assertion: "confirm() 不应直接将发票状态设为 VOUCHERED"
         method: confirm_should_not_directly_set_vouchered
         test_ref: confirm_should_not_directly_set_vouchered
+      - assertion: "confirm() 不应创建 ReceivableEntity (P34 已迁移到 BusinessDocEntity)"
+        method: confirm_should_not_create_receivable_entity
+        test_ref: confirm_should_not_create_receivable_entity
+    deviation: "P34 架构变更：不再创建 ReceivableEntity。旧 SPEC 描述的 ReceivableEntity 创建已废弃，改为创建 BusinessDocEntity(INVOICE_OUT) + 凭证。" 
 
   - id: T-03
     from: PENDING_REVIEW
@@ -883,7 +907,7 @@ out_of_scope:
 dependencies:
   - spec: P20
     entity: ReceivableEntity
-    relation: "confirm() 创建 ReceivableEntity (DRAFT)"
+    relation: "confirm() 创建 BusinessDocEntity(INVOICE_OUT) 和 VoucherEntity(DRAFT)，不再创建 ReceivableEntity (P34)"
   - spec: P22
     entity: VoucherEntity
     relation: "confirm() 创建 VoucherEntity (DRAFT)"
