@@ -1,324 +1,326 @@
 ---
 name: three-phase-loop
-description: 规划→开发→测试 三点式闭环。用户提交需求后自动执行 PLAN→BUILD→VERIFY 三阶段，每阶段有明确的检查点和输出物。
-version: 1.0.0
+description: >-
+  规划→开发→测试 三点式闭环。用户提交需求后自动执行 PLAN→BUILD→VERIFY
+  三阶段，每阶段有明确的检查点和输出物。V2.0 升级：微循环 + Contract-First
+  + 可执行断言 + 自动 Gate。
+version: 2.0.0
 author: Hermes
 trigger: 任何新需求、功能请求、修复请求
 ---
 
-# Three-Phase Loop Engineer
+# Three-Phase Loop Engineer v2.0
 
-## 核心规则
+## 核心变化（V1 → V2）
 
-**当用户提交一个新需求时，强制进入三阶段循环：**
-
-```
-提交需求
-  ↓
-① PLAN ── 写/完善 SPEC + 验收标准
-  ↓        确认：用户认可了吗？
-② BUILD ─ 按 SPEC 实现代码
-  ↓        确认：只做了 SPEC 约定的事吗？
-③ VERIFY ─ 正向+负向+跨实体验证
-  ↓        确认：验收标准全满足了吗？
-  ↓
-完成汇报 或 回到①
-```
-
-**每阶段结束必须等待用户确认才进入下一阶段。**
+| 维度 | V1（旧） | V2（新） |
+|------|---------|---------|
+| 循环粒度 | 整功能一次循环（小时级） | 微循环（5-15 分钟），每步可回退 |
+| 验证时机 | BUILD 完才 VERIFY | Contract-First：先写契约（测试/断言）再实现 |
+| SPEC 可执行 | Markdown 文档（人类读） | YAML 契约块（机器可验证） |
+| 自动化门禁 | 手动确认 | 内置 5 道 Gate + 可选 CI |
+| 容错 | 踩坑后手动修 | 每个循环前打 checkpoint，失败回滚 |
+| 并行度 | 串行 | 可并行：主循环 + 契约检查 agent |
 
 ---
 
-## ① PLAN 阶段
+## 微循环结构
+
+```
+                   ┌──────────────────────────────┐
+                   │  1 个微循环 = 1 个可验证断言  │
+                   │  （5-15 分钟）                │
+                   │                              │
+                   │  ① 写契约（测试/断言/SQL）   │
+                   │  ② 写刚好通过的实现          │
+                   │  ③ 验证 + Git checkpoint     │
+                   └──────┬───────────────────────┘
+                          │
+                  ┌───────┴───────┐
+                  │   通过？       │
+                  ├── YES ─→ 下一个微循环
+                  └── NO  ─→ git reset --hard + 缩小范围重试
+```
+
+### 契约（Contract）怎么写
+
+契约 = 一段可自动执行的代码/断言，定义了"这个微循环验证什么"。
+
+**契约三选一**（按优先级）：
+
+| 类型 | 适用范围 | 示例 |
+|------|---------|------|
+| **Contract Test** | Java 后端 | `assertEquals(30, doc.getStatus()); // 期望 DRAFT` |
+| **DB Query Assert** | 数据迁移/状态变更 | `SELECT status FROM t_business_doc WHERE id=X → DRAFT` |
+| **API Contract** | 端到端 | `POST /api/v1/business-docs/{id} → 200 + status=DRAFT` |
+
+**先写契约，再实现。** 契约通过了就说明这个微循环完成了。
+
+---
+
+## V2 全流程
+
+```
+用户提交需求
+  ↓
+① PLAN ── 拆成 N 个微循环 + 写 SPEC
+  ↓ 确认
+② BUILD ── 循环执行 [Contract → Implement → Verify → Commit]
+  ↓ 每个微循环 5-15 分钟
+③ VERIFY ── 全量回归 + 跨实体确认
+  ↓
+✅ 汇报 或 🔄 回到①
+```
+
+---
+
+## ① PLAN 阶段（宏观规划）
 
 ### 输出物
 
 1. `docs/specs/P{编号}-{功能名称}.md` — SPEC 文档
-2. 验收标准清单（≤8 条，在 SPEC 末尾）
+2. **任务拆解清单** — N 个微循环的列表，每个微循环后附 ONE LINE CONTRACT
 
-### SPEC 必须包含
+### SPEC 末尾必须加 YAML 契约块
 
-```markdown
-## 目标
-[一句话描述做什么]
-
-## 不做
-[明确排除什么]
-
-## 数据模型
-[Entity 变化 / 字段变化 / 迁移]
-
-## 核心逻辑
-[关键算法 / 状态转换 / 触发条件]
-
-## 验收标准
-- [ ] [验收条件1]
-- [ ] [验收条件2]
+```yaml
+---
+contracts:
+  - id: P34-M3-C1
+    description: 业务单据创建后状态为 DRAFT
+    type: unit_test
+    target: OutputInvoiceStateMachineServiceImplTest
+    assertion: doc.getStatus() == "DRAFT"
+  - id: P34-M3-C2
+    description: 凭证创建后关联 businessDocId
+    type: db_query
+    assertion: |
+      SELECT business_doc_id FROM t_voucher 
+      WHERE source_doc_id = :invoiceId → NOT NULL
+  - id: P34-M3-C3
+    description: 核销结算字段对齐
+    type: api
+    endpoint: GET /api/v1/business-docs/{id}
+    expected: data.settledAmount == 0
 ```
 
-### 检查点——验证 SPEC 完整性
-
-| 检查项 | 说明 |
-|--------|------|
-| 问题定义 | 为什么做这件事？ |
-| 范围边界 | 明确哪些不做 |
-| 数据变更 | Entity/DB 改动清单 |
-| API 变更 | 端点签名 |
-| 验收标准 | 可客观验证的条件 |
-| 测试策略 | 正向+负向+跨实体 |
-| 状态原则 | 自动创建的单据是否只能到 DRAFT？ |
-
-### ⚠️ PLAN Pitfall：不要替用户决定删功能
-
-当用户报告一个 bug（如"业务单据状态不对"）时，**只改用户说了有问题的部分**，不要衍生出"既然改了这里顺便重构流程"。
-
-正确做法：
-- 用户说"状态不对" → 改状态值 ✅
-- 用户没说"去掉凭证自动生成" → ❌ 不要提议去掉
-
-先列最小改动方案，等用户确认后再看是否还有延伸需求。
-
-### 向用户确认
+### 任务拆解模板
 
 ```
-**① PLAN 完成。** SPEC 已写入 docs/specs/，验收标准：
-1. [条件1]
-2. [条件2]
+SPEC P34-M3：
+├── 微循环 1：改 createBusinessDocFromInvoice status → DRAFT
+│   └─ 契约：doc.getStatus() == "DRAFT"
+├── 微循环 2：改 generateVoucherFromInvoiceDirect 写 voucherId
+│   └─ 契约：voucher.businessDocId == doc.id
+├── 微循环 3：populateVoucherNos 兜底
+│   └─ 契约：VO.voucherNo == inv.voucherNo
+└── 微循环 4：时间格式 yyyy-MM-dd HH:mm
+    └─ 契约：response.createdAt 不含 "T" 无秒
+```
 
-请确认是否按此方案进行 → 进入② BUILD。
+**每个微循环 ≤ 30 分钟。如果一个微循环预估超过 30 分钟 → 拆。**
+
+### 检查点
+
+```
+- [ ] 微循环清单 ≤ 8 个（超过说明粒度太粗）
+- [ ] 每个微循环有明确契约（人工可解释、机器可运行）
+- [ ] YAML 契约块已追加到 SPEC 末尾
+- [ ] 状态原则确认：自动创建的单据只能到 DRAFT
 ```
 
 ---
 
-## ② BUILD 阶段
+## ② BUILD 阶段（微循环主体）
 
-### 铁律
-
-1. **只改动 SPEC 约定的文件** — 不移除无关代码、不改格式、不重构
-2. **每次都跑编译验证** — `mvn compile -q` 或等效
-3. **只改 SPEC 范围的代码** — 超出范围先改 SPEC 再改代码
-
-### 检查点——commit 前核实
-
-```bash
-git diff --stat HEAD              # 改了什么
-# 每个文件问：这能对到 SPEC 的某一条吗？
-```
-
-### 向用户确认
+每个微循环固定 5 步：**Contract → Implement → Verify → Gate → Commit**
 
 ```
-**② BUILD 完成。** 改动清单：
-- [文件1]: [改动说明]
-- [文件2]: [改动说明]
+========================================
+微循环 N：{契约描述}
+========================================
 
-编译验证通过。
+┌─────────┐
+│ Step 1  │ 写契约
+│         │ 先在测试文件里写失败断言
+│         │ 或者写 DB Query / API Contract 文件
+│         │ 执行一次 → 确认它是红的（Contract Red）
+└─────────┘
+     ↓
+┌─────────┐
+│ Step 2  │ 写实现
+│         │ 刚好通过契约的最小代码
+│         │ 只改 SPEC 约定的文件
+│         │ 不改无关代码
+└─────────┘
+     ↓
+┌─────────┐
+│ Step 3  │ 验证
+│         │ mvn test -Dtest="XxxTest"
+│         │ 或者在 DB / API 上验证契约
+│         │ 契约变绿（Contract Green）
+└─────────┘
+     ↓
+┌─────────┐
+│ Step 4  │ Gate 检查
+│         │ □ 只改了 SPEC 约定的文件
+│         │ □ 编译无错误
+│         │ □ 契约通过
+│         │ □ 没有多余的代码
+│         │ □ 测试覆盖率没降
+│         │
+│         │ 任意一项 FAIL → 缩小重试或暂停
+└─────────┘
+     ↓
+┌─────────┐
+│ Step 5  │ Git Commit
+│         │ git add + git commit -m "P34-M3-C1: ..."
+│         │ 每个微循环单独提交
+│         │ 失败时 git reset --hard HEAD~1 回滚
+└─────────┘
+     ↓
+   进入下一个微循环
 ```
+
+### 契约红 → 绿的生命周期
+
+```
+Step 1: 写契约          → 执行 → RED    （确认测试是有效的）
+Step 2: 写实现          → (编译)         （刚够通过）
+Step 3: 验证            → 执行 → GREEN  （契约通过）
+                       ↓
+              如果依然是 RED：
+              → 契约太严格？检查契约定义
+              → 代码写错了？缩小范围重试
+              → 理解错了？回 PLAN 阶段修正 SPEC
+```
+
+### 🔴 Pitfall：不要一次编太多代码
+
+**坏习惯**：
+```java
+// 一次改了 5 个方法，然后 mvn test → 3 个失败
+// 不知道哪个方法导致的
+```
+
+**好习惯**：
+```
+微循环 1: 只改 createBusinessDocFromInvoice.status → DRAFT
+微循环 2: 只改 generateVoucherFromInvoiceDirect 写 voucherId
+...
+```
+
+每步可回退。多步混在一起就回退不了了。
 
 ---
 
-## ③ VERIFY 阶段
+## ③ VERIFY 阶段（最终验收）
 
 ### 必须跑的三层验证
 
 | 层 | 内容 | 命令 |
 |----|------|------|
-| 正向 | SPEC 约定的 full path 能走通 | `mvn test -Dtest=...` |
-| 负向 | 不该做的确实被拒绝 | 状态拒绝 / 错误码 |
-| 跨实体 | 关联数据一致 | 查 DB / VO 字段 |
+| 回归 | 全量测试，确认无破坏 | `mvn test` |
+| 契约 | SPEC 中所有 YAML contracts 逐条执行 | `run-contracts.py docs/specs/P34.md` |
+| 跨实体 | DB 级别链路段 | 查发票→业务单据→凭证 |
 
-### 正向测试
-
-```bash
-# 1. 跑受影响的测试类
-mvn test -Dtest="XxxServiceImplTest"
-# 期望: Tests run: N, Failures: 0, Errors: 0
-
-# 2. 跑全量测试（确认无回归）
-mvn test
-# 期望: Failures: 0（Errors 保持基线）
-```
-
-### 负向测试要求
-
-每个状态机方法必须有至少一个负向断言：
-- 非法状态 → BusinessException
-- 重复操作 → BusinessException
-- 缺少参数 → BusinessException
-
-### 跨实体验证（DB 级别）
-
-对于发票→业务单据→凭证的关联：
-
-```sql
--- 1. 发票 → 业务单据：docId/docNo/voucherId/voucherNo 正确填写
-SELECT doc_id, doc_no, voucher_id, voucher_no FROM t_output_invoice WHERE id = ?
-
--- 2. 业务单据 → 凭证：voucherId/voucherNo + status=DRAFT
-SELECT voucher_id, voucher_no, status FROM t_business_doc WHERE invoice_no = ?
-
--- 3. 凭证 → 发票/业务单据：sourceDocId + businessDocId 正确
-SELECT source_doc_id, source_doc_type, business_doc_id FROM t_voucher WHERE id = ?
-```
-
-### 🔴 VERIFY Pitfall：Flyway 迁移未应用的"透明"陷阱
-
-当 BUILD 阶段提交了新的 Flyway 迁移文件（`V${n}__*.sql`），但在应用中验证时发现 DB 没有变化：
-
-**根因**：迁移文件 commit 后**不会被自动执行**。应用（特别是 Docker 部署的）必须重新构建 + 重启，Flyway 才能在启动时运行新迁移。
-
-**验证方法**（BUILD 阶段完成后必须执行）：
-
-```bash
-# 1. 确认迁移在 git 中
-git diff --stat HEAD 或 git log --oneline -3
-
-# 2. 确认应用已重启（Docker 环境）
-docker ps --filter name=huicai-backend --format '{{.Status}}'
-
-# 3. 确认迁移已应用
-psql -h localhost -U huicai -d huicai -c "
-SELECT version, description, success FROM flyway_schema_history ORDER BY version DESC LIMIT 5;"
-# 最新版本应 >= 刚才提交的 V{n}
-
-# 4. 确认字段存在
-psql -h localhost -U huicai -d huicai -c "
-SELECT column_name FROM information_schema.columns
-WHERE table_name='t_business_doc' AND column_name IN ('invoice_id','reversed_from');"
-```
-
-**修复**：如果迁移未应用 → 重建 Docker 镜像 + 重启容器：
-```bash
-docker build -t huicai_backend ./backend
-docker rm -f huicai-backend
-docker run -d --name huicai-backend --network huicai_huicai-net -p 8000:8000 \
-  -e SPRING_DATASOURCE_URL=jdbc:postgresql://postgres16:5432/huicai \
-  ... 其他环境变量 ... \
-  huicai_backend:latest
-```
-
-如果 Flyway 迁移失败（SQL 错误）：
-1. 修复 migration SQL 文件
-2. `psql -c "DELETE FROM flyway_schema_history WHERE version='{n}';"` 删除失败记录
-3. 重建镜像 + 重启容器
-
-### 向用户汇报
+### VERIFY Gate
 
 ```
-**③ VERIFY 完成。**
+- [ ] 全量测试通过（Failures=0）
+- [ ] 所有 YAML contracts 执行通过
+- [ ] 发票→业务单据→凭证 DB 链路完整
+- [ ] 无 CircularReference / 配置冲突
+- [ ] 迁移已应用（如果涉及 Flyway）
+```
 
-| 项目 | 结果 |
-|------|------|
-| 正向测试 | N/0/0 |
-| 全量测试 | N/0/E |
-| 跨实体验证 | ✅ 发票→业务单据→凭证 链路完整 |
+### 旧数据修复检查
 
-**验收标准达成情况：**
-- [条件1] ✅
-- [条件2] ✅
+如果涉及旧数据兼容：
+
+```
+- [ ] 新建数据：走新代码路径 → 关联完整
+- [ ] 旧数据：兜底策略有效 → VO 层显示正确
+- [ ] 如果旧数据丢失 → rebuild SQL 已执行
 ```
 
 ---
 
-## 完整循环示例
+## VERIFY Pitfalls（V2 新增）
 
-用户：发票审核后要同时创建业务单据和凭证
+### 🔴 Contract-First 陷阱：契约写得太复杂
 
 ```
-① PLAN:
-   写 SPEC → 确认验收标准 → 用户确认
-   ↓
-② BUILD:
-   改 OutputInvoiceStateMachineServiceImpl.confirm() → 编译通过 → 用户确认
-   ↓
-③ VERIFY:
-   跑 mvn test → 查 DB 链路段 → 汇报
-   ↓
-   ✅ 完成 或 🔄 回到①修 SPEC
+❌ 坏契约：
+  UUID 生成规则 + 状态机 5 步 + 3 个表 JOIN
+
+✅ 好契约：
+  SELECT status FROM t_business_doc WHERE id = X → "DRAFT"
 ```
 
-### 🔴 VERIFY Pitfall：旧数据 voucher_id 为 NULL 时的兜底策略
+**规则**：每个契约只能验证一件事。如果一个契约需要 3 次 DB 查询 → 拆成 3 个微循环。
 
-当发票的 `voucher_id` 是 NULL（旧数据，`markVouchered` 在 V72 之前执行），但 `voucher_no` 有值时：
+### 🔴 灰烬陷阱：回滚失败后修复方向错误
 
-**根因**：V72 migration 之前生成的凭证，`voucher_id` 列不存在。后来加了该列但旧数据未回填。
-
-**修复策略**：
-1. **后端 VO 层兜底**：`populateVoucherNos()` 中增加 fallback — 如果 `voucherId` 为空但 `invoiceId` 有值，从发票表查 `voucherNo`，再通过 `voucherNo` 反向查 `t_voucher` 获取 `status`
-2. **前端判断**：用 `!doc?.voucherNo` 而不是 `!doc?.voucherId` 判断是否显示"生成凭证"按钮
-3. **旧数据重建**：如果业务单据表被清空（如 V74 DROP TABLE 误删），从发票表 `doc_id` 字段反向重建
-
-**关键代码模式**：
-```java
-// BusinessDocServiceImpl.populateVoucherNos() 兜底逻辑
-if (vo.getVoucherId() == null && vo.getInvoiceId() != null) {
-    OutputInvoiceEntity inv = outputInvoiceMapper.selectById(vo.getInvoiceId());
-    if (inv != null && inv.getVoucherNo() != null) {
-        vo.setVoucherNo(inv.getVoucherNo());
-        // 通过 voucherNo 反向查 voucher 表获取 status
-        VoucherEntity v = voucherMapper.selectOne(
-            new LambdaQueryWrapper<VoucherEntity>()
-                .eq(VoucherEntity::getVoucherNo, inv.getVoucherNo())
-                .last("LIMIT 1"));
-        if (v != null) vo.setVoucherStatus(v.getStatus());
-    }
-}
+```
+微循环 N 失败 → git reset --hard HEAD~1
+               ↓
+        重新理解契约
+               ↓
+        是代码错了 → 缩小范围重试
+        是契约错了 → 先改契约再重试
 ```
 
-### 🔴 VERIFY Pitfall：Docker 部署时 Controller 路径不匹配
+**关键**：不要原地重试。失败后的第一件事是**缩小范围**，不是"再试一次一样的"。
 
-前端 axios baseURL 是 `/api/v1`，API 调用路径是 `/business-docs/page`，最终请求 `POST /api/v1/business-docs/page`。
+### 🔴 循环膨胀中毒
 
-**常见错误**：
-- 手动 curl 测试时用了 `/api/v1/finance/business-docs/page`（多了 `/finance`）→ 404/500
-- Controller `@RequestMapping("/api/v1/business-docs")`，不是 `"/api/v1/finance/business-docs"`
-- 前端 `src/api/modules/businessDoc.ts` 中的路径必须与 Controller 的 `@RequestMapping` 一致
-
-**验证方法**：
-```bash
-# 正确路径
-curl -X POST 'http://localhost:8000/api/v1/business-docs/page' \
-  -H 'Authorization: Bearer TOKEN' \
-  -H 'Content-Type: application/json' \
-  -d '{"current":1,"size":10}'
+```
+每轮循环都往里加"顺便修一下..."的代码
+→ 循环永远不结束
 ```
 
-### 🔴 VERIFY Pitfall：业务单据数据丢失时的重建
+**解法**：每个微循环只能改 1 个契约对应的文件。用户的"顺便"需求 → 写到"待办"中，下次再来。
 
-当 `t_business_doc` 表为空但发票表有 `doc_id` 和 `doc_no` 时：
+---
 
-```sql
--- 从发票表反向重建业务单据
-INSERT INTO t_business_doc (
-    doc_no, doc_type, doc_date, period, amount, status,
-    customer_id, summary, source, voucher_id, voucher_no,
-    invoice_no, invoice_id, created_by, created_at,
-    settled_amount, unsettled_amount
-)
-SELECT 
-    inv.doc_no, 'INVOICE_OUT', inv.invoice_date, inv.period,
-    inv.total_amount,
-    CASE WHEN inv.voucher_id IS NOT NULL THEN 'VOUCHERED' ELSE 'DRAFT' END,
-    inv.customer_id,
-    COALESCE(inv.customer_name, '未知客户') || '-' || COALESCE(inv.invoice_no, ''),
-    'INVOICE', inv.voucher_id, inv.voucher_no,
-    inv.invoice_no, inv.id, inv.created_by, inv.created_at,
-    0, inv.total_amount
-FROM t_output_invoice inv
-WHERE inv.doc_id IS NOT NULL
-  AND NOT EXISTS (SELECT 1 FROM t_business_doc bd WHERE bd.doc_no = inv.doc_no);
+## 可选升级：CI Contract Runner
+
+在项目根目录加 `.github/workflows/contracts.yml`：
+
+```yaml
+name: Contract Verification
+on: pull_request
+jobs:
+  contracts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate SPEC contracts
+        run: python scripts/validate-contracts.py docs/specs/
 ```
 
-## 循环入口
+配套脚本 `scripts/validate-contracts.py` 读取 SPEC 末尾的 YAML 块，逐条断言执行。
 
-当检测到用户需求时（新功能、bug 修复、重构），自动进入此循环：
+---
 
-```python
-def on_new_requirement(req):
-    # 1. 判断是否是 SPEC 变更
-    if requires_planning(req):
-        enter_phase_1_plan(req)
-    else:
-        # 简单 bugfix（≤5 行、单文件、无架构影响）：直接走②→③
-        enter_phase_2_build(req)
+## 使用示例（基于本轮实战）
+
+```
+老丁：FPS2025120008 业务单据状态不对，凭证号未生成
+  ↓
+① PLAN：3 个微循环
+  ├─ MC1: status APPROVED → DRAFT（契约: doc.status == "DRAFT"）
+  ├─ MC2: voucherNo 兜底显示（契约: VO.voucherNo == inv.voucherNo）
+  └─ MC3: 时间格式去秒（契约: createdAt 不含 "T" 无秒）
+  ↓
+② BUILD：
+  微循环 1: 写 testRed → 实现 → verifyGreen → commit ✅
+  微循环 2: 写 testRed → 实现 → verifyGreen → commit ✅
+  微循环 3: 写 testRed → 实现 → verifyGreen → commit ✅
+  ↓
+③ VERIFY：
+  mvn test   → 全量 42/42 ✅
+  DB 链路    → 发票→业务单据→凭证 ✅
+  旧数据修复 → invoiceId 回填 ✅
 ```
