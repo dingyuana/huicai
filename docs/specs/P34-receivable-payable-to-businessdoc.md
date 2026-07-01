@@ -963,4 +963,90 @@ ALTER TABLE t_reconciliation_log DROP COLUMN target_business_doc_id;
 | `frontend/src/views/finance/business-doc/BusinessDocDetail.vue` | 修改：放开凭证生成 |
 | `frontend/src/views/arap/receivable/ReceivableList.vue` | 修改：改为业务单据视图 |
 | `frontend/src/api/modules/businessDoc.ts` | 修改：扩展 DOC_STATUS_LABELS |
-| `frontend/src/router/routes/base.ts` | 修改：可选移除独立应收路由 |
+|| `frontend/src/router/routes/base.ts` | 修改：可选移除独立应收路由 |
+|
+|---
+|
+|# === MACHINE-READABLE CONTRACT ===
+|
+|contract_version: "1.0"
+|
+|entity: BusinessDocEntity
+|module: finance
+|table: t_business_doc
+|
+|acronym: P34
+|
+|contracts:
+|  - id: P34-C1
+|    description: "发票审核后创建 INVOICE_OUT 业务单据，状态 DRAFT"
+|    type: unit_test
+|    target: OutputInvoiceStateMachineServiceImplTest.testConfirmCreatesBusinessDoc
+|    assertion: >
+|      confirm() → BusinessDocEntity(invoice_id=X, doc_type=INVOICE_OUT, status=DRAFT) created
+|
+|  - id: P34-C2
+|    description: "核销结算更新 BusinessDocEntity 的 settledAmount/unsettledAmount"
+|    type: db_query
+|    assertion: |
+|      SELECT settled_amount, unsettled_amount FROM t_business_doc
+|      WHERE id = :docId → settled_amount == :settleAmount
+|
+|  - id: P34-C3
+|    description: "未核销金额归零后状态自动变为 FULLY_RECONCILED"
+|    type: unit_test
+|    target: BusinessDocServiceImplTest.testUnsettledZeroChangesToFullyReconciled
+|    assertion: "updateSettlement(docId, amount=total) → status == FULLY_RECONCILED"
+|
+|  - id: P34-C4
+|    description: "V73 迁移后 t_receivable 数据完整迁移到 t_business_doc"
+|    type: db_query
+|    assertion: |
+|      SELECT COUNT(*) FROM t_business_doc WHERE doc_type='INVOICE_OUT' AND source='IMPORTED'
+|      -- 期望: >= 0 (若无可迁移数据也正常)
+|
+|  - id: P34-C5
+|    description: "核销推荐基于业务单据而非 receivable/payable"
+|    type: code_review
+|    target: ReconciliationServiceImpl.recommend
+|    assertion: "推荐查询使用 businessDocMapper，不含 ReceivableMapper/PayableMapper"
+|
+|acceptance_tests:
+|  - id: AT-P34-1
+|    description: "销售发票审核后创建 INVOICE_OUT 业务单据"
+|    method: testConfirmCreatesBusinessDoc
+|    status: covered
+|  - id: AT-P34-2
+|    description: "业务单据列表展示 INVOICE_OUT 类型"
+|    method: testBusinessDocListShowsInvoiceOut
+|    status: covered
+|  - id: AT-P34-3
+|    description: "核销确认后更新 settledAmount"
+|    method: testSettlementUpdatesBusinessDoc
+|    status: covered
+|
+|constraints:
+|  - id: C-P34-1
+|    type: data_integrity
+|    rule: "INVOICE_OUT 业务单据的 invoice_id 必须关联 t_output_invoice 的有效记录"
+|    enforcement: "外键约束 + 代码层 NOT NULL 检查"
+|  - id: C-P34-2
+|    type: concurrency
+|    rule: "核销并发更新业务单据时不丢失数据"
+|    enforcement: "乐观锁（version 字段）"
+|  - id: C-P34-3
+|    type: business
+|    rule: "V74 DROP TABLE 前必须确认数据迁移完成"
+|    enforcement: "行数一致性检查 SQL（见 VERIFY Pitfall）"
+|
+|dependencies:
+|  - spec: P36
+|    relation: "P36 红冲级联到 INVOICE_OUT 业务单据"
+|  - spec: P22
+|    relation: "INVOICE_OUT 生成的凭证遵循 P22 状态机"
+|  - spec: P30
+|    relation: "核销工作台基于业务单据列表"
+|
+|out_of_scope:
+|  - "P33 简化方案（已废弃，由 P34 替代）"
+|  - "ReceivableEntity/PayableEntity（V74 已删除）"

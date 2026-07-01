@@ -163,3 +163,109 @@ Long reverseInvoice(Long invoiceId, Long userId, String reason);
 - 进项发票红冲（P37 或后续迭代）
 - 红冲后自动调整纳税申报（P37 或后续迭代）
 - 批量红冲（P37 或后续迭代）
+
+---
+
+# === MACHINE-READABLE CONTRACT ===
+
+contract_version: "1.0"
+
+entity: OutputInvoiceEntity
+module: tax
+table: t_output_invoice / t_business_doc / t_voucher
+
+acronym: P36
+
+contracts:
+  - id: P36-C1
+    description: "销售发票 reverseInvoice 接口创建红字发票"
+    type: unit_test
+    target: OutputInvoiceStateMachineServiceImplTest.testReverseInvoiceCreatesRedInvoice
+    assertion: "reverseInvoice(id) → 红字发票(amount < 0, originalInvoiceNo=原发票号) 创建"
+
+  - id: P36-C2
+    description: "发票红冲级联创建红字业务单据"
+    type: db_query
+    assertion: |
+      SELECT r.id, r.doc_no, r.amount, r.status, r.reversed_from
+      FROM t_business_doc r
+      JOIN t_business_doc b ON b.id = r.reversed_from
+      WHERE b.doc_type = 'INVOICE_OUT' AND b.invoice_id = :invoiceId
+      → r.amount = -b.amount AND r.status = 'DRAFT'
+
+  - id: P36-C3
+    description: "发票红冲级联创建红字凭证"
+    type: db_query
+    assertion: |
+      SELECT v.id, v.voucher_no, v.status, v.reversed_from
+      FROM t_voucher v
+      WHERE v.reversed_from = (
+        SELECT v2.id FROM t_voucher v2
+        JOIN t_business_doc b ON b.voucher_id = v2.id
+        WHERE b.invoice_id = :invoiceId
+      )
+      → v.status = 'DRAFT'
+
+  - id: P36-C4
+    description: "红冲操作不改变原发票状态（级联而非自动）"
+    type: unit_test
+    target: OutputInvoiceStateMachineServiceImplTest.testReverseDoesNotChangeOriginalStatus
+    assertion: "reverseInvoice(id) → 原发票 status 不变（保持原值）"
+
+  - id: P36-C5
+    description: "红冲产生的所有单据/凭证均为 DRAFT"
+    type: db_query
+    assertion: |
+      SELECT status FROM t_business_doc WHERE reversed_from IS NOT NULL
+      UNION
+      SELECT status FROM t_voucher WHERE reversed_from IS NOT NULL
+      → 全部为 'DRAFT'
+
+acceptance_tests:
+  - id: AT-P36-1
+    description: "CONFIRMED 状态发票可红冲"
+    method: testReverseConfirmedInvoice
+    status: covered
+  - id: AT-P36-2
+    description: "VOUCHERED 状态发票可红冲"
+    method: testReverseVoucheredInvoice
+    status: covered
+  - id: AT-P36-3
+    description: "PENDING_CONFIRM 状态发票不可红冲"
+    method: testReversePendingConfirmFails
+    status: covered
+  - id: AT-P36-4
+    description: "红冲后原发票不可再次红冲"
+    method: testReverseAlreadyReversedFails
+    status: covered
+  - id: AT-P36-5
+    description: "红冲凭证的 reversedFrom 指向原凭证"
+    method: testReverseVoucherHasReversedFrom
+    status: covered
+
+constraints:
+  - id: C-P36-1
+    type: business
+    rule: "红冲产生的新单据/凭证均为 DRAFT，人工审核后生效"
+    enforcement: "代码层强制 DRAFT"
+  - id: C-P36-2
+    type: audit
+    rule: "红冲操作必须记录审计日志（操作人、时间、原因）"
+    enforcement: "AOP 审计日志"
+  - id: C-P36-3
+    type: concurreny
+    rule: "同一发票不可被多次红冲"
+    enforcement: "乐观锁 + 状态机前置检查"
+
+dependencies:
+  - spec: P34
+    relation: "红冲的业务单据（INVOICE_OUT/DRAFT）遵循 P34 的业务单据架构"
+  - spec: P22
+    relation: "红冲凭证的状态机遵循 P22 定义"
+  - spec: P24
+    relation: "审计日志记录覆盖红冲操作"
+
+out_of_scope:
+  - "进项发票红冲（P37 或后续迭代）"
+  - "红冲后自动调整纳税申报（P37 或后续迭代）"
+  - "批量红冲（P37 或后续迭代）"
