@@ -30,4 +30,5 @@ jobs:
           python scripts/validate_spec_contract.py \
             --dir docs/specs/ \
             --check-implementation \
-            --check-tests
+            --check-tests \
+            --project-root "${{ github.workspace }}"
