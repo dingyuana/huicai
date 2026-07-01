@@ -43,6 +43,8 @@ import com.huicai.module.arap.mapper.CustomerMapper;
 import com.huicai.module.arap.mapper.VendorMapper;
 import com.huicai.module.system.entity.UserEntity;
 import com.huicai.module.system.mapper.UserMapper;
+import com.huicai.module.tax.entity.OutputInvoiceEntity;
+import com.huicai.module.tax.mapper.OutputInvoiceMapper;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.Collections;
@@ -649,6 +651,36 @@ public class BusinessDocServiceImpl implements BusinessDocService {
                 if (v != null) {
                     vo.setVoucherNo(v.getVoucherNo());
                     vo.setVoucherStatus(v.getStatus());  // P2: 关联凭证状态
+                }
+            }
+        }
+
+        // 兜底：voucherId 为空但 invoiceId 有值的业务单据，从发票表查 voucherId/voucherNo 回填
+        for (BusinessDocVO vo : vos) {
+            if (vo.getVoucherId() == null && vo.getInvoiceId() != null) {
+                OutputInvoiceEntity inv = outputInvoiceMapper.selectById(vo.getInvoiceId());
+                if (inv != null && inv.getVoucherNo() != null) {
+                    vo.setVoucherNo(inv.getVoucherNo());
+                    // 如果 voucherId 也是 null，尝试从 voucher 表反向查找
+                    if (inv.getVoucherId() != null) {
+                        vo.setVoucherId(inv.getVoucherId());
+                    }
+                    // P2: 关联凭证状态
+                    if (inv.getVoucherId() != null) {
+                        VoucherEntity v = voucherMapper.selectById(inv.getVoucherId());
+                        if (v != null) {
+                            vo.setVoucherStatus(v.getStatus());
+                        }
+                    } else {
+                        // 兜底：通过 voucherNo 查找
+                        VoucherEntity v = voucherMapper.selectOne(
+                            new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<VoucherEntity>()
+                                .eq(VoucherEntity::getVoucherNo, inv.getVoucherNo())
+                                .last("LIMIT 1"));
+                        if (v != null) {
+                            vo.setVoucherStatus(v.getStatus());
+                        }
+                    }
                 }
             }
         }

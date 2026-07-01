@@ -31,6 +31,7 @@ public class BusinessDocVO {
     private Long voucherId;
     private String voucherNo;
     private String invoiceNo;
+    private Long invoiceId;
     private BigDecimal settledAmount;
     private BigDecimal unsettledAmount;
     private LocalDate dueDate;
@@ -84,6 +85,7 @@ public class BusinessDocVO {
         vo.setVoucherId(e.getVoucherId());
         vo.setVoucherNo(e.getVoucherNo());
         vo.setInvoiceNo(e.getInvoiceNo());
+        vo.setInvoiceId(e.getInvoiceId());
         // P34: 结算字段直接来自业务单据实体
         vo.setSettledAmount(e.getSettledAmount());
         vo.setUnsettledAmount(e.getUnsettledAmount());

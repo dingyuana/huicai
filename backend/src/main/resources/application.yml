@@ -41,6 +41,9 @@ spring:
     date-format: yyyy-MM-dd HH:mm
     time-zone: GMT+8
 
+  main:
+    allow-circular-references: true
+
   rabbitmq:
     host: localhost
     port: 5672
