@@ -1,10 +1,11 @@
-# P20 SPEC — AR/AP 状态机实现规格书
+# P20 SPEC — AR/AP 状态机实现规格书（待废弃）
 
-> 状态：**已修订（P34 架构变更）** | 优先级：高（P20）
-> 依据：docs/design/P20-arap-state-machine-design.md + P34 架构整合
-> 目标：应收/应付状态机已部分落地（ReceivableStateMachineService/PayableStateMachineService），
-> 但核心流程已迁移至业务单据体系（P34），应收/应付独立实体逐步合并到 BusinessDocEntity。
-> **注意**：本 SPEC 定义的状态机（9 状态）与当前代码（3 方法）存在显著偏差，详见下方 §1 偏差说明。
+> 状态：**待废弃（等待 P34 M4 完成后删除）** | 优先级：低
+> 依据：docs/design/P20-arap-state-machine-design.md
+> **2026-07-01 标注**：P34 架构已决定将应收/应付合并到业务单据体系，
+> ReceivableEntity/PayableEntity 将在 P34 M4（V72）阶段删除。
+> 本 SPEC 仅在 P34 完全实施前作为历史参考，不再维护。
+> 核心流程已迁移到 P34 SPEC 和 BusinessDocEntity。
 
 ---
 

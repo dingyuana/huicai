@@ -14,17 +14,6 @@
 > - 保留 `rejected_reason`（驳回原因，便于审计）
 >
 > **2026-07-01 P22 偏差说明**（审计发现）：
-> - `VoucherStateMachineService` 接口仅包含 assert 方法（状态检查），不含状态机方法
-> - 实际状态机方法（submit/audit/post/unpost/reverse/reject）在 `VoucherServiceImpl` 中实现
-> - SPEC §4.1 将方法定义在 `VoucherStateMachineService` 接口是错误的
-> - `VoucherStateMachineServiceImpl` 仅有 4 个 assert 方法，无状态变更逻辑
-> - 状态变更逻辑在 `VoucherServiceImpl` 中，通过调用 `VoucherStateMachineService.assertXxx()` 做前置校验
-> - `unpost()` 在 `VoucherServiceImpl` 中存在，SPEC §4.1 声明了但未在 VoucherStateMachineService 中实现（正确做法是在 VoucherServiceImpl）
-> - V41 → V47（V41-V44 + V46 已被占用）
-> - 删 `reversed_voucher_id`（用现 `reversedFrom` 字段）
-> - 删 `reversal_pair_id`（业务无需求，代码无引用）
-> - 加 `reverse_reason`（红冲原因，便于审计）
-> - 保留 `rejected_reason`（驳回原因）
 
 ---
 

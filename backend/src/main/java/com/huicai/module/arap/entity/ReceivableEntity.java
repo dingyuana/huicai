@@ -59,7 +59,7 @@ public class ReceivableEntity {
     @StatusChangeable(entity = "RECEIVABLE", fieldName = "status")
     private String status;
 
-    /** 被红冲应收单ID (P36 新增) */
+    /** 被红冲业务单据ID (P36 新增) */
     private Long reversedFrom;
 
     @TableField(fill = FieldFill.INSERT)

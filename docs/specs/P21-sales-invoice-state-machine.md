@@ -1,13 +1,14 @@
 # P21-a SPEC — 销售发票状态机实现规格书
 
-> 状态：**已实施（P31修正）** | 优先级：高（P21-a）
+> 状态：**已实施（P34修正）** | 优先级：高（P21-a）
 > 依据：`docs/需求分析书_发票与凭证状态机_V1.0.md` §3.1 发票状态机
 > 目标：为 `OutputInvoiceEntity`（销售发票）建立完整 8 状态机，消除 magic string
 > 工期：单批交付，3 个 commit
 > 拆分说明：原 P21 拆分为 P21-a（销售发票，本文件）+ P21-b（采购发票，已废弃）
 >
-> **P31 修正（2026-06-26）**：`confirm()` 现在自动生成应收单 + 凭证。
-> 流程变更为：发票导入 → 人工审核(confirm) → 自动生成应收单据和凭证 → 人工审核(凭证)。
+> **P34 修正（2026-07-01）**：`confirm()` 现在创建 INVOICE_OUT 业务单据 + 凭证。
+> 流程：发票导入 → 人工审核(confirm) → 自动创建业务单据(INVOICE_OUT) + 凭证(DRAFT) → 人工审核凭证。
+> **P31 修正已被 P34 取代**：P31 曾引入独立应收单，P34 恢复为业务单据体系。
 
 ---
 
@@ -279,7 +280,7 @@ package com.huicai.module.tax.service;
 
 /**
  * 销售发票状态机服务.
- * 详见 docs/需求分析书_发票与凭证状态机_V1.0.md §3.1.
+ * P34: 发票审核后创建 INVOICE_OUT 业务单据 + 凭证，不再创建独立应收单.
  */
 public interface OutputInvoiceStateMachineService {
 
@@ -289,30 +290,27 @@ public interface OutputInvoiceStateMachineService {
     /**
      * 审核通过 (PENDING_REVIEW → CONFIRMED).
      *
-     * P31: 审核通过后自动触发 postProcessAfterInvoiceConfirm,
-     * 直接生成业务单(DRAFT) + 应收单(DRAFT) + 凭证(DRAFT).
-     * 发票状态变为 VOUCHERED；无需中间的业务单审批环节。
+     * P34: 审核通过后自动创建 INVOICE_OUT 业务单据(APPROVED) + 凭证(DRAFT).
      */
     void confirm(Long invoiceId, Long userId);
 
     /** 审核驳回 (PENDING_REVIEW → PENDING_CONFIRM, 记录驳回原因) */
     void reject(Long invoiceId, Long userId, String reason);
 
-    /** 回退到待审核 (CONFIRMED → PENDING_REVIEW, 选错结算状态) */
+    /** 回退到待审核 (CONFIRMED → PENDING_REVIEW) */
     void revertToReview(Long invoiceId, Long userId);
 
-    /**
-     * 标记已生成凭证 (CONFIRMED → VOUCHERED, 记录 voucherId).
-     * P31: 该方法仅由 TaxService.generateVoucherFromInvoice 内部调用，
-     * 前端不再直接调用此接口。
-     */
-    void markVouchered(Long invoiceId, Long voucherId, Long userId);
+    /** 标记已生成凭证 (CONFIRMED → VOUCHERED, 记录 voucherId) */
+    void markVouchered(Long invoiceId, Long voucherId, String voucherNo, Long userId);
 
     /** 核销扣减后更新状态 (VOUCHERED → FULLY_RECONCILED / PARTIALLY_RECONCILED) */
     void onReconciliationUpdate(Long invoiceId, BigDecimal unsettledAmount, Long userId);
 
     /** 作废 (任意非终态 → VOIDED, 记录作废原因) */
     void voidInvoice(Long invoiceId, Long userId, String reason);
+
+    /** 红冲 (CONFIRMED/VOUCHERED/PARTIALLY_RECONCILED → 生成红字发票) P36 */
+    Long reverseInvoice(Long invoiceId, Long userId, String reason);
 }
 ```
 
