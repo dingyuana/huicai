@@ -266,6 +266,7 @@ public class OutputInvoiceStateMachineServiceImpl implements OutputInvoiceStateM
         doc.setSummary(isRedInvoice ? "红冲: " + invoice.getCustomerName() : invoice.getCustomerName());
         doc.setSource(isRedInvoice ? "RED_FLUSH" : "IMPORTED");
         doc.setInvoiceNo(invoice.getInvoiceNo());
+        doc.setInvoiceId(invoice.getId());   // P1: 直接关联发票ID
         doc.setSettledAmount(BigDecimal.ZERO);
         doc.setUnsettledAmount(invoice.getTotalAmount());
         doc.setCreatedBy(userId);
@@ -354,6 +355,14 @@ public class OutputInvoiceStateMachineServiceImpl implements OutputInvoiceStateM
                     businessDocMapper.updateById(doc);
                     log.info("P0 业务单据凭证状态回写: docId={}, voucherId={}, status=VOUCHERED",
                             doc.getId(), updatedInv.getVoucherId());
+
+                    // P1: 回写凭证的 businessDocId
+                    VoucherEntity v = new VoucherEntity();
+                    v.setId(updatedInv.getVoucherId());
+                    v.setBusinessDocId(doc.getId());
+                    voucherMapper.updateById(v);
+                    log.info("P1 凭证关联业务单据: voucherId={}, businessDocId={}",
+                            updatedInv.getVoucherId(), doc.getId());
                 }
             }
 

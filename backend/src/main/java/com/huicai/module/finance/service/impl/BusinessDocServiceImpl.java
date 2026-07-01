@@ -29,6 +29,8 @@ import com.huicai.module.system.entity.Subject;
 import com.huicai.module.system.mapper.SubjectMapper;
 import com.huicai.module.system.service.PeriodService;
 import com.huicai.module.system.service.VoucherTypeService;
+import com.huicai.module.tax.entity.OutputInvoiceEntity;
+import com.huicai.module.tax.mapper.OutputInvoiceMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -96,6 +98,7 @@ public class BusinessDocServiceImpl implements BusinessDocService {
     private final UserMapper userMapper;
     private final TemplateMatcher templateMatcher;
     private final VoucherTemplateService voucherTemplateService;
+    private final OutputInvoiceMapper outputInvoiceMapper;
 
     @Override
     public IPage<BusinessDocVO> pageQuery(BusinessDocQueryDTO q) {
@@ -120,6 +123,7 @@ public class BusinessDocServiceImpl implements BusinessDocService {
         populatePartyNames(vos);
         populateUserNames(vos);
         populateVoucherNos(vos);
+        populateInvoiceStatuses(vos);
         for (int i = 0; i < entities.size(); i++) {
             vos.get(i).setEnrichedSummary(enrichSummary(entities.get(i)));
         }
@@ -146,6 +150,7 @@ public class BusinessDocServiceImpl implements BusinessDocService {
         populatePartyNames(List.of(vo));
         populateUserNames(List.of(vo));
         populateVoucherNos(List.of(vo));
+        populateInvoiceStatuses(List.of(vo));
         vo.setEnrichedSummary(enrichSummary(entity));
         populateSettlementAmounts(vo, entity);
         return vo;
@@ -636,11 +641,30 @@ public class BusinessDocServiceImpl implements BusinessDocService {
                 .distinct()
                 .toList();
         if (voucherIds.isEmpty()) return;
-        Map<Long, String> voucherNoMap = voucherMapper.selectBatchIds(voucherIds).stream()
-                .collect(Collectors.toMap(VoucherEntity::getId, VoucherEntity::getVoucherNo));
+        Map<Long, VoucherEntity> voucherMap = voucherMapper.selectBatchIds(voucherIds).stream()
+                .collect(Collectors.toMap(VoucherEntity::getId, v -> v));
         for (BusinessDocVO vo : vos) {
             if (vo.getVoucherId() != null) {
-                vo.setVoucherNo(voucherNoMap.get(vo.getVoucherId()));
+                VoucherEntity v = voucherMap.get(vo.getVoucherId());
+                if (v != null) {
+                    vo.setVoucherNo(v.getVoucherNo());
+                    vo.setVoucherStatus(v.getStatus());  // P2: 关联凭证状态
+                }
+            }
+        }
+    }
+
+    /** P2: 回填业务单据关联的发票状态 */
+    private void populateInvoiceStatuses(List<BusinessDocVO> vos) {
+        for (BusinessDocVO vo : vos) {
+            if (vo.getInvoiceNo() != null) {
+                OutputInvoiceEntity inv = outputInvoiceMapper.selectOne(
+                        new LambdaQueryWrapper<OutputInvoiceEntity>()
+                                .eq(OutputInvoiceEntity::getInvoiceNo, vo.getInvoiceNo())
+                                .last("LIMIT 1"));
+                if (inv != null) {
+                    vo.setInvoiceStatus(inv.getStatus());
+                }
             }
         }
     }

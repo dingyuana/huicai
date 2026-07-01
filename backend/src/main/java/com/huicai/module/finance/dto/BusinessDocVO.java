@@ -43,6 +43,13 @@ public class BusinessDocVO {
     private Long approvedBy;
     private String approvedByName;
     private LocalDateTime approvedAt;
+
+    /** 关联发票状态（P2 跨单据查询） */
+    private String invoiceStatus = "";
+
+    /** 关联凭证状态（P2 跨单据查询） */
+    private String voucherStatus = "";
+
     private List<EntryVO> entries;
 
     @Data

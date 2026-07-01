@@ -285,12 +285,14 @@ public class TaxServiceImpl implements TaxService {
             var doc = businessDocMapper.selectById(inv.getDocId());
             if (doc != null) {
                 inv.setDocNo(doc.getDocNo());
+                inv.setDocStatus(doc.getStatus());  // P2: 关联业务单据状态
             }
         }
         if (inv.getVoucherId() != null) {
             var voucher = voucherMapper.selectById(inv.getVoucherId());
             if (voucher != null) {
                 inv.setVoucherNo(voucher.getVoucherNo());
+                inv.setVoucherStatus(voucher.getStatus());  // P2: 关联凭证状态
             }
         }
         // 回填应收单编号（通过 receivable_id 查询）

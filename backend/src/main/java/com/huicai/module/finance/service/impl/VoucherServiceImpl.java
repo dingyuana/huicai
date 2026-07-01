@@ -88,6 +88,7 @@ public class VoucherServiceImpl extends ServiceImpl<VoucherMapper, VoucherEntity
                 .map(this::toVoucherVO)
                 .collect(Collectors.toList());
         populateUserNames(voList);
+        populateRelatedStatuses(voList);
         voPage.setRecords(voList);
         return voPage;
     }
@@ -104,6 +105,7 @@ public class VoucherServiceImpl extends ServiceImpl<VoucherMapper, VoucherEntity
         List<VoucherEntryEntity> entries = voucherEntryMapper.selectByVoucherId(id);
         vo.setEntries(entries.stream().map(this::toEntryVO).collect(Collectors.toList()));
         populateUserNames(List.of(vo));
+        populateRelatedStatuses(List.of(vo));
         return vo;
     }
 
@@ -679,6 +681,26 @@ public class VoucherServiceImpl extends ServiceImpl<VoucherMapper, VoucherEntity
         }
 
         return vo;
+    }
+
+    /**
+     * P2: 回填凭证关联的发票状态和业务单据状态
+     */
+    private void populateRelatedStatuses(List<VoucherVO> vos) {
+        for (VoucherVO vo : vos) {
+            if (vo.getSourceDocId() != null && "OUTPUT_INVOICE".equals(vo.getSourceDocType())) {
+                OutputInvoiceEntity inv = outputInvoiceMapper.selectById(vo.getSourceDocId());
+                if (inv != null) {
+                    vo.setInvoiceStatus(inv.getStatus());
+                }
+            }
+            if (vo.getSourceDocId() != null && "BUSINESS_DOC".equals(vo.getSourceDocType())) {
+                BusinessDocEntity doc = businessDocMapper.selectById(vo.getSourceDocId());
+                if (doc != null) {
+                    vo.setBusinessDocStatus(doc.getStatus());
+                }
+            }
+        }
     }
 
     /**

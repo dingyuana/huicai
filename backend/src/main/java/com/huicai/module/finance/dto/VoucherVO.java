@@ -42,6 +42,13 @@ public class VoucherVO {
     private Long sourceDocId;
     private String sourceDocNo;
     private String sourceDocType;
+
+    /** 关联发票状态（P2 跨单据查询） */
+    private String invoiceStatus = "";
+
+    /** 关联业务单据状态（P2 跨单据查询） */
+    private String businessDocStatus = "";
+
     private List<EntryVO> entries;
 
     /**

@@ -58,6 +58,9 @@ public class BusinessDocEntity {
     /** 发票号（从发票导入时记录） */
     private String invoiceNo;
 
+    /** 关联销售发票ID（P1 新增） */
+    private Long invoiceId;
+
     /** OCR 数据 (JSONB) */
     private String ocrData;
 

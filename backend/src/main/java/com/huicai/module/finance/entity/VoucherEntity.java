@@ -101,6 +101,10 @@ public class VoucherEntity {
     /** 被红冲凭证ID */
     private Long reversedFrom;
 
+    /** 关联业务单据ID（P1 新增） */
+    @TableField("business_doc_id")
+    private Long businessDocId;
+
     /** 驳回原因 (P22, 2026-06-22 新增) */
     private String rejectedReason;
 

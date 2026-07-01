@@ -94,6 +94,14 @@ public class OutputInvoiceEntity {
     @TableField(exist = false)
     private LocalDateTime auditedAt;
 
+    /** 关联销售发票状态（P2 跨单据查询） */
+    @TableField(exist = false)
+    private String docStatus = "";
+
+    /** 关联凭证状态（P2 跨单据查询） */
+    @TableField(exist = false)
+    private String voucherStatus = "";
+
     /** 乐观锁版本号 */
     @Version
     private Integer version;
