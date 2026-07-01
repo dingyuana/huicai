@@ -10,12 +10,15 @@ import com.huicai.module.arap.entity.ReceivableEntity;
 import com.huicai.module.arap.mapper.CustomerMapper;
 import com.huicai.module.arap.mapper.ReceivableMapper;
 import com.huicai.module.arap.service.ReceivableService;
+import com.huicai.module.finance.entity.BusinessDocEntity;
+import com.huicai.module.finance.mapper.BusinessDocMapper;
 import com.huicai.module.system.entity.UserEntity;
 import com.huicai.module.system.mapper.UserMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Collections;
 import org.slf4j.Logger;
@@ -36,6 +39,7 @@ public class ReceivableServiceImpl implements ReceivableService {
     private final ReceivableMapper mapper;
     private final CustomerMapper customerMapper;
     private final UserMapper userMapper;
+    private final BusinessDocMapper businessDocMapper;
 
     private static final List<String> AGING_BUCKETS = List.of(
             "current", "days_0_30", "days_31_60", "days_61_90",
@@ -44,45 +48,66 @@ public class ReceivableServiceImpl implements ReceivableService {
 
     @Override
     public IPage<ReceivableVO> pageQuery(Long customerId, String period, String docNo, String invoiceNo, String voucherNo, Integer current, Integer size) {
-        Page<ReceivableEntity> page = new Page<>(
+        Page<BusinessDocEntity> page = new Page<>(
                 current == null ? 1 : current,
                 size == null ? 20 : size
         );
-        LambdaQueryWrapper<ReceivableEntity> wrapper = new LambdaQueryWrapper<>();
+        LambdaQueryWrapper<BusinessDocEntity> wrapper = new LambdaQueryWrapper<>();
+        wrapper.isNotNull(BusinessDocEntity::getCustomerId);
         if (customerId != null) {
-            wrapper.eq(ReceivableEntity::getCustomerId, customerId);
+            wrapper.eq(BusinessDocEntity::getCustomerId, customerId);
         }
         if (period != null && !period.isBlank()) {
-            wrapper.eq(ReceivableEntity::getPeriod, period);
+            wrapper.eq(BusinessDocEntity::getPeriod, period);
         }
         if (docNo != null && !docNo.isBlank()) {
-            wrapper.eq(ReceivableEntity::getDocNo, docNo);
+            wrapper.eq(BusinessDocEntity::getDocNo, docNo);
         }
         if (invoiceNo != null && !invoiceNo.isBlank()) {
-            wrapper.eq(ReceivableEntity::getInvoiceNo, invoiceNo);
+            wrapper.eq(BusinessDocEntity::getInvoiceNo, invoiceNo);
         }
         if (voucherNo != null && !voucherNo.isBlank()) {
-            wrapper.eq(ReceivableEntity::getVoucherNo, voucherNo);
+            wrapper.eq(BusinessDocEntity::getVoucherNo, voucherNo);
         }
-        wrapper.gt(ReceivableEntity::getUnsettledAmount, BigDecimal.ZERO);
-        wrapper.orderByDesc(ReceivableEntity::getTxDate);
-        IPage<ReceivableEntity> entityPage = mapper.selectPage(page, wrapper);
+        wrapper.gt(BusinessDocEntity::getUnsettledAmount, BigDecimal.ZERO);
+        wrapper.orderByDesc(BusinessDocEntity::getDocDate);
+        IPage<BusinessDocEntity> entityPage = businessDocMapper.selectPage(page, wrapper);
 
         IPage<ReceivableVO> voPage = new Page<>(entityPage.getCurrent(), entityPage.getSize(), entityPage.getTotal());
         List<ReceivableVO> vos = entityPage.getRecords().stream()
-                .map(ReceivableVO::fromEntity).collect(Collectors.toList());
+                .map(this::toReceivableVO).collect(Collectors.toList());
         populatePartyNames(vos);
         voPage.setRecords(vos);
         return voPage;
     }
 
+    private ReceivableVO toReceivableVO(BusinessDocEntity e) {
+        ReceivableVO vo = new ReceivableVO();
+        vo.setId(e.getId());
+        vo.setCustomerId(e.getCustomerId());
+        vo.setDocId(e.getId());
+        vo.setDocNo(e.getDocNo());
+        vo.setInvoiceNo(e.getInvoiceNo());
+        vo.setVoucherId(e.getVoucherId());
+        vo.setVoucherNo(e.getVoucherNo());
+        vo.setPeriod(e.getPeriod());
+        vo.setTxDate(e.getDocDate());
+        vo.setAmount(e.getAmount());
+        vo.setSettledAmount(e.getSettledAmount());
+        vo.setUnsettledAmount(e.getUnsettledAmount());
+        vo.setDueDate(e.getDueDate());
+        vo.setSummary(e.getSummary());
+        vo.setCreatedAt(e.getCreatedAt());
+        return vo;
+    }
+
     @Override
     public ReceivableVO getById(Long id) {
-        ReceivableEntity entity = mapper.selectById(id);
-        if (entity == null) {
+        BusinessDocEntity entity = businessDocMapper.selectById(id);
+        if (entity == null || entity.getCustomerId() == null) {
             throw new BusinessException("应收明细不存在");
         }
-        ReceivableVO vo = ReceivableVO.fromEntity(entity);
+        ReceivableVO vo = toReceivableVO(entity);
         populatePartyNames(List.of(vo));
         return vo;
     }
@@ -177,11 +202,12 @@ public class ReceivableServiceImpl implements ReceivableService {
     @Override
     public Map<String, Object> overallAging() {
         Map<String, Object> result = new HashMap<>();
-        List<ReceivableEntity> all = mapper.selectList(new LambdaQueryWrapper<ReceivableEntity>()
-                .gt(ReceivableEntity::getUnsettledAmount, BigDecimal.ZERO));
+        List<BusinessDocEntity> all = businessDocMapper.selectList(new LambdaQueryWrapper<BusinessDocEntity>()
+                .isNotNull(BusinessDocEntity::getCustomerId)
+                .gt(BusinessDocEntity::getUnsettledAmount, BigDecimal.ZERO));
         BigDecimal totalAmount = BigDecimal.ZERO;
         int totalCount = 0;
-        for (ReceivableEntity r : all) {
+        for (BusinessDocEntity r : all) {
             totalAmount = totalAmount.add(r.getUnsettledAmount());
             totalCount++;
         }

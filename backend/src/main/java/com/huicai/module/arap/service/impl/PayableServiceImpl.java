@@ -10,6 +10,8 @@ import com.huicai.module.arap.entity.PayableEntity;
 import com.huicai.module.arap.mapper.PayableMapper;
 import com.huicai.module.arap.mapper.VendorMapper;
 import com.huicai.module.arap.service.PayableService;
+import com.huicai.module.finance.entity.BusinessDocEntity;
+import com.huicai.module.finance.mapper.BusinessDocMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -31,6 +33,7 @@ public class PayableServiceImpl implements PayableService {
 
     private final PayableMapper mapper;
     private final VendorMapper vendorMapper;
+    private final BusinessDocMapper businessDocMapper;
 
     private static final List<String> AGING_BUCKETS = List.of(
             "current", "days_0_30", "days_31_60", "days_61_90",
@@ -39,35 +42,56 @@ public class PayableServiceImpl implements PayableService {
 
     @Override
     public IPage<PayableVO> pageQuery(Long vendorId, String period, String docNo, String invoiceNo, String voucherNo, Integer current, Integer size) {
-        Page<PayableEntity> page = new Page<>(
+        Page<BusinessDocEntity> page = new Page<>(
                 current == null ? 1 : current,
                 size == null ? 20 : size
         );
-        LambdaQueryWrapper<PayableEntity> wrapper = new LambdaQueryWrapper<>();
-        if (vendorId != null) wrapper.eq(PayableEntity::getVendorId, vendorId);
-        if (period != null && !period.isBlank()) wrapper.eq(PayableEntity::getPeriod, period);
-        if (docNo != null && !docNo.isBlank()) wrapper.eq(PayableEntity::getDocNo, docNo);
-        if (invoiceNo != null && !invoiceNo.isBlank()) wrapper.eq(PayableEntity::getInvoiceNo, invoiceNo);
-        if (voucherNo != null && !voucherNo.isBlank()) wrapper.eq(PayableEntity::getVoucherNo, voucherNo);
-        wrapper.gt(PayableEntity::getUnsettledAmount, BigDecimal.ZERO);
-        wrapper.orderByDesc(PayableEntity::getTxDate);
-        IPage<PayableEntity> entityPage = mapper.selectPage(page, wrapper);
+        LambdaQueryWrapper<BusinessDocEntity> wrapper = new LambdaQueryWrapper<>();
+        wrapper.isNotNull(BusinessDocEntity::getSupplierId);
+        if (vendorId != null) wrapper.eq(BusinessDocEntity::getSupplierId, vendorId);
+        if (period != null && !period.isBlank()) wrapper.eq(BusinessDocEntity::getPeriod, period);
+        if (docNo != null && !docNo.isBlank()) wrapper.eq(BusinessDocEntity::getDocNo, docNo);
+        if (invoiceNo != null && !invoiceNo.isBlank()) wrapper.eq(BusinessDocEntity::getInvoiceNo, invoiceNo);
+        if (voucherNo != null && !voucherNo.isBlank()) wrapper.eq(BusinessDocEntity::getVoucherNo, voucherNo);
+        wrapper.gt(BusinessDocEntity::getUnsettledAmount, BigDecimal.ZERO);
+        wrapper.orderByDesc(BusinessDocEntity::getDocDate);
+        IPage<BusinessDocEntity> entityPage = businessDocMapper.selectPage(page, wrapper);
 
         IPage<PayableVO> voPage = new Page<>(entityPage.getCurrent(), entityPage.getSize(), entityPage.getTotal());
         List<PayableVO> vos = entityPage.getRecords().stream()
-                .map(PayableVO::fromEntity).collect(Collectors.toList());
+                .map(this::toPayableVO).collect(Collectors.toList());
         populatePartyNames(vos);
         voPage.setRecords(vos);
         return voPage;
     }
 
+    private PayableVO toPayableVO(BusinessDocEntity e) {
+        PayableVO vo = new PayableVO();
+        vo.setId(e.getId());
+        vo.setVendorId(e.getSupplierId());
+        vo.setDocId(e.getId());
+        vo.setDocNo(e.getDocNo());
+        vo.setInvoiceNo(e.getInvoiceNo());
+        vo.setVoucherId(e.getVoucherId());
+        vo.setVoucherNo(e.getVoucherNo());
+        vo.setPeriod(e.getPeriod());
+        vo.setTxDate(e.getDocDate());
+        vo.setAmount(e.getAmount());
+        vo.setSettledAmount(e.getSettledAmount());
+        vo.setUnsettledAmount(e.getUnsettledAmount());
+        vo.setDueDate(e.getDueDate());
+        vo.setSummary(e.getSummary());
+        vo.setCreatedAt(e.getCreatedAt());
+        return vo;
+    }
+
     @Override
     public PayableVO getById(Long id) {
-        PayableEntity entity = mapper.selectById(id);
-        if (entity == null) {
+        BusinessDocEntity entity = businessDocMapper.selectById(id);
+        if (entity == null || entity.getSupplierId() == null) {
             throw new BusinessException("应付明细不存在");
         }
-        PayableVO vo = PayableVO.fromEntity(entity);
+        PayableVO vo = toPayableVO(entity);
         populatePartyNames(List.of(vo));
         return vo;
     }
