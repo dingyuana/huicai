@@ -32,7 +32,7 @@
 - 已全额核销（FULLY_RECONCILED）不可红冲
 
 **红冲流程**：
-1. 生成一张红字发票（金额取反，status=DRAFT）
+1. 生成一张红字发票（金额取反，status=PENDING_CONFIRM）
 2. 原蓝字发票标记为 REVERSED，记录 reversedByInvoiceId
 3. 如果原发票已关联业务单（docId 非空）：
    - 提示用户需要对关联业务单执行红冲（不自动处理）
