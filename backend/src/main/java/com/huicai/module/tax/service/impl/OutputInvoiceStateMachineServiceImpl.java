@@ -337,12 +337,30 @@ public class OutputInvoiceStateMachineServiceImpl implements OutputInvoiceStateM
 
             taxService.generateVoucherFromInvoice(invoiceId, userId);
 
+            // 重新读取发票（markVouchered 已设置 voucherId/voucherNo）
+            OutputInvoiceEntity updatedInv = invoiceMapper.selectById(invoiceId);
+            if (updatedInv != null && updatedInv.getVoucherId() != null) {
+                // 回写业务单据：凭证ID + 状态
+                BusinessDocEntity doc = businessDocMapper.selectOne(
+                        new LambdaQueryWrapper<BusinessDocEntity>()
+                                .eq(BusinessDocEntity::getInvoiceNo, updatedInv.getInvoiceNo())
+                                .eq(BusinessDocEntity::getDocType, "INVOICE_OUT")
+                                .last("LIMIT 1"));
+                if (doc != null) {
+                    doc.setVoucherId(updatedInv.getVoucherId());
+                    doc.setVoucherNo(updatedInv.getVoucherNo());
+                    doc.setStatus("VOUCHERED");
+                    doc.setUpdatedBy(userId);
+                    businessDocMapper.updateById(doc);
+                    log.info("P0 业务单据凭证状态回写: docId={}, voucherId={}, status=VOUCHERED",
+                            doc.getId(), updatedInv.getVoucherId());
+                }
+            }
+
             // P36: 红字发票 → 回填凭证 reversedFrom
             if (isRedInvoice && invoice.getReversedFrom() != null) {
-                // 重新读取发票（markVouchered 已经设置了 voucherId）
                 OutputInvoiceEntity redInv = invoiceMapper.selectById(invoiceId);
                 if (redInv != null && redInv.getVoucherId() != null) {
-                    // 蓝字发票的 voucherId 就是原凭证 ID
                     OutputInvoiceEntity blueInv = invoiceMapper.selectById(invoice.getReversedFrom());
                     if (blueInv != null && blueInv.getVoucherId() != null) {
                         VoucherEntity redVoucher = new VoucherEntity();
@@ -358,7 +376,6 @@ public class OutputInvoiceStateMachineServiceImpl implements OutputInvoiceStateM
             log.info("P33 销售发票凭证直连生成: invoiceId={}", invoiceId);
         } catch (Exception e) {
             log.error("P33 销售发票凭证生成失败: invoiceId={}, error={}", invoiceId, e.getMessage());
-            // 凭证生成失败不影响发票审核通过，记录日志供人工处理
         }
     }
 

@@ -11,9 +11,11 @@ import com.huicai.module.finance.dto.VoucherQueryDTO;
 import com.huicai.module.finance.dto.VoucherTemplateVO;
 import com.huicai.module.finance.dto.VoucherVO;
 import com.huicai.module.finance.dto.VoucherVO.EntryVO;
+import com.huicai.module.finance.entity.BusinessDocEntity;
 import com.huicai.module.finance.entity.SubjectBalanceEntity;
 import com.huicai.module.finance.entity.VoucherEntity;
 import com.huicai.module.finance.entity.VoucherEntryEntity;
+import com.huicai.module.finance.mapper.BusinessDocMapper;
 import com.huicai.module.finance.mapper.SubjectBalanceMapper;
 import com.huicai.module.finance.mapper.VoucherEntryMapper;
 import com.huicai.module.finance.mapper.VoucherMapper;
@@ -30,6 +32,8 @@ import com.huicai.module.system.mapper.UserMapper;
 import com.huicai.module.system.service.PeriodService;
 import com.huicai.module.system.service.SubjectService;
 import com.huicai.module.system.service.VoucherTypeService;
+import com.huicai.module.tax.entity.OutputInvoiceEntity;
+import com.huicai.module.tax.mapper.OutputInvoiceMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -62,6 +66,8 @@ public class VoucherServiceImpl extends ServiceImpl<VoucherMapper, VoucherEntity
     private final PeriodService periodService;
     private final UserMapper userMapper;
     private final VoucherStateMachineService voucherStateMachineService;
+    private final OutputInvoiceMapper outputInvoiceMapper;
+    private final BusinessDocMapper businessDocMapper;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Override
@@ -391,7 +397,69 @@ public class VoucherServiceImpl extends ServiceImpl<VoucherMapper, VoucherEntity
         log.info("红冲凭证: originalId={}, reverseId={}, voucherNo={}, userId={}",
                 id, reverseVoucher.getId(), reverseNo, userId);
 
+        // P0: 凭证红冲级联 — 回写源单据状态
+        cascadeReverseToSourceDocs(original, userId);
+
         return getDetail(reverseVoucher.getId());
+    }
+
+    /**
+     * P0: 凭证红冲后级联回写源发票/业务单据状态为 REVERSED。
+     */
+    private void cascadeReverseToSourceDocs(VoucherEntity original, Long userId) {
+        String sourceDocType = original.getSourceDocType();
+        Long sourceDocId = original.getSourceDocId();
+        String sourceDocNo = original.getSourceDocNo();
+
+        if (sourceDocType == null || sourceDocId == null) {
+            log.info("凭证无源单据信息，跳过级联: voucherId={}", original.getId());
+            return;
+        }
+
+        switch (sourceDocType) {
+            case "OUTPUT_INVOICE":
+                // 1. 标记销售发票为 REVERSED
+                OutputInvoiceEntity invoice = outputInvoiceMapper.selectById(sourceDocId);
+                if (invoice != null && !"REVERSED".equals(invoice.getStatus())) {
+                    invoice.setStatus("REVERSED");
+                    invoice.setUpdatedBy(userId);
+                    outputInvoiceMapper.updateById(invoice);
+                    log.info("P0 凭证红冲级联: 发票已标记 REVERSED, invoiceId={}", sourceDocId);
+                }
+                // 2. 标记关联的业务单据为 REVERSED
+                if (sourceDocNo != null) {
+                    BusinessDocEntity doc = businessDocMapper.selectOne(
+                            new LambdaQueryWrapper<BusinessDocEntity>()
+                                    .eq(BusinessDocEntity::getInvoiceNo, sourceDocNo)
+                                    .eq(BusinessDocEntity::getDocType, "INVOICE_OUT")
+                                    .last("LIMIT 1"));
+                    if (doc != null && !"REVERSED".equals(doc.getStatus())) {
+                        doc.setStatus("REVERSED");
+                        doc.setUpdatedBy(userId);
+                        businessDocMapper.updateById(doc);
+                        log.info("P0 凭证红冲级联: 业务单据已标记 REVERSED, docId={}", doc.getId());
+                    }
+                }
+                break;
+
+            case "BUSINESS_DOC":
+                // 标记业务单据为 REVERSED
+                BusinessDocEntity bdoc = businessDocMapper.selectById(sourceDocId);
+                if (bdoc != null && !"REVERSED".equals(bdoc.getStatus())) {
+                    bdoc.setStatus("REVERSED");
+                    bdoc.setUpdatedBy(userId);
+                    businessDocMapper.updateById(bdoc);
+                    log.info("P0 凭证红冲级联: 业务单据已标记 REVERSED, docId={}", sourceDocId);
+                }
+                break;
+
+            case "INPUT_INVOICE":
+                log.info("P0 凭证红冲级联: 进项发票级联暂不处理, sourceDocId={}", sourceDocId);
+                break;
+
+            default:
+                log.info("P0 凭证红冲级联: 未知源单据类型={}, 跳过", sourceDocType);
+        }
     }
 
     // ===================== 内部方法 =====================
