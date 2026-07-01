@@ -13,7 +13,6 @@ import com.huicai.module.tax.service.OutputInvoiceStateMachineService;
 import com.huicai.module.tax.service.TaxService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
@@ -35,7 +34,6 @@ import java.time.LocalDateTime;
  */
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class OutputInvoiceStateMachineServiceImpl implements OutputInvoiceStateMachineService {
 
     private final OutputInvoiceMapper invoiceMapper;
@@ -43,16 +41,27 @@ public class OutputInvoiceStateMachineServiceImpl implements OutputInvoiceStateM
     private final VoucherMapper voucherMapper;
     private final StringRedisTemplate redisTemplate;
 
-    /**
-     * 自注入实现 AOP 代理调用, 使 @Transactional 生效.
-     */
-    @Lazy
-    @Autowired
-    private OutputInvoiceStateMachineServiceImpl self;
+    private final OutputInvoiceStateMachineServiceImpl self;
+    private final TaxService taxService;
 
-    @Lazy
-    @Autowired
-    private TaxService taxService;
+    /**
+     * 构造器注入（替代 @Autowired 字段注入）.
+     * self 自注入用于 @Transactional 内部调用生效.
+     */
+    public OutputInvoiceStateMachineServiceImpl(
+            OutputInvoiceMapper invoiceMapper,
+            BusinessDocMapper businessDocMapper,
+            VoucherMapper voucherMapper,
+            StringRedisTemplate redisTemplate,
+            @Lazy OutputInvoiceStateMachineServiceImpl self,
+            TaxService taxService) {
+        this.invoiceMapper = invoiceMapper;
+        this.businessDocMapper = businessDocMapper;
+        this.voucherMapper = voucherMapper;
+        this.redisTemplate = redisTemplate;
+        this.self = self;
+        this.taxService = taxService;
+    }
 
     @Override
     @Transactional

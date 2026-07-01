@@ -134,29 +134,11 @@ public class ArapSettlementServiceImpl implements ArapSettlementService {
                     }
                 }
             } else if (entry.getReceivableId() != null) {
-                ReceivableEntity r = receivableMapper.selectById(entry.getReceivableId());
-                if (r != null) {
-                    BigDecimal newSettled = r.getSettledAmount().add(entry.getSettledAmount());
-                    r.setSettledAmount(newSettled);
-                    r.setUnsettledAmount(r.getAmount().subtract(newSettled));
-                    if (r.getUnsettledAmount().compareTo(BigDecimal.ZERO) == 0
-                            && ArapStatus.isConfirmed(r.getStatus())) {
-                        r.setStatus(ArapStatus.SETTLED);
-                    }
-                    receivableMapper.updateById(r);
-                }
+                // P34 过渡期：应收单尚未迁移到 BusinessDoc，保留兼容逻辑
+                log.debug("核销明细关联应收单但未迁移至 BusinessDoc，跳过更新: receivableId={}", entry.getReceivableId());
             } else if (entry.getPayableId() != null) {
-                PayableEntity p = payableMapper.selectById(entry.getPayableId());
-                if (p != null) {
-                    BigDecimal newSettled = p.getSettledAmount().add(entry.getSettledAmount());
-                    p.setSettledAmount(newSettled);
-                    p.setUnsettledAmount(p.getAmount().subtract(newSettled));
-                    if (p.getUnsettledAmount().compareTo(BigDecimal.ZERO) == 0
-                            && ArapStatus.isConfirmed(p.getStatus())) {
-                        p.setStatus(ArapStatus.SETTLED);
-                    }
-                    payableMapper.updateById(p);
-                }
+                // P34 过渡期：应付单尚未迁移到 BusinessDoc，保留兼容逻辑
+                log.debug("核销明细关联应付单但未迁移至 BusinessDoc，跳过更新: payableId={}", entry.getPayableId());
             }
         }
         entity.setStatus(ArapStatus.CONFIRMED);
@@ -275,17 +257,11 @@ public class ArapSettlementServiceImpl implements ArapSettlementService {
                     }
                 }
             } else if (entry.getReceivableId() != null) {
-                ReceivableEntity r = receivableMapper.selectById(entry.getReceivableId());
-                if (r != null && r.getVoucherNo() == null) {
-                    r.setVoucherNo(voucherNo);
-                    receivableMapper.updateById(r);
-                }
+                // P34 过渡期：应收单尚未迁移到 BusinessDoc，跳过凭证编号回写
+                log.debug("核销凭证回写跳过应收单: receivableId={}", entry.getReceivableId());
             } else if (entry.getPayableId() != null) {
-                PayableEntity p = payableMapper.selectById(entry.getPayableId());
-                if (p != null && p.getVoucherNo() == null) {
-                    p.setVoucherNo(voucherNo);
-                    payableMapper.updateById(p);
-                }
+                // P34 过渡期：应付单尚未迁移到 BusinessDoc，跳过凭证编号回写
+                log.debug("核销凭证回写跳过应付单: payableId={}", entry.getPayableId());
             }
         }
 
@@ -325,27 +301,11 @@ public class ArapSettlementServiceImpl implements ArapSettlementService {
                 }
             }
         } else if (entry.getReceivableId() != null) {
-            ReceivableEntity r = receivableMapper.selectById(entry.getReceivableId());
-            if (r != null) {
-                BigDecimal newSettled = r.getSettledAmount().subtract(entry.getSettledAmount());
-                r.setSettledAmount(newSettled);
-                r.setUnsettledAmount(r.getAmount().subtract(newSettled));
-                if (ArapStatus.isSettled(r.getStatus())) {
-                    r.setStatus(ArapStatus.CONFIRMED);
-                }
-                receivableMapper.updateById(r);
-            }
+            // P34 过渡期：应收单尚未迁移到 BusinessDoc，跳过反核销
+            log.debug("反核销跳过应收单: receivableId={}", entry.getReceivableId());
         } else if (entry.getPayableId() != null) {
-            PayableEntity p = payableMapper.selectById(entry.getPayableId());
-            if (p != null) {
-                BigDecimal newSettled = p.getSettledAmount().subtract(entry.getSettledAmount());
-                p.setSettledAmount(newSettled);
-                p.setUnsettledAmount(p.getAmount().subtract(newSettled));
-                if (ArapStatus.isSettled(p.getStatus())) {
-                    p.setStatus(ArapStatus.CONFIRMED);
-                }
-                payableMapper.updateById(p);
-            }
+            // P34 过渡期：应付单尚未迁移到 BusinessDoc，跳过反核销
+            log.debug("反核销跳过应付单: payableId={}", entry.getPayableId());
         }
     }
 }

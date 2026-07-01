@@ -73,15 +73,7 @@ class OutputInvoiceStateMachineServiceImplTest {
     @BeforeEach
     void setup() {
         service = new OutputInvoiceStateMachineServiceImpl(
-                invoiceMapper, businessDocMapper, voucherMapper, redisTemplate);
-        // 注入 lazy 依赖
-        try {
-            var field = OutputInvoiceStateMachineServiceImpl.class.getDeclaredField("taxService");
-            field.setAccessible(true);
-            field.set(service, taxService);
-        } catch (Exception e) {
-            throw new RuntimeException(e);
-        }
+                invoiceMapper, businessDocMapper, voucherMapper, redisTemplate, null, taxService);
         lenient().when(redisTemplate.opsForValue()).thenReturn(valueOps);
     }
 
