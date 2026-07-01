@@ -261,7 +261,7 @@ public class OutputInvoiceStateMachineServiceImpl implements OutputInvoiceStateM
         doc.setDocDate(invoice.getInvoiceDate());
         doc.setPeriod(invoice.getPeriod());
         doc.setAmount(invoice.getTotalAmount());
-        doc.setStatus("APPROVED");
+        doc.setStatus("DRAFT");
         doc.setCustomerId(invoice.getCustomerId());
         doc.setSummary(isRedInvoice ? "红冲: " + invoice.getCustomerName() : invoice.getCustomerName());
         doc.setSource(isRedInvoice ? "RED_FLUSH" : "IMPORTED");
@@ -350,10 +350,10 @@ public class OutputInvoiceStateMachineServiceImpl implements OutputInvoiceStateM
                 if (doc != null) {
                     doc.setVoucherId(updatedInv.getVoucherId());
                     doc.setVoucherNo(updatedInv.getVoucherNo());
-                    doc.setStatus("VOUCHERED");
+                    doc.setStatus("DRAFT");
                     doc.setUpdatedBy(userId);
                     businessDocMapper.updateById(doc);
-                    log.info("P0 业务单据凭证状态回写: docId={}, voucherId={}, status=VOUCHERED",
+                    log.info("P0 业务单据凭证状态回写: docId={}, voucherId={}, status=DRAFT",
                             doc.getId(), updatedInv.getVoucherId());
 
                     // P1: 回写凭证的 businessDocId
