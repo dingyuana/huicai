@@ -120,6 +120,10 @@ public class ArapSettlementServiceImpl implements ArapSettlementService {
             if (entry.getBusinessDocId() != null) {
                 BusinessDocEntity doc = businessDocMapper.selectById(entry.getBusinessDocId());
                 if (doc != null) {
+                    // P30-C5: 仅已审批状态的业务单据可核销
+                    if (!"APPROVED".equals(doc.getStatus())) {
+                        throw BusinessException.badRequest("仅已审批状态的业务单据可核销，当前状态: " + doc.getStatus());
+                    }
                     BigDecimal newSettled = doc.getSettledAmount() != null
                             ? doc.getSettledAmount().add(entry.getSettledAmount())
                             : entry.getSettledAmount();

@@ -51,4 +51,7 @@ public class CashJournalEntity {
 
     @TableLogic
     private Integer deleted;
+
+    @Version
+    private Integer version;
 }

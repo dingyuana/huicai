@@ -36,6 +36,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Lazy;
+
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
@@ -59,7 +62,9 @@ public class TaxServiceImpl implements TaxService {
     private final VoucherEntryMapper voucherEntryMapper;
     private final VoucherNoService voucherNoService;
     private final SubjectMapper subjectMapper;
-    private final OutputInvoiceStateMachineService stateMachineService;
+    @Lazy
+    @Autowired
+    private OutputInvoiceStateMachineService stateMachineService;
     private final TemplateMatcher templateMatcher;
     private final VoucherTemplateService voucherTemplateService;
     private final BusinessDocMapper businessDocMapper;

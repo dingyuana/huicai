@@ -207,10 +207,10 @@ contracts:
       → v.status = 'DRAFT'
 
   - id: P36-C4
-    description: "红冲操作不改变原发票状态（级联而非自动）"
+    description: "红冲操作将原发票标记为 REVERSED，新单据均为 DRAFT"
     type: unit_test
-    target: OutputInvoiceStateMachineServiceImplTest.testReverseDoesNotChangeOriginalStatus
-    assertion: "reverseInvoice(id) → 原发票 status 不变（保持原值）"
+    target: OutputInvoiceStateMachineServiceImplTest.testReverseMarksOriginalAsReversed
+    assertion: "reverseInvoice(id) → 原发票 status == REVERSED，新红字发票 status == PENDING_CONFIRM"
 
   - id: P36-C5
     description: "红冲产生的所有单据/凭证均为 DRAFT"

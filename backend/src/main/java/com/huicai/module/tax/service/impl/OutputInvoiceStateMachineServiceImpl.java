@@ -17,6 +17,7 @@ import org.springframework.context.annotation.Lazy;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.dao.OptimisticLockingFailureException;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -87,7 +88,9 @@ public class OutputInvoiceStateMachineServiceImpl implements OutputInvoiceStateM
         entity.setAuditedBy(userId);       // 记录审核人
         entity.setAuditedAt(LocalDateTime.now());  // 记录审核时间
         entity.setUpdatedBy(userId);
-        invoiceMapper.updateById(entity);
+        if (invoiceMapper.updateById(entity) == 0) {
+            throw new OptimisticLockingFailureException("发票版本冲突, id=" + invoiceId);
+        }
         log.info("销售发票审核通过: id={}, userId={}", invoiceId, userId);
 
         // P34: 审核后创建 INVOICE_OUT 业务单据 + 凭证（不再创建独立应收单）

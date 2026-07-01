@@ -822,4 +822,21 @@ class OutputInvoiceStateMachineServiceImplTest {
         assertEquals("IMPORTED", docCaptor.getValue().getSource());
         assertFalse(docCaptor.getValue().getSummary().startsWith("红冲:"));
     }
+
+    @Test
+    @DisplayName("P32-C4: 并发 confirm 时乐观锁拦截冲突")
+    void testConcurrentConfirmFailsWithOptimisticLock() {
+        // given
+        OutputInvoiceEntity invoice = invoice(InvoiceStatus.PENDING_REVIEW);
+        invoice.setAmount(BigDecimal.valueOf(1000));
+        invoice.setInvoiceNo("TEST-CONCURRENT-001");
+        when(invoiceMapper.selectById(INVOICE_ID)).thenReturn(invoice);
+        when(invoiceMapper.updateById(any())).thenReturn(0); // 模拟乐观锁冲突
+
+        // when & then
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> service.confirm(INVOICE_ID, USER_ID));
+        assertTrue(ex.getMessage().contains("版本冲突") || ex.getMessage().contains("更新失败"),
+                "乐观锁冲突应提示版本冲突，实际: " + ex.getMessage());
+    }
 }

@@ -54,7 +54,7 @@ INSERT INTO t_business_doc (
     created_by, created_at, updated_at, version
 )
 SELECT
-    COALESCE(p.payable_no, 'YF' || p.period || LPAD(CAST(p.id AS TEXT), 4, '0')),
+    COALESCE(p.doc_no, 'YF' || p.period || LPAD(CAST(p.id AS TEXT), 4, '0')),
     'INVOICE_IN',
     p.tx_date,
     p.period,
