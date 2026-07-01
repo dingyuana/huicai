@@ -154,3 +154,93 @@
 - ❌ 不改差额调整逻辑（后端已完整，前端暂时不暴露）
 - ❌ 不改银行对账页面（`BankReconciliationView` 与核销是独立模块）
 - ❌ 不在本批增加多币种/信用期/账龄分析
+
+---
+
+# === MACHINE-READABLE CONTRACT ===
+
+contract_version: "1.0"
+
+entity: ReconciliationRecord (business)
+module: arap
+table: t_reconciliation / t_reconciliation_log / t_arap_settlement
+
+acronym: P30
+
+contracts:
+  - id: P30-C1
+    description: "收款单→核销推荐入口可用"
+    type: api
+    endpoint: POST /api/v1/reconciliation/receipt/{receiptId}/recommend
+    expected: "200 + 推荐列表（业务单据金额匹配）"
+
+  - id: P30-C2
+    description: "付款单→核销推荐入口可用"
+    type: api
+    endpoint: POST /api/v1/reconciliation/payment/{paymentId}/recommend
+    expected: "200 + 推荐列表（业务单据金额匹配）"
+
+  - id: P30-C3
+    description: "核销执行后业务单据 settledAmount 正确更新"
+    type: db_query
+    assertion: |
+      SELECT settled_amount, unsettled_amount FROM t_business_doc
+      WHERE id = :docId
+      → settled_amount == :execAmount AND unsettled_amount == :remaining
+
+  - id: P30-C4
+    description: "核销日志记录完整"
+    type: db_query
+    assertion: |
+      SELECT operation_type, source_type, target_doc_type, target_business_doc_id
+      FROM t_reconciliation_log
+      WHERE settlement_id = :settlementId
+      → operation_type IS NOT NULL AND target_doc_type IN ('INVOICE_OUT','INVOICE_IN')
+
+  - id: P30-C5
+    description: "核销执行时校验状态机：仅已审批单可核销"
+    type: unit_test
+    target: ReconciliationServiceImplTest.testExecuteRejectsNonApprovedDoc
+    assertion: "execSettlement(docId) for doc.status != APPROVED → BusinessException"
+
+acceptance_tests:
+  - id: AT-P30-1
+    description: "收款单 tab 显示核销推荐"
+    method: testReceiptReconciliationRecommend
+    status: planned
+  - id: AT-P30-2
+    description: "核销确认后更新业务单据金额"
+    method: testSettlementUpdatesDocAmount
+    status: covered
+  - id: AT-P30-3
+    description: "核销操作记录审计日志"
+    method: testSettlementCreatesLog
+    status: covered
+
+constraints:
+  - id: C-P30-1
+    type: data_integrity
+    rule: "核销后 settledAmount + unsettledAmount = amount 恒成立"
+    enforcement: "业务层 SUM 校验"
+  - id: C-P30-2
+    type: business
+    rule: "仅 APPROVED 状态的业务单据可参与核销"
+    enforcement: "状态机前置检查"
+  - id: C-P30-3
+    type: concurrency
+    rule: "同一业务单据不可被两个互斥的核销操作同时更新"
+    enforcement: "乐观锁（BusinessDocEntity.version）"
+
+dependencies:
+  - spec: P34
+    relation: "核销目标为 INVOICE_OUT/INVOICE_IN 业务单据（P34 架构）"
+  - spec: P36
+    relation: "红冲过的单据核销金额需重新计算"
+  - spec: P22
+    relation: "核销凭证的摘要需包含业务单据号"
+
+out_of_scope:
+  - "核销推荐算法变更（L1-L6 现有逻辑不动）"
+  - "差额调整逻辑变更（后端已完整）"
+  - "银行对账页面变更（独立模块）"
+  - "多币种/信用期/账龄分析"

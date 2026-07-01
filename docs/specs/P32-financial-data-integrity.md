@@ -311,3 +311,87 @@ COMMENT ON COLUMN t_bank_statement.version IS '乐观锁版本号';
 | 日期 | 版本 | 内容 | 作者 |
 |------|------|------|------|
 | 2026-06-27 | v1.0 | 初版，涵盖 P0-P2 数据完整性修复 | 系统审计 |
+
+---
+
+# === MACHINE-READABLE CONTRACT ===
+
+contract_version: "1.0"
+
+entity: All core entities
+module: finance / tax / arap
+table: multiple
+
+acronym: P32
+
+contracts:
+  - id: P32-C1
+    description: "所有核心实体含乐观锁 @Version 字段"
+    type: code_review
+    target: OutputInvoiceEntity, BusinessDocEntity, VoucherEntity, BankStatementEntity, CashJournalEntity
+    assertion: "每类 Entity 均有 @Version 注解的 version 字段"
+
+  - id: P32-C2
+    description: "凭证摘要包含发票号，支持 SQL LIKE '%发票号%' 模糊查询"
+    type: db_query
+    assertion: |
+      SELECT summary FROM t_voucher WHERE summary LIKE '%25922000000082010917%'
+      → 返回至少 1 条（发票号存在的位置摘要包含该号）
+
+  - id: P32-C3
+    description: "健康检查接口检测 status=VOUCHERED 但 voucher_id IS NULL 的异常"
+    type: api
+    endpoint: GET /api/v1/system/health/integrity
+    expected: "200 + checkResults 中包含业务单据完整性检查结果"
+
+  - id: P32-C4
+    description: "并发更新时乐观锁正确拦截冲突"
+    type: unit_test
+    target: OutputInvoiceStateMachineServiceImplTest.testConcurrentConfirmFailsWithOptimisticLock
+    assertion: "两个事务同时 confirm 同一发票 → 其中一个抛出 OptimisticLockException"
+
+  - id: P32-C5
+    description: "期初余额不重复创建（幂等性）"
+    type: unit_test
+    target: BeginningBalanceServiceTest.testDuplicateBalanceRejected
+    assertion: "同一期间科目再次创建期初 → BusinessException"
+
+acceptance_tests:
+  - id: AT-P32-1
+    description: "乐观锁 @Version 字段已添加到所有核心实体"
+    method: testEntitiesHaveVersion
+    status: covered
+  - id: AT-P32-2
+    description: "摘要含发票号可模糊搜索"
+    method: testSummaryContainsInvoiceNo
+    status: covered
+  - id: AT-P32-3
+    description: "健康检查接口正常返回完整性报告"
+    method: testHealthIntegrityEndpoint
+    status: covered
+  - id: AT-P32-4
+    description: "并发 confirm 不会重复制证"
+    method: testConcurrentConfirmFailsWithLock
+    status: covered
+
+constraints:
+  - id: C-P32-1
+    type: business
+    rule: "所有修改操作必须通过带 @Version 的 Entity 执行，不能直接写 UPDATE SQL"
+    enforcement: "代码审查 + 禁止 MyBatis XML 直接 UPDATE 关键字段"
+  - id: C-P32-2
+    type: audit
+    rule: "所有写操作记录操作人 + 时间"
+    enforcement: "MyBatisPlus 自动填充（createdBy/updatedBy）"
+
+dependencies:
+  - spec: P34
+    relation: "BusinessDocEntity 的乐观锁版本号与 P34 共享"
+  - spec: P22
+    relation: "VoucherEntity 的 @Version 字段与 P22 状态机配合"
+  - spec: P24
+    relation: "审计日志记录补充 P24 的日志内容"
+
+out_of_scope:
+  - "数据库级 SEQUENCE 备份方案（编号连续性 - 低优先级）"
+  - "业财对账 API 的自动修复能力（只检测不修复）"
