@@ -9,8 +9,9 @@
 > - ✅ M1: V68 结算字段 + Entity 更新（已完成）
 > - ✅ M2: OutputInvoiceStateMachineServiceImpl 改为创建 BusinessDocEntity（已完成）
 > - ✅ P36 红冲级联：红字发票 confirm 时创建 RED_FLUSH 业务单据（已完成）
-> - ⏳ M3: 核销结算系统（ArapSettlementService + ReconciliationService）改为操作 BusinessDocEntity
-> - ⏳ M4: V71 数据迁移 t_receivable → t_business_doc + V72 删表
+> - ✅ M3: 核销结算系统的独立应收/应付逻辑已清理（已迁移到 BusinessDocEntity）
+> - ✅ M3 DB: V72 migration t_arap_settlement_entry + t_reconciliation_log 加字段（已完成）
+> - ⏳ M4: V73 数据迁移 t_receivable → t_business_doc + V74 删表
 
 ---
 
@@ -19,8 +20,8 @@
 | # | 改动 | 影响文件 | 风险 | 状态 |
 |---|------|---------|------|------|
 | 1 | DB: t_business_doc 增加结算字段 | V68 migration | 🟡 中 | ⏳ 待实现 |
-| 2 | DB: 数据迁移 t_receivable → t_business_doc | V71 migration | 🟡 中 | ⏳ 待实现 |
-| 3 | DB: 删除 t_receivable/t_payable 表 | V72 migration | 🔴 高 | ⏳ 待实现 |
+| 2 | DB: 数据迁移 t_receivable → t_business_doc | V73 migration | 🟡 中 | ⏳ 待实现 |
+| 3 | DB: 删除 t_receivable/t_payable 表 | V74 migration | 🔴 高 | ⏳ 待实现 |
 | 4 | 修改 OutputInvoiceStateMachineServiceImpl — 改回创建 BusinessDocEntity | 1 Java 文件 | 🟡 中 | ⏳ 待实现 |
 | 5 | 修改 BusinessDocServiceImpl — 放开 INVOICE_OUT 限制 | 1 Java 文件 | ✅ 低 | ⏳ 待实现 |
 | 6 | 修改 ArapSettlementServiceImpl — 改为更新 BusinessDocEntity | 1 Java 文件 | 🟡 中 | ⏳ 待实现 |
@@ -137,10 +138,10 @@ vo.setSettledAmount(e.getSettledAmount());
 vo.setUnsettledAmount(e.getUnsettledAmount());
 ```
 
-#### V71：数据迁移 t_receivable → t_business_doc
+#### V73：数据迁移 t_receivable → t_business_doc
 
 ```sql
--- V71__migrate_receivable_to_business_doc.sql
+-- V73__migrate_receivable_to_business_doc.sql
 -- 说明：将现有 t_receivable 数据迁移到 t_business_doc（INVOICE_OUT 类型）
 -- 迁移前请确认已执行 V68
 
@@ -278,11 +279,11 @@ SET target_business_doc_id = (
 WHERE l.target_doc_type = 'INVOICE_IN';
 ```
 
-#### V72：删除旧表（⚠️ 确认迁移成功后执行）
+#### V74：删除旧表（⚠️ 确认迁移成功后执行）
 
 ```sql
--- V72__drop_receivable_payable_tables.sql
--- ⚠️ 在确认 V71 迁移正确且所有业务验证通过后执行
+-- V74__drop_receivable_payable_tables.sql
+-- ⚠️ 在确认 V73 迁移正确且所有业务验证通过后执行
 
 DROP TABLE IF EXISTS t_receivable CASCADE;
 DROP TABLE IF EXISTS t_payable CASCADE;
@@ -828,11 +829,11 @@ assertEquals(invoice.getTotalAmount(), doc.getUnsettledAmount());
 
 | 风险 | 等级 | 缓解措施 |
 |------|------|---------|
-| 数据迁移丢失 | 🔴 高 | V71 使用 `NOT EXISTS` 防重复；迁移后验证行数一致后再执行 V72 |
+| 数据迁移丢失 | 🔴 高 | V73 使用 `NOT EXISTS` 防重复；迁移后验证行数一致后再执行 V74 |
 | 核销并发冲突 | 🟡 中 | `@Version` + `@Retryable` 乐观锁重试 |
 | 前端 INVOICE_OUT 显示异常 | 🟡 中 | 按类型分别处理：列表中新增核销相关操作按钮 |
 | 历史数据兼容 | 🟡 中 | 保留 `docId`/`docNo` 字段，历史 receivable 通过 mapping 指向已迁移的业务单据 |
-| 回滚困难 | 🔴 高 | V72 drop 表不可逆；V68/V71 可回滚 |
+| 回滚困难 | 🔴 高 | V74 drop 表不可逆；V68/V73 可回滚 |
 
 ### 4.3 回滚方案
 
@@ -843,7 +844,7 @@ ALTER TABLE t_business_doc DROP COLUMN unsettled_amount;
 ALTER TABLE t_business_doc DROP COLUMN due_date;
 ```
 
-**V71（迁移数据）**：
+**V73（迁移数据）**：
 ```sql
 -- 删除迁移插入的业务单据（INVOICE_OUT/INVOICE_IN 类型）
 DELETE FROM t_business_doc WHERE doc_type IN ('INVOICE_OUT', 'INVOICE_IN') AND source = 'IMPORTED';
@@ -852,7 +853,7 @@ ALTER TABLE t_arap_settlement_entry DROP COLUMN business_doc_id;
 ALTER TABLE t_reconciliation_log DROP COLUMN target_business_doc_id;
 ```
 
-**V72（删表）**：不可回滚。执行前必须确认所有数据验证通过。
+**V74（删表）**：不可回滚。执行前必须确认所有数据验证通过。
 
 ---
 
@@ -887,11 +888,11 @@ ALTER TABLE t_reconciliation_log DROP COLUMN target_business_doc_id;
 ### 第四阶段：数据迁移 + 清理（M4）
 | 步骤 | 内容 |
 |------|------|
-| 4.1 | 编写 V71 migration（迁移数据） |
+| 4.1 | 编写 V73 migration（迁移数据） |
 | 4.2 | 清理 10+ 个引用 ReceivableMapper/PayableMapper 的文件 |
 | 4.3 | 合并 ReceivableServiceImpl 能力到 BusinessDocService |
 | 4.4 | 前端 ReceivableList.vue 改造 |
-| 4.5 | 验收通过后执行 V72 drop 表 |
+| 4.5 | 验收通过后执行 V74 drop 表 |
 
 ---
 
@@ -906,8 +907,8 @@ ALTER TABLE t_reconciliation_log DROP COLUMN target_business_doc_id;
 - [ ] 核销推荐（recommend）基于业务单据而不是 receivable/payable 表
 - [ ] 进项发票不再创建 PayableEntity
 - [ ] 账龄分析基于 t_business_doc 查询
-- [ ] V71 迁移后 t_receivable 数据完整迁移到 t_business_doc
-- [ ] V72 删除 t_receivable/t_payable 后系统运行正常
+- [ ] V73 迁移后 t_receivable 数据完整迁移到 t_business_doc
+- [ ] V74 删除 t_receivable/t_payable 后系统运行正常
 - [ ] `mvn test` Failures: 0（允许 16 个 H2 历史 Errors）
 - [ ] 核销并发更新不丢失数据（乐观锁验证）
 
@@ -938,8 +939,8 @@ ALTER TABLE t_reconciliation_log DROP COLUMN target_business_doc_id;
 | 文件 | 变更类型 |
 |------|---------|
 | `backend/.../db/migration/V68__add_settlement_columns_to_business_doc.sql` | 新增 |
-| `backend/.../db/migration/V71__migrate_receivable_to_business_doc.sql` | 新增 |
-| `backend/.../db/migration/V72__drop_receivable_payable_tables.sql` | 新增 |
+| `backend/.../db/migration/V73__migrate_receivable_to_business_doc.sql` | 新增 |
+| `backend/.../db/migration/V74__drop_receivable_payable_tables.sql` | 新增 |
 | `backend/.../entity/BusinessDocEntity.java` | 修改：加字段 |
 | `backend/.../dto/BusinessDocVO.java` | 修改：fromEntity 同步读取新字段 |
 | `backend/.../service/impl/BusinessDocServiceImpl.java` | 修改：放开 INVOICE_OUT + 改 populateSettlementAmounts |
@@ -951,8 +952,8 @@ ALTER TABLE t_reconciliation_log DROP COLUMN target_business_doc_id;
 | `backend/.../service/impl/ReceivableServiceImpl.java` | 废弃：能力迁移到 BusinessDocService |
 | `backend/.../service/impl/PayableServiceImpl.java` | 废弃：能力迁移到 BusinessDocService |
 | `backend/.../service/impl/ReceivableStateMachineServiceImpl.java` | 废弃 |
-| `backend/.../entity/ReceivableEntity.java` | 废弃：V72 后删除 |
-| `backend/.../entity/PayableEntity.java` | 废弃：V72 后删除 |
+| `backend/.../entity/ReceivableEntity.java` | 废弃：V74 后删除 |
+| `backend/.../entity/PayableEntity.java` | 废弃：V74 后删除 |
 | `backend/.../service/impl/AutoGenerationService.java` | 修改：改为 BusinessDocMapper |
 | `backend/.../service/impl/BankStatementServiceImpl.java` | 修改：改为查询业务单据 |
 | `backend/.../service/impl/CustomerServiceImpl.java` | 修改：客户余额查询改业务单据 |

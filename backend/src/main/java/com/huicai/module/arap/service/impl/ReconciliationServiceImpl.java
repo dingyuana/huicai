@@ -53,8 +53,6 @@ public class ReconciliationServiceImpl implements ReconciliationService {
 
     private final BankStatementMapper bankStatementMapper;
     private final BusinessDocMapper businessDocMapper;
-    private final ReceivableMapper receivableMapper;
-    private final PayableMapper payableMapper;
     private final CustomerMapper customerMapper;
     private final VendorMapper vendorMapper;
     private final ReconciliationLogMapper logMapper;

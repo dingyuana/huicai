@@ -47,8 +47,6 @@ public class ArapSettlementServiceImpl implements ArapSettlementService {
 
     private final ArapSettlementMapper mapper;
     private final ArapSettlementEntryMapper entryMapper;
-    private final ReceivableMapper receivableMapper;
-    private final PayableMapper payableMapper;
     private final BusinessDocMapper businessDocMapper;
     private final VoucherTemplateService voucherTemplateService;
     private final VoucherMapper voucherMapper;
