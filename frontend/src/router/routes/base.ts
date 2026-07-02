@@ -284,6 +284,18 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/arap/reconciliation-workbench/ReconciliationWorkbench.vue'),
         meta: { title: '往来核销', permission: 'arap:reconciliation:workbench', keepAlive: true },
       },
+      {
+        path: 'arap/reconciliation-approval',
+        name: 'ReconciliationApproval',
+        component: () => import('@/views/arap/reconciliation-approval/ReconciliationApproval.vue'),
+        meta: { title: '核销审批', permission: 'arap:reconciliation:approve', keepAlive: true },
+      },
+      {
+        path: 'arap/reconciliation-exception',
+        name: 'ReconciliationExceptionList',
+        component: () => import('@/views/arap/reconciliation-exception/ReconciliationExceptionList.vue'),
+        meta: { title: '核销异常池', permission: 'arap:reconciliation:exception', keepAlive: true },
+      },
       // 税务管理
       {
         path: 'tax/input-invoice',

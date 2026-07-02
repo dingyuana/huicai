@@ -93,3 +93,61 @@ export function pageReconLogs(params: {
 }): Promise<any> {
   return request.get('/reconciliation/logs/page', { params })
 }
+
+// ====== 核销审批 ======
+
+export function approveReconciliation(id: number): Promise<any> {
+  return request.post(`/reconciliation/${id}/approve`)
+}
+
+export function rejectReconciliation(id: number, reason?: string): Promise<void> {
+  return request.post(`/reconciliation/${id}/reject`, null, { params: { reason: reason || '' } })
+}
+
+// ====== 核销异常池 ======
+
+export interface ReconciliationException {
+  id: number
+  tenantId: number
+  sourceDocType: string
+  sourceDocId: number
+  targetDocType?: string
+  targetDocId?: number
+  partyId?: number
+  partyType?: string
+  amount: number
+  unsettledAmount?: number
+  exceptionType: string
+  exceptionReason?: string
+  matchSuggestion?: string
+  status: string  // OPEN / RESOLVED / IGNORED
+  retryCount?: number
+  assignedTo?: number
+  resolvedBy?: number
+  resolvedAt?: string
+  remark?: string
+  createdBy?: number
+  createdAt: string
+  updatedAt?: string
+}
+
+export function pageReconciliationExceptions(params: {
+  status?: string
+  exceptionType?: string
+  current?: number
+  size?: number
+}): Promise<any> {
+  return request.get('/reconciliation/exceptions/page', { params })
+}
+
+export function resolveException(id: number, remark?: string): Promise<void> {
+  return request.post(`/reconciliation/exceptions/${id}/resolve`, null, { params: { remark: remark || '' } })
+}
+
+export function ignoreException(id: number, reason: string): Promise<void> {
+  return request.post(`/reconciliation/exceptions/${id}/ignore`, null, { params: { reason } })
+}
+
+export function retryException(id: number): Promise<any> {
+  return request.post(`/reconciliation/exceptions/${id}/retry`, null, { params: { userId: 0 } })
+}

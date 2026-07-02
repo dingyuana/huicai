@@ -1,6 +1,6 @@
 # P30 SPEC — 核销工作台修复与增强
 
-> 状态：**待启动** | 优先级：高
+> 状态：**已完成**（P30-1/P30-2/P30-3 全部落地） | 优先级：高
 > 依据：P12 核销业务闭环已落地，但前端工作台只支持银行流水触发，缺少收款单/付款单直接触发入口
 > 目标：补全核销工作台的触发源+审批UI+日志查询，使后端完整能力在前端可用
 > 工期：3 批工单（P30-1 / P30-2 / P30-3）
@@ -119,11 +119,28 @@
 - 列表：展示所有核销记录
 - 详情弹窗：查看核销匹配详情、关联凭证
 
+> ✅ **已实现**：核销日志功能已集成在 `SettlementList.vue` 的"核销日志"tab 中（P30-2 时已做），无需单独页面。
+
 ### 3.2 核销异常池页面
 
 后端已有 `GET /reconciliation/exceptions/page` + `POST /exceptions/{id}/resolve`：
 - 列表显示异常记录
 - 可标记已解决
+
+> ✅ **已实现（2026-07-02）**：`ReconciliationExceptionList.vue` — 完整 CRUD 页面，支持按状态/异常类型筛选，支持解决/忽略/重试操作。
+
+### 3.3 核销审批页面
+
+> ✅ **已实现（2026-07-02）**：`ReconciliationApproval.vue` — 显示 CONFIRMED 状态的核销日志列表，支持审批通过和驳回操作。
+
+### 3.4 实现文件清单
+
+| 文件 | 说明 |
+|------|------|
+| `frontend/src/api/modules/arapSettlement.ts` | 新增 approve/reject/exception CRUD API 函数 |
+| `frontend/src/views/arap/reconciliation-approval/ReconciliationApproval.vue` | 核销审批页面 |
+| `frontend/src/views/arap/reconciliation-exception/ReconciliationExceptionList.vue` | 核销异常池页面 |
+| `frontend/src/router/routes/base.ts` | 新增 2 条路由 |
 
 ---
 
