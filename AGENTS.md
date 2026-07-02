@@ -4,7 +4,7 @@
 
 ## §0 项目状态（硬数字，每次 commit 后更新）
 
-> **更新基准**：commit `28ccee7` (2026-06-29)
+> **更新基准**：commit `a7e2261` (2026-07-02)
 
 | 维度 | 数据 |
 |---|---|
@@ -29,6 +29,10 @@
 6. **数据权限**：MyBatis 拦截器自动注入 SQL 条件，实现组织级数据隔离
 7. **金额精度**：所有金额计算使用 `BigDecimal`，禁止 `double/float`，数据库 `NUMERIC(18,2)`
 8. **核销架构**：银行流水不直接参与核销，必须先生成收款单/付款单后再匹配应收/应付
+9. **事务红线**：所有涉及资金流转、记账、冲红、核销的核心写操作，必须使用 `@Transactional(rollbackFor = Exception.class)`，严禁无事务执行
+10. **逻辑删除**：关键财务表禁止物理删除，统一使用 `deleted` 字段（Integer，0=正常，1=删除），所有查询必须带 `deleted = 0` 条件
+11. **DTO/VO 隔离**：禁止将数据库 Entity 直接暴露给前端 Controller 返回值，入参必须定义 DTO/Param，出参必须定义 VO
+12. **异常处理**：禁止直接抛出原生 `Exception` 或 `RuntimeException`，必须使用 `BusinessException`（`com.huicai.common.exception`），统一错误码管理
 
 ---
 
@@ -102,7 +106,30 @@
 
 ---
 
-## §6 技术栈（已落地）
+## §6 常用命令速查
+
+| 操作 | 命令 |
+|------|------|
+| 启动后端 | `cd backend && mvn spring-boot:run` |
+| 启动前端 | `cd frontend && npm run dev` |
+| 运行全部测试 | `cd backend && mvn test` |
+| 运行单个测试类 | `cd backend && mvn test -Dtest=XxxTest` |
+| 代码格式化 | `cd backend && mvn spotless:apply` |
+| 编译检查 | `cd backend && mvn compile` |
+| 打包 | `cd backend && mvn clean package -DskipTests` |
+| 启动 Docker 环境 | `docker compose up -d` |
+| 查看 Flyway 状态 | `cd backend && mvn flyway:info` |
+
+## §7 风险边界（操作前需人工确认）
+
+1. **禁止 `git push -f`**：任何强制推送都会覆盖 Git 历史，必须经老丁确认
+2. **禁止直接修改生产配置**：`application-prod.yml` 等生产环境配置文件不可修改
+3. **禁止硬编码敏感信息**：数据库密码、API Key、密钥等必须通过环境变量或配置中心注入
+4. **DDL 必须走 Flyway**：禁止直接修改数据库表结构，所有 schema 变更必须生成 Flyway migration（`V{version}__{description}.sql`）
+5. **三方对照审计**：任何 schema 变更必须 `PG ↔ Entity ↔ 业务代码` 三方对齐，禁止只改一端
+6. **Git add 禁止通配**：`git add` 必须指定具体文件路径，禁止根目录 `git add -A`（防止卷进 IDE 自动生成文件）
+
+## §8 技术栈（已落地）
 
 | 层级 | 技术 |
 |---|---|
