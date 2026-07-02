@@ -226,7 +226,10 @@ public class SalesInvoiceImportService {
             String dateStr = rowMap.getOrDefault(dateIdx, "").trim();
             row.invoiceDate = parseInvoiceDate(dateStr);
         }
-        if (row.invoiceDate == null) throw new RuntimeException("缺少有效开票日期");
+        // 日期解析失败不跳过，提示但保留（允许用户后续手动改）
+        if (row.invoiceDate == null) {
+            throw new RuntimeException("缺少有效开票日期");
+        }
 
         Integer goodsIdx = mapping.getFieldToColumnIndex().get(ColumnMappingResolver.Field.GOODS_NAME);
         if (goodsIdx != null) row.goodsName = rowMap.getOrDefault(goodsIdx, "").trim();
@@ -236,6 +239,16 @@ public class SalesInvoiceImportService {
             String amtStr = rowMap.getOrDefault(amtIdx, "").trim();
             if (StrUtil.isNotBlank(amtStr))
                 row.amount = new BigDecimal(amtStr.replaceAll("[^0-9.-]", ""));
+        }
+        // 金额为空 → 尝试用价税合计 fallback
+        if (row.amount == null) {
+            Integer totalIdx = mapping.getFieldToColumnIndex().get(ColumnMappingResolver.Field.TOTAL_AMOUNT);
+            if (totalIdx != null) {
+                String totalStr = rowMap.getOrDefault(totalIdx, "").trim();
+                if (StrUtil.isNotBlank(totalStr)) {
+                    row.amount = new BigDecimal(totalStr.replaceAll("[^0-9.-]", ""));
+                }
+            }
         }
         if (row.amount == null) throw new RuntimeException("缺少金额");
 
@@ -575,7 +588,18 @@ public class SalesInvoiceImportService {
     }
 
     Long matchOrCreateCustomer(ParsedInvoiceRow row) {
-        if (StrUtil.isBlank(row.buyerTaxId) && StrUtil.isBlank(row.buyerName)) return null;
+        if (StrUtil.isBlank(row.buyerTaxId) && StrUtil.isBlank(row.buyerName)) {
+            // PATCH: 即使客户名称和税号都为空，也创建匿名客户，不跳过这行
+            CustomerEntity newCustomer = new CustomerEntity();
+            newCustomer.setName("匿名客户");
+            newCustomer.setTaxNo(null);
+            newCustomer.setCode("AUTO-" + System.currentTimeMillis());
+            newCustomer.setIsActive(true);
+            newCustomer.setRemark("发票导入自动创建（客户信息缺失）");
+            customerMapper.insert(newCustomer);
+            log.info("自动创建匿名客户 (名称税号缺失)");
+            return newCustomer.getId();
+        }
         if (StrUtil.isNotBlank(row.buyerTaxId)) {
             List<CustomerEntity> byTax = customerMapper.selectList(
                     new LambdaQueryWrapper<CustomerEntity>().eq(CustomerEntity::getTaxNo, row.buyerTaxId).last("LIMIT 1"));
