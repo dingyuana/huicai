@@ -331,7 +331,7 @@ public class BankStatementServiceImpl implements BankStatementService {
         );
 
         // 防误判: 摘要含社保关键词但对方是商业公司 → 跳过规则, 走兜底
-        if (rule != null && "social_security".equals(rule.getClassification())
+        if (rule != null && "salary_social".equals(rule.getClassification())
                 && StrUtil.isNotBlank(stmt.getCounterAccount())
                 && isCommercialEntity(stmt.getCounterAccount())) {
             rule = null;
@@ -359,7 +359,7 @@ public class BankStatementServiceImpl implements BankStatementService {
             );
 
             // 防误判: 兜底匹配社保但对方是商业公司 → 降级为方向兜底
-            if ("social_security".equals(fb.getClassification())
+            if ("salary_social".equals(fb.getClassification())
                     && StrUtil.isNotBlank(stmt.getCounterAccount())
                     && isCommercialEntity(stmt.getCounterAccount())) {
                 fb = fallbackHeuristic.classify("", stmt.getDirection());
@@ -687,7 +687,7 @@ public class BankStatementServiceImpl implements BankStatementService {
                 : statementMapper.countByClassification(accountId);
         Map<String, Integer> result = new LinkedHashMap<>();
         for (Map<String, Object> row : rows) {
-            String cls = row.get("classification") == null ? "pending" : String.valueOf(row.get("classification"));
+            String cls = row.get("classification") == null ? "other_unknown" : String.valueOf(row.get("classification"));
             Number cnt = (Number) row.get("cnt");
             result.put(cls, cnt == null ? 0 : cnt.intValue());
         }

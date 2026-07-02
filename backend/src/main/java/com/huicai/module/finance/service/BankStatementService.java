@@ -103,7 +103,7 @@ public interface BankStatementService {
 
     /**
      * 按 accountId + 可选 reviewStatus 统计各分类的流水数量.
-     * 返回结构: { classification: count }, 未分类 (NULL classification) 归入 "pending" 键.
+     * 返回结构: { classification: count }, 未分类 (NULL classification) 归入 "other_unknown" 键.
      */
     Map<String, Integer> classificationCounts(Long accountId, String reviewStatus);
 }
