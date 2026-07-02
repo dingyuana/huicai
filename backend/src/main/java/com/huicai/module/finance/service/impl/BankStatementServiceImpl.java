@@ -143,9 +143,17 @@ public class BankStatementServiceImpl implements BankStatementService {
                     statementMapper.insert(stmt);
                     imported++;
 
-                    // R1: 导入后主动生单 (老丁 2026-06-13 指示)
+                    // P0: CSV 导入后触发分类引擎（与 Excel 导入一致）
+                    try {
+                        this.classifySingle(stmt.getId());
+                    } catch (Exception e) {
+                        log.warn("CSV导入后分类失败: statementId={}", stmt.getId(), e);
+                    }
+
+                    // R1: 导入后主动生单 (re-read stmt to get updated classification)
                     if (autoGenerateOnImport) {
                         try {
+                            stmt = statementMapper.selectById(stmt.getId());
                             String type = AutoGenerationService.classifyType(stmt.getClassification());
                             if ("C".equals(type)) {
                                 stmt.setReviewStatus(StatementStatus.UNCONFIRMED);
