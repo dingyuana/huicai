@@ -47,16 +47,14 @@ export const MATCH_STATUS_LABELS: Record<string, string> = {
 }
 
 export const CLASSIFICATION_LABELS: Record<string, string> = {
-  bank_fee: '银行手续费',
-  interest_income: '利息收入',
   business_receipt: '业务收款',
   business_payment: '业务付款',
   internal_transfer: '内部转账',
-  tax_payment: '税费扣缴',
-  social_security: '社保缴费',
-  insurance_fee: '保险费用',
-  salary_payment: '工资发放',
-  pending: '待认领',
+  tax_withholding: '税费扣缴',
+  salary_social: '薪酬与社保',
+  bank_interest_fee: '银行利息与手续费',
+  financing_invest: '筹资与投资活动',
+  other_unknown: '其它/待认领',
 }
 
 export const REVIEW_STATUS_LABELS: Record<string, string> = {

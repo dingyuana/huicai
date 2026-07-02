@@ -192,29 +192,25 @@ public class AutoGenerationService {
         Subject creditAcct = null;
 
         switch (stmt.getClassification()) {
-            case "bank_fee": {
-                debitAcct = findSubjectByCode("6602.01");
-                creditAcct = bankAcct;
+            case "bank_interest_fee": {
+                // 银行利息与手续费：借方根据方向判断
+                if ("in".equals(direction)) {
+                    debitAcct = bankAcct;
+                    creditAcct = findSubjectByCode("6602.02"); // 利息收入
+                } else {
+                    debitAcct = findSubjectByCode("6602.01"); // 手续费
+                    creditAcct = bankAcct;
+                }
                 break;
             }
-            case "interest_income": {
-                debitAcct = bankAcct;
-                creditAcct = findSubjectByCode("6602.02");
-                break;
-            }
-            case "tax_payment": {
+            case "tax_withholding": {
                 debitAcct = findSubjectByCode("2221");
                 creditAcct = bankAcct;
                 break;
             }
-            case "social_security": {
-                Subject socialAcct = findSubjectByCode("2211.04");
-                debitAcct = socialAcct != null ? socialAcct : findSubjectByCode("2211");
-                creditAcct = bankAcct;
-                break;
-            }
-            case "insurance_fee": {
-                debitAcct = findSubjectByCode("6602.06");
+            case "salary_social": {
+                Subject salaryAcct = findSubjectByCode("2211");
+                debitAcct = salaryAcct != null ? salaryAcct : findSubjectByCode("2211");
                 creditAcct = bankAcct;
                 break;
             }
@@ -487,7 +483,7 @@ public class AutoGenerationService {
                 addVoucherEntry(voucher.getId(), bankAcct.getId(), BigDecimal.ZERO, amount, entrySummary, sort++);
                 break;
             }
-            case "salary_payment": {
+            case "salary_social": {
                 Subject salaryAcct = findSubjectByCode("2211");
                 addVoucherEntry(voucher.getId(), salaryAcct.getId(), amount, BigDecimal.ZERO, entrySummary, sort++);
                 addVoucherEntry(voucher.getId(), bankAcct.getId(), BigDecimal.ZERO, amount, entrySummary, sort++);
@@ -614,7 +610,7 @@ public class AutoGenerationService {
     private String mapToDocType(String classification) {
         return switch (classification) {
             case "business_receipt" -> "RECEIPT";
-            case "business_payment", "salary_payment", "social_security" -> "PAYMENT";
+            case "business_payment", "salary_social" -> "PAYMENT";
             case "internal_transfer" -> "TRANSFER";
             default -> "EXPENSE";
         };
@@ -743,10 +739,10 @@ public class AutoGenerationService {
 
     public static String classifyType(String classification) {
         return switch (classification) {
-            case "bank_fee", "interest_income", "tax_payment",
-                 "social_security", "insurance_fee" -> "A";
+            case "bank_interest_fee", "tax_withholding" -> "A";
             case "business_receipt", "business_payment",
-                 "internal_transfer", "salary_payment" -> "B";
+                 "internal_transfer", "salary_social" -> "B";
+            case "financing_invest" -> "C";
             default -> "C";
         };
     }

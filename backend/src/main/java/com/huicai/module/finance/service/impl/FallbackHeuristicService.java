@@ -79,8 +79,8 @@ public class FallbackHeuristicService {
             return new Result("business_payment", 10, "[direction:out]");
         }
 
-        // 3. 最终兜底: pending
-        return new Result("pending", 10, null);
+        // 3. 最终兜底: other_unknown
+        return new Result("other_unknown", 10, null);
     }
 
     private boolean matchDirection(ClassificationRuleEntity rule, String direction) {

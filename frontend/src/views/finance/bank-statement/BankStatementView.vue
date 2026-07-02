@@ -57,7 +57,7 @@
         <el-table-column prop="summary" label="摘要" min-width="180" show-overflow-tooltip />
         <el-table-column label="分类" width="100" align="center">
           <template #default="{ row }">
-            <el-tag v-if="row.classification && row.classification !== 'pending'"
+            <el-tag v-if="row.classification && row.classification !== 'other_unknown'"
               :type="row.reviewStatus === 'approved' ? 'success' : 'warning'" size="small">
               {{ CLASSIFICATION_LABELS[row.classification] || row.classification }}
             </el-tag>
@@ -84,7 +84,7 @@
         </el-table-column>
         <el-table-column label="操作" width="260" fixed="right">
           <template #default="{ row }">
-            <el-button v-if="!row.classification || row.classification === 'pending'"
+            <el-button v-if="!row.classification || row.classification === 'other_unknown'"
               text size="small" type="primary" @click="onClassify(row)">分类</el-button>
             <el-button v-if="canReview(row)"
               text size="small" type="success" @click.stop="onReview(row)">确认</el-button>
@@ -330,7 +330,7 @@
           <el-button @click="cancelEdit">取消</el-button>
           <el-button type="primary" @click="saveClassification">保存</el-button>
         </template>
-        <el-button v-if="!detailEditable && detailData && (!detailData.classification || detailData.classification === 'pending')"
+        <el-button v-if="!detailEditable && detailData && (!detailData.classification || detailData.classification === 'other_unknown')"
           type="primary" @click="onClassify(detailData); detailVisible = false">自动分类</el-button>
         <el-button v-if="!detailEditable && canReview(detailData)"
           type="success" @click="onReview(detailData); detailVisible = false">确认</el-button>
@@ -416,7 +416,7 @@ function reviewStatusTagType(status: string): ElTagType {
 
 function canReview(row: any): boolean {
   const s = row.reviewStatus
-  return row.classification && row.classification !== 'pending'
+  return row.classification && row.classification !== 'other_unknown'
     && (!s || s === 'PENDING' || s === 'classified' || s === 'manual_pending' || s === 'RECLASSIFIED')
 }
 
@@ -664,7 +664,7 @@ async function onAutoClassify() {
     const items = (res as any).records || []
     let classified = 0
     for (const item of items) {
-      if (!item.classification || item.classification === 'pending') {
+      if (!item.classification || item.classification === 'other_unknown') {
         try { await classifyStatement(item.id); classified++ } catch { /* skip */ }
       }
     }
@@ -736,7 +736,7 @@ async function onRowClick(row: any, column: any) {
 }
 
 function startEdit() {
-  editClassification.value = detailData.value.classification || 'pending'
+  editClassification.value = detailData.value.classification || 'other_unknown'
   detailEditable.value = true
 }
 

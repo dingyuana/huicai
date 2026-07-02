@@ -588,24 +588,21 @@ public class BankStatementServiceImpl implements BankStatementService {
 
         // 按分类计算分录: 复用 AutoGenerationService 中硬编码的分录逻辑
         switch (stmt.getClassification()) {
-            case "bank_fee":
-                entries.add(new BankStatementService.PreviewEntry("debit", "6602.01", "手续费", amount, stmt.getSummary()));
-                entries.add(new BankStatementService.PreviewEntry("credit", "1002", "银行存款", amount, stmt.getSummary()));
+            case "bank_interest_fee":
+                if ("in".equals(direction)) {
+                    entries.add(new BankStatementService.PreviewEntry("debit", "1002", "银行存款", amount, stmt.getSummary()));
+                    entries.add(new BankStatementService.PreviewEntry("credit", "6602.02", "利息收入", amount, stmt.getSummary()));
+                } else {
+                    entries.add(new BankStatementService.PreviewEntry("debit", "6602.01", "手续费", amount, stmt.getSummary()));
+                    entries.add(new BankStatementService.PreviewEntry("credit", "1002", "银行存款", amount, stmt.getSummary()));
+                }
                 break;
-            case "interest_income":
-                entries.add(new BankStatementService.PreviewEntry("debit", "1002", "银行存款", amount, stmt.getSummary()));
-                entries.add(new BankStatementService.PreviewEntry("credit", "6602.02", "利息收入", amount, stmt.getSummary()));
-                break;
-            case "tax_payment":
+            case "tax_withholding":
                 entries.add(new BankStatementService.PreviewEntry("debit", "2221", "应交税费", amount, stmt.getSummary()));
                 entries.add(new BankStatementService.PreviewEntry("credit", "1002", "银行存款", amount, stmt.getSummary()));
                 break;
-            case "social_security":
+            case "salary_social":
                 entries.add(new BankStatementService.PreviewEntry("debit", "2211", "应付职工薪酬", amount, stmt.getSummary()));
-                entries.add(new BankStatementService.PreviewEntry("credit", "1002", "银行存款", amount, stmt.getSummary()));
-                break;
-            case "insurance_fee":
-                entries.add(new BankStatementService.PreviewEntry("debit", "6602.06", "保险费", amount, stmt.getSummary()));
                 entries.add(new BankStatementService.PreviewEntry("credit", "1002", "银行存款", amount, stmt.getSummary()));
                 break;
             case "business_receipt":
@@ -618,10 +615,6 @@ public class BankStatementServiceImpl implements BankStatementService {
                 break;
             case "internal_transfer":
                 entries.add(new BankStatementService.PreviewEntry("debit", "1012", "其他货币资金", amount, stmt.getSummary()));
-                entries.add(new BankStatementService.PreviewEntry("credit", "1002", "银行存款", amount, stmt.getSummary()));
-                break;
-            case "salary_payment":
-                entries.add(new BankStatementService.PreviewEntry("debit", "2211", "应付职工薪酬", amount, stmt.getSummary()));
                 entries.add(new BankStatementService.PreviewEntry("credit", "1002", "银行存款", amount, stmt.getSummary()));
                 break;
             default:

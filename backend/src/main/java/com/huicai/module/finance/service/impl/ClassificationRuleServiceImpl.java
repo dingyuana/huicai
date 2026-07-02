@@ -102,14 +102,14 @@ public class ClassificationRuleServiceImpl implements ClassificationRuleService 
 
         // 8 条种子规则（与 V20 migration 数据一致）
         ClassificationRuleEntity[] seeds = new ClassificationRuleEntity[]{
-                createSeed(tenantId, 1, "银行手续费", "keyword_regex", "手续费|工本费|年费|账户管理费", "description", "out", "bank_fee", null, null),
-                createSeed(tenantId, 2, "利息收入", "keyword_regex", "利息|结息|存款利息", "description", "in", "interest_income", null, null),
-                createSeed(tenantId, 3, "业务收款", "keyword_regex", "货款", "description", "in", "business_receipt", null, null),
-                createSeed(tenantId, 4, "业务付款", "keyword_regex", "货款", "description", "out", "business_payment", null, null),
-                createSeed(tenantId, 5, "内部转账", "keyword_regex", "转账|转存|调拨|上划|下拨", "description", null, "internal_transfer", null, null),
-                createSeed(tenantId, 6, "税务缴费", "keyword_regex", "税|税务|缴税|税金|税款|增值税|所得税|城建税|教育费附加|国家金库|国库|印花", "description", "out", "tax_payment", null, null),
-                createSeed(tenantId, 7, "社保缴费", "keyword_regex", "社保|公积金|养老|医疗|失业|工伤|生育", "description", "out", "social_security", null, null),
-                createSeed(tenantId, 8, "保险费用", "keyword_regex", "保险|保费|投保|财产险|责任险|雇主责任险|意外险", "description", "out", "insurance_fee", null, null),
+                createSeed(tenantId, 1, "银行利息与手续费", "keyword_regex", "手续费|工本费|年费|账户管理费|利息|结息|存款利息", "description", null, "bank_interest_fee", null, null),
+                createSeed(tenantId, 2, "业务收款", "keyword_regex", "货款|收款|销售|回款|客户|应收|收入", "description", "in", "business_receipt", null, null),
+                createSeed(tenantId, 3, "业务付款", "keyword_regex", "货款|付款|采购|支付|供应商|应付|支出", "description", "out", "business_payment", null, null),
+                createSeed(tenantId, 4, "内部转账", "keyword_regex", "转账|转存|调拨|上划|下拨", "description", null, "internal_transfer", null, null),
+                createSeed(tenantId, 5, "税费扣缴", "keyword_regex", "税|税务|缴税|税金|税款|增值税|所得税|城建税|教育费附加|国家金库|国库|印花", "description", "out", "tax_withholding", null, null),
+                createSeed(tenantId, 6, "薪酬与社保", "keyword_regex", "工资|薪酬|社保|公积金|养老|医疗|失业|工伤|生育|代扣|个税", "description", "out", "salary_social", null, null),
+                createSeed(tenantId, 7, "筹资与投资活动", "keyword_regex", "借款|还款|贷款|理财|投资|融资|分红|股本|债券", "description", null, "financing_invest", null, null),
+                createSeed(tenantId, 8, "其它/待认领", "keyword_regex", "", "description", null, "other_unknown", null, null),
         };
 
         int inserted = 0;
