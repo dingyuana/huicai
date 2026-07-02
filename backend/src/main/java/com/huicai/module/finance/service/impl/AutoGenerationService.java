@@ -13,6 +13,7 @@ import com.huicai.module.arap.service.ExpenseReimbursementService;
 import com.huicai.module.arap.service.ReconciliationService;
 import com.huicai.module.finance.constant.BankClassification;
 import com.huicai.module.finance.constant.StatementStatus;
+import com.huicai.module.finance.constant.VoucherType;
 import com.huicai.module.finance.entity.*;
 import com.huicai.module.finance.mapper.*;
 import com.huicai.module.finance.service.VoucherNoService;
@@ -51,7 +52,6 @@ import java.util.Map;
 public class AutoGenerationService {
 
     private static final long DEFAULT_USER_ID = 1L;
-    private static final long DEFAULT_VOUCHER_TYPE_ID = 1L;
 
     private final BankStatementMapper statementMapper;
     private final BusinessDocMapper docMapper;
@@ -515,12 +515,30 @@ public class AutoGenerationService {
 
     // ─── 辅助方法 ───
 
+    /**
+     * 根据银行流水分类确定凭证类型：
+     *   business_receipt → 收款凭证 (SK)
+     *   business_payment → 付款凭证 (FK)
+     *   internal_transfer → 转账凭证 (ZZ)
+     *   其余（工资、税费、利息等）→ 记账凭证 (JZ)
+     */
+    private static long resolveVoucherType(String classification) {
+        if (classification == null) return VoucherType.JZ;
+        return switch (classification) {
+            case BankClassification.BUSINESS_RECEIPT -> VoucherType.SK;
+            case BankClassification.BUSINESS_PAYMENT -> VoucherType.FK;
+            case BankClassification.INTERNAL_TRANSFER -> VoucherType.ZZ;
+            default -> VoucherType.JZ;
+        };
+    }
+
     private VoucherEntity createVoucher(BankStatementEntity stmt, String period, BigDecimal amount, Long userId) {
-        String voucherNo = voucherNoService.generateNextNo(period, DEFAULT_VOUCHER_TYPE_ID);
+        long voucherTypeId = resolveVoucherType(stmt.getClassification());
+        String voucherNo = voucherNoService.generateNextNo(period, voucherTypeId);
         VoucherEntity voucher = new VoucherEntity();
         voucher.setVoucherNo(voucherNo);
         voucher.setPeriod(period);
-        voucher.setVoucherTypeId(DEFAULT_VOUCHER_TYPE_ID);
+        voucher.setVoucherTypeId(voucherTypeId);
         voucher.setStatus("DRAFT");
         voucher.setSource("GENERATED");
         // P19: 凭证摘要追加对方名称, 确保列表/详情可见

@@ -8,6 +8,7 @@ import com.huicai.module.arap.entity.*;
 import com.huicai.module.arap.mapper.*;
 import com.huicai.module.arap.service.ArapSettlementService;
 import com.huicai.module.arap.service.ReconciliationService;
+import com.huicai.module.finance.constant.VoucherType;
 import com.huicai.module.finance.entity.BusinessDocEntity;
 import com.huicai.module.finance.entity.VoucherEntity;
 import com.huicai.module.finance.entity.VoucherEntryEntity;
@@ -48,8 +49,6 @@ public class ReconciliationServiceImpl implements ReconciliationService {
     private static final BigDecimal TOLERANCE_RATE = new BigDecimal("0.10"); // L5: 容差 10%
     private static final long DEFAULT_TENANT_ID = 1L;
     private static final long DEFAULT_USER_ID = 1L;
-
-    private static final long DEFAULT_VOUCHER_TYPE_ID = 1L;
 
     private final BankStatementMapper bankStatementMapper;
     private final BusinessDocMapper businessDocMapper;
@@ -392,12 +391,13 @@ public class ReconciliationServiceImpl implements ReconciliationService {
 
         String period = request.period() != null ? request.period()
                 : java.time.LocalDate.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyyMM"));
-        String voucherNo = voucherNoService.generateNextNo(period, DEFAULT_VOUCHER_TYPE_ID);
+        long voucherTypeId = "reconciliation_receipt".equals(classification) ? VoucherType.SK : VoucherType.FK;
+        String voucherNo = voucherNoService.generateNextNo(period, voucherTypeId);
 
         VoucherEntity voucher = new VoucherEntity();
         voucher.setVoucherNo(voucherNo);
         voucher.setPeriod(period);
-        voucher.setVoucherTypeId(DEFAULT_VOUCHER_TYPE_ID);
+        voucher.setVoucherTypeId(voucherTypeId);
         voucher.setStatus("DRAFT");
         voucher.setSource("GENERATED");
         voucher.setSummary(request.remark() != null ? request.remark() : "核销自动生成");

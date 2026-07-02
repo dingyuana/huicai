@@ -11,6 +11,7 @@ import com.huicai.module.arap.entity.*;
 import com.huicai.module.arap.mapper.*;
 import com.huicai.module.arap.service.ArapSettlementService;
 import com.huicai.module.arap.service.PrepaymentService;
+import com.huicai.module.finance.constant.VoucherType;
 import com.huicai.module.finance.entity.VoucherEntity;
 import com.huicai.module.finance.entity.VoucherEntryEntity;
 import com.huicai.module.finance.mapper.VoucherEntryMapper;
@@ -39,7 +40,6 @@ public class PrepaymentServiceImpl implements PrepaymentService {
 
     private static final long DEFAULT_TENANT_ID = 1L;
     private static final long DEFAULT_USER_ID = 1L;
-    private static final long DEFAULT_VOUCHER_TYPE_ID = 1L;
 
     private static final String SUBJECT_PREPAY = "1123";
     private static final String SUBJECT_PAYABLE = "2202";
@@ -200,11 +200,11 @@ public class PrepaymentServiceImpl implements PrepaymentService {
         settlementMapper.updateById(settlement);
 
         // 7. 创建凭证 (借:应付账款 / 贷:预付账款)
-        String voucherNo = voucherNoService.generateNextNo(effectivePeriod, DEFAULT_VOUCHER_TYPE_ID);
+        String voucherNo = voucherNoService.generateNextNo(effectivePeriod, VoucherType.FK);
         VoucherEntity voucher = new VoucherEntity();
         voucher.setVoucherNo(voucherNo);
         voucher.setPeriod(effectivePeriod);
-        voucher.setVoucherTypeId(DEFAULT_VOUCHER_TYPE_ID);
+        voucher.setVoucherTypeId(VoucherType.FK);
         voucher.setStatus("DRAFT");
         voucher.setSource("GENERATED");
         voucher.setSummary(effectiveSummary);
@@ -334,11 +334,11 @@ public class PrepaymentServiceImpl implements PrepaymentService {
         settlement.setStatus(ArapStatus.CONFIRMED);
         settlementMapper.updateById(settlement);
 
-        String voucherNo = voucherNoService.generateNextNo(effectivePeriod, DEFAULT_VOUCHER_TYPE_ID);
+        String voucherNo = voucherNoService.generateNextNo(effectivePeriod, VoucherType.SK);
         VoucherEntity voucher = new VoucherEntity();
         voucher.setVoucherNo(voucherNo);
         voucher.setPeriod(effectivePeriod);
-        voucher.setVoucherTypeId(DEFAULT_VOUCHER_TYPE_ID);
+        voucher.setVoucherTypeId(VoucherType.SK);
         voucher.setStatus("DRAFT");
         voucher.setSource("GENERATED");
         voucher.setSummary(effectiveSummary);

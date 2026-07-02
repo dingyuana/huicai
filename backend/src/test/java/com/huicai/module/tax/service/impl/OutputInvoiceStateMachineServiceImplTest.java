@@ -831,7 +831,7 @@ class OutputInvoiceStateMachineServiceImplTest {
         invoice.setAmount(BigDecimal.valueOf(1000));
         invoice.setInvoiceNo("TEST-CONCURRENT-001");
         when(invoiceMapper.selectById(INVOICE_ID)).thenReturn(invoice);
-        when(invoiceMapper.updateById(any())).thenReturn(0); // 模拟乐观锁冲突
+        when(invoiceMapper.updateById(any(OutputInvoiceEntity.class))).thenReturn(0); // 模拟乐观锁冲突
 
         // when & then
         BusinessException ex = assertThrows(BusinessException.class,

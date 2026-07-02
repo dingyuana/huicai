@@ -16,6 +16,7 @@ import com.huicai.module.arap.mapper.ArapSettlementMapper;
 import com.huicai.module.arap.mapper.PayableMapper;
 import com.huicai.module.arap.mapper.ReceivableMapper;
 import com.huicai.module.arap.service.ArapSettlementService;
+import com.huicai.module.finance.constant.VoucherType;
 import com.huicai.module.finance.entity.BusinessDocEntity;
 import com.huicai.module.finance.entity.VoucherEntity;
 import com.huicai.module.finance.entity.VoucherEntryEntity;
@@ -42,7 +43,6 @@ import java.util.List;
 public class ArapSettlementServiceImpl implements ArapSettlementService {
 
     private static final Logger log = LoggerFactory.getLogger(ArapSettlementServiceImpl.class);
-    private static final long DEFAULT_VOUCHER_TYPE_ID = 1L;
     private static final long DEFAULT_USER_ID = 0L;
 
     private final ArapSettlementMapper mapper;
@@ -193,12 +193,13 @@ public class ArapSettlementServiceImpl implements ArapSettlementService {
 
         String period = entity.getPeriod() != null ? entity.getPeriod()
                 : java.time.LocalDate.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyyMM"));
-        String voucherNo = voucherNoService.generateNextNo(period, DEFAULT_VOUCHER_TYPE_ID);
+        long voucherTypeId = "payment".equals(classifySuffix) ? VoucherType.FK : VoucherType.SK;
+        String voucherNo = voucherNoService.generateNextNo(period, voucherTypeId);
 
         VoucherEntity voucher = new VoucherEntity();
         voucher.setVoucherNo(voucherNo);
         voucher.setPeriod(period);
-        voucher.setVoucherTypeId(DEFAULT_VOUCHER_TYPE_ID);
+        voucher.setVoucherTypeId(voucherTypeId);
         voucher.setStatus("DRAFT");
         voucher.setSource("GENERATED");
         voucher.setSummary("往来核销生成 — " + (entity.getSettlementNo() != null ? entity.getSettlementNo() : ""));

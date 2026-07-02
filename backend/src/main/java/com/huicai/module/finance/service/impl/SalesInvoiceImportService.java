@@ -9,6 +9,7 @@ import com.huicai.module.arap.entity.ReceivableEntity;
 import com.huicai.module.arap.mapper.CustomerMapper;
 import com.huicai.module.arap.mapper.ReceivableMapper;
 import com.huicai.module.arap.service.ReceivableStateMachineService;
+import com.huicai.module.finance.constant.VoucherType;
 import com.huicai.module.finance.entity.BusinessDocEntity;
 import com.huicai.module.finance.entity.BusinessDocEntryEntity;
 import com.huicai.module.finance.entity.VoucherEntity;
@@ -50,7 +51,7 @@ import java.util.concurrent.ConcurrentHashMap;
 public class SalesInvoiceImportService {
 
     private static final long DEFAULT_USER_ID = 1L;
-    private static final long DEFAULT_VOUCHER_TYPE_ID = 1L;
+    private static final long DEFAULT_VOUCHER_TYPE_ID = VoucherType.SK;
 
     private final BusinessDocMapper docMapper;
     private final BusinessDocEntryMapper docEntryMapper;
