@@ -4,6 +4,7 @@ import cn.hutool.core.util.StrUtil;
 import cn.hutool.json.JSONObject;
 import cn.hutool.json.JSONUtil;
 import com.huicai.common.exception.BusinessException;
+import com.huicai.module.finance.constant.StatementStatus;
 import com.huicai.module.finance.entity.BankStatementEntity;
 import com.huicai.module.finance.mapper.BankStatementMapper;
 import com.huicai.module.finance.service.BankStatementService;
@@ -173,7 +174,7 @@ public class BankStatementExcelImportService {
                             isDup = statementMapper.countDuplicate(accountId, stmt.getTxDate(), stmt.getExternalNo(), stmt.getAmount()) > 0;
                         } catch (Exception ignored) {}
                     }
-                    stmt.setReviewStatus(isDup ? "DUPLICATE" : "PENDING");
+                    stmt.setReviewStatus(isDup ? StatementStatus.DUPLICATE : StatementStatus.PENDING);
 
                     records.add(stmt);
                     p.put("txDate", stmt.getTxDate());
@@ -310,7 +311,7 @@ public class BankStatementExcelImportService {
                             isDup = statementMapper.countDuplicate(accountId, stmt.getTxDate(), stmt.getExternalNo(), stmt.getAmount()) > 0;
                         } catch (Exception ignored) {}
                     }
-                    stmt.setReviewStatus(isDup ? "DUPLICATE" : "PENDING");
+                    stmt.setReviewStatus(isDup ? StatementStatus.DUPLICATE : StatementStatus.PENDING);
 
                     records.add(stmt);
                     p.put("txDate", stmt.getTxDate());
@@ -486,7 +487,7 @@ public class BankStatementExcelImportService {
         int failed = 0;
         List<Map<String, Object>> errors = new ArrayList<>();
         for (BankStatementEntity stmt : records) {
-            if ("DUPLICATE".equals(stmt.getReviewStatus())) {
+            if (StatementStatus.DUPLICATE.equals(stmt.getReviewStatus())) {
                 duplicate++;
                 continue;
             }

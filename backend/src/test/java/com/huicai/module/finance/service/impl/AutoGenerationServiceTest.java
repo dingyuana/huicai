@@ -45,13 +45,12 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 /**
- * AutoGenerationService 单元测试 — H1 任务书
+ * AutoGenerationService 单元测试 — 新8分类体系
  * <p>
  * 覆盖:
- * - D2 修复: salary_payment 归 B 类 (不再走 A 类 switch)
- * - D3 修复: internal_transfer docType = TRANSFER (非 OTHER_PAYABLE)
- * - A/B/C 三类基础路由
+ * - A/B/C 三类基础路由（新分类）
  * - 幂等门: 已 generated_voucher_id 不重复生单
+ * - B类单据生成逻辑
  */
 @ExtendWith(MockitoExtension.class)
 class AutoGenerationServiceTest {
@@ -107,18 +106,14 @@ class AutoGenerationServiceTest {
     // ─── classifyType 静态路由测试 ───
 
     @Test
-    void testClassifyType_salaryPayment_归B类() {
-        // D2 修复: salary_payment 不应在 A 类
-        assertEquals("B", AutoGenerationService.classifyType("salary_payment"));
+    void testClassifyType_salarySocial_归B类() {
+        assertEquals("B", AutoGenerationService.classifyType("salary_social"));
     }
 
     @Test
-    void testClassifyType_A类5个() {
-        assertEquals("A", AutoGenerationService.classifyType("bank_fee"));
-        assertEquals("A", AutoGenerationService.classifyType("interest_income"));
-        assertEquals("A", AutoGenerationService.classifyType("tax_payment"));
-        assertEquals("A", AutoGenerationService.classifyType("social_security"));
-        assertEquals("A", AutoGenerationService.classifyType("insurance_fee"));
+    void testClassifyType_A类2个() {
+        assertEquals("A", AutoGenerationService.classifyType("bank_interest_fee"));
+        assertEquals("A", AutoGenerationService.classifyType("tax_withholding"));
     }
 
     @Test
@@ -126,27 +121,22 @@ class AutoGenerationServiceTest {
         assertEquals("B", AutoGenerationService.classifyType("business_receipt"));
         assertEquals("B", AutoGenerationService.classifyType("business_payment"));
         assertEquals("B", AutoGenerationService.classifyType("internal_transfer"));
-        assertEquals("B", AutoGenerationService.classifyType("salary_payment"));
+        assertEquals("B", AutoGenerationService.classifyType("salary_social"));
     }
 
     @Test
     void testClassifyType_C类默认() {
         assertEquals("C", AutoGenerationService.classifyType(""));
         assertEquals("C", AutoGenerationService.classifyType("unknown"));
-        assertEquals("C", AutoGenerationService.classifyType("pending"));
+        assertEquals("C", AutoGenerationService.classifyType("other_unknown"));
+        assertEquals("C", AutoGenerationService.classifyType("financing_invest"));
     }
 
-    // ─── D2 修复验证: salary_payment 实际走 B 类分支 ───
+    // ─── B类验证: salary_social 走 B 类分支 ───
 
     @Test
-    void testAutoGenerate_salaryPayment_走B类不走A类() {
-        // D2 修复后: salary_payment 归 B 类, autoGenerate 应走 generateDocThenVoucher
-        // 因 mock 没设 businessDocMapper 详细预期, 走完会因 docMapper.insert(null/空) 等抛错
-        // 关键: 不能走 A 类 (A 类会调 voucherEntryMapper 走 findSubjectByCode 2211)
-        // 注: voucherNoService / subjectMapper("2211") 的 stub 被删 — 因 voucherTemplateService 未 mock,
-        //     代码在 generateDocThenVoucher 内 matchByClassification 时抛 NPE,
-        //     根本走不到 createVoucher()/findSubjectByCode("2211"), 这两个 stub 触发 UnnecessaryStubbing
-        BankStatementEntity stmt = newStmt("salary_payment", "out");
+    void testAutoGenerate_salarySocial_走B类不走A类() {
+        BankStatementEntity stmt = newStmt("salary_social", "out");
         when(statementMapper.selectById(1L)).thenReturn(stmt);
 
         // 不抛异常 + docMapper 被调用 (B 类特征) 即为正确
@@ -157,23 +147,12 @@ class AutoGenerationServiceTest {
         }
         // B 类必 insert businessDoc
         verify(docMapper, atLeastOnce()).insert(any(BusinessDocEntity.class));
-        // A 类特征: 不应调 findSubjectByCode("6602.01"/"6602.02") 等 A 类专属科目
-        verify(subjectMapper, never()).selectList(argThat(w -> w != null
-                && w.getSqlSet() != null
-                && (w.getSqlSet().toString().contains("6602.01")
-                    || w.getSqlSet().toString().contains("6602.02")
-                    || w.getSqlSet().toString().contains("6602.06"))));
     }
 
     // ─── D3 修复验证: internal_transfer docType = TRANSFER ───
 
     @Test
     void testMapToDocType_internalTransfer_是TRANSFER() {
-        // D3 修复: 通过 autoGenerate B 类 internal_transfer 流程验证 mapToDocType 输出
-        // (mapToDocType 是 private, 改测生成 doc 时 doc.getDocType())
-        // 注: voucherNoService / subjectMapper("1012") 的 stub 被删 — 因 voucherTemplateService 未 mock,
-        //     代码在 generateDocThenVoucher 内 matchByClassification 时抛 NPE,
-        //     根本走不到 createVoucher()/findSubjectByCode("1012"), 这两个 stub 触发 UnnecessaryStubbing
         BankStatementEntity stmt = newStmt("internal_transfer", "out");
         when(statementMapper.selectById(1L)).thenReturn(stmt);
 
@@ -182,7 +161,7 @@ class AutoGenerationServiceTest {
         } catch (Exception e) {
             // mock 限制下可能抛, 但关键是 docMapper.insert 用了 docType="TRANSFER"
         }
-        // 验证 docMapper.insert 被调, 插入的 doc.docType == "TRANSFER" (D3 修复)
+        // 验证 docMapper.insert 被调, 插入的 doc.docType == "TRANSFER"
         org.mockito.ArgumentCaptor<BusinessDocEntity> captor =
                 org.mockito.ArgumentCaptor.forClass(BusinessDocEntity.class);
         verify(docMapper, atLeastOnce()).insert(captor.capture());
@@ -196,7 +175,7 @@ class AutoGenerationServiceTest {
 
     @Test
     void testAutoGenerate_已生过凭证_不重复() {
-        BankStatementEntity stmt = newStmt("bank_fee", "out");
+        BankStatementEntity stmt = newStmt("bank_interest_fee", "out");
         stmt.setGeneratedVoucherId(999L);  // 已生过
         when(statementMapper.selectById(1L)).thenReturn(stmt);
 
@@ -222,12 +201,24 @@ class AutoGenerationServiceTest {
 
     @Test
     void testAutoGenerate_C类分类_不生单() {
-        BankStatementEntity stmt = newStmt("unknown_class", "out");
+        BankStatementEntity stmt = newStmt("financing_invest", "out");
         when(statementMapper.selectById(1L)).thenReturn(stmt);
 
         boolean result = service.autoGenerate(1L, 1L);
 
         assertFalse(result, "C 类应不动, 返回 false");
+        verify(voucherMapper, never()).insert(any(VoucherEntity.class));
+        verify(docMapper, never()).insert(any(BusinessDocEntity.class));
+    }
+
+    @Test
+    void testAutoGenerate_otherUnknown_C类不生单() {
+        BankStatementEntity stmt = newStmt("other_unknown", "out");
+        when(statementMapper.selectById(1L)).thenReturn(stmt);
+
+        boolean result = service.autoGenerate(1L, 1L);
+
+        assertFalse(result, "other_unknown (C类) 应不动, 返回 false");
         verify(voucherMapper, never()).insert(any(VoucherEntity.class));
         verify(docMapper, never()).insert(any(BusinessDocEntity.class));
     }

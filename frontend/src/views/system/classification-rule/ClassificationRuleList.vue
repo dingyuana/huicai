@@ -185,29 +185,25 @@ const TYPE_LABELS: Record<string, string> = {
 }
 
 const CLASSIFICATION_LABELS: Record<string, string> = {
-  bank_fee: '银行费用',
-  interest_income: '利息收入',
+  bank_interest_fee: '银行利息与手续费',
+  tax_withholding: '税费扣缴',
+  salary_social: '薪酬与社保',
   business_receipt: '业务收款',
   business_payment: '业务付款',
   internal_transfer: '内部转账',
-  tax_payment: '税务缴费',
-  social_security: '社保缴费',
-  insurance_fee: '保险费用',
-  salary_payment: '工资发放',
-  pending: '待处理',
+  financing_invest: '筹资与投资活动',
+  other_unknown: '其它/待认领',
 }
 
 const CLASSIFICATION_TAG: Record<string, ElTagType> = {
-  bank_fee: 'danger',
-  interest_income: 'success',
+  bank_interest_fee: 'danger',
+  tax_withholding: 'danger',
+  salary_social: 'warning',
   business_receipt: 'success',
   business_payment: 'warning',
   internal_transfer: 'info',
-  tax_payment: 'danger',
-  social_security: 'warning',
-  insurance_fee: 'warning',
-  salary_payment: 'warning',
-  pending: 'info',
+  financing_invest: 'primary',
+  other_unknown: 'info',
 }
 
 // Subject tree → flat list for selector
@@ -289,7 +285,7 @@ const form = reactive<ClassificationRule>({
   pattern: '',
   matchField: 'description',
   direction: '',
-  classification: 'bank_fee',
+  classification: 'business_receipt',
   priority: 99,
   isActive: true,
   routeType: undefined,
@@ -323,7 +319,7 @@ const openEdit = (row?: ClassificationRule) => {
   } else {
     Object.assign(form, {
       name: '', ruleType: 'keyword_regex', pattern: '',
-      matchField: 'description', direction: '', classification: 'bank_fee',
+      matchField: 'description', direction: '', classification: 'business_receipt',
       priority: (list.value.length || 0) + 1, isActive: true,
       routeType: undefined,
       debitSubjectId: undefined, creditSubjectId: undefined,

@@ -12,6 +12,8 @@ import com.huicai.module.arap.mapper.PayableMapper;
 import com.huicai.module.arap.mapper.ReceivableMapper;
 import com.huicai.module.arap.mapper.VendorMapper;
 import com.huicai.module.arap.service.ReconciliationService;
+import com.huicai.module.finance.constant.BankClassification;
+import com.huicai.module.finance.constant.StatementStatus;
 import com.huicai.module.finance.entity.BankJournalEntity;
 import com.huicai.module.finance.entity.BankStatementEntity;
 import com.huicai.module.finance.entity.ClassificationRuleEntity;
@@ -146,7 +148,7 @@ public class BankStatementServiceImpl implements BankStatementService {
                         try {
                             String type = AutoGenerationService.classifyType(stmt.getClassification());
                             if ("C".equals(type)) {
-                                stmt.setReviewStatus("UNCONFIRMED");
+                                stmt.setReviewStatus(StatementStatus.UNCONFIRMED);
                                 statementMapper.updateById(stmt);
                             } else {
                                 autoGenerationService.autoGenerate(stmt.getId(), 1L);
@@ -331,7 +333,7 @@ public class BankStatementServiceImpl implements BankStatementService {
         );
 
         // 防误判: 摘要含社保关键词但对方是商业公司 → 跳过规则, 走兜底
-        if (rule != null && "salary_social".equals(rule.getClassification())
+        if (rule != null && BankClassification.SALARY_SOCIAL.equals(rule.getClassification())
                 && StrUtil.isNotBlank(stmt.getCounterAccount())
                 && isCommercialEntity(stmt.getCounterAccount())) {
             rule = null;
@@ -359,7 +361,7 @@ public class BankStatementServiceImpl implements BankStatementService {
             );
 
             // 防误判: 兜底匹配社保但对方是商业公司 → 降级为方向兜底
-            if ("salary_social".equals(fb.getClassification())
+            if (BankClassification.SALARY_SOCIAL.equals(fb.getClassification())
                     && StrUtil.isNotBlank(stmt.getCounterAccount())
                     && isCommercialEntity(stmt.getCounterAccount())) {
                 fb = fallbackHeuristic.classify("", stmt.getDirection());
@@ -392,10 +394,10 @@ public class BankStatementServiceImpl implements BankStatementService {
 
         String curStatus = stmt.getReviewStatus();
         boolean canReview = curStatus == null
-                || "PENDING".equals(curStatus)
-                || "classified".equals(curStatus)
-                || "manual_pending".equals(curStatus)
-                || "RECLASSIFIED".equals(curStatus);
+                || StatementStatus.PENDING.equals(curStatus)
+                || StatementStatus.CLASSIFIED.equals(curStatus)
+                || StatementStatus.MANUAL_PENDING.equals(curStatus)
+                || StatementStatus.RECLASSIFIED.equals(curStatus);
         if (!canReview) {
             throw BusinessException.badRequest("当前状态 " + curStatus + " 无法复审, 请先撤回或等待审批");
         }
@@ -403,7 +405,7 @@ public class BankStatementServiceImpl implements BankStatementService {
         // review() 只做审核确认，不生成凭证
         stmt.setReviewedBy(userId);
         stmt.setReviewedAt(LocalDateTime.now());
-        stmt.setReviewStatus("CONFIRMED");
+        stmt.setReviewStatus(StatementStatus.CONFIRMED);
 
         statementMapper.updateById(stmt);
         log.info("出纳确认: statementId={}, status=CONFIRMED", statementId);
@@ -417,7 +419,7 @@ public class BankStatementServiceImpl implements BankStatementService {
         if (stmt == null) {
             throw BusinessException.notFound("对账单记录不存在");
         }
-        if (!"CONFIRMED".equals(stmt.getReviewStatus())) {
+        if (!StatementStatus.CONFIRMED.equals(stmt.getReviewStatus())) {
             throw BusinessException.badRequest(
                 "当前状态 " + stmt.getReviewStatus() + " 无法审核，请先完成出纳确认");
         }
@@ -433,7 +435,7 @@ public class BankStatementServiceImpl implements BankStatementService {
 
         // 重新查询获取生成后的数据
         stmt = statementMapper.selectById(stmt.getId());
-        String newStatus = "A".equals(type) ? "voucher_generated" : "payment_created";
+        String newStatus = "A".equals(type) ? StatementStatus.VOUCHER_GENERATED : StatementStatus.PAYMENT_CREATED;
         stmt.setReviewStatus(newStatus);
         statementMapper.updateById(stmt);
 
@@ -470,7 +472,7 @@ public class BankStatementServiceImpl implements BankStatementService {
         }
         // 允许 CONFIRMED（重试场景）或 AUDITED（旧数据过渡兼容）
         String curStatus = stmt.getReviewStatus();
-        if (!"AUDITED".equals(curStatus) && !"CONFIRMED".equals(curStatus)) {
+        if (!"AUDITED".equals(curStatus) && !StatementStatus.CONFIRMED.equals(curStatus)) {
             throw BusinessException.badRequest(
                 "当前状态 " + curStatus + " 无法生成凭证，请先完成主管审核");
         }
@@ -483,7 +485,7 @@ public class BankStatementServiceImpl implements BankStatementService {
         }
 
         stmt = statementMapper.selectById(stmt.getId());
-        String newStatus = "A".equals(type) ? "voucher_generated" : "payment_created";
+        String newStatus = "A".equals(type) ? StatementStatus.VOUCHER_GENERATED : StatementStatus.PAYMENT_CREATED;
         stmt.setReviewStatus(newStatus);
         statementMapper.updateById(stmt);
 
@@ -519,10 +521,10 @@ public class BankStatementServiceImpl implements BankStatementService {
             throw BusinessException.notFound("对账单记录不存在");
         }
         String curStatus = stmt.getReviewStatus();
-        if (!"voucher_generated".equals(curStatus) && !"payment_created".equals(curStatus)) {
+        if (!StatementStatus.VOUCHER_GENERATED.equals(curStatus) && !StatementStatus.PAYMENT_CREATED.equals(curStatus)) {
             throw BusinessException.badRequest("当前状态 " + curStatus + " 无法核准, 仅支持 voucher_generated/payment_created");
         }
-        stmt.setReviewStatus("approved");
+        stmt.setReviewStatus(StatementStatus.APPROVED);
         statementMapper.updateById(stmt);
         log.info("核准过账: statementId={}", statementId);
     }
@@ -534,7 +536,7 @@ public class BankStatementServiceImpl implements BankStatementService {
         if (stmt == null) {
             throw BusinessException.notFound("对账单记录不存在");
         }
-        if (!"manual_pending".equals(stmt.getReviewStatus())) {
+        if (!StatementStatus.MANUAL_PENDING.equals(stmt.getReviewStatus())) {
             throw BusinessException.badRequest("当前状态 " + stmt.getReviewStatus() + " 无法人工处理, 仅支持 manual_pending");
         }
         if (!"A".equals(targetType) && !"B".equals(targetType)) {
@@ -548,7 +550,7 @@ public class BankStatementServiceImpl implements BankStatementService {
             case "A":
                 try {
                     boolean ok = autoGenerationService.autoGenerateInNewTx(stmt.getId(), stmt.getReviewedBy());
-                    stmt.setReviewStatus(ok ? "voucher_generated" : "manual_pending");
+                    stmt.setReviewStatus(ok ? StatementStatus.VOUCHER_GENERATED : StatementStatus.MANUAL_PENDING);
                     log.info("人工指定A类: statementId={}, ok={}", statementId, ok);
                 } catch (Exception e) {
                     log.warn("人工指定A类失败: statementId={}, err={}", statementId, e.getMessage());
@@ -558,7 +560,7 @@ public class BankStatementServiceImpl implements BankStatementService {
             case "B":
                 try {
                     boolean ok = autoGenerationService.autoGenerateInNewTx(stmt.getId(), stmt.getReviewedBy());
-                    stmt.setReviewStatus(ok ? "payment_created" : "manual_pending");
+                    stmt.setReviewStatus(ok ? StatementStatus.PAYMENT_CREATED : StatementStatus.MANUAL_PENDING);
                     log.info("人工指定B类: statementId={}, paymentType={}, ok={}", statementId, paymentType, ok);
                 } catch (Exception e) {
                     log.warn("人工指定B类失败: statementId={}, err={}", statementId, e.getMessage());
@@ -588,7 +590,7 @@ public class BankStatementServiceImpl implements BankStatementService {
 
         // 按分类计算分录: 复用 AutoGenerationService 中硬编码的分录逻辑
         switch (stmt.getClassification()) {
-            case "bank_interest_fee":
+            case BankClassification.BANK_INTEREST_FEE:
                 if ("in".equals(direction)) {
                     entries.add(new BankStatementService.PreviewEntry("debit", "1002", "银行存款", amount, stmt.getSummary()));
                     entries.add(new BankStatementService.PreviewEntry("credit", "6602.02", "利息收入", amount, stmt.getSummary()));
@@ -597,23 +599,23 @@ public class BankStatementServiceImpl implements BankStatementService {
                     entries.add(new BankStatementService.PreviewEntry("credit", "1002", "银行存款", amount, stmt.getSummary()));
                 }
                 break;
-            case "tax_withholding":
+            case BankClassification.TAX_WITHHOLDING:
                 entries.add(new BankStatementService.PreviewEntry("debit", "2221", "应交税费", amount, stmt.getSummary()));
                 entries.add(new BankStatementService.PreviewEntry("credit", "1002", "银行存款", amount, stmt.getSummary()));
                 break;
-            case "salary_social":
+            case BankClassification.SALARY_SOCIAL:
                 entries.add(new BankStatementService.PreviewEntry("debit", "2211", "应付职工薪酬", amount, stmt.getSummary()));
                 entries.add(new BankStatementService.PreviewEntry("credit", "1002", "银行存款", amount, stmt.getSummary()));
                 break;
-            case "business_receipt":
+            case BankClassification.BUSINESS_RECEIPT:
                 entries.add(new BankStatementService.PreviewEntry("debit", "1002", "银行存款", amount, stmt.getSummary()));
                 entries.add(new BankStatementService.PreviewEntry("credit", "1122", "应收账款", amount, stmt.getSummary()));
                 break;
-            case "business_payment":
+            case BankClassification.BUSINESS_PAYMENT:
                 entries.add(new BankStatementService.PreviewEntry("debit", "2202", "应付账款", amount, stmt.getSummary()));
                 entries.add(new BankStatementService.PreviewEntry("credit", "1002", "银行存款", amount, stmt.getSummary()));
                 break;
-            case "internal_transfer":
+            case BankClassification.INTERNAL_TRANSFER:
                 entries.add(new BankStatementService.PreviewEntry("debit", "1012", "其他货币资金", amount, stmt.getSummary()));
                 entries.add(new BankStatementService.PreviewEntry("credit", "1002", "银行存款", amount, stmt.getSummary()));
                 break;
@@ -687,7 +689,7 @@ public class BankStatementServiceImpl implements BankStatementService {
                 : statementMapper.countByClassification(accountId);
         Map<String, Integer> result = new LinkedHashMap<>();
         for (Map<String, Object> row : rows) {
-            String cls = row.get("classification") == null ? "other_unknown" : String.valueOf(row.get("classification"));
+            String cls = row.get("classification") == null ? BankClassification.OTHER_UNKNOWN : String.valueOf(row.get("classification"));
             Number cnt = (Number) row.get("cnt");
             result.put(cls, cnt == null ? 0 : cnt.intValue());
         }
@@ -696,10 +698,10 @@ public class BankStatementServiceImpl implements BankStatementService {
 
     /** 判断状态是否已锁定（不可删除/修改分类） */
     private static boolean isLocked(String reviewStatus) {
-        return "CONFIRMED".equals(reviewStatus)
-            || "voucher_generated".equals(reviewStatus)
-            || "payment_created".equals(reviewStatus)
-            || "approved".equals(reviewStatus);
+        return StatementStatus.CONFIRMED.equals(reviewStatus)
+            || StatementStatus.VOUCHER_GENERATED.equals(reviewStatus)
+            || StatementStatus.PAYMENT_CREATED.equals(reviewStatus)
+            || StatementStatus.APPROVED.equals(reviewStatus);
     }
 
     /** 解析路由类型 A/B/C：优先取匹配规则中的 routeType，其次按 classification 默认推断 */

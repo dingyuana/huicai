@@ -29,8 +29,8 @@ public interface BankStatementService {
     BankStatementEntity review(Long statementId, Long userId);
 
     /**
-     * 批量确认. salary_payment 分类时记录业务单据生成意图 (DRAFT, FROM_BANK_TXN).
-     * 验收第 10 条: salary_payment 出纳确认时生成付款单 (DRAFT 状态, 关联员工档案)
+     * 批量确认. salary_social 分类时记录业务单据生成意图 (DRAFT, FROM_BANK_TXN).
+     * 验收第 10 条: salary_social 出纳确认时生成付款单 (DRAFT 状态, 关联员工档案)
      *
      * @param statementIds 流水 ID 列表
      * @param userId       操作人 ID

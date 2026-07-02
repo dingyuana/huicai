@@ -70,7 +70,7 @@ class BankStatementServiceTest {
         @Test
         void review_已分类_标记CONFIRMED() {
             // review() 只做状态审核确认 → CONFIRMED, 不再 autoGenerate; 制证由 generateVoucher() 独立触发
-            BankStatementEntity stmt = stub(1L, "bank_fee");
+            BankStatementEntity stmt = stub(1L, "bank_interest_fee");
             when(statementMapper.selectById(1L)).thenReturn(stmt);
             when(statementMapper.updateById(any(BankStatementEntity.class))).thenReturn(1);
 
@@ -86,7 +86,7 @@ class BankStatementServiceTest {
 
         @Test
         void review_从PENDING_标记CONFIRMED() {
-            BankStatementEntity stmt = stubWithStatus(1L, "bank_fee", "PENDING");
+            BankStatementEntity stmt = stubWithStatus(1L, "bank_interest_fee", "PENDING");
             when(statementMapper.selectById(1L)).thenReturn(stmt);
             when(statementMapper.updateById(any(BankStatementEntity.class))).thenReturn(1);
 
@@ -98,7 +98,7 @@ class BankStatementServiceTest {
 
         @Test
         void review_从RECLASSIFIED_标记CONFIRMED() {
-            BankStatementEntity stmt = stubWithStatus(1L, "bank_fee", "RECLASSIFIED");
+            BankStatementEntity stmt = stubWithStatus(1L, "bank_interest_fee", "RECLASSIFIED");
             when(statementMapper.selectById(1L)).thenReturn(stmt);
             when(statementMapper.updateById(any(BankStatementEntity.class))).thenReturn(1);
 
@@ -126,7 +126,7 @@ class BankStatementServiceTest {
 
         @Test
         void review_CONFIRMED状态_throwBadRequest() {
-            BankStatementEntity stmt = stubWithStatus(1L, "bank_fee", "CONFIRMED");
+            BankStatementEntity stmt = stubWithStatus(1L, "bank_interest_fee", "CONFIRMED");
             when(statementMapper.selectById(1L)).thenReturn(stmt);
             BusinessException ex = assertThrows(BusinessException.class, () -> service.review(1L, 1L));
             assertTrue(ex.getMessage().contains("无法复审"));
@@ -135,7 +135,7 @@ class BankStatementServiceTest {
 
         @Test
         void review_approved状态_throwBadRequest() {
-            BankStatementEntity stmt = stubWithStatus(1L, "bank_fee", "approved");
+            BankStatementEntity stmt = stubWithStatus(1L, "bank_interest_fee", "approved");
             when(statementMapper.selectById(1L)).thenReturn(stmt);
             BusinessException ex = assertThrows(BusinessException.class, () -> service.review(1L, 1L));
             assertTrue(ex.getMessage().contains("无法复审"));
@@ -144,7 +144,7 @@ class BankStatementServiceTest {
 
         @Test
         void review_写入字段验证() {
-            BankStatementEntity stmt = stub(1L, "bank_fee");
+            BankStatementEntity stmt = stub(1L, "bank_interest_fee");
             when(statementMapper.selectById(1L)).thenReturn(stmt);
             when(statementMapper.updateById(any(BankStatementEntity.class))).thenReturn(1);
 
@@ -178,7 +178,7 @@ class BankStatementServiceTest {
 
         @Test
         void batchReview_混合成功失败_返回成功数() {
-            when(statementMapper.selectById(1L)).thenReturn(stub(1L, "bank_fee"));
+            when(statementMapper.selectById(1L)).thenReturn(stub(1L, "bank_interest_fee"));
             when(statementMapper.selectById(2L)).thenReturn(stub(2L, null));
             when(statementMapper.selectById(3L)).thenReturn(null);
             when(statementMapper.updateById(any(BankStatementEntity.class))).thenReturn(1);
@@ -197,9 +197,9 @@ class BankStatementServiceTest {
 
         @Test
         void audit_CONFIRMED_自动制证_标记voucher_generated() {
-            // bank_fee → classifyType() → "A" → voucher_generated
-            BankStatementEntity confirmed = stubWithStatus(1L, "bank_fee", "CONFIRMED");
-            BankStatementEntity afterGen = stubWithStatus(1L, "bank_fee", "voucher_generated");
+            // bank_interest_fee → classifyType() → "A" → voucher_generated
+            BankStatementEntity confirmed = stubWithStatus(1L, "bank_interest_fee", "CONFIRMED");
+            BankStatementEntity afterGen = stubWithStatus(1L, "bank_interest_fee", "voucher_generated");
             // 第一次 select 取原数据，autoGenerate 后 re-select 取生成后数据
             when(statementMapper.selectById(1L)).thenReturn(confirmed, afterGen);
             when(statementMapper.updateById(any(BankStatementEntity.class))).thenReturn(1);
@@ -223,7 +223,7 @@ class BankStatementServiceTest {
         @Test
         void audit_非CONFIRMED状态_throwBadRequest() {
             for (String badStatus : new String[]{"PENDING", "voucher_generated", "payment_created", "approved", null}) {
-                BankStatementEntity stmt = stubWithStatus(1L, "bank_fee", badStatus);
+                BankStatementEntity stmt = stubWithStatus(1L, "bank_interest_fee", badStatus);
                 when(statementMapper.selectById(1L)).thenReturn(stmt);
                 BusinessException ex = assertThrows(BusinessException.class, () -> service.audit(1L, 1L));
                 assertTrue(ex.getMessage().contains("无法审核"),
@@ -235,9 +235,9 @@ class BankStatementServiceTest {
 
         @Test
         void batchAudit_混合成功失败_返回成功数() {
-            BankStatementEntity confirmed = stubWithStatus(1L, "bank_fee", "CONFIRMED");
+            BankStatementEntity confirmed = stubWithStatus(1L, "bank_interest_fee", "CONFIRMED");
             when(statementMapper.selectById(1L)).thenReturn(confirmed, confirmed);  // audit 内部会 re-select
-            when(statementMapper.selectById(2L)).thenReturn(stubWithStatus(2L, "bank_fee", "PENDING"));
+            when(statementMapper.selectById(2L)).thenReturn(stubWithStatus(2L, "bank_interest_fee", "PENDING"));
             when(statementMapper.selectById(3L)).thenReturn(null);
             when(statementMapper.updateById(any(BankStatementEntity.class))).thenReturn(1);
             when(autoGenerationService.autoGenerateInNewTx(1L, 1L)).thenReturn(true);
@@ -256,9 +256,9 @@ class BankStatementServiceTest {
 
         @Test
         void generateVoucher_A类_标记voucher_generated() {
-            // bank_fee → classifyType() → "A" → voucher_generated
+            // bank_interest_fee → classifyType() → "A" → voucher_generated
             // 作为恢复重试入口，允许从 CONFIRMED 状态触发
-            BankStatementEntity stmt = stubWithStatus(1L, "bank_fee", "CONFIRMED");
+            BankStatementEntity stmt = stubWithStatus(1L, "bank_interest_fee", "CONFIRMED");
             when(statementMapper.selectById(1L)).thenReturn(stmt, stmt);
             when(statementMapper.updateById(any(BankStatementEntity.class))).thenReturn(1);
             when(autoGenerationService.autoGenerateInNewTx(1L, 1L)).thenReturn(true);
@@ -286,7 +286,7 @@ class BankStatementServiceTest {
 
         @Test
         void generateVoucher_autoGenerate失败_throwBadRequest() {
-            BankStatementEntity stmt = stubWithStatus(1L, "bank_fee", "CONFIRMED");
+            BankStatementEntity stmt = stubWithStatus(1L, "bank_interest_fee", "CONFIRMED");
             when(statementMapper.selectById(1L)).thenReturn(stmt);
             when(autoGenerationService.autoGenerateInNewTx(1L, 1L)).thenReturn(false);
 
@@ -306,7 +306,7 @@ class BankStatementServiceTest {
         void generateVoucher_非CONFIRMED非AUDITED状态_throwBadRequest() {
             // CONFIRMED 允许（重试入口），AUDITED 允许（旧数据兼容），其他状态拒绝
             for (String badStatus : new String[]{"PENDING", "voucher_generated", "payment_created", "approved", null}) {
-                BankStatementEntity stmt = stubWithStatus(1L, "bank_fee", badStatus);
+                BankStatementEntity stmt = stubWithStatus(1L, "bank_interest_fee", badStatus);
                 when(statementMapper.selectById(1L)).thenReturn(stmt);
                 BusinessException ex = assertThrows(BusinessException.class, () -> service.generateVoucher(1L, 1L));
                 assertTrue(ex.getMessage().contains("无法生成凭证"),
@@ -319,8 +319,8 @@ class BankStatementServiceTest {
         @Test
         void batchGenerateVouchers_混合成功失败_返回成功数() {
             // 从 CONFIRMED 生成（兼容旧流程的重试入口）
-            BankStatementEntity ok = stubWithStatus(1L, "bank_fee", "CONFIRMED");
-            BankStatementEntity bad = stubWithStatus(2L, "bank_fee", "PENDING");
+            BankStatementEntity ok = stubWithStatus(1L, "bank_interest_fee", "CONFIRMED");
+            BankStatementEntity bad = stubWithStatus(2L, "bank_interest_fee", "PENDING");
             when(statementMapper.selectById(1L)).thenReturn(ok, ok);
             when(statementMapper.selectById(2L)).thenReturn(bad);
             when(statementMapper.updateById(any(BankStatementEntity.class))).thenReturn(1);
@@ -339,7 +339,7 @@ class BankStatementServiceTest {
 
         @Test
         void approve_voucher_generated_标记approved() {
-            BankStatementEntity stmt = stubWithStatus(1L, "bank_fee", "voucher_generated");
+            BankStatementEntity stmt = stubWithStatus(1L, "bank_interest_fee", "voucher_generated");
             when(statementMapper.selectById(1L)).thenReturn(stmt);
             when(statementMapper.updateById(any(BankStatementEntity.class))).thenReturn(1);
 
@@ -375,7 +375,7 @@ class BankStatementServiceTest {
         @Test
         void approve_非终态前置_throwBadRequest() {
             for (String badStatus : new String[]{"CONFIRMED", "AUDITED", "PENDING", "approved", null}) {
-                BankStatementEntity stmt = stubWithStatus(1L, "bank_fee", badStatus);
+                BankStatementEntity stmt = stubWithStatus(1L, "bank_interest_fee", badStatus);
                 when(statementMapper.selectById(1L)).thenReturn(stmt);
                 BusinessException ex = assertThrows(BusinessException.class, () -> service.approve(1L));
                 assertTrue(ex.getMessage().contains("无法核准"),
@@ -467,7 +467,7 @@ class BankStatementServiceTest {
         @Test
         void fullStateTransition_从null到approved() {
             // 1. review: null → CONFIRMED（出纳确认，不制证）
-            BankStatementEntity stmt = stub(1L, "bank_fee");
+            BankStatementEntity stmt = stub(1L, "bank_interest_fee");
             when(statementMapper.selectById(1L)).thenReturn(stmt);
             when(statementMapper.updateById(any(BankStatementEntity.class))).thenReturn(1);
 
@@ -476,9 +476,9 @@ class BankStatementServiceTest {
             verify(autoGenerationService, never()).autoGenerateInNewTx(anyLong(), anyLong());
 
             // 2. audit: CONFIRMED → voucher_generated（主管审核，内部自动制证）
-            BankStatementEntity confirmed = stubWithStatus(1L, "bank_fee", "CONFIRMED");
+            BankStatementEntity confirmed = stubWithStatus(1L, "bank_interest_fee", "CONFIRMED");
             // 第二次 selectById 返回生成后的数据
-            BankStatementEntity afterGen = stubWithStatus(1L, "bank_fee", "voucher_generated");
+            BankStatementEntity afterGen = stubWithStatus(1L, "bank_interest_fee", "voucher_generated");
             when(statementMapper.selectById(1L)).thenReturn(confirmed, afterGen);
             when(autoGenerationService.autoGenerateInNewTx(1L, 1L)).thenReturn(true);
 
@@ -505,7 +505,7 @@ class BankStatementServiceTest {
         @Test
         void deleteStatement_未锁定状态_可删除() {
             for (String okStatus : new String[]{null, "PENDING", "manual_pending"}) {
-                BankStatementEntity stmt = stubWithStatus(1L, "bank_fee", okStatus);
+                BankStatementEntity stmt = stubWithStatus(1L, "bank_interest_fee", okStatus);
                 when(statementMapper.selectById(1L)).thenReturn(stmt);
                 when(statementMapper.deleteById(1L)).thenReturn(1);
 
@@ -527,7 +527,7 @@ class BankStatementServiceTest {
         @Test
         void deleteStatement_CONFIRMED状态_throwBadRequest() {
             for (String lockedStatus : new String[]{"CONFIRMED", "voucher_generated", "payment_created", "approved"}) {
-                BankStatementEntity stmt = stubWithStatus(1L, "bank_fee", lockedStatus);
+                BankStatementEntity stmt = stubWithStatus(1L, "bank_interest_fee", lockedStatus);
                 when(statementMapper.selectById(1L)).thenReturn(stmt);
                 BusinessException ex = assertThrows(BusinessException.class, () -> service.deleteStatement(1L));
                 assertTrue(ex.getMessage().contains("不允许删除"),
@@ -569,7 +569,7 @@ class BankStatementServiceTest {
         @Test
         void updateClassification_CONFIRMED状态_throwBadRequest() {
             for (String lockedStatus : new String[]{"CONFIRMED", "voucher_generated", "payment_created", "approved"}) {
-                BankStatementEntity stmt = stubWithStatus(1L, "bank_fee", lockedStatus);
+                BankStatementEntity stmt = stubWithStatus(1L, "bank_interest_fee", lockedStatus);
                 when(statementMapper.selectById(1L)).thenReturn(stmt);
                 BusinessException ex = assertThrows(BusinessException.class, () -> service.updateClassification(1L, "new_class"));
                 assertTrue(ex.getMessage().contains("不允许修改分类"),

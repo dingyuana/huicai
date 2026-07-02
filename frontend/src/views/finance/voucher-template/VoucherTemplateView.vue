@@ -64,15 +64,14 @@
           <el-col :span="12">
             <el-form-item label="分类">
               <el-select v-model="form.classification" placeholder="绑定分类" filterable allow-create clearable>
-                <el-option label="银行手续费" value="bank_fee" />
-                <el-option label="利息收入" value="interest_income" />
-                <el-option label="税务缴费" value="tax_payment" />
-                <el-option label="社保缴费" value="social_security" />
-                <el-option label="保险费用" value="insurance_fee" />
-                <el-option label="收款" value="business_receipt" />
-                <el-option label="付款" value="business_payment" />
+                <el-option label="银行利息与手续费" value="bank_interest_fee" />
+                <el-option label="业务收款" value="business_receipt" />
+                <el-option label="业务付款" value="business_payment" />
                 <el-option label="内部转账" value="internal_transfer" />
-                <el-option label="工资发放" value="salary_payment" />
+                <el-option label="税费扣缴" value="tax_withholding" />
+                <el-option label="薪酬与社保" value="salary_social" />
+                <el-option label="筹资与投资活动" value="financing_invest" />
+                <el-option label="其它/待认领" value="other_unknown" />
               </el-select>
             </el-form-item>
           </el-col>

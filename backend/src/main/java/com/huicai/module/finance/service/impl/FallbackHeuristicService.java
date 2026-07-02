@@ -2,6 +2,7 @@ package com.huicai.module.finance.service.impl;
 
 import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.huicai.module.finance.constant.BankClassification;
 import com.huicai.module.finance.entity.ClassificationRuleEntity;
 import com.huicai.module.finance.mapper.ClassificationRuleMapper;
 import jakarta.annotation.PostConstruct;
@@ -73,14 +74,14 @@ public class FallbackHeuristicService {
 
         // 2. 方向兜底: 按方向推断业务收/付
         if ("in".equalsIgnoreCase(direction)) {
-            return new Result("business_receipt", 10, "[direction:in]");
+            return new Result(BankClassification.BUSINESS_RECEIPT, 10, "[direction:in]");
         }
         if ("out".equalsIgnoreCase(direction)) {
-            return new Result("business_payment", 10, "[direction:out]");
+            return new Result(BankClassification.BUSINESS_PAYMENT, 10, "[direction:out]");
         }
 
         // 3. 最终兜底: other_unknown
-        return new Result("other_unknown", 10, null);
+        return new Result(BankClassification.OTHER_UNKNOWN, 10, null);
     }
 
     private boolean matchDirection(ClassificationRuleEntity rule, String direction) {

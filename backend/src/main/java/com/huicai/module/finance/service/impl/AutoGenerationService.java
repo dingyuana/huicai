@@ -11,6 +11,8 @@ import com.huicai.module.arap.mapper.*;
 import com.huicai.module.arap.service.EmployeeService;
 import com.huicai.module.arap.service.ExpenseReimbursementService;
 import com.huicai.module.arap.service.ReconciliationService;
+import com.huicai.module.finance.constant.BankClassification;
+import com.huicai.module.finance.constant.StatementStatus;
 import com.huicai.module.finance.entity.*;
 import com.huicai.module.finance.mapper.*;
 import com.huicai.module.finance.service.VoucherNoService;
@@ -38,10 +40,10 @@ import java.util.Map;
 /**
  * 银行流水自动生成单据与凭证 — 实现 4.13 章节设计的自动生单管道.
  * <p>
- * 分类路由:
- * - A类 (直接制证): bank_fee, interest_income, tax_payment, social_security, insurance_fee
- * - B类 (生成业务单据后制证): business_receipt, business_payment, internal_transfer, salary_payment
- * - C类 (待人工): pending
+ * 分类路由 (新8类体系):
+ * - A类 (直接制证): bank_interest_fee, tax_withholding
+ * - B类 (生成业务单据后制证): business_receipt, business_payment, internal_transfer, salary_social
+ * - C类 (待人工): financing_invest, other_unknown
  */
 @Slf4j
 @Service
@@ -88,11 +90,11 @@ public class AutoGenerationService {
         // 状态守卫：上层调用方（generateVoucher/processManual）已做前置校验;
         // 这里只拦截明确不允许制证的非法状态
         String revStatus = stmt.getReviewStatus();
-        if ("PENDING".equals(revStatus)) {
+        if (StatementStatus.PENDING.equals(revStatus)) {
             log.warn("流水 {} 状态为 PENDING, 跳过自动生成", statementId);
             return false;
         }
-        if ("approved".equals(revStatus)) {
+        if (StatementStatus.APPROVED.equals(revStatus)) {
             log.warn("流水 {} 已过账, 禁止重复制证, reviewStatus={}", statementId, revStatus);
             return false;
         }
@@ -116,7 +118,7 @@ public class AutoGenerationService {
             }
         }
         if (type == null) {
-            type = classifyType(classification);
+            type = BankClassification.routeType(classification);
         }
 
         // P11-3: 银行流水 → 员工匹配. 若 counterAccount 匹配到员工, 创建报销单草稿
@@ -192,7 +194,7 @@ public class AutoGenerationService {
         Subject creditAcct = null;
 
         switch (stmt.getClassification()) {
-            case "bank_interest_fee": {
+            case BankClassification.BANK_INTEREST_FEE: {
                 // 银行利息与手续费：借方根据方向判断
                 if ("in".equals(direction)) {
                     debitAcct = bankAcct;
@@ -203,12 +205,12 @@ public class AutoGenerationService {
                 }
                 break;
             }
-            case "tax_withholding": {
+            case BankClassification.TAX_WITHHOLDING: {
                 debitAcct = findSubjectByCode("2221");
                 creditAcct = bankAcct;
                 break;
             }
-            case "salary_social": {
+            case BankClassification.SALARY_SOCIAL: {
                 Subject salaryAcct = findSubjectByCode("2211");
                 debitAcct = salaryAcct != null ? salaryAcct : findSubjectByCode("2211");
                 creditAcct = bankAcct;
@@ -464,26 +466,26 @@ public class AutoGenerationService {
         int sort = 1;
 
         switch (stmt.getClassification()) {
-            case "business_receipt": {
+            case BankClassification.BUSINESS_RECEIPT: {
                 Subject arAcct = findSubjectByCode("1122");
                 addVoucherEntry(voucher.getId(), bankAcct.getId(), amount, BigDecimal.ZERO, entrySummary, sort++);
                 addVoucherEntry(voucher.getId(), arAcct.getId(), BigDecimal.ZERO, amount, entrySummary, sort++);
                 break;
             }
-            case "business_payment": {
+            case BankClassification.BUSINESS_PAYMENT: {
                 Subject apAcct = findSubjectByCode("2202");
                 addVoucherEntry(voucher.getId(), apAcct.getId(), amount, BigDecimal.ZERO, entrySummary, sort++);
                 addVoucherEntry(voucher.getId(), bankAcct.getId(), BigDecimal.ZERO, amount, entrySummary, sort++);
                 break;
             }
-            case "internal_transfer": {
+            case BankClassification.INTERNAL_TRANSFER: {
                 Subject otherAcct = findSubjectByCode("1012");
                 if (otherAcct == null) otherAcct = findSubjectByCode("1221");
                 addVoucherEntry(voucher.getId(), otherAcct.getId(), amount, BigDecimal.ZERO, entrySummary, sort++);
                 addVoucherEntry(voucher.getId(), bankAcct.getId(), BigDecimal.ZERO, amount, entrySummary, sort++);
                 break;
             }
-            case "salary_social": {
+            case BankClassification.SALARY_SOCIAL: {
                 Subject salaryAcct = findSubjectByCode("2211");
                 addVoucherEntry(voucher.getId(), salaryAcct.getId(), amount, BigDecimal.ZERO, entrySummary, sort++);
                 addVoucherEntry(voucher.getId(), bankAcct.getId(), BigDecimal.ZERO, amount, entrySummary, sort++);
@@ -609,9 +611,9 @@ public class AutoGenerationService {
 
     private String mapToDocType(String classification) {
         return switch (classification) {
-            case "business_receipt" -> "RECEIPT";
-            case "business_payment", "salary_social" -> "PAYMENT";
-            case "internal_transfer" -> "TRANSFER";
+            case BankClassification.BUSINESS_RECEIPT -> "RECEIPT";
+            case BankClassification.BUSINESS_PAYMENT, BankClassification.SALARY_SOCIAL -> "PAYMENT";
+            case BankClassification.INTERNAL_TRANSFER -> "TRANSFER";
             default -> "EXPENSE";
         };
     }
@@ -646,7 +648,7 @@ public class AutoGenerationService {
         String classification = stmt.getClassification();
         String counterName = stmt.getCounterAccount();
 
-        if ("business_receipt".equals(classification)) {
+        if (BankClassification.BUSINESS_RECEIPT.equals(classification)) {
             // 银行流水代表款项已收，不应创建新的应收单。
             // 检查该客户是否有未结清应收单，有则按 FIFO 核销；无则跳过。
             Long customerId = doc.getCustomerId();
@@ -689,7 +691,7 @@ public class AutoGenerationService {
                         stmt.getId(), customerId, doc.getId(), amount);
             }
 
-        } else if ("business_payment".equals(classification)) {
+        } else if (BankClassification.BUSINESS_PAYMENT.equals(classification)) {
             // 银行流水代表款项已付，不应创建新的应付单。
             // 检查该供应商是否有未结清应付单，有则按 FIFO 核销。
             Long vendorId = doc.getSupplierId();
@@ -732,19 +734,13 @@ public class AutoGenerationService {
                         stmt.getId(), vendorId, doc.getId(), amount);
             }
         } else {
-            // internal_transfer / salary_payment 等不走应收/应付
+            // internal_transfer / salary_social 等不走应收/应付
             log.debug("跳过: classification={}, 不需要应收/应付单", classification);
         }
     }
 
     public static String classifyType(String classification) {
-        return switch (classification) {
-            case "bank_interest_fee", "tax_withholding" -> "A";
-            case "business_receipt", "business_payment",
-                 "internal_transfer", "salary_social" -> "B";
-            case "financing_invest" -> "C";
-            default -> "C";
-        };
+        return BankClassification.routeType(classification);
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)

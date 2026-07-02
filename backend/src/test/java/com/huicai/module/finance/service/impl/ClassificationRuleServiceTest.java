@@ -16,10 +16,10 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
 /**
- * 分类规则 Service 纯单元测试
+ * 分类规则 Service 纯单元测试 — 新8分类体系
  * <p>
  * 参考 VoucherEntryValidationTest 模式: 不启动 Spring, 仅测试纯业务逻辑.
- * 覆盖 8 方法中的 6 个, 跳过 readOnly 的 page/getById/match.
+ * 覆盖 create/update/delete/reorder/seedForNewTenant/match 方法.
  */
 @ExtendWith(MockitoExtension.class)
 class ClassificationRuleServiceTest {
@@ -176,64 +176,68 @@ class ClassificationRuleServiceTest {
         verify(mapper, times(8)).insert(captor.capture());
         List<ClassificationRuleEntity> seeds = captor.getAllValues();
 
-        // 第1条: 银行手续费
-        assertEquals("银行手续费", seeds.get(0).getName());
+        // 第1条: 银行利息与手续费 (direction=null)
+        assertEquals("银行利息与手续费", seeds.get(0).getName());
         assertEquals("keyword_regex", seeds.get(0).getRuleType());
         assertEquals(1, seeds.get(0).getPriority());
         assertEquals(1L, seeds.get(0).getTenantId());
-        assertEquals("手续费|工本费|年费|账户管理费", seeds.get(0).getPattern());
+        assertEquals("手续费|工本费|年费|账户管理费|利息|结息|存款利息", seeds.get(0).getPattern());
         assertEquals("description", seeds.get(0).getMatchField());
-        assertEquals("out", seeds.get(0).getDirection());
-        assertEquals("bank_fee", seeds.get(0).getClassification());
+        assertNull(seeds.get(0).getDirection());
+        assertEquals("bank_interest_fee", seeds.get(0).getClassification());
         assertTrue(seeds.get(0).getIsActive());
         assertEquals(0, seeds.get(0).getDeleted());
         assertEquals(1L, seeds.get(0).getCreatedBy());
 
-        // 第2条: 利息收入
-        assertEquals("利息收入", seeds.get(1).getName());
-        assertEquals("interest_income", seeds.get(1).getClassification());
+        // 第2条: 业务收款 (direction=in)
+        assertEquals("业务收款", seeds.get(1).getName());
+        assertEquals("business_receipt", seeds.get(1).getClassification());
         assertEquals(2, seeds.get(1).getPriority());
         assertEquals("in", seeds.get(1).getDirection());
+        assertTrue(seeds.get(1).getPattern().contains("货款"));
 
-        // 第3条: 业务收款
-        assertEquals("业务收款", seeds.get(2).getName());
-        assertEquals("business_receipt", seeds.get(2).getClassification());
+        // 第3条: 业务付款 (direction=out)
+        assertEquals("业务付款", seeds.get(2).getName());
+        assertEquals("business_payment", seeds.get(2).getClassification());
         assertEquals(3, seeds.get(2).getPriority());
-        assertEquals("in", seeds.get(2).getDirection());
-        assertEquals("货款", seeds.get(2).getPattern());
+        assertEquals("out", seeds.get(2).getDirection());
+        assertTrue(seeds.get(2).getPattern().contains("货款"));
 
-        // 第4条: 业务付款
-        assertEquals("业务付款", seeds.get(3).getName());
-        assertEquals("business_payment", seeds.get(3).getClassification());
+        // 第4条: 内部转账 (direction=null)
+        assertEquals("内部转账", seeds.get(3).getName());
+        assertEquals("internal_transfer", seeds.get(3).getClassification());
         assertEquals(4, seeds.get(3).getPriority());
-        assertEquals("out", seeds.get(3).getDirection());
-        assertEquals("货款", seeds.get(3).getPattern());
+        assertNull(seeds.get(3).getDirection());
+        assertEquals("转账|转存|调拨|上划|下拨", seeds.get(3).getPattern());
 
-        // 第5条: 内部转账
-        assertEquals("内部转账", seeds.get(4).getName());
-        assertEquals("internal_transfer", seeds.get(4).getClassification());
+        // 第5条: 税费扣缴 (direction=out)
+        assertEquals("税费扣缴", seeds.get(4).getName());
+        assertEquals("tax_withholding", seeds.get(4).getClassification());
         assertEquals(5, seeds.get(4).getPriority());
-        assertNull(seeds.get(4).getDirection());
-        assertEquals("转账|转存|调拨|上划|下拨", seeds.get(4).getPattern());
+        assertEquals("out", seeds.get(4).getDirection());
+        assertTrue(seeds.get(4).getPattern().contains("增值税"));
 
-        // 第6条: 税务缴费
-        assertEquals("税务缴费", seeds.get(5).getName());
-        assertEquals("tax_payment", seeds.get(5).getClassification());
+        // 第6条: 薪酬与社保 (direction=out)
+        assertEquals("薪酬与社保", seeds.get(5).getName());
+        assertEquals("salary_social", seeds.get(5).getClassification());
         assertEquals(6, seeds.get(5).getPriority());
         assertEquals("out", seeds.get(5).getDirection());
-        assertTrue(seeds.get(5).getPattern().contains("增值税"));
+        assertTrue(seeds.get(5).getPattern().contains("工资"));
+        assertTrue(seeds.get(5).getPattern().contains("社保"));
 
-        // 第7条: 社保缴费
-        assertEquals("社保缴费", seeds.get(6).getName());
-        assertEquals("social_security", seeds.get(6).getClassification());
+        // 第7条: 筹资与投资活动 (direction=null)
+        assertEquals("筹资与投资活动", seeds.get(6).getName());
+        assertEquals("financing_invest", seeds.get(6).getClassification());
         assertEquals(7, seeds.get(6).getPriority());
-        assertEquals("out", seeds.get(6).getDirection());
+        assertNull(seeds.get(6).getDirection());
+        assertTrue(seeds.get(6).getPattern().contains("借款"));
+        assertTrue(seeds.get(6).getPattern().contains("投资"));
 
-        // 第8条: 保险费用
-        assertEquals("保险费用", seeds.get(7).getName());
-        assertEquals("insurance_fee", seeds.get(7).getClassification());
+        // 第8条: 其它/待认领 (direction=null)
+        assertEquals("其它/待认领", seeds.get(7).getName());
+        assertEquals("other_unknown", seeds.get(7).getClassification());
         assertEquals(8, seeds.get(7).getPriority());
-        assertEquals("out", seeds.get(7).getDirection());
+        assertNull(seeds.get(7).getDirection());
     }
 
     // ==================== createSeed (private, 通过 seedForNewTenant 间接验证) ====================
@@ -249,12 +253,12 @@ class ClassificationRuleServiceTest {
         verify(mapper, times(8)).insert(captor.capture());
         List<ClassificationRuleEntity> seeds = captor.getAllValues();
 
-        // in: 利息收入, 业务收款
-        assertEquals(2, seeds.stream().filter(s -> "in".equals(s.getDirection())).count());
-        // out: 银行手续费, 业务付款, 税务缴费, 社保缴费, 保险费用
-        assertEquals(5, seeds.stream().filter(s -> "out".equals(s.getDirection())).count());
-        // null: 内部转账
-        assertEquals(1, seeds.stream().filter(s -> s.getDirection() == null).count());
+        // in: 业务收款
+        assertEquals(1, seeds.stream().filter(s -> "in".equals(s.getDirection())).count());
+        // out: 业务付款, 税费扣缴, 薪酬与社保
+        assertEquals(3, seeds.stream().filter(s -> "out".equals(s.getDirection())).count());
+        // null: 银行利息与手续费, 内部转账, 筹资与投资活动, 其它/待认领
+        assertEquals(4, seeds.stream().filter(s -> s.getDirection() == null).count());
 
         // 所有种子已启用且未删除
         assertTrue(seeds.stream().allMatch(ClassificationRuleEntity::getIsActive));
@@ -280,14 +284,14 @@ class ClassificationRuleServiceTest {
 
     private List<ClassificationRuleEntity> seedRules() {
         return List.of(
-                rule(1L, 1, "银行手续费", "out", "手续费|工本费|年费|账户管理费", "bank_fee"),
-                rule(2L, 2, "利息收入", "in", "利息|结息|存款利息", "interest_income"),
-                rule(3L, 3, "业务收款", "in", "货款", "business_receipt"),
-                rule(4L, 4, "业务付款", "out", "货款", "business_payment"),
-                rule(5L, 5, "内部转账", null, "转账|转存|调拨|上划|下拨", "internal_transfer"),
-                rule(6L, 6, "税务缴费", "out", "税|税务|缴税|税金|税款|增值税|所得税|城建税|教育费附加|国家金库|国库|印花", "tax_payment"),
-                rule(7L, 7, "社保缴费", "out", "社保|公积金|养老|医疗|失业|工伤|生育", "social_security"),
-                rule(8L, 8, "保险费用", "out", "保险|保费|投保|财产险|责任险|雇主责任险|意外险", "insurance_fee")
+                rule(1L, 1, "银行利息与手续费", null, "手续费|工本费|年费|账户管理费|利息|结息|存款利息", "bank_interest_fee"),
+                rule(2L, 2, "业务收款", "in", "货款|收款|销售|回款|客户|应收|收入", "business_receipt"),
+                rule(3L, 3, "业务付款", "out", "货款|付款|采购|支付|供应商|应付|支出", "business_payment"),
+                rule(4L, 4, "内部转账", null, "转账|转存|调拨|上划|下拨", "internal_transfer"),
+                rule(5L, 5, "税费扣缴", "out", "税|税务|缴税|税金|税款|增值税|所得税|城建税|教育费附加|国家金库|国库|印花", "tax_withholding"),
+                rule(6L, 6, "薪酬与社保", "out", "工资|薪酬|社保|公积金|养老|医疗|失业|工伤|生育|代扣|个税", "salary_social"),
+                rule(7L, 7, "筹资与投资活动", null, "借款|还款|贷款|理财|投资|融资|分红|股本|债券", "financing_invest"),
+                rule(8L, 8, "其它/待认领", null, "", "other_unknown")
         );
     }
 
@@ -296,23 +300,70 @@ class ClassificationRuleServiceTest {
         when(mapper.selectList(any())).thenReturn(seedRules());
         ClassificationRuleEntity result = service.match("银行账户管理费扣款", "out", null);
         assertNotNull(result);
-        assertEquals("银行手续费", result.getName());
-        assertEquals("bank_fee", result.getClassification());
+        assertEquals("银行利息与手续费", result.getName());
+        assertEquals("bank_interest_fee", result.getClassification());
     }
 
     @Test
-    void match_命中利息() {
+    void match_命中利息_in方向() {
         when(mapper.selectList(any())).thenReturn(seedRules());
         ClassificationRuleEntity result = service.match("存款结息", "in", null);
         assertNotNull(result);
-        assertEquals("利息收入", result.getName());
-        assertEquals("interest_income", result.getClassification());
+        assertEquals("银行利息与手续费", result.getName());
+        assertEquals("bank_interest_fee", result.getClassification());
+    }
+
+    @Test
+    void match_命中手续费_out方向() {
+        when(mapper.selectList(any())).thenReturn(seedRules());
+        ClassificationRuleEntity result = service.match("转账手续费", "out", null);
+        assertNotNull(result);
+        assertEquals("银行利息与手续费", result.getName());
+        assertEquals("bank_interest_fee", result.getClassification());
+    }
+
+    @Test
+    void match_命中税费() {
+        when(mapper.selectList(any())).thenReturn(seedRules());
+        ClassificationRuleEntity result = service.match("缴纳增值税", "out", null);
+        assertNotNull(result);
+        assertEquals("税费扣缴", result.getName());
+        assertEquals("tax_withholding", result.getClassification());
+    }
+
+    @Test
+    void match_命中工资() {
+        when(mapper.selectList(any())).thenReturn(seedRules());
+        ClassificationRuleEntity result = service.match("发放5月工资", "out", null);
+        assertNotNull(result);
+        assertEquals("薪酬与社保", result.getName());
+        assertEquals("salary_social", result.getClassification());
+    }
+
+    @Test
+    void match_命中社保() {
+        when(mapper.selectList(any())).thenReturn(seedRules());
+        ClassificationRuleEntity result = service.match("缴社保", "out", null);
+        assertNotNull(result);
+        assertEquals("薪酬与社保", result.getName());
+        assertEquals("salary_social", result.getClassification());
+    }
+
+    @Test
+    void match_命中借款() {
+        when(mapper.selectList(any())).thenReturn(seedRules());
+        ClassificationRuleEntity result = service.match("收到银行借款", "in", null);
+        assertNotNull(result);
+        assertEquals("筹资与投资活动", result.getName());
+        assertEquals("financing_invest", result.getClassification());
     }
 
     @Test
     void match_方向过滤() {
         when(mapper.selectList(any())).thenReturn(seedRules());
-        ClassificationRuleEntity result = service.match("存款结息", "out", null);
+        // 工资需要out方向，传in方向应该不命中工资规则（会命中不限方向的规则或返回null）
+        ClassificationRuleEntity result = service.match("发放5月工资", "in", null);
+        // 应该返回null，因为第6条要求out方向，其他关键词不匹配in方向的业务收款
         assertNull(result);
     }
 
