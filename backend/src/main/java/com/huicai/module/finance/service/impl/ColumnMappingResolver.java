@@ -35,7 +35,6 @@ public class ColumnMappingResolver {
                 "交易流水号", "transaction reference number", "record id"),
         PAYER_NAME("付款人名称", "payer name", "payer's name", "付款人"),
         PAYEE_NAME("收款人名称", "payee name", "payee's name", "收款人"),
-        BALANCE_AFTER("交易后余额", "余额", "balance", "available balance"),
         INVOICE_NO("发票号码", "发票号", "发票代码", "invoice no", "invoice number", "invoice",
                 "数电发票号码", "全电发票号码"),
         SELLER_TAX_ID("销方识别号", "销方税号", "seller tax id", "seller tax no",

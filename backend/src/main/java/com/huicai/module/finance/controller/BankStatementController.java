@@ -65,8 +65,7 @@ public class BankStatementController {
             ColumnMappingResolver.Field.SUMMARY,
             ColumnMappingResolver.Field.EXTERNAL_NO,
             ColumnMappingResolver.Field.PAYER_NAME,
-            ColumnMappingResolver.Field.PAYEE_NAME,
-            ColumnMappingResolver.Field.BALANCE_AFTER
+            ColumnMappingResolver.Field.PAYEE_NAME
     );
 
     @Operation(summary = "解析Excel表头, 返回所有列名和系统字段列表")
