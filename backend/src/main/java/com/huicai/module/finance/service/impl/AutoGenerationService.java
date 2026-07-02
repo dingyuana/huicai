@@ -671,7 +671,26 @@ public class AutoGenerationService {
                 log.info("银行流水收款按 FIFO 核销完成: customerId={}, amount={}, counterName={}",
                         customerId, amount, counterName);
             } else {
-                log.info("客户 '{}' 无未结清应收，银行流水收款直接确认，不生成应收明细", counterName);
+                // P12-3: 无未结清应收，走预收款路径
+                log.info("P12-3 客户 '{}' 无未结清应收，走预收款路径", counterName);
+                PrepaymentEntity prepay = new PrepaymentEntity();
+                prepay.setTenantId(1L);
+                prepay.setCustomerId(customerId);
+                prepay.setDocId(doc.getId());
+                prepay.setVoucherId(doc.getVoucherId());
+                prepay.setPeriod(period);
+                prepay.setTxDate(stmt.getTxDate());
+                prepay.setAmount(amount);
+                prepay.setSettledAmount(BigDecimal.ZERO);
+                prepay.setUnsettledAmount(amount);
+                prepay.setSummary(stmt.getSummary());
+                prepay.setStatus(ArapStatus.DRAFT);
+                prepay.setSourceDocType("bank_txn");
+                prepay.setSourceDocId(stmt.getId());
+                prepay.setCreatedBy(String.valueOf(userId != null ? userId : DEFAULT_USER_ID));
+                prepaymentMapper.insert(prepay);
+                log.info("P12-3 预收款生成: statementId={}, customerId={}, docId={}, amount={}",
+                        stmt.getId(), customerId, doc.getId(), amount);
             }
 
         } else if ("business_payment".equals(classification)) {
