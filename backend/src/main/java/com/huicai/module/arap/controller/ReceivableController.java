@@ -9,11 +9,20 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
-import com.huicai.module.arap.entity.ReceivableEntity;
 import java.util.List;
 import java.util.Map;
 
-@Tag(name = "应收明细")
+/**
+ * 应收明细 — 历史视图（P34 后应收数据已迁移至 t_business_doc）。
+ * <p>
+ * 分页查询已改造为读取 t_business_doc（customerId != null 的业务单据）。
+ * 创建/确认/冲销等操作请使用「核销工作台」(/api/v1/reconciliation) 和「业务单据」(/api/v1/business-docs)。
+ * <p>
+ * @deprecated P34 架构后不再创建独立应收单，本 Controller 仅用于查看历史数据，
+ *             后续前端将统一跳转到「核销工作台」。新增核销操作请走 ReconciliationController。
+ */
+@Deprecated
+@Tag(name = "应收明细（历史视图）")
 @RestController
 @RequestMapping("/api/v1/receivables")
 @RequiredArgsConstructor

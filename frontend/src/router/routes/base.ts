@@ -247,14 +247,14 @@ const routes: RouteRecordRaw[] = [
       {
         path: 'arap/receivable',
         name: 'ReceivableList',
-        component: () => import('@/views/arap/receivable/ReceivableList.vue'),
-        meta: { title: '应收核销', permission: 'receivable:list', keepAlive: true },
+        redirect: '/arap/reconciliation-workbench',
+        meta: { title: '应收核销', permission: 'receivable:list', keepAlive: false },
       },
       {
         path: 'arap/payable',
         name: 'PayableList',
-        component: () => import('@/views/arap/payable/PayableList.vue'),
-        meta: { title: '应付核销', permission: 'payable:list', keepAlive: true },
+        redirect: '/arap/reconciliation-workbench',
+        meta: { title: '应付核销', permission: 'payable:list', keepAlive: false },
       },
       {
         path: 'arap/bad-debt',
