@@ -57,7 +57,7 @@
 
 **可选：核销状态字段**（若需精准判断）：
 - `t_business_doc` 现有 `voucher_id` 和 `status` 字段
-- 通过 `t_receivable`/`t_payable` 的 `unsettled_amount` 判断是否已核销
+- 通过 `t_business_doc` 的 `unsettled_amount` 判断是否已核销（P34 后不再使用被删除的 t_receivable/t_payable）
 
 ### 1.3 前端改动
 
