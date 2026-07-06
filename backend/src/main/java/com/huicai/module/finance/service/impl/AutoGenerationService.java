@@ -398,6 +398,7 @@ public class AutoGenerationService {
         doc.setSummary(stmt.getSummary());
         doc.setStatus("DRAFT");
         doc.setSource("FROM_BANK_TXN");
+        doc.setBankStatementId(stmt.getId());
         doc.setCreatedBy(userId);
 
         // P19: 从银行流水的对方名称解析客户/供应商 ID, 不存在则自动创建档案
@@ -550,6 +551,10 @@ public class AutoGenerationService {
         voucher.setTotalDebit(amount);
         voucher.setTotalCredit(amount);
         voucher.setCreatedBy(userId);
+        // P38: 来源追溯字段（凭证 → 银行流水）
+        voucher.setSourceDocType("BANK_STMT");
+        voucher.setSourceDocId(stmt.getId());
+        voucher.setSourceDocNo(stmt.getExternalNo());
         voucherMapper.insert(voucher);
         return voucher;
     }
@@ -667,8 +672,8 @@ public class AutoGenerationService {
         String counterName = stmt.getCounterAccount();
 
         if (BankClassification.BUSINESS_RECEIPT.equals(classification)) {
-            // 银行流水代表款项已收，不应创建新的应收单。
-            // 检查该客户是否有未结清应收单，有则按 FIFO 核销；无则跳过。
+            // 银行流水代表款项已收，不应创建新的应收单，也不应自动核销。
+            // 正确的流程：用户去核销工作台手工匹配并执行核销（P34 铁律：系统不允许自动核销）。
             Long customerId = doc.getCustomerId();
             if (customerId == null) {
                 customerId = findCustomerByName(counterName);
@@ -680,12 +685,9 @@ public class AutoGenerationService {
             doc.setCustomerId(customerId);
 
             if (reconciliationService.hasOpenInvoices("INVOICE_OUT", customerId)) {
-                reconciliationService.autoReconcileFifo(
-                        customerId, "INVOICE_OUT", amount,
-                        "bank_txn", stmt.getId(),
-                        period, "银行流水自动核销应收");
-                log.info("银行流水收款按 FIFO 核销完成: customerId={}, amount={}, counterName={}",
-                        customerId, amount, counterName);
+                log.info("银行流水收款: 客户 '{}' 有未结清应收单，请到核销工作台手工核销 (customerId={}, amount={})",
+                        counterName, customerId, amount);
+                // P30: 不做自动核销 — 系统不允许自动核销，用户通过核销工作台手工操作
             } else {
                 // P12-3: 无未结清应收，走预收款路径
                 log.info("P12-3 客户 '{}' 无未结清应收，走预收款路径", counterName);
@@ -710,8 +712,8 @@ public class AutoGenerationService {
             }
 
         } else if (BankClassification.BUSINESS_PAYMENT.equals(classification)) {
-            // 银行流水代表款项已付，不应创建新的应付单。
-            // 检查该供应商是否有未结清应付单，有则按 FIFO 核销。
+            // 银行流水代表款项已付，不应创建新的应付单，也不应自动核销。
+            // 正确的流程：用户去核销工作台手工匹配并执行核销（P34 铁律：系统不允许自动核销）。
             Long vendorId = doc.getSupplierId();
             if (vendorId == null) {
                 vendorId = findVendorByName(counterName);
@@ -723,12 +725,9 @@ public class AutoGenerationService {
             doc.setSupplierId(vendorId);
 
             if (reconciliationService.hasOpenInvoices("INVOICE_IN", vendorId)) {
-                reconciliationService.autoReconcileFifo(
-                        vendorId, "INVOICE_IN", amount,
-                        "bank_txn", stmt.getId(),
-                        period, "银行流水自动核销应付");
-                log.info("银行流水付款按 FIFO 核销完成: vendorId={}, amount={}, counterName={}",
-                        vendorId, amount, counterName);
+                log.info("银行流水付款: 供应商 '{}' 有未结清应付单，请到核销工作台手工核销 (vendorId={}, amount={})",
+                        counterName, vendorId, amount);
+                // P30: 不做自动核销 — 系统不允许自动核销，用户通过核销工作台手工操作
             } else {
                 // P12-3: 无未结清应付，走预付款路径
                 log.info("P12-3 供应商 '{}' 无未结清应付，走预付款路径", counterName);

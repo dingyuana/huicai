@@ -353,7 +353,7 @@ public class OutputInvoiceStateMachineServiceImpl implements OutputInvoiceStateM
                 if (doc != null) {
                     doc.setVoucherId(updatedInv.getVoucherId());
                     doc.setVoucherNo(updatedInv.getVoucherNo());
-                    doc.setStatus("DRAFT");
+doc.setStatus("VOUCHERED");
                     doc.setUpdatedBy(userId);
                     businessDocMapper.updateById(doc);
                     log.info("P0 业务单据凭证状态回写: docId={}, voucherId={}, status=DRAFT",

@@ -3,6 +3,7 @@ package com.huicai.module.arap.controller;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.huicai.common.response.R;
 import com.huicai.module.arap.dto.ReceivableVO;
+import com.huicai.module.arap.entity.ReceivableEntity;
 import com.huicai.module.arap.service.ReceivableService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;

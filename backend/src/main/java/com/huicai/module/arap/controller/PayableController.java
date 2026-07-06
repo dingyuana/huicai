@@ -10,6 +10,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
 import com.huicai.module.arap.entity.PayableEntity;
+import java.util.Map;
 
 /**
  * 应付明细 — 历史视图（P34 后应付数据已迁移至 t_business_doc）。

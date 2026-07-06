@@ -8,6 +8,7 @@ import com.huicai.module.arap.entity.*;
 import com.huicai.module.arap.mapper.*;
 import com.huicai.module.arap.service.ArapSettlementService;
 import com.huicai.module.arap.service.ReconciliationService;
+import com.huicai.module.tax.service.OutputInvoiceStateMachineService;
 import com.huicai.module.finance.constant.VoucherType;
 import com.huicai.module.finance.entity.BusinessDocEntity;
 import com.huicai.module.finance.entity.VoucherEntity;
@@ -61,6 +62,7 @@ public class ReconciliationServiceImpl implements ReconciliationService {
     private final VoucherNoService voucherNoService;
     private final VoucherTemplateService voucherTemplateService;
     private final ArapSettlementService settlementService;
+    private final OutputInvoiceStateMachineService outputInvoiceStateMachineService;
 
     @Override
     public RecommendResult recommendReceipt(Long receiptId, Long customerId, BigDecimal amount, String summary, String counterpartyName) {
@@ -295,6 +297,18 @@ public class ReconciliationServiceImpl implements ReconciliationService {
             throw new OptimisticLockingFailureException("BusinessDoc版本冲突, id=" + doc.getId());
         }
 
+        // P38-F4: 核销后同步发票状态
+        if (doc.getInvoiceId() != null && "INVOICE_OUT".equals(request.targetDocType())) {
+            try {
+                outputInvoiceStateMachineService.onReconciliationUpdate(
+                        doc.getInvoiceId(), doc.getUnsettledAmount(), DEFAULT_USER_ID);
+                log.info("P38 核销同步发票状态: invoiceId={}, unsettled={}",
+                        doc.getInvoiceId(), doc.getUnsettledAmount());
+            } catch (Exception e) {
+                log.warn("P38 核销同步发票状态失败(不影响核销): {}", e.getMessage());
+            }
+        }
+
         // Create reconciliation log
         ReconciliationLogEntity reconLog = new ReconciliationLogEntity();
         reconLog.setTenantId(DEFAULT_TENANT_ID);
@@ -403,6 +417,10 @@ public class ReconciliationServiceImpl implements ReconciliationService {
         voucher.setSummary(request.remark() != null ? request.remark() : "核销自动生成");
         voucher.setTemplateId(template.getId());
         voucher.setCreatedBy(DEFAULT_USER_ID);
+        // P38-F7: 来源追溯字段（凭证→核销来源）
+        voucher.setSourceDocType("RECONCILIATION");
+        voucher.setSourceDocId(request.sourceDocId());
+        voucher.setSourceDocNo(request.remark() != null ? request.remark() : "");
         voucherMapper.insert(voucher);
 
         BigDecimal totalAmount = BigDecimal.ZERO;

@@ -431,25 +431,7 @@ public class BankStatementServiceImpl implements BankStatementService {
             throw BusinessException.badRequest(
                 "当前状态 " + stmt.getReviewStatus() + " 无法审核，请先完成出纳确认");
         }
-
-        // 获取分类路由类型
-        String type = resolveRouteType(stmt);
-
-        // 自动生成凭证+单据（均为草稿状态）
-        boolean ok = autoGenerationService.autoGenerateInNewTx(stmt.getId(), userId);
-        if (!ok) {
-            throw BusinessException.badRequest("自动制证失败, classification=" + stmt.getClassification());
-        }
-
-        // 重新查询获取生成后的数据
-        stmt = statementMapper.selectById(stmt.getId());
-        String newStatus = "A".equals(type) ? StatementStatus.VOUCHER_GENERATED : StatementStatus.PAYMENT_CREATED;
-        stmt.setReviewStatus(newStatus);
-        statementMapper.updateById(stmt);
-
-        log.info("主管审核+制证: statementId={}, classification={}, status={}",
-                statementId, stmt.getClassification(), newStatus);
-        return stmt;
+        return doAutoGenerate(stmt, userId);
     }
 
     @Override
@@ -484,21 +466,24 @@ public class BankStatementServiceImpl implements BankStatementService {
             throw BusinessException.badRequest(
                 "当前状态 " + curStatus + " 无法生成凭证，请先完成主管审核");
         }
+        return doAutoGenerate(stmt, userId);
+    }
 
+    /**
+     * P38-F9: 提取公共自动制证逻辑.
+     */
+    private BankStatementEntity doAutoGenerate(BankStatementEntity stmt, Long userId) {
         String type = resolveRouteType(stmt);
-
         boolean ok = autoGenerationService.autoGenerateInNewTx(stmt.getId(), userId);
         if (!ok) {
             throw BusinessException.badRequest("自动制证失败, classification=" + stmt.getClassification());
         }
-
         stmt = statementMapper.selectById(stmt.getId());
         String newStatus = "A".equals(type) ? StatementStatus.VOUCHER_GENERATED : StatementStatus.PAYMENT_CREATED;
         stmt.setReviewStatus(newStatus);
         statementMapper.updateById(stmt);
-
         log.info("制证完成: statementId={}, classification={}, status={}",
-                statementId, stmt.getClassification(), newStatus);
+                stmt.getId(), stmt.getClassification(), newStatus);
         return stmt;
     }
 

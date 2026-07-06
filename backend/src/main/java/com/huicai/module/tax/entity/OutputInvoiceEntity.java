@@ -86,12 +86,10 @@ public class OutputInvoiceEntity {
     @TableField(fill = FieldFill.INSERT_UPDATE)
     private LocalDateTime updatedAt;
 
-    /** 审核人ID */
-    @TableField(exist = false)
+    /** 审核人ID（V63 已添加列） */
     private Long auditedBy;
 
-    /** 审核时间 */
-    @TableField(exist = false)
+    /** 审核时间（V63 已添加列） */
     private LocalDateTime auditedAt;
 
     /** 关联销售发票状态（P2 跨单据查询） */

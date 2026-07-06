@@ -106,8 +106,6 @@
         </template>
         <el-menu-item index="/arap/customer">客户档案</el-menu-item>
         <el-menu-item index="/arap/vendor">供应商档案</el-menu-item>
-        <el-menu-item index="/arap/receivable">应收核销</el-menu-item>
-        <el-menu-item index="/arap/payable">应付核销</el-menu-item>
         <el-menu-item index="/arap/bad-debt">坏账准备</el-menu-item>
         <el-menu-item index="/arap/prepayment">预收/预付管理</el-menu-item>
         <el-menu-item index="/arap/aging">账龄分析</el-menu-item>

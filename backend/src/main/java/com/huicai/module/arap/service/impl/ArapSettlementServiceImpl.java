@@ -136,11 +136,11 @@ public class ArapSettlementServiceImpl implements ArapSettlementService {
                     }
                 }
             } else if (entry.getReceivableId() != null) {
-                // P34 过渡期：应收单尚未迁移到 BusinessDoc，保留兼容逻辑
-                log.debug("核销明细关联应收单但未迁移至 BusinessDoc，跳过更新: receivableId={}", entry.getReceivableId());
+                // P38-F5: P34 过渡期已结束，旧格式应报错
+                throw new BusinessException("核销明细仍使用旧格式(receivableId)，请迁移至 businessDocId: id=" + entry.getReceivableId());
             } else if (entry.getPayableId() != null) {
-                // P34 过渡期：应付单尚未迁移到 BusinessDoc，保留兼容逻辑
-                log.debug("核销明细关联应付单但未迁移至 BusinessDoc，跳过更新: payableId={}", entry.getPayableId());
+                // P38-F5: P34 过渡期已结束，旧格式应报错
+                throw new BusinessException("核销明细仍使用旧格式(payableId)，请迁移至 businessDocId: id=" + entry.getPayableId());
             }
         }
         entity.setStatus(ArapStatus.CONFIRMED);
@@ -255,6 +255,7 @@ public class ArapSettlementServiceImpl implements ArapSettlementService {
                 if (doc != null && doc.getVoucherNo() == null) {
                     doc.setVoucherNo(voucherNo);
                     doc.setVoucherId(voucher.getId());
+                    doc.setStatus("VOUCHERED"); // P38-F8: 推进BusinessDoc状态
                     if (businessDocMapper.updateById(doc) == 0) {
                         throw new OptimisticLockingFailureException("BusinessDoc回写凭证版本冲突, id=" + doc.getId());
                     }

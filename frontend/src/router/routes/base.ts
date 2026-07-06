@@ -244,18 +244,7 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/arap/vendor/VendorList.vue'),
         meta: { title: '供应商档案', permission: 'vendor:list', keepAlive: true },
       },
-      {
-        path: 'arap/receivable',
-        name: 'ReceivableList',
-        redirect: '/arap/reconciliation-workbench',
-        meta: { title: '应收核销', permission: 'receivable:list', keepAlive: false },
-      },
-      {
-        path: 'arap/payable',
-        name: 'PayableList',
-        redirect: '/arap/reconciliation-workbench',
-        meta: { title: '应付核销', permission: 'payable:list', keepAlive: false },
-      },
+
       {
         path: 'arap/bad-debt',
         name: 'BadDebtList',

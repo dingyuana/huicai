@@ -19,6 +19,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
 
@@ -164,6 +165,7 @@ class OutputInvoiceStateMachineServiceImplTest {
         // given
         OutputInvoiceEntity inv = invoice(InvoiceStatus.PENDING_REVIEW);
         when(invoiceMapper.selectById(INVOICE_ID)).thenReturn(inv);
+        lenient().when(invoiceMapper.updateById(any(OutputInvoiceEntity.class))).thenReturn(1);
         lenient().when(valueOps.increment(anyString())).thenReturn(1L);
 
         // when
@@ -738,6 +740,7 @@ class OutputInvoiceStateMachineServiceImplTest {
         redInvoice.setOriginalInvoiceNo("TEST001");
         when(invoiceMapper.selectById(INVOICE_ID)).thenReturn(redInvoice);
         when(businessDocMapper.selectCount(any())).thenReturn(0L);
+        lenient().when(invoiceMapper.updateById(any(OutputInvoiceEntity.class))).thenReturn(1);
         doAnswer(inv -> {
             BusinessDocEntity d = inv.getArgument(0);
             d.setId(500L);
@@ -762,18 +765,19 @@ class OutputInvoiceStateMachineServiceImplTest {
     @Test
     @DisplayName("confirm_红字发票_关联原业务单据(reversedFrom)")
     void confirm_redInvoice_linksToOriginalBusinessDoc() {
-        // given — 红字发票有 reversedFrom 指向蓝字发票
+// given — 红字发票有 reversedFrom 指向蓝字发票
         OutputInvoiceEntity redInvoice = invoice(InvoiceStatus.PENDING_REVIEW);
         redInvoice.setAmount(new BigDecimal("-1000.00"));
         redInvoice.setTotalAmount(new BigDecimal("-1130.00"));
         redInvoice.setTaxRate(new BigDecimal("0.13"));
         redInvoice.setOriginalInvoiceNo("TEST001");
-        redInvoice.setReversedFrom(99L);  // 指向蓝字发票
+        redInvoice.setReversedFrom(200L); // 指向蓝字发票 ID
         when(invoiceMapper.selectById(INVOICE_ID)).thenReturn(redInvoice);
         when(businessDocMapper.selectCount(any())).thenReturn(0L);
-        // 蓝字发票对应的业务单据
+        lenient().when(invoiceMapper.updateById(any(OutputInvoiceEntity.class))).thenReturn(1);
+        // 存在蓝字业务单据
         BusinessDocEntity blueDoc = new BusinessDocEntity();
-        blueDoc.setId(400L);
+        blueDoc.setId(300L);
         blueDoc.setInvoiceNo("TEST001");
         when(businessDocMapper.selectOne(any())).thenReturn(blueDoc);
         doAnswer(inv -> {
@@ -791,7 +795,7 @@ class OutputInvoiceStateMachineServiceImplTest {
         // then — 红字业务单据 reversedFrom 指向蓝字业务单据
         ArgumentCaptor<BusinessDocEntity> docCaptor = ArgumentCaptor.forClass(BusinessDocEntity.class);
         verify(businessDocMapper).insert(docCaptor.capture());
-        assertEquals(400L, docCaptor.getValue().getReversedFrom());
+        assertEquals(300L, docCaptor.getValue().getReversedFrom());
     }
 
     @Test
@@ -804,6 +808,7 @@ class OutputInvoiceStateMachineServiceImplTest {
         blueInvoice.setTaxRate(new BigDecimal("0.13"));
         when(invoiceMapper.selectById(INVOICE_ID)).thenReturn(blueInvoice);
         when(businessDocMapper.selectCount(any())).thenReturn(0L);
+        lenient().when(invoiceMapper.updateById(any(OutputInvoiceEntity.class))).thenReturn(1);
         doAnswer(inv -> {
             BusinessDocEntity d = inv.getArgument(0);
             d.setId(500L);
@@ -834,9 +839,72 @@ class OutputInvoiceStateMachineServiceImplTest {
         when(invoiceMapper.updateById(any(OutputInvoiceEntity.class))).thenReturn(0); // 模拟乐观锁冲突
 
         // when & then
-        BusinessException ex = assertThrows(BusinessException.class,
+        assertThrows(OptimisticLockingFailureException.class,
                 () -> service.confirm(INVOICE_ID, USER_ID));
-        assertTrue(ex.getMessage().contains("版本冲突") || ex.getMessage().contains("更新失败"),
-                "乐观锁冲突应提示版本冲突，实际: " + ex.getMessage());
+    }
+
+    @Test
+    @DisplayName("P38-F1: confirm 后 BusinessDoc 状态为 VOUCHERED")
+    void confirm_businessDocStatusVouchered() {
+        // given
+        OutputInvoiceEntity inv = invoice(InvoiceStatus.PENDING_REVIEW);
+        when(invoiceMapper.selectById(INVOICE_ID)).thenReturn(inv);
+        lenient().when(invoiceMapper.updateById(any(OutputInvoiceEntity.class))).thenReturn(1);
+        when(businessDocMapper.selectCount(any())).thenReturn(0L);
+        doAnswer(invOnInsert -> {
+            BusinessDocEntity d = invOnInsert.getArgument(0);
+            d.setId(500L);
+            return null;
+        }).when(businessDocMapper).insert(any(BusinessDocEntity.class));
+        // 模拟 voucher 生成成功，回写 doc
+        lenient().when(businessDocMapper.selectOne(any())).thenAnswer(a -> {
+            BusinessDocEntity d = new BusinessDocEntity();
+            d.setId(500L);
+            d.setStatus("DRAFT");
+            d.setInvoiceNo("TEST001");
+            return d;
+        });
+        doAnswer(invOnUpdate -> {
+            // 模拟 taxService 生成凭证后 markVouchered 修改了发票
+            inv.setVoucherId(200L);
+            inv.setVoucherNo("VCH-TEST-001");
+            return null;
+        }).when(taxService).generateVoucherFromInvoice(anyLong(), anyLong());
+        lenient().when(redisTemplate.opsForValue()).thenReturn(valueOps);
+        lenient().when(valueOps.increment(anyString())).thenReturn(1L);
+
+        // when
+        service.confirm(INVOICE_ID, USER_ID);
+
+        // then — BusinessDoc UPDATE 时状态为 VOUCHERED
+        ArgumentCaptor<BusinessDocEntity> docCaptor = ArgumentCaptor.forClass(BusinessDocEntity.class);
+        verify(businessDocMapper, atLeast(1)).updateById(docCaptor.capture());
+        BusinessDocEntity updatedDoc = docCaptor.getValue();
+        assertEquals("VOUCHERED", updatedDoc.getStatus());
+    }
+
+    @Test
+    @DisplayName("P38-F2: confirm 后 auditedBy/auditedAt 已设置")
+    void confirm_auditedByAuditedAtSet() {
+        // given
+        OutputInvoiceEntity inv = invoice(InvoiceStatus.PENDING_REVIEW);
+        when(invoiceMapper.selectById(INVOICE_ID)).thenReturn(inv);
+        lenient().when(invoiceMapper.updateById(any(OutputInvoiceEntity.class))).thenReturn(1);
+        doAnswer(invOnInsert -> {
+            BusinessDocEntity d = invOnInsert.getArgument(0);
+            d.setId(500L);
+            return null;
+        }).when(businessDocMapper).insert(any(BusinessDocEntity.class));
+        lenient().when(businessDocMapper.selectCount(any())).thenReturn(0L);
+        lenient().when(redisTemplate.opsForValue()).thenReturn(valueOps);
+        lenient().when(valueOps.increment(anyString())).thenReturn(1L);
+        doNothing().when(taxService).generateVoucherFromInvoice(anyLong(), anyLong());
+
+        // when
+        service.confirm(INVOICE_ID, USER_ID);
+
+        // then
+        assertEquals(USER_ID, inv.getAuditedBy());
+        assertNotNull(inv.getAuditedAt());
     }
 }

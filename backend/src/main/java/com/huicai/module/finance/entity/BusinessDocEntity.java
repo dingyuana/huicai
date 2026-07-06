@@ -103,6 +103,9 @@ public class BusinessDocEntity {
     /** 到期日 */
     private LocalDate dueDate;
 
+    /** 来源银行流水ID（P38-F6: 反向追溯银行流水→单据） */
+    private Long bankStatementId;
+
     // ==================== 乐观锁 ====================
 
     /** 乐观锁版本号 */

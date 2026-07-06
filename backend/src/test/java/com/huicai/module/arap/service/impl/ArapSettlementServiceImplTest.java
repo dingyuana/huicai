@@ -9,6 +9,14 @@ import com.huicai.module.arap.mapper.ArapSettlementEntryMapper;
 import com.huicai.module.arap.mapper.ArapSettlementMapper;
 import com.huicai.module.arap.mapper.PayableMapper;
 import com.huicai.module.arap.mapper.ReceivableMapper;
+import com.huicai.module.finance.entity.BusinessDocEntity;
+import com.huicai.module.finance.entity.VoucherEntity;
+import com.huicai.module.finance.entity.VoucherEntryEntity;
+import com.huicai.module.finance.mapper.BusinessDocMapper;
+import com.huicai.module.finance.mapper.VoucherEntryMapper;
+import com.huicai.module.finance.mapper.VoucherMapper;
+import com.huicai.module.finance.service.VoucherNoService;
+import com.huicai.module.finance.service.VoucherTemplateService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -29,6 +37,11 @@ class ArapSettlementServiceImplTest {
     @Mock private ArapSettlementEntryMapper entryMapper;
     @Mock private ReceivableMapper receivableMapper;
     @Mock private PayableMapper payableMapper;
+    @Mock private BusinessDocMapper businessDocMapper;
+    @Mock private VoucherTemplateService voucherTemplateService;
+    @Mock private VoucherMapper voucherMapper;
+    @Mock private VoucherEntryMapper voucherEntryMapper;
+    @Mock private VoucherNoService voucherNoService;
 
     @InjectMocks private ArapSettlementServiceImpl service;
 
@@ -89,29 +102,31 @@ class ArapSettlementServiceImplTest {
     }
 
     @Test
-    void confirm_DRAFT状态_改CONFIRMED并更新应收() {
+    void confirm_DRAFT状态_改CONFIRMED并更新业务单据() {
         ArapSettlementEntity e = new ArapSettlementEntity();
         e.setId(1L);
         e.setStatus("DRAFT");
         when(mapper.selectById(1L)).thenReturn(e);
 
         ArapSettlementEntryEntity entry = new ArapSettlementEntryEntity();
-        entry.setReceivableId(100L);
+        entry.setBusinessDocId(100L);
         entry.setSettledAmount(new BigDecimal("200"));
         when(entryMapper.selectList(any())).thenReturn(List.of(entry));
 
-        ReceivableEntity r = new ReceivableEntity();
-        r.setId(100L);
-        r.setAmount(new BigDecimal("1000"));
-        r.setSettledAmount(BigDecimal.ZERO);
-        r.setUnsettledAmount(new BigDecimal("1000"));
-        when(receivableMapper.selectById(100L)).thenReturn(r);
+        BusinessDocEntity doc = new BusinessDocEntity();
+        doc.setId(100L);
+        doc.setAmount(new BigDecimal("1000"));
+        doc.setSettledAmount(BigDecimal.ZERO);
+        doc.setUnsettledAmount(new BigDecimal("1000"));
+        doc.setStatus("APPROVED");
+        when(businessDocMapper.selectById(100L)).thenReturn(doc);
+        when(businessDocMapper.updateById(any(BusinessDocEntity.class))).thenReturn(1);
 
         ArapSettlementEntity out = service.confirm(1L);
         assertEquals("CONFIRMED", out.getStatus());
-        assertEquals(0, new BigDecimal("200").compareTo(r.getSettledAmount()));
-        assertEquals(0, new BigDecimal("800").compareTo(r.getUnsettledAmount()));
-        verify(receivableMapper).updateById(r);
+        assertEquals(0, new BigDecimal("200").compareTo(doc.getSettledAmount()));
+        assertEquals(0, new BigDecimal("800").compareTo(doc.getUnsettledAmount()));
+        verify(businessDocMapper).updateById(doc);
         verify(mapper).updateById(e);
     }
 
@@ -144,5 +159,33 @@ class ArapSettlementServiceImplTest {
         when(mapper.selectById(1L)).thenReturn(e);
         BusinessException ex = assertThrows(BusinessException.class, () -> service.delete(1L));
         assertTrue(ex.getMessage().contains("仅草稿"));
+    }
+
+    @Test
+    void confirm_receivableIdOldPath_throws() {
+        // P38-F5: 旧格式 receivableId 应抛 BusinessException
+        ArapSettlementEntity e = new ArapSettlementEntity();
+        e.setId(1L);
+        e.setStatus("DRAFT");
+        when(mapper.selectById(1L)).thenReturn(e);
+        when(entryMapper.selectList(any())).thenReturn(List.of(
+                new ArapSettlementEntryEntity() {{ setReceivableId(100L); setSettledAmount(new BigDecimal("100")); }}
+        ));
+        BusinessException ex = assertThrows(BusinessException.class, () -> service.confirm(1L));
+        assertTrue(ex.getMessage().contains("receivableId") || ex.getMessage().contains("旧格式"));
+    }
+
+    @Test
+    void confirm_payableIdOldPath_throws() {
+        // P38-F5: 旧格式 payableId 应抛 BusinessException
+        ArapSettlementEntity e = new ArapSettlementEntity();
+        e.setId(1L);
+        e.setStatus("DRAFT");
+        when(mapper.selectById(1L)).thenReturn(e);
+        when(entryMapper.selectList(any())).thenReturn(List.of(
+                new ArapSettlementEntryEntity() {{ setPayableId(200L); setSettledAmount(new BigDecimal("100")); }}
+        ));
+        BusinessException ex = assertThrows(BusinessException.class, () -> service.confirm(1L));
+        assertTrue(ex.getMessage().contains("payableId") || ex.getMessage().contains("旧格式"));
     }
 }

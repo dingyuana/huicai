@@ -5,12 +5,10 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.huicai.common.response.R;
 import com.huicai.module.arap.constant.ArapStatus;
-import com.huicai.module.arap.entity.PayableEntity;
-import com.huicai.module.arap.entity.ReceivableEntity;
 import com.huicai.module.arap.entity.ReconciliationLogEntity;
-import com.huicai.module.arap.mapper.PayableMapper;
-import com.huicai.module.arap.mapper.ReceivableMapper;
 import com.huicai.module.arap.mapper.ReconciliationLogMapper;
+import com.huicai.module.finance.entity.BusinessDocEntity;
+import com.huicai.module.finance.mapper.BusinessDocMapper;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
@@ -29,46 +27,47 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class ReconciliationReportController {
 
-    private final ReceivableMapper receivableMapper;
-    private final PayableMapper payableMapper;
+    private final BusinessDocMapper businessDocMapper;
     private final ReconciliationLogMapper logMapper;
 
     // ==================== 未核销明细 ====================
 
-    @Operation(summary = "未核销应收明细 — unsettledAmount > 0 的应收列表")
+    @Operation(summary = "未核销应收明细 — t_business_doc (customerId != null) unsettledAmount > 0")
     @GetMapping("/unmatched-receivables")
-    public R<IPage<ReceivableEntity>> unmatchedReceivables(
+    public R<IPage<BusinessDocEntity>> unmatchedReceivables(
             @RequestParam(required = false) Long customerId,
             @RequestParam(required = false) String period,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dueDateBefore,
             @RequestParam(defaultValue = "1") Integer current,
             @RequestParam(defaultValue = "20") Integer size) {
-        Page<ReceivableEntity> page = new Page<>(current, size);
-        LambdaQueryWrapper<ReceivableEntity> wrapper = new LambdaQueryWrapper<ReceivableEntity>()
-                .gt(ReceivableEntity::getUnsettledAmount, BigDecimal.ZERO)
-                .eq(customerId != null, ReceivableEntity::getCustomerId, customerId)
-                .eq(period != null, ReceivableEntity::getPeriod, period)
-                .le(dueDateBefore != null, ReceivableEntity::getDueDate, dueDateBefore)
-                .orderByAsc(ReceivableEntity::getDueDate, ReceivableEntity::getTxDate);
-        return R.ok(receivableMapper.selectPage(page, wrapper));
+        Page<BusinessDocEntity> page = new Page<>(current, size);
+        LambdaQueryWrapper<BusinessDocEntity> wrapper = new LambdaQueryWrapper<BusinessDocEntity>()
+                .in(BusinessDocEntity::getDocType, "INVOICE_OUT", "RECEIPT")
+                .gt(BusinessDocEntity::getUnsettledAmount, BigDecimal.ZERO)
+                .eq(customerId != null, BusinessDocEntity::getCustomerId, customerId)
+                .eq(period != null, BusinessDocEntity::getPeriod, period)
+                .le(dueDateBefore != null, BusinessDocEntity::getDueDate, dueDateBefore)
+                .orderByAsc(BusinessDocEntity::getDueDate, BusinessDocEntity::getDocDate);
+        return R.ok(businessDocMapper.selectPage(page, wrapper));
     }
 
-    @Operation(summary = "未核销应付明细 — unsettledAmount > 0 的应付列表")
+    @Operation(summary = "未核销应付明细 — t_business_doc (supplierId != null) unsettledAmount > 0")
     @GetMapping("/unmatched-payables")
-    public R<IPage<PayableEntity>> unmatchedPayables(
+    public R<IPage<BusinessDocEntity>> unmatchedPayables(
             @RequestParam(required = false) Long vendorId,
             @RequestParam(required = false) String period,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dueDateBefore,
             @RequestParam(defaultValue = "1") Integer current,
             @RequestParam(defaultValue = "20") Integer size) {
-        Page<PayableEntity> page = new Page<>(current, size);
-        LambdaQueryWrapper<PayableEntity> wrapper = new LambdaQueryWrapper<PayableEntity>()
-                .gt(PayableEntity::getUnsettledAmount, BigDecimal.ZERO)
-                .eq(vendorId != null, PayableEntity::getVendorId, vendorId)
-                .eq(period != null, PayableEntity::getPeriod, period)
-                .le(dueDateBefore != null, PayableEntity::getDueDate, dueDateBefore)
-                .orderByAsc(PayableEntity::getDueDate, PayableEntity::getTxDate);
-        return R.ok(payableMapper.selectPage(page, wrapper));
+        Page<BusinessDocEntity> page = new Page<>(current, size);
+        LambdaQueryWrapper<BusinessDocEntity> wrapper = new LambdaQueryWrapper<BusinessDocEntity>()
+                .in(BusinessDocEntity::getDocType, "INVOICE_IN", "PAYMENT")
+                .gt(BusinessDocEntity::getUnsettledAmount, BigDecimal.ZERO)
+                .eq(vendorId != null, BusinessDocEntity::getSupplierId, vendorId)
+                .eq(period != null, BusinessDocEntity::getPeriod, period)
+                .le(dueDateBefore != null, BusinessDocEntity::getDueDate, dueDateBefore)
+                .orderByAsc(BusinessDocEntity::getDueDate, BusinessDocEntity::getDocDate);
+        return R.ok(businessDocMapper.selectPage(page, wrapper));
     }
 
     // ==================== 核销操作日志 ====================

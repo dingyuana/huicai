@@ -33,8 +33,8 @@
 跑通以下 4 个端到端测试场景：
 - **S1** 销售发票导入 → t_business_doc + t_output_invoice + t_receivable 都有记录
 - **S2** 采购发票导入（新建）→ t_business_doc + t_input_invoice + t_payable 都有记录
-- **S3** 银行收款流水 B 类确认 → t_business_doc(RECEIPT) + 凭证 + 应收核销记录
-- **S4** 银行付款流水 B 类确认 → t_business_doc(PAYMENT) + 凭证 + 应付核销记录
+- **S3** 银行收款流水 B 类确认 → t_business_doc(RECEIPT) + DRAFT 凭证，**不做自动核销**，用户在核销工作台手工匹配
+- **S4** 银行付款流水 B 类确认 → t_business_doc(PAYMENT) + DRAFT 凭证，**不做自动核销**，同上
 
 ---
 
@@ -45,9 +45,7 @@
 | **P10-1** | 销售发票导入补写应收单 | `SalesInvoiceImportService` + 1 Mapper 注入 | ✅ 低 | ✅ 高 |
 | **P10-2** | 采购发票导入新建（仿销售版） | 新建 `InputInvoiceImportService` + Controller | ✅ 中 | ✅ 高 |
 | **P10-3** | 银行流水 B 类补写应收/应付单（不自动核销） | `AutoGenerationService` + 4 Mapper 注入 | ✅ 中 | ✅ 中 |
-| **P10-4** | 银行流水 B 类确认后自动触发核销 | `AutoGenerationService` 嵌入 `ReconciliationService.execute` | ✅ **高** | ✅ 高 |
-
-**推荐顺序**：1 → 2 → 3 → 4，每批 1 commit + 跑通测试 + 你过目后再进下批。
+| **P10-4** | ~~银行流水 B 类确认后自动触发核销~~ **已移除**（P34 铁律：系统不允许自动核销） | ~~`AutoGenerationService` 嵌入 `ReconciliationService.execute`~~ | ✅ ~~高~~ | ~~高~~ |\n| **P10-4** 已被移除，核销改为人工通过核销工作台操作。|\n\n**推荐顺序**：1 → 2 → 3，每批 1 commit + 跑通测试 + 你过目后再进下批。
 
 ---
 
@@ -154,44 +152,16 @@ if (StrUtil.isNotBlank(party) && type.equals("B")) {
 
 ---
 
-### P10-4：银行流水 B 类确认后自动触发核销
+### ~~P10-4：银行流水 B 类确认后自动触发核销~~ **已移除**\n\n> **2026-07-03 移除原因**：P34 铁律规定系统不允许自动核销。核销全部通过核销工作台人工操作。\n> `autoReconcileFifo` 调用已从 `AutoGenerationService.createReceivableOrPayableFromBankDoc` 中删除。\n\n此批工单不再需要。银行流水 B 类确认后：
+- **只生成 DRAFT 业务单据（收款单/付款单）**
+- **不做自动核销**，用户通过核销工作台手工匹配执行核销
+- P12-3 预收/预付款路径保持不变（创建 DRAFT prepayment）
 
-**这是最难的一批**——跨模块事务 + 状态机。
+**相关代码已修改**：`createReceivableOrPayableFromBankDoc` 中 `autoReconcileFifo` 调用已删除，替换为 log 提示用户去核销工作台操作。
 
-**改动文件**：
-- `AutoGenerationService.java` — 注入 `ReconciliationService`
+**受影响测试**：如果有测试用例验证 P10-4 自动核销行为，需同步更新。
 
-**改动点**（P10-3 之后追加）：
-
-```java
-// 在生成应收/应付单之后，自动尝试核销
-if (receivableCreated) {
-    // L1-L5 匹配 + 自动执行
-    ReconciliationResult result = reconciliationService.autoMatch(
-        "bank_txn", stmt.getId(), amount, party, stmt.getTxDate()
-    );
-    // 自动 executed？还是 pending_review 等人审？
-}
-```
-
-**关键决策点（你定）**：
-- 核销后是 `executed`（系统自动核销完）还是 `pending_review`（生成草稿等人审）？
-- 老丁硬约束："人是唯一审核主体"——**必须是 `pending_review`**，系统永远不自动 executed
-- P5 设计：`matched → confirmed → pending_review → approved → executed` 5 段式
-
-**P10-4 实现路径**：
-- `createReceivableOrPayableFromBankDoc` 中，在 `receivableMapper.insert` 后调 `reconciliationService.execute`
-- `execute` 内部状态设为 `CONFIRMED`（已确认、待审批执行），**不是 auto-executed**
-- 人在核销待审池里点"批准"才到 `executed`
-
-**单测**：3 个，验证 execute 被正确调用。
-
-**Commit**：`feat(finance+arap): 银行流水 B 类确认后自动串联核销（停在 CONFIRMED 状态）`
-
-**风险**：
-- 跨模块 `@Transactional` 边界（finance 调 arap）— 测试事务回滚
-- 状态机错乱（如果核销失败，流水已确认但没核销，要不要回滚流水？）— 选不回滚，留 warning 日志
-- 性能（B 类批量确认时，N 条流水 × 5 级匹配 = O(N×5) SQL）— 接受，加批量接口
+**P10-4 旧内容已全部移除**（自动核销逻辑不再使用）。
 
 ---
 
@@ -249,9 +219,9 @@ P10-4 → 同上（最大风险批次，你重点审）
 
 按"列表化决策模式"——以下每项单字回：
 
-一、**工单分批顺序**（1→2→3→4）接受？  
-二、**P10-4 自动核销停在 pending_review**（不自动 executed）接受？  
-三、**P10-3 只生成单据不自动核销**（拆给 P10-4）接受？  
+一、**工单分批顺序**（1→2→3）接受？  
+二、**P10-4 已移除**（P34 铁律：系统不允许自动核销，核销改由核销工作台人工操作）  
+三、**P10-3 只生成单据不自动核销**（已执行）接受？  
 四、**P10-2 采购凭证硬编码科目**（不动模板）接受？  
 五、**先开工 P10-1**（最高 ROI，最低风险）？  
 

@@ -10,7 +10,13 @@ import com.huicai.module.arap.service.ReconciliationService.ExecuteRequest;
 import com.huicai.module.arap.service.ReconciliationService.PreCheckResult;
 import com.huicai.module.arap.service.ReconciliationService.RecommendResult;
 import com.huicai.module.finance.entity.BusinessDocEntity;
+import com.huicai.module.finance.entity.VoucherEntity;
 import com.huicai.module.finance.mapper.BusinessDocMapper;
+import com.huicai.module.finance.mapper.VoucherEntryMapper;
+import com.huicai.module.finance.mapper.VoucherMapper;
+import com.huicai.module.finance.service.VoucherNoService;
+import com.huicai.module.finance.service.VoucherTemplateService;
+import com.huicai.module.tax.service.OutputInvoiceStateMachineService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -34,6 +40,11 @@ class ReconciliationServiceImplTest {
     @Mock private ReconciliationLogMapper logMapper;
     @Mock private ReconciliationExceptionMapper exceptionMapper;
     @Mock private ArapSettlementService settlementService;
+    @Mock private VoucherMapper voucherMapper;
+    @Mock private VoucherEntryMapper voucherEntryMapper;
+    @Mock private VoucherTemplateService voucherTemplateService;
+    @Mock private VoucherNoService voucherNoService;
+    @Mock private OutputInvoiceStateMachineService outputInvoiceStateMachineService;
 
     @InjectMocks private ReconciliationServiceImpl service;
 
@@ -524,5 +535,19 @@ class ReconciliationServiceImplTest {
                 "receipt", 1L, 5L, "CUSTOMER", "INVOICE_OUT",
                 BigDecimal.ZERO, "202606", "smart测试");
         assertTrue(r.isEmpty());
+    }
+
+    @Test
+    void execute_syncsInvoiceStatus_whenDocHasInvoiceId() {
+        // P38-F4: 核销后同步发票状态
+        BusinessDocEntity doc = stubBusinessDoc(1L, 1L, null, "INVOICE_OUT", new BigDecimal("1000"), new BigDecimal("500"));
+        doc.setInvoiceId(999L);
+        when(businessDocMapper.selectById(1L)).thenReturn(doc);
+        when(businessDocMapper.updateById(any(BusinessDocEntity.class))).thenReturn(1);
+
+        ExecuteRequest req = new ExecuteRequest("receipt", 1L, "INVOICE_OUT", 1L, new BigDecimal("200"), BigDecimal.ZERO, "MANUAL", 1L, null, "202606", "");
+        service.execute(req);
+
+        verify(outputInvoiceStateMachineService).onReconciliationUpdate(eq(999L), any(), anyLong());
     }
 }

@@ -28,6 +28,7 @@ import com.huicai.module.system.mapper.SubjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -226,7 +227,7 @@ class AutoGenerationServiceTest {
     // ==================== P10-3: 银行流水 B 类→应收/应付单 ====================
 
     @Test
-    void testAutoGenerate_receipt_有客户有未结清应收_走FIFO核销() {
+    void testAutoGenerate_receipt_有客户有未结清应收_不做自动核销() {
         BankStatementEntity stmt = newStmt("business_receipt", "in");
         stmt.setCounterAccount("客户A");
         when(statementMapper.selectById(1L)).thenReturn(stmt);
@@ -236,8 +237,6 @@ class AutoGenerationServiceTest {
         }}));
         // 客户有未结清应收
         when(reconciliationService.hasOpenInvoices(eq("INVOICE_OUT"), eq(5L))).thenReturn(true);
-        when(reconciliationService.autoReconcileFifo(anyLong(), anyString(), any(), anyString(), anyLong(), anyString(), anyString()))
-                .thenReturn(java.util.Collections.emptyList());
         // 模板匹配返回 null → 走硬编码路径
         when(subjectMapper.selectList(argThat(q -> q != null)))
                 .thenReturn(java.util.Collections.singletonList(new Subject() {{
@@ -255,15 +254,14 @@ class AutoGenerationServiceTest {
         }
         // 不应再创建应收明细（银行流水已收，不是应收）
         verify(receivableMapper, never()).insert(any(ReceivableEntity.class));
-        // 应调 FIFO 核销
-        verify(reconciliationService).autoReconcileFifo(eq(5L), eq("INVOICE_OUT"), eq(new BigDecimal("100.00")),
-                eq("bank_txn"), eq(1L), anyString(), anyString());
+        // P30 铁律：不做自动核销
+        verify(reconciliationService, never()).autoReconcileFifo(anyLong(), anyString(), any(), anyString(), anyLong(), anyString(), anyString());
         // 不应插入 payable
         verify(payableMapper, never()).insert(any(PayableEntity.class));
     }
 
     @Test
-    void testAutoGenerate_payment_有供应商有未结清应付_走FIFO核销() {
+    void testAutoGenerate_payment_有供应商有未结清应付_不做自动核销() {
         BankStatementEntity stmt = newStmt("business_payment", "out");
         stmt.setCounterAccount("供应商B");
         when(statementMapper.selectById(1L)).thenReturn(stmt);
@@ -273,8 +271,6 @@ class AutoGenerationServiceTest {
         }}));
         // 供应商有未结清应付
         when(reconciliationService.hasOpenInvoices(eq("INVOICE_IN"), eq(8L))).thenReturn(true);
-        when(reconciliationService.autoReconcileFifo(anyLong(), anyString(), any(), anyString(), anyLong(), anyString(), anyString()))
-                .thenReturn(java.util.Collections.emptyList());
         when(subjectMapper.selectList(argThat(q -> q != null)))
                 .thenReturn(java.util.Collections.singletonList(new Subject() {{
                     setId(10L); setCode("1002"); setIsLeaf(true);
@@ -290,9 +286,8 @@ class AutoGenerationServiceTest {
         }
         // 不应再创建应付明细
         verify(payableMapper, never()).insert(any(PayableEntity.class));
-        // 应调 FIFO 核销
-        verify(reconciliationService).autoReconcileFifo(eq(8L), eq("INVOICE_IN"), eq(new BigDecimal("100.00")),
-                eq("bank_txn"), eq(1L), anyString(), anyString());
+        // P30 铁律：不做自动核销
+        verify(reconciliationService, never()).autoReconcileFifo(anyLong(), anyString(), any(), anyString(), anyLong(), anyString(), anyString());
         verify(receivableMapper, never()).insert(any(ReceivableEntity.class));
     }
 
@@ -349,10 +344,10 @@ class AutoGenerationServiceTest {
         verify(receivableMapper, never()).insert(any(ReceivableEntity.class));
     }
 
-    // ==================== P10-4: 银行流水 B 类→自动核销 ====================
+    // ==================== P10-4 已移除: 银行流水不做自动核销 ====================
 
     @Test
-    void testAutoGenerate_receipt_有客户有未结清应收_FIFO核销执行() {
+    void testAutoGenerate_receipt_有客户有未结清应收_不做自动核销_P30() {
         BankStatementEntity stmt = newStmt("business_receipt", "in");
         stmt.setCounterAccount("客户A");
         when(statementMapper.selectById(1L)).thenReturn(stmt);
@@ -361,8 +356,6 @@ class AutoGenerationServiceTest {
         }}));
         // 客户有未结清应收
         when(reconciliationService.hasOpenInvoices(eq("INVOICE_OUT"), eq(5L))).thenReturn(true);
-        when(reconciliationService.autoReconcileFifo(anyLong(), anyString(), any(), anyString(), anyLong(), anyString(), anyString()))
-                .thenReturn(java.util.Collections.emptyList());
         when(subjectMapper.selectList(argThat(q -> q != null)))
                 .thenReturn(java.util.Collections.singletonList(new Subject() {{
                     setId(10L); setCode("1002"); setIsLeaf(true);
@@ -377,12 +370,12 @@ class AutoGenerationServiceTest {
         } catch (Exception e) {
             // mock 限制下可能抛
         }
-        verify(reconciliationService).autoReconcileFifo(eq(5L), eq("INVOICE_OUT"), eq(new BigDecimal("100.00")),
-                eq("bank_txn"), eq(1L), anyString(), anyString());
+        // P30 铁律：不做自动核销
+        verify(reconciliationService, never()).autoReconcileFifo(anyLong(), anyString(), any(), anyString(), anyLong(), anyString(), anyString());
     }
 
     @Test
-    void testAutoGenerate_payment_有供应商有未结清应付_FIFO核销执行() {
+    void testAutoGenerate_payment_有供应商有未结清应付_不做自动核销_P30() {
         BankStatementEntity stmt = newStmt("business_payment", "out");
         stmt.setCounterAccount("供应商B");
         when(statementMapper.selectById(1L)).thenReturn(stmt);
@@ -391,8 +384,6 @@ class AutoGenerationServiceTest {
         }}));
         // 供应商有未结清应付
         when(reconciliationService.hasOpenInvoices(eq("INVOICE_IN"), eq(8L))).thenReturn(true);
-        when(reconciliationService.autoReconcileFifo(anyLong(), anyString(), any(), anyString(), anyLong(), anyString(), anyString()))
-                .thenReturn(java.util.Collections.emptyList());
         when(subjectMapper.selectList(argThat(q -> q != null)))
                 .thenReturn(java.util.Collections.singletonList(new Subject() {{
                     setId(10L); setCode("1002"); setIsLeaf(true);
@@ -406,8 +397,8 @@ class AutoGenerationServiceTest {
             service.autoGenerate(1L, 1L);
         } catch (Exception e) {
         }
-        verify(reconciliationService).autoReconcileFifo(eq(8L), eq("INVOICE_IN"), eq(new BigDecimal("100.00")),
-                eq("bank_txn"), eq(1L), anyString(), anyString());
+        // P30 铁律：不做自动核销
+        verify(reconciliationService, never()).autoReconcileFifo(anyLong(), anyString(), any(), anyString(), anyLong(), anyString(), anyString());
     }
 
     @Test
@@ -464,7 +455,7 @@ class AutoGenerationServiceTest {
     }
 
     @Test
-    void testAutoGenerate_payment_供应商有未结清应付_走FIFO核销() {
+    void testAutoGenerate_payment_供应商有未结清应付_不做自动核销() {
         BankStatementEntity stmt = newStmt("business_payment", "out");
         stmt.setCounterAccount("供应商D");
         when(statementMapper.selectById(1L)).thenReturn(stmt);
@@ -473,8 +464,6 @@ class AutoGenerationServiceTest {
             setName("供应商D");
         }}));
         when(reconciliationService.hasOpenInvoices(eq("INVOICE_IN"), eq(21L))).thenReturn(true);
-        when(reconciliationService.autoReconcileFifo(anyLong(), anyString(), any(), anyString(), anyLong(), anyString(), anyString()))
-                .thenReturn(java.util.Collections.emptyList());
         when(subjectMapper.selectList(argThat(q -> q != null)))
                 .thenReturn(java.util.Collections.singletonList(new Subject() {{
                     setId(10L); setCode("1002"); setIsLeaf(true);
@@ -490,8 +479,8 @@ class AutoGenerationServiceTest {
         }
         // 不应再创建应付明细
         verify(payableMapper, never()).insert(any(PayableEntity.class));
-        verify(reconciliationService).autoReconcileFifo(eq(21L), eq("INVOICE_IN"), eq(new BigDecimal("100.00")),
-                eq("bank_txn"), eq(1L), anyString(), anyString());
+        // P30 铁律：不做自动核销
+        verify(reconciliationService, never()).autoReconcileFifo(anyLong(), anyString(), any(), anyString(), anyLong(), anyString(), anyString());
     }
 
     // ==================== P11-3: 银行流水 → 员工匹配 ====================
@@ -539,5 +528,52 @@ class AutoGenerationServiceTest {
         }
         // expenseReimbursementService.autoCreateForBankStmt 不被调用
         verify(expenseReimbursementService, never()).autoCreateForBankStmt(anyLong(), anyLong(), any(), anyString());
+    }
+    
+    @Test
+    void createVoucher_setsSourceDocFields() {
+        // P38-F3: 银行流水制证后 Voucher 应包含 sourceDocType/sourceDocId/sourceDocNo
+        BankStatementEntity stmt = newStmt("business_receipt", "in");
+        stmt.setExternalNo("EXT-001");
+        when(statementMapper.selectById(1L)).thenReturn(stmt);
+        when(voucherNoService.generateNextNo(anyString(), anyLong())).thenReturn("VCH-001");
+        when(subjectMapper.selectList(any()))
+                .thenReturn(List.of(new Subject() {{ setId(10L); setCode("1002"); setIsLeaf(true); }}))
+                .thenReturn(List.of(new Subject() {{ setId(20L); setCode("6001"); setIsLeaf(true); }}));
+        when(voucherTemplateService.matchByClassification(any())).thenReturn(null);
+
+        service.autoGenerate(1L, 1L);
+
+        ArgumentCaptor<VoucherEntity> voucherCaptor = ArgumentCaptor.forClass(VoucherEntity.class);
+        verify(voucherMapper, atLeastOnce()).insert(voucherCaptor.capture());
+        VoucherEntity v = voucherCaptor.getValue();
+        assertEquals("BANK_STMT", v.getSourceDocType());
+        assertEquals(1L, v.getSourceDocId());
+        assertEquals("EXT-001", v.getSourceDocNo());
+    }
+
+    @Test
+    void businessDoc_hasBankStatementId() {
+        // P38-F6: B类制证后 BusinessDoc 应包含 bankStatementId
+        BankStatementEntity stmt = newStmt("business_receipt", "in");
+        stmt.setExternalNo("EXT-002");
+        when(statementMapper.selectById(1L)).thenReturn(stmt);
+        when(voucherNoService.generateNextNo(anyString(), anyLong())).thenReturn("VCH-002");
+        doAnswer(inv -> {
+            BusinessDocEntity d = inv.getArgument(0);
+            d.setId(100L);
+            return null;
+        }).when(docMapper).insert(any(BusinessDocEntity.class));
+        when(subjectMapper.selectList(any()))
+                .thenReturn(List.of(new Subject() {{ setId(10L); setCode("1002"); setIsLeaf(true); }}))
+                .thenReturn(List.of(new Subject() {{ setId(20L); setCode("6001"); setIsLeaf(true); }}));
+        when(voucherTemplateService.matchByClassification(any())).thenReturn(null);
+
+        service.autoGenerate(1L, 1L);
+
+        ArgumentCaptor<BusinessDocEntity> docCaptor = ArgumentCaptor.forClass(BusinessDocEntity.class);
+        verify(docMapper, atLeastOnce()).insert(docCaptor.capture());
+        BusinessDocEntity doc = docCaptor.getValue();
+        assertEquals(1L, doc.getBankStatementId());
     }
 }
