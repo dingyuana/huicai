@@ -7,9 +7,11 @@ class Settings(BaseSettings):
 
     # 服务
     service_name: str = "huicai-ai-service"
+    service_version: str = "1.0"
     service_port: int = 8000
     debug: bool = True
     log_level: str = "INFO"
+    cors_origins: list[str] = ["http://localhost:3000", "http://localhost:3001"]
 
     # RabbitMQ
     rabbitmq_url: str = "amqp://huicai:huicai123@localhost:5672/"
