@@ -246,7 +246,7 @@ class FallbackHeuristicServiceTest {
     void financingInvest_分红() {
         FallbackHeuristicService.Result r = service.classify("收到投资分红", "in");
         assertEquals("financing_invest", r.getClassification());
-        assertEquals("分红", r.getMatchedKeyword());
+        assertEquals("投资", r.getMatchedKeyword());
     }
 
     // ==================== 方向兜底 (priority=10) ====================

@@ -15,6 +15,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.context.ApplicationContext;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.dao.OptimisticLockingFailureException;
@@ -41,27 +42,27 @@ public class OutputInvoiceStateMachineServiceImpl implements OutputInvoiceStateM
     private final BusinessDocMapper businessDocMapper;
     private final VoucherMapper voucherMapper;
     private final StringRedisTemplate redisTemplate;
+    private final ApplicationContext applicationContext;
 
     private final OutputInvoiceStateMachineServiceImpl self;
-    private final TaxService taxService;
 
     /**
      * 构造器注入（替代 @Autowired 字段注入）.
      * self 自注入用于 @Transactional 内部调用生效.
      */
     public OutputInvoiceStateMachineServiceImpl(
-            OutputInvoiceMapper invoiceMapper,
-            BusinessDocMapper businessDocMapper,
-            VoucherMapper voucherMapper,
-            StringRedisTemplate redisTemplate,
-            @Lazy OutputInvoiceStateMachineServiceImpl self,
-            TaxService taxService) {
+        OutputInvoiceMapper invoiceMapper,
+        BusinessDocMapper businessDocMapper,
+        VoucherMapper voucherMapper,
+        StringRedisTemplate redisTemplate,
+        @Lazy OutputInvoiceStateMachineServiceImpl self,
+        ApplicationContext applicationContext) {
         this.invoiceMapper = invoiceMapper;
-        this.businessDocMapper = businessDocMapper;
-        this.voucherMapper = voucherMapper;
-        this.redisTemplate = redisTemplate;
-        this.self = self;
-        this.taxService = taxService;
+this.businessDocMapper = businessDocMapper;
+this.voucherMapper = voucherMapper;
+this.redisTemplate = redisTemplate;
+this.self = self;
+this.applicationContext = applicationContext;
     }
 
     @Override
@@ -339,7 +340,7 @@ public class OutputInvoiceStateMachineServiceImpl implements OutputInvoiceStateM
                     && (invoice.getAmount() != null && invoice.getAmount().compareTo(BigDecimal.ZERO) < 0
                         || invoice.getOriginalInvoiceNo() != null);
 
-            taxService.generateVoucherFromInvoice(invoiceId, userId);
+            applicationContext.getBean(TaxService.class).generateVoucherFromInvoice(invoiceId, userId);
 
             // 重新读取发票（markVouchered 已设置 voucherId/voucherNo）
             OutputInvoiceEntity updatedInv = invoiceMapper.selectById(invoiceId);

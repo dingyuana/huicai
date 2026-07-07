@@ -18,12 +18,10 @@ import com.huicai.module.tax.entity.InputInvoiceEntity;
 import com.huicai.module.tax.entity.OutputInvoiceEntity;
 import com.huicai.module.tax.entity.TaxDeclarationEntity;
 import com.huicai.module.tax.entity.TaxTypeEntity;
-import com.huicai.module.arap.mapper.ReceivableMapper;
 import com.huicai.module.tax.mapper.InputInvoiceMapper;
 import com.huicai.module.tax.mapper.OutputInvoiceMapper;
 import com.huicai.module.tax.mapper.TaxDeclarationMapper;
 import com.huicai.module.tax.mapper.TaxTypeMapper;
-import com.huicai.module.tax.service.OutputInvoiceStateMachineService;
 import com.huicai.module.tax.service.TaxService;
 import com.huicai.module.finance.service.TemplateMatcher;
 import com.huicai.common.util.TemplateEngine;
@@ -62,13 +60,9 @@ public class TaxServiceImpl implements TaxService {
     private final VoucherEntryMapper voucherEntryMapper;
     private final VoucherNoService voucherNoService;
     private final SubjectMapper subjectMapper;
-    @Lazy
-    @Autowired
-    private OutputInvoiceStateMachineService stateMachineService;
     private final TemplateMatcher templateMatcher;
     private final VoucherTemplateService voucherTemplateService;
     private final BusinessDocMapper businessDocMapper;
-    private final ReceivableMapper receivableMapper;
 
     // ========== 税种 ==========
     @Override
@@ -300,13 +294,7 @@ public class TaxServiceImpl implements TaxService {
                 inv.setVoucherStatus(voucher.getStatus());  // P2: 关联凭证状态
             }
         }
-        // 回填应收单编号（通过 receivable_id 查询）
-        if (inv.getReceivableId() != null) {
-            var recv = receivableMapper.selectById(inv.getReceivableId());
-            if (recv != null && recv.getReceivableNo() != null) {
-                inv.setReceivableNo(recv.getReceivableNo());
-            }
-        }
+        // P34: 应收单已合并到业务单据，不再回填 receivableNo
     }
 
     @Override
@@ -433,7 +421,13 @@ public class TaxServiceImpl implements TaxService {
             voucherEntryMapper.insert(cr2);
         }
 
-        stateMachineService.markVouchered(invoiceId, voucher.getId(), voucherNo, userId);
+        // Inline markVouchered to break circular dependency
+        inv.setStatus(InvoiceStatus.VOUCHERED);
+        inv.setVoucherId(voucher.getId());
+        inv.setVoucherNo(voucherNo);
+        inv.setUpdatedBy(userId);
+        outputMapper.updateById(inv);
+        log.info("发票生成凭证: invoiceId={}, voucherId={}, voucherNo={}", invoiceId, voucher.getId(), voucherNo);
         log.info("发票生成凭证: invoiceId={}, voucherId={}, voucherNo={}", invoiceId, voucher.getId(), voucherNo);
     }
 
@@ -494,7 +488,12 @@ public class TaxServiceImpl implements TaxService {
         voucher.setTotalCredit(maxAmt);
         voucherMapper.updateById(voucher);
 
-        stateMachineService.markVouchered(inv.getId(), voucher.getId(), voucherNo, userId);
+        // Inline markVouchered to break circular dependency
+        inv.setStatus(InvoiceStatus.VOUCHERED);
+        inv.setVoucherId(voucher.getId());
+        inv.setVoucherNo(voucherNo);
+        inv.setUpdatedBy(userId);
+        outputMapper.updateById(inv);
         log.info("发票模板制证: invoiceId={}, voucherId={}, templateId={}", inv.getId(), voucher.getId(), template.getId());
     }
 
@@ -788,5 +787,101 @@ public class TaxServiceImpl implements TaxService {
     private BigDecimal toBigDecimal(Object o) {
         if (o == null) return BigDecimal.ZERO;
         return new BigDecimal(o.toString());
+    }
+
+    @Override
+    @Transactional
+    public String batchGenerateVoucherFromInvoices(List<Long> invoiceIds, Long userId, Boolean sameCustomer) {
+        if (invoiceIds == null || invoiceIds.isEmpty()) {
+            throw BusinessException.badRequest("发票ID列表不能为空");
+        }
+        List<OutputInvoiceEntity> invoices = outputMapper.selectBatchIds(invoiceIds);
+        if (invoices.size() != invoiceIds.size()) {
+            throw BusinessException.badRequest("部分发票不存在");
+        }
+        for (OutputInvoiceEntity inv : invoices) {
+            if (!InvoiceStatus.isVoucherable(inv.getStatus())) {
+                throw BusinessException.badRequest("发票 " + inv.getInvoiceNo() + " 状态不允许生成凭证，当前: " + inv.getStatus());
+            }
+        }
+        if (Boolean.TRUE.equals(sameCustomer)) {
+            String firstCust = invoices.get(0).getCustomerName();
+            for (int i = 1; i < invoices.size(); i++) {
+                String cust = invoices.get(i).getCustomerName();
+                if (!java.util.Objects.equals(firstCust, cust)) {
+                    throw BusinessException.badRequest("批量生成要求同一客户，第" + (i + 1) + "张不一致: " + cust);
+                }
+            }
+        }
+        BigDecimal totalExclTax = invoices.stream()
+                .map(i -> i.getAmount() != null ? i.getAmount() : BigDecimal.ZERO)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal totalTax = invoices.stream()
+                .map(i -> i.getTaxAmount() != null ? i.getTaxAmount() : BigDecimal.ZERO)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal totalAmount = totalExclTax.add(totalTax);
+        OutputInvoiceEntity first = invoices.get(0);
+        String period = first.getPeriod();
+        String customerName = first.getCustomerName();
+        String invoiceNoList = invoices.stream()
+                .map(OutputInvoiceEntity::getInvoiceNo)
+                .filter(java.util.Objects::nonNull)
+                .reduce((a, b) -> a + ", " + b).orElse("");
+        String voucherNo = voucherNoService.generateNextNo(period, VOUCHER_TYPE_ID);
+        java.util.Map<String, Subject> subjects = findSubjectsByCodes(java.util.List.of("1122", "5001", "2221.01"));
+        Subject subjectAr = subjects.get("1122");
+        Subject subjectRevenue = subjects.get("5001");
+        Subject subjectOutputTax = subjects.get("2221.01");
+        if (subjectAr == null || subjectRevenue == null) {
+            throw new BusinessException(500, "缺少基础科目配置(1122/5001)");
+        }
+        VoucherEntity voucher = new VoucherEntity();
+        voucher.setVoucherNo(voucherNo);
+        voucher.setPeriod(period);
+        voucher.setVoucherTypeId(VOUCHER_TYPE_ID);
+        voucher.setStatus("DRAFT");
+        voucher.setSource("GENERATED");
+        voucher.setSummary("合并凭证: " + invoiceNoList + " - " + (customerName != null ? customerName : ""));
+        voucher.setTotalDebit(totalAmount);
+        voucher.setTotalCredit(totalAmount);
+        voucher.setCreatedBy(userId);
+        voucher.setSourceDocType("OUTPUT_INVOICE");
+        voucher.setSourceDocNo(invoiceNoList);
+        voucherMapper.insert(voucher);
+        int sort = 1;
+        VoucherEntryEntity dr = new VoucherEntryEntity();
+        dr.setVoucherId(voucher.getId());
+        dr.setSubjectId(subjectAr.getId());
+        dr.setDebit(totalAmount);
+        dr.setCredit(BigDecimal.ZERO);
+        dr.setSummary("合并发票: " + invoiceNoList);
+        dr.setSortOrder(sort++);
+        voucherEntryMapper.insert(dr);
+        VoucherEntryEntity cr = new VoucherEntryEntity();
+        cr.setVoucherId(voucher.getId());
+        cr.setSubjectId(subjectRevenue.getId());
+        cr.setDebit(BigDecimal.ZERO);
+        cr.setCredit(totalExclTax);
+        cr.setSummary("合并发票: " + invoiceNoList);
+        cr.setSortOrder(sort++);
+        voucherEntryMapper.insert(cr);
+        if (subjectOutputTax != null && totalTax.compareTo(BigDecimal.ZERO) > 0) {
+            VoucherEntryEntity taxCr = new VoucherEntryEntity();
+            taxCr.setVoucherId(voucher.getId());
+            taxCr.setSubjectId(subjectOutputTax.getId());
+            taxCr.setDebit(BigDecimal.ZERO);
+            taxCr.setCredit(totalTax);
+            taxCr.setSummary("合并发票: " + invoiceNoList);
+            taxCr.setSortOrder(sort);
+            voucherEntryMapper.insert(taxCr);
+        }
+        for (OutputInvoiceEntity inv : invoices) {
+            inv.setProcessStatus("PROCESSED");
+            inv.setVoucherId(voucher.getId());
+            inv.setVoucherNo(voucherNo);
+            outputMapper.updateById(inv);
+        }
+        log.info("批量生成凭证成功: {} 张发票 -> 凭证 {}", invoiceIds.size(), voucherNo);
+        return voucherNo;
     }
 }

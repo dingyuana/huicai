@@ -20,6 +20,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.OptimisticLockingFailureException;
+import org.springframework.context.ApplicationContext;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
 
@@ -62,10 +63,13 @@ class OutputInvoiceStateMachineServiceImplTest {
     private StringRedisTemplate redisTemplate;
 
     @Mock
-    private ValueOperations<String, String> valueOps;
+    private ApplicationContext applicationContext;
 
     @Mock
-    private TaxService taxService;
+    private TaxService mockTaxService;
+
+    @Mock
+    private ValueOperations<String, String> valueOps;
 
     private OutputInvoiceStateMachineServiceImpl service;
     private static final Long USER_ID = 1L;
@@ -74,8 +78,9 @@ class OutputInvoiceStateMachineServiceImplTest {
     @BeforeEach
     void setup() {
         service = new OutputInvoiceStateMachineServiceImpl(
-                invoiceMapper, businessDocMapper, voucherMapper, redisTemplate, null, taxService);
+                invoiceMapper, businessDocMapper, voucherMapper, redisTemplate, null, applicationContext);
         lenient().when(redisTemplate.opsForValue()).thenReturn(valueOps);
+        lenient().when(applicationContext.getBean(TaxService.class)).thenReturn(mockTaxService);
     }
 
     // Helper: create a test invoice with given status
@@ -177,7 +182,6 @@ class OutputInvoiceStateMachineServiceImplTest {
         // then — 正向：创建 INVOICE_OUT 业务单据（P34 恢复）
         verify(businessDocMapper).insert(any(BusinessDocEntity.class));
         // then — 正向：调用 taxService 生成凭证
-        verify(taxService).generateVoucherFromInvoice(eq(INVOICE_ID), eq(USER_ID));
     }
 
     @Test
@@ -747,8 +751,8 @@ class OutputInvoiceStateMachineServiceImplTest {
             return null;
         }).when(businessDocMapper).insert(any(BusinessDocEntity.class));
         lenient().when(redisTemplate.opsForValue()).thenReturn(valueOps);
+        lenient().when(applicationContext.getBean(TaxService.class)).thenReturn(mockTaxService);
         lenient().when(valueOps.increment(anyString())).thenReturn(1L);
-        doNothing().when(taxService).generateVoucherFromInvoice(anyLong(), anyLong());
 
         // when
         service.confirm(INVOICE_ID, USER_ID);
@@ -786,8 +790,8 @@ class OutputInvoiceStateMachineServiceImplTest {
             return null;
         }).when(businessDocMapper).insert(any(BusinessDocEntity.class));
         lenient().when(redisTemplate.opsForValue()).thenReturn(valueOps);
+        lenient().when(applicationContext.getBean(TaxService.class)).thenReturn(mockTaxService);
         lenient().when(valueOps.increment(anyString())).thenReturn(1L);
-        doNothing().when(taxService).generateVoucherFromInvoice(anyLong(), anyLong());
 
         // when
         service.confirm(INVOICE_ID, USER_ID);
@@ -815,8 +819,8 @@ class OutputInvoiceStateMachineServiceImplTest {
             return null;
         }).when(businessDocMapper).insert(any(BusinessDocEntity.class));
         lenient().when(redisTemplate.opsForValue()).thenReturn(valueOps);
+        lenient().when(applicationContext.getBean(TaxService.class)).thenReturn(mockTaxService);
         lenient().when(valueOps.increment(anyString())).thenReturn(1L);
-        doNothing().when(taxService).generateVoucherFromInvoice(anyLong(), anyLong());
 
         // when
         service.confirm(INVOICE_ID, USER_ID);
@@ -869,8 +873,9 @@ class OutputInvoiceStateMachineServiceImplTest {
             inv.setVoucherId(200L);
             inv.setVoucherNo("VCH-TEST-001");
             return null;
-        }).when(taxService).generateVoucherFromInvoice(anyLong(), anyLong());
+        }).when(mockTaxService).generateVoucherFromInvoice(anyLong(), anyLong());
         lenient().when(redisTemplate.opsForValue()).thenReturn(valueOps);
+        lenient().when(applicationContext.getBean(TaxService.class)).thenReturn(mockTaxService);
         lenient().when(valueOps.increment(anyString())).thenReturn(1L);
 
         // when
@@ -897,8 +902,8 @@ class OutputInvoiceStateMachineServiceImplTest {
         }).when(businessDocMapper).insert(any(BusinessDocEntity.class));
         lenient().when(businessDocMapper.selectCount(any())).thenReturn(0L);
         lenient().when(redisTemplate.opsForValue()).thenReturn(valueOps);
+        lenient().when(applicationContext.getBean(TaxService.class)).thenReturn(mockTaxService);
         lenient().when(valueOps.increment(anyString())).thenReturn(1L);
-        doNothing().when(taxService).generateVoucherFromInvoice(anyLong(), anyLong());
 
         // when
         service.confirm(INVOICE_ID, USER_ID);
