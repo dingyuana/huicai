@@ -1,6 +1,7 @@
 # SPEC: Phase 1 — 银行流水导入与智能分类引擎
 
-## 基本信息
+> **编号**：HUICAI-SPC-001
+> **版本**：V1.0 | **修改日期**：2026-07-07 | **修改人**：Hermes | **修改内容**：添加编号头部
 
 - **任务 ID**: P1-BANK-IMPORT
 - **类型**: feature
@@ -9,6 +10,7 @@
 - **执行工具**: OpenCode
 - **参考实现**: `/root/data/disk/huihua-finance`（Go 版，业务逻辑可直接移植）
 
+> **关联需求**: REQ-2026-017, REQ-2026-018, REQ-2026-019
 ## 背景
 
 当前慧财财务（huicai/Java）已具备基础骨架（Spring Boot + MyBatis-Plus + Vue 3）和 AI 微服务（Python FastAPI + RabbitMQ），但核心的**银行流水批量导入**和**智能分类**功能尚未实现。

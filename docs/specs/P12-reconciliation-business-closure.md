@@ -1,11 +1,12 @@
 # P12 SPEC — 核销业务闭环 (审批/驳回/差额/预收预付)
 
-> 状态：已落地（main 分支 commit ff59d3d + 66fbea1）
+> **编号**：HUICAI-SPC-012（main 分支 commit ff59d3d + 66fbea1）
 > 工期：3 批工单 (P12-1 审批/驳回 / P12-2 差额调整 / P12-3 预收/预付)
 > mvn test: 250/0/0
 
 ---
 
+> **关联需求**: REQ-2026-020
 ## 1. 业务背景
 
 P5 + P10 已建核销基础 (推荐 L1-L5 + execute/reverse)，但**状态机不完整**：
@@ -155,3 +156,13 @@ CREATE INDEX idx_t_prepayment_status ON t_prepayment(status);
 - 退/红字对冲 (P13 候选)
 - 多笔合并核销 (一笔收款核销多张发票) — 当前已是 N:1 模型
 - 信用期/账龄驱动的智能核销
+
+---
+## 验收标准
+
+| ID | 描述 | 断言 |
+|----|------|------|
+| AT-P12-1 | 核销执行后应收单unsettled_amount减少 | `after execute: receivable.unsettled_amount < before` |
+| AT-P12-2 | 核销单确认后状态为CONFIRMED | `confirm() → settlement.status == 'CONFIRMED'` |
+| AT-P12-3 | 核销单生成凭证后状态为VOUCHERED | `generateVoucher() → settlement.status == 'VOUCHERED'` |
+| AT-P12-4 | 预收预付创建后状态为DRAFT | `prepayment.status == 'DRAFT'` |

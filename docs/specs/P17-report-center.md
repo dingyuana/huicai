@@ -1,11 +1,12 @@
 # P17 SPEC — 报表中心 (科目余额表/资产负债表/利润表/现金流量表/趋势)
 
-> 状态：补单测中（9 方法全已实现, 0 测试覆盖）
+> **编号**：HUICAI-SPC-017（9 方法全已实现, 0 测试覆盖）
 > 目标：补 5 个单测 + 文档化 4 大报表
 > 工期：1 批
 
 ---
 
+> **关联需求**: REQ-2026-034, REQ-2026-035
 ## 1. 现状摸底 (2026-06-15)
 
 | 文件 | 状态 |
@@ -68,3 +69,13 @@
 ## 4. 测试验收
 
 **目标**: 300 → 305 (+5 测试)
+
+---
+## 验收标准
+
+| ID | 描述 | 断言 |
+|----|------|------|
+| AT-P17-1 | 资产负债表数据完整 | `balanceSheet(period) → assets == liabilities + equity` |
+| AT-P17-2 | 利润表数据完整 | `profitStatement(period) → revenue - expense == profit` |
+| AT-P17-3 | 科目余额表按层级展示 | `subjectBalance(period) → tree structure` |
+| AT-P17-4 | 杜邦分析返回指标树 | `dupont(period) → ROE decomposed` |

@@ -1,11 +1,12 @@
 # P33 代码与SPEC差距分析
 
-> 日期: 2026-06-29
+> **编号**：HUICAI-SPC-033A
 > 依据: `docs/specs/P33-streamline-sales-invoice-flow.md` + `docs/tasks/P33-streamline-sales-invoice-flow_开发计划.md`
 > 对比范围: 实际代码 vs SPEC 设计
 
 ---
 
+> **关联需求**: REQ-2026-007, REQ-2026-008
 ## 一、已完成项 ✅
 
 ### 1. 核心流程简化

@@ -1,12 +1,13 @@
 # P10 SPEC — 发票+银行流水 端到端应收/应付/核销自动接入
 
-> 状态：**已落地**（main 分支 4 批 commit 全部 ✅）
+> **编号**：HUICAI-SPC-010 — V74 已删除 t_receivable/t_payable，本 SPEC 描述的独立应收/应付表架构已不适用
+> **当前架构**：统一使用 t_business_doc（INVOICE_OUT/INVOICE_IN），详见 P34 SPEC
+> **历史价值**：P10 的 4 批 commit 实现了发票→应收/应付自动写入，为后续 P34 业务单据统一化提供了前提
 > mvn test: 211 → 235 (+24 测试, 0 fail, 0 error)
-> 目标：把"t_receivable/t_payable 是空表+可写"的状态，打通到"发票导入/流水确认后自动写入"
-> 工期：分 4 批工单（每批 1 个 commit、可独立回滚）
 
 ---
 
+> **关联需求**: REQ-2026-012, REQ-2026-013, REQ-2026-014
 ## 0. 范围与目标
 
 ### 0.1 业务目标

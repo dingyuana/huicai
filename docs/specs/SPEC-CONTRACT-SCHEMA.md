@@ -1,9 +1,11 @@
 # SPEC Contract YAML Schema — Machine-Readable Contract Format
 
-> Version: 1.0 | Date: 2026-06-30
+> **编号**：HUICAI-SPC-099
+> **版本**：1.0 | **修改日期**：2026-06-30 | **修改人**：Hermes | **修改内容**：初始创建
 > Purpose: Define the machine-readable contract block that can be appended to any
 > SPEC markdown file for automated validation.
 
+> **关联需求**: REQ-2026-047, REQ-2026-048, REQ-2026-052
 ## 1. Design Principles
 
 1. **Co-located**: YAML block lives in the SAME `.md` file as the natural-language SPEC,

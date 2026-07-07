@@ -1,11 +1,12 @@
 # P14 SPEC — 银企对账 E2E 闭环 (match + confirmMatch + 状态机)
 
-> 状态：补缺失方法中（接口已 9 个方法, 缺 `confirmMatch` 人工确认）
+> **编号**：HUICAI-SPC-014（接口已 9 个方法, 缺 `confirmMatch` 人工确认）
 > 目标：自动匹配 → 人工确认 → 锁定 → 完成对账
 > 工期：1 批（补 1 方法 + 1 端点 + 2 单测）
 
 ---
 
+> **关联需求**: REQ-2026-020
 ## 1. 现状摸底 (2026-06-15)
 
 | 文件 | 状态 |
@@ -79,3 +80,12 @@ MATCHED ──→ lockReconciliation ──→ LOCKED
 ## 4. 测试验收
 
 **目标**: 290 → 292 (+2 测试, 0 fail, 0 error)
+
+---
+## 验收标准
+
+| ID | 描述 | 断言 |
+|----|------|------|
+| AT-P14-1 | 自动匹配生成匹配记录 | `match(period) → reconciliation_log count > 0` |
+| AT-P14-2 | 人工确认后匹配锁定 | `confirmMatch(id) → log.status == 'CONFIRMED'` |
+| AT-P14-3 | 余额调节表生成 | `execute(period) → reconciliation_report exists` |

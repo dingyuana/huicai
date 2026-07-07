@@ -1,11 +1,13 @@
 # 时间戳精度规范
 
-## 背景
+> **编号**：HUICAI-SPC-100
+> **版本**：V1.0 | **修改日期**：2026-07-07 | **修改人**：Hermes | **修改内容**：添加编号头部
 
 项目中所有时间戳字段（`createdAt`、`updatedAt`、`submittedAt`、`approvedAt`、`postedAt`、`auditedAt` 等）使用 `LocalDateTime`（Java 8 Date/Time API），数据库列类型为 `timestamp`（PostgreSQL）。
 
 Jackson 默认将 `LocalDateTime` 序列化为 ISO-8601 格式（如 `2026-06-25T21:41:11.643184`），包含毫秒/纳秒精度。业务上不需要此精度，冗余信息徒增数据量且无实际用途。
 
+> **关联需求**: REQ-2026-049
 ## 决定
 
 **全项目统一：`LocalDateTime` 序列化/反序列化格式为 `yyyy-MM-dd'T'HH:mm:ss`（秒级精度），去除毫秒和纳秒。**

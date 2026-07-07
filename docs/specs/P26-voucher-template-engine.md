@@ -1,12 +1,13 @@
 # P26 SPEC — 凭证模板引擎实现规格书
 
-> 状态：待实现 | 优先级：P0（核心引擎）
+> **编号**：HUICAI-SPC-026 | 优先级：P0（核心引擎）
 > 依据：`docs/DESIGN.md §20 凭证模板系统`、`docs/需求分析书_银行流水导入分类_V1.0.md`
 > 目标：将凭证分录的科目映射从硬编码剥离为配置驱动，实现 TemplateEngine 变量替换 + TemplateMatcher 多维匹配
 > 工期：3 批（P0 核心引擎 2 天 → P1 业务接入 2 天 → P2 种子数据+结转 1 天）
 
 ---
 
+> **关联需求**: REQ-2026-010
 ## 0. 改动清单总览
 
 | # | 改动 | 文件 | 风险 | 批次 |
@@ -577,3 +578,13 @@ if (StrUtil.isNotBlank(line.getAssistType())) {
 - **依赖 P21/P22**：凭证状态机 + 发票状态机已落地，本 SPEC 不涉及状态变更
 - **依赖 V23/V40/V42**：已有模板表和种子数据需要 V48 迁移扩展字段
 - **被 PeriodCloseService 依赖**：P2 期末结转需要本 SPEC 的 TemplateMatcher + TemplateEngine
+
+---
+## 验收标准
+
+| ID | 描述 | 断言 |
+|----|------|------|
+| AT-P26-1 | 模板匹配返回正确模板 | `match(context) → template.account matches expected` |
+| AT-P26-2 | 变量替换正确 | `renderSummary('{{amount}}', ctx) → contains amount value` |
+| AT-P26-3 | 金额表达式计算正确 | `renderAmount('{{amount}}-{{taxAmount}}', ctx) → correct BigDecimal` |
+| AT-P26-4 | 无匹配模板降级硬编码 | `match(no-match context) → fallback to hardcoded subjects` |

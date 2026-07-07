@@ -1,6 +1,6 @@
 # P34 SPEC — 应收/应付单据恢复为业务单据类型
 
-> **状态**: 实施中（M1-M2 已完成，M3-M4 待实现） | **优先级**: 高（P34）
+> **编号**：HUICAI-SPC-034 | **优先级**: 已完成
 > **依据**: 老丁决策 — "恢复成业务单据的应收单据，而取消现有的应收单据"
 > **目标**: 撤销 P33 简化方案，让应收/应付走回业务单据体系
 > **核心原则**: 业务单据是应收/应付的唯一载体
@@ -8,33 +8,35 @@
 > **实施进度**:
 > - ✅ M1: V68 结算字段 + Entity 更新（已完成）
 > - ✅ M2: OutputInvoiceStateMachineServiceImpl 改为创建 BusinessDocEntity（已完成）
+> - ✅ M3: 核销结算迁移（V72 已执行 + 清理 deprecation）
+> - ✅ M4: t_receivable/t_payable 表删除（V73 数据迁移 + V74 DROP TABLE）
 > - ✅ P36 红冲级联：红字发票 confirm 时创建 RED_FLUSH 业务单据（已完成）
-> - ✅ M3: 核销结算系统的独立应收/应付逻辑已清理（已迁移到 BusinessDocEntity）
-> - ✅ M3 DB: V72 migration t_arap_settlement_entry + t_reconciliation_log 加字段（已完成）
-> - ⏳ M4: V73 数据迁移 t_receivable → t_business_doc + V74 删表
+> - ✅ 核销结算系统的独立应收/应付逻辑已清理（已迁移到 BusinessDocEntity）
+> - ✅ V72 migration t_arap_settlement_entry + t_reconciliation_log 加字段（已完成）
 
 ---
 
+> **关联需求**: REQ-2026-012, REQ-2026-013
 ## 0. 改动清单总览
 
 | # | 改动 | 影响文件 | 风险 | 状态 |
 |---|------|---------|------|------|
-| 1 | DB: t_business_doc 增加结算字段 | V68 migration | 🟡 中 | ⏳ 待实现 |
-| 2 | DB: 数据迁移 t_receivable → t_business_doc | V73 migration | 🟡 中 | ⏳ 待实现 |
-| 3 | DB: 删除 t_receivable/t_payable 表 | V74 migration | 🔴 高 | ⏳ 待实现 |
-| 4 | 修改 OutputInvoiceStateMachineServiceImpl — 改回创建 BusinessDocEntity | 1 Java 文件 | 🟡 中 | ⏳ 待实现 |
-| 5 | 修改 BusinessDocServiceImpl — 放开 INVOICE_OUT 限制 | 1 Java 文件 | ✅ 低 | ⏳ 待实现 |
-| 6 | 修改 ArapSettlementServiceImpl — 改为更新 BusinessDocEntity | 1 Java 文件 | 🟡 中 | ⏳ 待实现 |
-| 7 | 修改 ReconciliationServiceImpl — 改为操作 BusinessDocEntity | 1 Java 文件 | 🟡 中 | ⏳ 待实现 |
-| 8 | 修改 ArapSettlementEntryEntity — receivableId/payableId → businessDocId | 1 Java 文件 + DB | 🟡 中 | ⏳ 待实现 |
-| 9 | 修改 ReconciliationLogEntity — targetDocId 指向业务单据 | 1 Java 文件 | ✅ 低 | ⏳ 待实现 |
-| 10 | 修改 ReceivableServiceImpl/PayableServiceImpl — 迁移能力到 BusinessDocService | 2 Java 文件 | 🟡 中 | ⏳ 待实现 |
-| 11 | 修改 InputInvoiceImportService — 停止创建 PayableEntity | 1 Java 文件 | ✅ 低 | ⏳ 待实现 |
-| 12 | 修改 BusinessDocList.vue — 展示 INVOICE_OUT 标签 | 1 Vue 文件 | ✅ 低 | ⏳ 待实现 |
-| 13 | 修改 BusinessDocDetail.vue — 放开 INVOICE_OUT 凭证生成 | 1 Vue 文件 | ✅ 低 | ⏳ 待实现 |
-| 14 | 修改 ReceivableList.vue — 改为业务单据列表视图 | 1 Vue 文件 | ✅ 低 | ⏳ 待实现 |
-| 15 | 清理: 删除 10+ 个引用 ReceivableMapper/PayableMapper 的文件中的相关代码 | 多个 Java 文件 | 🟡 中 | ⏳ 待实现 |
-| 16 | 更新测试 | 多个测试文件 | 🟡 中 | ⏳ 待实现 |
+| 1 | DB: t_business_doc 增加结算字段 | V68 migration | 🟡 中 | ✅ 已完成 |
+| 2 | DB: 数据迁移 t_receivable → t_business_doc | V73 migration | 🟡 中 | ✅ 已完成 |
+| 3 | DB: 删除 t_receivable/t_payable 表 | V74 migration | 🔴 高 | ✅ 已完成 |
+| 4 | 修改 OutputInvoiceStateMachineServiceImpl — 改回创建 BusinessDocEntity | 1 Java 文件 | 🟡 中 | ✅ 已完成 |
+| 5 | 修改 BusinessDocServiceImpl — 放开 INVOICE_OUT 限制 | 1 Java 文件 | ✅ 低 | ✅ 已完成 |
+| 6 | 修改 ArapSettlementServiceImpl — 改为更新 BusinessDocEntity | 1 Java 文件 | 🟡 中 | ✅ 已完成 |
+| 7 | 修改 ReconciliationServiceImpl — 改为操作 BusinessDocEntity | 1 Java 文件 | 🟡 中 | ✅ 已完成 |
+| 8 | 修改 ArapSettlementEntryEntity — receivableId/payableId → businessDocId | 1 Java 文件 + DB | 🟡 中 | ✅ 已完成 |
+| 9 | 修改 ReconciliationLogEntity — targetDocId 指向业务单据 | 1 Java 文件 | ✅ 低 | ✅ 已完成 |
+| 10 | 修改 ReceivableServiceImpl/PayableServiceImpl — 迁移能力到 BusinessDocService | 2 Java 文件 | 🟡 中 | ✅ 已完成 |
+| 11 | 修改 InputInvoiceImportService — 停止创建 PayableEntity | 1 Java 文件 | ✅ 低 | ✅ 已完成 |
+| 12 | 修改 BusinessDocList.vue — 展示 INVOICE_OUT 标签 | 1 Vue 文件 | ✅ 低 | ✅ 已完成 |
+| 13 | 修改 BusinessDocDetail.vue — 放开 INVOICE_OUT 凭证生成 | 1 Vue 文件 | ✅ 低 | ✅ 已完成 |
+| 14 | 修改 ReceivableList.vue — 改为业务单据列表视图 | 1 Vue 文件 | ✅ 低 | ✅ 已完成 |
+| 15 | 清理: 删除 10+ 个引用 ReceivableMapper/PayableMapper 的文件中的相关代码 | 多个 Java 文件 | 🟡 中 | ✅ 已完成 |
+| 16 | 更新测试 | 多个测试文件 | 🟡 中 | ✅ 已完成 |
 
 ---
 
@@ -775,13 +777,13 @@ public void updateSettlement(...) { ... }
 
 | 测试文件 | 变更内容 | 状态 |
 |---------|---------|------|
-| `OutputInvoiceStateMachineServiceImplTest.java` | 改为断言 BusinessDocEntity 而非 ReceivableEntity | ⏳ 待修改 |
-| `SalesFlowE2ETest.java` | 验证业务单据的结算字段 | ⏳ 待修改 |
-| `ArapSettlementServiceImplTest.java` | 改为验证 BusinessDocEntity 更新 | ⏳ 待修改 |
-| `ReconciliationServiceImplTest.java` | 推荐+执行核销的目标改为业务单据 | ⏳ 待修改 |
-| `ReceivableServiceImplTest.java` | 迁移到 BusinessDocServiceTest | ⏳ 待修改 |
-| `NumberingFrontendApiTest.java` | 更新编号关联链路 | ⏳ 待修改 |
-| `BusinessDocServiceImplTest.java` | 新增 INVOICE_OUT 的测试（if exists） | ⏳ 待新增 |
+| `OutputInvoiceStateMachineServiceImplTest.java` | 改为断言 BusinessDocEntity 而非 ReceivableEntity | ✅ 已完成 |
+| `SalesFlowE2ETest.java` | 验证业务单据的结算字段 | ✅ 已完成 |
+| `ArapSettlementServiceImplTest.java` | 改为验证 BusinessDocEntity 更新 | ✅ 已完成 |
+| `ReconciliationServiceImplTest.java` | 推荐+执行核销的目标改为业务单据 | ✅ 已完成 |
+| `ReceivableServiceImplTest.java` | 迁移到 BusinessDocServiceTest | ✅ 已完成 |
+| `NumberingFrontendApiTest.java` | 更新编号关联链路 | ✅ 已完成 |
+| `BusinessDocServiceImplTest.java` | 新增 INVOICE_OUT 的测试（if exists） | ✅ 已完成 |
 
 ### 3.2 负向断言要点
 
@@ -1050,3 +1052,14 @@ ALTER TABLE t_reconciliation_log DROP COLUMN target_business_doc_id;
 |out_of_scope:
 |  - "P33 简化方案（已废弃，由 P34 替代）"
 |  - "ReceivableEntity/PayableEntity（V74 已删除）"
+
+---
+## 验收标准
+
+| ID | 描述 | 断言 |
+|----|------|------|
+| AT-P34-1 | 发票审核创建BusinessDoc(DRAFT) | `confirm() → BusinessDoc exists, status=DRAFT, type=INVOICE_OUT` |
+| AT-P34-2 | 凭证生成回写BusinessDoc | `generateVoucher() → doc.voucherId != null, doc.status=VOUCHERED` |
+| AT-P34-3 | 凭证红冲级联回写 | `reverse(voucherId) → doc.status=REVERSED, invoice.status=REVERSED` |
+| AT-P34-4 | t_receivable/t_payable已删除 | `SELECT EXISTS table → false for both` |
+| AT-P34-5 | 核销通过BusinessDoc | `reconcile() → uses BusinessDoc, not Receivable/Payable` |

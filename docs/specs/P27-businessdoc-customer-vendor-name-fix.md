@@ -1,11 +1,12 @@
-# P27 SPEC — BusinessDoc 客户/供应商名称字段补齐（修复 P26 P1-1 回归）
+# P27 SPEC — BusinessDoc 客户/供应商名称字段补齐
 
-> 状态：待实现 | 优先级：P0（编译失败，mvn test 红）
+> **编号**：HUICAI-SPC-027 | 优先级：P0（编译失败，mvn test 红）
 > 修复目标：`BusinessDocServiceImpl.generateVoucher()` 第 317 行调用 `entity.getCustomerName()/getSupplierName()` 时 `BusinessDocEntity` 上不存在这 2 个字段，导致 4 个测试 fail、整体 BUILD FAILURE。
 > 依据：P26 凭证模板引擎 SPEC §1.1（变量定义：{客户名称} / {供应商名称}）、影响分析 §第 15 章（实施回归）
 
 ---
 
+> **关联需求**: REQ-2026-005
 ## 0. 改动清单总览
 
 | # | 改动 | 文件 | 风险 | 批次 |

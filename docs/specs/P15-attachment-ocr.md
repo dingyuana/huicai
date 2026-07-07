@@ -1,11 +1,12 @@
 # P15 SPEC — 票据/附件管理 (上传 + 模拟 OCR)
 
-> 状态：补 OCR 方法中（storage 模块基础已有, P15-1 加 OCR 规则解析）
+> **编号**：HUICAI-SPC-015（storage 模块基础已有, P15-1 加 OCR 规则解析）
 > 目标：附件上传 → 模拟 OCR → 结构化 JSON → 关联到单据
 > 工期：1 批
 
 ---
 
+> **关联需求**: REQ-2026-046
 ## 1. 现状摸底 (2026-06-15)
 
 | 文件 | 状态 |
@@ -93,3 +94,12 @@ String runOcr(Long id, Map<String, String> hint) {
 ## 5. 测试验收
 
 **目标**: 292 → 295 (+3 测试, 0 fail, 0 error)
+
+---
+## 验收标准
+
+| ID | 描述 | 断言 |
+|----|------|------|
+| AT-P15-1 | 附件上传成功 | `upload(file) → attachment.id != null` |
+| AT-P15-2 | OCR识别返回结构化JSON | `ocrRecognize(file) → result contains 'invoice_no'` |
+| AT-P15-3 | 附件关联到业务实体 | `attach(bizType, bizId, fileId) → link exists` |

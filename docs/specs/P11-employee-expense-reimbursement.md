@@ -1,12 +1,13 @@
 # P11 SPEC — 个人（员工）报销单 端到端自动接入
 
-> 状态：**已落地**（main 分支 commits 260f701 + 1e33906 + f246d08 + 50a5204）
+> **编号**：HUICAI-SPC-011（main 分支 commits 260f701 + 1e33906 + f246d08 + 50a5204）
 > mvn test: 250 → 281 (+31 测试, 0 fail, 0 error)
 > 目标：银行流水→识别"员工"→关联报销单→生成付款单→生成凭证
 > 工期：4 批工单（每批独立 commit、可回滚）
 
 ---
 
+> **关联需求**: REQ-2026-016
 ## 0. 业务背景
 
 你最初的 5 分支图中，唯一**未实现的分支**：
@@ -258,3 +259,13 @@ autoCreateForBankStmt → t_expense_reimbursement (DRAFT, expenseType=OTHER)
   ↓
 /generate-voucher → VOUCHERED (voucherId 回写)
 ```
+---
+## 验收标准
+
+| ID | 描述 | 断言 |
+|----|------|------|
+| AT-P11-1 | 报销单创建后状态为DRAFT | `entity.status == 'DRAFT'` |
+| AT-P11-2 | 提交后状态为SUBMITTED | `submit() → status == 'SUBMITTED'` |
+| AT-P11-3 | 审核通过后状态为APPROVED | `approve() → status == 'APPROVED'` |
+| AT-P11-4 | 驳回后状态为REJECTED | `reject() → status == 'REJECTED'` |
+| AT-P11-5 | 生成凭证后状态为VOUCHERED | `autoVoucher() → status == 'VOUCHERED' AND voucher_id != null` |

@@ -1,6 +1,6 @@
 # P24 SPEC — 状态变更审计追踪规格书
 
-> 状态：待实现 | 优先级：高（P24）
+> **编号**：HUICAI-SPC-024 | 优先级：高（P24）
 > 依据：`docs/需求分析书_发票与凭证状态机_V1.0.md` §6 审计追踪
 > 目标：用 AOP 切面自动捕获 `invoice.status` / `voucher.status` 等状态字段变更，写入现有 `t_audit_log`
 > 工期：单批交付，3 个 commit
@@ -8,6 +8,7 @@
 
 ---
 
+> **关联需求**: REQ-2026-051
 ## 0. 改动清单总览
 
 | # | 改动 | 文件 | 风险 |
@@ -307,3 +308,12 @@ private String status;
 - 防止普通用户查到他人的操作历史
 
 **审计日志写入必须 fail-fast**：审计失败必须让业务事务回滚（按 §6 测试场景），不允许"业务成功但审计丢失"。
+---
+## 验收标准
+
+| ID | 描述 | 断言 |
+|----|------|------|
+| AT-P24-1 | 状态变更写入审计日志 | `confirm() → audit_log count +1` |
+| AT-P24-2 | 审计日志含旧值新值 | `audit_log.oldSnapshot != null AND newSnapshot != null` |
+| AT-P24-3 | 审核人ID记录 | `audit_log.userId == current user` |
+| AT-P24-4 | 非状态变更不写审计 | `updateById without status change → audit_log count unchanged` |

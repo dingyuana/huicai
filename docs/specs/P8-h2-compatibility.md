@@ -1,10 +1,12 @@
 # P8 SPEC — IntegrationTest H2 兼容性修复
 
-> 状态：决策 SPEC（3 选 1）
+> **编号**：HUICAI-SPC-008
+> **版本**：V1.0 | **修改日期**：2026-07-07 | **修改人**：Hermes | **修改内容**：添加编号头部
 > 问题根源：16 errors 全从 5 个 `*IntegrationTest` 类产生
 
 ---
 
+> **关联需求**: REQ-2026-049
 ## 1. 问题诊断
 
 **当前配置**（每个 IntegrationTest 独立写死的）：

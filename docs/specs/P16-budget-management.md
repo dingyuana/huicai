@@ -1,11 +1,12 @@
 # P16 SPEC — 预算编制/控制/分析
 
-> 状态：补单测中（11 方法全已实现, 0 测试覆盖）
+> **编号**：HUICAI-SPC-016（11 方法全已实现, 0 测试覆盖）
 > 目标：补 5 个单测 + 文档化预算状态机
 > 工期：1 批
 
 ---
 
+> **关联需求**: REQ-2026-031, REQ-2026-032, REQ-2026-033
 ## 1. 现状摸底 (2026-06-15)
 
 | 文件 | 状态 |
@@ -67,3 +68,14 @@ DRAFT ──→ approve ──→ APPROVED ──→ activate ──→ ACTIVE
 ## 4. 测试验收
 
 **目标**: 295 → 300 (+5 测试)
+
+---
+## 验收标准
+
+| ID | 描述 | 断言 |
+|----|------|------|
+| AT-P16-1 | 预算创建后状态为DRAFT | `create() → status == 'DRAFT'` |
+| AT-P16-2 | 提交后状态为SUBMITTED | `submit() → status == 'SUBMITTED'` |
+| AT-P16-3 | 审批后状态为APPROVED | `approve() → status == 'APPROVED'` |
+| AT-P16-4 | 预算检查返回余额 | `check(subjectId, amount) → remaining >= 0` |
+| AT-P16-5 | 超预算BLOCK类型阻止提交 | `BLOCK type + over budget → BusinessException` |

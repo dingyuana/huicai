@@ -1,11 +1,12 @@
 # P13 SPEC — 税务申报 (进销项归集 + 申报表自动生成)
 
-> 状态：补单测中（骨架完整, 6 归集方法 + calculateVat 已在 main）
+> **编号**：HUICAI-SPC-013（骨架完整, 6 归集方法 + calculateVat 已在 main）
 > 目标：进项/销项按 period 自动归集 → 增值税应纳税额计算 → 申报表生成 → 申报状态机
 > 工期：1 批（骨架已有, 主要补单测 + 申报表详情表）
 
 ---
 
+> **关联需求**: REQ-2026-030
 ## 1. 现状摸底 (2026-06-15)
 
 | 文件 | 状态 |
@@ -102,3 +103,13 @@ DRAFT ──→ submitDeclaration ──→ SUBMITTED ──→ (人工) ──�
 | P16 | 预算编制 + 控制 + 分析 | 中 |
 | P17 | 报表中心 (三大报表) | 中 |
 | P18 | 申报状态机扩展 (approve/reject) | 低 |
+
+---
+## 验收标准
+
+| ID | 描述 | 断言 |
+|----|------|------|
+| AT-P13-1 | 进项归集按period汇总 | `collectInput(period) → sum(amount) matches DB` |
+| AT-P13-2 | 销项归集按period汇总 | `collectOutput(period) → sum(amount) matches DB` |
+| AT-P13-3 | 增值税计算正确 | `calculateVat(period) → output_tax - input_tax == payable` |
+| AT-P13-4 | 申报表生成 | `generateDeclaration(period) → declaration exists` |

@@ -1,6 +1,6 @@
 # P21-a SPEC — 销售发票状态机实现规格书
 
-> 状态：**已实施（P34修正）** | 优先级：高（P21-a）
+> **编号**：HUICAI-SPC-021 | 优先级：高（P21-a）
 > 依据：`docs/需求分析书_发票与凭证状态机_V1.0.md` §3.1 发票状态机
 > 目标：为 `OutputInvoiceEntity`（销售发票）建立完整 8 状态机，消除 magic string
 > 工期：单批交付，3 个 commit
@@ -12,6 +12,7 @@
 
 ---
 
+> **关联需求**: REQ-2026-027, REQ-2026-028
 ## 0. 改动清单总览
 
 | # | 改动 | 文件 | 风险 |
@@ -809,9 +810,9 @@ acceptance_tests:
     test_class: OutputInvoiceStateMachineServiceImplTest
 
   - id: AT-003
-    description: "审核通过：PENDING_REVIEW → CONFIRMED，自动创建业务单+应收单+凭证"
+    description: "审核通过：PENDING_REVIEW → CONFIRMED，自动创建业务单据+凭证"
     method: confirm_positive_statusChanged
-    assertion: "status == CONFIRMED; BusinessDoc created; Receivable created; Voucher created"
+    assertion: "status == CONFIRMED; BusinessDoc created (INVOICE_OUT); Voucher created"
     status: covered
     test_class: OutputInvoiceStateMachineServiceImplTest
 
@@ -903,16 +904,28 @@ out_of_scope:
   - "发票打印/导出（不在状态机范围）"
 
 dependencies:
-  - spec: P20
-    entity: ReceivableEntity
-    relation: "confirm() 创建 BusinessDocEntity(INVOICE_OUT) 和 VoucherEntity(DRAFT)，不再创建 ReceivableEntity (P34)"
   - spec: P22
     entity: VoucherEntity
     relation: "confirm() 创建 VoucherEntity (DRAFT)"
   - spec: P24
     entity: AuditLog
     relation: "状态变更审计日志由 P24 AOP 接管"
+  - spec: P34
+    entity: BusinessDocEntity
+    relation: "confirm() 创建 BusinessDocEntity(INVOICE_OUT)，替代原 ReceivableEntity"
   - spec: P36
     entity: OutputInvoiceEntity
-    relation: "红冲级联（发票→业务单→应收→凭证）"
+    relation: "红冲级联（发票→业务单→凭证）"
 ```
+
+---
+## 验收标准
+
+| ID | 描述 | 断言 |
+|----|------|------|
+| AT-P21-1 | PENDING_CONFIRM→PENDING_REVIEW | `submitReview() → status == 'PENDING_REVIEW'` |
+| AT-P21-2 | PENDING_REVIEW→CONFIRMED | `confirm() → status == 'CONFIRMED'` |
+| AT-P21-3 | CONFIRMED→VOUCHERED | `markVouchered() → status == 'VOUCHERED'` |
+| AT-P21-4 | VOUCHERED→FULLY_RECONCILED | `reconcile(unsettled=0) → status == 'FULLY_RECONCILED'` |
+| AT-P21-5 | 任意非终态→VOIDED | `void(reason) → status == 'VOIDED'` |
+| AT-P21-6 | 终态不可变更 | `VOIDED/REVERSED → any action → BusinessException` |
