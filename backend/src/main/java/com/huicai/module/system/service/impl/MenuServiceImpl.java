@@ -55,7 +55,7 @@ public class MenuServiceImpl implements MenuService {
     }
 
     @Override
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public void delete(Long id) {
         List<MenuEntity> allMenus = menuMapper.selectList(
                 new LambdaQueryWrapper<MenuEntity>()

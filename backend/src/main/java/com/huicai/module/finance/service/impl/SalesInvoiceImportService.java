@@ -3,12 +3,8 @@ package com.huicai.module.finance.service.impl;
 import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.huicai.common.exception.BusinessException;
-import com.huicai.module.arap.constant.ArapStatus;
 import com.huicai.module.arap.entity.CustomerEntity;
-import com.huicai.module.arap.entity.ReceivableEntity;
 import com.huicai.module.arap.mapper.CustomerMapper;
-import com.huicai.module.arap.mapper.ReceivableMapper;
-import com.huicai.module.arap.service.ReceivableStateMachineService;
 import com.huicai.module.finance.constant.VoucherType;
 import com.huicai.module.finance.entity.BusinessDocEntity;
 import com.huicai.module.finance.entity.BusinessDocEntryEntity;
@@ -61,12 +57,11 @@ public class SalesInvoiceImportService {
     private final CustomerMapper customerMapper;
     private final SubjectMapper subjectMapper;
     private final OutputInvoiceMapper outputInvoiceMapper;
-    private final ReceivableMapper receivableMapper;
     private final ColumnMappingResolver columnMappingResolver;
     private final StringRedisTemplate redisTemplate;
     private final BusinessDocService businessDocService;
     private final OutputInvoiceStateMachineService invoiceStateMachineService;
-    private final ReceivableStateMachineService receivableStateMachineService;
+    private final InvoiceDedupUtil invoiceDedupUtil;
 
     @Value("${invoice.auto-flow-after-import:false}")
     private boolean autoFlowAfterImport;
@@ -167,7 +162,8 @@ public class SalesInvoiceImportService {
             previews.add(p);
         }
 
-        Set<String> existingSet = findExistingInvoiceNos(allRows);
+        Set<String> existingSet = invoiceDedupUtil.findExisting(
+                allRows.stream().map(r -> r.invoiceNo).filter(StrUtil::isNotBlank).toList());
 
         log.info("销售发票预览完成: batchId={}, total={}, errors={}, existing={}",
                 batchId, allRows.size(), errors.size(), existingSet.size());
@@ -229,7 +225,7 @@ public class SalesInvoiceImportService {
         }
         // 日期解析失败不跳过，提示但保留（允许用户后续手动改）
         if (row.invoiceDate == null) {
-            throw new RuntimeException("缺少有效开票日期");
+            throw new BusinessException("缺少有效开票日期");
         }
 
         Integer goodsIdx = mapping.getFieldToColumnIndex().get(ColumnMappingResolver.Field.GOODS_NAME);
@@ -251,7 +247,7 @@ public class SalesInvoiceImportService {
                 }
             }
         }
-        if (row.amount == null) throw new RuntimeException("缺少金额");
+        if (row.amount == null) throw new BusinessException("缺少金额");
 
         Integer taxAmtIdx = mapping.getFieldToColumnIndex().get(ColumnMappingResolver.Field.TAX_AMOUNT);
         if (taxAmtIdx != null) {
@@ -277,6 +273,15 @@ public class SalesInvoiceImportService {
         }
         if (row.totalAmount == null) {
             row.totalAmount = row.amount.add(row.taxAmount);
+        }
+
+        // 价税分离：当 amount(不含税)缺失或为零时，从 totalAmount 反向计算
+        boolean amountMissing = row.amount.signum() == 0;
+        if (amountMissing && row.totalAmount != null && row.totalAmount.compareTo(BigDecimal.ZERO) > 0
+                && row.taxRate != null && row.taxRate.compareTo(BigDecimal.ZERO) > 0) {
+            BigDecimal divisor = BigDecimal.ONE.add(row.taxRate.divide(BigDecimal.valueOf(100), 10, java.math.RoundingMode.HALF_UP));
+            row.amount = row.totalAmount.divide(divisor, 2, java.math.RoundingMode.HALF_UP);
+            row.taxAmount = row.totalAmount.subtract(row.amount);
         }
 
         Integer positiveIdx = mapping.getFieldToColumnIndex().get(ColumnMappingResolver.Field.IS_POSITIVE);
@@ -357,7 +362,8 @@ public class SalesInvoiceImportService {
 
         ensureStandardSubjects();
 
-        Set<String> existingSet = findExistingInvoiceNos(rows);
+        Set<String> existingSet = invoiceDedupUtil.findExisting(
+                rows.stream().map(r -> r.invoiceNo).filter(StrUtil::isNotBlank).toList());
 
         int success = 0, docCreated = 0, voucherCreated = 0, duplicateSkipped = 0;
         List<Map<String, Object>> errors = new ArrayList<>();
@@ -558,6 +564,7 @@ public class SalesInvoiceImportService {
         inv.setCustomerId(customerId);
         inv.setCustomerName(row.buyerName);
         inv.setAmount(row.amount);
+        inv.setAmountExTax(row.amount);
         if (row.taxRate != null) {
             inv.setTaxRate(row.taxRate);
         } else if (row.amount.compareTo(BigDecimal.ZERO) != 0) {
@@ -567,6 +574,7 @@ public class SalesInvoiceImportService {
         }
         inv.setTaxAmount(row.taxAmount);
         inv.setTotalAmount(row.totalAmount);
+        inv.setProcessStatus("PENDING");
         inv.setInvoiceType("SPECIAL");
         inv.setStatus(InvoiceStatus.PENDING_CONFIRM);
         // P31 修正: 导入时不关联业务单，审核后才创建
@@ -582,7 +590,7 @@ public class SalesInvoiceImportService {
             outputInvoiceMapper.insert(inv);
         } catch (Exception e) {
             log.error("写入销项发票失败: invoiceNo={}", row.invoiceNo, e);
-            throw new RuntimeException("写入销项发票失败: " + e.getMessage(), e);
+            throw new BusinessException("写入销项发票失败: " + e.getMessage());
         }
         log.debug("写入销项发票: invoiceNo={}, id={}", row.invoiceNo, inv.getId());
         return inv;
@@ -642,50 +650,6 @@ public class SalesInvoiceImportService {
         List<Subject> list = subjectMapper.selectList(
                 new LambdaQueryWrapper<Subject>().eq(Subject::getCode, code).last("LIMIT 1"));
         return list.isEmpty() ? null : list.get(0);
-    }
-
-    /**
-     * 批量查询哪些发票号已存在于 t_output_invoice
-     */
-    Set<String> findExistingInvoiceNos(List<ParsedInvoiceRow> rows) {
-        Set<String> invoiceNos = new HashSet<>();
-        for (ParsedInvoiceRow row : rows) {
-            if (StrUtil.isNotBlank(row.invoiceNo)) {
-                invoiceNos.add(row.invoiceNo);
-            }
-        }
-        if (invoiceNos.isEmpty()) return Collections.emptySet();
-        List<OutputInvoiceEntity> existing = outputInvoiceMapper.selectList(
-                new LambdaQueryWrapper<OutputInvoiceEntity>()
-                        .in(OutputInvoiceEntity::getInvoiceNo, invoiceNos));
-        Set<String> result = new HashSet<>();
-        for (OutputInvoiceEntity inv : existing) {
-            if (inv.getInvoiceNo() != null) result.add(inv.getInvoiceNo());
-        }
-        return result;
-    }
-
-    /**
-     * P10-1: 销售发票导入成功后，自动生成应收单 t_receivable.
-     * unsettled_amount 初始 = 总额（待收款），settled = 0.
-     */
-    @Transactional
-    void createReceivableFromInvoice(BusinessDocEntity doc, ParsedInvoiceRow row,
-                                     Long customerId, String period) {
-        ReceivableEntity recv = new ReceivableEntity();
-        recv.setCustomerId(customerId);
-        recv.setDocId(doc.getId());
-        recv.setVoucherId(doc.getVoucherId());
-        recv.setPeriod(period);
-        recv.setTxDate(row.invoiceDate);
-        recv.setAmount(row.totalAmount);
-        recv.setSettledAmount(BigDecimal.ZERO);
-        recv.setUnsettledAmount(row.totalAmount);
-        recv.setSummary(row.goodsName);
-        recv.setStatus(ArapStatus.DRAFT); // P31: 应收单导入时 DRAFT，由异步流程审核后 CONFIRMED
-        receivableMapper.insert(recv);
-        log.info("P10-1 销售发票应收单生成: customerId={}, docId={}, amount={}",
-                customerId, doc.getId(), row.totalAmount);
     }
 
     /**

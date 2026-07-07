@@ -1,0 +1,69 @@
+# 05-费用报销管理设计
+
+> **编号**：HUICAI-DES-006
+> **版本**：V1.0 | **修改日期**：2026-07-07 | **修改人**：Hermes | **修改内容**：初始创建
+> 代码包：`com.huicai.module.arap`
+> 设计文档：[主文档](../DESIGN.md)
+
+---
+
+## 1. 模块定位
+
+传统定位：全员报销入口与费用管控中心。员工填写报销单→审批→打款→生成凭证。
+
+**对比传统：**
+- 传统：PC端+实体发票，当前：**电子流程+MinIO附件**
+- 传统：多级审批流，当前：**状态机控制**（DRAFT→SUBMITTED→APPROVED/REJECTED→VOUCHERED）
+- 当前新增：AI 辅助审核（预览）
+
+## 2. 核心组件
+
+| 组件 | 说明 |
+|------|------|
+| ExpenseReimbursementService | 报销单CRUD + 状态流转 + 凭证生成 |
+| ExpenseTypeService | 费用类型管理 |
+
+## 3. 数据模型
+
+| 表名 | 说明 | 关键字段 |
+|------|------|---------|
+| t_expense_reimbursement | 报销单 | employee_id, expense_type, amount, summary, status, bank_stmt_id, voucher_id |
+
+## 4. 状态机
+
+```
+DRAFT ──submit──→ SUBMITTED ──approve──→ APPROVED ──generateVoucher──→ VOUCHERED
+  ↕                              ↕
+  edit                        reject(→REJECTED)
+```
+
+## 5. API 端点
+
+| 端点 | 方法 | 说明 |
+|------|------|------|
+| /api/v1/expense-reimbursements/page | GET | 分页 |
+| /api/v1/expense-reimbursements/{id} | GET | 详情 |
+| /api/v1/expense-reimbursements | POST | 创建草稿 |
+| /api/v1/expense-reimbursements/{id} | PUT | 修改草稿 |
+| /api/v1/expense-reimbursements/{id}/submit | POST | 提交 |
+| /api/v1/expense-reimbursements/{id}/approve | POST | 审核通过 |
+| /api/v1/expense-reimbursements/{id}/reject | POST | 驳回 |
+| /api/v1/expense-reimbursements/{id}/auto-voucher | POST | 自动生成凭证 |
+
+## 6. AI 叠加场景
+
+| 场景 | 说明 | 优先级 |
+|------|------|--------|
+| AI 初审 | 扫描附件自动校验合规性 | 🟡 P2 |
+| 科目推荐 | 基于费用类型+摘要推荐科目 | 🟡 P2 |
+
+## 7. 成熟度与待办
+
+| 维度 | 状态 | 备注 |
+|------|------|------|
+| 后端 | ✅ 完整 | 9 个端点+完整状态机 |
+| 前端 | ✅ 刚完成 | P1-D 新建 ExpenseList/ExpenseEdit |
+| 测试 | ❌ 缺 | ExpenseReimbursementService 测试未写 |
+| 对传统覆盖 | ✅ | 报销/审批/凭证全流程 |
+
+> **文档结束**

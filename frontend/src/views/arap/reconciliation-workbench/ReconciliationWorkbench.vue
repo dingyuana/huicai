@@ -94,8 +94,8 @@
         <el-table v-if="recommendResult.items && recommendResult.items.length" :data="recommendResult.items" border stripe size="small">
           <el-table-column label="目标类型" width="100" align="center">
             <template #default="{ row }">
-              <el-tag :type="row.targetDocType === 'INVOICE_OUT' ? 'success' : 'warning'" size="small">
-                {{ row.targetDocType === 'INVOICE_OUT' ? '应收单' : '应付单' }}
+              <el-tag :type="tagTypeForTarget(row.targetDocType)" size="small">
+                {{ TARGET_DOC_TYPE_LABELS[row.targetDocType] || row.targetDocType }}
               </el-tag>
             </template>
           </el-table-column>
@@ -184,7 +184,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Loading } from '@element-plus/icons-vue'
 import { getBusinessDocPage, type BusinessDocVO, type BusinessDocQuery } from '@/api/modules/businessDoc'
@@ -236,9 +236,15 @@ async function fetchData() {
   loading.value = true
   try {
     const params: BusinessDocQuery = {
-      docType: activeTab.value,
       current: query.value.current,
       size: query.value.size,
+    }
+    // 收款单 tab 同时查收款单(RECEIPT) + 应收单(INVOICE_OUT) + 其他应收(OTHER_RECEIVABLE)
+    if (activeTab.value === 'RECEIPT') {
+      params.docTypes = ['RECEIPT', 'INVOICE_OUT', 'OTHER_RECEIVABLE']
+    } else {
+      // 付款单 tab 同时查付款单(PAYMENT) + 费用报销(EXPENSE) + 进项发票(INVOICE_IN) + 其他应付(OTHER_PAYABLE)
+      params.docTypes = ['PAYMENT', 'EXPENSE', 'INVOICE_IN', 'OTHER_PAYABLE']
     }
     if (query.value.keyword) params.keyword = query.value.keyword
     if (query.value.period) params.period = query.value.period
@@ -250,6 +256,7 @@ async function fetchData() {
   }
 }
 
+onMounted(() => { fetchData() })
 function onSearch() { query.value.current = 1; fetchData() }
 function onReset() { query.value = { current: 1, size: 20 }; fetchData() }
 function onRefresh() { fetchData() }
@@ -277,6 +284,24 @@ async function onRowClick(row: any) {
   }
 }
 
+function tagTypeForTarget(docType: string): string {
+  switch (docType) {
+    case 'INVOICE_OUT': case 'RECEIPT': return 'success'
+    case 'INVOICE_IN': case 'PAYMENT': return 'warning'
+    default: return 'info'
+  }
+}
+
+const TARGET_DOC_TYPE_LABELS: Record<string, string> = {
+  INVOICE_OUT: '应收单',
+  INVOICE_IN: '应付单',
+  RECEIPT: '收款单',
+  PAYMENT: '付款单',
+  EXPENSE: '费用报销',
+  OTHER_RECEIVABLE: '其他应收',
+  OTHER_PAYABLE: '其他应付',
+}
+
 async function onShowRecommend(row: any) {
   currentDoc.value = row
   const partyName = activeTab.value === 'RECEIPT' ? row.customerName : row.supplierName
@@ -287,8 +312,14 @@ async function onShowRecommend(row: any) {
   try {
     const customerId = row.customerId
     const supplierId = row.supplierId
-    if (activeTab.value === 'RECEIPT' && customerId) {
+    if (activeTab.value === 'RECEIPT') {
+      if (!customerId) {
+        ElMessage.warning('单据缺少客户信息')
+        recommendDialogVisible.value = false
+        return
+      }
       recommendResult.value = await getReceiptRecommend(row.id, {
+        sourceDocType: row.docType,
         customerId,
         amount: row.unsettledAmount || row.amount,
         summary: row.summary,
@@ -302,6 +333,7 @@ async function onShowRecommend(row: any) {
         return
       }
       recommendResult.value = await getPaymentRecommend(row.id, {
+        sourceDocType: row.docType,
         vendorId,
         amount: row.unsettledAmount || row.amount,
         summary: row.summary,

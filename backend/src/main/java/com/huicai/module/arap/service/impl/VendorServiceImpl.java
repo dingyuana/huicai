@@ -6,9 +6,9 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.huicai.common.exception.BusinessException;
 import com.huicai.module.arap.entity.VendorEntity;
-import com.huicai.module.arap.mapper.PayableMapper;
 import com.huicai.module.arap.mapper.VendorMapper;
 import com.huicai.module.arap.service.VendorService;
+import com.huicai.module.finance.mapper.BusinessDocMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -20,7 +20,7 @@ import java.util.Map;
 public class VendorServiceImpl implements VendorService {
 
     private final VendorMapper mapper;
-    private final PayableMapper payableMapper;
+    private final BusinessDocMapper businessDocMapper;
 
     @Override
     public IPage<VendorEntity> pageQuery(String keyword, Boolean isActive, Integer current, Integer size) {
@@ -96,7 +96,7 @@ public class VendorServiceImpl implements VendorService {
 
     @Override
     public List<Map<String, Object>> unsettledSummary() {
-        return payableMapper.aggregateByVendor();
+        return businessDocMapper.aggregateByVendor();
     }
 
     private void validateCode(String code, Long excludeId) {

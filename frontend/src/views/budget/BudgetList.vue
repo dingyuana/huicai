@@ -39,11 +39,12 @@
           </template>
         </el-table-column>
         <el-table-column prop="remark" label="备注" min-width="200" show-overflow-tooltip />
-        <el-table-column label="操作" width="240" fixed="right">
+        <el-table-column label="操作" width="300" fixed="right">
           <template #default="{ row }">
-            <el-button text type="primary" v-if="row.status === 'DRAFT'" @click="onApprove(row)">审批</el-button>
-            <el-button text type="warning" v-if="row.status === 'APPROVED'" @click="onActivate(row)">激活</el-button>
-            <el-button text v-if="row.status === 'ACTIVE'" @click="onExecution(row)">执行分析</el-button>
+            <el-button text type="primary" v-if="row.status === 'DRAFT'" @click="onSubmit(row)">提交</el-button>
+            <el-button text type="primary" v-if="row.status === 'SUBMITTED'" @click="onApprove(row)">审批</el-button>
+            <el-button text type="primary" v-if="row.status === 'APPROVED'" @click="router.push('/budget/adjustment?budgetId=' + row.id)">预算调整</el-button>
+            <el-button text v-if="row.status === 'ACTIVE' || row.status === 'APPROVED'" @click="onExecution(row)">执行分析</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -74,7 +75,7 @@
       </el-form>
       <template #footer>
         <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="onSubmit">确定</el-button>
+        <el-button type="primary" @click="onSubmitNew">确定</el-button>
       </template>
     </el-dialog>
 
@@ -102,16 +103,20 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue'
 import { ElMessage, type FormInstance } from 'element-plus'
-import { pageBudget, createBudget, approveBudget, activateBudget, executionAnalysis } from '@/api/modules/budget'
+import { useRouter } from 'vue-router'
+import { pageBudget, createBudget, submitBudget, approveBudget, executionAnalysis } from '@/api/modules/budget'
+
+const router = useRouter()
 
 const STATUS_OPTIONS = [
   { value: 'DRAFT', label: '草稿' },
+  { value: 'SUBMITTED', label: '已提交' },
   { value: 'APPROVED', label: '已审批' },
-  { value: 'ACTIVE', label: '已激活' },
+  { value: 'REJECTED', label: '已驳回' },
   { value: 'CLOSED', label: '已关闭' },
 ]
 const STATUS_MAP: Record<string, string> = Object.fromEntries(STATUS_OPTIONS.map((o) => [o.value, o.label]))
-const STATUS_TAG_MAP: Record<string, string> = { DRAFT: 'info', APPROVED: 'primary', ACTIVE: 'success', CLOSED: 'warning' }
+const STATUS_TAG_MAP: Record<string, string> = { DRAFT: 'info', SUBMITTED: 'warning', APPROVED: 'success', REJECTED: 'danger', CLOSED: 'info' }
 
 const TYPE_OPTIONS = [
   { value: 'EXPENSE', label: '费用' },
@@ -152,27 +157,28 @@ const openEdit = () => {
   dialogVisible.value = true
 }
 
-const onSubmit = async () => {
+const onSubmitNew = async () => {
   if (!formRef.value) return
   await formRef.value.validate(async (valid) => {
     if (!valid) return
     if (!form.entries) form.entries = []
-    await createBudget(form)
+    // 后端要求 { budget: BudgetEntity, entries: List }
+    await createBudget({ budget: form, entries: form.entries })
     ElMessage.success('创建成功')
     dialogVisible.value = false
     fetchData()
   })
 }
 
-const onApprove = async (row: any) => {
-  await approveBudget(row.id)
-  ElMessage.success('已审批')
+const onSubmit = async (row: any) => {
+  await submitBudget(row.id)
+  ElMessage.success('已提交')
   fetchData()
 }
 
-const onActivate = async (row: any) => {
-  await activateBudget(row.id)
-  ElMessage.success('已激活')
+const onApprove = async (row: any) => {
+  await approveBudget(row.id)
+  ElMessage.success('已审批')
   fetchData()
 }
 

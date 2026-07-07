@@ -3,6 +3,8 @@ package com.huicai.config.security;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
+import jakarta.annotation.PostConstruct;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
@@ -11,6 +13,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.Date;
 import java.util.List;
 
+@Slf4j
 @Component
 public class JwtProvider {
 
@@ -25,6 +28,16 @@ public class JwtProvider {
         this.key = Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
         this.accessTokenExpiration = accessTokenExpiration;
         this.refreshTokenExpiration = refreshTokenExpiration;
+    }
+
+    @PostConstruct
+    public void validateConfig() {
+        if (key.getEncoded().length < 32) {
+            log.error("JWT secret 长度不足 32 字节（当前 {} 字节），HMAC-SHA256 要求至少 32 字节。请设置环境变量 JWT_SECRET。",
+                    key.getEncoded().length);
+            throw new IllegalStateException("JWT secret 长度不足，请设置环境变量 JWT_SECRET（至少 32 字符）");
+        }
+        log.info("JWT 配置校验通过，secret 长度 {} 字节", key.getEncoded().length);
     }
 
     public String generateAccessToken(String username, Long userId, List<String> roles) {

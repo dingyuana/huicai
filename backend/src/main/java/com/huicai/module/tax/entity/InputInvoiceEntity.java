@@ -23,6 +23,29 @@ public class InputInvoiceEntity {
     private BigDecimal taxRate;
     private BigDecimal taxAmount;
     private BigDecimal totalAmount;
+
+    /**
+     * 不含税金额（价税分离计算）
+     */
+    @TableField("amount_ex_tax")
+    private BigDecimal amountExTax;
+
+    /**
+     * AI 风险标签
+     */
+    @TableField("ai_risk_tag")
+    private String aiRiskTag;
+
+    /**
+     * 处理状态: PENDING / PROCESSED / FAILED
+     */
+    @TableField("process_status")
+    private String processStatus;
+
+    /** AI 科目映射推荐结果（JSONB） */
+    @TableField("ai_mapping_result")
+    private String aiMappingResult;
+
     private String invoiceType;
     private String certificationStatus;
     private LocalDate certifiedDate;

@@ -1,0 +1,188 @@
+# 10-AI 智能体编排层设计
+
+> **编号**：HUICAI-DES-011
+> **版本**：V1.0 | **修改日期**：2026-07-07 | **修改人**：Hermes | **修改内容**：初始创建（含 Java 后端 + Python 服务实际代码）
+> 代码包：`com.huicai.module.ai`（Java）+ `ai-service/`（Python）
+> 设计文档：[主文档](../DESIGN.md)
+> 架构文档：[AI_ORCHESTRATION.md](../architecture/AI_ORCHESTRATION.md)
+
+---
+
+## 1. 定位与边界
+
+**AI 智能体层不是替代 Java 业务模块，而是作为横切辅助能力叠加在模块之上。**
+
+核心原则：
+- **确定性操作**（凭证过账、结账、折旧、核销执行）→ Java 状态机控制，AI 不介入
+- **非确定性操作**（科目推荐、异常检测、分类匹配、语义理解）→ AI 处理，结果必须人工确认后落库
+- **AI 输出 = 建议**，永远不自动应用到财务数据
+
+## 2. 总体架构
+
+```
+┌─────────────────────────────────────────────────────┐
+│                    API 网关                          │
+│     POST /api/v1/agent/route { intent, input }      │
+└────────────────────────┬────────────────────────────┘
+                         │
+┌────────────────────────▼────────────────────────────┐
+│              RouterAgent (LangGraph)                 │
+│  意图识别 → 路由到对应子 Agent                       │
+│  记忆共享 / 工具调用 / HITL 节点                      │
+└──┬──────────┬──────────┬──────────┬──────────────────┘
+   │          │          │          │
+   ▼          ▼          ▼          ▼
+┌──────┐ ┌──────┐ ┌──────┐ ┌──────────┐
+│科目映射│ │异常检测│ │流水分类│ │审核建议等  │
+│Agent  │ │Agent  │ │Agent  │ │  （未来）  │
+└───┬───┘ └───┬───┘ └───┬───┘ └──────────┘
+   │          │          │
+   ▼          ▼          ▼
+┌─────────────────────────────────────────────────────┐
+│              Java 后端 (Spring Boot)                  │
+│    AiTaskController / NvidiaAiController              │
+│    RabbitMQ ↔ Python 异步通信                         │
+│    t_ai_task / t_ai_anomaly_tag / t_ai_feedback_log  │
+└─────────────────────────────────────────────────────┘
+```
+
+## 3. Java 端 — 后端 AI 模块
+
+### 3.1 核心组件
+
+| 组件 | 说明 |
+|------|------|
+| NvidiaAiService | NVIDIA API 调用封装（minimaxai/minimax-m3 多模态） |
+| AiTaskService | AI 任务管理（创建/查询/取消） |
+| AiTaskStateMachineService | AI 任务状态机 |
+| AiFeedbackLogService | AI 反馈日志（用户对AI结果评价） |
+| NvidiaAiController | AI 推理调用入口 |
+| AiTaskController | AI 任务 CRUD |
+| AiFeedbackLogController | AI 反馈日志 API |
+
+### 3.2 数据模型
+
+| 表名 | 说明 | 关键字段 |
+|------|------|---------|
+| t_ai_task | AI 任务 | task_type, status(PENDING/PROCESSING/COMPLETED/FAILED), input_data(jsonb), result_data(jsonb) |
+| t_ai_anomaly_tag | AI 异常标签 | target_type, target_id, tag_type, severity, description |
+| t_ai_feedback_log | AI 反馈日志 | task_id, feedback_type(ACCEPT/REJECT/MODIFY), user_id |
+
+### 3.3 AI 任务状态机
+
+```
+PENDING ──start──→ PROCESSING ──complete──→ COMPLETED
+                    ↕                   ↕
+                  fail(→FAILED)      feedback(→REVIEWED)
+```
+
+### 3.4 异步通信
+
+Java → Python：RabbitMQ `huicai.ai.task.queue`
+Python → Java：RabbitMQ `huicai.ai.result.queue`
+消息格式：`AiTaskMessage { taskId, taskType, inputData }` / `AiTaskResult { taskId, status, result }`
+
+## 4. Python 端 — AI 服务
+
+### 4.1 服务架构
+
+```
+ai-service/
+├── main.py           # FastAPI 入口 + 生命周期管理
+├── core/
+│   ├── config.py     # 配置（DB/MinIO/MQ/模型）
+│   ├── logging.py    # 结构化日志（loguru）
+│   ├── models.py     # LangChain LLM 封装（结构化输出+降级）
+│   ├── agent.py      # Agent 基类 + RouterAgent + MatchAgent + AnomalyAgent
+│   └── graph.py      # LangGraph 状态图定义
+├── api/
+│   ├── health.py     # 健康检查
+│   ├── ocr.py        # OCR 识别
+│   ├── match.py      # 智能匹配（规则→向量→LLM 三阶段）
+│   ├── anomaly.py    # 异常检测（凭证+多维发票）
+│   ├── embedding.py  # 文本嵌入（pgvector）
+│   └── agent.py      # Agent 路由 API
+└── workers/
+    └── task_consumer.py  # RabbitMQ 消费者
+```
+
+### 4.2 已实现的 API 端点
+
+| 端点 | 方法 | 说明 |
+|------|------|------|
+| /api/v1/health | GET | 健康检查 |
+| /api/v1/agent/route | POST | 统一 Agent 路由入口 |
+| /api/v1/agent/agents | GET | 列出所有 Agent |
+| /api/v1/agent/health | GET | Agent 系统健康检查 |
+| /api/v1/match/score | POST | 规则匹配（向后兼容） |
+| /api/v1/match/agent/subject-mapping | POST | 三阶段科目映射 |
+| /api/v1/anomaly/voucher | POST | 凭证异常检测（向后兼容） |
+| /api/v1/anomaly/invoice | POST | 多维发票异常检测 |
+| /api/v1/embedding/similarity | POST | 语义检索 |
+| /api/v1/ocr/recognize | POST | OCR 识别 |
+
+### 4.3 注册的 Agent
+
+| Agent | intent | 状态 |
+|-------|--------|------|
+| MatchAgent | "match" | ✅ 已注册 |
+| AnomalyAgent | "anomaly" | ✅ 已注册 |
+
+### 4.4 三阶段科目映射管道
+
+```
+输入: item_name="电脑", amount=5000
+  │
+  ├── 阶段 1: 规则引擎（24条规则）
+  │    └─ "电脑" → 6602.12 办公设备 (conf=0.95)
+  │
+  ├── 阶段 2: pgvector 语义检索
+  │    └─ top-3 候选 (conf≥0.5)
+  │
+  └── 阶段 3: LangChain LLM 推理（结构化输出）
+       └─ AccountMatchResult { account_code, confidence, reasoning }
+       └─ conf<0.5 → HITL 挂起
+```
+
+### 4.5 多维异常检测
+
+| 维度 | 检测逻辑 | 严重度 |
+|------|---------|--------|
+| 品名背离 | 进项"水泥"(CONSTRUCTION)→销项"餐饮"(FOOD) | HIGH |
+| 时间异常 | 周末/凌晨开票 | MEDIUM |
+| 对方重复 | 同一客户同日≥3次 | LOW |
+| 金额波动 | >历史均值×5 | MEDIUM |
+
+### 4.6 置信度与安全机制
+
+| 置信度 | 行为 |
+|--------|------|
+| ≥ 0.9 | 自动推荐，标注"AI 推荐" |
+| 0.5 ~ 0.9 | top-3 候选，人工选择 |
+| < 0.5 | HITL 挂起，人工补全 |
+
+## 5. 八大智能体与模块对应关系
+
+| 智能体 | 对应模块 | 状态 |
+|--------|---------|------|
+| 科目映射 Agent | tax / finance | ✅ 已实现 |
+| 异常检测 Agent | tax | ✅ 已实现 |
+| 流水分类 Agent | finance | ⏳ 待实现 |
+| 审核建议 Agent | arap / expense | ⏳ 待实现 |
+| 核销匹配 Agent | arap | ⏳ 待实现 |
+| 经营分析 Agent | report | 🔵 P3 |
+| 预算预测 Agent | budget | 🔵 P3 |
+| 风控规则 Agent | 全系统 | 🔵 P3 |
+
+## 6. 成熟度与待办
+
+| 维度 | 状态 | 备注 |
+|------|------|------|
+| Java 后端 | ✅ 完整 | AiTask 状态机 + NVIDIA API + MQ |
+| Python 服务 | ✅ 基础 | 5 端点 + RouterAgent + 2 Agent |
+| LangGraph 编排 | ✅ P2-6 完成 | RouterAgent + 状态图 |
+| 前端 AI 按钮 | ✅ P2-7 完成 | 发票/凭证页嵌入 |
+| LangChain 结构化输出 | ✅ P2-1 完成 | AccountMatchResult |
+| 4 个待实现 Agent | ⏳ P2 后续 | 流水分类/审核建议/核销匹配 |
+
+> **文档结束**

@@ -5,7 +5,6 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.huicai.common.exception.BusinessException;
 import com.huicai.module.arap.dto.ExpenseReimbursementVO;
 import com.huicai.module.arap.constant.ArapStatus;
-import com.huicai.module.arap.entity.PayableEntity;
 import com.huicai.module.arap.entity.*;
 import com.huicai.module.arap.mapper.*;
 import com.huicai.module.arap.service.EmployeeService;
@@ -64,8 +63,6 @@ public class AutoGenerationService {
     private final ClassificationRuleMapper classificationRuleMapper;
     private final CustomerMapper customerMapper;
     private final VendorMapper vendorMapper;
-    private final ReceivableMapper receivableMapper;
-    private final PayableMapper payableMapper;
     private final PrepaymentMapper prepaymentMapper;
     private final ReconciliationService reconciliationService;
     private final EmployeeService employeeService;

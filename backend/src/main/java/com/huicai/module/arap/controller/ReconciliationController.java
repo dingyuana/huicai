@@ -25,22 +25,24 @@ public class ReconciliationController {
     @PostMapping("/receipt/{receiptId}/recommend")
     public R<ReconciliationService.RecommendResult> recommendReceipt(
             @PathVariable Long receiptId,
+            @RequestParam String sourceDocType,
             @RequestParam Long customerId,
             @RequestParam BigDecimal amount,
             @RequestParam(required = false) String summary,
             @RequestParam(required = false) String counterpartyName) {
-        return R.ok(reconciliationService.recommendReceipt(receiptId, customerId, amount, summary, counterpartyName));
+        return R.ok(reconciliationService.recommendReceipt(receiptId, sourceDocType, customerId, amount, summary, counterpartyName));
     }
 
     @Operation(summary = "付款核销推荐")
     @PostMapping("/payment/{paymentId}/recommend")
     public R<ReconciliationService.RecommendResult> recommendPayment(
             @PathVariable Long paymentId,
+            @RequestParam String sourceDocType,
             @RequestParam Long vendorId,
             @RequestParam BigDecimal amount,
             @RequestParam(required = false) String summary,
             @RequestParam(required = false) String counterpartyName) {
-        return R.ok(reconciliationService.recommendPayment(paymentId, vendorId, amount, summary, counterpartyName));
+        return R.ok(reconciliationService.recommendPayment(paymentId, sourceDocType, vendorId, amount, summary, counterpartyName));
     }
 
     @Operation(summary = "核销前预检查 (5项检查)")

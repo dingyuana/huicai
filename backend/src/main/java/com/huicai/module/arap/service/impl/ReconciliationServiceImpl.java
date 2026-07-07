@@ -65,36 +65,46 @@ public class ReconciliationServiceImpl implements ReconciliationService {
     private final OutputInvoiceStateMachineService outputInvoiceStateMachineService;
 
     @Override
-    public RecommendResult recommendReceipt(Long receiptId, Long customerId, BigDecimal amount, String summary, String counterpartyName) {
-        return recommend(customerId, null, amount, summary, counterpartyName, true, "receipt", receiptId, null, null);
+    public RecommendResult recommendReceipt(Long receiptId, String sourceDocType, Long customerId, BigDecimal amount, String summary, String counterpartyName) {
+        return recommend(customerId, null, amount, summary, counterpartyName, sourceDocType, "receipt", receiptId, null, null);
     }
 
     @Override
-    public RecommendResult recommendPayment(Long paymentId, Long vendorId, BigDecimal amount, String summary, String counterpartyName) {
-        return recommend(null, vendorId, amount, summary, counterpartyName, false, "payment", paymentId, null, null);
+    public RecommendResult recommendPayment(Long paymentId, String sourceDocType, Long vendorId, BigDecimal amount, String summary, String counterpartyName) {
+        return recommend(null, vendorId, amount, summary, counterpartyName, sourceDocType, "payment", paymentId, null, null);
     }
 
-    private RecommendResult recommend(Long customerId, Long vendorId, BigDecimal amount, String summary, String counterpartyName, boolean isReceipt, String sourceType, Long sourceId, LocalDate txDate, String externalNo) {
-        List<RecommendItem> items = new ArrayList<>();
-        String targetDocType = isReceipt ? "INVOICE_OUT" : "INVOICE_IN";
+    /** 根据来源单据类型确定推荐目标单据类型 */
+    private static String resolveTargetDocType(String sourceDocType) {
+        if (sourceDocType == null) return null;
+        return switch (sourceDocType) {
+            case "RECEIPT", "OTHER_RECEIVABLE" -> "INVOICE_OUT";
+            case "INVOICE_OUT" -> "RECEIPT";
+            case "PAYMENT", "EXPENSE", "OTHER_PAYABLE" -> "INVOICE_IN";
+            case "INVOICE_IN" -> "PAYMENT";
+            default -> null;
+        };
+    }
 
-        // P34: 直接查询 BusinessDocEntity（替代 ReceivableEntity/PayableEntity）
-        List<BusinessDocEntity> invoices;
-        if (isReceipt && customerId != null) {
-            invoices = businessDocMapper.selectList(
-                    new LambdaQueryWrapper<BusinessDocEntity>()
-                            .eq(BusinessDocEntity::getCustomerId, customerId)
-                            .eq(BusinessDocEntity::getDocType, "INVOICE_OUT")
-                            .gt(BusinessDocEntity::getUnsettledAmount, BigDecimal.ZERO));
-        } else if (!isReceipt && vendorId != null) {
-            invoices = businessDocMapper.selectList(
-                    new LambdaQueryWrapper<BusinessDocEntity>()
-                            .eq(BusinessDocEntity::getSupplierId, vendorId)
-                            .eq(BusinessDocEntity::getDocType, "INVOICE_IN")
-                            .gt(BusinessDocEntity::getUnsettledAmount, BigDecimal.ZERO));
-        } else {
+    private RecommendResult recommend(Long customerId, Long vendorId, BigDecimal amount, String summary, String counterpartyName, String sourceDocType, String sourceType, Long sourceId, LocalDate txDate, String externalNo) {
+        List<RecommendItem> items = new ArrayList<>();
+        String targetDocType = resolveTargetDocType(sourceDocType);
+        if (targetDocType == null) {
             return new RecommendResult(sourceType, sourceId, counterpartyName, amount, List.of());
         }
+
+        // 确定按客户还是供应商匹配 & 目标单据的 party 字段
+        boolean targetIsReceivableSide = "INVOICE_OUT".equals(targetDocType) || "RECEIPT".equals(targetDocType);
+        Long partyId = targetIsReceivableSide ? customerId : vendorId;
+        if (partyId == null) {
+            return new RecommendResult(sourceType, sourceId, counterpartyName, amount, List.of());
+        }
+
+        List<BusinessDocEntity> invoices = businessDocMapper.selectList(
+                new LambdaQueryWrapper<BusinessDocEntity>()
+                        .eq(targetIsReceivableSide ? BusinessDocEntity::getCustomerId : BusinessDocEntity::getSupplierId, partyId)
+                        .eq(BusinessDocEntity::getDocType, targetDocType)
+                        .gt(BusinessDocEntity::getUnsettledAmount, BigDecimal.ZERO));
 
         for (BusinessDocEntity doc : invoices) {
             // 跳过由银行流水自动生成的单据(防止自引用循环推荐)

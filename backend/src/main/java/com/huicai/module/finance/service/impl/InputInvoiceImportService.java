@@ -3,10 +3,7 @@ package com.huicai.module.finance.service.impl;
 import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.huicai.common.exception.BusinessException;
-import com.huicai.module.arap.constant.ArapStatus;
-import com.huicai.module.arap.entity.PayableEntity;
 import com.huicai.module.arap.entity.VendorEntity;
-import com.huicai.module.arap.mapper.PayableMapper;
 import com.huicai.module.arap.mapper.VendorMapper;
 import com.huicai.module.finance.constant.VoucherType;
 import com.huicai.module.finance.entity.BusinessDocEntity;
@@ -62,8 +59,8 @@ public class InputInvoiceImportService {
     private final VendorMapper vendorMapper;
     private final SubjectMapper subjectMapper;
     private final InputInvoiceMapper inputInvoiceMapper;
-    private final PayableMapper payableMapper;
     private final ColumnMappingResolver columnMappingResolver;
+    private final InvoiceDedupUtil invoiceDedupUtil;
 
     private final Map<String, List<ParsedInputInvoiceRow>> batchCache = new ConcurrentHashMap<>();
 
@@ -162,7 +159,8 @@ public class InputInvoiceImportService {
             previews.add(p);
         }
 
-        Set<String> existingSet = findExistingInvoiceNos(allRows);
+        Set<String> existingSet = invoiceDedupUtil.findExisting(
+                allRows.stream().map(r -> r.invoiceNo).filter(StrUtil::isNotBlank).toList());
 
         log.info("采购发票预览完成: batchId={}, total={}, errors={}, existing={}",
                 batchId, allRows.size(), errors.size(), existingSet.size());
@@ -215,8 +213,39 @@ public class InputInvoiceImportService {
             }
         }
 
-        // totalAmount = amount + taxAmount (若未单独列)
-        r.totalAmount = r.amount.add(r.taxAmount);
+        // 价税合计列（可选，用于价税分离）
+        Integer totalIdx = mapping.getFieldToColumnIndex().get(ColumnMappingResolver.Field.TOTAL_AMOUNT);
+        BigDecimal totalFromColumn = null;
+        if (totalIdx != null) {
+            try {
+                totalFromColumn = new BigDecimal(rowMap.getOrDefault(totalIdx, "0").trim());
+            } catch (Exception ignored) {}
+        }
+
+        // 税率列（可选，用于价税分离）
+        Integer rateIdx = mapping.getFieldToColumnIndex().get(ColumnMappingResolver.Field.TAX_RATE);
+        if (rateIdx != null) {
+            String rateStr = rowMap.getOrDefault(rateIdx, "").trim();
+            if (StrUtil.isNotBlank(rateStr)) {
+                try { r.taxRate = new BigDecimal(rateStr.replace("%", "").trim()); } catch (Exception ignored) {}
+            }
+        }
+
+        // 价税分离：当 amount(不含税)缺失或为零时，从 totalAmount 反向计算
+        boolean amountMissing = r.amount.signum() == 0;
+        if (amountMissing && totalFromColumn != null && r.taxRate != null && r.taxRate.compareTo(BigDecimal.ZERO) > 0) {
+            BigDecimal divisor = BigDecimal.ONE.add(r.taxRate.divide(BigDecimal.valueOf(100), 10, java.math.RoundingMode.HALF_UP));
+            r.amount = totalFromColumn.divide(divisor, 2, java.math.RoundingMode.HALF_UP);
+            r.taxAmount = totalFromColumn.subtract(r.amount);
+            r.totalAmount = totalFromColumn;
+        } else {
+            // totalAmount = amount + taxAmount (若未单独列)
+            if (totalFromColumn != null && totalFromColumn.compareTo(BigDecimal.ZERO) > 0) {
+                r.totalAmount = totalFromColumn;
+            } else {
+                r.totalAmount = r.amount.add(r.taxAmount);
+            }
+        }
 
         r.isPositive = r.totalAmount.compareTo(BigDecimal.ZERO) > 0;
         if (!r.isPositive) {
@@ -249,24 +278,6 @@ public class InputInvoiceImportService {
         return null;
     }
 
-    Set<String> findExistingInvoiceNos(List<ParsedInputInvoiceRow> rows) {
-        List<String> invoiceNos = new ArrayList<>();
-        for (ParsedInputInvoiceRow r : rows) {
-            if (StrUtil.isNotBlank(r.invoiceNo)) {
-                invoiceNos.add(r.invoiceNo);
-            }
-        }
-        if (invoiceNos.isEmpty()) return Collections.emptySet();
-        List<InputInvoiceEntity> existing = inputInvoiceMapper.selectList(
-                new LambdaQueryWrapper<InputInvoiceEntity>()
-                        .in(InputInvoiceEntity::getInvoiceNo, invoiceNos));
-        Set<String> result = new HashSet<>();
-        for (InputInvoiceEntity inv : existing) {
-            if (inv.getInvoiceNo() != null) result.add(inv.getInvoiceNo());
-        }
-        return result;
-    }
-
     public Map<String, Object> confirmImport(String batchId) {
         if (StrUtil.isBlank(batchId)) {
             throw BusinessException.badRequest("batchId 不能为空");
@@ -279,7 +290,8 @@ public class InputInvoiceImportService {
             return Map.of("total", 0, "success", 0, "docCreated", 0, "voucherCreated", 0, "batchId", batchId);
         }
 
-        Set<String> existingSet = findExistingInvoiceNos(rows);
+        Set<String> existingSet = invoiceDedupUtil.findExisting(
+                rows.stream().map(r -> r.invoiceNo).filter(StrUtil::isNotBlank).toList());
 
         int success = 0, docCreated = 0, voucherCreated = 0, duplicateSkipped = 0;
         List<Map<String, Object>> errors = new ArrayList<>();
@@ -304,7 +316,6 @@ public class InputInvoiceImportService {
                 BusinessDocEntity doc = createBusinessDoc(row, vendorId, period);
                 String voucherNo = createVoucher(doc, row, vendorId, period);
                 insertInputInvoice(row, vendorId, period, doc, voucherNo);
-                createPayableFromInvoice(doc, row, vendorId, period, voucherNo);
                 success++; docCreated++; voucherCreated++;
             } catch (Exception e) {
                 log.warn("处理采购发票行失败 row={}: {}", row.rowNum, e.getMessage());
@@ -416,8 +427,10 @@ public class InputInvoiceImportService {
         inv.setVendorId(vendorId);
         inv.setVendorName(row.sellerName);
         inv.setAmount(row.amount);
+        inv.setAmountExTax(row.amount);
         inv.setTaxAmount(row.taxAmount);
         inv.setTotalAmount(row.totalAmount);
+        inv.setProcessStatus("PENDING");
         inv.setInvoiceType("SPECIAL");
         // P21-b 重构 2026-06-22 修 P0 bug: 原 PENDING 违反 V8 CHECK 约束 (chk_cert_status 仅允许 UNCERTIFIED/CERTIFIED/INVALID/CANCELLED)
         inv.setCertificationStatus("UNCERTIFIED");
@@ -427,32 +440,6 @@ public class InputInvoiceImportService {
         inv.setVoucherNo(voucherNo);            // 新增：凭证编号冗余
         inv.setCreatedBy(DEFAULT_USER_ID);
         inputInvoiceMapper.insert(inv);
-    }
-
-    /**
-     * P10-2 关键: 采购发票导入成功后, 自动生成应付单 t_payable.
-     * 与 P10-1 销售应收单对称.
-     */
-    @Transactional
-    void createPayableFromInvoice(BusinessDocEntity doc, ParsedInputInvoiceRow row,
-                                  Long vendorId, String period, String voucherNo) {
-        PayableEntity pay = new PayableEntity();
-        pay.setVendorId(vendorId);
-        pay.setDocId(doc.getId());
-        pay.setDocNo(doc.getDocNo());           // 新增：业务单据编号冗余
-        pay.setInvoiceNo(row.invoiceNo);        // 新增：发票编号冗余
-        pay.setVoucherId(doc.getVoucherId());
-        pay.setVoucherNo(voucherNo);            // 新增：凭证编号冗余
-        pay.setPeriod(period);
-        pay.setTxDate(row.invoiceDate);
-        pay.setAmount(row.totalAmount);
-        pay.setSettledAmount(BigDecimal.ZERO);
-        pay.setUnsettledAmount(row.totalAmount);
-        pay.setSummary(row.goodsName);
-        pay.setStatus(ArapStatus.CONFIRMED);
-        payableMapper.insert(pay);
-        log.info("P10-2 采购发票应付单生成: vendorId={}, docId={}, invoiceNo={}, voucherNo={}, amount={}",
-                vendorId, doc.getId(), row.invoiceNo, voucherNo, row.totalAmount);
     }
 
     /**

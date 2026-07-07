@@ -1,6 +1,7 @@
 # 编号关联体系设计文档
 
-**版本**: v1.8  
+> **编号**：HUICAI-ARC-002
+> **版本**：v1.8 | **修改日期**：2026-07-07 | **修改人**：Hermes | **修改内容**：添加编号头部  
 **日期**: 2026-06-29  
 **状态**: 全部实现完成，46/46 测试通过  
 **P33 修正**: 2026-06-29 销售发票链路移除业务单中间环节，发票→应收单→凭证直连
@@ -34,39 +35,35 @@
 └────────┬────────┘
          │
          ▼
-┌─────────────────┐     ┌─────────────────┐
-│  应收单          │     │  应付单          │
-│  receivable     │     │  payable        │
-└────────┴────────┘     └────────┴────────┘
-         │                        │
-         └──────────┬─────────────┘
-                    │
-                    ▼
-          ┌─────────────────┐
-          │  会计凭证        │  Voucher
-          │  voucher        │
-          └─────────────────┘
+┌─────────────────┐
+│  业务单据        │  BusinessDoc（替代应收/应付）
+│  business_doc   │
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│  会计凭证        │  Voucher
+│  voucher        │
+└─────────────────┘
 ```
 
-> **P33 简化（2026-06-29）**：销售发票链路不再经过业务单中间层。  
-> 旧链路：销售发票 → 业务单 → 应收单 → 凭证  
-> 新链路：销售发票 → 应收单 → 凭证
+> **P34 变更（2026-07-01）**：t_receivable/t_payable 独立表已删除（V74），统一合并到 t_business_doc。
 
 ### 2.2 关联矩阵
 
-| 源表 → 目标表 | OutputInvoice | InputInvoice | Receivable | Payable | Voucher |
-|--------------|---------------|--------------|------------|---------|---------|
-| OutputInvoice | - | ⭕ | `invoice_id` + `invoice_no` + `receivable_id` + `receivable_no` | ⭕ | `voucher_id` + `voucher_no` |
-| InputInvoice | ⭕ | - | ⭕ | `invoice_id` + `invoice_no` | `voucher_id` + `voucher_no` |
-| Receivable | `receivable_id` + `receivable_no` | ⭕ | - | ⭕ | `voucher_id` + `voucher_no` |
-| Payable | ⭕ | `invoice_id` + `invoice_no` | ⭕ | - | `voucher_id` + `voucher_no` |
-| Voucher | `source_doc_id` + `source_doc_no` + `source_doc_type` | `source_doc_id` + `source_doc_no` + `source_doc_type` | `source_doc_id` + `source_doc_no` + `source_doc_type` | `source_doc_id` + `source_doc_no` + `source_doc_type` | - |
+| 源表 → 目标表 | OutputInvoice | InputInvoice | BusinessDoc | Voucher |
+|--------------|---------------|--------------|-------------|---------|
+| OutputInvoice | - | ⭕ | `invoice_id` + `invoice_no` | `voucher_id` + `voucher_no` |
+| InputInvoice | ⭕ | - | `invoice_id` + `invoice_no` | `voucher_id` + `voucher_no` |
+| BusinessDoc | `doc_id` + `doc_no` | `doc_id` + `doc_no` | - | `voucher_id` + `voucher_no` |
+| Voucher | `source_doc_id` + `source_doc_no` + `source_doc_type` | `source_doc_id` + `source_doc_no` + `source_doc_type` | `source_doc_id` + `source_doc_no` + `source_doc_type` | - |
 
 **图例**:
 - `Id + No`: ID外键关联 + 编号字段冗余
 - `⭕`: 无直接关联，通过中间表关联
 
-> **P33 变更（2026-06-29）**：销售发票链路不再经过 BusinessDoc，`t_output_invoice` 与 `t_receivable` 之间建立直接关联（`invoice_id` + `receivable_id`）。
+> **P33 变更（2026-06-29）**：销售发票链路简化，发票直接生成凭证。
+> **P34 变更（2026-07-01）**：应收/应付独立表已删除，统一合并到 BusinessDoc。
 
 ---
 
@@ -76,38 +73,28 @@
 
 | 表名 | 关联字段 | 状态 | 备注 |
 |------|---------|------|------|
-| **t_output_invoice** | `receivable_id`, `receivable_no` | ✅ 已实现 | P33 新增（V65） |
+| **t_output_invoice** | `doc_id`, `doc_no` | ✅ 已实现 | 关联业务单据 |
 | | `voucher_id`, `voucher_no` | ✅ 已实现 | 关联会计凭证 |
 | | `original_invoice_id`, `original_invoice_no` | ✅ 已实现 | 红冲关联 |
 | | `reversed_by_invoice_id`, `reversed_by_invoice_no` | ✅ 已实现 | 被红冲关联 |
-| | `doc_id`, `doc_no` | ⚠️ 保留 | P33 简化后不再写入，历史数据保留 |
-| **t_input_invoice** | `doc_id` | ✅ 已实现 | 关联业务单据 |
-| | `voucher_id` | ✅ 已实现 | 关联会计凭证 |
-| | `doc_no`, `voucher_no` | ✅ 已实现 | V64 补充编号冗余 |
-| **t_receivable** | `invoice_id` | ✅ 已实现 | P33 新增（V65） |
-| | `doc_id` | ⚠️ 保留 | P33 简化后不再写入，历史数据保留 |
-| | `voucher_id` | ✅ 已实现 | 关联会计凭证 |
-| | `doc_no`, `voucher_no`, `invoice_no` | ✅ 已实现 | V64 补充 |
-| **t_payable** | `doc_id` | ✅ 已实现 | 关联业务单据 |
-| | `voucher_id` | ✅ 已实现 | 关联会计凭证 |
-| | `doc_no`, `voucher_no`, `invoice_no` | ✅ 已实现 | V64 补充 |
-| **t_business_doc** | `voucher_id`, `voucher_no` | ✅ 已实现 | V64 补充 |
+| **t_input_invoice** | `doc_id`, `doc_no` | ✅ 已实现 | 关联业务单据 |
+| | `voucher_id`, `voucher_no` | ✅ 已实现 | 关联会计凭证 |
+| **t_business_doc** | `invoice_id`, `invoice_no` | ✅ 已实现 | 关联发票 |
+| | `voucher_id`, `voucher_no` | ✅ 已实现 | 关联会计凭证 |
 | **t_voucher** | `source_doc_id`, `source_doc_no` | ✅ 已实现 | V64 补充 |
 | | `source_doc_type` | ✅ 已实现 | V64 补充 |
 
-> **P33 变更（2026-06-29）**：销售发票链路不再创建业务单，`t_output_invoice` 与 `t_receivable` 之间建立直接关联。`doc_id/doc_no` 字段保留但不写入，历史数据仍可查询。
+> **P34 变更（2026-07-01）**：t_receivable/t_payable 独立表已删除，关联字段统一合并到 t_business_doc。
 
 ### 3.2 实现完成度统计
 
 | 模块 | 字段总数 | 已实现 | 完成度 |
 |------|---------|--------|--------|
-| 销售发票 | 8 | 8 | **100% ✅** |
+| 销售发票 | 4 | 4 | **100% ✅** |
 | 采购发票 | 4 | 4 | **100% ✅** |
-| 应收单 | 4 | 4 | **100% ✅** |
-| 应付单 | 4 | 4 | **100% ✅** |
-| 业务单据 | 2 | 2 | **100% ✅** |
+| 业务单据 | 4 | 4 | **100% ✅** |
 | 会计凭证 | 3 | 3 | **100% ✅** |
-| **整体** | **25** | **25** | **100% ✅** |
+| **整体** | **15** | **15** | **100% ✅** |
 
 ---
 
@@ -127,11 +114,9 @@
 
 ```java
 public enum SourceDocType {
-    BUSINESS_DOC,        // 业务单据
+    BUSINESS_DOC,        // 业务单据（含应收/应付）
     OUTPUT_INVOICE,      // 销售发票
     INPUT_INVOICE,       // 采购发票
-    RECEIVABLE,          // 应收单
-    PAYABLE,             // 应付单
     BANK_STATEMENT       // 银行流水
 }
 ```
@@ -147,14 +132,14 @@ public enum SourceDocType {
 | 表名 | 新增字段 | 数量 |
 |------|---------|------|
 | t_input_invoice | doc_no, voucher_no | 2 |
-| t_receivable | doc_no, voucher_no, invoice_no | 3 |
-| t_payable | doc_no, voucher_no, invoice_no | 3 |
 | t_business_doc | voucher_id, voucher_no | 2 |
 | t_voucher | source_doc_id, source_doc_no, source_doc_type | 3 |
 | t_arap_settlement | voucher_no | 1 |
-| **合计** | | **14** |
+| **合计** | | **8** |
 
 所有新增字段均创建了 B-tree 索引（`idx_表名_字段名` 规范）。
+
+> **P34 变更（2026-07-01）**：V74 删除了 t_receivable/t_payable 表及相关索引。
 
 ---
 
@@ -165,8 +150,8 @@ public enum SourceDocType {
 | 触发动作 | 赋值字段 | 赋值位置 | 状态 |
 |---------|---------|---------|------|
 | 业务单据生成发票 | doc_id, doc_no | InvoiceService.create() | ✅ |
-| 发票审核生成应收/应付 | invoice_id, invoice_no | ReceivableService.confirm() | ✅ |
-| 应收/应付核销生成凭证 | voucher_id, voucher_no | VoucherService.generate() | ✅ |
+| 发票审核生成业务单据 | invoice_id, invoice_no | BusinessDocService.confirm() | ✅ |
+| 业务单据核销生成凭证 | voucher_id, voucher_no | VoucherService.generate() | ✅ |
 | 凭证生成回写 | voucher_id, voucher_no, docNo | 各 Service markVouchered | ✅ |
 | 采购发票导入 | docNo, invoiceNo, voucherNo | InputInvoiceImportService | ✅ |
 | 销售发票导入 | sourceDocId, sourceDocNo, sourceDocType | SalesInvoiceImportService | ✅ |
@@ -197,20 +182,17 @@ public enum SourceDocType {
 |------|---------|---------|------|
 | t_input_invoice | doc_no | idx_input_invoice_doc_no | 按单据号查询发票 |
 | t_input_invoice | voucher_no | idx_input_invoice_voucher_no | 按凭证号查询发票 |
-| t_receivable | doc_no | idx_receivable_doc_no | 按单据号查询应收 |
-| t_receivable | voucher_no | idx_receivable_voucher_no | 按凭证号查询应收 |
-| t_receivable | invoice_no | idx_receivable_invoice_no | 按发票号查询应收 |
-| t_payable | doc_no | idx_payable_doc_no | 按单据号查询应付 |
-| t_payable | voucher_no | idx_payable_voucher_no | 按凭证号查询应付 |
-| t_payable | invoice_no | idx_payable_invoice_no | 按发票号查询应付 |
-| t_voucher | source_doc_no | idx_voucher_source_doc_no | 按原始单据号查询凭证 |
+| t_output_invoice | doc_no | idx_output_invoice_doc_no | 按单据号查询发票 |
+| t_output_invoice | voucher_no | idx_output_invoice_voucher_no | 按凭证号查询发票 |
+| t_business_doc | invoice_no | idx_business_doc_invoice_no | 按发票号查询业务单 |
 | t_business_doc | voucher_no | idx_business_doc_voucher_no | 按凭证号查询业务单 |
+| t_voucher | source_doc_no | idx_voucher_source_doc_no | 按原始单据号查询凭证 |
 | t_arap_settlement | voucher_no | idx_arap_settlement_voucher_no | 按凭证号查询核销单 |
 
 ### 7.2 索引验证
 
-**15 个索引测试全部通过**（`NumberingAssociationIndexesTest`），涵盖：
-- 6 张表的 11 个编号字段索引
+**8 个索引测试全部通过**（`NumberingAssociationIndexesTest`），涵盖：
+- 5 张表的 8 个编号字段索引
 - 索引存在性验证
 - 索引查询性能验证
 
@@ -233,9 +215,9 @@ public enum SourceDocType {
 
 ### 8.2 测试覆盖场景
 
-- ✅ 销售流程全链路：BusinessDoc → OutputInvoice → Receivable → Voucher
-- ✅ 采购流程全链路：BusinessDoc → InputInvoice → Payable → Voucher
-- ✅ 核销流程：Receivable + Payable → Settlement → Voucher
+- ✅ 销售流程全链路：BusinessDoc → OutputInvoice → Voucher
+- ✅ 采购流程全链路：BusinessDoc → InputInvoice → Voucher
+- ✅ 核销流程：BusinessDoc → Settlement → Voucher
 - ✅ 反向溯源：从 Voucher 可溯源到原始单据 ID 和编号
 - ✅ 跨模块一致性：同一业务流程中各单据的关联编号一致
 - ✅ 一致性校验 Job：5 类脏数据检测 + 混合场景
@@ -260,7 +242,7 @@ public enum SourceDocType {
 - 补全后执行一致性校验
 
 ### 9.3 审计字段待迁移
-⚠️ **注意**: `ReceivableEntity`/`PayableEntity`/`InputInvoiceEntity`/`OutputInvoiceEntity` 的 `auditedBy`/`auditedAt` 字段当前标记为 `@TableField(exist = false)`，因为 `t_receivable`/`t_payable`/`t_input_invoice`/`t_output_invoice` 表尚未添加审计字段列。如需启用，需额外 Migration。
+⚠️ **注意**: `InputInvoiceEntity`/`OutputInvoiceEntity` 的 `auditedBy`/`auditedAt` 字段当前标记为 `@TableField(exist = false)`，因为 `t_input_invoice`/`t_output_invoice` 表尚未添加审计字段列。如需启用，需额外 Migration。
 
 ---
 
@@ -276,3 +258,4 @@ public enum SourceDocType {
 | v1.5 | 2026-06-28 | P2 编号关联查询接口完成 |
 | v1.6 | 2026-06-28 | P2-3 数据一致性校验定时任务完成 |
 | v1.7 | 2026-06-28 | **全部完成**：V64 Migration + 46/46 测试通过 + 100% 字段实现 |
+| v1.8 | 2026-07-07 | **P34 更新**：移除 t_receivable/t_payable 相关内容，统一合并到 BusinessDoc |

@@ -59,11 +59,11 @@ public interface ReconciliationService {
         String remark
     ) {}
 
-    /** 收款核销推荐 */
-    RecommendResult recommendReceipt(Long receiptId, Long customerId, BigDecimal amount, String summary, String counterpartyName);
+    /** 收款核销推荐 — sourceDocType = RECEIPT/INVOICE_OUT/OTHER_RECEIVABLE */
+    RecommendResult recommendReceipt(Long receiptId, String sourceDocType, Long customerId, BigDecimal amount, String summary, String counterpartyName);
 
-    /** 付款核销推荐 */
-    RecommendResult recommendPayment(Long paymentId, Long vendorId, BigDecimal amount, String summary, String counterpartyName);
+    /** 付款核销推荐 — sourceDocType = PAYMENT/INVOICE_IN/EXPENSE/OTHER_PAYABLE */
+    RecommendResult recommendPayment(Long paymentId, String sourceDocType, Long vendorId, BigDecimal amount, String summary, String counterpartyName);
 
     /** 执行单笔核销 */
     ReconciliationLogEntity execute(ExecuteRequest request);

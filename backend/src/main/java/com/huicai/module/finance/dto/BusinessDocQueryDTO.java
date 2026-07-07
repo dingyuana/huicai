@@ -3,10 +3,12 @@ package com.huicai.module.finance.dto;
 import lombok.Data;
 
 import java.time.LocalDate;
+import java.util.List;
 
 @Data
 public class BusinessDocQueryDTO {
     private String docType;
+    private List<String> docTypes;
     private String status;
     private String period;
     private String keyword;

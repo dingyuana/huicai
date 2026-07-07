@@ -73,7 +73,8 @@ function calcTotal() { /* computed handles it */ }
 async function handleSave() {
   saving.value = true
   try {
-    await request.post('/budgets', form.value)
+    // 后端要求 { budget: BudgetEntity, entries: List }
+    await request.post('/budgets', { budget: form.value, entries: form.value.entries })
     ElMessage.success('保存成功')
     router.push('/budget')
   } finally { saving.value = false }

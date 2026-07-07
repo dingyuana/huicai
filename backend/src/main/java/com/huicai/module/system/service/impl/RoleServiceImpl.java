@@ -79,7 +79,7 @@ public class RoleServiceImpl implements RoleService {
     }
 
     @Override
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public void assignMenus(Long roleId, List<Long> menuIds) {
         roleMenuMapper.delete(new LambdaQueryWrapper<RoleMenuEntity>().eq(RoleMenuEntity::getRoleId, roleId));
         for (Long menuId : menuIds) {
@@ -91,7 +91,7 @@ public class RoleServiceImpl implements RoleService {
     }
 
     @Override
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public void delete(Long id) {
         Long userCount = userRoleMapper.selectCount(
                 new LambdaQueryWrapper<UserRoleEntity>().eq(UserRoleEntity::getRoleId, id));

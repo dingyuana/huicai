@@ -5,14 +5,10 @@ import com.huicai.common.exception.BusinessException;
 import com.huicai.module.arap.entity.CustomerEntity;
 import com.huicai.module.arap.entity.EmployeeEntity;
 import com.huicai.module.arap.entity.ExpenseReimbursementEntity;
-import com.huicai.module.arap.entity.PayableEntity;
 import com.huicai.module.arap.entity.PrepaymentEntity;
-import com.huicai.module.arap.entity.ReceivableEntity;
 import com.huicai.module.arap.entity.VendorEntity;
 import com.huicai.module.arap.mapper.CustomerMapper;
-import com.huicai.module.arap.mapper.PayableMapper;
 import com.huicai.module.arap.mapper.PrepaymentMapper;
-import com.huicai.module.arap.mapper.ReceivableMapper;
 import com.huicai.module.arap.mapper.VendorMapper;
 import com.huicai.module.arap.service.EmployeeService;
 import com.huicai.module.arap.service.ExpenseReimbursementService;
@@ -65,8 +61,7 @@ class AutoGenerationServiceTest {
     @Mock private SubjectMapper subjectMapper;
     @Mock private CustomerMapper customerMapper;
     @Mock private VendorMapper vendorMapper;
-    @Mock private ReceivableMapper receivableMapper;
-    @Mock private PayableMapper payableMapper;
+    
     @Mock private PrepaymentMapper prepaymentMapper;
     @Mock private ReconciliationService reconciliationService;
     @Mock private VoucherTemplateService voucherTemplateService;
@@ -252,12 +247,8 @@ class AutoGenerationServiceTest {
         } catch (Exception e) {
             // mock 限制下可能抛
         }
-        // 不应再创建应收明细（银行流水已收，不是应收）
-        verify(receivableMapper, never()).insert(any(ReceivableEntity.class));
         // P30 铁律：不做自动核销
         verify(reconciliationService, never()).autoReconcileFifo(anyLong(), anyString(), any(), anyString(), anyLong(), anyString(), anyString());
-        // 不应插入 payable
-        verify(payableMapper, never()).insert(any(PayableEntity.class));
     }
 
     @Test
@@ -284,11 +275,8 @@ class AutoGenerationServiceTest {
             service.autoGenerate(1L, 1L);
         } catch (Exception e) {
         }
-        // 不应再创建应付明细
-        verify(payableMapper, never()).insert(any(PayableEntity.class));
         // P30 铁律：不做自动核销
         verify(reconciliationService, never()).autoReconcileFifo(anyLong(), anyString(), any(), anyString(), anyLong(), anyString(), anyString());
-        verify(receivableMapper, never()).insert(any(ReceivableEntity.class));
     }
 
     @Test
@@ -314,8 +302,7 @@ class AutoGenerationServiceTest {
             service.autoGenerate(1L, 1L);
         } catch (Exception e) {
         }
-        // 无未结清应收 → 不应创建应收明细，也不应调 FIFO 核销
-        verify(receivableMapper, never()).insert(any(ReceivableEntity.class));
+        // P30 铁律：不做自动核销
         verify(reconciliationService, never()).autoReconcileFifo(anyLong(), anyString(), any(), anyString(), anyLong(), anyString(), anyString());
     }
 
@@ -340,8 +327,6 @@ class AutoGenerationServiceTest {
         } catch (Exception e) {
             // mock 限制下可能抛
         }
-        // 应收单不应插入 (客户不匹配)
-        verify(receivableMapper, never()).insert(any(ReceivableEntity.class));
     }
 
     // ==================== P10-4 已移除: 银行流水不做自动核销 ====================
@@ -477,8 +462,6 @@ class AutoGenerationServiceTest {
             service.autoGenerate(1L, 1L);
         } catch (Exception e) {
         }
-        // 不应再创建应付明细
-        verify(payableMapper, never()).insert(any(PayableEntity.class));
         // P30 铁律：不做自动核销
         verify(reconciliationService, never()).autoReconcileFifo(anyLong(), anyString(), any(), anyString(), anyLong(), anyString(), anyString());
     }

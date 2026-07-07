@@ -77,8 +77,9 @@ knife4j:
     language: zh_cn
 
 # JWT 配置
+# secret 优先读取环境变量 JWT_SECRET，开发环境可使用默认值
 jwt:
-  secret: huicai-finance-jwt-secret-key-2026-very-long-secret-string
+  secret: ${JWT_SECRET:huicai-finance-jwt-secret-key-2026-very-long-secret-string}
   access-token-expiration: 86400000
   refresh-token-expiration: 604800000
 

@@ -399,7 +399,7 @@ const columnMapping = ref<Record<string, string>>({})
 const classificationCounts = ref<Record<string, number>>({})
 const totalCount = computed(() => Object.values(classificationCounts.value).reduce((a, b) => a + b, 0))
 
-const query = ref<{ accountId?: number; reviewStatus?: string; classification?: string; current: number; size: number }>({
+const query = ref<{ accountId?: string; reviewStatus?: string; classification?: string; current: number; size: number }>({
   current: 1, size: 20,
 })
 

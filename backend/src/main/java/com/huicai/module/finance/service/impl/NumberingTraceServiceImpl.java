@@ -3,11 +3,8 @@ package com.huicai.module.finance.service.impl;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.huicai.module.arap.entity.ArapSettlementEntity;
 import com.huicai.module.arap.entity.ArapSettlementEntryEntity;
-import com.huicai.module.arap.entity.PayableEntity;
 import com.huicai.module.arap.mapper.ArapSettlementEntryMapper;
 import com.huicai.module.arap.mapper.ArapSettlementMapper;
-import com.huicai.module.arap.mapper.PayableMapper;
-import com.huicai.module.arap.mapper.ReceivableMapper;
 import com.huicai.module.finance.dto.NumberingTraceVO;
 import com.huicai.module.finance.entity.BusinessDocEntity;
 import com.huicai.module.finance.entity.VoucherEntity;
@@ -42,8 +39,6 @@ public class NumberingTraceServiceImpl implements NumberingTraceService {
     private final BusinessDocMapper businessDocMapper;
     private final InputInvoiceMapper inputInvoiceMapper;
     private final OutputInvoiceMapper outputInvoiceMapper;
-    private final ReceivableMapper receivableMapper;
-    private final PayableMapper payableMapper;
     private final ArapSettlementMapper arapSettlementMapper;
     private final ArapSettlementEntryMapper settlementEntryMapper;
     private final VoucherService voucherService;
@@ -89,9 +84,11 @@ public class NumberingTraceServiceImpl implements NumberingTraceService {
             return buildVoucherNode(voucher);
         }
 
-        // 2. 查业务单据
+        // 2. 查业务单据（P34: 应收/应付已合并到业务单据）
         LambdaQueryWrapper<BusinessDocEntity> docQ = new LambdaQueryWrapper<>();
-        docQ.eq(BusinessDocEntity::getDocNo, traceNo);
+        docQ.eq(BusinessDocEntity::getDocNo, traceNo)
+            .or().eq(BusinessDocEntity::getVoucherNo, traceNo)
+            .or().eq(BusinessDocEntity::getInvoiceNo, traceNo);
         BusinessDocEntity doc = businessDocMapper.selectOne(docQ);
         if (doc != null) {
             return buildDocNode(doc);
@@ -105,27 +102,7 @@ public class NumberingTraceServiceImpl implements NumberingTraceService {
             return buildInputInvoiceNode(inv);
         }
 
-        // 4. 查应收单（P33: 增加 receivableNo 匹配）
-        LambdaQueryWrapper<com.huicai.module.arap.entity.ReceivableEntity> recQ = new LambdaQueryWrapper<>();
-        recQ.eq(com.huicai.module.arap.entity.ReceivableEntity::getDocNo, traceNo)
-            .or().eq(com.huicai.module.arap.entity.ReceivableEntity::getVoucherNo, traceNo)
-            .or().eq(com.huicai.module.arap.entity.ReceivableEntity::getReceivableNo, traceNo);
-        com.huicai.module.arap.entity.ReceivableEntity rec = receivableMapper.selectOne(recQ);
-        if (rec != null) {
-            return buildReceivableNode(rec);
-        }
-
-        // 5. 查应付单（P33: 增加 payableNo 匹配）
-        LambdaQueryWrapper<PayableEntity> payQ = new LambdaQueryWrapper<>();
-        payQ.eq(PayableEntity::getDocNo, traceNo)
-            .or().eq(PayableEntity::getVoucherNo, traceNo)
-            .or().eq(PayableEntity::getPayableNo, traceNo);
-        PayableEntity pay = payableMapper.selectOne(payQ);
-        if (pay != null) {
-            return buildPayableNode(pay);
-        }
-
-        // 6. 查核销单
+        // 5. 查核销单
         LambdaQueryWrapper<ArapSettlementEntity> setQ = new LambdaQueryWrapper<>();
         setQ.eq(ArapSettlementEntity::getSettlementNo, traceNo)
             .or().eq(ArapSettlementEntity::getVoucherNo, traceNo);
@@ -187,20 +164,20 @@ public class NumberingTraceServiceImpl implements NumberingTraceService {
         return node;
     }
 
-    private NumberingTraceVO.TraceNode buildReceivableNode(com.huicai.module.arap.entity.ReceivableEntity r) {
+    private NumberingTraceVO.TraceNode buildReceivableNode(BusinessDocEntity r) {
         NumberingTraceVO.TraceNode node = new NumberingTraceVO.TraceNode();
         node.setNodeType("RECEIVABLE");
-        node.setNodeNo(r.getReceivableNo() != null ? r.getReceivableNo() : r.getDocNo());
+        node.setNodeNo(r.getDocNo());
         node.setSummary(r.getSummary());
         node.setAmount(r.getAmount());
         node.setStatus(r.getStatus());
         node.setVoucherNo(r.getVoucherNo());
-        node.setInvoiceNo(r.getInvoiceNo());  // P33: 填充发票编号
+        node.setInvoiceNo(r.getInvoiceNo());
         node.setCreatedAt(r.getCreatedAt());
         return node;
     }
 
-    private NumberingTraceVO.TraceNode buildPayableNode(PayableEntity p) {
+    private NumberingTraceVO.TraceNode buildPayableNode(BusinessDocEntity p) {
         NumberingTraceVO.TraceNode node = new NumberingTraceVO.TraceNode();
         node.setNodeType("PAYABLE");
         node.setNodeNo(p.getDocNo());
@@ -268,22 +245,14 @@ public class NumberingTraceServiceImpl implements NumberingTraceService {
     }
 
     private NumberingTraceVO.TraceNode buildNextDownstreamForInvoice(String invoiceNo, boolean isSales) {
-        if (isSales) {
-            // 销售发票 → 应收单（P33: 通过 invoiceNo 或 invoiceId 查找）
-            LambdaQueryWrapper<com.huicai.module.arap.entity.ReceivableEntity> q = new LambdaQueryWrapper<>();
-            q.eq(com.huicai.module.arap.entity.ReceivableEntity::getInvoiceNo, invoiceNo);
-            com.huicai.module.arap.entity.ReceivableEntity rec = receivableMapper.selectOne(q);
-            if (rec != null) {
-                return buildReceivableNode(rec);
-            }
-        } else {
-            // 采购发票 → 应付单（通过 invoiceNo 字段）
-            LambdaQueryWrapper<PayableEntity> q = new LambdaQueryWrapper<>();
-            q.eq(PayableEntity::getInvoiceNo, invoiceNo);
-            PayableEntity pay = payableMapper.selectOne(q);
-            if (pay != null) {
-                return buildPayableNode(pay);
-            }
+        // P34: 发票 → 业务单据（应收/应付已合并到业务单据）
+        String docType = isSales ? "INVOICE_OUT" : "INVOICE_IN";
+        LambdaQueryWrapper<BusinessDocEntity> q = new LambdaQueryWrapper<>();
+        q.eq(BusinessDocEntity::getInvoiceNo, invoiceNo)
+          .eq(BusinessDocEntity::getDocType, docType);
+        BusinessDocEntity doc = businessDocMapper.selectOne(q);
+        if (doc != null) {
+            return buildDocNode(doc);
         }
         return null;
     }
@@ -302,46 +271,25 @@ public class NumberingTraceServiceImpl implements NumberingTraceService {
     }
 
     private NumberingTraceVO.TraceNode buildSettlementAndVoucher(String docNo, boolean isReceivable) {
-        // 应收/应付单 → 核销明细 → 核销单 → 凭证
-        if (isReceivable) {
-            LambdaQueryWrapper<com.huicai.module.arap.entity.ReceivableEntity> rq = new LambdaQueryWrapper<>();
-            rq.eq(com.huicai.module.arap.entity.ReceivableEntity::getDocNo, docNo);
-            com.huicai.module.arap.entity.ReceivableEntity rec = receivableMapper.selectOne(rq);
-            if (rec != null) {
-                // 通过 receivableId 找核销明细
-                LambdaQueryWrapper<ArapSettlementEntryEntity> eq = new LambdaQueryWrapper<>();
-                eq.eq(ArapSettlementEntryEntity::getReceivableId, rec.getId());
-                ArapSettlementEntryEntity entry = settlementEntryMapper.selectOne(eq);
-                if (entry != null) {
-                    LambdaQueryWrapper<ArapSettlementEntity> sq = new LambdaQueryWrapper<>();
-                    sq.eq(ArapSettlementEntity::getId, entry.getSettlementId());
-                    ArapSettlementEntity settlement = arapSettlementMapper.selectOne(sq);
-                    if (settlement != null && settlement.getVoucherNo() != null) {
-                        LambdaQueryWrapper<VoucherEntity> vq = new LambdaQueryWrapper<>();
-                        vq.eq(VoucherEntity::getVoucherNo, settlement.getVoucherNo());
-                        VoucherEntity v = voucherMapper.selectOne(vq);
-                        if (v != null) return buildVoucherNode(v);
-                    }
-                }
-            }
-        } else {
-            LambdaQueryWrapper<PayableEntity> pq = new LambdaQueryWrapper<>();
-            pq.eq(PayableEntity::getDocNo, docNo);
-            PayableEntity pay = payableMapper.selectOne(pq);
-            if (pay != null) {
-                LambdaQueryWrapper<ArapSettlementEntryEntity> eq = new LambdaQueryWrapper<>();
-                eq.eq(ArapSettlementEntryEntity::getPayableId, pay.getId());
-                ArapSettlementEntryEntity entry = settlementEntryMapper.selectOne(eq);
-                if (entry != null) {
-                    LambdaQueryWrapper<ArapSettlementEntity> sq = new LambdaQueryWrapper<>();
-                    sq.eq(ArapSettlementEntity::getId, entry.getSettlementId());
-                    ArapSettlementEntity settlement = arapSettlementMapper.selectOne(sq);
-                    if (settlement != null && settlement.getVoucherNo() != null) {
-                        LambdaQueryWrapper<VoucherEntity> vq = new LambdaQueryWrapper<>();
-                        vq.eq(VoucherEntity::getVoucherNo, settlement.getVoucherNo());
-                        VoucherEntity v = voucherMapper.selectOne(vq);
-                        if (v != null) return buildVoucherNode(v);
-                    }
+        // P34: 业务单据 → 核销明细 → 核销单 → 凭证
+        String docType = isReceivable ? "INVOICE_OUT" : "INVOICE_IN";
+        LambdaQueryWrapper<BusinessDocEntity> dq = new LambdaQueryWrapper<>();
+        dq.eq(BusinessDocEntity::getDocNo, docNo)
+          .eq(BusinessDocEntity::getDocType, docType);
+        BusinessDocEntity doc = businessDocMapper.selectOne(dq);
+        if (doc != null) {
+            LambdaQueryWrapper<ArapSettlementEntryEntity> eq = new LambdaQueryWrapper<>();
+            eq.eq(ArapSettlementEntryEntity::getBusinessDocId, doc.getId());
+            ArapSettlementEntryEntity entry = settlementEntryMapper.selectOne(eq);
+            if (entry != null) {
+                LambdaQueryWrapper<ArapSettlementEntity> sq = new LambdaQueryWrapper<>();
+                sq.eq(ArapSettlementEntity::getId, entry.getSettlementId());
+                ArapSettlementEntity settlement = arapSettlementMapper.selectOne(sq);
+                if (settlement != null && settlement.getVoucherNo() != null) {
+                    LambdaQueryWrapper<VoucherEntity> vq = new LambdaQueryWrapper<>();
+                    vq.eq(VoucherEntity::getVoucherNo, settlement.getVoucherNo());
+                    VoucherEntity v = voucherMapper.selectOne(vq);
+                    if (v != null) return buildVoucherNode(v);
                 }
             }
         }
@@ -419,26 +367,21 @@ public class NumberingTraceServiceImpl implements NumberingTraceService {
     }
 
     private NumberingTraceVO.TraceNode buildInvoiceUpstream(String docNo, boolean isReceivable) {
-        if (isReceivable) {
-            // P33: 应收单 → 销售发票（通过 receivableNo 查找应收单，再通过 invoiceNo 查找销售发票）
-            LambdaQueryWrapper<com.huicai.module.arap.entity.ReceivableEntity> q = new LambdaQueryWrapper<>();
-            q.eq(com.huicai.module.arap.entity.ReceivableEntity::getReceivableNo, docNo)
-                .or().eq(com.huicai.module.arap.entity.ReceivableEntity::getDocNo, docNo);
-            com.huicai.module.arap.entity.ReceivableEntity rec = receivableMapper.selectOne(q);
-            if (rec != null && rec.getInvoiceNo() != null) {
-                // 通过 invoiceNo 查找销售发票
+        // P34: 业务单据 → 发票（应收/应付已合并到业务单据）
+        String docType = isReceivable ? "INVOICE_OUT" : "INVOICE_IN";
+        LambdaQueryWrapper<BusinessDocEntity> q = new LambdaQueryWrapper<>();
+        q.eq(BusinessDocEntity::getDocNo, docNo)
+          .eq(BusinessDocEntity::getDocType, docType);
+        BusinessDocEntity doc = businessDocMapper.selectOne(q);
+        if (doc != null && doc.getInvoiceNo() != null) {
+            if (isReceivable) {
                 LambdaQueryWrapper<OutputInvoiceEntity> iq = new LambdaQueryWrapper<>();
-                iq.eq(OutputInvoiceEntity::getInvoiceNo, rec.getInvoiceNo());
+                iq.eq(OutputInvoiceEntity::getInvoiceNo, doc.getInvoiceNo());
                 OutputInvoiceEntity inv = outputInvoiceMapper.selectOne(iq);
                 if (inv != null) return buildOutputInvoiceNode(inv);
-            }
-        } else {
-            LambdaQueryWrapper<PayableEntity> q = new LambdaQueryWrapper<>();
-            q.eq(PayableEntity::getDocNo, docNo);
-            PayableEntity pay = payableMapper.selectOne(q);
-            if (pay != null && pay.getInvoiceNo() != null) {
+            } else {
                 LambdaQueryWrapper<InputInvoiceEntity> iq = new LambdaQueryWrapper<>();
-                iq.eq(InputInvoiceEntity::getInvoiceNo, pay.getInvoiceNo());
+                iq.eq(InputInvoiceEntity::getInvoiceNo, doc.getInvoiceNo());
                 InputInvoiceEntity inv = inputInvoiceMapper.selectOne(iq);
                 if (inv != null) return buildInputInvoiceNode(inv);
             }
@@ -446,28 +389,19 @@ public class NumberingTraceServiceImpl implements NumberingTraceService {
         return null;
     }
     private NumberingTraceVO.TraceNode buildSettlementUpstream(String settlementNo) {
-        // 核销单 → 核销明细 → 应收单/应付单
+        // P34: 核销单 → 核销明细 → 业务单据（应收/应付已合并到业务单据）
         LambdaQueryWrapper<ArapSettlementEntity> q = new LambdaQueryWrapper<>();
         q.eq(ArapSettlementEntity::getSettlementNo, settlementNo);
         ArapSettlementEntity s = arapSettlementMapper.selectOne(q);
         if (s != null) {
-            // 通过 settlementId 找核销明细
             LambdaQueryWrapper<ArapSettlementEntryEntity> eq = new LambdaQueryWrapper<>();
             eq.eq(ArapSettlementEntryEntity::getSettlementId, s.getId());
             ArapSettlementEntryEntity entry = settlementEntryMapper.selectOne(eq);
-            if (entry != null) {
-                if (entry.getReceivableId() != null) {
-                    LambdaQueryWrapper<com.huicai.module.arap.entity.ReceivableEntity> rq = new LambdaQueryWrapper<>();
-                    rq.eq(com.huicai.module.arap.entity.ReceivableEntity::getId, entry.getReceivableId());
-                    com.huicai.module.arap.entity.ReceivableEntity rec = receivableMapper.selectOne(rq);
-                    if (rec != null) return buildReceivableNode(rec);
-                }
-                if (entry.getPayableId() != null) {
-                    LambdaQueryWrapper<PayableEntity> pq = new LambdaQueryWrapper<>();
-                    pq.eq(PayableEntity::getId, entry.getPayableId());
-                    PayableEntity pay = payableMapper.selectOne(pq);
-                    if (pay != null) return buildPayableNode(pay);
-                }
+            if (entry != null && entry.getBusinessDocId() != null) {
+                LambdaQueryWrapper<BusinessDocEntity> dq = new LambdaQueryWrapper<>();
+                dq.eq(BusinessDocEntity::getId, entry.getBusinessDocId());
+                BusinessDocEntity doc = businessDocMapper.selectOne(dq);
+                if (doc != null) return buildDocNode(doc);
             }
         }
         return null;

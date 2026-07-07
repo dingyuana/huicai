@@ -6,7 +6,8 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app.api import health, ocr, match, anomaly, embedding
+from app.api import health, ocr, match, anomaly, embedding, agent
+from app.core.agent import create_default_agents, RouterAgent
 from app.core.config import settings
 from app.core.logging import get_logger, setup_logging
 from app.workers.task_consumer import TaskConsumer
@@ -18,6 +19,9 @@ logger = get_logger(__name__)
 # 全局任务消费者
 _consumer: TaskConsumer | None = None
 
+# 全局 Agent 路由器
+_agent_router: RouterAgent | None = None
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -26,6 +30,10 @@ async def lifespan(app: FastAPI):
     logger.info(f"启动 {settings.service_name} on port {settings.service_port}")
     _consumer = TaskConsumer()
     consumer_task = asyncio.create_task(_consumer.start())
+    # 初始化 Agent 系统
+    global _agent_router
+    _agent_router = create_default_agents()
+    logger.info("Agent 编排层已就绪: {} Agent(s)", len(_agent_router.agents))
     try:
         yield
     finally:
@@ -73,6 +81,7 @@ app.include_router(ocr.router, prefix="/api/v1")
 app.include_router(match.router, prefix="/api/v1")
 app.include_router(anomaly.router, prefix="/api/v1")
 app.include_router(embedding.router, prefix="/api/v1")
+app.include_router(agent.router, prefix="/api/v1")
 
 
 if __name__ == "__main__":

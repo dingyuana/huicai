@@ -7,8 +7,8 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.huicai.common.exception.BusinessException;
 import com.huicai.module.arap.entity.CustomerEntity;
 import com.huicai.module.arap.mapper.CustomerMapper;
-import com.huicai.module.arap.mapper.ReceivableMapper;
 import com.huicai.module.arap.service.CustomerService;
+import com.huicai.module.finance.mapper.BusinessDocMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -20,7 +20,7 @@ import java.util.Map;
 public class CustomerServiceImpl implements CustomerService {
 
     private final CustomerMapper mapper;
-    private final ReceivableMapper receivableMapper;
+    private final BusinessDocMapper businessDocMapper;
 
     @Override
     public IPage<CustomerEntity> pageQuery(String keyword, Boolean isActive, Integer current, Integer size) {
@@ -96,7 +96,7 @@ public class CustomerServiceImpl implements CustomerService {
 
     @Override
     public List<Map<String, Object>> unsettledSummary() {
-        return receivableMapper.aggregateByCustomer();
+        return businessDocMapper.aggregateByCustomer();
     }
 
     private void validateCode(String code, Long excludeId) {

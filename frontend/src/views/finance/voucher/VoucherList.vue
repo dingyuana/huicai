@@ -70,6 +70,7 @@
             <el-button text size="small" v-if="row.status === 'AUDITED'" type="warning" @click="onPost(row)">记账</el-button>
             <el-button text size="small" v-if="row.status === 'POSTED'" type="warning" @click="onUnpost(row)">反过账</el-button>
             <el-button text size="small" v-if="row.status === 'POSTED' || row.status === 'AUDITED'" type="danger" @click="onReverse(row)">红冲</el-button>
+            <!-- <el-button text size="small" type="warning" @click="onAiCheck(row)">AI 检测</el-button> -->
             <el-popconfirm v-if="row.status === 'DRAFT'" title="确认删除此凭证？" @confirm="onDelete(row)">
               <template #reference>
                 <el-button text type="danger" size="small">删除</el-button>
@@ -229,6 +230,20 @@ async function onUnpost(row: VoucherVO) {
   await unpostVoucher(row.id)
   ElMessage.success('反过账成功')
   await fetchData()
+}
+
+async function onAiCheck(row: VoucherVO) {
+  try {
+    const { aiSubjectMapping } = await import('@/api/modules/tax')
+    const res: any = await aiSubjectMapping(row.summary || '', Number(row.totalDebit || 0))
+    if (res?.result?.best) {
+      ElMessage.success(`AI 检测: ${res.result.best.account_name} (${res.result.best.confidence})`)
+    } else {
+      ElMessage.info('AI 检测通过，未发现异常')
+    }
+  } catch {
+    ElMessage.error('AI 检测失败')
+  }
 }
 
 async function onBatchSubmit() {

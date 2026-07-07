@@ -74,14 +74,14 @@ export function preCheckReconciliation(data: {
 
 export function getReceiptRecommend(
   receiptId: number,
-  params: { customerId: number; amount: number; summary?: string; counterpartyName?: string }
+  params: { sourceDocType: string; customerId: number; amount: number; summary?: string; counterpartyName?: string }
 ): Promise<ReconciliationRecommendResult> {
   return request.post(`/reconciliation/receipt/${receiptId}/recommend`, null, { params })
 }
 
 export function getPaymentRecommend(
   paymentId: number,
-  params: { vendorId: number; amount: number; summary?: string; counterpartyName?: string }
+  params: { sourceDocType: string; vendorId: number; amount: number; summary?: string; counterpartyName?: string }
 ): Promise<ReconciliationRecommendResult> {
   return request.post(`/reconciliation/payment/${paymentId}/recommend`, null, { params })
 }

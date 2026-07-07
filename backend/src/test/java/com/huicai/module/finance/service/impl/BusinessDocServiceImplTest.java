@@ -3,8 +3,7 @@ package com.huicai.module.finance.service.impl;
 import com.huicai.common.exception.BusinessException;
 import com.huicai.module.arap.entity.VendorEntity;
 import com.huicai.module.arap.mapper.CustomerMapper;
-import com.huicai.module.arap.mapper.PayableMapper;
-import com.huicai.module.arap.mapper.ReceivableMapper;
+
 import com.huicai.module.arap.mapper.VendorMapper;
 import com.huicai.module.finance.dto.BusinessDocDTO;
 import com.huicai.module.finance.dto.BusinessDocVO;
@@ -41,8 +40,11 @@ import java.time.LocalDate;
 import java.util.Collections;
 import java.util.List;
 
+import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+
 import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 /**
@@ -67,8 +69,7 @@ class BusinessDocServiceImplTest {
     @Mock private CustomerMapper customerMapper;
     @Mock private VendorMapper vendorMapper;
     @Mock private UserMapper userMapper;
-    @Mock private ReceivableMapper receivableMapper;
-    @Mock private PayableMapper payableMapper;
+    
     @Mock private TemplateMatcher templateMatcher;
     @Mock private VoucherTemplateService voucherTemplateService;
 
@@ -96,9 +97,7 @@ class BusinessDocServiceImplTest {
         when(docEntryMapper.deleteByDocId(anyLong())).thenReturn(0);
         when(docEntryMapper.selectByDocId(anyLong())).thenReturn(Collections.emptyList());
 
-        // populateSettlementAmounts 路径 (P20 应收/应付状态机 + 业务闭环 P12)
-        when(receivableMapper.selectList(any())).thenReturn(Collections.emptyList());
-        when(payableMapper.selectList(any())).thenReturn(Collections.emptyList());
+        // P34: 应收/应付已合并到业务单据，不再需要单独查询
 
         // P26 P1-1 模板引擎：默认 templateMatcher.match 返回 null，走硬编码降级路径
         when(templateMatcher.match(any())).thenReturn(null);

@@ -79,10 +79,21 @@ public class BudgetServiceImpl implements BudgetService {
     }
 
     @Override
-    public BudgetEntity approve(Long id) {
+    public BudgetEntity submit(Long id) {
         BudgetEntity entity = getById(id);
         if (!"DRAFT".equals(entity.getStatus())) {
-            throw new BusinessException("仅草稿状态可审批");
+            throw new BusinessException("仅草稿状态可提交");
+        }
+        entity.setStatus("SUBMITTED");
+        budgetMapper.updateById(entity);
+        return entity;
+    }
+
+    @Override
+    public BudgetEntity approve(Long id) {
+        BudgetEntity entity = getById(id);
+        if (!"SUBMITTED".equals(entity.getStatus())) {
+            throw new BusinessException("仅已提交状态可审批");
         }
         entity.setStatus("APPROVED");
         entity.setApprovedAt(LocalDateTime.now());

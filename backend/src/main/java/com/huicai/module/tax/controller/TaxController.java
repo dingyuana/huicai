@@ -255,4 +255,16 @@ public class TaxController {
             @RequestParam(required = false) String approver) {
         return R.ok(service.rejectDeclaration(id, approver, reason));
     }
+
+    @Operation(summary = "批量合并生成凭证（多张销项发票→一张凭证）")
+    @PostMapping("/invoice/batch/generate-voucher")
+    public R<Map<String, Object>> batchGenerateVoucher(@RequestBody Map<String, Object> body) {
+        @SuppressWarnings("unchecked")
+        List<Integer> idsRaw = (List<Integer>) body.get("invoice_ids");
+        if (idsRaw == null || idsRaw.isEmpty()) return R.fail("invoice_ids 不能为空");
+        List<Long> invoiceIds = idsRaw.stream().map(Integer::longValue).collect(java.util.stream.Collectors.toList());
+        Boolean sameCustomer = (Boolean) body.getOrDefault("same_customer", true);
+        String voucherNo = service.batchGenerateVoucherFromInvoices(invoiceIds, SecurityUtils.getCurrentUserId(), sameCustomer);
+        return R.ok(java.util.Map.of("voucher_no", voucherNo));
+    }
 }

@@ -107,6 +107,7 @@ public class BusinessDocServiceImpl implements BusinessDocService {
         Page<BusinessDocEntity> page = new Page<>(q.getCurrent(), q.getSize());
         LambdaQueryWrapper<BusinessDocEntity> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(StrUtil.isNotBlank(q.getDocType()), BusinessDocEntity::getDocType, q.getDocType())
+                .in(q.getDocTypes() != null && !q.getDocTypes().isEmpty(), BusinessDocEntity::getDocType, q.getDocTypes())
                 .eq(StrUtil.isNotBlank(q.getStatus()), BusinessDocEntity::getStatus, q.getStatus())
                 .eq(StrUtil.isNotBlank(q.getPeriod()), BusinessDocEntity::getPeriod, q.getPeriod())
                 .and(StrUtil.isNotBlank(q.getKeyword()), w -> w

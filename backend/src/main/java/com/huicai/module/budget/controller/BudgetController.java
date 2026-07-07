@@ -45,6 +45,12 @@ public class BudgetController {
         return R.ok(service.create(request.budget, request.entries));
     }
 
+    @Operation(summary = "提交预算")
+    @PostMapping("/{id}/submit")
+    public R<BudgetEntity> submit(@PathVariable Long id) {
+        return R.ok(service.submit(id));
+    }
+
     @Operation(summary = "审批预算")
     @PostMapping("/{id}/approve")
     public R<BudgetEntity> approve(@PathVariable Long id) {

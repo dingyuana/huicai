@@ -34,6 +34,10 @@ export function createBudget(data: Budget): Promise<Budget> {
   return request.post('/budgets', data)
 }
 
+export function submitBudget(id: number): Promise<Budget> {
+  return request.post(`/budgets/${id}/submit`)
+}
+
 export function approveBudget(id: number): Promise<Budget> {
   return request.post(`/budgets/${id}/approve`)
 }

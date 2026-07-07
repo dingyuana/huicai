@@ -67,6 +67,7 @@ export interface BusinessDocDTO {
 
 export interface BusinessDocQuery {
   docType?: string
+  docTypes?: string[]
   status?: string
   period?: string
   keyword?: string

@@ -39,8 +39,8 @@ class BudgetServiceImplTest {
     }
 
     @Test
-    void approve_draft_becomes_approved() {
-        when(budgetMapper.selectById(1L)).thenReturn(stubBudget(1L, "DRAFT"));
+    void approve_submitted_becomes_approved() {
+        when(budgetMapper.selectById(1L)).thenReturn(stubBudget(1L, "SUBMITTED"));
         BudgetEntity r = service.approve(1L);
         assertEquals("APPROVED", r.getStatus());
         assertNotNull(r.getApprovedAt());
@@ -48,10 +48,10 @@ class BudgetServiceImplTest {
     }
 
     @Test
-    void approve_non_draft_throws() {
+    void approve_non_submitted_throws() {
         when(budgetMapper.selectById(1L)).thenReturn(stubBudget(1L, "APPROVED"));
         BusinessException ex = assertThrows(BusinessException.class, () -> service.approve(1L));
-        assertTrue(ex.getMessage().contains("仅草稿状态可审批"));
+        assertTrue(ex.getMessage().contains("仅已提交状态可审批"));
     }
 
     @Test

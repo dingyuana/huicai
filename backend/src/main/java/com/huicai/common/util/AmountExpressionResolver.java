@@ -1,6 +1,7 @@
 package com.huicai.common.util;
 
 import java.math.BigDecimal;
+import java.math.MathContext;
 import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.List;
@@ -10,11 +11,12 @@ import java.util.Map;
  * 金额表达式解析器.
  * <p>
  * 支持四则运算: + - * / ( )
- * 使用递归下降解析，不含外部依赖.
+ * 使用递归下降解析，内部全程 BigDecimal，不含外部依赖.
  */
 public final class AmountExpressionResolver {
 
     private static final String SAFE_PATTERN = "^[0-9+\\-*/().\\s]+$";
+    private static final MathContext MC = MathContext.DECIMAL128;
 
     private AmountExpressionResolver() {}
 
@@ -28,8 +30,7 @@ public final class AmountExpressionResolver {
             throw new IllegalArgumentException("不安全的表达式: " + expr);
         }
         try {
-            double result = new Parser(expr).parse();
-            return BigDecimal.valueOf(result).setScale(2, RoundingMode.HALF_UP);
+            return new Parser(expr).parse().setScale(2, RoundingMode.HALF_UP);
         } catch (Exception e) {
             throw new IllegalArgumentException("表达式计算失败: " + expr, e);
         }
@@ -51,7 +52,7 @@ public final class AmountExpressionResolver {
         return evaluate(expr);
     }
 
-    // ====== 递归下降解析器 ======
+    // ====== 递归下降解析器（全程 BigDecimal） ======
 
     private static class Parser {
         private final List<String> tokens;
@@ -62,43 +63,48 @@ public final class AmountExpressionResolver {
             this.pos = 0;
         }
 
-        double parse() {
-            double result = parseAddSub();
+        BigDecimal parse() {
+            BigDecimal result = parseAddSub();
             if (pos < tokens.size()) throw new IllegalArgumentException("多余token: " + tokens.get(pos));
             return result;
         }
 
         // + -
-        private double parseAddSub() {
-            double left = parseMulDiv();
+        private BigDecimal parseAddSub() {
+            BigDecimal left = parseMulDiv();
             while (pos < tokens.size()) {
                 String op = tokens.get(pos);
-                if ("+".equals(op)) { pos++; left += parseMulDiv(); }
-                else if ("-".equals(op)) { pos++; left -= parseMulDiv(); }
+                if ("+".equals(op)) { pos++; left = left.add(parseMulDiv(), MC); }
+                else if ("-".equals(op)) { pos++; left = left.subtract(parseMulDiv(), MC); }
                 else break;
             }
             return left;
         }
 
         // * /
-        private double parseMulDiv() {
-            double left = parseUnary();
+        private BigDecimal parseMulDiv() {
+            BigDecimal left = parseUnary();
             while (pos < tokens.size()) {
                 String op = tokens.get(pos);
-                if ("*".equals(op)) { pos++; left *= parseUnary(); }
-                else if ("/".equals(op)) { pos++; double right = parseUnary(); if (right == 0) throw new ArithmeticException("除零"); left /= right; }
+                if ("*".equals(op)) { pos++; left = left.multiply(parseUnary(), MC); }
+                else if ("/".equals(op)) {
+                    pos++;
+                    BigDecimal right = parseUnary();
+                    if (right.compareTo(BigDecimal.ZERO) == 0) throw new ArithmeticException("除零");
+                    left = left.divide(right, MC);
+                }
                 else break;
             }
             return left;
         }
 
         // 负号 + ( )
-        private double parseUnary() {
+        private BigDecimal parseUnary() {
             if (pos >= tokens.size()) throw new IllegalArgumentException("表达式不完整");
             String tok = tokens.get(pos);
             if ("-".equals(tok)) {
                 pos++;
-                return -parseUnary();
+                return parseUnary().negate();
             }
             if ("+".equals(tok)) {
                 pos++;
@@ -106,7 +112,7 @@ public final class AmountExpressionResolver {
             }
             if ("(".equals(tok)) {
                 pos++;
-                double val = parseAddSub();
+                BigDecimal val = parseAddSub();
                 if (pos >= tokens.size() || !")".equals(tokens.get(pos))) throw new IllegalArgumentException("缺右括号");
                 pos++;
                 return val;
@@ -114,9 +120,9 @@ public final class AmountExpressionResolver {
             return parseNumber();
         }
 
-        private double parseNumber() {
+        private BigDecimal parseNumber() {
             String tok = tokens.get(pos++);
-            return Double.parseDouble(tok);
+            return new BigDecimal(tok, MC);
         }
 
         private static List<String> tokenize(String expr) {

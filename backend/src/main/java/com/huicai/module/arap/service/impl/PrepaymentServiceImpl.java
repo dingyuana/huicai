@@ -8,12 +8,16 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.huicai.common.exception.BusinessException;
 import com.huicai.module.arap.constant.ArapStatus;
 import com.huicai.module.arap.entity.*;
-import com.huicai.module.arap.mapper.*;
+import com.huicai.module.arap.mapper.ArapSettlementEntryMapper;
+import com.huicai.module.arap.mapper.ArapSettlementMapper;
+import com.huicai.module.arap.mapper.PrepaymentMapper;
 import com.huicai.module.arap.service.ArapSettlementService;
 import com.huicai.module.arap.service.PrepaymentService;
 import com.huicai.module.finance.constant.VoucherType;
+import com.huicai.module.finance.entity.BusinessDocEntity;
 import com.huicai.module.finance.entity.VoucherEntity;
 import com.huicai.module.finance.entity.VoucherEntryEntity;
+import com.huicai.module.finance.mapper.BusinessDocMapper;
 import com.huicai.module.finance.mapper.VoucherEntryMapper;
 import com.huicai.module.finance.mapper.VoucherMapper;
 import com.huicai.module.finance.service.VoucherNoService;
@@ -47,8 +51,7 @@ public class PrepaymentServiceImpl implements PrepaymentService {
     private static final String SUBJECT_PREPAID_RECEIPT = "2203";
 
     private final PrepaymentMapper prepaymentMapper;
-    private final PayableMapper payableMapper;
-    private final ReceivableMapper receivableMapper;
+    private final BusinessDocMapper businessDocMapper;
     private final ArapSettlementService settlementService;
     private final ArapSettlementMapper settlementMapper;
     private final ArapSettlementEntryMapper settlementEntryMapper;
@@ -120,14 +123,14 @@ public class PrepaymentServiceImpl implements PrepaymentService {
             throw new BusinessException("预付款已全额核销, 无可抵扣余额");
         }
 
-        // 2. 校验应付单
-        PayableEntity payable = payableMapper.selectById(payableId);
+        // 2. 校验应付单（P34: 查询 BusinessDocEntity 替代 PayableEntity）
+        BusinessDocEntity payable = businessDocMapper.selectById(payableId);
         if (payable == null) {
             throw new BusinessException("应付单不存在: " + payableId);
         }
-        if (!prepay.getVendorId().equals(payable.getVendorId())) {
+        if (!prepay.getVendorId().equals(payable.getSupplierId())) {
             throw new BusinessException("预付款与应付单的供应商不一致: prepay.vendorId="
-                    + prepay.getVendorId() + ", payable.vendorId=" + payable.getVendorId());
+                    + prepay.getVendorId() + ", payable.supplierId=" + payable.getSupplierId());
         }
         if (payable.getUnsettledAmount().compareTo(BigDecimal.ZERO) <= 0) {
             throw new BusinessException("应付单已结清, 无可抵扣余额");
@@ -158,7 +161,7 @@ public class PrepaymentServiceImpl implements PrepaymentService {
         }
         prepaymentMapper.updateById(prepay);
 
-        // 5. 更新应付单
+        // 5. 更新应付单（P34: 更新 BusinessDocEntity 替代 PayableEntity）
         BigDecimal payNewSettled = payable.getSettledAmount().add(finalApply);
         payable.setSettledAmount(payNewSettled);
         payable.setUnsettledAmount(payable.getAmount().subtract(payNewSettled));
@@ -166,7 +169,7 @@ public class PrepaymentServiceImpl implements PrepaymentService {
                 && ArapStatus.isConfirmed(payable.getStatus())) {
             payable.setStatus(ArapStatus.SETTLED);
         }
-        payableMapper.updateById(payable);
+        businessDocMapper.updateById(payable);
 
         // 6. 创建核销单 (ArapSettlement)
         String effectivePeriod = period != null ? period
@@ -261,7 +264,8 @@ public class PrepaymentServiceImpl implements PrepaymentService {
             throw new BusinessException("预收款已全额核销, 无可抵扣余额");
         }
 
-        ReceivableEntity receivable = receivableMapper.selectById(receivableId);
+        // P34: 查询 BusinessDocEntity 替代 ReceivableEntity
+        BusinessDocEntity receivable = businessDocMapper.selectById(receivableId);
         if (receivable == null) {
             throw new BusinessException("应收单不存在: " + receivableId);
         }
@@ -296,6 +300,7 @@ public class PrepaymentServiceImpl implements PrepaymentService {
         }
         prepaymentMapper.updateById(prepay);
 
+        // P34: 更新 BusinessDocEntity 替代 ReceivableEntity
         BigDecimal recNewSettled = receivable.getSettledAmount().add(finalApply);
         receivable.setSettledAmount(recNewSettled);
         receivable.setUnsettledAmount(receivable.getAmount().subtract(recNewSettled));
@@ -303,7 +308,7 @@ public class PrepaymentServiceImpl implements PrepaymentService {
                 && ArapStatus.isConfirmed(receivable.getStatus())) {
             receivable.setStatus(ArapStatus.SETTLED);
         }
-        receivableMapper.updateById(receivable);
+        businessDocMapper.updateById(receivable);
 
         String effectivePeriod = period != null ? period
                 : LocalDate.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyyMM"));

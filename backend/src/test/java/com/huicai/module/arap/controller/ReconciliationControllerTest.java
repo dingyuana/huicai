@@ -52,11 +52,12 @@ class ReconciliationControllerTest {
     @DisplayName("收款核销推荐_参数正确绑定_Service被调用")
     void recommendReceipt_paramsBound_serviceCalled() throws Exception {
         // given
-        when(reconciliationService.recommendReceipt(anyLong(), anyLong(), any(), any(), any()))
+        when(reconciliationService.recommendReceipt(anyLong(), anyString(), anyLong(), any(), any(), any()))
                 .thenReturn(null);
 
         // when & then
         mvc.perform(post("/api/v1/reconciliation/receipt/1/recommend")
+                        .param("sourceDocType", "RECEIPT")
                         .param("customerId", "10")
                         .param("amount", "500.00")
                         .param("summary", "客户回款")
@@ -64,25 +65,24 @@ class ReconciliationControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(200));
 
-        verify(reconciliationService).recommendReceipt(eq(1L), eq(10L), eq(new BigDecimal("500.00")), eq("客户回款"), isNull());
+        verify(reconciliationService).recommendReceipt(eq(1L), eq("RECEIPT"), eq(10L), eq(new BigDecimal("500.00")), eq("客户回款"), isNull());
     }
 
     @Test
     @DisplayName("付款核销推荐_BigDecimal参数正确解析")
     void recommendPayment_decimalParamParsedCorrectly() throws Exception {
         // given
-        when(reconciliationService.recommendPayment(anyLong(), anyLong(), any(), any(), any()))
+        when(reconciliationService.recommendPayment(anyLong(), anyString(), anyLong(), any(), any(), any()))
                 .thenReturn(null);
 
-        // when & then
         mvc.perform(post("/api/v1/reconciliation/payment/1/recommend")
+                        .param("sourceDocType", "PAYMENT")
                         .param("vendorId", "20")
                         .param("amount", "1234.56")
                         .contentType(MediaType.APPLICATION_FORM_URLENCODED))
                 .andExpect(status().isOk());
 
-        // 验证参数正确解析为 BigDecimal
-        verify(reconciliationService).recommendPayment(eq(1L), eq(20L), eq(new BigDecimal("1234.56")), isNull(), isNull());
+        verify(reconciliationService).recommendPayment(eq(1L), eq("PAYMENT"), eq(20L), eq(new BigDecimal("1234.56")), isNull(), isNull());
     }
 
     // 注意：缺少参数返回 400 是 Spring MVC 框架层面的行为

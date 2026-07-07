@@ -3,10 +3,6 @@ package com.huicai.common.test;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.huicai.common.exception.BusinessException;
 import com.huicai.module.arap.constant.ArapStatus;
-import com.huicai.module.arap.entity.PayableEntity;
-import com.huicai.module.arap.entity.ReceivableEntity;
-import com.huicai.module.arap.mapper.PayableMapper;
-import com.huicai.module.arap.mapper.ReceivableMapper;
 import com.huicai.module.finance.entity.BusinessDocEntity;
 import com.huicai.module.finance.entity.BusinessDocEntryEntity;
 import com.huicai.module.finance.entity.VoucherEntity;
@@ -106,24 +102,6 @@ public final class StateMachineTestHelper {
     }
 
     /**
-     * 验证未创建任何应收单.
-     */
-    public static void verifyNoReceivableCreated(ReceivableMapper receivableMapper) {
-        if (receivableMapper != null) {
-            verify(receivableMapper, never()).insert(any(ReceivableEntity.class));
-        }
-    }
-
-    /**
-     * 验证未创建任何应付单.
-     */
-    public static void verifyNoPayableCreated(PayableMapper payableMapper) {
-        if (payableMapper != null) {
-            verify(payableMapper, never()).insert(any(PayableEntity.class));
-        }
-    }
-
-    /**
      * 验证未对任何指定 Mapper 执行 insert.
      * <p>通用兜底：当一个状态机方法不应有创建任何资源的副作用时，传入选中的 mapper.
      */
@@ -161,20 +139,11 @@ public final class StateMachineTestHelper {
         return e;
     }
 
-    public static ReceivableEntity createReceivable(Long id, String status) {
-        ReceivableEntity e = new ReceivableEntity();
+    public static BusinessDocEntity createBusinessDoc(Long id, String status, String docType) {
+        BusinessDocEntity e = new BusinessDocEntity();
         e.setId(id);
         e.setStatus(status);
-        e.setAmount(new BigDecimal("1000.00"));
-        e.setSettledAmount(BigDecimal.ZERO);
-        e.setUnsettledAmount(new BigDecimal("1000.00"));
-        return e;
-    }
-
-    public static PayableEntity createPayable(Long id, String status) {
-        PayableEntity e = new PayableEntity();
-        e.setId(id);
-        e.setStatus(status);
+        e.setDocType(docType);
         e.setAmount(new BigDecimal("1000.00"));
         e.setSettledAmount(BigDecimal.ZERO);
         e.setUnsettledAmount(new BigDecimal("1000.00"));

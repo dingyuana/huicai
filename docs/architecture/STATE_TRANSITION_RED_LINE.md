@@ -1,6 +1,7 @@
 # 财务系统状态转换红线规范
 
-**版本**: v1.0  
+> **编号**：HUICAI-ARC-003
+> **版本**：v1.0 | **修改日期**：2026-07-07 | **修改人**：Hermes | **修改内容**：添加编号头部  
 **最后更新**: 2026-06-27  
 **适用范围**: 慧财财务系统所有业务模块  
 
@@ -146,8 +147,7 @@ public void confirm(Long id, Long userId) {
 | 模块 | 实体 | 字段 | Service 方法 | 完成状态 |
 |------|------|------|-------------|----------|
 | 凭证管理 | `VoucherEntity` | `auditedBy/auditedAt` | `audit()/batchAudit()/reject()` | ✅ 已完成（原有逻辑） |
-| 应收管理 | `ReceivableEntity` | `auditedBy/auditedAt` | `confirm()` | ✅ 已完成（2026-06-27） |
-| 应付管理 | `PayableEntity` | `auditedBy/auditedAt` | `confirm()` | ✅ 已完成（2026-06-27） |
+| 业务单据 | `BusinessDocEntity` | `auditedBy/auditedAt` | `confirm()/reject()` | ✅ 已完成（2026-06-27） |
 | 销售发票 | `OutputInvoiceEntity` | `auditedBy/auditedAt` | `confirm()/reject()` | ✅ 已完成（2026-06-27） |
 | 银行流水 | `BankStatementEntity` | `reviewedBy/reviewedAt` | `review()/audit()` | ✅ 已完成（2026-06-27） |
 
@@ -168,9 +168,12 @@ public void confirm(Long id, Long userId) {
 ### 已执行 Migration
 
 - **V63__add_audit_fields_to_core_tables.sql**
-  - 影响表：`t_receivable`、`t_payable`、`t_output_invoice`、`t_input_invoice`
+  - 影响表：`t_business_doc`、`t_output_invoice`、`t_input_invoice`
   - 新增字段：`audited_by`、`audited_at`
-  - 执行状态：待发布后执行
+  - 执行状态：已执行
+- **V74__drop_receivable_payable_tables.sql**
+  - 影响表：`t_receivable`、`t_payable`（已删除）
+  - 执行状态：已执行
 
 ### 历史数据处理
 
@@ -214,7 +217,7 @@ void confirm_shouldSetAuditFields() {
 
 | 字段 | 说明 |
 |------|------|
-| `entity_type` | 实体类型（如：VOUCHER、RECEIVABLE） |
+| `entity_type` | 实体类型（如：VOUCHER、BUSINESS_DOC） |
 | `entity_id` | 实体ID |
 | `operator_id` | 操作人ID |
 | `operation` | 操作类型（CREATE/UPDATE/AUDIT/REJECT） |
@@ -243,6 +246,7 @@ PR 合并前，Reviewer 必须确认：
 | 版本 | 日期 | 修改人 | 修改内容 |
 |------|------|--------|---------|
 | v1.0 | 2026-06-27 | Hermes | 初始版本，完成 P0 核心模块规范 |
+| v1.1 | 2026-07-07 | Hermes | **P34 更新**：移除 Receivable/Payable 实体，替换为 BusinessDoc |
 
 ---
 

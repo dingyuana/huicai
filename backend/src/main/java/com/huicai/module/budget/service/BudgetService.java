@@ -13,6 +13,7 @@ public interface BudgetService {
     IPage<BudgetEntity> pageQuery(String period, String status, Integer current, Integer size);
     BudgetEntity getById(Long id);
     BudgetEntity create(BudgetEntity entity, List<BudgetEntryEntity> entries);
+    BudgetEntity submit(Long id);
     BudgetEntity approve(Long id);
     BudgetEntity activate(Long id);
     Map<String, Object> checkBudget(Long subjectId, String period, BigDecimal amount);

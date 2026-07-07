@@ -7,9 +7,9 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.huicai.common.exception.BusinessException;
 import com.huicai.module.arap.constant.ArapStatus;
 import com.huicai.module.arap.entity.BadDebtProvisionEntity;
-import com.huicai.module.arap.entity.ReceivableEntity;
 import com.huicai.module.arap.mapper.BadDebtProvisionMapper;
-import com.huicai.module.arap.mapper.ReceivableMapper;
+import com.huicai.module.finance.entity.BusinessDocEntity;
+import com.huicai.module.finance.mapper.BusinessDocMapper;
 import com.huicai.module.arap.service.BadDebtService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -26,7 +26,7 @@ import java.util.Map;
 public class BadDebtServiceImpl implements BadDebtService {
 
     private final BadDebtProvisionMapper mapper;
-    private final ReceivableMapper receivableMapper;
+    private final BusinessDocMapper businessDocMapper;
 
     @Override
     public IPage<BadDebtProvisionEntity> pageQuery(String status, Integer current, Integer size) {
@@ -54,15 +54,16 @@ public class BadDebtServiceImpl implements BadDebtService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public BadDebtProvisionEntity provisionByAging(String period, Map<String, BigDecimal> ratios) {
-        // 加载所有应收未核销明细
-        List<ReceivableEntity> receivables = receivableMapper.selectList(
-                new LambdaQueryWrapper<ReceivableEntity>()
-                        .eq(ReceivableEntity::getPeriod, period)
-                        .gt(ReceivableEntity::getUnsettledAmount, BigDecimal.ZERO)
+        // P34: 加载所有销售发票类业务单据未核销明细
+        List<BusinessDocEntity> docs = businessDocMapper.selectList(
+                new LambdaQueryWrapper<BusinessDocEntity>()
+                        .eq(BusinessDocEntity::getPeriod, period)
+                        .eq(BusinessDocEntity::getDocType, "INVOICE_OUT")
+                        .gt(BusinessDocEntity::getUnsettledAmount, BigDecimal.ZERO)
         );
         BigDecimal total = BigDecimal.ZERO;
         LocalDate today = LocalDate.now();
-        for (ReceivableEntity r : receivables) {
+        for (BusinessDocEntity r : docs) {
             String bucket = computeAgingBucket(today, r.getDueDate());
             BigDecimal ratio = ratios.getOrDefault(bucket, BigDecimal.ZERO);
             if (ratio.compareTo(BigDecimal.ZERO) > 0) {
@@ -85,13 +86,15 @@ public class BadDebtServiceImpl implements BadDebtService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public BadDebtProvisionEntity provisionByPercentage(String period, BigDecimal ratio) {
-        List<ReceivableEntity> receivables = receivableMapper.selectList(
-                new LambdaQueryWrapper<ReceivableEntity>()
-                        .eq(ReceivableEntity::getPeriod, period)
-                        .gt(ReceivableEntity::getUnsettledAmount, BigDecimal.ZERO)
+        // P34: 加载所有销售发票类业务单据未核销明细
+        List<BusinessDocEntity> docs = businessDocMapper.selectList(
+                new LambdaQueryWrapper<BusinessDocEntity>()
+                        .eq(BusinessDocEntity::getPeriod, period)
+                        .eq(BusinessDocEntity::getDocType, "INVOICE_OUT")
+                        .gt(BusinessDocEntity::getUnsettledAmount, BigDecimal.ZERO)
         );
-        BigDecimal totalUnsettled = receivables.stream()
-                .map(ReceivableEntity::getUnsettledAmount)
+        BigDecimal totalUnsettled = docs.stream()
+                .map(BusinessDocEntity::getUnsettledAmount)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
         BigDecimal provision = totalUnsettled.multiply(ratio)
                 .setScale(2, RoundingMode.HALF_UP);

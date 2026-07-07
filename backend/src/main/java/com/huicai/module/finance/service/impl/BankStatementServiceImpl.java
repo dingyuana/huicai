@@ -5,11 +5,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.huicai.common.exception.BusinessException;
-import com.huicai.module.arap.entity.PayableEntity;
-import com.huicai.module.arap.entity.ReceivableEntity;
 import com.huicai.module.arap.mapper.CustomerMapper;
-import com.huicai.module.arap.mapper.PayableMapper;
-import com.huicai.module.arap.mapper.ReceivableMapper;
 import com.huicai.module.arap.mapper.VendorMapper;
 import com.huicai.module.arap.service.ReconciliationService;
 import com.huicai.module.finance.constant.BankClassification;
@@ -66,8 +62,6 @@ public class BankStatementServiceImpl implements BankStatementService {
     private final BusinessDocMapper businessDocMapper;
     private final CustomerMapper customerMapper;
     private final VendorMapper vendorMapper;
-    private final ReceivableMapper receivableMapper;
-    private final PayableMapper payableMapper;
 
     /**
      * 分页查询对账单.

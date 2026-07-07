@@ -285,6 +285,19 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/arap/reconciliation-exception/ReconciliationExceptionList.vue'),
         meta: { title: '核销异常池', permission: 'arap:reconciliation:exception', keepAlive: true },
       },
+      // 费用报销
+      {
+        path: 'arap/expense',
+        name: 'ExpenseList',
+        component: () => import('@/views/arap/ExpenseList.vue'),
+        meta: { title: '费用报销单', permission: 'arap:expense:list', keepAlive: true },
+      },
+      {
+        path: 'arap/expense/edit',
+        name: 'ExpenseEdit',
+        component: () => import('@/views/arap/ExpenseEdit.vue'),
+        meta: { title: '编辑报销单', permission: 'arap:expense:create' },
+      },
       // 税务管理
       {
         path: 'tax/input-invoice',
@@ -316,6 +329,12 @@ const routes: RouteRecordRaw[] = [
         name: 'BudgetEdit',
         component: () => import('@/views/budget/BudgetEdit.vue'),
         meta: { title: '编辑预算', permission: 'budget:create' },
+      },
+      {
+        path: 'budget/adjustment',
+        name: 'AdjustmentList',
+        component: () => import('@/views/budget/AdjustmentList.vue'),
+        meta: { title: '预算调整', permission: 'budget:adjustment' },
       },
       // 报表
       {

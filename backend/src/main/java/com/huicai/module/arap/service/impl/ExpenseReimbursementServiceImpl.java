@@ -96,7 +96,7 @@ public class ExpenseReimbursementServiceImpl implements ExpenseReimbursementServ
     }
 
     @Override
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public ExpenseReimbursementVO createDraft(ExpenseReimbursementEntity entity) {
         if (entity.getEmployeeId() == null) throw new BusinessException("员工ID不能为空");
         if (StrUtil.isBlank(entity.getExpenseType())) throw new BusinessException("费用类型不能为空");
@@ -110,7 +110,7 @@ public class ExpenseReimbursementServiceImpl implements ExpenseReimbursementServ
     }
 
     @Override
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public ExpenseReimbursementVO updateDraft(ExpenseReimbursementEntity entity) {
         ExpenseReimbursementEntity existing = mapper.selectById(entity.getId());
         if (existing == null) throw new BusinessException("报销单不存在: " + entity.getId());
@@ -126,7 +126,7 @@ public class ExpenseReimbursementServiceImpl implements ExpenseReimbursementServ
     }
 
     @Override
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public ExpenseReimbursementVO submit(Long id) {
         ExpenseReimbursementEntity e = mapper.selectById(id);
         if (e == null) throw new BusinessException("报销单不存在: " + id);
@@ -140,7 +140,7 @@ public class ExpenseReimbursementServiceImpl implements ExpenseReimbursementServ
     }
 
     @Override
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public ExpenseReimbursementVO approve(Long id, String approver) {
         ExpenseReimbursementEntity e = mapper.selectById(id);
         if (e == null) throw new BusinessException("报销单不存在: " + id);
@@ -163,7 +163,7 @@ public class ExpenseReimbursementServiceImpl implements ExpenseReimbursementServ
     }
 
     @Override
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public ExpenseReimbursementVO reject(Long id, String approver, String reason) {
         ExpenseReimbursementEntity e = mapper.selectById(id);
         if (e == null) throw new BusinessException("报销单不存在: " + id);
@@ -180,7 +180,7 @@ public class ExpenseReimbursementServiceImpl implements ExpenseReimbursementServ
     }
 
     @Override
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public ExpenseReimbursementVO generateVoucher(Long id, Long voucherId) {
         ExpenseReimbursementEntity e = mapper.selectById(id);
         if (e == null) throw new BusinessException("报销单不存在: " + id);
@@ -194,7 +194,7 @@ public class ExpenseReimbursementServiceImpl implements ExpenseReimbursementServ
     }
 
     @Override
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public ExpenseReimbursementVO generateVoucherForApproved(Long id) {
         ExpenseReimbursementEntity e = mapper.selectById(id);
         if (e == null) throw new BusinessException("报销单不存在: " + id);
@@ -250,7 +250,7 @@ public class ExpenseReimbursementServiceImpl implements ExpenseReimbursementServ
     }
 
     @Override
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public ExpenseReimbursementVO autoCreateForBankStmt(Long bankStmtId, Long employeeId, BigDecimal amount, String summary) {
         ExpenseReimbursementEntity existing = findByBankStmtId(bankStmtId);
         if (existing != null) return getById(existing.getId());

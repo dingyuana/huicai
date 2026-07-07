@@ -1,7 +1,5 @@
 package com.huicai.suite;
 
-import com.huicai.module.arap.mapper.PayableMapperTest;
-import com.huicai.module.arap.mapper.ReceivableMapperTest;
 import com.huicai.module.system.mapper.SubjectMapperTest;
 import com.huicai.module.tax.mapper.OutputInvoiceMapperTest;
 import com.huicai.module.finance.mapper.VoucherMapperTest;
@@ -30,8 +28,6 @@ import org.junit.platform.suite.api.SuiteDisplayName;
 @SuiteDisplayName("Mapper 真实 DB 测试套件")
 @SelectClasses({
         SubjectMapperTest.class,
-        ReceivableMapperTest.class,
-        PayableMapperTest.class,
         OutputInvoiceMapperTest.class,
         VoucherMapperTest.class,
         // TODO: 新增 Mapper 测试后添加到这里

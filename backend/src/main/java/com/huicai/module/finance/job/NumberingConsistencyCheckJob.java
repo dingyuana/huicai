@@ -2,10 +2,7 @@ package com.huicai.module.finance.job;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.huicai.module.arap.entity.ArapSettlementEntity;
-import com.huicai.module.arap.entity.PayableEntity;
 import com.huicai.module.arap.mapper.ArapSettlementMapper;
-import com.huicai.module.arap.mapper.PayableMapper;
-import com.huicai.module.arap.mapper.ReceivableMapper;
 import com.huicai.module.finance.entity.BusinessDocEntity;
 import com.huicai.module.finance.entity.VoucherEntity;
 import com.huicai.module.finance.mapper.BusinessDocMapper;
@@ -36,8 +33,6 @@ import java.util.Map;
 public class NumberingConsistencyCheckJob {
 
     private final InputInvoiceMapper inputInvoiceMapper;
-    private final ReceivableMapper receivableMapper;
-    private final PayableMapper payableMapper;
     private final BusinessDocMapper businessDocMapper;
     private final ArapSettlementMapper arapSettlementMapper;
     private final VoucherMapper voucherMapper;
@@ -57,15 +52,7 @@ public class NumberingConsistencyCheckJob {
             issues.putAll(checkInputInvoices());
             totalChecked += 1000; // 预估
 
-            // 2. 检查应收单
-            issues.putAll(checkReceivables());
-            totalChecked += 1000;
-
-            // 3. 检查应付单
-            issues.putAll(checkPayables());
-            totalChecked += 1000;
-
-            // 4. 检查业务单据
+            // 2. 检查业务单据
             issues.putAll(checkBusinessDocs());
             totalChecked += 1000;
 
@@ -109,37 +96,6 @@ public class NumberingConsistencyCheckJob {
           .and(w -> w.isNull(InputInvoiceEntity::getDocNo).or().eq(InputInvoiceEntity::getDocNo, ""));
         long count2 = inputInvoiceMapper.selectCount(q2);
         if (count2 > 0) issues.put("进项发票: docId 非空但 docNo 为空", (int) count2);
-
-        return issues;
-    }
-
-    /**
-     * 检查应收单
-     */
-    private Map<String, Integer> checkReceivables() {
-        Map<String, Integer> issues = new HashMap<>();
-
-        LambdaQueryWrapper<com.huicai.module.arap.entity.ReceivableEntity> q = new LambdaQueryWrapper<>();
-        q.isNotNull(com.huicai.module.arap.entity.ReceivableEntity::getVoucherId)
-          .and(w -> w.isNull(com.huicai.module.arap.entity.ReceivableEntity::getVoucherNo).or()
-                     .eq(com.huicai.module.arap.entity.ReceivableEntity::getVoucherNo, ""));
-        long count = receivableMapper.selectCount(q);
-        if (count > 0) issues.put("应收单: voucherId 非空但 voucherNo 为空", (int) count);
-
-        return issues;
-    }
-
-    /**
-     * 检查应付单
-     */
-    private Map<String, Integer> checkPayables() {
-        Map<String, Integer> issues = new HashMap<>();
-
-        LambdaQueryWrapper<PayableEntity> q = new LambdaQueryWrapper<>();
-        q.isNotNull(PayableEntity::getVoucherId)
-          .and(w -> w.isNull(PayableEntity::getVoucherNo).or().eq(PayableEntity::getVoucherNo, ""));
-        long count = payableMapper.selectCount(q);
-        if (count > 0) issues.put("应付单: voucherId 非空但 voucherNo 为空", (int) count);
 
         return issues;
     }

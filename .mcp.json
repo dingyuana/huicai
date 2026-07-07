@@ -1,0 +1,17 @@
+{
+  "mcpServers": {
+    "project-git": {
+      "command": "/root/.hermes/hermes-agent/venv/bin/python",
+      "args": ["-m", "mcp_server_git", "--repository", "/data/disk/huicai"],
+      "timeout": 30
+    },
+    "project-github": {
+      "command": "/root/.hermes/hermes-agent/venv/bin/python",
+      "args": ["-m", "mcp_server_github"],
+      "env": {
+        "GITHUB_TOKEN": "${GITHUB_TOKEN:-}"
+      },
+      "timeout": 30
+    }
+  }
+}

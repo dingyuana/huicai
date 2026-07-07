@@ -55,17 +55,4 @@ public class ClearDataController {
         return R.ok(Map.of("deleted", count, "message", "已清空所有业务单据及明细行"));
     }
 
-    @Operation(summary = "清空应收明细")
-    @PostMapping("/clear-receivables")
-    public R<Map<String, Object>> clearReceivables() {
-        int count = clearDataService.clearReceivables();
-        return R.ok(Map.of("deleted", count, "message", "已清空应收明细"));
     }
-
-    @Operation(summary = "清空应付明细")
-    @PostMapping("/clear-payables")
-    public R<Map<String, Object>> clearPayables() {
-        int count = clearDataService.clearPayables();
-        return R.ok(Map.of("deleted", count, "message", "已清空应付明细"));
-    }
-}

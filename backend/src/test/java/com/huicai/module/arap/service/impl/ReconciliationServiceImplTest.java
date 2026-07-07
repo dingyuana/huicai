@@ -93,7 +93,7 @@ class ReconciliationServiceImplTest {
 
     @Test
     void recommendReceipt_无客户ID_返回空items() {
-        RecommendResult r = service.recommendReceipt(1L, null, new BigDecimal("100"), "测试", "客户A");
+        RecommendResult r = service.recommendReceipt(1L, "RECEIPT", null, new BigDecimal("100"), "测试", "客户A");
         assertTrue(r.items().isEmpty());
         verifyNoInteractions(businessDocMapper);
     }
@@ -105,19 +105,17 @@ class ReconciliationServiceImplTest {
         when(businessDocMapper.selectList(any())).thenReturn(List.of(
                 stubBusinessDoc(100L, 1L, null, "INVOICE_OUT", new BigDecimal("500"), new BigDecimal("500"))
         ));
-        RecommendResult r = service.recommendReceipt(1L, 1L, new BigDecimal("500"), "摘要", "客户A");
+        RecommendResult r = service.recommendReceipt(1L, "RECEIPT", 1L, new BigDecimal("500"), "摘要", "客户A");
         assertEquals(1, r.items().size());
-        // L3(金额+日期) 优先于 L4(金额精确) — 但 stubBusinessDoc txDate 是 6-10, 源无日期, 走 L4
         assertTrue(r.items().get(0).matchLevel().equals("L3") || r.items().get(0).matchLevel().equals("L4"));
     }
 
     @Test
     void recommendReceipt_2张应收_按L级别排序() {
-        // 第 1 张 L4（金额精确无 externalNo），第 2 张 L5（容差）
         BusinessDocEntity r4 = stubBusinessDoc(1L, 1L, null, "INVOICE_OUT", new BigDecimal("100"), new BigDecimal("100"));
         BusinessDocEntity r5 = stubBusinessDoc(2L, 1L, null, "INVOICE_OUT", new BigDecimal("100"), new BigDecimal("95"));
         when(businessDocMapper.selectList(any())).thenReturn(List.of(r5, r4));
-        RecommendResult r = service.recommendReceipt(1L, 1L, new BigDecimal("100"), "摘要", "客户A");
+        RecommendResult r = service.recommendReceipt(1L, "RECEIPT", 1L, new BigDecimal("100"), "摘要", "客户A");
         assertEquals(2, r.items().size());
         assertEquals("L4", r.items().get(0).matchLevel());
         assertEquals("L5", r.items().get(1).matchLevel());
@@ -127,7 +125,7 @@ class ReconciliationServiceImplTest {
 
     @Test
     void recommendPayment_无供应商ID_返回空items() {
-        RecommendResult r = service.recommendPayment(1L, null, new BigDecimal("100"), "测试", "供应商A");
+        RecommendResult r = service.recommendPayment(1L, "PAYMENT", null, new BigDecimal("100"), "测试", "供应商A");
         assertTrue(r.items().isEmpty());
     }
 
@@ -136,7 +134,7 @@ class ReconciliationServiceImplTest {
         when(businessDocMapper.selectList(any())).thenReturn(List.of(
                 stubBusinessDoc(1L, null, 1L, "INVOICE_IN", new BigDecimal("100"), BigDecimal.ZERO)
         ));
-        RecommendResult r = service.recommendPayment(1L, 1L, new BigDecimal("100"), "摘要", "供应商A");
+        RecommendResult r = service.recommendPayment(1L, "PAYMENT", 1L, new BigDecimal("100"), "摘要", "供应商A");
         assertTrue(r.items().isEmpty());
     }
 

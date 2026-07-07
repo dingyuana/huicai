@@ -49,4 +49,9 @@ public interface TaxService {
 
     /** P1: 申报审批通过后自动生成缴税凭证 (APPROVED → voucher created) */
     void generateVoucherFromDeclaration(Long declarationId, Long userId);
+
+    /**
+     * 批量生成凭证（多张发票合并生成一张凭证）
+     */
+    String batchGenerateVoucherFromInvoices(List<Long> invoiceIds, Long userId, Boolean sameCustomer);
 }

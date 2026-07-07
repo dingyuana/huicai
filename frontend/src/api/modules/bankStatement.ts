@@ -3,7 +3,7 @@ import type { PageResult } from '@/types/api'
 
 export interface BankStatementVO {
   id: number
-  accountId: number
+  accountId: string
   txDate: string
   txType: string
   counterAccount?: string
@@ -68,24 +68,24 @@ export const REVIEW_STATUS_LABELS: Record<string, string> = {
   approved: '已过账',
 }
 
-export function getBankStatementPage(params: { accountId?: number; status?: string; classification?: string; reviewStatus?: string; current?: number; size?: number }): Promise<PageResult<BankStatementVO>> {
+export function getBankStatementPage(params: { accountId?: string; status?: string; classification?: string; reviewStatus?: string; current?: number; size?: number }): Promise<PageResult<BankStatementVO>> {
   return request.get('/bank-statements/page', { params })
 }
-export function getClassificationCounts(accountId: number, reviewStatus?: string): Promise<Record<string, number>> {
+export function getClassificationCounts(accountId: string, reviewStatus?: string): Promise<Record<string, number>> {
   return request.get('/bank-statements/classification-counts', { params: { accountId, reviewStatus } })
 }
 export function getBankStatementDetail(id: number): Promise<BankStatementVO> {
   return request.get(`/bank-statements/${id}`)
 }
-export function importStatementCsv(accountId: number, csvContent: string): Promise<number> {
+export function importStatementCsv(accountId: string, csvContent: string): Promise<number> {
   return request.post('/bank-statements/import-csv', csvContent, { params: { accountId }, headers: { 'Content-Type': 'text/plain' } })
 }
-export function importStatementExcel(accountId: number, file: File): Promise<{ total: number; success: number; classified: number; errors: Array<{ row: number; message: string }>; batchId: string }> {
+export function importStatementExcel(accountId: string, file: File): Promise<{ total: number; success: number; classified: number; errors: Array<{ row: number; message: string }>; batchId: string }> {
   const formData = new FormData()
   formData.append('file', file)
   return request.post('/bank-statements/import-excel', formData, { params: { accountId }, headers: { 'Content-Type': 'multipart/form-data' } })
 }
-export function previewStatementExcel(accountId: number, file: File): Promise<{
+export function previewStatementExcel(accountId: string, file: File): Promise<{
   total: number; valid: number; errors: any[]; batchId: string; previews: any[]; headers?: string[]
 }> {
   const formData = new FormData()
@@ -94,7 +94,7 @@ export function previewStatementExcel(accountId: number, file: File): Promise<{
 }
 
 /** 带自定义列映射的 Excel 预览 */
-export function previewStatementExcelWithMapping(accountId: number, file: File, columnMapping: Record<string, string>): Promise<{
+export function previewStatementExcelWithMapping(accountId: string, file: File, columnMapping: Record<string, string>): Promise<{
   total: number; valid: number; errors: any[]; batchId: string; previews: any[]; headers?: string[]
 }> {
   const formData = new FormData()
@@ -135,7 +135,7 @@ export function batchAuditStatements(ids: number[]): Promise<number> {
 export function approveStatement(id: number): Promise<void> {
   return request.post(`/bank-statements/${id}/approve`)
 }
-export function autoMatchStatements(accountId: number): Promise<MatchSuggestion[]> {
+export function autoMatchStatements(accountId: string): Promise<MatchSuggestion[]> {
   return request.get('/bank-statements/auto-match', { params: { accountId } })
 }
 export function confirmStatementMatch(statementId: number, journalId: number): Promise<number> {
