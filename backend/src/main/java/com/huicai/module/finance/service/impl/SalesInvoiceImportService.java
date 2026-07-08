@@ -440,6 +440,9 @@ public class SalesInvoiceImportService {
         doc.setSource("INVOICE_IMPORT");
         doc.setInvoiceNo(row.invoiceNo);
         doc.setCreatedBy(DEFAULT_USER_ID);
+        // 新导入应收单未核销金额 = 总金额（P34 核销工作台筛选条件）
+        doc.setSettledAmount(BigDecimal.ZERO);
+        doc.setUnsettledAmount(row.totalAmount);
         docMapper.insert(doc);
 
         // P31: 创建业务单分录（供 generateVoucher 使用），带入发票号

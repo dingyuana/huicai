@@ -188,6 +188,13 @@ public class BusinessDocServiceImpl implements BusinessDocService {
         if (StrUtil.isBlank(entity.getSource())) {
             entity.setSource("MANUAL");
         }
+        // 新单据未核销金额 = 总金额（P34 核销工作台筛选条件）
+        if (entity.getSettledAmount() == null) {
+            entity.setSettledAmount(BigDecimal.ZERO);
+        }
+        if (entity.getUnsettledAmount() == null) {
+            entity.setUnsettledAmount(entity.getAmount());
+        }
         entity.setCreatedBy(userId);
         docMapper.insert(entity);
 

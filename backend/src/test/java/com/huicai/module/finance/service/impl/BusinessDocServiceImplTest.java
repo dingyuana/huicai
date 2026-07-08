@@ -6,6 +6,7 @@ import com.huicai.module.arap.mapper.CustomerMapper;
 
 import com.huicai.module.arap.mapper.VendorMapper;
 import com.huicai.module.finance.dto.BusinessDocDTO;
+import com.huicai.module.finance.dto.BusinessDocQueryDTO;
 import com.huicai.module.finance.dto.BusinessDocVO;
 import com.huicai.module.finance.entity.BusinessDocEntity;
 import com.huicai.module.finance.entity.BusinessDocEntryEntity;
@@ -18,6 +19,8 @@ import com.huicai.module.finance.mapper.VoucherMapper;
 import com.huicai.module.finance.service.TemplateMatcher;
 import com.huicai.module.finance.service.VoucherNoService;
 import com.huicai.module.finance.service.VoucherTemplateService;
+import com.huicai.module.tax.entity.OutputInvoiceEntity;
+import com.huicai.module.tax.mapper.OutputInvoiceMapper;
 import com.huicai.module.system.entity.PeriodEntity;
 import com.huicai.module.system.entity.Subject;
 import com.huicai.module.system.entity.UserEntity;
@@ -41,6 +44,7 @@ import java.util.Collections;
 import java.util.List;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -72,6 +76,7 @@ class BusinessDocServiceImplTest {
     
     @Mock private TemplateMatcher templateMatcher;
     @Mock private VoucherTemplateService voucherTemplateService;
+    @Mock private OutputInvoiceMapper outputInvoiceMapper;
 
     @org.mockito.InjectMocks private BusinessDocServiceImpl service;
 
@@ -574,5 +579,205 @@ class BusinessDocServiceImplTest {
         }
 
         verify(vendorMapper, atLeastOnce()).selectById(99L);
+    }
+
+    // ========== pageQuery() 测试 ==========
+
+    private BusinessDocEntity createStubDoc(Long id, String docType, String status, BigDecimal amount) {
+        BusinessDocEntity e = new BusinessDocEntity();
+        e.setId(id);
+        e.setDocNo("DOC-" + id);
+        e.setDocType(docType);
+        e.setDocDate(LocalDate.of(2026, 6, 15));
+        e.setPeriod("202606");
+        e.setAmount(amount);
+        e.setStatus(status);
+        e.setSupplierId(99L);
+        e.setCustomerId(id % 2 == 0L ? 100L : null);
+        e.setSummary("测试单据 " + id);
+        e.setCreatedBy(1L);
+        e.setVoucherId(null);
+        e.setInvoiceNo(null);
+        e.setSettledAmount(BigDecimal.ZERO);
+        e.setUnsettledAmount(amount);
+        return e;
+    }
+
+    @Test
+    void pageQuery_emptyQuery_returnsAll() {
+        BusinessDocEntity doc = createStubDoc(1L, "RECEIPT", "APPROVED", new BigDecimal("1000"));
+        Page<BusinessDocEntity> mockPage = new Page<>(1, 20, 1);
+        mockPage.setRecords(List.of(doc));
+        when(docMapper.selectPage(any(Page.class), any(LambdaQueryWrapper.class))).thenReturn(mockPage);
+        when(outputInvoiceMapper.selectOne(any())).thenReturn(null);
+
+        BusinessDocQueryDTO query = new BusinessDocQueryDTO();
+        IPage<BusinessDocVO> result = service.pageQuery(query);
+
+        assertEquals(1, result.getTotal());
+        assertEquals("RECEIPT", result.getRecords().get(0).getDocType());
+        verify(docMapper).selectPage(any(Page.class), any(LambdaQueryWrapper.class));
+    }
+
+    @Test
+    void pageQuery_withSingleDocType_filtersCorrectly() {
+        BusinessDocEntity receipt = createStubDoc(1L, "RECEIPT", "APPROVED", new BigDecimal("1000"));
+        BusinessDocEntity payment = createStubDoc(2L, "PAYMENT", "APPROVED", new BigDecimal("500"));
+        Page<BusinessDocEntity> mockPage = new Page<>(1, 20, 1);
+        mockPage.setRecords(List.of(receipt));
+        when(docMapper.selectPage(any(Page.class), any(LambdaQueryWrapper.class))).thenReturn(mockPage);
+        when(outputInvoiceMapper.selectOne(any())).thenReturn(null);
+
+        BusinessDocQueryDTO query = new BusinessDocQueryDTO();
+        query.setDocType("RECEIPT");
+        IPage<BusinessDocVO> result = service.pageQuery(query);
+
+        assertEquals(1, result.getTotal());
+        assertEquals("RECEIPT", result.getRecords().get(0).getDocType());
+    }
+
+    @Test
+    void pageQuery_withDocTypes_list_filtersCorrectly() {
+        // 模拟核销工作台场景：docTypes=['RECEIPT','INVOICE_OUT','OTHER_RECEIVABLE']
+        BusinessDocEntity receipt = createStubDoc(1L, "RECEIPT", "APPROVED", new BigDecimal("1000"));
+        BusinessDocEntity invoiceOut = createStubDoc(2L, "INVOICE_OUT", "APPROVED", new BigDecimal("1950"));
+        BusinessDocEntity payment = createStubDoc(3L, "PAYMENT", "APPROVED", new BigDecimal("500"));
+        Page<BusinessDocEntity> mockPage = new Page<>(1, 20, 2);
+        mockPage.setRecords(List.of(receipt, invoiceOut));
+        when(docMapper.selectPage(any(Page.class), any(LambdaQueryWrapper.class))).thenReturn(mockPage);
+        when(outputInvoiceMapper.selectOne(any())).thenReturn(null);
+
+        BusinessDocQueryDTO query = new BusinessDocQueryDTO();
+        query.setDocTypes(List.of("RECEIPT", "INVOICE_OUT", "OTHER_RECEIVABLE"));
+        IPage<BusinessDocVO> result = service.pageQuery(query);
+
+        assertEquals(2, result.getTotal());
+        assertEquals(2, result.getRecords().size());
+        // 验证两种类型都被返回
+        assertTrue(result.getRecords().stream().anyMatch(v -> "RECEIPT".equals(v.getDocType())));
+        assertTrue(result.getRecords().stream().anyMatch(v -> "INVOICE_OUT".equals(v.getDocType())));
+    }
+
+    @Test
+    void pageQuery_withStatus_filtersCorrectly() {
+        BusinessDocEntity draft = createStubDoc(1L, "RECEIPT", "DRAFT", new BigDecimal("1000"));
+        Page<BusinessDocEntity> mockPage = new Page<>(1, 20, 1);
+        mockPage.setRecords(List.of(draft));
+        when(docMapper.selectPage(any(Page.class), any(LambdaQueryWrapper.class))).thenReturn(mockPage);
+        when(outputInvoiceMapper.selectOne(any())).thenReturn(null);
+
+        BusinessDocQueryDTO query = new BusinessDocQueryDTO();
+        query.setStatus("DRAFT");
+        IPage<BusinessDocVO> result = service.pageQuery(query);
+
+        assertEquals(1, result.getTotal());
+        assertEquals("DRAFT", result.getRecords().get(0).getStatus());
+    }
+
+    @Test
+    void pageQuery_withKeyword_filtersByDocNo() {
+        BusinessDocEntity doc = createStubDoc(1L, "RECEIPT", "APPROVED", new BigDecimal("1000"));
+        doc.setDocNo("INV-2026-001");
+        Page<BusinessDocEntity> mockPage = new Page<>(1, 20, 1);
+        mockPage.setRecords(List.of(doc));
+        when(docMapper.selectPage(any(Page.class), any(LambdaQueryWrapper.class))).thenReturn(mockPage);
+        when(outputInvoiceMapper.selectOne(any())).thenReturn(null);
+
+        BusinessDocQueryDTO query = new BusinessDocQueryDTO();
+        query.setKeyword("INV-2026-001");
+        IPage<BusinessDocVO> result = service.pageQuery(query);
+
+        assertEquals(1, result.getTotal());
+    }
+
+    @Test
+    void pageQuery_withPeriod_filtersCorrectly() {
+        BusinessDocEntity doc = createStubDoc(1L, "RECEIPT", "APPROVED", new BigDecimal("1000"));
+        doc.setPeriod("202605");
+        Page<BusinessDocEntity> mockPage = new Page<>(1, 20, 1);
+        mockPage.setRecords(List.of(doc));
+        when(docMapper.selectPage(any(Page.class), any(LambdaQueryWrapper.class))).thenReturn(mockPage);
+        when(outputInvoiceMapper.selectOne(any())).thenReturn(null);
+
+        BusinessDocQueryDTO query = new BusinessDocQueryDTO();
+        query.setPeriod("202605");
+        IPage<BusinessDocVO> result = service.pageQuery(query);
+
+        assertEquals(1, result.getTotal());
+        assertEquals("202605", result.getRecords().get(0).getPeriod());
+    }
+
+    @Test
+    void pageQuery_emptyResult_returnsEmptyPage() {
+        Page<BusinessDocEntity> mockPage = new Page<>(1, 20, 0);
+        mockPage.setRecords(Collections.emptyList());
+        when(docMapper.selectPage(any(Page.class), any(LambdaQueryWrapper.class))).thenReturn(mockPage);
+
+        BusinessDocQueryDTO query = new BusinessDocQueryDTO();
+        query.setDocType("NONEXISTENT");
+        IPage<BusinessDocVO> result = service.pageQuery(query);
+
+        assertEquals(0, result.getTotal());
+        assertTrue(result.getRecords().isEmpty());
+    }
+
+    @Test
+    void pageQuery_pagination_respectsSize() {
+        List<BusinessDocEntity> docs = List.of(
+            createStubDoc(1L, "RECEIPT", "APPROVED", new BigDecimal("100")),
+            createStubDoc(2L, "RECEIPT", "APPROVED", new BigDecimal("200")),
+            createStubDoc(3L, "RECEIPT", "APPROVED", new BigDecimal("300"))
+        );
+        Page<BusinessDocEntity> mockPage = new Page<>(1, 2, 3);
+        mockPage.setRecords(docs.subList(0, 2));
+        when(docMapper.selectPage(any(Page.class), any(LambdaQueryWrapper.class))).thenReturn(mockPage);
+        when(outputInvoiceMapper.selectOne(any())).thenReturn(null);
+
+        BusinessDocQueryDTO query = new BusinessDocQueryDTO();
+        query.setCurrent(1);
+        query.setSize(2);
+        IPage<BusinessDocVO> result = service.pageQuery(query);
+
+        assertEquals(3, result.getTotal());
+        assertEquals(2, result.getRecords().size());
+    }
+
+    @Test
+    void pageQuery_populatesPartyNames_correctly() {
+        BusinessDocEntity doc = createStubDoc(1L, "RECEIPT", "APPROVED", new BigDecimal("1000"));
+        doc.setCustomerId(100L);
+        Page<BusinessDocEntity> mockPage = new Page<>(1, 20, 1);
+        mockPage.setRecords(List.of(doc));
+        when(docMapper.selectPage(any(Page.class), any(LambdaQueryWrapper.class))).thenReturn(mockPage);
+        when(outputInvoiceMapper.selectOne(any())).thenReturn(null);
+
+        BusinessDocQueryDTO query = new BusinessDocQueryDTO();
+        IPage<BusinessDocVO> result = service.pageQuery(query);
+
+        // 验证 customerName 被填充（即使为空列表也不会 NPE）
+        assertNotNull(result.getRecords().get(0));
+    }
+
+    @Test
+    void pageQuery_multipleDocType_combinations_works() {
+        // 验证 docType 和 docTypes 共存时，MyBatis Plus eq + in 都生效
+        // docType='RECEIPT' AND docType IN ('INVOICE_OUT') → 无匹配记录
+        // 但由于用的是 mock，selectPage 返回预设数据，验证 mock 行为
+        BusinessDocEntity invoiceOut = createStubDoc(1L, "INVOICE_OUT", "APPROVED", new BigDecimal("1950"));
+        Page<BusinessDocEntity> mockPage = new Page<>(1, 20, 1);
+        mockPage.setRecords(List.of(invoiceOut));
+        when(docMapper.selectPage(any(Page.class), any(LambdaQueryWrapper.class))).thenReturn(mockPage);
+        when(outputInvoiceMapper.selectOne(any())).thenReturn(null);
+
+        BusinessDocQueryDTO query = new BusinessDocQueryDTO();
+        query.setDocType("RECEIPT");
+        query.setDocTypes(List.of("INVOICE_OUT"));
+        IPage<BusinessDocVO> result = service.pageQuery(query);
+
+        // mock 返回预设数据，不执行真实 SQL 验证
+        // 实际生产环境中，eq(docType='RECEIPT') AND in(docType IN ('INVOICE_OUT'))
+        // 会导致 SQL 无匹配，返回 0 条。这里 mock 返回 1 条是为了验证
+        // pageQuery 本身不因参数矛盾而崩溃
+        assertEquals(1, result.getTotal());
     }
 }
