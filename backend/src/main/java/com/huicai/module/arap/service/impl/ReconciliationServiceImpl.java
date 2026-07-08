@@ -530,8 +530,16 @@ public class ReconciliationServiceImpl implements ReconciliationService {
         checks.add(new PreCheckItem("amountValid", amountValid, amountMsg));
 
         // 5. 期间正常: period 格式校验 (YYYYMM 格式)
-        boolean periodValid = request.period() != null && request.period().matches("\\d{6}");
-        checks.add(new PreCheckItem("periodValid", periodValid, periodValid ? "期间格式正确: " + request.period() : "期间格式无效: " + request.period()));
+        // 如果请求未携带 period，从来源单据自动推导
+        String effectivePeriod = request.period();
+        if (StrUtil.isBlank(effectivePeriod) && request.sourceDocId() != null) {
+            BusinessDocEntity sourceDoc = businessDocMapper.selectById(request.sourceDocId());
+            if (sourceDoc != null && StrUtil.isNotBlank(sourceDoc.getPeriod())) {
+                effectivePeriod = sourceDoc.getPeriod();
+            }
+        }
+        boolean periodValid = effectivePeriod != null && effectivePeriod.matches("\\d{6}");
+        checks.add(new PreCheckItem("periodValid", periodValid, periodValid ? "期间格式正确: " + effectivePeriod : "期间格式无效: " + effectivePeriod));
 
         boolean allPassed = checks.stream().allMatch(PreCheckItem::passed);
         return new PreCheckResult(allPassed, checks);
