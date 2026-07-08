@@ -208,6 +208,7 @@ async function onOpenReconcile() {
   try {
     if (isPayment) {
       reconResult.value = await getPaymentRecommend(doc.value.id, {
+        sourceDocType: doc.value.docType,
         vendorId: doc.value.supplierId!,
         amount: doc.value.amount!,
         summary: doc.value.summary || undefined,
@@ -215,6 +216,7 @@ async function onOpenReconcile() {
       })
     } else {
       reconResult.value = await getReceiptRecommend(doc.value.id, {
+        sourceDocType: doc.value.docType,
         customerId: doc.value.customerId!,
         amount: doc.value.amount!,
         summary: doc.value.summary || undefined,
