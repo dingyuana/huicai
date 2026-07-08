@@ -239,12 +239,12 @@ async function fetchData() {
       current: query.value.current,
       size: query.value.size,
     }
-    // 收款单 tab 同时查收款单(RECEIPT) + 应收单(INVOICE_OUT) + 其他应收(OTHER_RECEIVABLE)
+    // 收款单 tab 只查收款单本身，应收单在核销推荐时作为目标匹配
     if (activeTab.value === 'RECEIPT') {
-      params.docTypes = ['RECEIPT', 'INVOICE_OUT', 'OTHER_RECEIVABLE']
+      params.docTypes = ['RECEIPT']
     } else {
-      // 付款单 tab 同时查付款单(PAYMENT) + 费用报销(EXPENSE) + 进项发票(INVOICE_IN) + 其他应付(OTHER_PAYABLE)
-      params.docTypes = ['PAYMENT', 'EXPENSE', 'INVOICE_IN', 'OTHER_PAYABLE']
+      // 付款单 tab 只查付款单本身，应付单在核销推荐时作为目标匹配
+      params.docTypes = ['PAYMENT']
     }
     if (query.value.keyword) params.keyword = query.value.keyword
     if (query.value.period) params.period = query.value.period

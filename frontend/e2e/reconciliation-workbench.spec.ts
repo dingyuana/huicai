@@ -17,17 +17,11 @@ test.describe('核销工作台 E2E', () => {
       const body = JSON.parse(route.request().postData() || '{}')
       await route.fulfill({ status: 200, contentType: 'application/json',
         body: JSON.stringify({ code: 200, msg: 'ok', data: {
-          total: 3, current: 1, size: 20,
+          total: 1, current: 1, size: 20,
           records: [
-            { id: 1, docNo: 'YS2026070001', docType: 'INVOICE_OUT', docDate: '2026-07-08', period: '202607',
-              amount: 1950, settledAmount: 0, unsettledAmount: 1950,
-              customerName: '测试客户A', summary: '销项发票应收', status: 'DRAFT' },
-            { id: 2, docNo: 'SH2026070001', docType: 'RECEIPT', docDate: '2026-07-08', period: '202607',
+            { id: 1, docNo: 'SH2026070001', docType: 'RECEIPT', docDate: '2026-07-08', period: '202607',
               amount: 1000, settledAmount: 0, unsettledAmount: 1000,
-              customerName: '测试客户B', summary: '收款', status: 'DRAFT' },
-            { id: 3, docNo: 'QTYS2026070001', docType: 'OTHER_RECEIVABLE', docDate: '2026-07-08', period: '202607',
-              amount: 500, settledAmount: 0, unsettledAmount: 500,
-              customerName: '测试客户C', summary: '其他应收', status: 'DRAFT' },
+              customerName: '测试客户A', summary: '收款', status: 'DRAFT' },
           ]
         }})
       })
@@ -42,18 +36,13 @@ test.describe('核销工作台 E2E', () => {
     await expect(page.locator('.el-radio-button').last()).toHaveText('付款单')
     // 验证默认选中收款单
     await expect(page.locator('.el-radio-button__inner.is-active').first()).toHaveText('收款单')
-    // 验证表格行数
+    // 验证表格行数（只显示收款单，不显示应收单）
     const rows = page.locator('.el-table__body-wrapper tbody tr')
-    await expect(rows).toHaveCount(3)
-    // 验证 INVOICE_OUT 行可见
-    await expect(page.getByText('YS2026070001')).toBeVisible()
-    await expect(page.getByText('INVOICE_OUT')).not.toBeVisible() // docType 不在表格列中
+    await expect(rows).toHaveCount(1)
     // 验证 RECEIPT 行可见
     await expect(page.getByText('SH2026070001')).toBeVisible()
-    // 验证未核销金额列：应显示 1,950.00 / 1,000.00 / 500.00
-    await expect(page.getByText('1,950.00').first()).toBeVisible()
+    // 验证未核销金额列
     await expect(page.getByText('1,000.00').first()).toBeVisible()
-    await expect(page.getByText('500.00').first()).toBeVisible()
   })
 
   test('切换到付款单 tab 应查询应付方向单据', async ({ page }) => {
