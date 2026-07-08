@@ -181,7 +181,7 @@
     </el-dialog>
 
     <!-- 核销单详情对话框 -->
-    <el-dialog v-model="detailDialogVisible" title="核销单详情" width="600">
+    <el-dialog v-model="detailDialogVisible" title="核销单详情" width="750">
       <template v-if="settlementDetail">
         <el-descriptions :column="2" border>
           <el-descriptions-item label="核销编号" :span="2">{{ settlementDetail.settlementNo }}</el-descriptions-item>
@@ -200,17 +200,81 @@
           <el-descriptions-item label="折扣金额">{{ fmtAmount(settlementDetail.discountAmount) }}</el-descriptions-item>
           <el-descriptions-item label="备注" :span="2">{{ settlementDetail.remark || '-' }}</el-descriptions-item>
         </el-descriptions>
+
+        <!-- 上下游穿透标签 -->
+        <div style="margin-top:16px">
+          <el-space>
+            <el-button text type="primary" @click="showUpstreamDrawer = true">
+              <el-icon><ArrowUp /></el-icon> 上游来源
+            </el-button>
+            <el-button text type="primary" @click="showDownstreamDrawer = true">
+              <el-icon><ArrowDown /></el-icon> 下游去向
+            </el-button>
+            <el-button text type="primary" @click="showTimeline = !showTimeline">
+              全链路时间轴 {{ showTimeline ? '▲' : '▼' }}
+            </el-button>
+          </el-space>
+        </div>
+
+        <!-- 时间轴 -->
+        <div v-show="showTimeline" style="margin-top:12px">
+          <ReconciliationTimeline v-if="settlementDetail.id" :settlementId="settlementDetail.id" @jump="onTimelineJump" />
+        </div>
       </template>
       <template #footer>
         <el-button @click="detailDialogVisible=false">关闭</el-button>
       </template>
     </el-dialog>
+
+    <!-- 上游来源抽屉 -->
+    <el-drawer v-model="showUpstreamDrawer" title="上游来源" size="400">
+      <template v-if="traceData?.upstream">
+        <el-card v-if="traceData.upstream.bankTransaction" shadow="never" style="margin-bottom:12px">
+          <template #header><span>银行流水</span></template>
+          <div>流水号: {{ traceData.upstream.bankTransaction.transactionNo }}</div>
+          <div>金额: ¥{{ fmtAmount(traceData.upstream.bankTransaction.amount) }}</div>
+          <div>对方账户: {{ traceData.upstream.bankTransaction.counterAccount }}</div>
+        </el-card>
+        <el-card v-if="traceData.upstream.receipt" shadow="never">
+          <template #header><span>收款单</span></template>
+          <div>单据号: {{ traceData.upstream.receipt.docNo }}</div>
+          <div>金额: ¥{{ fmtAmount(traceData.upstream.receipt.amount) }}</div>
+          <div>状态: {{ traceData.upstream.receipt.status }}</div>
+        </el-card>
+      </template>
+      <div v-else style="text-align:center;color:#909399;padding:40px">暂无上游数据</div>
+    </el-drawer>
+
+    <!-- 下游去向抽屉 -->
+    <el-drawer v-model="showDownstreamDrawer" title="下游去向" size="400">
+      <template v-if="traceData?.downstream">
+        <div v-for="doc in traceData.downstream.businessDocs" :key="doc.id">
+          <el-card shadow="never" style="margin-bottom:12px">
+            <template #header>
+              <span>{{ doc.docType === 'INVOICE_OUT' ? '应收单' : '应付单' }} #{{ doc.docNo }}</span>
+            </template>
+            <div>金额: ¥{{ fmtAmount(doc.amount) }}</div>
+            <div>已核销: ¥{{ fmtAmount(doc.settledAmount) }}</div>
+            <div>未核销: ¥{{ fmtAmount(doc.unsettledAmount) }}</div>
+          </el-card>
+        </div>
+        <div v-for="inv in traceData.downstream.invoices" :key="inv.id">
+          <el-card shadow="never" style="margin-bottom:12px">
+            <template #header><span>发票 #{{ inv.invoiceNo }}</span></template>
+            <div>金额: ¥{{ fmtAmount(inv.amount) }}</div>
+            <div>状态: {{ inv.status }}</div>
+          </el-card>
+        </div>
+      </template>
+      <div v-else style="text-align:center;color:#909399;padding:40px">暂无下游数据</div>
+    </el-drawer>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { ArrowUp, ArrowDown } from '@element-plus/icons-vue'
 import { useRouter } from 'vue-router'
 import {
   pageSettlements, getSettlementDetail, createSettlement,
@@ -218,6 +282,8 @@ import {
   pageReconLogs, reverseRecon,
   type ArapSettlement, type ReconciliationLog,
 } from '@/api/modules/arapSettlement'
+import { getReconciliationTrace, type ReconciliationTraceVO } from '@/api/modules/reconciliation'
+import ReconciliationTimeline from '@/views/arap/reconciliation-workbench/ReconciliationTimeline.vue'
 
 const router = useRouter()
 
@@ -331,11 +397,29 @@ async function onDeleteSettlement(row: ArapSettlement) {
 const detailDialogVisible = ref(false)
 const settlementDetail = ref<ArapSettlement | null>(null)
 
+// 上下游穿透 + 时间轴
+const showUpstreamDrawer = ref(false)
+const showDownstreamDrawer = ref(false)
+const showTimeline = ref(false)
+const traceData = ref<ReconciliationTraceVO | null>(null)
+
 async function onViewSettlement(row: ArapSettlement) {
   try {
     settlementDetail.value = await getSettlementDetail(row.id)
     detailDialogVisible.value = true
+    // 异步加载 trace 数据
+    loadTrace(row.id)
   } catch (e: any) { ElMessage.error(e?.message || '查询详情失败') }
+}
+
+async function loadTrace(settlementId: number) {
+  try {
+    traceData.value = await getReconciliationTrace(settlementId)
+  } catch { /* 追溯数据非必须，静默失败 */ }
+}
+
+function onTimelineJump(path: string) {
+  if (path) router.push(path)
 }
 
 // Reverse reconciliation

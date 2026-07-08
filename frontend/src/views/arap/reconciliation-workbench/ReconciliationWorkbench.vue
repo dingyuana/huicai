@@ -3,7 +3,12 @@
     <el-card shadow="never">
       <div class="page-header">
         <span class="page-title">核销工作台</span>
-        <el-button @click="onRefresh">刷新</el-button>
+        <el-space>
+          <el-button type="primary" @click="onAutoFifo" :disabled="!list.length" :loading="fifoLoading">
+            <el-icon><Refresh /></el-icon> 自动核销
+          </el-button>
+          <el-button @click="onRefresh">刷新</el-button>
+        </el-space>
       </div>
 
       <!-- tab 切换 -->
@@ -180,6 +185,30 @@
         </el-table>
       </template>
     </el-dialog>
+
+    <!-- FIFO 自动核销结果弹窗 -->
+    <el-dialog v-model="fifoDialogVisible" title="自动核销匹配结果" width="600px" destroy-on-close>
+      <template v-if="fifoResult && fifoResult.length">
+        <el-alert title="共 {{ fifoResult.length }} 项匹配，请人工确认后执行" type="success" :closable="false" style="margin-bottom:16px" />
+        <el-table :data="fifoResult" border stripe size="small">
+          <el-table-column label="目标单据" prop="targetDocNo" width="160" />
+          <el-table-column label="核销金额" width="120" align="right">
+            <template #default="{ row }">{{ fmtAmount(row.allocatedAmount || row.amount) }}</template>
+          </el-table-column>
+          <el-table-column label="操作" width="160" align="center">
+            <template #default="{ row }">
+              <el-button text size="small" type="primary" @click="onExecuteFromFifo(row)">执行核销</el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+      </template>
+      <template v-else>
+        <el-alert title="暂无匹配的核销项" type="info" :closable="false" />
+      </template>
+      <template #footer>
+        <el-button @click="fifoDialogVisible = false">关闭</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -190,6 +219,7 @@ import { Loading } from '@element-plus/icons-vue'
 import { getBusinessDocPage, type BusinessDocVO, type BusinessDocQuery } from '@/api/modules/businessDoc'
 import {
   getReceiptRecommend, getPaymentRecommend, executeReconciliation, preCheckReconciliation,
+  autoFifoReconciliation,
   type PreCheckResult,
 } from '@/api/modules/reconciliation'
 
@@ -449,6 +479,54 @@ async function onPreCheck(item: any) {
     preCheckDialogVisible.value = false
   } finally {
     preCheckLoading.value = false
+  }
+}
+
+// ====== FIFO 自动核销 ======
+const fifoDialogVisible = ref(false)
+const fifoLoading = ref(false)
+const fifoResult = ref<any>(null)
+
+async function onAutoFifo() {
+  if (!list.value.length) return
+  const row = list.value[0]
+  const isReceipt = activeTab.value === 'RECEIPT'
+  const partyId = isReceipt ? row.customerId : row.supplierId
+  if (!partyId) {
+    ElMessage.warning('单据缺少客户/供应商信息，无法自动核销')
+    return
+  }
+  fifoLoading.value = true
+  try {
+    fifoResult.value = await autoFifoReconciliation({
+      partyId,
+      targetDocType: isReceipt ? 'INVOICE_OUT' : 'INVOICE_IN',
+      amount: row.amount || 0,
+      sourceDocType: isReceipt ? 'receipt' : 'payment',
+      sourceDocId: row.id,
+    })
+    fifoDialogVisible.value = true
+  } catch (e: any) {
+    ElMessage.error(e?.message || '自动核销失败')
+  } finally {
+    fifoLoading.value = false
+  }
+}
+
+async function onExecuteFromFifo(row: any) {
+  try {
+    await executeReconciliation({
+      sourceDocType: activeTab.value === 'RECEIPT' ? 'receipt' : 'payment',
+      sourceDocId: row.sourceDocId || row.id,
+      targetDocType: row.targetDocType || (activeTab.value === 'RECEIPT' ? 'INVOICE_OUT' : 'INVOICE_IN'),
+      targetDocId: row.targetDocId || row.targetBusinessDocId,
+      amount: row.allocatedAmount || row.amount,
+    })
+    ElMessage.success('核销执行成功')
+    fifoDialogVisible.value = false
+    fetchData()
+  } catch (e: any) {
+    ElMessage.error(e?.message || '核销执行失败')
   }
 }
 </script>
