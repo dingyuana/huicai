@@ -11,7 +11,7 @@
 
 | 编号 | 文件名 | 版本 | 最后修改 | 修改人 | 说明 |
 |------|--------|------|---------|--------|------|
-| HUICAI-MAIN-001 | DESIGN.md | V4.0 | 2026-07-07 | Hermes | 综合设计主文档，含模块索引和全局决策 |
+| HUICAI-MAIN-001 | DESIGN.md | V4.3 | 2026-07-08 | Hermes | 综合设计主文档，含模块索引和全局决策 |
 
 ## 二、设计文档（design/）
 
@@ -45,7 +45,8 @@
 
 | 编号范围 | 说明 |
 |----------|------|
-| P0-P41 | 功能规格文档，详见 specs/ 目录 |
+| P0-P42 | 功能规格文档，详见 specs/ 目录 |
+| P42 | 核销前端增强 — Timeline 视图、穿透点击、FIFO 自动核销 |
 
 ## 五、开发文档（development/）
 
@@ -66,7 +67,10 @@
 | HUICAI-DEV-034~040 | requirements/*.md | — | — | — | 需求分析（7份） |
 | **HUICAI-DEV-035** | **standards/文档管理规范.md** | **V1.0** | **2026-07-07** | **Hermes** | **文档编号/头部/生命周期规范** |
 || HUICAI-DEV-036 | plans/P0-P3-roadmap.md | V4.0 | 2026-07-07 | Hermes | P0-P3开发路线图（P0-P2已完成，P3远期） |
-|| **HUICAI-DEV-037** | **requirements/REQUIREMENTS_REGISTRY.md** | **V1.0** | **2026-07-07** | **Hermes** | **需求登记册（REQ-2026-001~054，54 条需求）** |
+|| HUICAI-DEV-037 | requirements/REQUIREMENTS_REGISTRY.md | V1.1 | 2026-07-08 | Hermes | 需求登记册（REQ-2026-001~057，57 条需求） |
+|| HUICAI-DEV-038 | lessons/002-period-constraint-testing-gap.md | V1.0 | 2026-07-07 | Hermes | 期间约束测试盲区复盘 |
+|| HUICAI-DEV-039 | lessons/003-cross-module-integration-gap.md | — | — | — | 跨模块集成空白复盘 |
+|| HUICAI-DEV-040 | lessons/004-api-contract-gap-after-architecture-migration.md | — | — | — | 架构迁移API契约空白复盘 |
 
 ## 六、测试文档（testing/）
 
@@ -81,8 +85,17 @@
 | HUICAI-TST-007 | test-methodology.md | V1.0 | 2026-07-07 | Hermes | 测试方法总结与检查清单 |
 | HUICAI-TST-008 | plans/frontend-test-plan.md | V1.0 | 2026-07-07 | Hermes | 前端测试方案（Vitest+Vue Test Utils） |
 | HUICAI-TST-009 | plans/ai-service-test-plan.md | V1.0 | 2026-07-07 | Hermes | AI服务测试方案（pytest+httpx） |
+| HUICAI-TST-010 | test-coverage-matrix.md | V1.0 | 2026-07-07 | Hermes | 测试覆盖矩阵（标识空白区域） |
+| HUICAI-TST-011 | test-prevention-mechanism.md | V1.0 | 2026-07-07 | Hermes | 防错机制（影响面清单+测试门禁） |
+| HUICAI-TST-012 | entity-db-audit-report.md | V1.0 | 2026-07-07 | Hermes | Entity-DB 审计报告 |
 
-## 七、参考文档（reference/）
+## 七、事故报告（incidents/）
+
+| 编号 | 文件名 | 日期 | 说明 |
+|------|--------|------|------|
+| HUICAI-INC-001 | sales-invoice-audited-by-column-error.md | 2026-07-07 | 销项发票auditedBy列缺失故障报告 |
+
+## 八、参考文档（reference/）
 
 | 编号 | 文件名 | 说明 |
 |------|--------|------|

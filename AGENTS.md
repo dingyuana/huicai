@@ -4,15 +4,15 @@
 
 ## §0 项目状态（硬数字，每次 commit 后更新）
 
-> **更新基准**：commit `43c2d55` (2026-07-07) — P40 AI 服务骨架增强
+> **更新基准**：commit `0f8d420` (2026-07-08) — P42 核销能力补充
 > **当前分支**：`ai-evolution`
 > **关联文档**：[DESIGN.md](docs/DESIGN.md)、[需求登记册](docs/requirements/REQUIREMENTS_REGISTRY.md)、[DOCUMENT_REGISTRY.md](docs/DOCUMENT_REGISTRY.md)
 
 | 维度 | 数据 |
 |------|------|
 | 后端代码 | 345 Java 文件 |
-| 测试用例 | 573 个 `@Test` 方法 / 76 个测试类 |
-| 数据库 | PostgreSQL 16 / V1-V80 Flyway migration |
+| 测试用例 | 579 个 `@Test` 方法 / 78 个测试类 |
+| 数据库 | PostgreSQL 16 / V1-V83 Flyway migration |
 | API 端点 | 433 个后端端点 |
 | 核心模块 | 基础数据、总账、应收应付、现金管理、固定资产、费用报销、发票税务、预算、财务报表、存储管理 |
 | AI 服务 | Python FastAPI 5 端点（health/anomaly/embedding/match/ocr）|

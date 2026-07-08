@@ -1,9 +1,11 @@
 # 慧财财务系统 — 综合设计文档（主文档）
 
-> 版本：V4.1
-> 日期：2026-07-07
+> 版本：V4.3
+> 日期：2026-07-08
 > 范围：纯财务流程（不含销售/采购等业务流程）
 > 版本历史：
+> - V4.3 (2026-07-08): 核销前端增强 — Timeline 视图、穿透点击、FIFO 自动核销按钮
+> - V4.2 (2026-07-08): 核销模块增强 — 全链路追溯API、余额快照、容差配置化
 > - V4.1 (2026-07-07): 新增 §九 需求映射，关联 REQUIREMENTS_REGISTRY.md
 > - V4.0 (2026-07-07): 模块设计文档拆分，主文档精简
 > 设计文档索引：
@@ -88,7 +90,7 @@
 |------|------|--------|---------|--------|------|
 | 00 | 基础数据管理 | `system` | [00-system-design.md](design/00-system-design.md) | 良好 | 科目/期间/权限/主数据 |
 | 01 | 总账管理 | `finance` | [01-gl-design.md](design/01-gl-design.md) | 良好 | 凭证/账簿/结账/红冲/溯源 |
-| 02 | 应收应付管理 | `arap` | [02-arap-design.md](design/02-arap-design.md) | 良好 | 核销工作台/预收预付/坏账 |
+| 02 | 应收应付管理 | `arap` | [02-arap-design.md](design/02-arap-design.md) | 良好 | 核销工作台/预收预付/坏账/全链路追溯/容差配置 |
 | 03 | 现金与资金管理 | `finance` | [03-cash-design.md](design/03-cash-design.md) | 良好 | 银行流水/对账/分类 |
 | 04 | 固定资产管理 | `asset` | [04-asset-design.md](design/04-asset-design.md) | 及格 | 卡片/折旧/处置/盘点 |
 | 05 | 费用报销管理 | `arap` | [05-expense-design.md](design/05-expense-design.md) | 较差 | 报销/审批/打款 |
