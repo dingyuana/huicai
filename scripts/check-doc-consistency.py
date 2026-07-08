@@ -138,7 +138,7 @@ def get_doc_version(doc_file):
         return None
     with open(filepath) as f:
         first_lines = ''.join([f.readline() for _ in range(10)])
-    match = re.search(r'版本[：:].*?V([\d.]+)', first_lines)
+    match = re.search(r'版本.*?[：:].*?V([\d.]+)', first_lines)
     return match.group(1) if match else None
 
 

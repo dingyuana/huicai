@@ -44,6 +44,12 @@ public class ReconciliationLogEntity {
     @StatusChangeable(entity = "RECONCILIATION_LOG", fieldName = "status")
     private String status;
 
+    /** 操作类型: CREATE / CONFIRM / REJECT / CANCEL */
+    private String operationType;
+
+    /** 触发规则ID（自动核销时记录） */
+    private String ruleId;
+
     /** 备注 */
     private String remark;
 

@@ -8,6 +8,7 @@ import com.huicai.module.arap.entity.*;
 import com.huicai.module.arap.mapper.*;
 import com.huicai.module.arap.service.ArapSettlementService;
 import com.huicai.module.arap.service.ReconciliationService;
+import com.huicai.module.arap.service.ReconciliationToleranceService;
 import com.huicai.module.tax.service.OutputInvoiceStateMachineService;
 import com.huicai.module.finance.constant.VoucherType;
 import com.huicai.module.finance.entity.BusinessDocEntity;
@@ -45,9 +46,8 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class ReconciliationServiceImpl implements ReconciliationService {
 
-    private static final BigDecimal TOLERANCE = new BigDecimal("5.00");
     private static final BigDecimal SCORE_THRESHOLD = new BigDecimal("0.70");
-    private static final BigDecimal TOLERANCE_RATE = new BigDecimal("0.10"); // L5: 容差 10%
+    private static final BigDecimal DEFAULT_TOLERANCE_RATE = new BigDecimal("0.10");
     private static final long DEFAULT_TENANT_ID = 1L;
     private static final long DEFAULT_USER_ID = 1L;
 
@@ -63,6 +63,7 @@ public class ReconciliationServiceImpl implements ReconciliationService {
     private final VoucherTemplateService voucherTemplateService;
     private final ArapSettlementService settlementService;
     private final OutputInvoiceStateMachineService outputInvoiceStateMachineService;
+    private final ReconciliationToleranceService toleranceService;
 
     @Override
     public RecommendResult recommendReceipt(Long receiptId, String sourceDocType, Long customerId, BigDecimal amount, String summary, String counterpartyName) {
@@ -96,6 +97,7 @@ public class ReconciliationServiceImpl implements ReconciliationService {
         // 确定按客户还是供应商匹配 & 目标单据的 party 字段
         boolean targetIsReceivableSide = "INVOICE_OUT".equals(targetDocType) || "RECEIPT".equals(targetDocType);
         Long partyId = targetIsReceivableSide ? customerId : vendorId;
+        String partyType = targetIsReceivableSide ? "CUSTOMER" : "VENDOR";
         if (partyId == null) {
             return new RecommendResult(sourceType, sourceId, counterpartyName, amount, List.of());
         }
@@ -128,7 +130,7 @@ public class ReconciliationServiceImpl implements ReconciliationService {
                     counterpartyName, externalNo, invoiceNo, txDate, invoiceTxDate);
 
             if (matchLevel != null) {
-                BigDecimal matchScore = calculateScore(amount, unsettledAmount, summary, invoiceSummary, counterpartyName, invoiceCustomerName);
+                BigDecimal matchScore = calculateScore(amount, unsettledAmount, summary, invoiceSummary, counterpartyName, invoiceCustomerName, partyId, partyType);
                 BigDecimal suggestedAmount = amount.min(unsettledAmount);
                 items.add(new RecommendItem(targetDocId, invoiceNo, targetDocType, amount, unsettledAmount, matchScore, matchLevel, suggestedAmount));
             } else {
@@ -196,7 +198,7 @@ public class ReconciliationServiceImpl implements ReconciliationService {
         // L5: 容差匹配 — 金额差异 ≤ invoice 金额的 10%
         if (unsettledAmount.compareTo(BigDecimal.ZERO) > 0) {
             BigDecimal rate = diff.divide(unsettledAmount, 4, RoundingMode.HALF_UP);
-            if (rate.compareTo(TOLERANCE_RATE) <= 0) {
+            if (rate.compareTo(DEFAULT_TOLERANCE_RATE) <= 0) {
                 return "L5";
             }
         }
@@ -204,12 +206,13 @@ public class ReconciliationServiceImpl implements ReconciliationService {
         return null;
     }
 
-    private BigDecimal calculateScore(BigDecimal sourceAmount, BigDecimal unsettledAmount, String sourceSummary, String targetSummary, String sourceName, String targetName) {
+    private BigDecimal calculateScore(BigDecimal sourceAmount, BigDecimal unsettledAmount, String sourceSummary, String targetSummary, String sourceName, String targetName, Long partyId, String partyType) {
         BigDecimal score = BigDecimal.ZERO;
 
-        // Amount match (0.4)
+        BigDecimal tolerance = toleranceService.getToleranceAmount(partyId, partyType);
+
         BigDecimal diff = sourceAmount.subtract(unsettledAmount).abs();
-        if (diff.compareTo(TOLERANCE) <= 0) {
+        if (diff.compareTo(tolerance) <= 0) {
             if (diff.compareTo(BigDecimal.ZERO) == 0) {
                 score = score.add(new BigDecimal("0.40"));
             } else {
@@ -354,9 +357,14 @@ public class ReconciliationServiceImpl implements ReconciliationService {
                     String prefix = isReceivableSettle ? "JS" : "FS";
                     settlement.setSettlementNo(prefix + "-" + request.period() + "-" + cn.hutool.core.util.IdUtil.fastSimpleUUID().substring(0, 6).toUpperCase());
 
+                    BigDecimal beforeBalance = doc.getUnsettledAmount();
+                    BigDecimal afterBalance = beforeBalance.subtract(request.amount());
+
                     ArapSettlementEntryEntity entry = new ArapSettlementEntryEntity();
                     entry.setBusinessDocId(request.targetDocId());
                     entry.setSettledAmount(request.amount());
+                    entry.setBeforeBalance(beforeBalance);
+                    entry.setAfterBalance(afterBalance);
 
                     settlementService.create(settlement, List.of(entry));
                 }
@@ -992,5 +1000,108 @@ public class ReconciliationServiceImpl implements ReconciliationService {
         log.info("智能最优匹配完成: sourceType={}, sourceId={}, partyId={}, total={}, logs={}",
                 sourceDocType, sourceDocId, partyId, totalAmount, logs.size());
         return logs;
+    }
+
+    // ==================== 全链路追溯 ====================
+
+    public com.huicai.module.arap.dto.vo.ReconciliationTraceVO trace(Long logId) {
+        ReconciliationLogEntity log = logMapper.selectById(logId);
+        // 如果 logId 不是 reconciliation_log ID，尝试作为 settlement ID 查找
+        if (log == null) {
+            try {
+                ArapSettlementEntity settlement = settlementService.getById(logId);
+                if (settlement != null) {
+                    // 通过 settlement 的金额查找对应的 reconciliation_log
+                    log = logMapper.selectOne(new LambdaQueryWrapper<ReconciliationLogEntity>()
+                            .eq(ReconciliationLogEntity::getAllocatedAmount, settlement.getTotalAmount())
+                            .last("LIMIT 1"));
+                    if (log == null) {
+                        // 无 reconciliation_log 记录时返回空 trace
+                        com.huicai.module.arap.dto.vo.ReconciliationTraceVO empty = new com.huicai.module.arap.dto.vo.ReconciliationTraceVO();
+                        empty.setTraceId("TRC-SETTLEMENT-" + settlement.getSettlementNo());
+                        com.huicai.module.arap.dto.vo.ReconciliationTraceVO.SettlementInfo si = new com.huicai.module.arap.dto.vo.ReconciliationTraceVO.SettlementInfo();
+                        si.setId(settlement.getId());
+                        si.setSettlementNo(settlement.getSettlementNo());
+                        si.setAmount(settlement.getTotalAmount());
+                        si.setStatus(settlement.getStatus());
+                        si.setCreatedAt(settlement.getCreatedAt());
+                        empty.setSettlement(si);
+                        empty.setUpstream(new com.huicai.module.arap.dto.vo.ReconciliationTraceVO.UpstreamInfo());
+                        empty.setDownstream(new com.huicai.module.arap.dto.vo.ReconciliationTraceVO.DownstreamInfo());
+                        empty.setOperationTrail(java.util.Collections.emptyList());
+                        return empty;
+                    }
+                }
+            } catch (Exception e) {
+                // settlement ID 也不匹配，继续走下面的 null 检查
+            }
+        }
+        if (log == null) {
+            throw new BusinessException("核销记录不存在: " + logId);
+        }
+
+        com.huicai.module.arap.dto.vo.ReconciliationTraceVO trace = new com.huicai.module.arap.dto.vo.ReconciliationTraceVO();
+        trace.setTraceId("TRC-" + java.time.LocalDate.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyyMM")) + "-" + String.format("%04d", logId));
+
+        com.huicai.module.arap.dto.vo.ReconciliationTraceVO.SettlementInfo settlement = new com.huicai.module.arap.dto.vo.ReconciliationTraceVO.SettlementInfo();
+        settlement.setId(log.getId());
+        settlement.setStatus(log.getStatus());
+        settlement.setAmount(log.getAllocatedAmount());
+        settlement.setCreatedAt(log.getCreatedAt());
+        trace.setSettlement(settlement);
+
+        com.huicai.module.arap.dto.vo.ReconciliationTraceVO.UpstreamInfo upstream = new com.huicai.module.arap.dto.vo.ReconciliationTraceVO.UpstreamInfo();
+        
+        if ("bank_txn".equals(log.getSourceDocType()) && log.getSourceDocId() != null) {
+            com.huicai.module.finance.entity.BankStatementEntity stmt = bankStatementMapper.selectById(log.getSourceDocId());
+            if (stmt != null) {
+                com.huicai.module.arap.dto.vo.ReconciliationTraceVO.BankTransaction bankTxn = new com.huicai.module.arap.dto.vo.ReconciliationTraceVO.BankTransaction();
+                bankTxn.setId(stmt.getId());
+                bankTxn.setTransactionNo(stmt.getExternalNo());
+                bankTxn.setAmount(stmt.getAmount());
+                bankTxn.setCounterAccount(stmt.getCounterAccount());
+                upstream.setBankTransaction(bankTxn);
+            }
+        }
+
+        if ("RECEIPT".equals(log.getSourceDocType()) && log.getSourceDocId() != null) {
+            BusinessDocEntity receipt = businessDocMapper.selectById(log.getSourceDocId());
+            if (receipt != null) {
+                com.huicai.module.arap.dto.vo.ReconciliationTraceVO.ReceiptInfo receiptInfo = new com.huicai.module.arap.dto.vo.ReconciliationTraceVO.ReceiptInfo();
+                receiptInfo.setId(receipt.getId());
+                receiptInfo.setDocNo(receipt.getDocNo());
+                receiptInfo.setAmount(receipt.getAmount());
+                receiptInfo.setStatus(receipt.getStatus());
+                upstream.setReceipt(receiptInfo);
+            }
+        }
+        trace.setUpstream(upstream);
+
+        com.huicai.module.arap.dto.vo.ReconciliationTraceVO.DownstreamInfo downstream = new com.huicai.module.arap.dto.vo.ReconciliationTraceVO.DownstreamInfo();
+
+        if (log.getTargetDocId() != null) {
+            BusinessDocEntity doc = businessDocMapper.selectById(log.getTargetDocId());
+            if (doc != null) {
+                com.huicai.module.arap.dto.vo.ReconciliationTraceVO.BusinessDocInfo docInfo = new com.huicai.module.arap.dto.vo.ReconciliationTraceVO.BusinessDocInfo();
+                docInfo.setId(doc.getId());
+                docInfo.setDocNo(doc.getDocNo());
+                docInfo.setDocType(doc.getDocType());
+                docInfo.setAmount(doc.getAmount());
+                docInfo.setSettledAmount(doc.getSettledAmount());
+                docInfo.setUnsettledAmount(doc.getUnsettledAmount());
+                downstream.setBusinessDocs(List.of(docInfo));
+            }
+        }
+        trace.setDownstream(downstream);
+
+        List<com.huicai.module.arap.dto.vo.ReconciliationTraceVO.OperationTrail> trails = new ArrayList<>();
+        com.huicai.module.arap.dto.vo.ReconciliationTraceVO.OperationTrail trail = new com.huicai.module.arap.dto.vo.ReconciliationTraceVO.OperationTrail();
+        trail.setOperationType(log.getOperationType() != null ? log.getOperationType() : "CREATE");
+        trail.setTime(log.getCreatedAt());
+        trail.setRemark(log.getRemark());
+        trails.add(trail);
+        trace.setOperationTrail(trails);
+
+        return trace;
     }
 }

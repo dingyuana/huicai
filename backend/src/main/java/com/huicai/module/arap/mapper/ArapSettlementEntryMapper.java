@@ -13,4 +13,7 @@ public interface ArapSettlementEntryMapper extends BaseMapper<ArapSettlementEntr
 
     @Delete("DELETE FROM t_arap_settlement_entry WHERE payable_id IS NOT NULL")
     int deleteByPayableNotNull();
+
+    @Delete("DELETE FROM t_arap_settlement_entry")
+    int deleteAll();
 }

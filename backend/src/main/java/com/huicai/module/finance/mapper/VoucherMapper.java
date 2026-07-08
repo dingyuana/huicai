@@ -8,6 +8,7 @@ import org.apache.ibatis.annotations.Delete;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
+import org.apache.ibatis.annotations.Update;
 
 import java.util.List;
 import java.util.Map;
@@ -52,6 +53,9 @@ public interface VoucherMapper extends BaseMapper<VoucherEntity> {
 
     @Delete("DELETE FROM t_voucher")
     int deleteAll();
+
+    @Update("UPDATE t_voucher SET business_doc_id = NULL WHERE business_doc_id IS NOT NULL")
+    int nullOutBusinessDocId();
 
     @Select("""
         SELECT v.id, v.voucher_no, v.total_debit, v.total_credit,

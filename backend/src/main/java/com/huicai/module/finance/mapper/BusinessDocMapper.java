@@ -22,6 +22,9 @@ public interface BusinessDocMapper extends BaseMapper<BusinessDocEntity> {
     @Delete("DELETE FROM t_business_doc")
     int physicalDeleteAll();
 
+    @Update("UPDATE t_business_doc SET invoice_id = NULL WHERE invoice_id IS NOT NULL")
+    int nullOutInvoiceId();
+
     @Select("""
         SELECT id, doc_no, status, customer_id, supplier_id
         FROM t_business_doc

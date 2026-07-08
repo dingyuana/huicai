@@ -2,9 +2,11 @@ package com.huicai.module.tax.mapper;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.huicai.module.tax.entity.InputInvoiceEntity;
+import org.apache.ibatis.annotations.Delete;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
+import org.apache.ibatis.annotations.Update;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -30,4 +32,10 @@ public interface InputInvoiceMapper extends BaseMapper<InputInvoiceEntity> {
         GROUP BY tax_rate
     """)
     List<Map<String, Object>> byTaxRate(@Param("period") String period);
+
+    @Delete("DELETE FROM t_input_invoice")
+    int physicalDeleteAll();
+
+    @Update("UPDATE t_input_invoice SET doc_id = NULL WHERE doc_id IS NOT NULL")
+    int nullOutDocId();
 }

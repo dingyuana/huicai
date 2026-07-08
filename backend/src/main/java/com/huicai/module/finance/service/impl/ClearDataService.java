@@ -1,12 +1,14 @@
 package com.huicai.module.finance.service.impl;
 
 import com.huicai.module.arap.mapper.ArapSettlementEntryMapper;
+import com.huicai.module.arap.mapper.ReconciliationLogMapper;
 import com.huicai.module.finance.mapper.BankJournalMapper;
 import com.huicai.module.finance.mapper.BankStatementMapper;
 import com.huicai.module.finance.mapper.BusinessDocMapper;
 import com.huicai.module.finance.mapper.BusinessDocEntryMapper;
 import com.huicai.module.finance.mapper.VoucherEntryMapper;
 import com.huicai.module.finance.mapper.VoucherMapper;
+import com.huicai.module.tax.mapper.InputInvoiceMapper;
 import com.huicai.module.tax.mapper.OutputInvoiceMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -25,6 +27,8 @@ public class ClearDataService {
     private final VoucherMapper voucherMapper;
     private final VoucherEntryMapper voucherEntryMapper;
     private final OutputInvoiceMapper outputInvoiceMapper;
+    private final InputInvoiceMapper inputInvoiceMapper;
+    private final ReconciliationLogMapper reconciliationLogMapper;
 
     public int clearBankStatements() {
         int ve = 0, v = 0, d = 0, s = 0;
@@ -37,13 +41,19 @@ public class ClearDataService {
     }
 
     public int clearInvoiceRecords() {
-        int ve = 0, v = 0, d = 0, oi = 0;
+        int ve = 0, v = 0, d = 0, oi = 0, ii = 0, ni = 0;
+        // 1. Null out invoice_id on business_doc before deleting invoices
+        try { ni = businessDocMapper.nullOutInvoiceId(); } catch (Exception e) { log.warn("doc nullOutInvoiceId: {}", e.getMessage()); }
+        // 2. Delete input_invoice (no FK pointing to business_doc)
+        try { ii = inputInvoiceMapper.physicalDeleteAll(); } catch (Exception e) { log.warn("input_invoice: {}", e.getMessage()); }
+        // 3. Delete output_invoice (FK t_business_doc.invoice_id already nulled)
         try { oi = outputInvoiceMapper.physicalDeleteAll(); } catch (Exception e) { log.warn("output_invoice: {}", e.getMessage()); }
+        // 4. Clear related vouchers + entries + docs (source = INVOICE_IMPORT)
         try { ve = voucherEntryMapper.deleteByVoucherSource("INVOICE_IMPORT"); } catch (Exception e) { log.warn("voucher_entry: {}", e.getMessage()); }
         try { v = voucherMapper.deleteBySource("INVOICE_IMPORT"); } catch (Exception e) { log.warn("voucher: {}", e.getMessage()); }
         try { d = businessDocMapper.deleteBySource("INVOICE_IMPORT"); } catch (Exception e) { log.warn("doc: {}", e.getMessage()); }
-        log.info("清空发票记录: docs={}, vouchers={}, entries={}, output_invoices={}", d, v, ve, oi);
-        return d + v + ve + oi;
+        log.info("清空发票记录: invoice_id_nulled={}, input_invoices={}, output_invoices={}, docs={}, vouchers={}, entries={}", ni, ii, oi, d, v, ve);
+        return ni + ii + oi + d + v + ve;
     }
 
     public int clearVouchers() {
@@ -61,13 +71,19 @@ public class ClearDataService {
      * 清空业务单据(含明细行)
      */
     public int clearBusinessDocs() {
-        int rr = 0, pr = 0, bjr = 0, e = 0, d = 0;
-        // 先解除外键引用，再物理删除（P34: 应收/应付已合并到业务单据，不再单独清理）
+        int rr = 0, pr = 0, bjr = 0, e = 0, d = 0, se = 0, rl = 0, vn = 0, ni = 0;
+        // 先解除所有外键引用，再物理删除
         try { bjr = bankJournalMapper.nullOutBusinessDocId(); } catch (Exception ex) { log.warn("bank_journal nullOutDocId: {}", ex.getMessage()); }
+        try { vn = voucherMapper.nullOutBusinessDocId(); } catch (Exception ex) { log.warn("voucher nullOutBusinessDocId: {}", ex.getMessage()); }
+        try { ni = businessDocMapper.nullOutInvoiceId(); } catch (Exception ex) { log.warn("doc nullOutInvoiceId: {}", ex.getMessage()); }
+        // settlement_entry + reconciliation_log 引用 business_doc_id，先删
+        try { se = settlementEntryMapper.deleteAll(); } catch (Exception ex) { log.warn("settlement_entry: {}", ex.getMessage()); }
+        try { rl = reconciliationLogMapper.deleteAll(); } catch (Exception ex) { log.warn("reconciliation_log: {}", ex.getMessage()); }
+        // doc_entry 有 ON DELETE CASCADE，先删 entry 再删 doc
         try { e = businessDocEntryMapper.physicalDeleteAll(); } catch (Exception ex) { log.warn("doc_entry: {}", ex.getMessage()); }
         try { d = businessDocMapper.physicalDeleteAll(); } catch (Exception ex) { log.warn("doc: {}", ex.getMessage()); }
-        log.info("清空业务单据: doc_refs_nulled(j={}), entries={}, docs={}", bjr, e, d);
-        return e + d;
+        log.info("清空业务单据: refs_nulled(j={},v={},i={}), entries={}, docs={}, settlement_entries={}, recon_logs={}", bjr, vn, ni, e, d, se, rl);
+        return e + d + se + rl;
     }
 
     public int clearAll() {

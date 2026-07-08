@@ -1,11 +1,17 @@
 package com.huicai.module.arap.controller;
 
 import com.huicai.common.response.R;
+import com.huicai.module.arap.dto.ReconciliationToleranceDTO;
+import com.huicai.module.arap.dto.vo.ReconciliationToleranceVO;
+import com.huicai.module.arap.dto.vo.ReconciliationTraceVO;
 import com.huicai.module.arap.entity.ReconciliationExceptionEntity;
 import com.huicai.module.arap.entity.ReconciliationLogEntity;
 import com.huicai.module.arap.service.ReconciliationService;
+import com.huicai.module.arap.service.ReconciliationToleranceService;
+import com.huicai.module.arap.service.impl.ReconciliationServiceImpl;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
@@ -20,6 +26,8 @@ import java.util.Map;
 public class ReconciliationController {
 
     private final ReconciliationService reconciliationService;
+    private final ReconciliationToleranceService toleranceService;
+    private final ReconciliationServiceImpl reconciliationServiceImpl;
 
     @Operation(summary = "收款核销推荐")
     @PostMapping("/receipt/{receiptId}/recommend")
@@ -191,5 +199,50 @@ public class ReconciliationController {
         return R.ok(reconciliationService.smartAllocate(
                 sourceDocType, sourceDocId, partyId, partyType,
                 targetDocType, amount, period, summary));
+    }
+
+    // ==================== 全链路追溯 ====================
+
+    @Operation(summary = "核销全链路追溯")
+    @GetMapping("/{id}/trace")
+    public R<ReconciliationTraceVO> trace(@PathVariable Long id) {
+        return R.ok(reconciliationServiceImpl.trace(id));
+    }
+
+    // ==================== 容差配置管理 ====================
+
+    @Operation(summary = "获取默认容差配置")
+    @GetMapping("/tolerance/default")
+    public R<ReconciliationToleranceVO> getDefaultTolerance() {
+        return R.ok(toleranceService.getDefaultConfig());
+    }
+
+    @Operation(summary = "获取指定客户/供应商容差配置")
+    @GetMapping("/tolerance/{partyId}/{partyType}")
+    public R<ReconciliationToleranceVO> getToleranceByParty(
+            @PathVariable Long partyId,
+            @PathVariable String partyType) {
+        return R.ok(toleranceService.getByParty(partyId, partyType));
+    }
+
+    @Operation(summary = "创建容差配置")
+    @PostMapping("/tolerance")
+    public R<ReconciliationToleranceVO> createTolerance(@Valid @RequestBody ReconciliationToleranceDTO dto) {
+        return R.ok(toleranceService.create(dto));
+    }
+
+    @Operation(summary = "更新容差配置")
+    @PutMapping("/tolerance/{id}")
+    public R<ReconciliationToleranceVO> updateTolerance(
+            @PathVariable Long id,
+            @Valid @RequestBody ReconciliationToleranceDTO dto) {
+        return R.ok(toleranceService.update(id, dto));
+    }
+
+    @Operation(summary = "删除容差配置")
+    @DeleteMapping("/tolerance/{id}")
+    public R<Void> deleteTolerance(@PathVariable Long id) {
+        toleranceService.delete(id);
+        return R.ok();
     }
 }

@@ -407,13 +407,14 @@ async function onViewSettlement(row: ArapSettlement) {
   try {
     settlementDetail.value = await getSettlementDetail(row.id)
     detailDialogVisible.value = true
-    // trace 数据需要 reconciliation_log ID，不在自动加载
+    // 加载上下游数据（后端同时支持 settlementId 和 logId）
+    loadTrace(row.id)
   } catch (e: any) { ElMessage.error(e?.message || '查询详情失败') }
 }
 
-async function loadTrace(logId: number) {
+async function loadTrace(id: number) {
   try {
-    traceData.value = await getReconciliationTrace(logId)
+    traceData.value = await getReconciliationTrace(id)
   } catch {
     traceData.value = null
   }

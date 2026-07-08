@@ -149,7 +149,8 @@ this.applicationContext = applicationContext;
     public void onReconciliationUpdate(Long invoiceId, BigDecimal unsettledAmount, Long userId) {
         OutputInvoiceEntity entity = getEntity(invoiceId);
         if (!InvoiceStatus.isVouchered(entity.getStatus())) {
-            throw BusinessException.badRequest("仅已生成凭证的发票可核销");
+            log.warn("P38 发票未生成凭证跳过核销状态同步: id={}, status={}", invoiceId, entity.getStatus());
+            return;
         }
         String newStatus = unsettledAmount.compareTo(BigDecimal.ZERO) == 0
                 ? InvoiceStatus.FULLY_RECONCILED

@@ -45,8 +45,14 @@ class ReconciliationServiceImplTest {
     @Mock private VoucherTemplateService voucherTemplateService;
     @Mock private VoucherNoService voucherNoService;
     @Mock private OutputInvoiceStateMachineService outputInvoiceStateMachineService;
+    @Mock private com.huicai.module.arap.service.ReconciliationToleranceService toleranceService;
 
     @InjectMocks private ReconciliationServiceImpl service;
+
+    @org.junit.jupiter.api.BeforeEach
+    void setUp() {
+        lenient().when(toleranceService.getToleranceAmount(anyLong(), anyString())).thenReturn(new BigDecimal("5.00"));
+    }
 
     private BusinessDocEntity stubBusinessDoc(Long id, Long customerId, Long supplierId, String docType, BigDecimal amount, BigDecimal unsettled) {
         BusinessDocEntity b = new BusinessDocEntity();

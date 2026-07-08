@@ -3,7 +3,8 @@
 > **编号**：HUICAI-SPC-030 | 优先级：高
 > 依据：P12 核销业务闭环已落地，但前端工作台只支持银行流水触发，缺少收款单/付款单直接触发入口
 > 目标：补全核销工作台的触发源+审批UI+日志查询，使后端完整能力在前端可用
-> 工期：3 批工单（P30-1 / P30-2 / P30-3）
+> **V2.0 更新**：新增 P30-4 批次 — 全链路追溯API、余额快照、容差配置化
+> 工期：4 批工单（P30-1 / P30-2 / P30-3 / P30-4）
 
 ---
 
@@ -256,6 +257,185 @@ dependencies:
     relation: "红冲过的单据核销金额需重新计算"
   - spec: P22
     relation: "核销凭证的摘要需包含业务单据号"
+
+---
+
+## 7. P30-4：核销全链路追溯 + 余额快照 + 容差配置化
+
+### 7.1 目标
+
+参考外部核销设计方案，补全本项目缺失的三项核心能力：
+1. **全链路追溯API**：一次性返回核销单的完整业务链路（流水→收款单→核销单→应收单→发票→凭证）
+2. **余额快照**：核销时记录单据前后余额，便于审计追溯
+3. **容差配置化**：将硬编码的5元容差阈值改为可配置，支持按客户/供应商设置不同阈值
+
+### 7.2 P30-4-1：全链路追溯 API
+
+**API 定义**：
+
+| 方法 | 路由 | 说明 |
+|------|------|------|
+| GET | `/api/v1/reconciliation/{id}/trace` | 核销全链路追溯 |
+
+**请求参数**：
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| id | Long | 是 | 核销日志ID或核销单ID |
+
+**响应结构**：
+
+```json
+{
+  "traceId": "TRC-202607-001",
+  "settlement": {
+    "id": 1,
+    "settlementNo": "JS-202607-0001",
+    "amount": 10000.00,
+    "status": "EXECUTED",
+    "createdAt": "2026-07-08 10:00:00"
+  },
+  "upstream": {
+    "bankTransaction": {
+      "id": 100,
+      "transactionNo": "BK-202607-0001",
+      "amount": 10000.00,
+      "counterAccount": "客户A"
+    },
+    "receipt": {
+      "id": 50,
+      "docNo": "SK-202607-0001",
+      "amount": 10000.00,
+      "status": "VOUCHERED"
+    }
+  },
+  "downstream": {
+    "businessDocs": [
+      {
+        "id": 200,
+        "docNo": "YD-202607-0001",
+        "docType": "INVOICE_OUT",
+        "amount": 10000.00,
+        "settledAmount": 10000.00,
+        "unsettledAmount": 0.00
+      }
+    ],
+    "invoices": [
+      {
+        "id": 300,
+        "invoiceNo": "FP-202607-0001",
+        "amount": 10000.00,
+        "status": "FULLY_RECONCILED"
+      }
+    ]
+  },
+  "operationTrail": [
+    {
+      "operationType": "CREATE",
+      "operator": "张三",
+      "time": "2026-07-08 10:00:00",
+      "remark": "自动匹配核销"
+    },
+    {
+      "operationType": "CONFIRM",
+      "operator": "李四",
+      "time": "2026-07-08 10:30:00",
+      "remark": "审核通过"
+    }
+  ],
+  "voucher": {
+    "id": 400,
+    "voucherNo": "PZ-202607-0001",
+    "status": "POSTED"
+  }
+}
+```
+
+### 7.3 P30-4-2：余额快照
+
+**数据库变更**（Flyway V81）：
+
+```sql
+ALTER TABLE t_arap_settlement_entry 
+ADD COLUMN before_balance NUMERIC(18,2) DEFAULT 0,
+ADD COLUMN after_balance NUMERIC(18,2) DEFAULT 0;
+
+ALTER TABLE t_reconciliation_log 
+ADD COLUMN operation_type VARCHAR(20) DEFAULT 'CREATE',
+ADD COLUMN rule_id VARCHAR(50);
+```
+
+**业务逻辑**：
+
+1. 核销执行前，查询业务单据当前 `unsettled_amount` 作为 `before_balance`
+2. 核销执行后，计算 `after_balance = before_balance - settled_amount`
+3. 将快照写入 `t_arap_settlement_entry`
+4. 同时记录操作类型到 `t_reconciliation_log`
+
+### 7.4 P30-4-3：容差配置化
+
+**数据库变更**（Flyway V82）：
+
+```sql
+CREATE TABLE t_reconciliation_tolerance (
+    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    tenant_id BIGINT NOT NULL DEFAULT 1,
+    party_id BIGINT,
+    party_type VARCHAR(20),
+    tolerance_amount NUMERIC(18,2) DEFAULT 5.00,
+    tolerance_rate NUMERIC(5,2) DEFAULT 10.00,
+    effective_from DATE DEFAULT NOW(),
+    effective_to DATE,
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW(),
+    deleted INTEGER DEFAULT 0
+);
+
+CREATE INDEX idx_tolerance_party ON t_reconciliation_tolerance(party_id, party_type);
+CREATE INDEX idx_tolerance_tenant ON t_reconciliation_tolerance(tenant_id);
+```
+
+**API 定义**：
+
+| 方法 | 路由 | 说明 |
+|------|------|------|
+| GET | `/api/v1/reconciliation/tolerance/default` | 获取默认容差配置 |
+| GET | `/api/v1/reconciliation/tolerance/{partyId}/{partyType}` | 获取指定客户/供应商容差配置 |
+| POST | `/api/v1/reconciliation/tolerance` | 创建容差配置 |
+| PUT | `/api/v1/reconciliation/tolerance/{id}` | 更新容差配置 |
+| DELETE | `/api/v1/reconciliation/tolerance/{id}` | 删除容差配置 |
+
+**容差获取优先级**：
+
+```
+1. 客户/供应商专属配置（party_id + party_type）
+2. 全局配置（party_id = NULL）
+3. 系统默认值（5元，10%）
+```
+
+### 7.5 P30-4 验收标准
+
+| ID | 描述 | 断言 |
+|----|------|------|
+| AT-P30-4-1 | 全链路追溯API返回完整数据 | `trace().settlement != null && trace().upstream != null && trace().downstream != null && trace().operationTrail.length >= 1` |
+| AT-P30-4-2 | 核销明细记录余额快照 | `settlementEntry.beforeBalance > 0 && settlementEntry.afterBalance == settlementEntry.beforeBalance - settlementEntry.amount` |
+| AT-P30-4-3 | 容差配置优先使用客户专属 | `getTolerance(customerId).toleranceAmount == customerConfig.toleranceAmount` |
+| AT-P30-4-4 | 容差配置回退全局 | `getTolerance(unknownId).toleranceAmount == globalConfig.toleranceAmount` |
+
+---
+
+## 8. 施工顺序（更新）
+
+| 批 | 内容 | 前置依赖 | 风险 |
+|---|------|---------|------|
+| **P30-1** | 工作台增加收款/付款单 tab | BusinessDoc 分页接口 | 🟡 低 |
+| **P30-2** | 核销审批/驳回 UI | P30-1（建议但非必须） | 🟡 低 |
+| **P30-3** | 核销日志与异常池 | 无 | ✅ 低 |
+| **P30-4** | 全链路追溯 + 余额快照 + 容差配置化 | P30-1/P30-2 | 🟡 中 |
+
+**推荐开工顺序**：P30-1 → P30-2 → P30-3 → P30-4
+
+---
 
 out_of_scope:
   - "核销推荐算法变更（L1-L6 现有逻辑不动）"
