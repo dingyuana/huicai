@@ -2,6 +2,7 @@ package com.huicai.module.finance.entity;
 
 import com.baomidou.mybatisplus.annotation.*;
 import com.huicai.common.annotation.StatusChangeable;
+import com.huicai.module.system.handler.JsonbTypeHandler;
 import lombok.Data;
 
 import java.math.BigDecimal;
@@ -62,6 +63,7 @@ public class BusinessDocEntity {
     private Long invoiceId;
 
     /** OCR 数据 (JSONB) */
+    @TableField(typeHandler = JsonbTypeHandler.class)
     private String ocrData;
 
     /** 附件ID列表 */

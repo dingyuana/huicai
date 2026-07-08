@@ -2,6 +2,7 @@ package com.huicai.module.tax.entity;
 
 import com.baomidou.mybatisplus.annotation.*;
 import com.huicai.common.annotation.StatusChangeable;
+import com.huicai.module.system.handler.JsonbTypeHandler;
 import lombok.Data;
 
 import java.math.BigDecimal;
@@ -44,7 +45,7 @@ public class OutputInvoiceEntity {
     private String processStatus;
 
     /** AI 科目映射推荐结果（JSONB） */
-    @TableField("ai_mapping_result")
+    @TableField(value = "ai_mapping_result", typeHandler = JsonbTypeHandler.class)
     private String aiMappingResult;
 
     private String invoiceType;

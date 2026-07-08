@@ -2,6 +2,7 @@ package com.huicai.module.tax.entity;
 
 import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableName;
+import com.huicai.module.system.handler.JsonbTypeHandler;
 import lombok.Data;
 
 import java.math.BigDecimal;
@@ -33,7 +34,7 @@ public class AccountMappingRuleEntity {
     private String direction;
 
     /** 辅助核算维度 */
-    @TableField("aux_dimension")
+    @TableField(value = "aux_dimension", typeHandler = JsonbTypeHandler.class)
     private String auxDimension;
 
     /** 匹配优先级 */

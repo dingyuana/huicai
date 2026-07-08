@@ -1,6 +1,7 @@
 package com.huicai.module.finance.entity;
 
 import com.baomidou.mybatisplus.annotation.*;
+import com.huicai.module.system.handler.JsonbTypeHandler;
 import lombok.Data;
 
 import java.math.BigDecimal;
@@ -32,6 +33,7 @@ public class VoucherEntryEntity {
     private String summary;
 
     /** 辅助核算信息(JSON) */
+    @TableField(typeHandler = JsonbTypeHandler.class)
     private String assistJson;
 
     /** 排序号 */
