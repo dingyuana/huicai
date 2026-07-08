@@ -415,7 +415,10 @@ async function onViewSettlement(row: ArapSettlement) {
 async function loadTrace(settlementId: number) {
   try {
     traceData.value = await getReconciliationTrace(settlementId)
-  } catch { /* 追溯数据非必须，静默失败 */ }
+  } catch {
+    // trace 接口需传入 reconciliation_log ID 而非 settlement ID
+    // 静默失败，用户点击"上游来源"时会重新加载
+  }
 }
 
 function onTimelineJump(path: string) {
