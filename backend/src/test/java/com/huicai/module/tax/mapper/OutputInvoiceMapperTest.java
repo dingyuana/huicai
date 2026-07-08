@@ -272,4 +272,49 @@ public class OutputInvoiceMapperTest extends AbstractMapperTest {
         assertEquals(0, new BigDecimal("0.09").compareTo(found2.getTaxRate()));
         assertEquals(0, new BigDecimal("0.06").compareTo(found3.getTaxRate()));
     }
+
+    /**
+     * 场景 6：Entity-DB 字段对齐测试（修复 P40 两个 bug 的回归保护）
+     *
+     * 验证：
+     * - auditedBy/auditedAt 有 @TableField(exist = false)，SELECT 不报 "column does not exist"
+     * - aiMappingResult 有 typeHandler = JsonbTypeHandler.class，UPDATE 不报 JSONB 类型不匹配
+     */
+    @Test
+    void entityDbAlignment_shouldNotThrowColumnErrors() {
+        var e = new OutputInvoiceEntity();
+        e.setInvoiceNo("INV-ALIGN-001");
+        e.setInvoiceDate(LocalDate.of(2026, 7, 8));
+        e.setPeriod("202607");
+        e.setCustomerId(testCustomerId);
+        e.setCustomerName("对齐测试客户");
+        e.setAmount(new BigDecimal("10000.00"));
+        e.setTaxRate(new BigDecimal("0.13"));
+        e.setTaxAmount(new BigDecimal("1300.00"));
+        e.setTotalAmount(new BigDecimal("11300.00"));
+        e.setAmountExTax(new BigDecimal("10000.00"));
+        e.setInvoiceType("SPECIAL");
+        e.setStatus("PENDING_CONFIRM");
+        e.setCreatedBy(1L);
+        e.setDeleted(0);
+        e.setAiMappingResult("{\"account_code\":\"1122\",\"confidence\":0.95}");
+        outputInvoiceMapper.insert(e);
+        assertNotNull(e.getId());
+
+        OutputInvoiceEntity found = outputInvoiceMapper.selectById(e.getId());
+        assertNotNull(found);
+        assertEquals("PENDING_CONFIRM", found.getStatus());
+
+        e.setStatus("PENDING_REVIEW");
+        assertDoesNotThrow(() -> outputInvoiceMapper.updateById(e));
+
+        OutputInvoiceEntity updated = outputInvoiceMapper.selectById(e.getId());
+        assertEquals("PENDING_REVIEW", updated.getStatus());
+
+        e.setAiMappingResult("{\"account_code\":\"6001\",\"confidence\":0.88}");
+        assertDoesNotThrow(() -> outputInvoiceMapper.updateById(e));
+
+        OutputInvoiceEntity finalCheck = outputInvoiceMapper.selectById(e.getId());
+        assertEquals("{\"account_code\":\"6001\",\"confidence\":0.88}", finalCheck.getAiMappingResult());
+    }
 }
