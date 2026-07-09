@@ -55,4 +55,10 @@ public class ClearDataController {
         return R.ok(Map.of("deleted", count, "message", "已清空所有业务单据及明细行"));
     }
 
+    @Operation(summary = "清空核销数据")
+    @PostMapping("/clear-settlements")
+    public R<Map<String, Object>> clearSettlements() {
+        int count = clearDataService.clearSettlements();
+        return R.ok(Map.of("deleted", count, "message", "已清空核销数据，业务单据核销金额已重置"));
     }
+}

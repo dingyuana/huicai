@@ -1,6 +1,7 @@
 package com.huicai.module.finance.service.impl;
 
 import com.huicai.module.arap.mapper.ArapSettlementEntryMapper;
+import com.huicai.module.arap.mapper.ArapSettlementMapper;
 import com.huicai.module.arap.mapper.ReconciliationLogMapper;
 import com.huicai.module.finance.mapper.BankJournalMapper;
 import com.huicai.module.finance.mapper.BankStatementMapper;
@@ -24,6 +25,7 @@ public class ClearDataService {
     private final BusinessDocMapper businessDocMapper;
     private final BusinessDocEntryMapper businessDocEntryMapper;
     private final ArapSettlementEntryMapper settlementEntryMapper;
+    private final ArapSettlementMapper settlementMapper;
     private final VoucherMapper voucherMapper;
     private final VoucherEntryMapper voucherEntryMapper;
     private final OutputInvoiceMapper outputInvoiceMapper;
@@ -93,5 +95,18 @@ public class ClearDataService {
         int d = clearBusinessDocs();
         log.info("清空全部: total={}", s + i + v + d);
         return s + i + v + d;
+    }
+
+    /**
+     * 清空核销数据（核销单、核销明细、核销日志），重置业务单据核销金额
+     */
+    public int clearSettlements() {
+        int se = 0, sl = 0, rl = 0, bd = 0;
+        try { se = settlementEntryMapper.deleteAll(); } catch (Exception e) { log.warn("settlement_entry: {}", e.getMessage()); }
+        try { sl = settlementMapper.physicalDeleteAll(); } catch (Exception e) { log.warn("settlement: {}", e.getMessage()); }
+        try { rl = reconciliationLogMapper.deleteAll(); } catch (Exception e) { log.warn("recon_log: {}", e.getMessage()); }
+        try { bd = businessDocMapper.resetSettlementAmounts(); } catch (Exception e) { log.warn("businessDoc reset: {}", e.getMessage()); }
+        log.info("清空核销数据: entries={}, settlements={}, logs={}, docs_reset={}", se, sl, rl, bd);
+        return se + sl + rl + bd;
     }
 }

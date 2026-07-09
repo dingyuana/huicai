@@ -452,6 +452,7 @@ async function refreshActive() {
 
 onMounted(() => {
   fetchSettlements()
+  fetchReconLogs()
 })
 </script>
 

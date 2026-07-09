@@ -70,4 +70,35 @@ public final class ArapStatus {
     public static boolean isModifiable(String status) {
         return DRAFT.equals(status);
     }
+
+    /** 是否可取消（仅草稿） */
+    public static boolean isCancellable(String status) {
+        return DRAFT.equals(status);
+    }
+
+    /** 是否可驳回（仅已确认） */
+    public static boolean isRejectable(String status) {
+        return CONFIRMED.equals(status);
+    }
+
+    /** 是否可生成凭证（仅已确认） */
+    public static boolean isVoucherable(String status) {
+        return CONFIRMED.equals(status);
+    }
+
+    /**
+     * 校验状态转换是否合法.
+     * @param from 当前状态
+     * @param to 目标状态
+     * @return 是否允许转换
+     */
+    public static boolean canTransition(String from, String to) {
+        if (from == null || to == null) return false;
+        return switch (from) {
+            case DRAFT -> CONFIRMED.equals(to) || CANCELLED.equals(to);
+            case CONFIRMED -> VOUCHERED.equals(to) || REJECTED.equals(to) || REVERSED.equals(to);
+            case VOUCHERED -> REVERSED.equals(to);
+            default -> false;
+        };
+    }
 }

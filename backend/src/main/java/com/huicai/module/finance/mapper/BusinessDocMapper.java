@@ -80,4 +80,7 @@ public interface BusinessDocMapper extends BaseMapper<BusinessDocEntity> {
         GROUP BY supplier_id
     """)
     List<Map<String, Object>> aggregateByVendor();
+
+    @Update("UPDATE t_business_doc SET settled_amount = 0, unsettled_amount = amount WHERE deleted = 0")
+    int resetSettlementAmounts();
 }

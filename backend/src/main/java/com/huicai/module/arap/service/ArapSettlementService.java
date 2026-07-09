@@ -13,6 +13,10 @@ public interface ArapSettlementService {
     ArapSettlementEntity confirm(Long id);
     void delete(Long id);
 
+        void cancel(Long id);
+
+    void reject(Long id);
+
     /**
      * 核销单生成凭证 — 状态从 CONFIRMED → VOUCHERED
      */

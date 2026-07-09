@@ -103,8 +103,8 @@ public class ArapSettlementServiceImpl implements ArapSettlementService {
     @Transactional(rollbackFor = Exception.class)
     public ArapSettlementEntity confirm(Long id) {
         ArapSettlementEntity entity = getById(id);
-        if (!ArapStatus.isDraft(entity.getStatus())) {
-            throw new BusinessException("仅草稿状态可确认");
+        if (!ArapStatus.canTransition(entity.getStatus(), ArapStatus.CONFIRMED)) {
+            throw new BusinessException("核销单状态不允许确认: " + entity.getStatus());
         }
         // 更新明细对应应收/应付的已核销金额
         List<ArapSettlementEntryEntity> entries = entryMapper.selectList(
@@ -157,10 +157,32 @@ public class ArapSettlementServiceImpl implements ArapSettlementService {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
+    public void cancel(Long id) {
+        ArapSettlementEntity entity = getById(id);
+        if (!ArapStatus.canTransition(entity.getStatus(), ArapStatus.CANCELLED)) {
+            throw new BusinessException("核销单状态不允许取消: " + entity.getStatus());
+        }
+        entity.setStatus(ArapStatus.CANCELLED);
+        mapper.updateById(entity);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void reject(Long id) {
+        ArapSettlementEntity entity = getById(id);
+        if (!ArapStatus.canTransition(entity.getStatus(), ArapStatus.REJECTED)) {
+            throw new BusinessException("核销单状态不允许驳回: " + entity.getStatus());
+        }
+        entity.setStatus(ArapStatus.REJECTED);
+        mapper.updateById(entity);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
     public void generateVoucher(Long id) {
         ArapSettlementEntity entity = getById(id);
-        if (!ArapStatus.isConfirmed(entity.getStatus())) {
-            throw new BusinessException("仅已确认(CONFIRMED)的核销单可生成凭证");
+        if (!ArapStatus.canTransition(entity.getStatus(), ArapStatus.VOUCHERED)) {
+            throw new BusinessException("核销单状态不允许生成凭证: " + entity.getStatus());
         }
         if (entity.getVoucherId() != null) {
             throw new BusinessException("该核销单已生成凭证, voucherId=" + entity.getVoucherId());
@@ -274,8 +296,8 @@ public class ArapSettlementServiceImpl implements ArapSettlementService {
     @Transactional(rollbackFor = Exception.class)
     public void reverse(Long id) {
         ArapSettlementEntity entity = getById(id);
-        if (!ArapStatus.isConfirmed(entity.getStatus())) {
-            throw new BusinessException("仅已确认(CONFIRMED)的核销单可反核销");
+        if (!ArapStatus.canTransition(entity.getStatus(), ArapStatus.REVERSED)) {
+            throw new BusinessException("核销单状态不允许反核销: " + entity.getStatus());
         }
         List<ArapSettlementEntryEntity> entries = entryMapper.selectList(
                 new LambdaQueryWrapper<ArapSettlementEntryEntity>()

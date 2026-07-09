@@ -62,6 +62,20 @@ public class ArapSettlementController {
         return R.ok();
     }
 
+    @Operation(summary = "取消核销单 — DRAFT → CANCELLED")
+    @PostMapping("/{id}/cancel")
+    public R<Void> cancel(@PathVariable Long id) {
+        service.cancel(id);
+        return R.ok();
+    }
+
+    @Operation(summary = "驳回核销单 — CONFIRMED → REJECTED")
+    @PostMapping("/{id}/reject")
+    public R<Void> reject(@PathVariable Long id) {
+        service.reject(id);
+        return R.ok();
+    }
+
     @Operation(summary = "删除")
     @DeleteMapping("/{id}")
     public R<Void> delete(@PathVariable Long id) {

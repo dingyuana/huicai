@@ -83,6 +83,10 @@ export function clearPayables(): Promise<{ deleted: number; message: string }> {
   return request.post('/system/clear-payables')
 }
 
+export function clearSettlements(): Promise<{ deleted: number; message: string }> {
+  return request.post('/system/clear-settlements')
+}
+
 // ==================== Role ====================
 export interface RoleVO {
   id: number
