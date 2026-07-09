@@ -133,6 +133,10 @@
 17. **`execute_code` 工具返回空**：沙箱内 `terminal()`/`read_file()` 可能返回空，改用 `subprocess.run()` 直接调系统命令
 18. **Maven JDK 21 编译**：`maven-compiler-plugin` 必须 ≥ 3.12.0，否则 `--release 21` 报错
 
+### 4.6 工作流执行类
+19. **起步跳过三步闭环**：收到"开发/继续开发/写代码"指令时，Hermes 必须先走 SPEC→审核门→再执行，禁止直接写 SPEC 文档或代码。**三次纠正沉淀：** 2026-07-09 ai-evolution-v2 起步时直接写计划文档+commit，跳过老丁审核（违反铁律 #10）。修正：收到任何开发指令，第一条输出必须是 SPEC 草案或要求确认需求，不是代码/计划文档。
+20. **`git add -A` 导致 doc 漂移**：写完文档后用了 `git add -A` 而非指定文件路径，导致关联 issue 修复。修正：commit 前先 `git status --short` 确认只有目标文件被跟踪。
+
 ---
 
 ## §5 命名约定（强制执行）
