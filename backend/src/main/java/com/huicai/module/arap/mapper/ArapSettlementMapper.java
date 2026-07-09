@@ -23,7 +23,7 @@ public interface ArapSettlementMapper extends BaseMapper<ArapSettlementEntity> {
             SELECT s.*, c.name AS customer_name, v.name AS vendor_name
             FROM t_arap_settlement s
             LEFT JOIN t_customer c ON s.party_id = c.id AND s.party_type = 'CUSTOMER'
-            LEFT JOIN t_supplier v ON s.party_id = v.id AND s.party_type = 'VENDOR'
+            LEFT JOIN t_vendor v ON s.party_id = v.id AND s.party_type = 'VENDOR'
             WHERE s.deleted = 0
             ORDER BY s.created_at DESC
             """)
