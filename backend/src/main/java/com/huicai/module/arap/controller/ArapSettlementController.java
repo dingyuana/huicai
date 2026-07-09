@@ -33,8 +33,8 @@ public class ArapSettlementController {
 
     @Operation(summary = "详情")
     @GetMapping("/{id}")
-    public R<ArapSettlementEntity> getById(@PathVariable Long id) {
-        return R.ok(service.getById(id));
+    public R<ArapSettlementVO> getById(@PathVariable Long id) {
+        return R.ok(service.getDetailWithPartyName(id));
     }
 
     @Operation(summary = "创建核销单")

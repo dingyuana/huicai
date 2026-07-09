@@ -12,6 +12,8 @@ import com.huicai.module.arap.entity.ArapSettlementEntity;
 import com.huicai.module.arap.entity.ArapSettlementEntryEntity;
 import com.huicai.module.arap.mapper.ArapSettlementEntryMapper;
 import com.huicai.module.arap.mapper.ArapSettlementMapper;
+import com.huicai.module.arap.mapper.CustomerMapper;
+import com.huicai.module.arap.mapper.VendorMapper;
 import com.huicai.module.arap.service.ArapSettlementService;
 import com.huicai.module.finance.constant.VoucherType;
 import com.huicai.module.finance.entity.BusinessDocEntity;
@@ -45,6 +47,8 @@ public class ArapSettlementServiceImpl implements ArapSettlementService {
     private final ArapSettlementMapper mapper;
     private final ArapSettlementEntryMapper entryMapper;
     private final BusinessDocMapper businessDocMapper;
+    private final CustomerMapper customerMapper;
+    private final VendorMapper vendorMapper;
     private final VoucherTemplateService voucherTemplateService;
     private final VoucherMapper voucherMapper;
     private final VoucherEntryMapper voucherEntryMapper;
@@ -80,6 +84,22 @@ public class ArapSettlementServiceImpl implements ArapSettlementService {
             throw new BusinessException("核销单不存在");
         }
         return entity;
+    }
+
+    @Override
+    public ArapSettlementVO getDetailWithPartyName(Long id) {
+        ArapSettlementEntity entity = mapper.selectById(id);
+        if (entity == null) throw new BusinessException("核销单不存在");
+        ArapSettlementVO vo = new ArapSettlementVO();
+        org.springframework.beans.BeanUtils.copyProperties(entity, vo);
+        if (entity.getPartyId() != null && "CUSTOMER".equals(entity.getPartyType())) {
+            com.huicai.module.arap.entity.CustomerEntity customer = customerMapper.selectById(entity.getPartyId());
+            if (customer != null) vo.setCustomerName(customer.getName());
+        } else if (entity.getPartyId() != null && "VENDOR".equals(entity.getPartyType())) {
+            com.huicai.module.arap.entity.VendorEntity vendor = vendorMapper.selectById(entity.getPartyId());
+            if (vendor != null) vo.setVendorName(vendor.getName());
+        }
+        return vo;
     }
 
     @Override

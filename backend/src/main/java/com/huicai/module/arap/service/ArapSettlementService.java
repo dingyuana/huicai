@@ -25,6 +25,8 @@ public interface ArapSettlementService {
     /**
      * 核销单生成凭证 — 状态从 CONFIRMED → VOUCHERED
      */
+    ArapSettlementVO getDetailWithPartyName(Long id);
+
     void generateVoucher(Long id);
 
     /**

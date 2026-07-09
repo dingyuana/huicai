@@ -41,12 +41,12 @@
             <el-table-column type="index" label="序号" width="50" />
             <el-table-column prop="settlementNo" label="核销编号" width="140" />
             <el-table-column label="类型" width="100" align="center">
-              <template #default="{row}">
-                <el-tag :type="row.settlementType==='RECEIVABLE'?'success':'warning'" size="small">
-                  {{ row.settlementType==='RECEIVABLE'?'应收核销':'应付核销' }}
-                </el-tag>
-              </template>
-            </el-table-column>
+                        <template #default="{ row }">
+                          <el-tag :type="['RECEIVE','RECEIVABLE'].includes(row.settlementType)?'success':'warning'" size="small">
+                            {{ settlementTypeLabel(row.settlementType) }}
+                          </el-tag>
+                        </template>
+                      </el-table-column>
             <el-table-column prop="settlementDate" label="核销日期" width="100" />
             <el-table-column label="客户/供应商" min-width="150">
               <template #default="{row}">{{ row.customerName || row.vendorName || '-' }}</template>
