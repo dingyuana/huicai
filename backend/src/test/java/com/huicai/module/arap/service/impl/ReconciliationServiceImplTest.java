@@ -164,7 +164,7 @@ class ReconciliationServiceImplTest {
 
         assertNotNull(log);
         assertEquals("CONFIRMED", log.getStatus());
-        verify(businessDocMapper).updateById(any(BusinessDocEntity.class));
+        verify(businessDocMapper, times(2)).updateById(any(BusinessDocEntity.class));
         verify(logMapper).insert(any(ReconciliationLogEntity.class));
     }
 

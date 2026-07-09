@@ -4,7 +4,7 @@
 
 ## §0 项目状态（硬数字，每次 commit 后更新）
 
-> **更新基准**：commit `0f8d420` (2026-07-08) — P42 核销能力补充
+> **更新基准**：commit `65e8d66` (2026-07-09) — P44/P45 核销列表修复 + 上游追溯
 > **当前分支**：`ai-evolution`
 > **关联文档**：[DESIGN.md](docs/DESIGN.md)、[需求登记册](docs/requirements/REQUIREMENTS_REGISTRY.md)、[DOCUMENT_REGISTRY.md](docs/DOCUMENT_REGISTRY.md)
 
