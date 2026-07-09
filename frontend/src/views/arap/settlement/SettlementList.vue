@@ -186,8 +186,8 @@
         <el-descriptions :column="2" border>
           <el-descriptions-item label="核销编号" :span="2">{{ settlementDetail.settlementNo }}</el-descriptions-item>
           <el-descriptions-item label="类型">
-            <el-tag :type="settlementDetail.settlementType==='RECEIVABLE'?'success':'warning'" size="small">
-              {{ settlementDetail.settlementType==='RECEIVABLE'?'应收核销':'应付核销' }}
+            <el-tag :type="['RECEIVE','RECEIVABLE'].includes(settlementDetail.settlementType)?'success':'warning'" size="small">
+              {{ settlementTypeLabel(settlementDetail.settlementType) }}
             </el-tag>
           </el-descriptions-item>
           <el-descriptions-item label="状态">
@@ -201,7 +201,25 @@
           <el-descriptions-item label="备注" :span="2">{{ settlementDetail.remark || '-' }}</el-descriptions-item>
         </el-descriptions>
 
-        <!-- 上下游穿透标签 -->
+                <!-- 核销依据：核销明细 -->
+                <div v-if="settlementEntries.length" style="margin-top:16px">
+                  <h4 style="margin-bottom:8px">核销依据</h4>
+                  <el-table :data="settlementEntries" border stripe size="small">
+                    <el-table-column label="来源单据" prop="sourceDocNo" min-width="140" />
+                    <el-table-column label="目标单据" prop="targetDocNo" min-width="140" />
+                    <el-table-column label="核销金额" width="120" align="right">
+                      <template #default="{ row }">{{ fmtAmount(row.settledAmount) }}</template>
+                    </el-table-column>
+                    <el-table-column label="核销前余额" width="120" align="right">
+                      <template #default="{ row }">{{ fmtAmount(row.beforeBalance) }}</template>
+                    </el-table-column>
+                    <el-table-column label="核销后余额" width="120" align="right">
+                      <template #default="{ row }">{{ fmtAmount(row.afterBalance) }}</template>
+                    </el-table-column>
+                  </el-table>
+                </div>
+
+                <ReconciliationTimeline v-if="settlementDetail.id" :settlementId="settlementDetail.id" @jump="onTimelineJump" />
         <div style="margin-top:16px">
           <el-space>
             <el-button text type="primary" @click="showUpstreamDrawer = true">
@@ -277,10 +295,10 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowUp, ArrowDown } from '@element-plus/icons-vue'
 import { useRouter } from 'vue-router'
 import {
-  pageSettlements, getSettlementDetail, createSettlement,
-  confirmSettlement, deleteSettlement,
-  pageReconLogs, reverseRecon,
-  type ArapSettlement, type ReconciliationLog,
+  pageSettlements, getSettlementDetail, getSettlementEntries, createSettlement,
+  confirmSettlement, deleteSettlement, confirmReconciliationLog,
+  getReconRecords, cancelReconciliationLog, type ArapSettlement,
+  type ReconciliationLog,
 } from '@/api/modules/arapSettlement'
 import { getReconciliationTrace, type ReconciliationTraceVO } from '@/api/modules/reconciliation'
 import ReconciliationTimeline from '@/views/arap/reconciliation-workbench/ReconciliationTimeline.vue'
@@ -298,8 +316,15 @@ function statusType(s: string) {
 }
 
 function statusLabel(s: string) {
-  const map: Record<string, string> = { DRAFT: '草稿', CONFIRMED: '已确认', VOUCHERED: '已记账', REVERSED: '已冲销' }
+  const map: Record<string, string> = { DRAFT: '草稿', CONFIRMED: '已确认', VOUCHERED: '已记账', REVERSED: '已冲销', CANCELLED: '已取消', REJECTED: '已驳回' }
   return map[s] || s
+}
+
+function settlementTypeLabel(s: string | null) {
+  if (!s) return '应收核销'
+  if (s === 'RECEIVE' || s === 'RECEIVABLE') return '应收核销'
+  if (s === 'PAY' || s === 'PAYABLE') return '应付核销'
+  return s
 }
 
 function sourceLabel(s: string) {
@@ -396,6 +421,7 @@ async function onDeleteSettlement(row: ArapSettlement) {
 // Detail
 const detailDialogVisible = ref(false)
 const settlementDetail = ref<ArapSettlement | null>(null)
+const settlementEntries = ref<any[]>([])
 
 // 上下游穿透 + 时间轴
 const showUpstreamDrawer = ref(false)
@@ -406,6 +432,7 @@ const traceData = ref<ReconciliationTraceVO | null>(null)
 async function onViewSettlement(row: ArapSettlement) {
   try {
     settlementDetail.value = await getSettlementDetail(row.id)
+    settlementEntries.value = await getSettlementEntries(row.id)
     detailDialogVisible.value = true
     // 加载上下游数据（后端同时支持 settlementId 和 logId）
     loadTrace(row.id)

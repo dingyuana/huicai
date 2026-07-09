@@ -7,6 +7,7 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.huicai.common.exception.BusinessException;
 import com.huicai.module.arap.constant.ArapStatus;
+import com.huicai.module.arap.dto.vo.ArapSettlementVO;
 import com.huicai.module.arap.entity.ArapSettlementEntity;
 import com.huicai.module.arap.entity.ArapSettlementEntryEntity;
 import com.huicai.module.arap.mapper.ArapSettlementEntryMapper;
@@ -64,6 +65,12 @@ public class ArapSettlementServiceImpl implements ArapSettlementService {
         }
         wrapper.orderByDesc(ArapSettlementEntity::getCreatedAt);
         return mapper.selectPage(page, wrapper);
+    }
+
+    @Override
+    public IPage<ArapSettlementVO> pageQueryWithPartyName(String status, String voucherNo, Integer current, Integer size) {
+        Page<ArapSettlementVO> page = new Page<>(current == null ? 1 : current, size == null ? 20 : size);
+        return mapper.pageWithPartyName(page);
     }
 
     @Override
@@ -175,6 +182,14 @@ public class ArapSettlementServiceImpl implements ArapSettlementService {
         }
         entity.setStatus(ArapStatus.REJECTED);
         mapper.updateById(entity);
+    }
+
+    @Override
+    public List<ArapSettlementEntryEntity> getEntries(Long settlementId) {
+        return entryMapper.selectList(
+                new LambdaQueryWrapper<ArapSettlementEntryEntity>()
+                        .eq(ArapSettlementEntryEntity::getSettlementId, settlementId)
+        );
     }
 
     @Override

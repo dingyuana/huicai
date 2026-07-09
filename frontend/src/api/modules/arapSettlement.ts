@@ -60,6 +60,10 @@ export function getSettlementDetail(id: number): Promise<ArapSettlement> {
   return request.get(`/arap-settlements/${id}`)
 }
 
+export function getSettlementEntries(id: number): Promise<any[]> {
+  return request.get(`/arap-settlements/${id}/entries`)
+}
+
 export function createSettlement(data: {
   settlementType: string
   partyId: number

@@ -2,6 +2,7 @@ package com.huicai.module.arap.controller;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.huicai.common.response.R;
+import com.huicai.module.arap.dto.vo.ArapSettlementVO;
 import com.huicai.module.arap.entity.ArapSettlementEntity;
 import com.huicai.module.arap.entity.ArapSettlementEntryEntity;
 import com.huicai.module.arap.service.ArapSettlementService;
@@ -22,12 +23,12 @@ public class ArapSettlementController {
 
     @Operation(summary = "分页查询")
     @GetMapping("/page")
-    public R<IPage<ArapSettlementEntity>> page(
+    public R<IPage<ArapSettlementVO>> page(
             @RequestParam(required = false) String status,
             @RequestParam(required = false) String voucherNo,
             @RequestParam(defaultValue = "1") Integer current,
             @RequestParam(defaultValue = "20") Integer size) {
-        return R.ok(service.pageQuery(status, voucherNo, current, size));
+        return R.ok(service.pageQueryWithPartyName(status, voucherNo, current, size));
     }
 
     @Operation(summary = "详情")
@@ -67,6 +68,12 @@ public class ArapSettlementController {
     public R<Void> cancel(@PathVariable Long id) {
         service.cancel(id);
         return R.ok();
+    }
+
+    @Operation(summary = "核销明细列表")
+    @GetMapping("/{id}/entries")
+    public R<List<ArapSettlementEntryEntity>> getEntries(@PathVariable Long id) {
+        return R.ok(service.getEntries(id));
     }
 
     @Operation(summary = "驳回核销单 — CONFIRMED → REJECTED")
