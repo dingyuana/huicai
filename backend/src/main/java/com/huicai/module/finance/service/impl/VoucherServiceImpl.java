@@ -329,6 +329,18 @@ public class VoucherServiceImpl extends ServiceImpl<VoucherMapper, VoucherEntity
 
     @Override
     @Transactional
+    public void close(Long id, Long userId) {
+        VoucherEntity entity = getValidVoucher(id);
+        voucherStateMachineService.assertClosable(entity);
+        assertPeriodOpen(entity.getPeriod());
+        entity.setStatus("CLOSED");
+        entity.setUpdatedBy(userId);
+        voucherMapper.updateById(entity);
+        log.info("结账凭证: id={}, userId={}", id, userId);
+    }
+
+    @Override
+    @Transactional
     public void batchPost(List<Long> ids, Long userId) {
         for (Long id : ids) {
             VoucherEntity entity = getValidVoucher(id);

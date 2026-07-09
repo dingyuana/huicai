@@ -26,7 +26,7 @@ public class VoucherEntity {
     /** 凭证类型ID */
     private Long voucherTypeId;
 
-    /** 状态: DRAFT-草稿, SUBMITTED-已提交, AUDITED-已审核, POSTED-已记账 */
+    /** 状态: DRAFT-草稿, SUBMITTED-已提交, AUDITED-已审核, POSTED-已记账, CLOSED-已结账 */
     @StatusChangeable(entity = "VOUCHER", fieldName = "status")
     private String status;
 

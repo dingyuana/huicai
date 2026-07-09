@@ -2,19 +2,20 @@ package com.huicai.module.finance.constant;
 
 /**
  * 凭证模块状态常量.
- * 核心 4 状态（status 字段）+ REJECTED/REVERSED 作为附属字段.
- * 详见 docs/需求分析书_发票与凭证状态机_V1.0.md §3.2
- * 2026-06-22 P22 创建
+ * 核心 5 状态（status 字段）+ REJECTED/REVERSED 作为附属字段.
+ * 详见 docs/specs/P22-voucher-state-machine.md
+ * 2026-06-22 P22 创建 | 2026-07-09 新增 CLOSED 状态
  */
 public final class VoucherStatus {
 
     private VoucherStatus() {}
 
-    // ====== status 字段 4 状态 ======
+    // ====== status 字段 5 状态 ======
     public static final String DRAFT = "DRAFT";
     public static final String SUBMITTED = "SUBMITTED";
     public static final String AUDITED = "AUDITED";
     public static final String POSTED = "POSTED";
+    public static final String CLOSED = "CLOSED";
 
     // ====== 检查方法 ======
     public static boolean isDraft(String status) {
@@ -29,16 +30,20 @@ public final class VoucherStatus {
     public static boolean isPostable(String status) {
         return AUDITED.equals(status);
     }
-    public static boolean isPosted(String status) {
+    /** 仅 POSTED 可结账 */
+    public static boolean isClosable(String status) {
         return POSTED.equals(status);
+    }
+    public static boolean isPosted(String status) {
+        return POSTED.equals(status) || CLOSED.equals(status);
     }
     public static boolean isModifiable(String status) {
-        // POSTED 不可修改（铁律）
-        return !POSTED.equals(status);
+        // POSTED 和 CLOSED 不可修改（铁律）
+        return !POSTED.equals(status) && !CLOSED.equals(status);
     }
     public static boolean isReversible(String status) {
-        // 仅 POSTED 可冲销
-        return POSTED.equals(status);
+        // POSTED 和 CLOSED 均可冲销
+        return POSTED.equals(status) || CLOSED.equals(status);
     }
     public static boolean isRejected(String rejectedReason) {
         // REJECTED 状态 = status=DRAFT + rejectedReason 非空

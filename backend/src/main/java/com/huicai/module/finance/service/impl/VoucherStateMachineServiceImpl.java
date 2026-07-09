@@ -41,7 +41,15 @@ public class VoucherStateMachineServiceImpl implements VoucherStateMachineServic
     public void assertReversible(VoucherEntity entity) {
         if (!VoucherStatus.isReversible(entity.getStatus())) {
             throw BusinessException.badRequest(
-                    "凭证当前状态 " + entity.getStatus() + " 不可红冲, 需 POSTED");
+                    "凭证当前状态 " + entity.getStatus() + " 不可红冲, 需 POSTED 或 CLOSED");
+        }
+    }
+
+    @Override
+    public void assertClosable(VoucherEntity entity) {
+        if (!VoucherStatus.isClosable(entity.getStatus())) {
+            throw BusinessException.badRequest(
+                    "凭证当前状态 " + entity.getStatus() + " 不可结账, 需 POSTED");
         }
     }
 }
