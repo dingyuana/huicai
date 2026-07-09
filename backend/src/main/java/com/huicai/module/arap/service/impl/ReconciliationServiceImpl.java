@@ -292,31 +292,47 @@ public class ReconciliationServiceImpl implements ReconciliationService {
         Long resolvedVendorId = request.vendorId();
 
         // P34: Update target business doc unsettled amount
-        BusinessDocEntity doc = businessDocMapper.selectById(request.targetDocId());
-        if (doc == null) throw new BusinessException("业务单据不存在: " + request.targetDocId());
+        BusinessDocEntity targetDoc = businessDocMapper.selectById(request.targetDocId());
+        if (targetDoc == null) throw new BusinessException("业务单据不存在: " + request.targetDocId());
         if ("INVOICE_OUT".equals(request.targetDocType()) && resolvedCustomerId == null) {
-            resolvedCustomerId = doc.getCustomerId();
+            resolvedCustomerId = targetDoc.getCustomerId();
         }
         if ("INVOICE_IN".equals(request.targetDocType()) && resolvedVendorId == null) {
-            resolvedVendorId = doc.getSupplierId();
+            resolvedVendorId = targetDoc.getSupplierId();
         }
-        BigDecimal newSettled = (doc.getSettledAmount() != null ? doc.getSettledAmount() : BigDecimal.ZERO)
+        BigDecimal targetNewSettled = (targetDoc.getSettledAmount() != null ? targetDoc.getSettledAmount() : BigDecimal.ZERO)
                 .add(request.amount());
-        doc.setSettledAmount(newSettled);
-        doc.setUnsettledAmount(doc.getAmount().subtract(newSettled));
-        doc.setStatus(doc.getUnsettledAmount().compareTo(BigDecimal.ZERO) == 0
+        targetDoc.setSettledAmount(targetNewSettled);
+        targetDoc.setUnsettledAmount(targetDoc.getAmount().subtract(targetNewSettled));
+        targetDoc.setStatus(targetDoc.getUnsettledAmount().compareTo(BigDecimal.ZERO) == 0
                 ? "FULLY_RECONCILED" : "PARTIALLY_RECONCILED");
-        if (businessDocMapper.updateById(doc) == 0) {
-            throw new OptimisticLockingFailureException("BusinessDoc版本冲突, id=" + doc.getId());
+        if (businessDocMapper.updateById(targetDoc) == 0) {
+            throw new OptimisticLockingFailureException("目标单据版本冲突, id=" + targetDoc.getId());
+        }
+
+        // 同步更新来源单据的已核销/未核销金额 (receipt/payment 类型)
+        if ("receipt".equals(request.sourceDocType()) || "payment".equals(request.sourceDocType())) {
+            BusinessDocEntity sourceDoc = businessDocMapper.selectById(request.sourceDocId());
+            if (sourceDoc != null) {
+                BigDecimal srcNewSettled = (sourceDoc.getSettledAmount() != null ? sourceDoc.getSettledAmount() : BigDecimal.ZERO)
+                        .add(request.amount());
+                sourceDoc.setSettledAmount(srcNewSettled);
+                sourceDoc.setUnsettledAmount(sourceDoc.getAmount().subtract(srcNewSettled));
+                sourceDoc.setStatus(sourceDoc.getUnsettledAmount().compareTo(BigDecimal.ZERO) == 0
+                        ? "FULLY_RECONCILED" : "PARTIALLY_RECONCILED");
+                if (businessDocMapper.updateById(sourceDoc) == 0) {
+                    throw new OptimisticLockingFailureException("来源单据版本冲突, id=" + sourceDoc.getId());
+                }
+            }
         }
 
         // P38-F4: 核销后同步发票状态
-        if (doc.getInvoiceId() != null && "INVOICE_OUT".equals(request.targetDocType())) {
+        if (targetDoc.getInvoiceId() != null && "INVOICE_OUT".equals(request.targetDocType())) {
             try {
                 outputInvoiceStateMachineService.onReconciliationUpdate(
-                        doc.getInvoiceId(), doc.getUnsettledAmount(), DEFAULT_USER_ID);
+                        targetDoc.getInvoiceId(), targetDoc.getUnsettledAmount(), DEFAULT_USER_ID);
                 log.info("P38 核销同步发票状态: invoiceId={}, unsettled={}",
-                        doc.getInvoiceId(), doc.getUnsettledAmount());
+                        targetDoc.getInvoiceId(), targetDoc.getUnsettledAmount());
             } catch (Exception e) {
                 log.warn("P38 核销同步发票状态失败(不影响核销): {}", e.getMessage());
             }
@@ -329,6 +345,7 @@ public class ReconciliationServiceImpl implements ReconciliationService {
         reconLog.setSourceDocId(request.sourceDocId());
         reconLog.setTargetDocType(request.targetDocType());
         reconLog.setTargetDocId(request.targetDocId());
+        reconLog.setTargetBusinessDocId(request.targetDocId());
         reconLog.setAllocatedAmount(request.amount());
         reconLog.setDiscountAmount(BigDecimal.ZERO);
         reconLog.setMatchScore(request.matchScore());
@@ -357,7 +374,7 @@ public class ReconciliationServiceImpl implements ReconciliationService {
                     String prefix = isReceivableSettle ? "JS" : "FS";
                     settlement.setSettlementNo(prefix + "-" + request.period() + "-" + cn.hutool.core.util.IdUtil.fastSimpleUUID().substring(0, 6).toUpperCase());
 
-                    BigDecimal beforeBalance = doc.getUnsettledAmount();
+                    BigDecimal beforeBalance = targetDoc.getUnsettledAmount();
                     BigDecimal afterBalance = beforeBalance.subtract(request.amount());
 
                     ArapSettlementEntryEntity entry = new ArapSettlementEntryEntity();

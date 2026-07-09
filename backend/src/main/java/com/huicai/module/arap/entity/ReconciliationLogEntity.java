@@ -34,6 +34,9 @@ public class ReconciliationLogEntity {
     /** 现金折扣金额 */
     private BigDecimal discountAmount;
 
+    /** 目标业务单据 ID（V81 已添加列） */
+    private Long targetBusinessDocId;
+
     /** 匹配度评分 */
     private BigDecimal matchScore;
 
