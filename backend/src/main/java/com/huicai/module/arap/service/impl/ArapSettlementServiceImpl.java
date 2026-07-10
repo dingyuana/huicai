@@ -132,15 +132,12 @@ public class ArapSettlementServiceImpl implements ArapSettlementService {
     @Retryable(retryFor = OptimisticLockingFailureException.class, maxAttempts = 3, backoff = @org.springframework.retry.annotation.Backoff(delay = 100))
     @Transactional(rollbackFor = Exception.class)
     public ArapSettlementEntity confirm(Long id) {
-        // Backward compat: if DRAFT→CONFIRMED, auto-submit first then approve
+        // Backward compat: 旧接口 call submit→approve 串联
         ArapSettlementEntity entity = getById(id);
         if (DRAFT.equals(entity.getStatus())) {
-            return approve(id);
+            submit(id); // DRAFT → SUBMITTED
         }
-        if (!ArapStatus.isApprovable(entity.getStatus())) {
-            throw new BusinessException("核销单状态不允许确认: " + entity.getStatus());
-        }
-        return approve(id);
+        return approve(id); // SUBMITTED → CONFIRMED
     }
 
     @Override
