@@ -1,0 +1,52 @@
+package com.huicai.module.system.service.impl;
+
+import com.huicai.module.system.entity.PeriodEntity;
+import com.huicai.module.system.mapper.PeriodMapper;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.*;
+
+@ExtendWith(MockitoExtension.class)
+class PeriodServiceImplTest {
+
+    @Mock private PeriodMapper periodMapper;
+    @InjectMocks private PeriodServiceImpl service;
+
+    private PeriodEntity stubEntity() {
+        PeriodEntity e = new PeriodEntity();
+        e.setId(1L);
+        e.setYear(2026);
+        e.setMonth(7);
+        e.setPeriodCode("202607");
+        e.setStartDate(java.time.LocalDate.of(2026, 7, 1));
+        e.setEndDate(java.time.LocalDate.of(2026, 7, 31));
+        e.setStatus("OPEN");
+        return e;
+    }
+
+    @Test
+    void save_正常_调insert() {
+        service.save(stubEntity());
+        verify(periodMapper).insert(any(PeriodEntity.class));
+    }
+
+    @Test
+    void openPeriod_正常_调updateById() {
+        when(periodMapper.selectById(1L)).thenReturn(stubEntity());
+        service.openPeriod(1L);
+        verify(periodMapper).updateById(any(PeriodEntity.class));
+    }
+
+    @Test
+    void closePeriod_正常_调updateById() {
+        when(periodMapper.selectById(1L)).thenReturn(stubEntity());
+        service.closePeriod(1L);
+        verify(periodMapper).updateById(any(PeriodEntity.class));
+    }
+}
