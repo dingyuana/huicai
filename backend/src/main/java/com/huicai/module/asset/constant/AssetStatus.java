@@ -16,10 +16,18 @@ public final class AssetStatus {
     public static final String ASSET_CARD_DRAFT = "DRAFT";
     /** 在用 */
     public static final String ASSET_CARD_IN_USE = "IN_USE";
-    /** 停用 */
+    /** 闲置（原 STOPPED，推荐使用） */
+    public static final String ASSET_CARD_IDLE = "IDLE";
+    /**
+     * 停用.
+     * @deprecated 请使用 {@link #ASSET_CARD_IDLE}
+     */
+    @Deprecated
     public static final String ASSET_CARD_STOPPED = "STOPPED";
     /** 已处置 */
     public static final String ASSET_CARD_DISPOSED = "DISPOSED";
+    /** 已报废 */
+    public static final String ASSET_CARD_SCRAPPED = "SCRAPPED";
 
     // ==================== 资产盘点状态 ====================
 
@@ -49,6 +57,10 @@ public final class AssetStatus {
         return ASSET_CARD_IN_USE.equals(status);
     }
 
+    public static boolean isAssetCardIdle(String status) {
+        return ASSET_CARD_IDLE.equals(status);
+    }
+
     public static boolean isAssetCardStopped(String status) {
         return ASSET_CARD_STOPPED.equals(status);
     }
@@ -57,8 +69,12 @@ public final class AssetStatus {
         return ASSET_CARD_DISPOSED.equals(status);
     }
 
+    public static boolean isAssetCardScrapped(String status) {
+        return ASSET_CARD_SCRAPPED.equals(status);
+    }
+
     public static boolean isAssetCardActive(String status) {
-        return ASSET_CARD_IN_USE.equals(status) || ASSET_CARD_STOPPED.equals(status);
+        return ASSET_CARD_IN_USE.equals(status) || ASSET_CARD_IDLE.equals(status) || ASSET_CARD_STOPPED.equals(status);
     }
 
     // ==================== 资产盘点检查方法 ====================

@@ -21,6 +21,15 @@ public final class BudgetStatus {
     /** 已批准 */
     public static final String BUDGET_APPROVED = "APPROVED";
 
+    /** 执行中（已激活） */
+    public static final String BUDGET_ACTIVE = "ACTIVE";
+
+    /** 已关闭 */
+    public static final String BUDGET_CLOSED = "CLOSED";
+
+    /** 已驳回 */
+    public static final String BUDGET_REJECTED = "REJECTED";
+
     /** 已冻结 */
     public static final String BUDGET_FROZEN = "FROZEN";
 
@@ -47,6 +56,18 @@ public final class BudgetStatus {
 
     public static boolean isBudgetApproved(String status) {
         return BUDGET_APPROVED.equals(status);
+    }
+
+    public static boolean isBudgetActive(String status) {
+        return BUDGET_ACTIVE.equals(status);
+    }
+
+    public static boolean isBudgetClosed(String status) {
+        return BUDGET_CLOSED.equals(status);
+    }
+
+    public static boolean isBudgetRejected(String status) {
+        return BUDGET_REJECTED.equals(status);
     }
 
     public static boolean isBudgetFrozen(String status) {

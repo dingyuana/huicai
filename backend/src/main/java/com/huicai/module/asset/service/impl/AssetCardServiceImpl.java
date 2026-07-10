@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.huicai.common.exception.BusinessException;
+import com.huicai.module.asset.constant.AssetStatus;
 import com.huicai.module.asset.entity.AssetCardEntity;
 import com.huicai.module.asset.entity.AssetCategoryEntity;
 import com.huicai.module.asset.entity.AssetDepreciationEntity;
@@ -65,7 +66,7 @@ public class AssetCardServiceImpl implements AssetCardService {
     @Override
     public AssetCardEntity create(AssetCardEntity entity) {
         validateCode(entity.getAssetCode(), null);
-        if (entity.getStatus() == null) entity.setStatus("IN_USE");
+        if (entity.getStatus() == null) entity.setStatus(AssetStatus.ASSET_CARD_IN_USE);
         if (entity.getAccumulatedDepreciation() == null) {
             entity.setAccumulatedDepreciation(BigDecimal.ZERO);
         }
@@ -83,7 +84,7 @@ public class AssetCardServiceImpl implements AssetCardService {
     @Override
     public AssetCardEntity update(AssetCardEntity entity) {
         AssetCardEntity existing = getById(entity.getId());
-        if (!existing.getStatus().equals("DRAFT") && !existing.getStatus().equals("IN_USE")) {
+        if (!existing.getStatus().equals(AssetStatus.ASSET_CARD_DRAFT) && !existing.getStatus().equals(AssetStatus.ASSET_CARD_IN_USE)) {
             // 允许更新
         }
         validateCode(entity.getAssetCode(), entity.getId());
@@ -103,7 +104,7 @@ public class AssetCardServiceImpl implements AssetCardService {
     @Override
     public void delete(Long id) {
         AssetCardEntity card = getById(id);
-        if (!"IN_USE".equals(card.getStatus()) && !"IDLE".equals(card.getStatus())) {
+        if (!AssetStatus.isAssetCardInUse(card.getStatus()) && !AssetStatus.isAssetCardIdle(card.getStatus())) {
             throw new BusinessException("仅可删除在用或闲置状态的资产");
         }
         cardMapper.deleteById(id);

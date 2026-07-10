@@ -220,3 +220,18 @@ acceptance_tests:
     scenario: 进项发票导入生成凭证为 FK
     status: missing
 ```
+
+---
+
+## 6. 验收标准
+
+| 编号 | 场景 | 前置条件 | 操作步骤 | 预期结果 |
+|------|------|---------|---------|---------|
+| AT-01 | 银行流水 business_receipt 自动制证 | 银行流水记录存在，classification='business_receipt'，未审核 | ① 选择该笔银行流水 ② 触发自动制证流程 | 生成凭证的 voucher_type_id = 2（SK 收款凭证） |
+| AT-02 | 银行流水 business_payment 自动制证 | 银行流水记录存在，classification='business_payment'，未审核 | ① 选择该笔银行流水 ② 触发自动制证流程 | 生成凭证的 voucher_type_id = 3（FK 付款凭证） |
+| AT-03 | 银行流水 internal_transfer 自动制证 | 银行流水记录存在，classification='internal_transfer'，未审核 | ① 选择该笔银行流水 ② 触发自动制证流程 | 生成凭证的 voucher_type_id = 4（ZZ 转账凭证） |
+| AT-04 | 银行流水其他/空分类降级制证 | 银行流水记录存在，classification='salary_social' 或 null | ① 选择该笔银行流水 ② 触发自动制证流程 | 生成凭证的 voucher_type_id = 1（JZ 记账凭证，兜底） |
+| AT-05 | 销项发票导入生成 SK 凭证 | 销项发票导入完成，处于待制证状态 | ① 执行销项发票导入制证 | 生成凭证的 voucher_type_id = 2（SK 收款凭证） |
+| AT-06 | 进项发票导入生成 FK 凭证 | 进项发票导入完成，处于待制证状态 | ① 执行进项发票导入制证 | 生成凭证的 voucher_type_id = 3（FK 付款凭证） |
+| AT-07 | 核销结算应收方向制证 SK | settlement_type='receivable' 的核销结算记录，BusinessDoc 已创建 | ① 执行核销结算制证 | 生成凭证的 voucher_type_id = 2（SK 收款凭证） |
+| AT-08 | 对账制证应付方向生成 FK 凭证 | 对账方向为 INVOICE_IN（应付方向），BusinessDoc 已到位 | ① 执行对账制证 | 生成凭证的 voucher_type_id = 3（FK 付款凭证） |

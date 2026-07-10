@@ -49,14 +49,18 @@
 | 端点 | 方法 | 说明 |
 |------|------|------|
 | /api/v1/reports/balance-sheet | GET | 资产负债表 |
-| /api/v1/reports/profit-statement | GET | 利润表 |
+| /api/v1/reports/income-statement | GET | 利润表 |
 | /api/v1/reports/cash-flow | GET | 现金流量表 |
 | /api/v1/reports/subject-balance | GET | 科目余额表 |
-| /api/v1/reports/export | GET | Excel导出 |
-| /api/v1/analysis/dupont | GET | 杜邦分析 |
-| /api/v1/analysis/trend | GET | 趋势分析 |
-| /api/v1/analysis/metrics | GET | 财务指标 |
-| /api/v1/analysis/alerts | GET | 预警列表 |
+| /api/v1/reports/trend | GET | 趋势数据(多期) |
+| /api/v1/reports/analysis/dupont | GET | 杜邦分析 |
+| /api/v1/reports/analysis/key-metrics | GET | 关键指标 |
+| /api/v1/reports/analysis/metrics | GET | 指标定义 |
+| /api/v1/reports/analysis/yoy-mom | GET | 同比环比 |
+| /api/v1/reports/subject-balance/export | GET | 科目余额表导出 |
+| /api/v1/reports/balance-sheet/export | GET | 资产负债表导出 |
+| /api/v1/reports/income-statement/export | GET | 利润表导出 |
+| /api/v1/reports/cash-flow/export | GET | 现金流量表导出 |
 
 ## 6. AI 叠加场景
 

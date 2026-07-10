@@ -65,14 +65,18 @@ ai-service/tests/
 
 ---
 
-## §2 验证清单
+## §2 验收标准
 
-- [ ] 10+ 测试文件创建
-- [ ] 单元测试覆盖 MatchAgent 三阶段管道
-- [ ] 单元测试覆盖 AnomalyAgent 四维度检测
-- [ ] API 测试覆盖 5 个端点
-- [ ] `pytest ai-service/tests/` 全部通过
-- [ ] 不使用真实外部依赖（全 mock）
+| 编号 | 场景 | 前置条件 | 操作步骤 | 预期结果 |
+|------|------|---------|---------|---------|
+| AT-001 | 单元测试数量达标 | pytest 已安装，ai-service/tests/ 目录存在 | 运行 `pytest --collect-only | grep 'test_' \| wc -l` | 收集到至少 5 个单元测试用例（test_ 前缀） |
+| AT-002 | API 测试数量达标 | pytest 已安装，API 测试文件存在 | 运行 `pytest --collect-only | grep 'test_' \| wc -l` | 收集到至少 5 个 API 端点测试用例 |
+| AT-003 | 全部测试通过 | 所有测试已编写，mock 环境就绪 | 运行 `pytest ai-service/tests/ -v` | exit code = 0，所有测试绿色通过 |
+| AT-004 | 不使用真实外部依赖 | 测试代码已提交 | 审查所有 `tests/` 目录下的测试代码 | 无真实 pgvector / RabbitMQ / NVIDIA API 连接，全部使用 mock |
+| AT-005 | MatchAgent 三阶段管道覆盖率 | MatchAgent 实现完成，test_match.py 存在 | 查看 test_match.py 测试内容 | 覆盖清洗(cleaning)→检索(retrieval)→重排(reranking) 三阶段 |
+| AT-006 | AnomalyAgent 四维度检测覆盖率 | AnomalyAgent 实现完成，test_anomaly.py 存在 | 查看 test_anomaly.py 测试内容 | 覆盖金额异常 / 科目异常 / 频次异常 / 对手方异常四维度 |
+| AT-007 | 健康检查端点响应正常 | ai-service 测试环境已启动 | 发送 GET /health 请求 | 返回 HTTP 200，包含服务状态信息 |
+| AT-008 | CI 集成 pytest 命令 | CI 配置文件（.gitlab-ci.yml 等）已更新 | 查看 CI 配置中的 test job | pytest ai-service/tests/ 命令已加入 CI 流程 |
 
 ---
 

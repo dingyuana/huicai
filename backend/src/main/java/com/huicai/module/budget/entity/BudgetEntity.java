@@ -18,6 +18,11 @@ public class BudgetEntity {
     private String period;
     private String budgetType;
     private BigDecimal totalAmount;
+    /**
+     * 预算状态.
+     * <p>可选值：{@code DRAFT}(草稿), {@code SUBMITTED}(已提交), {@code APPROVED}(已批准),
+     * {@code ACTIVE}(执行中), {@code CLOSED}(已关闭), {@code REJECTED}(已驳回), {@code FROZEN}(已冻结)</p>
+     */
     @StatusChangeable(entity = "BUDGET", fieldName = "status")
     private String status;
     private Long approvedBy;
