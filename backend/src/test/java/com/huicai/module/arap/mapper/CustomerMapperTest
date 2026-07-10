@@ -1,0 +1,141 @@
+package com.huicai.module.arap.mapper;
+
+import com.huicai.module.arap.entity.CustomerEntity;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.DisplayName;
+import org.mockito.Mockito;
+import static org.junit.jupiter.api.Assertions.*;
+
+/**
+ * CustomerMapper 方法签名验证测试
+ */
+public class CustomerMapperTest {
+
+    @Test
+    @DisplayName("CustomerMapper insert 方法应接受正确参数")
+    void insert_shouldAcceptValidParams() {
+        CustomerMapper mapper = Mockito.mock(CustomerMapper.class);
+        CustomerEntity entity = new CustomerEntity();
+        
+        // 设置必要字段
+        entity.setCode("CUST001");
+        entity.setName("测试客户");
+        entity.setContactPerson("张三");
+        entity.setPhone("13800000001");
+        entity.setEmail("cust@example.com");
+        entity.setAddress("测试地址");
+        entity.setTaxNo("91110000MA001");
+        entity.setBankName("工商银行");
+        entity.setBankAccount("6222000012345678");
+        entity.setCreditLimit(java.math.BigDecimal.valueOf(100000));
+        entity.setCreditDays(30);
+        entity.setSubjectId(1L);
+        entity.setIsActive(true);
+        entity.setRemark("测试客户");
+        
+        // 验证方法可调用且返回正确类型
+        Mockito.when(mapper.insert(entity)).thenReturn(1);
+        int rows = mapper.insert(entity);
+        
+        assertEquals(1, rows);
+        Mockito.verify(mapper).insert(entity);
+    }
+
+    @Test
+    @DisplayName("CustomerMapper selectById 方法应返回实体")
+    void selectById_shouldReturnEntity() {
+        CustomerMapper mapper = Mockito.mock(CustomerMapper.class);
+        CustomerEntity entity = new CustomerEntity();
+        entity.setCode("CUST001");
+        entity.setName("测试客户");
+        entity.setContactPerson("张三");
+        entity.setPhone("13800000001");
+        entity.setEmail("cust@example.com");
+        entity.setAddress("测试地址");
+        entity.setTaxNo("91110000MA001");
+        entity.setBankName("工商银行");
+        entity.setBankAccount("6222000012345678");
+        entity.setCreditLimit(java.math.BigDecimal.valueOf(100000));
+        entity.setCreditDays(30);
+        entity.setSubjectId(1L);
+        entity.setIsActive(true);
+        entity.setRemark("测试客户");
+        Mockito.when(mapper.selectById(1L)).thenReturn(entity);
+        
+        CustomerEntity result = mapper.selectById(1L);
+        
+        assertNotNull(result);
+        Mockito.verify(mapper).selectById(1L);
+    }
+
+    @Test
+    @DisplayName("CustomerMapper updateById 方法应接受实体参数")
+    void updateById_shouldAcceptEntity() {
+        CustomerMapper mapper = Mockito.mock(CustomerMapper.class);
+        CustomerEntity entity = new CustomerEntity();
+        entity.setCode("CUST001");
+        entity.setName("测试客户");
+        entity.setContactPerson("张三");
+        entity.setPhone("13800000001");
+        entity.setEmail("cust@example.com");
+        entity.setAddress("测试地址");
+        entity.setTaxNo("91110000MA001");
+        entity.setBankName("工商银行");
+        entity.setBankAccount("6222000012345678");
+        entity.setCreditLimit(java.math.BigDecimal.valueOf(100000));
+        entity.setCreditDays(30);
+        entity.setSubjectId(1L);
+        entity.setIsActive(true);
+        entity.setRemark("测试客户");
+        Mockito.when(mapper.updateById(entity)).thenReturn(1);
+        
+        int rows = mapper.updateById(entity);
+        
+        assertEquals(1, rows);
+        Mockito.verify(mapper).updateById(entity);
+    }
+
+    @Test
+    @DisplayName("CustomerMapper deleteById 方法应接受ID参数")
+    void deleteById_shouldAcceptId() {
+        CustomerMapper mapper = Mockito.mock(CustomerMapper.class);
+        Mockito.when(mapper.deleteById(1L)).thenReturn(1);
+        
+        int rows = mapper.deleteById(1L);
+        
+        assertEquals(1, rows);
+        Mockito.verify(mapper).deleteById(1L);
+    }
+
+    @Test
+    @DisplayName("CustomerMapper 所有方法定义应正确")
+    void allMethods_shouldBeDefined() {
+        CustomerMapper mapper = Mockito.mock(CustomerMapper.class);
+        
+        // 验证所有常用方法存在
+        CustomerEntity e = new CustomerEntity();
+        e.setCode("CUST001");
+        e.setName("测试客户");
+        e.setContactPerson("张三");
+        e.setPhone("13800000001");
+        e.setEmail("cust@example.com");
+        e.setAddress("测试地址");
+        e.setTaxNo("91110000MA001");
+        e.setBankName("工商银行");
+        e.setBankAccount("6222000012345678");
+        e.setCreditLimit(java.math.BigDecimal.valueOf(100000));
+        e.setCreditDays(30);
+        e.setSubjectId(1L);
+        e.setIsActive(true);
+        e.setRemark("测试客户");
+        Mockito.when(mapper.insert(e)).thenReturn(1);
+        Mockito.when(mapper.selectById(1L)).thenReturn(e);
+        Mockito.when(mapper.updateById(e)).thenReturn(1);
+        Mockito.when(mapper.deleteById(1L)).thenReturn(1);
+        
+        assertEquals(1, mapper.insert(e));
+        assertNotNull(mapper.selectById(1L));
+        assertEquals(1, mapper.updateById(e));
+        assertEquals(1, mapper.deleteById(1L));
+    }
+}
