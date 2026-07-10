@@ -15,8 +15,12 @@ public final class ArapStatus {
 
     /** 草稿 */
     public static final String DRAFT = "DRAFT";
+    /** 已提交（等待审批） */
+    public static final String SUBMITTED = "SUBMITTED";
     /** 已确认 */
     public static final String CONFIRMED = "CONFIRMED";
+    /** 已驳回 */
+    public static final String REJECTED = "REJECTED";
     /** 已冲销/反核销 */
     public static final String REVERSED = "REVERSED";
 
@@ -76,9 +80,29 @@ public final class ArapStatus {
         return DRAFT.equals(status);
     }
 
-    /** 是否可驳回（仅已确认） */
+    /** 是否可取消（仅草稿或已提交） */
+    public static boolean isCancellable(String status) {
+        return DRAFT.equals(status) || SUBMITTED.equals(status);
+    }
+
+    /** 是否可提交（仅草稿） */
+    public static boolean isSubmitable(String status) {
+        return DRAFT.equals(status);
+    }
+
+    /** 是否可审批通过（仅已提交） */
+    public static boolean isApprovable(String status) {
+        return SUBMITTED.equals(status);
+    }
+
+    /** 是否可驳回（仅已提交） */
     public static boolean isRejectable(String status) {
-        return CONFIRMED.equals(status);
+        return SUBMITTED.equals(status);
+    }
+
+    /** 是否可反核销（仅已确认或已记账） */
+    public static boolean isReversible(String status) {
+        return CONFIRMED.equals(status) || VOUCHERED.equals(status);
     }
 
     /** 是否可生成凭证（仅已确认） */
@@ -95,8 +119,9 @@ public final class ArapStatus {
     public static boolean canTransition(String from, String to) {
         if (from == null || to == null) return false;
         return switch (from) {
-            case DRAFT -> CONFIRMED.equals(to) || CANCELLED.equals(to);
-            case CONFIRMED -> VOUCHERED.equals(to) || REJECTED.equals(to) || REVERSED.equals(to);
+            case DRAFT -> SUBMITTED.equals(to) || CANCELLED.equals(to);
+            case SUBMITTED -> CONFIRMED.equals(to) || REJECTED.equals(to) || CANCELLED.equals(to);
+            case CONFIRMED -> VOUCHERED.equals(to);
             case VOUCHERED -> REVERSED.equals(to);
             default -> false;
         };

@@ -68,17 +68,44 @@
 
 **状态机：**
 ```
-[DRAFT] ──confirm──→ [CONFIRMED] ──generateVoucher──→ [VOUCHERED]
-                       │
-                       └──reverse──→ [REVERSED]
+[DRAFT] ──submit──→ [SUBMITTED] ──approve──→ [CONFIRMED] ──generateVoucher──→ [VOUCHERED]
+   │                       │                           │
+   │                       ↓                           ↓
+   │                   CANCELLED                   REJECTED
+   │
+   └──cancel──→ [CANCELLED]
+
+[VOUCHERED] ──reverse(红冲)──→ [REVERSED]（创建对冲核销单，金额为负）
 ```
 
 | 状态 | 含义 | 说明 |
 |------|------|------|
 | `DRAFT` | 草稿 | 创建后初始状态，可修改可删除 |
-| `CONFIRMED` | 已确认 | 更新应收/应付的 settled_amount，不可修改 |
+| `SUBMITTED` | 已提交 | 等待审批，不可修改 |
+| `CONFIRMED` | 已确认 | 审批通过，更新应收/应付的 settled_amount，不可修改 |
+| `REJECTED` | 已驳回 | 审批拒绝，退回 DRAFT |
 | `VOUCHERED` | 已记账 | 已生成凭证，终态 |
 | `REVERSED` | 已冲销 | 反核销后状态 |
+| `CANCELLED` | 已取消 | 取消草稿或驳回后取消 |
+
+**状态转换表：**
+
+| 当前状态 | 目标状态 | 操作 | 条件 |
+|---------|---------|------|------|
+| (新建) | DRAFT | create | — |
+| DRAFT | SUBMITTED | `submit(id)` | 核销金额校验通过 |
+| DRAFT | CANCELLED | `cancel(id)` | 取消草稿 |
+| SUBMITTED | CONFIRMED | `approve(id)` | 审批通过 |
+| SUBMITTED | REJECTED | `reject(id, reason)` | 审批驳回，需填写原因 |
+| SUBMITTED | CANCELLED | `cancel(id)` | 取消提交中的核销单 |
+| CONFIRMED | VOUCHERED | `generateVoucher(id)` | 凭证生成成功 |
+| VOUCHERED | REVERSED | `reverse(id, reason)` | 红冲反核销，**必须创建对冲核销单** |
+
+**红冲规范（对齐 Voucher 模式）：**
+- `reverse()` **不直接改 status**，而是创建一条新的对冲核销单（`settlementType=REVERSAL`，金额取负，`reversedFromSettlementId` 指向原单）
+- 原核销单 status 改为 `REVERSED`
+- 对冲核销单初始 status = `DRAFT`，需走完整的 submit→approve 流程
+- 对冲核销单审批通过后回滚业务单据的 settled_amount/unsettled_amount
 
 ### 2.3 预付款（Prepayment）— `t_business_doc`（docType=PREPAYMENT）
 
@@ -151,6 +178,7 @@ DRAFT ──submit──→ SUBMITTED ──approve──→ APPROVED ──gene
 |------|------|---------|
 | V1.0 | 2026-06-17 | 初始创建，基于 t_receivable/t_payable 独立表 |
 | V2.0 | 2026-07-09 | 架构变更：统一使用 t_business_doc 替代 t_receivable/t_payable；更新核销流程、状态机、交互图；增加架构变更说明 |
+| V3.0 | 2026-07-10 | 核销单增加 submit→approve 审核流程、红冲创建对冲单据、所有操作记录 reconciliation_log |
 
 ---
 

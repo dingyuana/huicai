@@ -29,6 +29,9 @@ public class ArapSettlementEntity {
      */
     @TableField("voucher_no")
     private String voucherNo;
+    /** 被对冲的原核销单ID（红冲时指向原单） */
+    @TableField("reversed_from_settlement_id")
+    private Long reversedFromSettlementId;
     @StatusChangeable(entity = "ARAP_SETTLEMENT", fieldName = "status")
     private String status;
     private Long createdBy;

@@ -43,7 +43,27 @@ public class ArapSettlementController {
         return R.ok(service.create(request.settlement, request.entries));
     }
 
-    @Operation(summary = "确认核销")
+    @Operation(summary = "提交核销单 — DRAFT → SUBMITTED")
+    @PostMapping("/{id}/submit")
+    public R<Void> submit(@PathVariable Long id) {
+        service.submit(id);
+        return R.ok();
+    }
+
+    @Operation(summary = "审批通过 — SUBMITTED → CONFIRMED")
+    @PostMapping("/{id}/approve")
+    public R<ArapSettlementEntity> approve(@PathVariable Long id) {
+        return R.ok(service.approve(id));
+    }
+
+    @Operation(summary = "驳回 — SUBMITTED → REJECTED")
+    @PostMapping("/{id}/reject")
+    public R<Void> reject(@RequestParam String reason, @PathVariable Long id) {
+        service.reject(id, reason);
+        return R.ok();
+    }
+
+    @Operation(summary = "确认核销（兼容旧接口，DRAFT→CONFIRMED自动提审）")
     @PostMapping("/{id}/confirm")
     public R<ArapSettlementEntity> confirm(@PathVariable Long id) {
         return R.ok(service.confirm(id));
