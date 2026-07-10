@@ -75,11 +75,6 @@ public final class ArapStatus {
         return DRAFT.equals(status);
     }
 
-    /** 是否可取消（仅草稿） */
-    public static boolean isCancellable(String status) {
-        return DRAFT.equals(status);
-    }
-
     /** 是否可取消（仅草稿或已提交） */
     public static boolean isCancellable(String status) {
         return DRAFT.equals(status) || SUBMITTED.equals(status);
@@ -101,7 +96,7 @@ public final class ArapStatus {
     }
 
     /** 是否可反核销（仅已确认或已记账） */
-    public static boolean isReversible(String status) {
+    public static boolean isSettlementReversible(String status) {
         return CONFIRMED.equals(status) || VOUCHERED.equals(status);
     }
 

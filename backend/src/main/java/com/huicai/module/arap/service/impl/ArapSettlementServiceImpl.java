@@ -361,7 +361,7 @@ public class ArapSettlementServiceImpl implements ArapSettlementService {
     @Transactional(rollbackFor = Exception.class)
     public void reverse(Long id) {
         ArapSettlementEntity entity = getById(id);
-        if (!ArapStatus.isReversible(entity.getStatus())) {
+        if (!ArapStatus.isSettlementReversible(entity.getStatus())) {
             throw new BusinessException("仅已确认或已记账的核销单可反核销, 当前: " + entity.getStatus());
         }
         // 创建对冲核销单（红冲）— 对齐 Voucher 红冲模式
