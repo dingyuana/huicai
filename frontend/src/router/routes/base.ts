@@ -291,6 +291,12 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/arap/reconciliation-exception/ReconciliationExceptionList.vue'),
         meta: { title: '核销异常池', permission: 'arap:reconciliation:exception', keepAlive: true },
       },
+      {
+        path: 'arap/customer-statement',
+        name: 'CustomerStatement',
+        component: () => import('@/views/arap/customer-statement/CustomerStatementList.vue'),
+        meta: { title: '客户对账', permission: 'customer:statement:list', keepAlive: true },
+      },
       // 费用报销
       {
         path: 'arap/expense',

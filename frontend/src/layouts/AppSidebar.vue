@@ -110,6 +110,7 @@
         <el-menu-item index="/arap/aging-analysis">账龄分析</el-menu-item>
         <el-menu-item index="/arap/prepayment">预收/预付管理</el-menu-item>
         <el-menu-item index="/arap/aging">账龄分析</el-menu-item>
+        <el-menu-item index="/arap/customer-statement">客户对账</el-menu-item>
         <el-menu-item index="/arap/settlement">核销单</el-menu-item>
         <el-menu-item index="/arap/reconciliation-workbench">往来核销</el-menu-item>
       </el-sub-menu>
