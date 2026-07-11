@@ -38,8 +38,8 @@ public final class ArapStatus {
 
     /** 已执行 */
     public static final String EXECUTED = "EXECUTED";
-    /** 已拒绝 */
-    public static final String REJECTED = "REJECTED";
+    /** 已拒绝（ReconciliationLog 特有） */
+    public static final String LOG_REJECTED = "REJECTED";
     /** 已取消 */
     public static final String CANCELLED = "CANCELLED";
 

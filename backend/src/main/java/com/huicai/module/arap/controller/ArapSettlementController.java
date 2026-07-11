@@ -96,8 +96,8 @@ public class ArapSettlementController {
         return R.ok(service.getEntries(id));
     }
 
-    @Operation(summary = "驳回核销单 — CONFIRMED → REJECTED")
-    @PostMapping("/{id}/reject")
+    @Operation(summary = "驳回核销单（无理由）")
+    @PostMapping("/{id}/reject-simple")
     public R<Void> reject(@PathVariable Long id) {
         service.reject(id);
         return R.ok();

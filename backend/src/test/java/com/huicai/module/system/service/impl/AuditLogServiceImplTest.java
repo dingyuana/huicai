@@ -44,7 +44,7 @@ class AuditLogServiceImplTest {
     @Test
     void pageLog_调selectPage() {
         when(mapper.selectPage(any(), any())).thenReturn(null);
-        service.pageLog(1, 20, null, null, null);
+        service.pageLog(1, 20, null, null, null, null);
         verify(mapper).selectPage(any(), any());
     }
 }

@@ -134,7 +134,7 @@ public class ArapSettlementServiceImpl implements ArapSettlementService {
     public ArapSettlementEntity confirm(Long id) {
         // Backward compat: 旧接口 call submit→approve 串联
         ArapSettlementEntity entity = getById(id);
-        if (DRAFT.equals(entity.getStatus())) {
+        if (ArapStatus.DRAFT.equals(entity.getStatus())) {
             submit(id); // DRAFT → SUBMITTED
         }
         return approve(id); // SUBMITTED → CONFIRMED
@@ -204,6 +204,12 @@ public class ArapSettlementServiceImpl implements ArapSettlementService {
         mapper.updateById(entity);
         logReconciliationLog(entity, "APPROVE", null, null, DEFAULT_USER_ID);
         return entity;
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void reject(Long id) {
+        reject(id, null);
     }
 
     @Override
@@ -427,7 +433,6 @@ public class ArapSettlementServiceImpl implements ArapSettlementService {
             ReconciliationLogEntity logEntity = new ReconciliationLogEntity();
             logEntity.setSourceDocType("SETTLEMENT");
             logEntity.setSourceDocId(settlement.getId());
-            logEntity.setSourceDocNo(settlement.getSettlementNo());
             logEntity.setTargetDocType(null);
             logEntity.setTargetDocId(null);
             logEntity.setAllocatedAmount(settlement.getTotalAmount());
