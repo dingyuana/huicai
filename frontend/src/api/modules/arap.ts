@@ -175,3 +175,26 @@ export function clearReceivables(): Promise<any> {
 export function clearPayables(): Promise<any> {
   return request.post('/system/clear-payables')
 }
+
+// ===== 账龄分析 (P51) =====
+export function getAgingSummary(params: { period: string; customerId?: number }): Promise<any> {
+  return request.get('/aging-analysis/summary', { params })
+}
+export function getAgingByCustomer(period: string): Promise<any> {
+  return request.get('/aging-analysis/by-customer', { params: { period } })
+}
+export function getDueReceivables(params: { date: string; customerId?: number }): Promise<any> {
+  return request.get('/aging-analysis/due-receivables', { params })
+}
+export function getAlerts(params: { alertLevel?: string; status?: string; customerId?: number }): Promise<any> {
+  return request.get('/aging-analysis/alerts', { params })
+}
+export function generateAlerts(period: string): Promise<any> {
+  return request.post('/aging-analysis/alerts/generate', null, { params: { period } })
+}
+export function dismissAlert(id: number): Promise<void> {
+  return request.post(`/aging-analysis/alerts/${id}/dismiss`)
+}
+export function resolveAlert(id: number): Promise<void> {
+  return request.post(`/aging-analysis/alerts/${id}/resolve`)
+}

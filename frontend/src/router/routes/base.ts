@@ -252,6 +252,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '坏账准备', permission: 'bad:debt:list', keepAlive: true },
       },
       {
+        path: 'arap/aging-analysis',
+        name: 'AgingAnalysis',
+        component: () => import('@/views/arap/aging-analysis/AgingAnalysisView.vue'),
+        meta: { title: '账龄分析', permission: 'aging:analysis:list', keepAlive: true },
+      },
+      {
         path: 'arap/prepayment',
         name: 'PrepaymentList',
         component: () => import('@/views/arap/prepayment/PrepaymentList.vue'),
