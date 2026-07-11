@@ -199,6 +199,20 @@ export function resolveAlert(id: number): Promise<void> {
   return request.post(`/aging-analysis/alerts/${id}/resolve`)
 }
 
+// ===== 坏账准备 P43 扩展 =====
+export function getBadDebtScheme(): Promise<any> {
+  return request.get('/bad-debts/scheme')
+}
+export function updateBadDebtScheme(data: Record<string, number>): Promise<void> {
+  return request.put('/bad-debts/scheme', data)
+}
+export function writeOffBadDebt(data: { sourceType: string; sourceId: number; writeOffAmount: number; reason: string }): Promise<any> {
+  return request.post('/bad-debts/write-off', data)
+}
+export function recoveryBadDebt(data: { sourceId: number; amount: number }): Promise<any> {
+  return request.post('/bad-debts/recovery', data)
+}
+
 // ===== 客户对账 (P52) =====
 export function generateStatements(data: { customerIds: number[]; period: string }): Promise<any> {
   return request.post('/customer-statements/generate', data)

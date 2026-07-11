@@ -118,14 +118,15 @@ class BadDebtControllerTest {
     void confirm_pathVariable_boundCorrectly() throws Exception {
         BadDebtProvisionEntity entity = new BadDebtProvisionEntity();
         entity.setId(1L);
-        entity.setStatus("CONFIRMED");
-        when(service.confirm(eq(1L))).thenReturn(entity);
+        entity.setStatus("VOUCHERED");
+        when(service.confirm(eq(1L), anyLong())).thenReturn(entity);
 
-        mvc.perform(post("/api/v1/bad-debts/1/confirm"))
+        mvc.perform(post("/api/v1/bad-debts/1/confirm")
+                        .param("userId", "1"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.status").value("CONFIRMED"));
+                .andExpect(jsonPath("$.data.status").value("VOUCHERED"));
 
-        verify(service).confirm(eq(1L));
+        verify(service).confirm(eq(1L), eq(1L));
     }
 
     @Test
