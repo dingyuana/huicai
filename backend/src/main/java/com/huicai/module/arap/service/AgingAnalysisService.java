@@ -17,6 +17,35 @@ public interface AgingAnalysisService {
     /** 按客户维度的账龄分析 */
     List<AgingByCustomerVO> getAgingByCustomer(String period);
 
+    // ===== 应付侧（P53 对称扩展） =====
+
+    /** 应付账龄汇总（按区间分布） */
+    AgingSummaryVO getPayableAgingSummary(String period, Long vendorId);
+
+    /** 按供应商维度的应付账龄 */
+    List<AgingByVendorVO> getPayableAgingByVendor(String period);
+
+    /** 到期应付表（已到期未付明细） */
+    DuePayablesVO getDuePayables(LocalDate reportDate, Long vendorId);
+
+    // ===== VOs =====
+
+    record AgingByVendorVO(
+        Long vendorId, String vendorName,
+        BigDecimal totalUnsettled, Map<String, BigDecimal> buckets
+    ) {}
+
+    record DuePayablesVO(
+        LocalDate reportDate, BigDecimal totalDue, int totalDueCount,
+        List<DuePayableItem> items
+    ) {}
+
+    record DuePayableItem(
+        String vendorName, String docNo, LocalDate dueDate,
+        BigDecimal originalAmount, BigDecimal unsettledAmount,
+        int overdueDays, String agingBucket
+    ) {}
+
     /** 到期债权表（已到期未核销明细） */
     DueReceivablesVO getDueReceivables(LocalDate reportDate, Long customerId);
 

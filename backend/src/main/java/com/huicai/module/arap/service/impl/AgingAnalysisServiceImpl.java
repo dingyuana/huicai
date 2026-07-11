@@ -4,9 +4,11 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.huicai.module.arap.entity.AgingAlertEntity;
 import com.huicai.module.arap.entity.CustomerEntity;
 import com.huicai.module.arap.entity.PrepaymentEntity;
+import com.huicai.module.arap.entity.VendorEntity;
 import com.huicai.module.arap.mapper.AgingAlertMapper;
 import com.huicai.module.arap.mapper.CustomerMapper;
 import com.huicai.module.arap.mapper.PrepaymentMapper;
+import com.huicai.module.arap.mapper.VendorMapper;
 import com.huicai.module.arap.service.AgingAnalysisService;
 import com.huicai.module.finance.entity.BusinessDocEntity;
 import com.huicai.module.finance.mapper.BusinessDocMapper;
@@ -33,7 +35,7 @@ public class AgingAnalysisServiceImpl implements AgingAnalysisService {
     private final PrepaymentMapper prepaymentMapper;
     private final AgingAlertMapper alertMapper;
     private final CustomerMapper customerMapper;
-
+    private final VendorMapper vendorMapper;
     // ========== 账龄引擎 ==========
 
     private AgingResult calcAging(LocalDate refDate, LocalDate dueDate) {
@@ -119,12 +121,21 @@ public class AgingAnalysisServiceImpl implements AgingAnalysisService {
     }
 
     private final Map<Long, String> customerNameCache = new HashMap<>();
+    private final Map<Long, String> vendorNameCache = new HashMap<>();
 
     private String lookupCustomerName(Long customerId) {
         if (customerId == null) return null;
         return customerNameCache.computeIfAbsent(customerId, id -> {
             CustomerEntity c = customerMapper.selectById(id);
             return c != null ? c.getName() : null;
+        });
+    }
+
+    private String lookupVendorName(Long vendorId) {
+        if (vendorId == null) return null;
+        return vendorNameCache.computeIfAbsent(vendorId, id -> {
+            VendorEntity v = vendorMapper.selectById(id);
+            return v != null ? v.getName() : null;
         });
     }
 
@@ -324,5 +335,120 @@ public class AgingAnalysisServiceImpl implements AgingAnalysisService {
             alert.setDismissedAt(LocalDateTime.now());
             alertMapper.updateById(alert);
         }
+    }
+
+    // ========== 应付账龄分析 API（P53） ==========
+
+    private List<AgingSourceRow> loadAllPayableUnsettled(String period) {
+        List<AgingSourceRow> rows = new ArrayList<>();
+        businessDocMapper.selectList(
+            new LambdaQueryWrapper<BusinessDocEntity>()
+                .in(BusinessDocEntity::getDocType, List.of("INVOICE_IN", "PAYMENT", "OTHER_PAYABLE"))
+                .eq(BusinessDocEntity::getPeriod, period)
+                .gt(BusinessDocEntity::getUnsettledAmount, BigDecimal.ZERO)
+                .eq(BusinessDocEntity::getDeleted, 0)
+        ).forEach(doc -> {
+            String name = lookupVendorName(doc.getSupplierId());
+            rows.add(new AgingSourceRow(
+                doc.getDocType(), doc.getId(), doc.getDocNo(),
+                doc.getSupplierId(), name,
+                doc.getDueDate(), doc.getAmount(), doc.getUnsettledAmount()
+            ));
+        });
+        return rows;
+    }
+
+    @Override
+    public AgingSummaryVO getPayableAgingSummary(String period, Long vendorId) {
+        LocalDate now = LocalDate.now();
+        List<AgingSourceRow> all = loadAllPayableUnsettled(period);
+        if (vendorId != null) {
+            all = all.stream().filter(r -> vendorId.equals(r.partyId())).toList();
+        }
+        return computeAgingSummary(now, period, all);
+    }
+
+    @Override
+    public List<AgingByVendorVO> getPayableAgingByVendor(String period) {
+        LocalDate now = LocalDate.now();
+        List<AgingSourceRow> all = loadAllPayableUnsettled(period);
+        Map<Long, List<AgingSourceRow>> byVendor = all.stream()
+            .filter(r -> r.partyId() != null)
+            .collect(Collectors.groupingBy(AgingSourceRow::partyId));
+        List<AgingByVendorVO> result = new ArrayList<>();
+        for (var entry : byVendor.entrySet()) {
+            List<AgingSourceRow> rows = entry.getValue();
+            Map<String, BigDecimal> buckets = new LinkedHashMap<>();
+            BigDecimal total = BigDecimal.ZERO;
+            for (AgingSourceRow row : rows) {
+                AgingResult ar = calcAging(now, row.dueDate());
+                buckets.merge(ar.bucket(), row.unsettledAmount(), BigDecimal::add);
+                total = total.add(row.unsettledAmount());
+            }
+            String name = rows.stream().map(AgingSourceRow::partyName)
+                .filter(Objects::nonNull).findFirst().orElse("");
+            result.add(new AgingByVendorVO(entry.getKey(), name, total, buckets));
+        }
+        result.sort((a, b) -> b.totalUnsettled().compareTo(a.totalUnsettled()));
+        return result;
+    }
+
+    @Override
+    public DuePayablesVO getDuePayables(LocalDate reportDate, Long vendorId) {
+        List<AgingSourceRow> all = loadAllPayableUnsettled(reportDate.format(DateTimeFormatter.ofPattern("yyyyMM")));
+        if (vendorId != null) {
+            all = all.stream().filter(r -> vendorId.equals(r.partyId())).toList();
+        }
+        List<DuePayableItem> items = all.stream()
+            .filter(r -> r.dueDate() != null && r.dueDate().isBefore(reportDate))
+            .map(r -> {
+                AgingResult ar = calcAging(reportDate, r.dueDate());
+                return new DuePayableItem(
+                    r.partyName() != null ? r.partyName() : "",
+                    r.sourceNo(), r.dueDate(),
+                    r.originalAmount(), r.unsettledAmount(),
+                    ar.days(), ar.bucket()
+                );
+            })
+            .sorted((a, b) -> Integer.compare(b.overdueDays(), a.overdueDays()))
+            .toList();
+        BigDecimal totalDue = items.stream()
+            .map(DuePayableItem::unsettledAmount)
+            .reduce(BigDecimal.ZERO, BigDecimal::add);
+        return new DuePayablesVO(reportDate, totalDue, items.size(), items);
+    }
+
+    private AgingSummaryVO computeAgingSummary(LocalDate now, String period, List<AgingSourceRow> all) {
+        List<String> bucketOrder = List.of("current", "days_1_30", "days_31_60", "days_61_90",
+            "days_91_180", "days_181_365", "over_365");
+        Map<String, List<AgingSourceRow>> grouped = new LinkedHashMap<>();
+        bucketOrder.forEach(b -> grouped.put(b, new ArrayList<>()));
+        BigDecimal totalUnsettled = BigDecimal.ZERO;
+        BigDecimal totalOverdue = BigDecimal.ZERO;
+        for (AgingSourceRow row : all) {
+            AgingResult ar = calcAging(now, row.dueDate());
+            grouped.get(ar.bucket()).add(row);
+            totalUnsettled = totalUnsettled.add(row.unsettledAmount());
+            if (!"current".equals(ar.bucket())) {
+                totalOverdue = totalOverdue.add(row.unsettledAmount());
+            }
+        }
+        List<AgingBucket> buckets = new ArrayList<>();
+        for (String bucket : bucketOrder) {
+            List<AgingSourceRow> rows = grouped.get(bucket);
+            if (rows.isEmpty() && !"current".equals(bucket)) continue;
+            BigDecimal amt = rows.stream()
+                .map(AgingSourceRow::unsettledAmount)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+            String pct = totalUnsettled.compareTo(BigDecimal.ZERO) > 0
+                ? amt.multiply(BigDecimal.valueOf(100)).divide(totalUnsettled, 2, RoundingMode.HALF_UP) + "%"
+                : "0%";
+            buckets.add(new AgingBucket(bucketLabel(bucket), amt, rows.size(), pct));
+        }
+        String overdueRate = totalUnsettled.compareTo(BigDecimal.ZERO) > 0
+            ? totalOverdue.multiply(BigDecimal.valueOf(100)).divide(totalUnsettled, 2, RoundingMode.HALF_UP) + "%"
+            : "0%";
+        return new AgingSummaryVO(now, period,
+            new AgingSummary(totalUnsettled, totalOverdue, overdueRate), buckets);
     }
 }

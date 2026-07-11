@@ -42,6 +42,30 @@ public class AgingAnalysisController {
         return R.ok(service.getDueReceivables(date, customerId));
     }
 
+    // ===== 应付侧（P53）=====
+
+    @Operation(summary = "应付账龄汇总（按区间分布）")
+    @GetMapping("/payable-summary")
+    public R<AgingSummaryVO> getPayableAgingSummary(
+            @RequestParam String period,
+            @RequestParam(required = false) Long vendorId) {
+        return R.ok(service.getPayableAgingSummary(period, vendorId));
+    }
+
+    @Operation(summary = "按供应商维度的应付账龄")
+    @GetMapping("/payable-by-vendor")
+    public R<List<AgingByVendorVO>> getPayableAgingByVendor(@RequestParam String period) {
+        return R.ok(service.getPayableAgingByVendor(period));
+    }
+
+    @Operation(summary = "到期应付表（已到期未付明细）")
+    @GetMapping("/payable-due")
+    public R<DuePayablesVO> getDuePayables(
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
+            @RequestParam(required = false) Long vendorId) {
+        return R.ok(service.getDuePayables(date, vendorId));
+    }
+
     @Operation(summary = "查询逾期预警列表")
     @GetMapping("/alerts")
     public R<List<AgingAlertVO>> getAlerts(
