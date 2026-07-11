@@ -100,6 +100,9 @@
 || /api/v1/customer-statements/** | 客户对账 | 对账单生成、发送、确认、差异处理 | P52 |
 || /api/v1/outstanding-items/** | 未达账项 | 未达账项管理 | P52 |
 || /api/v1/disputes/** | 差异处理 | 对账差异记录 | P52 |
+|| /api/v1/payment-plans | GET | 付款计划 | P53 |
+|| /api/v1/purchase-returns | POST/GET | 采购退货（财务） | P53 |
+|| /api/v1/prepayment/available | GET | 可用预付款查询 | P53 |
 
 ### 5.1 核销全链路追溯 API
 
@@ -146,6 +149,6 @@
 | 测试 | ✅ 良好 | ReconciliationControllerTest + 42 个测试、ReconciliationWorkbenchE2ETest |
 | 对传统超越 | ✅ 统一 BusinessDoc、核销工作台统一入口 | |
 | 与传统差距 | 账龄分析前端 | 后端有，前端待完善 |
-| 待开发规范 | 📝 P43/P51/P52/P53 | 坏账计提/账龄分析/客户对账/采购付款，P43/P51/P52 已完成，P53 待开发 |
+|| 待开发规范 | — | 所有模块已完成 |
 
 > **文档结束**

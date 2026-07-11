@@ -247,3 +247,21 @@ export function pageDisputes(params: any): Promise<any> {
 export function resolveDispute(id: number): Promise<void> {
   return request.post(`/disputes/${id}/resolve`)
 }
+
+// ===== 付款计划 (P53 M2) =====
+export function generatePaymentPlan(params: { period?: string; vendorId?: number }): Promise<any> {
+  return request.get('/payment-plans', { params })
+}
+
+// ===== 采购退货 (P53 M3) =====
+export function createPurchaseReturn(data: { originalDocNo: string; vendorId: number; returnAmount: number; taxAmount?: number; reason?: string }): Promise<any> {
+  return request.post('/purchase-returns', data)
+}
+export function getPurchaseReturn(id: number): Promise<any> {
+  return request.get(`/purchase-returns/${id}`)
+}
+
+// ===== 可用预付款查询 (P53 M4) =====
+export function getAvailablePrepayment(params: { vendorId: number; amount?: number }): Promise<any> {
+  return request.get('/prepayment/available', { params })
+}
