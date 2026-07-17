@@ -74,6 +74,26 @@ public interface BusinessDocMapper extends BaseMapper<BusinessDocEntity> {
     List<Map<String, Object>> agingByCustomer(@Param("customerId") Long customerId);
 
     @Select("""
+        SELECT
+          CASE
+            WHEN b.due_date >= CURRENT_DATE THEN 'current'
+            WHEN b.due_date >= CURRENT_DATE - INTERVAL '30 days' THEN 'days_0_30'
+            WHEN b.due_date >= CURRENT_DATE - INTERVAL '60 days' THEN 'days_31_60'
+            WHEN b.due_date >= CURRENT_DATE - INTERVAL '90 days' THEN 'days_61_90'
+            WHEN b.due_date >= CURRENT_DATE - INTERVAL '180 days' THEN 'days_91_180'
+            WHEN b.due_date >= CURRENT_DATE - INTERVAL '365 days' THEN 'days_181_365'
+            ELSE 'over_365'
+          END AS aging_bucket,
+          SUM(b.unsettled_amount) AS amount,
+          COUNT(*) AS count
+        FROM t_business_doc b
+        WHERE b.deleted = 0 AND b.unsettled_amount > 0
+          AND b.supplier_id = #{vendorId}
+        GROUP BY aging_bucket
+    """)
+    List<Map<String, Object>> agingByVendor(@Param("vendorId") Long vendorId);
+
+    @Select("""
         SELECT supplier_id, SUM(unsettled_amount) AS total_unsettled
         FROM t_business_doc
         WHERE deleted = 0 AND supplier_id IS NOT NULL AND unsettled_amount > 0

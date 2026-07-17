@@ -6,6 +6,7 @@ import com.huicai.module.tax.entity.InputInvoiceEntity;
 import com.huicai.module.tax.entity.OutputInvoiceEntity;
 import com.huicai.module.tax.entity.TaxDeclarationEntity;
 import com.huicai.module.tax.entity.TaxTypeEntity;
+import com.huicai.module.tax.service.InputInvoiceStateMachineService;
 import com.huicai.module.tax.service.OutputInvoiceStateMachineService;
 import com.huicai.module.tax.service.TaxService;
 import com.huicai.module.system.util.SecurityUtils;
@@ -25,6 +26,7 @@ public class TaxController {
 
     private final TaxService service;
     private final OutputInvoiceStateMachineService stateMachineService;
+    private final InputInvoiceStateMachineService inputStateMachineService;
 
     // ========== 税种管理 ==========
     @Operation(summary = "税种分页查询")
@@ -97,6 +99,58 @@ public class TaxController {
     @GetMapping("/input-invoices/by-tax-rate")
     public R<List<Map<String, Object>>> inputByTaxRate(@RequestParam String period) {
         return R.ok(service.inputByTaxRate(period));
+    }
+
+    // ========== 进项发票状态机 (P40) ==========
+    @Operation(summary = "进项-提交审核 (PENDING_CONFIRM -> PENDING_REVIEW)")
+    @PostMapping("/input-invoices/{id}/submit-review")
+    public R<Void> submitInputReview(@PathVariable Long id,
+            @RequestParam(required = false) Long userId) {
+        inputStateMachineService.submitForReview(id, orDefault(userId));
+        return R.ok();
+    }
+
+    @Operation(summary = "进项-审核通过 (PENDING_REVIEW -> CONFIRMED -> 自动创建应付单+凭证)")
+    @PostMapping("/input-invoices/{id}/confirm")
+    public R<Void> confirmInput(@PathVariable Long id,
+            @RequestParam(required = false) Long userId) {
+        inputStateMachineService.confirm(id, orDefault(userId));
+        return R.ok();
+    }
+
+    @Operation(summary = "进项-审核驳回 (PENDING_REVIEW -> PENDING_CONFIRM)")
+    @PostMapping("/input-invoices/{id}/reject")
+    public R<Void> rejectInput(@PathVariable Long id,
+            @RequestParam String reason,
+            @RequestParam(required = false) Long userId) {
+        inputStateMachineService.reject(id, orDefault(userId), reason);
+        return R.ok();
+    }
+
+    @Operation(summary = "进项-回退到待审核 (CONFIRMED -> PENDING_REVIEW)")
+    @PostMapping("/input-invoices/{id}/revert")
+    public R<Void> revertInput(@PathVariable Long id,
+            @RequestParam(required = false) Long userId) {
+        inputStateMachineService.revertToReview(id, orDefault(userId));
+        return R.ok();
+    }
+
+    @Operation(summary = "进项-作废 (任意非终态 -> VOIDED)")
+    @PostMapping("/input-invoices/{id}/void")
+    public R<Void> voidInput(@PathVariable Long id,
+            @RequestParam String reason,
+            @RequestParam(required = false) Long userId) {
+        inputStateMachineService.voidInvoice(id, orDefault(userId), reason);
+        return R.ok();
+    }
+
+    @Operation(summary = "进项-红冲 (CONFIRMED/VOUCHERED/PARTIALLY_RECONCILED -> REVERSED, 生成红字发票)")
+    @PostMapping("/input-invoices/{id}/reverse")
+    public R<Long> reverseInput(@PathVariable Long id,
+            @RequestParam String reason,
+            @RequestParam(required = false) Long userId) {
+        Long redInvoiceId = inputStateMachineService.reverseInvoice(id, orDefault(userId), reason);
+        return R.ok(redInvoiceId);
     }
 
     // ========== 销项发票 ==========

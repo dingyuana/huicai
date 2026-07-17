@@ -17,6 +17,7 @@ import com.huicai.module.finance.service.VoucherNoService;
 import com.huicai.module.system.entity.Subject;
 import com.huicai.module.system.mapper.SubjectMapper;
 import com.huicai.module.tax.entity.InputInvoiceEntity;
+import com.huicai.module.tax.constant.InvoiceStatus;
 import com.huicai.module.tax.mapper.InputInvoiceMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -34,13 +35,13 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * P10-2: 采购发票 Excel 导入 — 仿 SalesInvoiceImportService.
- * 流程: 解析 → 预览 → 确认 → 写 t_business_doc(INVOICE_IN) + 凭证 + t_input_invoice + t_payable.
+ * P10-2: 采购发票 Excel 导入 - 仿 SalesInvoiceImportService.
+ * P40 变更: 导入时只创建进项发票(status=PENDING_CONFIRM)，不再自动创建业务单据和凭证。
+ *          审核通过后由 InputInvoiceStateMachineService.confirm() 自动创建。
  *
  * 与销售版差异:
- * - 凭证方向: 借 5001/贷 2202 (销售是 借 1122/贷 5001+2221.01)
+ * - 凭证方向: 借 1601/2221.01 (进项税) / 贷 2202 (应付账款) [审核后生成]
  * - 客商: Vendor 而非 Customer
- * - 应付单: t_payable 而非 t_receivable
  * - 发票表: t_input_invoice 而非 t_output_invoice
  */
 @Slf4j
@@ -313,10 +314,9 @@ public class InputInvoiceImportService {
                     continue;
                 }
                 String period = row.invoiceDate.format(DateTimeFormatter.ofPattern("yyyyMM"));
-                BusinessDocEntity doc = createBusinessDoc(row, vendorId, period);
-                String voucherNo = createVoucher(doc, row, vendorId, period);
-                insertInputInvoice(row, vendorId, period, doc, voucherNo);
-                success++; docCreated++; voucherCreated++;
+                // P40: 导入时只创建发票，审核通过后才创建业务单据和凭证
+                insertInputInvoice(row, vendorId, period);
+                success++;
             } catch (Exception e) {
                 log.warn("处理采购发票行失败 row={}: {}", row.rowNum, e.getMessage());
                 Map<String, Object> err = new LinkedHashMap<>();
@@ -329,7 +329,6 @@ public class InputInvoiceImportService {
 
         return Map.of(
                 "total", rows.size(), "success", success,
-                "docCreated", docCreated, "voucherCreated", voucherCreated,
                 "duplicateSkipped", duplicateSkipped,
                 "errors", errors, "batchId", batchId
         );
@@ -419,7 +418,7 @@ public class InputInvoiceImportService {
     }
 
     @Transactional
-    void insertInputInvoice(ParsedInputInvoiceRow row, Long vendorId, String period, BusinessDocEntity doc, String voucherNo) {
+    void insertInputInvoice(ParsedInputInvoiceRow row, Long vendorId, String period) {
         InputInvoiceEntity inv = new InputInvoiceEntity();
         inv.setInvoiceNo(row.invoiceNo);
         inv.setInvoiceDate(row.invoiceDate);
@@ -428,16 +427,14 @@ public class InputInvoiceImportService {
         inv.setVendorName(row.sellerName);
         inv.setAmount(row.amount);
         inv.setAmountExTax(row.amount);
+        inv.setTaxRate(row.taxRate != null ? row.taxRate : BigDecimal.ZERO);
         inv.setTaxAmount(row.taxAmount);
         inv.setTotalAmount(row.totalAmount);
         inv.setProcessStatus("PENDING");
+        inv.setStatus(InvoiceStatus.PENDING_CONFIRM);  // P40: 导入后待确认
         inv.setInvoiceType("SPECIAL");
-        // P21-b 重构 2026-06-22 修 P0 bug: 原 PENDING 违反 V8 CHECK 约束 (chk_cert_status 仅允许 UNCERTIFIED/CERTIFIED/INVALID/CANCELLED)
+        // P21-b 重构 2026-06-22 修 P0 bug: 原 PENDING 违反 V8 CHECK 约束
         inv.setCertificationStatus("UNCERTIFIED");
-        inv.setDocId(doc.getId());
-        inv.setDocNo(doc.getDocNo());           // 新增：业务单据编号冗余
-        inv.setVoucherId(doc.getVoucherId());
-        inv.setVoucherNo(voucherNo);            // 新增：凭证编号冗余
         inv.setCreatedBy(DEFAULT_USER_ID);
         inputInvoiceMapper.insert(inv);
     }

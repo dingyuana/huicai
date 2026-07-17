@@ -18,6 +18,11 @@
             <el-option v-for="o in CERT_OPTIONS" :key="o.value" :label="o.label" :value="o.value" />
           </el-select>
         </el-form-item>
+        <el-form-item label="审核状态">
+          <el-select v-model="query.status" clearable placeholder="全部" style="width:130px">
+            <el-option v-for="o in STATUS_OPTIONS" :key="o.value" :label="o.label" :value="o.value" />
+          </el-select>
+        </el-form-item>
         <el-form-item>
           <el-button type="primary" @click="fetchData">查询</el-button>
         </el-form-item>
@@ -36,16 +41,49 @@
         <el-table-column prop="taxRate" label="税率" width="80" align="center">
           <template #default="{ row }">{{ Number(row.taxRate).toFixed(2) }}%</template>
         </el-table-column>
-        <el-table-column label="认证状态" width="120" align="center">
+        <el-table-column label="审核状态" width="120" align="center">
+          <template #default="{ row }">
+            <el-tag :type="(STATUS_TAG_MAP[row.status] || 'info') as any" size="small">
+              {{ STATUS_MAP[row.status] || row.status }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="认证状态" width="100" align="center">
           <template #default="{ row }">
             <el-tag :type="(CERT_TAG_MAP[row.certificationStatus] || 'info') as any" size="small">
               {{ CERT_MAP[row.certificationStatus] || row.certificationStatus }}
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="180" fixed="right">
+        <el-table-column label="操作" width="220" fixed="right">
           <template #default="{ row }">
-            <el-button text type="primary" v-if="row.certificationStatus === 'UNCERTIFIED'" @click="onCertify(row)">认证</el-button>
+            <template v-if="row.status === 'PENDING_CONFIRM'">
+              <el-button link type="primary" size="small" @click="doAction(row, 'submitReview')">提交审核</el-button>
+              <el-button link type="danger" size="small" @click="doAction(row, 'void')">作废</el-button>
+            </template>
+            <template v-else-if="row.status === 'PENDING_REVIEW'">
+              <el-button link type="primary" size="small" @click="doAction(row, 'confirm')">通过</el-button>
+              <el-button link type="warning" size="small" @click="doAction(row, 'reject')">驳回</el-button>
+              <el-button link type="danger" size="small" @click="doAction(row, 'void')">作废</el-button>
+            </template>
+            <template v-else-if="row.status === 'CONFIRMED'">
+              <el-button link type="primary" size="small" @click="doAction(row, 'genVoucher')">生成凭证</el-button>
+              <el-button link type="warning" size="small" @click="doAction(row, 'revert')">回退</el-button>
+              <el-button link type="danger" size="small" @click="doAction(row, 'void')">作废</el-button>
+              <el-button link type="danger" size="small" @click="doAction(row, 'reverse')">红冲</el-button>
+            </template>
+            <template v-else-if="row.status === 'VOUCHERED' || row.status === 'PARTIALLY_RECONCILED'">
+              <el-tag size="small" type="success">已生成凭证</el-tag>
+              <el-button link type="danger" size="small" @click="doAction(row, 'reverse')">红冲</el-button>
+            </template>
+            <template v-else-if="row.status === 'FULLY_RECONCILED'">
+              <el-tag size="small" type="success">已核销</el-tag>
+            </template>
+            <template v-else-if="row.status === 'VOIDED'">
+              <el-tag size="small" type="danger">已作废</el-tag>
+            </template>
+            <el-button v-if="row.certificationStatus === 'UNCERTIFIED' && row.status !== 'VOIDED'"
+              link type="primary" size="small" @click="onCertify(row)">认证</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -107,8 +145,11 @@
 
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue'
-import { ElMessage, type FormInstance } from 'element-plus'
-import { pageInputInvoice, createInputInvoice, certifyInputInvoice } from '@/api/modules/tax'
+import { ElMessage, ElMessageBox, type FormInstance } from 'element-plus'
+import {
+  pageInputInvoice, createInputInvoice, certifyInputInvoice,
+  submitInputReview, confirmInputInvoice, rejectInputInvoice, revertInputInvoice, voidInputInvoice, reverseInputInvoice,
+} from '@/api/modules/tax'
 
 const CERT_OPTIONS = [
   { value: 'UNCERTIFIED', label: '未认证' },
@@ -121,7 +162,23 @@ const CERT_TAG_MAP: Record<string, string> = {
   UNCERTIFIED: 'warning', CERTIFIED: 'success', INVALID: 'danger', CANCELLED: 'info',
 }
 
-const query = reactive({ vendorName: '', period: '', certStatus: '', current: 1, size: 20 })
+const STATUS_OPTIONS = [
+  { value: 'PENDING_CONFIRM', label: '待确认' },
+  { value: 'PENDING_REVIEW', label: '待审核' },
+  { value: 'CONFIRMED', label: '已确认' },
+  { value: 'VOUCHERED', label: '已生成凭证' },
+  { value: 'FULLY_RECONCILED', label: '已核销' },
+  { value: 'PARTIALLY_RECONCILED', label: '部分核销' },
+  { value: 'VOIDED', label: '已作废' },
+]
+const STATUS_MAP: Record<string, string> = Object.fromEntries(STATUS_OPTIONS.map((o) => [o.value, o.label]))
+const STATUS_TAG_MAP: Record<string, string> = {
+  PENDING_CONFIRM: 'warning', PENDING_REVIEW: 'info', CONFIRMED: 'success',
+  VOUCHERED: '', FULLY_RECONCILED: 'success', PARTIALLY_RECONCILED: '',
+  VOIDED: 'danger',
+}
+
+const query = reactive({ vendorName: '', period: '', certStatus: '', status: '', current: 1, size: 20 })
 const list = ref<any[]>([])
 const total = ref(0)
 const loading = ref(false)
@@ -159,7 +216,7 @@ const fetchData = async () => {
 const openEdit = () => {
   Object.assign(form, {
     id: undefined, invoiceNo: '', invoiceDate: '', vendorName: '',
-    amount: 0, taxRate: 0.13, taxAmount: 0, invoiceType: 'SPECIAL', remark: '',
+    amount: 0, taxRate: 13, taxAmount: 0, invoiceType: 'SPECIAL', remark: '',
   })
   dialogVisible.value = true
 }
@@ -179,6 +236,35 @@ const onCertify = async (row: any) => {
   await certifyInputInvoice(row.id)
   ElMessage.success('已认证')
   fetchData()
+}
+
+const doAction = async (row: any, action: string) => {
+  const id = row?.id
+  if (!id) return
+  const label = ({ submitReview: '提交审核', confirm: '审核通过', reject: '驳回', revert: '回退', void: '作废', reverse: '红冲', genVoucher: '手工生成凭证' } as any)[action] || action
+
+  if (action === 'reject' || action === 'void' || action === 'reverse') {
+    const { value: reason } = await ElMessageBox.prompt(
+      `请输入${label}原因`, label, { inputType: 'textarea', inputValidator: (v: string) => !!v?.trim(), inputErrorMessage: '原因不能为空' }
+    ).catch(() => ({ value: null }))
+    if (!reason) return
+    try {
+      if (action === 'reject') await rejectInputInvoice(id, reason)
+      else if (action === 'reverse') await reverseInputInvoice(id, reason)
+      else await voidInputInvoice(id, reason)
+      ElMessage.success(`${label}成功`)
+      fetchData()
+    } catch { /* backend handles error msg */ }
+    return
+  }
+
+  try {
+    if (action === 'submitReview') await submitInputReview(id)
+    else if (action === 'confirm') await confirmInputInvoice(id)
+    else if (action === 'revert') await revertInputInvoice(id)
+    ElMessage.success(`${label}成功`)
+    fetchData()
+  } catch { /* backend handles error msg */ }
 }
 
 onMounted(fetchData)

@@ -457,7 +457,8 @@ class ReconciliationServiceImplTest {
 
         List<ReconciliationLogEntity> logs = service.autoReconcileFifo(5L, "INVOICE_OUT", new BigDecimal("700"), "receipt", 1L, "202606", "FIFO测试");
         assertEquals(2, logs.size());
-        verify(businessDocMapper, times(2)).updateById(any(BusinessDocEntity.class));
+        // 2次(目标单据) + 2次(来源单据, 同一笔收款每次核销都更新结算金额)
+        verify(businessDocMapper, times(4)).updateById(any(BusinessDocEntity.class));
         verify(logMapper, times(2)).insert(any(ReconciliationLogEntity.class));
     }
 

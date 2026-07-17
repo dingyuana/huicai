@@ -44,6 +44,9 @@ public class InputInvoiceEntity {
     @TableField("process_status")
     private String processStatus;
 
+    /** 审核状态: PENDING_CONFIRM/PENDING_REVIEW/CONFIRMED/VOUCHERED/... */
+    private String status;
+
     /** AI 科目映射推荐结果（JSONB） */
     @TableField(value = "ai_mapping_result", typeHandler = JsonbTypeHandler.class)
     private String aiMappingResult;
@@ -84,12 +87,14 @@ public class InputInvoiceEntity {
     private LocalDateTime updatedAt;
 
     /** 审核人ID */
-    @TableField(exist = false)
     private Long auditedBy;
 
     /** 审核时间 */
-    @TableField(exist = false)
     private LocalDateTime auditedAt;
+
+    /** 审核驳回原因 */
+    @TableField("reject_reason")
+    private String rejectReason;
 
     @TableLogic
     private Integer deleted;
