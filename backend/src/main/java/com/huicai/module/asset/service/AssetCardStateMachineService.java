@@ -5,7 +5,7 @@ import com.huicai.module.asset.entity.AssetCardEntity;
 
 /**
  * 资产卡片状态机服务.
- * 封装资产卡片 4 状态 (DRAFT/IN_USE/STOPPED/DISPOSED) 的状态流转检查.
+ * 封装资产卡片 4 状态 (DRAFT/IN_USE/IDLE/DISPOSED) 的状态流转检查.
  */
 public interface AssetCardStateMachineService {
 
@@ -17,23 +17,23 @@ public interface AssetCardStateMachineService {
     void assertActivable(AssetCardEntity entity);
 
     /**
-     * 校验可停用 (IN_USE → STOPPED).
+     * 校验可停用 (IN_USE → IDLE).
      *
      * @throws BusinessException 如果 status 不是 IN_USE
      */
     void assertStoppable(AssetCardEntity entity);
 
     /**
-     * 校验可重新启用 (STOPPED → IN_USE).
+     * 校验可重新启用 (IDLE → IN_USE).
      *
-     * @throws BusinessException 如果 status 不是 STOPPED
+     * @throws BusinessException 如果 status 不是 IDLE
      */
     void assertRestartable(AssetCardEntity entity);
 
     /**
-     * 校验可处置 (IN_USE/STOPPED → DISPOSED).
+     * 校验可处置 (IN_USE/IDLE → DISPOSED).
      *
-     * @throws BusinessException 如果 status 不是 IN_USE 或 STOPPED
+     * @throws BusinessException 如果 status 不是 IN_USE 或 IDLE
      */
     void assertDisposable(AssetCardEntity entity);
 
@@ -43,7 +43,7 @@ public interface AssetCardStateMachineService {
     boolean isInUse(AssetCardEntity entity);
 
     /**
-     * 检查是否为停用状态.
+     * 检查是否为闲置状态.
      */
     boolean isStopped(AssetCardEntity entity);
 

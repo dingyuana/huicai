@@ -64,6 +64,7 @@ public class ReconciliationServiceImpl implements ReconciliationService {
     private final ArapSettlementService settlementService;
     private final OutputInvoiceStateMachineService outputInvoiceStateMachineService;
     private final ReconciliationToleranceService toleranceService;
+    private final ArapSettlementEntryMapper settlementEntryMapper;
 
     @Override
     public RecommendResult recommendReceipt(Long receiptId, String sourceDocType, Long customerId, BigDecimal amount, String summary, String counterpartyName) {
@@ -353,6 +354,7 @@ public class ReconciliationServiceImpl implements ReconciliationService {
         reconLog.setStatus(ArapStatus.CONFIRMED);
         reconLog.setRemark(request.remark());
         reconLog.setCreatedBy(DEFAULT_USER_ID);
+        reconLog.setOperationType("CREATE");
         logMapper.insert(reconLog);
 
         // Also create settlement record via existing ArapSettlementService
@@ -619,6 +621,7 @@ public class ReconciliationServiceImpl implements ReconciliationService {
         }
 
         reconLog.setStatus(ArapStatus.CANCELLED);
+        reconLog.setOperationType("CANCEL");
         reconLog.setRemark("反核销原因: " + reason);
         logMapper.updateById(reconLog);
 
@@ -634,6 +637,7 @@ public class ReconciliationServiceImpl implements ReconciliationService {
             throw new BusinessException("仅已确认(CONFIRMED)的核销可审批执行, 当前状态: " + reconLog.getStatus());
         }
         reconLog.setStatus(ArapStatus.EXECUTED);
+        reconLog.setOperationType("CONFIRM");
         logMapper.updateById(reconLog);
         log.info("核销审批执行完成: logId={}, amount={}", logId, reconLog.getAllocatedAmount());
         return reconLog;
@@ -663,6 +667,7 @@ public class ReconciliationServiceImpl implements ReconciliationService {
             }
         }
         reconLog.setStatus(ArapStatus.REJECTED);
+        reconLog.setOperationType("REJECT");
         reconLog.setRemark(reason);
         logMapper.updateById(reconLog);
         log.info("核销驳回完成: logId={}, amount={}, reason={}", logId, amount, reason);
@@ -1061,10 +1066,32 @@ public class ReconciliationServiceImpl implements ReconciliationService {
         trace.setTraceId("TRC-" + java.time.LocalDate.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyyMM")) + "-" + String.format("%04d", logId));
 
         com.huicai.module.arap.dto.vo.ReconciliationTraceVO.SettlementInfo settlement = new com.huicai.module.arap.dto.vo.ReconciliationTraceVO.SettlementInfo();
-        settlement.setId(log.getId());
-        settlement.setStatus(log.getStatus());
-        settlement.setAmount(log.getAllocatedAmount());
-        settlement.setCreatedAt(log.getCreatedAt());
+        // Look up actual settlement record via settlement_entry.business_doc_id
+        Long actualSettlementId = null;
+        if (log.getTargetDocId() != null) {
+            List<ArapSettlementEntryEntity> entries = settlementEntryMapper.selectList(
+                    new LambdaQueryWrapper<ArapSettlementEntryEntity>()
+                            .eq(ArapSettlementEntryEntity::getBusinessDocId, log.getTargetDocId())
+                            .last("LIMIT 1"));
+            if (!entries.isEmpty()) {
+                actualSettlementId = entries.get(0).getSettlementId();
+            }
+        }
+        if (actualSettlementId != null) {
+            settlement.setId(actualSettlementId);
+            ArapSettlementEntity s = settlementService.getById(actualSettlementId);
+            if (s != null) {
+                settlement.setSettlementNo(s.getSettlementNo());
+                settlement.setAmount(s.getTotalAmount());
+                settlement.setStatus(s.getStatus());
+                settlement.setCreatedAt(s.getCreatedAt());
+            }
+        } else {
+            settlement.setId(log.getId());
+            settlement.setStatus(log.getStatus());
+            settlement.setAmount(log.getAllocatedAmount());
+            settlement.setCreatedAt(log.getCreatedAt());
+        }
         trace.setSettlement(settlement);
 
         com.huicai.module.arap.dto.vo.ReconciliationTraceVO.UpstreamInfo upstream = new com.huicai.module.arap.dto.vo.ReconciliationTraceVO.UpstreamInfo();

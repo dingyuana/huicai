@@ -93,7 +93,16 @@
 | /api/v1/arap-settlements/** | CRUD | 核销单 |
 | /api/v1/arap-settlements/{id}/generate-voucher | POST | 生成凭证 |
 | /api/v1/prepayments/** | CRUD | 预收预付 |
-| /api/v1/bad-debts/** | CRUD | 坏账 |
+|| /api/v1/bad-debts/** | CRUD | 坏账 | P43 |
+|| /api/v1/aging-analysis/** | 账龄分析 | 账龄分析表、到期债权表、逾期预警 | P51 |
+|| /api/v1/aging-analysis/payable-* | 应付账龄 | 应付账龄汇总、按供应商、到期应付 | P53 |
+|| /api/v1/customer-statements/** | 客户对账 | 对账单生成、发送、确认、差异处理 | P52 |
+|| /api/v1/customer-statements/** | 客户对账 | 对账单生成、发送、确认、差异处理 | P52 |
+|| /api/v1/outstanding-items/** | 未达账项 | 未达账项管理 | P52 |
+|| /api/v1/disputes/** | 差异处理 | 对账差异记录 | P52 |
+|| /api/v1/payment-plans | GET | 付款计划 | P53 |
+|| /api/v1/purchase-returns | POST/GET | 采购退货（财务） | P53 |
+|| /api/v1/prepayment/available | GET | 可用预付款查询 | P53 |
 
 ### 5.1 核销全链路追溯 API
 
@@ -135,10 +144,11 @@
 
 | 维度 | 状态 | 备注 |
 |------|------|------|
-| 后端 | ✅ 完整 | 核销工作台+坏账+预收预付 |
+| 后端 | ✅ 完整 | 核销工作台+坏账(P43)+账龄分析(P51)+客户对账(P52)+应付账龄(P53) |
 | 前端 | ✅ 完整 | 核销工作台+结算列表+坏账列表+Timeline+穿透点击+FIFO自动核销 |
 | 测试 | ✅ 良好 | ReconciliationControllerTest + 42 个测试、ReconciliationWorkbenchE2ETest |
 | 对传统超越 | ✅ 统一 BusinessDoc、核销工作台统一入口 | |
 | 与传统差距 | 账龄分析前端 | 后端有，前端待完善 |
+|| 待开发规范 | — | 所有模块已完成 |
 
 > **文档结束**

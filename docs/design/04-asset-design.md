@@ -12,9 +12,13 @@
 传统定位：实物资产台账与折旧计算器。核心功能是内置折旧算法（直线法/双倍余额递减法），按月批量计提折旧。
 
 **对比传统：**
-- 传统：简单状态（在用/停用/报废），当前：**4态状态机**（IN_USE→IDLE→DISPOSED→SCRAPPED）
+- 传统：简单状态（在用/停用/报废），当前：**5态状态机**（DRAFT→IN_USE↔STOPPED/IDLE→DISPOSED + SCRAPPED）
 - 传统：折旧公式硬编码，当前：支持多方法 + 自定义算法
 - 当前新增：资产盘点（盘点单→差异处理→凭证）
+
+> **⚠️ 代码-设计差异说明：** 设计稿原计划 4 态（IN_USE→IDLE→DISPOSED→SCRAPPED），
+> 代码实际实现了 5 态状态机，包含 DRAFT 作为初始态。IDLE 已添加为 STOPPED 的别名常量，
+> SCRAPPED 已添加但尚未接入完整处置流程。
 
 ## 2. 核心组件
 
@@ -42,10 +46,14 @@
 ## 4. 状态机
 
 ```
-IN_USE ──→ IDLE ──→ DISPOSED ──→ SCRAPPED
-  ↕          ↕
-use        dispose(直接报废)
+DRAFT ──启用──→ IN_USE ──停用──→ STOPPED (兼容 IDLE) ──处置──→ DISPOSED
+  ↕                ↕
+  edit          restart(←STOPPED)
+                    └──处置也可从 STOPPED/IDLE 直接发起
 ```
+
+> **说明：** 代码中 STOPPED 是 DB 留存值，新代码推荐使用 {@code IDLE} 常量。
+> SCRAPPED 常量已声明但未进入当前状态机流转，为预留状态。
 
 ## 5. API 端点
 

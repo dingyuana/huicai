@@ -9,6 +9,84 @@
         </div>
       </div>
 
+      <!-- 统计卡片 -->
+      <el-row :gutter="16" style="margin-bottom:16px">
+        <el-col :span="4">
+          <el-card class="stat-card" shadow="hover" :style="{ animationDelay: '0s' }">
+            <div class="stat-content">
+              <div class="stat-info">
+                <span class="stat-label">总凭证数</span>
+                <span class="stat-value">{{ fmtNum(stats.totalCount || 0) }}</span>
+              </div>
+              <div class="stat-icon icon-total">
+                <el-icon><Document /></el-icon>
+              </div>
+            </div>
+          </el-card>
+        </el-col>
+        <el-col :span="5">
+          <el-card class="stat-card" shadow="hover" :style="{ animationDelay: '0.1s' }">
+            <div class="stat-content">
+              <div class="stat-info">
+                <span class="stat-label">借方合计</span>
+                <span class="stat-value">¥ {{ fmtAmount(stats.totalDebit) }}</span>
+              </div>
+              <div class="stat-icon icon-debit">
+                <el-icon><Bottom /></el-icon>
+              </div>
+            </div>
+          </el-card>
+        </el-col>
+        <el-col :span="5">
+          <el-card class="stat-card" shadow="hover" :style="{ animationDelay: '0.2s' }">
+            <div class="stat-content">
+              <div class="stat-info">
+                <span class="stat-label">贷方合计</span>
+                <span class="stat-value">¥ {{ fmtAmount(stats.totalCredit) }}</span>
+              </div>
+              <div class="stat-icon icon-credit">
+                <el-icon><Top /></el-icon>
+              </div>
+            </div>
+          </el-card>
+        </el-col>
+        <el-col :span="5">
+          <el-card class="stat-card" shadow="hover" :style="{ animationDelay: '0.3s' }">
+            <div class="stat-content">
+              <div class="stat-info">
+                <span class="stat-label">已记账</span>
+                <span class="stat-value">{{ fmtNum(stats.postedCount || 0) }}</span>
+              </div>
+              <div class="stat-icon icon-posted">
+                <el-icon><SuccessFilled /></el-icon>
+              </div>
+            </div>
+          </el-card>
+        </el-col>
+        <el-col :span="5">
+          <el-card class="stat-card" shadow="hover" :style="{ animationDelay: '0.4s' }">
+            <div class="stat-content">
+              <div class="stat-info">
+                <span class="stat-label">草稿</span>
+                <span class="stat-value">{{ fmtNum(stats.draftCount || 0) }}</span>
+              </div>
+              <div class="stat-icon icon-draft">
+                <el-icon><Edit /></el-icon>
+              </div>
+            </div>
+          </el-card>
+        </el-col>
+      </el-row>
+
+      <!-- 分类标签 -->
+      <el-radio-group v-model="tabType" style="margin-bottom:12px" @change="onTabChange">
+        <el-radio-button value="">全部</el-radio-button>
+        <el-radio-button value="DRAFT">草稿 ({{ stats.draftCount || 0 }})</el-radio-button>
+        <el-radio-button value="SUBMITTED">已提交 ({{ stats.submittedCount || 0 }})</el-radio-button>
+        <el-radio-button value="AUDITED">已审核 ({{ stats.auditedCount || 0 }})</el-radio-button>
+        <el-radio-button value="POSTED">已记账 ({{ stats.postedCount || 0 }})</el-radio-button>
+      </el-radio-group>
+
       <el-form :model="query" inline class="filter-form">
         <el-form-item label="期间">
           <el-input v-model="query.period" placeholder="YYYYMM" clearable style="width:120px" />
@@ -70,7 +148,6 @@
             <el-button text size="small" v-if="row.status === 'AUDITED'" type="warning" @click="onPost(row)">记账</el-button>
             <el-button text size="small" v-if="row.status === 'POSTED'" type="warning" @click="onUnpost(row)">反过账</el-button>
             <el-button text size="small" v-if="row.status === 'POSTED' || row.status === 'AUDITED'" type="danger" @click="onReverse(row)">红冲</el-button>
-            <!-- <el-button text size="small" type="warning" @click="onAiCheck(row)">AI 检测</el-button> -->
             <el-popconfirm v-if="row.status === 'DRAFT'" title="确认删除此凭证？" @confirm="onDelete(row)">
               <template #reference>
                 <el-button text type="danger" size="small">删除</el-button>
@@ -94,9 +171,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
+import { Document, Bottom, Top, SuccessFilled, Edit } from '@element-plus/icons-vue'
 import {
   getVoucherPage,
   submitVoucher,
@@ -120,6 +198,20 @@ const loading = ref(false)
 const list = ref<VoucherVO[]>([])
 const total = ref(0)
 const selectedRows = ref<VoucherVO[]>([])
+
+// 分类标签
+const tabType = ref('')
+
+// 汇总统计
+const stats = reactive({
+  totalCount: 0,
+  totalDebit: 0,
+  totalCredit: 0,
+  draftCount: 0,
+  submittedCount: 0,
+  auditedCount: 0,
+  postedCount: 0,
+})
 
 const query = ref<VoucherQueryDTO>({
   period: '',
@@ -147,12 +239,31 @@ function fmtAmount(v: number) {
   return v == null ? '' : Number(v).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
+function fmtNum(v: number) {
+  return v == null ? '0' : Number(v).toLocaleString('zh-CN')
+}
+
 async function fetchData() {
   loading.value = true
   try {
-    const res = await getVoucherPage(query.value)
+    // 分页查询（按当前分类标签过滤）
+    const params = { ...query.value }
+    if (tabType.value) params.status = tabType.value
+    const res = await getVoucherPage(params)
     list.value = res.records
     total.value = res.total
+
+    // 统计汇总（无分类过滤查全部，带分类查当前分类）
+    const allParams = { period: query.value.period, keyword: query.value.keyword, current: 1, size: 9999 }
+    const allRes = await getVoucherPage(allParams)
+    const allRecords = allRes.records || []
+    stats.totalCount = allRes.total || 0
+    stats.totalDebit = allRecords.reduce((s: number, r: VoucherVO) => s + Number(r.totalDebit || 0), 0)
+    stats.totalCredit = allRecords.reduce((s: number, r: VoucherVO) => s + Number(r.totalCredit || 0), 0)
+    stats.draftCount = allRecords.filter((r: VoucherVO) => r.status === 'DRAFT').length
+    stats.submittedCount = allRecords.filter((r: VoucherVO) => r.status === 'SUBMITTED').length
+    stats.auditedCount = allRecords.filter((r: VoucherVO) => r.status === 'AUDITED').length
+    stats.postedCount = allRecords.filter((r: VoucherVO) => r.status === 'POSTED').length
   } catch {
     // handled
   } finally {
@@ -167,6 +278,12 @@ function onSearch() {
 
 function onReset() {
   query.value = { period: '', status: '', keyword: '', current: 1, size: 20 }
+  tabType.value = ''
+  fetchData()
+}
+
+function onTabChange() {
+  query.value.current = 1
   fetchData()
 }
 
@@ -232,20 +349,6 @@ async function onUnpost(row: VoucherVO) {
   await fetchData()
 }
 
-async function onAiCheck(row: VoucherVO) {
-  try {
-    const { aiSubjectMapping } = await import('@/api/modules/tax')
-    const res: any = await aiSubjectMapping(row.summary || '', Number(row.totalDebit || 0))
-    if (res?.result?.best) {
-      ElMessage.success(`AI 检测: ${res.result.best.account_name} (${res.result.best.confidence})`)
-    } else {
-      ElMessage.info('AI 检测通过，未发现异常')
-    }
-  } catch {
-    ElMessage.error('AI 检测失败')
-  }
-}
-
 async function onBatchSubmit() {
   const ids = selectedRows.value.filter((r) => r.status === 'DRAFT').map((r) => r.id)
   if (ids.length === 0) return
@@ -295,4 +398,41 @@ onMounted(fetchData)
   display: flex;
   justify-content: flex-end;
 }
+/* 统计卡片 */
+.stat-card {
+  border-radius: 8px;
+  transition: all 0.3s ease;
+}
+.stat-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1) !important;
+}
+.stat-content {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.stat-info {
+  display: flex;
+  flex-direction: column;
+}
+.stat-label {
+  font-size: 12px;
+  color: #909399;
+  margin-bottom: 4px;
+}
+.stat-value {
+  font-size: 18px;
+  font-weight: 600;
+  color: #303133;
+}
+.stat-icon {
+  font-size: 28px;
+  opacity: 0.6;
+}
+.icon-total { color: #409EFF; }
+.icon-debit { color: #67C23A; }
+.icon-credit { color: #E6A23C; }
+.icon-posted { color: #67C23A; }
+.icon-draft { color: #909399; }
 </style>

@@ -8,6 +8,9 @@ spring:
 
   flyway:
     enabled: false  # H2 不完全兼容 PostgreSQL 语法，跳过 Flyway
+  sql:
+    init:
+      mode: always  # 加载 schema.sql 初始化表结构
 
   data:
     redis:

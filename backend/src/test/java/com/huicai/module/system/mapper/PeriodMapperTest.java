@@ -73,7 +73,7 @@ class PeriodMapperTest extends AbstractMapperTest {
         PeriodEntity entity = new PeriodEntity();
         entity.setPeriodCode("202613");
         entity.setYear(2026);
-        entity.setMonth(13); // 非法月份
+        entity.setMonth(13); // 非法月份;
         entity.setStartDate(LocalDate.of(2026, 1, 1));
         entity.setEndDate(LocalDate.of(2026, 1, 31));
         entity.setStatus("open");
@@ -88,7 +88,7 @@ class PeriodMapperTest extends AbstractMapperTest {
         entity.setYear(2026); entity.setMonth(7);
         entity.setStartDate(LocalDate.of(2026, 7, 1));
         entity.setEndDate(LocalDate.of(2026, 7, 31));
-        entity.setStatus("INVALID"); // 非法状态值
+        entity.setStatus("INVALID"); // 非法状态值;
         assertThrows(Exception.class, () -> periodMapper.insert(entity),
                 "status 有 CHECK 约束 (open/closed/locked)，INVALID 应失败");
     }

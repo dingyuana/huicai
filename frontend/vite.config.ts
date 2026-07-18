@@ -20,6 +20,10 @@ export default defineConfig({
     environment: 'happy-dom',
     include: ['src/__tests__/**/*.test.ts'],
     globals: true,
+    css: true,
+    deps: {
+      inline: ['element-plus'],
+    },
   },
   resolve: {
     alias: {

@@ -30,18 +30,19 @@ public class AssetCardStateMachineServiceImpl implements AssetCardStateMachineSe
 
     @Override
     public void assertRestartable(AssetCardEntity entity) {
-        if (!AssetStatus.isAssetCardStopped(entity.getStatus())) {
+        String status = entity.getStatus();
+        if (!AssetStatus.isAssetCardIdle(status) && !AssetStatus.isAssetCardStopped(status)) {
             throw BusinessException.badRequest(
-                    "资产卡片当前状态 " + entity.getStatus() + " 不可重新启用, 需 STOPPED");
+                    "资产卡片当前状态 " + status + " 不可重新启用, 需 IDLE");
         }
     }
 
     @Override
     public void assertDisposable(AssetCardEntity entity) {
         String status = entity.getStatus();
-        if (!AssetStatus.isAssetCardInUse(status) && !AssetStatus.isAssetCardStopped(status)) {
+        if (!AssetStatus.isAssetCardInUse(status) && !AssetStatus.isAssetCardIdle(status) && !AssetStatus.isAssetCardStopped(status)) {
             throw BusinessException.badRequest(
-                    "资产卡片当前状态 " + status + " 不可处置, 需 IN_USE 或 STOPPED");
+                    "资产卡片当前状态 " + status + " 不可处置, 需 IN_USE 或 IDLE");
         }
     }
 
@@ -52,7 +53,8 @@ public class AssetCardStateMachineServiceImpl implements AssetCardStateMachineSe
 
     @Override
     public boolean isStopped(AssetCardEntity entity) {
-        return AssetStatus.isAssetCardStopped(entity.getStatus());
+        String status = entity.getStatus();
+        return AssetStatus.isAssetCardIdle(status) || AssetStatus.isAssetCardStopped(status);
     }
 
     @Override

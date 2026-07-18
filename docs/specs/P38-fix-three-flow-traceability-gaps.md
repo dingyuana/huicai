@@ -381,17 +381,16 @@ WHERE s.generated_doc_id = d.id
 
 ## 8. 验收标准
 
-- [ ] F1: 发票 confirm 后 BusinessDoc.status==VOUCHERED ✅ 测试验证
-- [ ] F2: `auditedBy`/`auditedAt` 正确写入 `t_output_invoice` ✅ 测试验证
-- [ ] F3: 银行流水制证后 Voucher.sourceDocType==BANK_STMT ✅ 测试验证
-- [ ] F4: 核销后发票状态同步为 FULLY_RECONCILED/PARTIALLY_RECONCILED ✅ 测试验证
-- [ ] F5: Settlement.confirm() 旧路径抛 BusinessException ✅ 测试验证
-- [ ] F6: BusinessDoc.bankStatementId 正确回写 ✅ 测试验证
-- [ ] F7: 核销制证 Voucher.sourceDocType==RECONCILIATION ✅ 测试验证
-- [ ] F8: Settlement.generateVoucher() 后 BusinessDoc.status==VOUCHERED ✅ 测试验证
-- [ ] F9: audit()/generateVoucher() 去重无回归 ✅ mvn test 0 fail
-- [ ] F10: fillOutputInvoiceDetails 降级路径正确 ✅ 测试验证
-- [ ] 全部 10 项修改通过 mvn test（容忍 16 个 H2 历史 errors）
+| 编号 | 场景 | 前置条件 | 操作步骤 | 预期结果 |
+|------|------|---------|---------|---------|
+| AT-F1 | 发票 confirm 后 BusinessDoc 状态正确 | 销项发票处于待确认状态，BusinessDoc 草稿已创建 | ① 执行发票 confirm 操作 | BusinessDoc.status == "VOUCHERED"，非 "DRAFT" |
+| AT-F2 | 发票审核信息持久化到 DB | 销项发票处于待确认状态，V63 migration 已执行 | ① 执行发票 confirm 操作 ② 直接查询 t_output_invoice 表 | audited_by 和 audited_at 字段非空，正确持久化 |
+| AT-F3 | 银行流水制证凭证来源追溯 | 银行流水记录已审核，触发自动制证 | ① 执行银行流水自动制证流程 ② 查询生成的 Voucher 记录 | Voucher.sourceDocType == "BANK_STMT"，sourceDocId / sourceDocNo 非空 |
+| AT-F4 | 核销后发票状态同步 | 发票状态为 VOUCHERED，unsettledAmount 已知 | ① 对关联 BusinessDoc 执行核销操作 | 发票状态: unsettledAmount=0 → FULLY_RECONCILED；>0 → PARTIALLY_RECONCILED |
+| AT-F5 | Settlement 旧格式路径抛出异常 | Settlement 明细存在 receivableId/payableId 旧格式记录 | ① 执行 Settlement.confirm() | 抛出 BusinessException，提示"请迁移至 businessDocId" |
+| AT-F6 | BusinessDoc 银行流水反向追溯 | 银行流水自动制证已完成 | ① 查询生成的 BusinessDoc 记录 | BusinessDoc.bankStatementId 非空，指向源银行流水 ID |
+| AT-F7 | 核销制证凭证来源追溯 | 核销操作已完成，Voucher 已生成 | ① 查询核销生成的 Voucher 记录 | Voucher.sourceDocType == "RECONCILIATION"，sourceDocId / sourceDocNo 非空 |
+| AT-F8 | Settlement 制证后 BusinessDoc 状态更新 | Settlement 已 CONFIRMED，关联 BusinessDoc 存在 | ① 执行 Settlement.generateVoucher() | BusinessDoc.status 更新为 "VOUCHERED" |
 
 ---
 

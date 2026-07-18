@@ -2,6 +2,7 @@ package com.huicai.module.arap.controller;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.huicai.module.arap.service.BusinessDocAgingService;
 import com.huicai.module.finance.dto.BusinessDocVO;
 import com.huicai.module.finance.service.BusinessDocService;
 import org.junit.jupiter.api.DisplayName;
@@ -28,6 +29,9 @@ class ArapControllerTest {
 
     @MockBean
     private BusinessDocService docService;
+
+    @MockBean
+    private BusinessDocAgingService businessDocAgingService;
 
     @Test
     @DisplayName("应收明细分页查询_默认参数正确生效")

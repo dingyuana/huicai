@@ -1,4 +1,9 @@
 -- V63__add_audit_fields_to_core_tables.sql
+-- ⚠️ 本文件放错了目录（db/ 而非 db/migration/），Flyway 从未执行！
+-- t_input_invoice 的 audited_by/audited_at 已由 V90 补建。
+-- t_output_invoice 的 audited_by/audited_at 仍标记为 @TableField(exist = false)，未报错但不可写。
+-- 如需启用，需独立 migration。
+-- 
 -- 添加审核字段到核心业务表（状态转换红线基础设施）
 -- 为所有需要审核的业务表添加：审核人ID + 审核时间
 -- 命名说明:

@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.huicai.module.arap.entity.ReconciliationLogEntity;
 import com.huicai.module.arap.service.ReconciliationService;
+import com.huicai.module.arap.service.impl.ReconciliationServiceImpl;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -44,7 +45,7 @@ class ReconciliationControllerTest {
     private ObjectMapper om;
 
     @MockBean
-    private ReconciliationService reconciliationService;
+    private ReconciliationServiceImpl reconciliationService;
 
     // ==================== 推荐接口测试 ====================
 

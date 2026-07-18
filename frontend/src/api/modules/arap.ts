@@ -175,3 +175,93 @@ export function clearReceivables(): Promise<any> {
 export function clearPayables(): Promise<any> {
   return request.post('/system/clear-payables')
 }
+
+// ===== 账龄分析 (P51) =====
+export function getAgingSummary(params: { period: string; customerId?: number }): Promise<any> {
+  return request.get('/aging-analysis/summary', { params })
+}
+export function getAgingByCustomer(period: string): Promise<any> {
+  return request.get('/aging-analysis/by-customer', { params: { period } })
+}
+export function getDueReceivables(params: { date: string; customerId?: number }): Promise<any> {
+  return request.get('/aging-analysis/due-receivables', { params })
+}
+export function getAlerts(params: { alertLevel?: string; status?: string; customerId?: number }): Promise<any> {
+  return request.get('/aging-analysis/alerts', { params })
+}
+export function generateAlerts(period: string): Promise<any> {
+  return request.post('/aging-analysis/alerts/generate', null, { params: { period } })
+}
+export function dismissAlert(id: number): Promise<void> {
+  return request.post(`/aging-analysis/alerts/${id}/dismiss`)
+}
+export function resolveAlert(id: number): Promise<void> {
+  return request.post(`/aging-analysis/alerts/${id}/resolve`)
+}
+
+// ===== 坏账准备 P43 扩展 =====
+export function getBadDebtScheme(): Promise<any> {
+  return request.get('/bad-debts/scheme')
+}
+export function updateBadDebtScheme(data: Record<string, number>): Promise<void> {
+  return request.put('/bad-debts/scheme', data)
+}
+export function writeOffBadDebt(data: { sourceType: string; sourceId: number; writeOffAmount: number; reason: string }): Promise<any> {
+  return request.post('/bad-debts/write-off', data)
+}
+export function recoveryBadDebt(data: { sourceId: number; amount: number }): Promise<any> {
+  return request.post('/bad-debts/recovery', data)
+}
+
+// ===== 客户对账 (P52) =====
+export function generateStatements(data: { customerIds: number[]; period: string }): Promise<any> {
+  return request.post('/customer-statements/generate', data)
+}
+export function getStatement(id: number): Promise<any> {
+  return request.get(`/customer-statements/${id}`)
+}
+export function pageStatements(params: any): Promise<any> {
+  return request.get('/customer-statements/page', { params })
+}
+export function sendStatement(id: number): Promise<void> {
+  return request.post(`/customer-statements/${id}/send`)
+}
+export function confirmStatement(id: number): Promise<void> {
+  return request.post(`/customer-statements/${id}/confirm`)
+}
+export function disputeStatement(id: number, data: any): Promise<void> {
+  return request.post(`/customer-statements/${id}/dispute`, data)
+}
+export function pageOutstandingItems(params: any): Promise<any> {
+  return request.get('/outstanding-items/page', { params })
+}
+export function resolveOutstandingItem(id: number): Promise<void> {
+  return request.post(`/outstanding-items/${id}/resolve`)
+}
+export function cancelOutstandingItem(id: number): Promise<void> {
+  return request.post(`/outstanding-items/${id}/cancel`)
+}
+export function pageDisputes(params: any): Promise<any> {
+  return request.get('/disputes/page', { params })
+}
+export function resolveDispute(id: number): Promise<void> {
+  return request.post(`/disputes/${id}/resolve`)
+}
+
+// ===== 付款计划 (P53 M2) =====
+export function generatePaymentPlan(params: { period?: string; vendorId?: number }): Promise<any> {
+  return request.get('/payment-plans', { params })
+}
+
+// ===== 采购退货 (P53 M3) =====
+export function createPurchaseReturn(data: { originalDocNo: string; vendorId: number; returnAmount: number; taxAmount?: number; reason?: string }): Promise<any> {
+  return request.post('/purchase-returns', data)
+}
+export function getPurchaseReturn(id: number): Promise<any> {
+  return request.get(`/purchase-returns/${id}`)
+}
+
+// ===== 可用预付款查询 (P53 M4) =====
+export function getAvailablePrepayment(params: { vendorId: number; amount?: number }): Promise<any> {
+  return request.get('/prepayment/available', { params })
+}

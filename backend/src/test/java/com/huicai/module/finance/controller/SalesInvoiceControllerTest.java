@@ -1,6 +1,11 @@
 package com.huicai.module.finance.controller;
 
+import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.huicai.module.finance.dto.BusinessDocQueryDTO;
+import com.huicai.module.finance.dto.BusinessDocVO;
+import com.huicai.module.finance.service.BusinessDocService;
 import com.huicai.module.finance.service.impl.SalesInvoiceImportService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -41,6 +46,9 @@ class SalesInvoiceControllerTest {
 
     @MockBean
     private SalesInvoiceImportService importService;
+
+    @MockBean
+    private BusinessDocService businessDocService;
 
     // ==================== 文件上传测试 ====================
 
@@ -154,24 +162,39 @@ class SalesInvoiceControllerTest {
     @Test
     @DisplayName("分页查询_默认参数正确生效")
     void page_defaultParams_applied() throws Exception {
+        // given
+        IPage<BusinessDocVO> page = new Page<>(1, 20);
+        when(businessDocService.pageQuery(any(BusinessDocQueryDTO.class))).thenReturn(page);
+
         // when & then - 不传参数，使用默认值 current=1, size=20
         mvc.perform(get("/api/v1/sales-invoices/page"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(200));
 
-        // 注意：此 Controller 的 page 方法直接返回提示消息，不调用 Service
-        // 所以不验证 Service 调用
+        verify(businessDocService).pageQuery(argThat(query ->
+                query.getCurrent().equals(1) &&
+                query.getSize().equals(20) &&
+                "INVOICE_OUT".equals(query.getDocType())
+        ));
     }
 
     @Test
     @DisplayName("分页查询_自定义参数正确传递")
     void page_customParams_passedCorrectly() throws Exception {
+        // given
+        IPage<BusinessDocVO> page = new Page<>(3, 100);
+        when(businessDocService.pageQuery(any(BusinessDocQueryDTO.class))).thenReturn(page);
+
         // when & then
         mvc.perform(get("/api/v1/sales-invoices/page")
                         .param("current", "3")
                         .param("size", "100"))
                 .andExpect(status().isOk());
 
-        // 此方法只是返回重定向提示，不调用 Service
+        verify(businessDocService).pageQuery(argThat(query ->
+                query.getCurrent().equals(3) &&
+                query.getSize().equals(100) &&
+                "INVOICE_OUT".equals(query.getDocType())
+        ));
     }
 }

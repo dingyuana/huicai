@@ -51,10 +51,11 @@ public class BadDebtController {
         return R.ok(service.provisionByPercentage(period, ratio));
     }
 
-    @Operation(summary = "确认")
+    @Operation(summary = "确认（自动生成凭证）")
     @PostMapping("/{id}/confirm")
-    public R<BadDebtProvisionEntity> confirm(@PathVariable Long id) {
-        return R.ok(service.confirm(id));
+    public R<BadDebtProvisionEntity> confirm(@PathVariable Long id,
+                                             @RequestParam(defaultValue = "1") Long userId) {
+        return R.ok(service.confirm(id, userId));
     }
 
     @Operation(summary = "删除")
@@ -62,5 +63,38 @@ public class BadDebtController {
     public R<Void> delete(@PathVariable Long id) {
         service.delete(id);
         return R.ok();
+    }
+
+    // ===== P43 新增端点 =====
+
+    @Operation(summary = "获取默认计提方案")
+    @GetMapping("/scheme")
+    public R<?> getDefaultScheme() {
+        return R.ok(service.getDefaultScheme());
+    }
+
+    @Operation(summary = "更新默认方案计提比例")
+    @PutMapping("/scheme")
+    public R<Void> updateSchemeRatios(@RequestBody Map<String, BigDecimal> ratios) {
+        service.updateSchemeRatios(ratios);
+        return R.ok();
+    }
+
+    @Operation(summary = "坏账核销")
+    @PostMapping("/write-off")
+    public R<Void> writeOff(@RequestParam Long sourceId,
+                            @RequestParam String sourceType,
+                            @RequestParam BigDecimal amount,
+                            @RequestParam String reason,
+                            @RequestParam(defaultValue = "1") Long userId) {
+        return R.ok(service.writeOff(sourceId, sourceType, amount, reason, userId));
+    }
+
+    @Operation(summary = "已核销收回")
+    @PostMapping("/recovery")
+    public R<Void> recovery(@RequestParam Long sourceId,
+                            @RequestParam BigDecimal amount,
+                            @RequestParam(defaultValue = "1") Long userId) {
+        return R.ok(service.recovery(sourceId, amount, userId));
     }
 }

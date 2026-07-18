@@ -69,6 +69,25 @@ export function certifyInputInvoice(id: number, deductionPeriod?: string): Promi
 export function inputInvoiceSummary(period: string): Promise<any> {
   return request.get('/tax/input-invoices/summary', { params: { period } })
 }
+// ====== 进项发票状态机 (P40) ======
+export function submitInputReview(id: number): Promise<void> {
+  return request.post(`/tax/input-invoices/${id}/submit-review`)
+}
+export function confirmInputInvoice(id: number): Promise<void> {
+  return request.post(`/tax/input-invoices/${id}/confirm`)
+}
+export function rejectInputInvoice(id: number, reason: string): Promise<void> {
+  return request.post(`/tax/input-invoices/${id}/reject`, null, { params: { reason } })
+}
+export function revertInputInvoice(id: number): Promise<void> {
+  return request.post(`/tax/input-invoices/${id}/revert`)
+}
+export function voidInputInvoice(id: number, reason: string): Promise<void> {
+  return request.post(`/tax/input-invoices/${id}/void`, null, { params: { reason } })
+}
+export function reverseInputInvoice(id: number, reason: string): Promise<number> {
+  return request.post(`/tax/input-invoices/${id}/reverse`, null, { params: { reason } })
+}
 export function pageOutputInvoice(params: any): Promise<any> {
   return request.get('/tax/output-invoices/page', { params })
 }

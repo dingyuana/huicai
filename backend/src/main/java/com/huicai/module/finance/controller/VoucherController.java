@@ -108,6 +108,13 @@ public class VoucherController {
         return R.ok(voucherService.reverse(id, SecurityUtils.getCurrentUserId()));
     }
 
+    @Operation(summary = "结账凭证 (POSTED → CLOSED)")
+    @PostMapping("/{id}/close")
+    public R<Void> close(@PathVariable Long id) {
+        voucherService.close(id, SecurityUtils.getCurrentUserId());
+        return R.ok();
+    }
+
     @Operation(summary = "驳回凭证 (SUBMITTED → DRAFT, reason必填)")
     @PostMapping("/{id}/reject")
     public R<Void> reject(@PathVariable Long id, @RequestParam String reason) {

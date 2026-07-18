@@ -95,4 +95,27 @@ public class PrepaymentController {
     public R<List<PrepaymentEntity>> getOpenPrepaymentsForCustomer(@PathVariable Long customerId) {
         return R.ok(prepaymentService.getOpenPrepaymentsForCustomer(customerId));
     }
+
+    @Operation(summary = "查询可用预付款（P53 M4）")
+    @GetMapping("/available")
+    public R<AvailablePrepaymentVO> getAvailablePrepayment(
+            @RequestParam Long vendorId,
+            @RequestParam(required = false) BigDecimal amount) {
+        List<PrepaymentEntity> open = prepaymentService.getOpenPrepayments(vendorId);
+        BigDecimal totalPrepayment = open.stream()
+                .map(PrepaymentEntity::getUnsettledAmount)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        boolean hasAvailable = totalPrepayment.compareTo(BigDecimal.ZERO) > 0;
+        BigDecimal suggestedOffset = BigDecimal.ZERO;
+        if (hasAvailable && amount != null && amount.compareTo(BigDecimal.ZERO) > 0) {
+            suggestedOffset = totalPrepayment.min(amount);
+        }
+        return R.ok(new AvailablePrepaymentVO(hasAvailable, totalPrepayment, suggestedOffset));
+    }
+
+    record AvailablePrepaymentVO(
+        boolean hasAvailablePrepayment,
+        BigDecimal totalPrepayment,
+        BigDecimal suggestedOffset
+    ) {}
 }

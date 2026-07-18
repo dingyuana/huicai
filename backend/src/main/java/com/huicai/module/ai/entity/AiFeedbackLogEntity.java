@@ -37,6 +37,7 @@ public class AiFeedbackLogEntity {
     private String humanAction;
 
     /** 人工修改字段 JSONB */
+    @TableField(value = "human_modified_fields", typeHandler = com.huicai.module.system.handler.JsonbTypeHandler.class)
     private String humanModifiedFields;
 
     /** 创建人 */

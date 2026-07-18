@@ -15,6 +15,10 @@
 - 传统：事后统计 → 当前：**事前控制**（报销提交时实时校验预算余额，预占预算，驳回时释放）
 - 传统：简单超支警告 → 当前：**三级控制**（WARN/APPROVE_REQUIRED/BLOCK）
 
+> **⚠️ 代码-设计差异说明：** 设计稿原计划 5 态（DRAFT→SUBMITTED→APPROVED→CLOSED + REJECTED），
+> 代码实际实现了 7 态状态机，中间增加了 ACTIVE（执行中/已激活）和 FROZEN（已冻结）状态。
+> CLOSED 和 REJECTED 常量已声明，暂未接入完整流转逻辑。
+
 ## 2. 核心组件
 
 | 组件 | 说明 |
@@ -34,10 +38,13 @@
 ## 4. 状态机
 
 ```
-DRAFT ──submit──→ SUBMITTED ──approve──→ APPROVED ──close──→ CLOSED
-  ↕                              ↕
-  edit                        reject(→REJECTED)
+DRAFT ──submit──→ SUBMITTED ──approve──→ APPROVED ──activate──→ ACTIVE ──close──→ CLOSED
+  ↕                              ↕                            ↕
+  edit                        reject(→REJECTED)            freeze(→FROZEN)
 ```
+
+> **说明：** ACTIVE(执行中) 和 FROZEN(已冻结) 为代码实际新增状态。
+> CLOSED 和 REJECTED 常量已声明，接入流转逻辑待补充。
 
 ## 5. 三级控制策略
 

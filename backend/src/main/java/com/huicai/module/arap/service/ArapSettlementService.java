@@ -13,6 +13,12 @@ public interface ArapSettlementService {
     IPage<ArapSettlementEntity> pageQuery(String status, String voucherNo, Integer current, Integer size);
     ArapSettlementEntity getById(Long id);
     ArapSettlementEntity create(ArapSettlementEntity entity, List<ArapSettlementEntryEntity> entries);
+    /** 提交核销单 — DRAFT → SUBMITTED */
+    void submit(Long id);
+    /** 审批通过 — SUBMITTED → CONFIRMED */
+    ArapSettlementEntity approve(Long id);
+    /** 驳回 — SUBMITTED → REJECTED（退回 DRAFT） */
+    void reject(Long id, String reason);
     ArapSettlementEntity confirm(Long id);
     void delete(Long id);
 

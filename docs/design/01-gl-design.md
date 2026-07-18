@@ -60,6 +60,7 @@ DRAFT ──submit──→ SUBMITTED ──audit──→ AUDITED ──post─
 | /api/v1/vouchers/{id}/audit | POST | 审核 |
 | /api/v1/vouchers/{id}/reject | POST | 驳回 |
 | /api/v1/vouchers/{id}/post | POST | 过账 |
+| /api/v1/vouchers/{id}/close | POST | 结账（POSTED → CLOSED） |
 | /api/v1/vouchers/{id}/reverse | POST | 红冲 |
 | /api/v1/vouchers/{id}/unpost | POST | 反过账 |
 | /api/v1/vouchers/trace | GET | 编号追溯 |

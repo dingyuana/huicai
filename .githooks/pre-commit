@@ -1,0 +1,51 @@
+#!/bin/bash
+# pre-commit hook — 三步闭环合规检查
+# ai-evolution-v2 分支上，任何代码变更必须关联 SPEC 文件
+
+BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null)
+
+# 仅对 ai-evolution-v2 分支生效
+if [ "$BRANCH" != "ai-evolution-v2" ]; then
+    exit 0
+fi
+
+# 检查本次 commit 是否包含代码文件变更
+STAGED_FILES=$(git diff --cached --name-only --diff-filter=ACM)
+
+# 代码文件模式
+CODE_PATTERN='\.(java|py|vue|ts|js|xml|sql|yaml|yml)$'
+
+HAS_CODE=false
+HAS_SPEC=false
+
+for file in $STAGED_FILES; do
+    if echo "$file" | grep -qE "$CODE_PATTERN"; then
+        HAS_CODE=true
+    fi
+    if echo "$file" | grep -qE '^docs/specs/.*\.md$'; then
+        HAS_SPEC=true
+    fi
+done
+
+if [ "$HAS_CODE" = true ] && [ "$HAS_SPEC" = false ]; then
+    echo ""
+    echo "╔══════════════════════════════════════════════════════════════╗"
+    echo "║  三步闭环合规检查失败                                       ║"
+    echo "╠══════════════════════════════════════════════════════════════╣"
+    echo "║  分支: $BRANCH                          ║"
+    echo "║  代码变更 → 但未发现关联 SPEC 文件                         ║"
+    echo "╠══════════════════════════════════════════════════════════════╣"
+    echo "║  违反 AGENTS.md §1 铁律 #10                                  ║"
+    echo "║  SPEC→Plan→审核→执行，不能跳过前两步                        ║"
+    echo "╚══════════════════════════════════════════════════════════════╝"
+    echo ""
+    echo "修正方案："
+    echo "  1. 先写 SPEC 到 docs/specs/PXX-xxx.md"
+    echo "  2. 老丁审核通过"
+    echo "  3. 再 git add 代码文件"
+    echo "  4. 如需强制跳过（仅紧急修复）：git commit --no-verify"
+    echo ""
+    exit 1
+fi
+
+exit 0

@@ -10,9 +10,11 @@ import com.huicai.module.arap.constant.ArapStatus;
 import com.huicai.module.arap.dto.vo.ArapSettlementVO;
 import com.huicai.module.arap.entity.ArapSettlementEntity;
 import com.huicai.module.arap.entity.ArapSettlementEntryEntity;
+import com.huicai.module.arap.entity.ReconciliationLogEntity;
 import com.huicai.module.arap.mapper.ArapSettlementEntryMapper;
 import com.huicai.module.arap.mapper.ArapSettlementMapper;
 import com.huicai.module.arap.mapper.CustomerMapper;
+import com.huicai.module.arap.mapper.ReconciliationLogMapper;
 import com.huicai.module.arap.mapper.VendorMapper;
 import com.huicai.module.arap.service.ArapSettlementService;
 import com.huicai.module.finance.constant.VoucherType;
@@ -53,6 +55,7 @@ public class ArapSettlementServiceImpl implements ArapSettlementService {
     private final VoucherMapper voucherMapper;
     private final VoucherEntryMapper voucherEntryMapper;
     private final VoucherNoService voucherNoService;
+    private final ReconciliationLogMapper logMapper;
 
     @Override
     public IPage<ArapSettlementEntity> pageQuery(String status, String voucherNo, Integer current, Integer size) {
@@ -129,17 +132,50 @@ public class ArapSettlementServiceImpl implements ArapSettlementService {
     @Retryable(retryFor = OptimisticLockingFailureException.class, maxAttempts = 3, backoff = @org.springframework.retry.annotation.Backoff(delay = 100))
     @Transactional(rollbackFor = Exception.class)
     public ArapSettlementEntity confirm(Long id) {
+        // Backward compat: 旧接口 call submit→approve 串联
         ArapSettlementEntity entity = getById(id);
-        if (!ArapStatus.canTransition(entity.getStatus(), ArapStatus.CONFIRMED)) {
-            throw new BusinessException("核销单状态不允许确认: " + entity.getStatus());
+        if (ArapStatus.DRAFT.equals(entity.getStatus())) {
+            submit(id); // DRAFT → SUBMITTED
         }
-        // 更新明细对应应收/应付的已核销金额
+        return approve(id); // SUBMITTED → CONFIRMED
+    }
+
+    @Override
+    public void delete(Long id) {
+        ArapSettlementEntity entity = getById(id);
+        if (!ArapStatus.isDraft(entity.getStatus())) {
+            throw new BusinessException("仅草稿状态可删除");
+        }
+        entryMapper.delete(new LambdaQueryWrapper<ArapSettlementEntryEntity>()
+                .eq(ArapSettlementEntryEntity::getSettlementId, id));
+        mapper.deleteById(id);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void submit(Long id) {
+        ArapSettlementEntity entity = getById(id);
+        if (!ArapStatus.isSubmitable(entity.getStatus())) {
+            throw new BusinessException("核销单状态不允许提交: " + entity.getStatus());
+        }
+        entity.setStatus(ArapStatus.SUBMITTED);
+        mapper.updateById(entity);
+        logReconciliationLog(entity, "SUBMIT", null, null, DEFAULT_USER_ID);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public ArapSettlementEntity approve(Long id) {
+        ArapSettlementEntity entity = getById(id);
+        if (!ArapStatus.isApprovable(entity.getStatus())) {
+            throw new BusinessException("核销单状态不允许审批: " + entity.getStatus());
+        }
+        // 复用原 confirm 逻辑：更新明细对应应收/应付的已核销金额
         List<ArapSettlementEntryEntity> entries = entryMapper.selectList(
                 new LambdaQueryWrapper<ArapSettlementEntryEntity>()
                         .eq(ArapSettlementEntryEntity::getSettlementId, id)
         );
         for (ArapSettlementEntryEntity entry : entries) {
-            // P34: 优先使用 businessDocId（取代 receivableId/payableId）
             if (entry.getBusinessDocId() != null) {
                 BusinessDocEntity doc = businessDocMapper.selectById(entry.getBusinessDocId());
                 if (doc != null) {
@@ -159,49 +195,45 @@ public class ArapSettlementServiceImpl implements ArapSettlementService {
                     }
                 }
             } else if (entry.getReceivableId() != null) {
-                // P38-F5: P34 过渡期已结束，旧格式应报错
                 throw new BusinessException("核销明细仍使用旧格式(receivableId)，请迁移至 businessDocId: id=" + entry.getReceivableId());
             } else if (entry.getPayableId() != null) {
-                // P38-F5: P34 过渡期已结束，旧格式应报错
                 throw new BusinessException("核销明细仍使用旧格式(payableId)，请迁移至 businessDocId: id=" + entry.getPayableId());
             }
         }
         entity.setStatus(ArapStatus.CONFIRMED);
         mapper.updateById(entity);
+        logReconciliationLog(entity, "APPROVE", null, null, DEFAULT_USER_ID);
         return entity;
     }
 
     @Override
-    public void delete(Long id) {
+    @Transactional(rollbackFor = Exception.class)
+    public void reject(Long id) {
+        reject(id, null);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void reject(Long id, String reason) {
         ArapSettlementEntity entity = getById(id);
-        if (!ArapStatus.isDraft(entity.getStatus())) {
-            throw new BusinessException("仅草稿状态可删除");
+        if (!ArapStatus.isRejectable(entity.getStatus())) {
+            throw new BusinessException("核销单状态不允许驳回: " + entity.getStatus());
         }
-        entryMapper.delete(new LambdaQueryWrapper<ArapSettlementEntryEntity>()
-                .eq(ArapSettlementEntryEntity::getSettlementId, id));
-        mapper.deleteById(id);
+        entity.setStatus(ArapStatus.REJECTED);
+        mapper.updateById(entity);
+        logReconciliationLog(entity, "REJECT", reason, null, DEFAULT_USER_ID);
     }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void cancel(Long id) {
         ArapSettlementEntity entity = getById(id);
-        if (!ArapStatus.canTransition(entity.getStatus(), ArapStatus.CANCELLED)) {
+        if (!ArapStatus.isCancellable(entity.getStatus())) {
             throw new BusinessException("核销单状态不允许取消: " + entity.getStatus());
         }
         entity.setStatus(ArapStatus.CANCELLED);
         mapper.updateById(entity);
-    }
-
-    @Override
-    @Transactional(rollbackFor = Exception.class)
-    public void reject(Long id) {
-        ArapSettlementEntity entity = getById(id);
-        if (!ArapStatus.canTransition(entity.getStatus(), ArapStatus.REJECTED)) {
-            throw new BusinessException("核销单状态不允许驳回: " + entity.getStatus());
-        }
-        entity.setStatus(ArapStatus.REJECTED);
-        mapper.updateById(entity);
+        logReconciliationLog(entity, "CANCEL", null, null, DEFAULT_USER_ID);
     }
 
     @Override
@@ -300,6 +332,7 @@ public class ArapSettlementServiceImpl implements ArapSettlementService {
         entity.setVoucherNo(voucherNo);      // 新增：回写凭证编号到核销单
         entity.setStatus(ArapStatus.VOUCHERED);
         mapper.updateById(entity);
+        logReconciliationLog(entity, "GENERATE_VOUCHER", null, voucherNo, DEFAULT_USER_ID);
 
         // 新增：回写凭证编号到所有核销明细对应的业务单据/应收/应付单
         for (ArapSettlementEntryEntity entry : entries) {
@@ -331,18 +364,45 @@ public class ArapSettlementServiceImpl implements ArapSettlementService {
     @Transactional(rollbackFor = Exception.class)
     public void reverse(Long id) {
         ArapSettlementEntity entity = getById(id);
-        if (!ArapStatus.canTransition(entity.getStatus(), ArapStatus.REVERSED)) {
-            throw new BusinessException("核销单状态不允许反核销: " + entity.getStatus());
+        if (!ArapStatus.isSettlementReversible(entity.getStatus())) {
+            throw new BusinessException("仅已确认或已记账的核销单可反核销, 当前: " + entity.getStatus());
         }
+        // 创建对冲核销单（红冲）— 对齐 Voucher 红冲模式
+        ArapSettlementEntity reverseSettlement = new ArapSettlementEntity();
+        reverseSettlement.setSettlementNo(entity.getSettlementNo() + "-H");
+        reverseSettlement.setSettlementType("REVERSAL");
+        reverseSettlement.setSettlementDate(entity.getSettlementDate());
+        reverseSettlement.setPeriod(entity.getPeriod());
+        reverseSettlement.setPartyId(entity.getPartyId());
+        reverseSettlement.setPartyType(entity.getPartyType());
+        reverseSettlement.setTotalAmount(entity.getTotalAmount().negate()); // 金额取负
+        reverseSettlement.setDiscountAmount(entity.getDiscountAmount());
+        reverseSettlement.setStatus(ArapStatus.DRAFT);
+        reverseSettlement.setReversedFromSettlementId(id);
+        reverseSettlement.setCreatedBy(DEFAULT_USER_ID);
+        mapper.insert(reverseSettlement);
+
+        // 复制原核销明细，金额取负
         List<ArapSettlementEntryEntity> entries = entryMapper.selectList(
                 new LambdaQueryWrapper<ArapSettlementEntryEntity>()
                         .eq(ArapSettlementEntryEntity::getSettlementId, id)
         );
         for (ArapSettlementEntryEntity entry : entries) {
-            restoreUnsettledAmount(entry);
+            ArapSettlementEntryEntity reverseEntry = new ArapSettlementEntryEntity();
+            reverseEntry.setSettlementId(reverseSettlement.getId());
+            reverseEntry.setBusinessDocId(entry.getBusinessDocId());
+            reverseEntry.setReceivableId(entry.getReceivableId());
+            reverseEntry.setPayableId(entry.getPayableId());
+            reverseEntry.setSettledAmount(entry.getSettledAmount().negate()); // 金额取负
+            reverseEntry.setBeforeBalance(entry.getBeforeBalance());
+            reverseEntry.setAfterBalance(entry.getAfterBalance());
+            entryMapper.insert(reverseEntry);
         }
+
+        // 原核销单状态改为 REVERSED
         entity.setStatus(ArapStatus.REVERSED);
         mapper.updateById(entity);
+        logReconciliationLog(entity, "REVERSE", "红冲反核销，创建对冲单据 id=" + reverseSettlement.getId(), null, DEFAULT_USER_ID);
     }
 
     private void restoreUnsettledAmount(ArapSettlementEntryEntity entry) {
@@ -358,11 +418,35 @@ public class ArapSettlementServiceImpl implements ArapSettlementService {
                 }
             }
         } else if (entry.getReceivableId() != null) {
-            // P34 过渡期：应收单尚未迁移到 BusinessDoc，跳过反核销
             log.debug("反核销跳过应收单: receivableId={}", entry.getReceivableId());
         } else if (entry.getPayableId() != null) {
-            // P34 过渡期：应付单尚未迁移到 BusinessDoc，跳过反核销
             log.debug("反核销跳过应付单: payableId={}", entry.getPayableId());
+        }
+    }
+
+    /**
+     * 记录核销日志到 t_reconciliation_log。
+     */
+    private void logReconciliationLog(ArapSettlementEntity settlement, String operationType,
+                                      String remark, String voucherNo, Long userId) {
+        try {
+            ReconciliationLogEntity logEntity = new ReconciliationLogEntity();
+            logEntity.setSourceDocType("SETTLEMENT");
+            logEntity.setSourceDocId(settlement.getId());
+            logEntity.setTargetDocType(null);
+            logEntity.setTargetDocId(null);
+            logEntity.setAllocatedAmount(settlement.getTotalAmount());
+            logEntity.setMatchScore(BigDecimal.ONE);
+            logEntity.setMatchMethod("MANUAL");
+            logEntity.setStatus(settlement.getStatus());
+            logEntity.setOperationType(operationType);
+            logEntity.setRemark(remark);
+            logEntity.setCreatedBy(userId);
+            logMapper.insert(logEntity);
+            log.info("核销日志已写入: settlementId={}, operationType={}, status={}",
+                    settlement.getId(), operationType, settlement.getStatus());
+        } catch (Exception e) {
+            log.warn("写入核销日志失败: settlementId={}, error={}", settlement.getId(), e.getMessage());
         }
     }
 }

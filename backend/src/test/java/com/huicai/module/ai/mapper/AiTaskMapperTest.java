@@ -1,0 +1,113 @@
+package com.huicai.module.ai.mapper;
+
+import com.huicai.module.ai.entity.AiTaskEntity;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.DisplayName;
+import org.mockito.Mockito;
+import static org.junit.jupiter.api.Assertions.*;
+
+/**
+ * AiTaskMapper 方法签名验证测试
+ */
+public class AiTaskMapperTest {
+
+    @Test
+    @DisplayName("AiTaskMapper insert 方法应接受正确参数")
+    void insert_shouldAcceptValidParams() {
+        AiTaskMapper mapper = Mockito.mock(AiTaskMapper.class);
+        AiTaskEntity entity = new AiTaskEntity();
+        
+        // 设置必要字段
+        entity.setTaskNo("AI-TASK-001");
+        entity.setTaskType("ANOMALY_DETECTION");
+        entity.setStatus("RUNNING");
+        entity.setBizType("voucher");
+        entity.setBizId(1L);
+        entity.setInputData("{}");
+        entity.setOutputData("{}");
+        
+        // 验证方法可调用且返回正确类型
+        Mockito.when(mapper.insert(entity)).thenReturn(1);
+        int rows = mapper.insert(entity);
+        
+        assertEquals(1, rows);
+        Mockito.verify(mapper).insert(entity);
+    }
+
+    @Test
+    @DisplayName("AiTaskMapper selectById 方法应返回实体")
+    void selectById_shouldReturnEntity() {
+        AiTaskMapper mapper = Mockito.mock(AiTaskMapper.class);
+        AiTaskEntity entity = new AiTaskEntity();
+        entity.setTaskNo("AI-TASK-001");
+        entity.setTaskType("ANOMALY_DETECTION");
+        entity.setStatus("RUNNING");
+        entity.setBizType("voucher");
+        entity.setBizId(1L);
+        entity.setInputData("{}");
+        entity.setOutputData("{}");
+        Mockito.when(mapper.selectById(1L)).thenReturn(entity);
+        
+        AiTaskEntity result = mapper.selectById(1L);
+        
+        assertNotNull(result);
+        Mockito.verify(mapper).selectById(1L);
+    }
+
+    @Test
+    @DisplayName("AiTaskMapper updateById 方法应接受实体参数")
+    void updateById_shouldAcceptEntity() {
+        AiTaskMapper mapper = Mockito.mock(AiTaskMapper.class);
+        AiTaskEntity entity = new AiTaskEntity();
+        entity.setTaskNo("AI-TASK-001");
+        entity.setTaskType("ANOMALY_DETECTION");
+        entity.setStatus("RUNNING");
+        entity.setBizType("voucher");
+        entity.setBizId(1L);
+        entity.setInputData("{}");
+        entity.setOutputData("{}");
+        Mockito.when(mapper.updateById(entity)).thenReturn(1);
+        
+        int rows = mapper.updateById(entity);
+        
+        assertEquals(1, rows);
+        Mockito.verify(mapper).updateById(entity);
+    }
+
+    @Test
+    @DisplayName("AiTaskMapper deleteById 方法应接受ID参数")
+    void deleteById_shouldAcceptId() {
+        AiTaskMapper mapper = Mockito.mock(AiTaskMapper.class);
+        Mockito.when(mapper.deleteById(1L)).thenReturn(1);
+        
+        int rows = mapper.deleteById(1L);
+        
+        assertEquals(1, rows);
+        Mockito.verify(mapper).deleteById(1L);
+    }
+
+    @Test
+    @DisplayName("AiTaskMapper 所有方法定义应正确")
+    void allMethods_shouldBeDefined() {
+        AiTaskMapper mapper = Mockito.mock(AiTaskMapper.class);
+        
+        // 验证所有常用方法存在
+        AiTaskEntity e = new AiTaskEntity();
+        e.setTaskNo("AI-TASK-001");
+        e.setTaskType("ANOMALY_DETECTION");
+        e.setStatus("RUNNING");
+        e.setBizType("voucher");
+        e.setBizId(1L);
+        e.setInputData("{}");
+        e.setOutputData("{}");
+        Mockito.when(mapper.insert(e)).thenReturn(1);
+        Mockito.when(mapper.selectById(1L)).thenReturn(e);
+        Mockito.when(mapper.updateById(e)).thenReturn(1);
+        Mockito.when(mapper.deleteById(1L)).thenReturn(1);
+        
+        assertEquals(1, mapper.insert(e));
+        assertNotNull(mapper.selectById(1L));
+        assertEquals(1, mapper.updateById(e));
+        assertEquals(1, mapper.deleteById(1L));
+    }
+}

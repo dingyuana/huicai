@@ -252,6 +252,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '坏账准备', permission: 'bad:debt:list', keepAlive: true },
       },
       {
+        path: 'arap/aging-analysis',
+        name: 'AgingAnalysis',
+        component: () => import('@/views/arap/aging-analysis/AgingAnalysisView.vue'),
+        meta: { title: '账龄分析', permission: 'aging:analysis:list', keepAlive: true },
+      },
+      {
         path: 'arap/prepayment',
         name: 'PrepaymentList',
         component: () => import('@/views/arap/prepayment/PrepaymentList.vue'),
@@ -284,6 +290,24 @@ const routes: RouteRecordRaw[] = [
         name: 'ReconciliationExceptionList',
         component: () => import('@/views/arap/reconciliation-exception/ReconciliationExceptionList.vue'),
         meta: { title: '核销异常池', permission: 'arap:reconciliation:exception', keepAlive: true },
+      },
+      {
+        path: 'arap/customer-statement',
+        name: 'CustomerStatement',
+        component: () => import('@/views/arap/customer-statement/CustomerStatementList.vue'),
+        meta: { title: '客户对账', permission: 'customer:statement:list', keepAlive: true },
+      },
+      {
+        path: 'arap/payment-plan',
+        name: 'PaymentPlan',
+        component: () => import('@/views/arap/payment-plan/PaymentPlanList.vue'),
+        meta: { title: '付款计划', permission: 'arap:payment:plan', keepAlive: true },
+      },
+      {
+        path: 'arap/purchase-return',
+        name: 'PurchaseReturn',
+        component: () => import('@/views/arap/purchase-return/PurchaseReturnList.vue'),
+        meta: { title: '采购退货', permission: 'arap:purchase:return:list', keepAlive: true },
       },
       // 费用报销
       {

@@ -37,6 +37,11 @@ public interface VoucherStateMachineService {
     void assertReversible(VoucherEntity entity);
 
     /**
+     * 校验可结账 (POSTED → CLOSED).
+     */
+    void assertClosable(VoucherEntity entity);
+
+    /**
      * 检查凭证是否被红冲 (status=POSTED + reversedFrom 非空).
      */
     default boolean isReversed(VoucherEntity entity) {

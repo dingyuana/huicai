@@ -42,7 +42,7 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(Exception.class)
     @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
     public R<Void> handleUnknown(Exception e) {
-        log.error("系统异常: ", e);
+        log.error("系统异常: {}", e.getMessage(), e);
         return R.fail("系统繁忙，请稍后重试");
     }
 }

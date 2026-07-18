@@ -1,7 +1,7 @@
 # 06-发票与税务管理设计
 
 > **编号**：HUICAI-DES-007
-> **版本**：V1.0 | **修改日期**：2026-07-07 | **修改人**：Hermes | **修改内容**：初始创建
+> **版本**：V1.1 | **修改日期**：2026-07-17 | **修改人**：Hermes | **修改内容**：新增进项发票状态机（P40），科目方向差异化
 > 代码包：`com.huicai.module.tax`
 > 设计文档：[主文档](../DESIGN.md)
 
@@ -13,7 +13,7 @@
 
 **超越传统之处：**
 - 传统：手工录入或税控盘导入 → 当前：**Excel自动化导入 + 价税分离 + 容错（匿名客户回退）**
-- 传统：简单状态 → 当前：**6态状态机**（PENDING_CONFIRM→CONFIRMED→VOUCHERED→核销→REVERSED）
+- 传统：简单状态 → 当前：**进销项均实现8态状态机**（PENDING_CONFIRM→PENDING_REVIEW→CONFIRMED→VOUCHERED→核销→REVERSED）
 - 当前新增：**AI 科目映射**（规则→pgvector→LLM三阶段）+ **异常检测**（品名背离/时间异常）
 
 ## 2. 核心组件
@@ -22,7 +22,8 @@
 |------|------|
 | OutputInvoiceService | 销项发票管理 |
 | InputInvoiceService | 进项发票管理 |
-| OutputInvoiceStateMachineService | 销项发票6态状态机 |
+| OutputInvoiceStateMachineService | 销项发票8态状态机 |
+| InputInvoiceStateMachineService | 进项发票8态状态机（P40新增） |
 | TaxService | 税金计算、凭证生成 |
 | SalesInvoiceImportService | 销项发票Excel导入（列名映射+价税分离+防重） |
 | InputInvoiceImportService | 进项发票导入（对称逻辑） |
@@ -34,40 +35,80 @@
 | 表名 | 说明 | 关键字段 |
 |------|------|---------|
 | t_output_invoice | 销项发票 | invoice_no, customer_id, amount, tax_rate, tax_amount, total_amount, amount_ex_tax, status, ai_risk_tag, doc_no, voucher_no |
-| t_input_invoice | 进项发票 | invoice_no, vendor_id, amount, tax_rate, tax_amount, total_amount, amount_ex_tax, status, doc_no, voucher_no |
+| t_input_invoice | 进项发票 | invoice_no, vendor_id, amount, tax_rate, tax_amount, total_amount, amount_ex_tax, status, doc_no, voucher_no, certification_status |
 | t_tax_type | 税种 | code, name, rate |
 | t_tax_declaration | 纳税申报 | period, declaration_no, status |
 
 ## 4. 核心流程（以票定账，人工审核驱动）
 
 ```
-① 发票导入 → PENDING_CONFIRM（仅创建发票，不自动生单）
-② 人工提交审核 → 人工审核通过 → CONFIRMED
-③ 人工点击"生成业务单据" → BusinessDoc DRAFT
+① 发票导入/手动创建 → PENDING_CONFIRM（仅创建发票，不自动生单）
+② 人工提交审核 → PENDING_REVIEW
+③ 人工审核通过 → CONFIRMED → 自动创建 BusinessDoc + 凭证（Voucher DRAFT）
 ④ 人工审核业务单据 → APPROVED
-⑤ 人工点击"生成凭证" → Voucher DRAFT
-⑥ 人工审核凭证 → 过账 → POSTED
+⑤ 人工审核凭证 → 过账 → POSTED
+⑥ 核销 → FULLY/PARTIALLY_RECONCILED
 ```
 
-## 5. 状态机（销项）
+## 5. 状态机
+
+### 5.1 销项（INVOICE_OUT）
 
 ```
 PENDING_CONFIRM ──submitReview──→ PENDING_REVIEW ──confirm──→ CONFIRMED ──markVouchered──→ VOUCHERED
       ↕                      ↕              ↕                    ↕
-    void(→VOIDED)       reject(→reject)   revert(→回退)     reconcile(→FULLY/PARTIALLY_RECONCILED)
-                                                              ↕
-                                                           reverse(→REVERSED)
+    void(→VOIDED)       reject(→回退)     revert(→回退)      reconcile(→FULLY/PARTIALLY_RECONCILED)
+                                                                  ↕
+                                                               reverse(→REVERSED)
 ```
 
+**凭证科目方向（销项）：** 借 1122(应收账款) / 贷 5001(主营收入) + 2221.01(销项税)
+
+### 5.2 进项（INVOICE_IN）（P40 新增）
+
+```
+PENDING_CONFIRM ──submitReview──→ PENDING_REVIEW ──confirm──→ CONFIRMED ──auto──→ VOUCHERED
+      ↕                      ↕              ↕                    ↕
+    void(→VOIDED)       reject(→回退)     revert(→回退)      reconcile(→FULLY/PARTIALLY_RECONCILED)
+```
+
+**凭证科目方向（进项）：** 借 1601(原材料) + 2221.01(进项税) / 贷 2202(应付账款)
+
+> 进项与销项状态机流程相同，但凭证科目方向相反：
+> - 销项：借应收账款(1122) / 贷主营收入(5001)+销项税(2221.01)
+> - 进项：借原材料(1601)+进项税(2221.01) / 贷应付账款(2202)
+
 ## 6. API 端点
+
+### 6.1 销项发票
 
 | 端点 | 方法 | 说明 |
 |------|------|------|
 | /api/v1/tax/output-invoices/** | CRUD | 销项发票 |
-| /api/v1/tax/input-invoices/** | CRUD | 进项发票 |
-| /api/v1/tax/output-invoices/{id}/confirm | POST | 审核通过 |
+| /api/v1/tax/output-invoices/{id}/submit-review | POST | 提交审核 |
+| /api/v1/tax/output-invoices/{id}/confirm | POST | 审核通过(自动创建 INVOICE_OUT 业务单据+凭证) |
+| /api/v1/tax/output-invoices/{id}/reject | POST | 审核驳回 |
+| /api/v1/tax/output-invoices/{id}/revert | POST | 回退到待审核 |
 | /api/v1/tax/output-invoices/{id}/mark-vouchered | POST | 生成凭证 |
+| /api/v1/tax/output-invoices/{id}/void | POST | 作废 |
 | /api/v1/tax/output-invoices/{id}/reverse | POST | 红冲 |
+
+### 6.2 进项发票（P40 新增）
+
+| 端点 | 方法 | 说明 |
+|------|------|------|
+| /api/v1/tax/input-invoices/** | CRUD | 进项发票 |
+| /api/v1/tax/input-invoices/{id}/submit-review | POST | 提交审核 |
+| /api/v1/tax/input-invoices/{id}/confirm | POST | 审核通过(自动创建 INVOICE_IN 业务单据+凭证) |
+| /api/v1/tax/input-invoices/{id}/reject | POST | 审核驳回 |
+| /api/v1/tax/input-invoices/{id}/revert | POST | 回退到待审核 |
+| /api/v1/tax/input-invoices/{id}/void | POST | 作废 |
+| /api/v1/tax/input-invoices/{id}/certify | POST | 税务认证（独立于审核状态机） |
+
+### 6.3 通用
+
+| 端点 | 方法 | 说明 |
+|------|------|------|
 | /api/v1/tax/vat/calculate | GET | 增值税计算 |
 | /api/v1/tax/declarations/** | CRUD | 纳税申报 |
 
@@ -83,9 +124,7 @@ PENDING_CONFIRM ──submitReview──→ PENDING_REVIEW ──confirm──�
 
 | 维度 | 状态 | 备注 |
 |------|------|------|
-| 后端 | ✅ 完整 | 含完整状态机+导入流程 |
-| 前端 | ✅ 完整 | OutputInvoiceList/InputInvoiceList |
-| 测试 | ✅ 良好 | OutputInvoiceMapperTest + 42个状态机测试 |
+| 后端 | ✅ 完整 | 进销项均含完整状态机+导入流程 |
+| 前端 | ✅ 完整 | OutputInvoiceList/InputInvoiceList 均含审核操作按钮 |
+| 测试 | ✅ 良好 | OutputInvoiceMapperTest + 42个状态机测试 + InputInvoiceStateMachine 22测 + E2E |
 | 对传统超越 | ✅ AI科目映射+异常检测+自动导入+价税分离 | 远超传统 |
-
-> **文档结束**

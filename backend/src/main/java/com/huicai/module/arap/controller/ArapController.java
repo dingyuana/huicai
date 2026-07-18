@@ -2,6 +2,7 @@ package com.huicai.module.arap.controller;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.huicai.common.response.R;
+import com.huicai.module.arap.service.BusinessDocAgingService;
 import com.huicai.module.finance.dto.BusinessDocQueryDTO;
 import com.huicai.module.finance.dto.BusinessDocVO;
 import com.huicai.module.finance.service.BusinessDocService;
@@ -12,6 +13,8 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
+import java.util.Map;
+
 @Tag(name = "往来管理")
 @RestController
 @RequestMapping("/api/v1")
@@ -19,6 +22,7 @@ import java.util.List;
 public class ArapController {
 
     private final BusinessDocService docService;
+    private final BusinessDocAgingService businessDocAgingService;
 
     @Operation(summary = "应收明细分页查询")
     @GetMapping("/receivables/page")
@@ -98,14 +102,14 @@ public class ArapController {
 
     @Operation(summary = "应收账龄分析")
     @GetMapping("/receivables/aging")
-    public R<Void> receivableAging(@RequestParam(required = false) Long customerId) {
-        return R.ok();
+    public R<List<Map<String, Object>>> receivableAging(@RequestParam(required = false) Long customerId) {
+        return R.ok(businessDocAgingService.getReceivableAging(customerId));
     }
 
     @Operation(summary = "应付账龄分析")
     @GetMapping("/payables/aging")
-    public R<Void> payableAging(@RequestParam(required = false) Long vendorId) {
-        return R.ok();
+    public R<List<Map<String, Object>>> payableAging(@RequestParam(required = false) Long vendorId) {
+        return R.ok(businessDocAgingService.getPayableAging(vendorId));
     }
 
     @Operation(summary = "逾期应收")

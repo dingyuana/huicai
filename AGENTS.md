@@ -6,13 +6,13 @@
 
 > **更新基准**：commit `65e8d66` (2026-07-09) — P44/P45 核销列表修复 + 上游追溯
 > **当前分支**：`ai-evolution`
-> **关联文档**：[DESIGN.md](docs/DESIGN.md)、[需求登记册](docs/requirements/REQUIREMENTS_REGISTRY.md)、[DOCUMENT_REGISTRY.md](docs/DOCUMENT_REGISTRY.md)
+> **关联文档**：[DESIGN.md](docs/DESIGN.md)、[需求登记册](docs/requirements/REQUIREMENTS_REGISTRY.md)、[DOCUMENT_REGISTRY.md](docs/DOCUMENT_REGISTRY.md)、[Flyway治理规范](docs/development/flyway-governance.md)
 
 | 维度 | 数据 |
 |------|------|
 | 后端代码 | 345 Java 文件 |
 | 测试用例 | 579 个 `@Test` 方法 / 78 个测试类 |
-| 数据库 | PostgreSQL 16 / V1-V83 Flyway migration |
+| 数据库 | PostgreSQL 16 / V1 baseline (merged V1-V91) |
 | API 端点 | 433 个后端端点 |
 | 核心模块 | 基础数据、总账、应收应付、现金管理、固定资产、费用报销、发票税务、预算、财务报表、存储管理 |
 | AI 服务 | Python FastAPI 5 端点（health/anomaly/embedding/match/ocr）|
@@ -132,6 +132,10 @@
 16. **`git add <dir>` 陷阱**：add 目录后必查 `git status --short`，防止卷进 IDE 自动生成文件
 17. **`execute_code` 工具返回空**：沙箱内 `terminal()`/`read_file()` 可能返回空，改用 `subprocess.run()` 直接调系统命令
 18. **Maven JDK 21 编译**：`maven-compiler-plugin` 必须 ≥ 3.12.0，否则 `--release 21` 报错
+
+### 4.6 工作流执行类
+19. **起步跳过三步闭环**：收到"开发/继续开发/写代码"指令时，Hermes 必须先走 SPEC→审核门→再执行，禁止直接写 SPEC 文档或代码。**三次纠正沉淀：** 2026-07-09 ai-evolution-v2 起步时直接写计划文档+commit，跳过老丁审核（违反铁律 #10）。修正：收到任何开发指令，第一条输出必须是 SPEC 草案或要求确认需求，不是代码/计划文档。
+20. **`git add -A` 导致 doc 漂移**：写完文档后用了 `git add -A` 而非指定文件路径，导致关联 issue 修复。修正：commit 前先 `git status --short` 确认只有目标文件被跟踪。
 
 ---
 

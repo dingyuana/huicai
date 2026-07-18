@@ -2,7 +2,12 @@ package com.huicai.module.finance.e2e;
 
 import com.huicai.common.test.AbstractMapperTest;
 import com.huicai.module.arap.entity.CustomerEntity;
+import com.huicai.module.arap.entity.ReconciliationLogEntity;
 import com.huicai.module.arap.mapper.CustomerMapper;
+import com.huicai.module.arap.mapper.ReconciliationLogMapper;
+import com.huicai.module.arap.service.ArapSettlementService;
+import com.huicai.module.arap.service.ReconciliationService;
+import com.huicai.module.arap.service.impl.ReconciliationServiceImpl;
 import com.huicai.module.finance.entity.BusinessDocEntity;
 import com.huicai.module.finance.mapper.BusinessDocMapper;
 import com.huicai.module.finance.service.BusinessDocService;
@@ -44,6 +49,15 @@ public class ReconciliationWorkbenchE2ETest extends AbstractMapperTest {
 
     @Autowired
     private SubjectMapper subjectMapper;
+
+    @Autowired
+    private ReconciliationServiceImpl reconciliationService;
+
+    @Autowired
+    private ReconciliationLogMapper reconciliationLogMapper;
+
+    @Autowired
+    private ArapSettlementService arapSettlementService;
 
     private Long testCustomerId;
 
@@ -233,5 +247,111 @@ public class ReconciliationWorkbenchE2ETest extends AbstractMapperTest {
         assertTrue(paymentPage.getRecords().stream()
                         .anyMatch(v -> "PAYMENT".equals(v.getDocType())),
                 "PAYMENT tab 应包含 PAYMENT 类型单据");
+    }
+
+    @Test
+    void executeReconciliation_thenTrace_shouldContainSettlementData() {
+        // 1. 创建收款单（来源单据）
+        BusinessDocEntity receipt = new BusinessDocEntity();
+        receipt.setDocNo("SK-E2E-TRC-" + System.currentTimeMillis());
+        receipt.setDocType("RECEIPT");
+        receipt.setDocDate(LocalDate.of(2026, 7, 9));
+        receipt.setPeriod("202607");
+        receipt.setAmount(new BigDecimal("1000.00"));
+        receipt.setSettledAmount(BigDecimal.ZERO);
+        receipt.setUnsettledAmount(new BigDecimal("1000.00"));
+        receipt.setCustomerId(testCustomerId);
+        receipt.setStatus("APPROVED");
+        receipt.setSource("MANUAL");
+        receipt.setCreatedBy(1L);
+        businessDocMapper.insert(receipt);
+
+        // 2. 创建应收单（目标单据）
+        BusinessDocEntity invoiceOut = new BusinessDocEntity();
+        invoiceOut.setDocNo("YS-E2E-TRC-" + System.currentTimeMillis());
+        invoiceOut.setDocType("INVOICE_OUT");
+        invoiceOut.setDocDate(LocalDate.of(2026, 7, 9));
+        invoiceOut.setPeriod("202607");
+        invoiceOut.setAmount(new BigDecimal("1000.00"));
+        invoiceOut.setSettledAmount(BigDecimal.ZERO);
+        invoiceOut.setUnsettledAmount(new BigDecimal("1000.00"));
+        invoiceOut.setCustomerId(testCustomerId);
+        invoiceOut.setStatus("APPROVED");
+        invoiceOut.setSource("INVOICE_IMPORT");
+        invoiceOut.setCreatedBy(1L);
+        businessDocMapper.insert(invoiceOut);
+
+        // 3. 执行核销
+        ReconciliationService.ExecuteRequest executeReq = new ReconciliationService.ExecuteRequest(
+                "RECEIPT", receipt.getId(),
+                "INVOICE_OUT", invoiceOut.getId(),
+                new BigDecimal("500.00"), new BigDecimal("0.95"), "MANUAL",
+                testCustomerId, null, "202607", "E2E核销测试");
+        ReconciliationLogEntity log = reconciliationService.execute(executeReq);
+        assertNotNull(log);
+        assertEquals("CONFIRMED", log.getStatus());
+        assertEquals("CREATE", log.getOperationType());
+        assertNotNull(log.getId());
+
+        // 4. 查询 trace
+        var trace = reconciliationService.trace(log.getId());
+        assertNotNull(trace);
+        assertNotNull(trace.getSettlement());
+        assertNotNull(trace.getSettlement().getId(), "trace settlement ID 不应为空");
+        assertNotNull(trace.getSettlement().getSettlementNo(), "trace settlementNo 不应为空（period有值时生成核销单）");
+        assertNotNull(trace.getUpstream());
+        assertNotNull(trace.getDownstream());
+        assertFalse(trace.getOperationTrail().isEmpty(), "operationTrail 不应为空");
+        assertEquals("CREATE", trace.getOperationTrail().get(0).getOperationType());
+
+        // 5. 验证下游业务单据
+        assertNotNull(trace.getDownstream().getBusinessDocs());
+        assertFalse(trace.getDownstream().getBusinessDocs().isEmpty());
+    }
+
+    @Test
+    void executeReconciliation_traceSettlementId_shouldMatchActualSettlement() {
+        // 创建核销执行所需数据
+        BusinessDocEntity receipt = new BusinessDocEntity();
+        receipt.setDocNo("SK-E2E-TRC2-" + System.currentTimeMillis());
+        receipt.setDocType("RECEIPT");
+        receipt.setDocDate(LocalDate.of(2026, 7, 9));
+        receipt.setPeriod("202607");
+        receipt.setAmount(new BigDecimal("2000.00"));
+        receipt.setSettledAmount(BigDecimal.ZERO);
+        receipt.setUnsettledAmount(new BigDecimal("2000.00"));
+        receipt.setCustomerId(testCustomerId);
+        receipt.setStatus("APPROVED");
+        receipt.setSource("MANUAL");
+        receipt.setCreatedBy(1L);
+        businessDocMapper.insert(receipt);
+
+        BusinessDocEntity invoiceOut = new BusinessDocEntity();
+        invoiceOut.setDocNo("YS-E2E-TRC2-" + System.currentTimeMillis());
+        invoiceOut.setDocType("INVOICE_OUT");
+        invoiceOut.setDocDate(LocalDate.of(2026, 7, 9));
+        invoiceOut.setPeriod("202607");
+        invoiceOut.setAmount(new BigDecimal("2000.00"));
+        invoiceOut.setSettledAmount(BigDecimal.ZERO);
+        invoiceOut.setUnsettledAmount(new BigDecimal("2000.00"));
+        invoiceOut.setCustomerId(testCustomerId);
+        invoiceOut.setStatus("APPROVED");
+        invoiceOut.setSource("INVOICE_IMPORT");
+        invoiceOut.setCreatedBy(1L);
+        businessDocMapper.insert(invoiceOut);
+
+        // 执行核销（带period触发settlement创建）
+        ReconciliationService.ExecuteRequest executeReq = new ReconciliationService.ExecuteRequest(
+                "RECEIPT", receipt.getId(),
+                "INVOICE_OUT", invoiceOut.getId(),
+                new BigDecimal("1000.00"), new BigDecimal("0.95"), "MANUAL",
+                testCustomerId, null, "202607", "E2E Settlement ID检查");
+        ReconciliationLogEntity log = reconciliationService.execute(executeReq);
+
+        // trace 中的 settlement.id 应是真实核销单ID，不是 log.id
+        var trace = reconciliationService.trace(log.getId());
+        assertNotNull(trace.getSettlement());
+        assertNotEquals(log.getId(), trace.getSettlement().getId(),
+                "trace settlement.id 不应等于 log.id，应指向真实核销单");
     }
 }

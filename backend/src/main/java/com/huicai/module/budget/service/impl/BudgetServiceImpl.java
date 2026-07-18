@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.huicai.common.exception.BusinessException;
+import com.huicai.module.budget.constant.BudgetStatus;
 import com.huicai.module.budget.entity.BudgetAdjustmentEntity;
 import com.huicai.module.budget.entity.BudgetEntity;
 import com.huicai.module.budget.entity.BudgetEntryEntity;
@@ -58,7 +59,7 @@ public class BudgetServiceImpl implements BudgetService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public BudgetEntity create(BudgetEntity entity, List<BudgetEntryEntity> entries) {
-        if (entity.getStatus() == null) entity.setStatus("DRAFT");
+        if (entity.getStatus() == null) entity.setStatus(BudgetStatus.BUDGET_DRAFT);
         BigDecimal total = BigDecimal.ZERO;
         if (entries != null) {
             for (BudgetEntryEntity e : entries) {
@@ -81,10 +82,10 @@ public class BudgetServiceImpl implements BudgetService {
     @Override
     public BudgetEntity submit(Long id) {
         BudgetEntity entity = getById(id);
-        if (!"DRAFT".equals(entity.getStatus())) {
+        if (!BudgetStatus.BUDGET_DRAFT.equals(entity.getStatus())) {
             throw new BusinessException("仅草稿状态可提交");
         }
-        entity.setStatus("SUBMITTED");
+        entity.setStatus(BudgetStatus.BUDGET_SUBMITTED);
         budgetMapper.updateById(entity);
         return entity;
     }
@@ -92,10 +93,10 @@ public class BudgetServiceImpl implements BudgetService {
     @Override
     public BudgetEntity approve(Long id) {
         BudgetEntity entity = getById(id);
-        if (!"SUBMITTED".equals(entity.getStatus())) {
+        if (!BudgetStatus.BUDGET_SUBMITTED.equals(entity.getStatus())) {
             throw new BusinessException("仅已提交状态可审批");
         }
-        entity.setStatus("APPROVED");
+        entity.setStatus(BudgetStatus.BUDGET_APPROVED);
         entity.setApprovedAt(LocalDateTime.now());
         budgetMapper.updateById(entity);
         return entity;
@@ -104,10 +105,10 @@ public class BudgetServiceImpl implements BudgetService {
     @Override
     public BudgetEntity activate(Long id) {
         BudgetEntity entity = getById(id);
-        if (!"APPROVED".equals(entity.getStatus())) {
+        if (!BudgetStatus.BUDGET_APPROVED.equals(entity.getStatus())) {
             throw new BusinessException("仅已审批可激活");
         }
-        entity.setStatus("ACTIVE");
+        entity.setStatus(BudgetStatus.BUDGET_ACTIVE);
         budgetMapper.updateById(entity);
         return entity;
     }
@@ -168,7 +169,7 @@ public class BudgetServiceImpl implements BudgetService {
         List<BudgetEntity> budgets = budgetMapper.selectList(
                 new LambdaQueryWrapper<BudgetEntity>()
                         .eq(BudgetEntity::getPeriod, period)
-                        .in(BudgetEntity::getStatus, "APPROVED", "ACTIVE")
+                        .in(BudgetEntity::getStatus, BudgetStatus.BUDGET_APPROVED, BudgetStatus.BUDGET_ACTIVE)
         );
         BigDecimal totalBudget = BigDecimal.ZERO;
         BigDecimal totalUsed = BigDecimal.ZERO;
@@ -212,7 +213,7 @@ public class BudgetServiceImpl implements BudgetService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public BudgetAdjustmentEntity createAdjustment(BudgetAdjustmentEntity entity) {
-        if (entity.getStatus() == null) entity.setStatus("DRAFT");
+        if (entity.getStatus() == null) entity.setStatus(BudgetStatus.BUDGET_DRAFT);
         if (entity.getAdjustmentDate() == null) entity.setAdjustmentDate(LocalDate.now());
         adjustmentMapper.insert(entity);
         return entity;
@@ -223,7 +224,7 @@ public class BudgetServiceImpl implements BudgetService {
     public BudgetAdjustmentEntity approveAdjustment(Long id) {
         BudgetAdjustmentEntity entity = adjustmentMapper.selectById(id);
         if (entity == null) throw new BusinessException("调整单不存在");
-        if (!"DRAFT".equals(entity.getStatus())) {
+        if (!BudgetStatus.BUDGET_DRAFT.equals(entity.getStatus())) {
             throw new BusinessException("仅草稿状态可审批");
         }
         BudgetEntity budget = getById(entity.getBudgetId());
@@ -233,7 +234,7 @@ public class BudgetServiceImpl implements BudgetService {
             budget.setTotalAmount(budget.getTotalAmount().subtract(entity.getAdjustmentAmount()));
         }
         budgetMapper.updateById(budget);
-        entity.setStatus("APPROVED");
+        entity.setStatus(BudgetStatus.ADJUSTMENT_APPROVED);
         entity.setApprovedAt(LocalDateTime.now());
         adjustmentMapper.updateById(entity);
         return entity;

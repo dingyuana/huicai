@@ -160,14 +160,18 @@ public class TaxServiceImpl implements TaxService {
             throw new BusinessException("金额和税率不能为空");
         }
         if (entity.getTaxAmount() == null) {
+            // taxRate 存储为百分比整数(如13表示13%)，需除100
             entity.setTaxAmount(entity.getAmount().multiply(entity.getTaxRate())
-                    .setScale(2, RoundingMode.HALF_UP));
+                    .divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP));
         }
         if (entity.getTotalAmount() == null) {
             entity.setTotalAmount(entity.getAmount().add(entity.getTaxAmount()));
         }
         if (entity.getCertificationStatus() == null) {
             entity.setCertificationStatus("UNCERTIFIED");
+        }
+        if (entity.getStatus() == null) {
+            entity.setStatus(InvoiceStatus.PENDING_CONFIRM);
         }
         if (entity.getPeriod() == null) {
             entity.setPeriod(String.format("%04d%02d",
@@ -303,8 +307,9 @@ public class TaxServiceImpl implements TaxService {
             throw new BusinessException("金额和税率不能为空");
         }
         if (entity.getTaxAmount() == null) {
+            // taxRate 存储为百分比整数(如13表示13%)，需除100
             entity.setTaxAmount(entity.getAmount().multiply(entity.getTaxRate())
-                    .setScale(2, RoundingMode.HALF_UP));
+                    .divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP));
         }
         if (entity.getTotalAmount() == null) {
             entity.setTotalAmount(entity.getAmount().add(entity.getTaxAmount()));

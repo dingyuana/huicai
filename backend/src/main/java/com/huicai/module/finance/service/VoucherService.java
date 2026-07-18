@@ -60,9 +60,14 @@ public interface VoucherService {
     void batchAudit(List<Long> ids, Long userId);
 
     /**
-     * 记账(已审核→已记账)
+     * 记账凭证 (AUDITED → POSTED).
      */
     void post(Long id, Long userId);
+
+    /**
+     * 结账凭证 (POSTED → CLOSED).
+     */
+    void close(Long id, Long userId);
 
     /**
      * 批量记账

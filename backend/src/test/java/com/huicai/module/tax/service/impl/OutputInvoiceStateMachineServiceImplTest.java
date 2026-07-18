@@ -411,16 +411,16 @@ class OutputInvoiceStateMachineServiceImplTest {
     }
 
     @Test
-    @DisplayName("onReconciliationUpdate_负向_非已生成凭证状态_抛异常")
-    void onReconciliationUpdate_negative_wrongStatus_throws() {
+    @DisplayName("onReconciliationUpdate_负向_非已生成凭证状态_静默跳过")
+    void onReconciliationUpdate_negative_wrongStatus_skips() {
         // given
         OutputInvoiceEntity inv = invoice(InvoiceStatus.CONFIRMED);
         when(invoiceMapper.selectById(INVOICE_ID)).thenReturn(inv);
 
-        // when/then
-        BusinessException ex = assertThrows(BusinessException.class,
-                () -> service.onReconciliationUpdate(INVOICE_ID, BigDecimal.ZERO, USER_ID));
-        StateMachineTestHelper.assertBusinessErrorContains(ex, "仅已生成凭证的发票可核销");
+        // when — 非 VOUCHERED 状态不抛异常，静默跳过
+        assertDoesNotThrow(() -> service.onReconciliationUpdate(INVOICE_ID, BigDecimal.ZERO, USER_ID));
+        // then — 不应更新
+        verify(invoiceMapper, never()).updateById(any(OutputInvoiceEntity.class));
     }
 
     // ====================================================================
