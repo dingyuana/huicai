@@ -2,7 +2,7 @@
 §
 项目路径：`/root/data/huicai/`（老丁确认）。设计文档在 `docs/design/`，SPEC 在 `docs/specs/`。
 §
-当前分支：`ai-evolution-v2`（最新 commit 44fd37c — feat(P53): 采购付款财务流程完全实现）。最新 migration：V88。
+当前分支：`feature/architecture-base-branch`（基于 main，最新 commit fce647d — 代码清理+修复）。最新 migration：V1__baseline.sql + V55.1/V84-V90。
 §
 技术栈：Spring Boot 3.x + MyBatis-Plus + Flyway / Vue 3 + Element Plus + TypeScript / PostgreSQL 16
 §
