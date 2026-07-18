@@ -1,11 +1,64 @@
-# SPEC Contract YAML Schema — Machine-Readable Contract Format
+# SPEC Contract YAML Schema - Machine-Readable Contract Format
 
 > **编号**：HUICAI-SPC-099
-> **版本**：1.0 | **修改日期**：2026-06-30 | **修改人**：Hermes | **修改内容**：初始创建
+> **版本**：2.0 | **修改日期**：2026-07-18 | **修改人**：Hermes | **修改内容**：加入 SDD 四段模板 + BDD Given-When-Then 格式规范
+> **历史版本**：1.0 (2026-06-30) - 初始创建
 > Purpose: Define the machine-readable contract block that can be appended to any
 > SPEC markdown file for automated validation.
 
 > **关联需求**: REQ-2026-047, REQ-2026-048, REQ-2026-052
+
+## 0. SDD 四段模板（SPEC 正文强制结构）
+
+每个 SPEC 文档正文必须包含以下四个段落。这是 SDD（规范驱动开发）的核心约束--Spec 定义边界，代码实现边界。
+
+```markdown
+## 1. 输入契约
+- 接受什么参数、什么类型、什么约束
+- 前置条件（如：实体必须处于 X 状态）
+- 权限要求
+
+## 2. 输出契约
+- 返回什么结构、什么状态
+- 成功响应结构（VO 字段列表）
+- 失败响应结构（错误码 + message，参考全局错误码字典）
+
+## 3. 状态流转
+- 状态机图（合法转换 + 非法转换）
+- 负向断言（禁止的跳转路径，如：DRAFT 不能直接跳到 AUDITED）
+- 副作用说明（转换时创建/修改的其他实体）
+
+## 4. 异常处理
+- 异常场景列表（每个场景对应一个错误码）
+- 每个场景的降级策略
+- 事务回滚条件
+```
+
+## 0.1 BDD 行为契约格式（验收标准强制格式）
+
+SPEC 中的验收标准必须使用 Given-When-Then 格式（BDD 行为驱动开发）：
+
+```markdown
+## 验收标准（BDD）
+
+### 场景 1：{场景名}
+- **Given** {前置条件/初始状态}
+- **When** {触发动作}
+- **Then** {期望结果}
+- **And** {负向断言：不该发生的}
+
+### 场景 2：{场景名}
+- **Given** ...
+- **When** ...
+- **Then** ...
+```
+
+**规则**：
+1. 每个 BDD 场景必须对应一个 `@Test` 方法，方法名用 `test_{场景描述}` 命名
+2. Given-When-Then 块的 Then 必须包含至少一个正向断言
+3. 状态机类场景必须包含负向断言（不该做的没做）
+4. BDD 场景数量 = YAML 契约块中 acceptance_tests 数量
+
 ## 1. Design Principles
 
 1. **Co-located**: YAML block lives in the SAME `.md` file as the natural-language SPEC,
@@ -289,8 +342,12 @@ The validator enforces:
 2. **Terminal protection**: No transition FROM a `terminal: true` state
 3. **Trigger uniqueness**: Each `trigger` method name appears at most once per `from` state
 4. **Test coverage**: Every `transition` with a `test_ref` must have a corresponding `@Test` method
-5. **AT status check**: `acceptance_tests` with `status: missing` → CI warning
+5. **AT status check**: `acceptance_tests` with `status: missing` -> CI warning
 6. **ID uniqueness**: All IDs (`T-NN`, `AT-NNN`, `C-NN`) must be unique within their type
+7. **SDD 四段检查**: SPEC 正文必须包含「输入契约」「输出契约」「状态流转」「异常处理」四段
+8. **BDD 格式检查**: 验收标准必须使用 Given-When-Then 格式，每个场景对应一个 `@Test` 方法
+9. **BDD 场景覆盖**: BDD 场景数量 = `acceptance_tests` 数量，两者必须 1:1 对应
+10. **负向断言检查**: 状态机类 SPEC 必须包含 `negative_assertions`
 
 ## 5. Integration Points
 

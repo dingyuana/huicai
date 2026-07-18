@@ -53,22 +53,25 @@
 ├── Phase 3: DEV — 开发实施 + DIR 捕获
 └── Phase 4-5: 审核 + 闭环回写
 
-内循环（three-phase-loop v3.0）— 功能级微循环开发
-├── TRIAGE → PLAN → 审核门 → BUILD(微循环) → VERIFY → REPORT
-└── 每个微循环 5-15 分钟，Contract-First 先写契约再实现
+内循环（three-phase-loop v3.1）- 功能级微循环开发
+├── TRIAGE -> PLAN -> 审核门 -> BUILD(微循环) -> VERIFY -> REPORT
+└── 每个微循环 5-15 分钟，TDD-First (Red->Green)，SDD+BDD 规范驱动
 ```
 
 ### 2.2 任务执行流程
 ```
-需求理解 → 写 SPEC + 需求编号 → 老丁审核 → 微循环开发 → 验证 → commit → push
+需求理解 -> 写 SPEC（四段模板+BDD）-> 老丁审核 -> TDD微循环(Red->Green) -> 验证 -> commit -> push
 ```
 
 ### 2.3 开发规则
-- **三步闭环**：SPEC→Plan→审核→执行，禁止跳过前两步
-- **Contract-First**：每个微循环先写可执行契约（测试/断言/SQL），再写实现
+- **三步闭环**：SPEC->Plan->审核->执行，禁止跳过前两步
+- **SDD 规范驱动**：每个 SPEC 必须含四段模板（输入契约/输出契约/状态流转/异常处理），Spec 定义边界，代码实现边界
+- **BDD 行为契约**：验收标准必须用 Given-When-Then 格式，每个场景对应一个 @Test 方法
+- **TDD-First (Red->Green)**：每个微循环先写测试，运行确认 FAIL(红)，再写实现，运行确认 PASS(绿)。跳过 RED 验证 = 违规
 - **先写 SPEC 再写代码**：所有功能必须先有设计文档，禁止边想边写
 - **测试必须 0 fail**：每次提交前 `mvn test` 必须 Failures: 0
 - **负向断言强制**：所有状态机方法必须同时验证「该做的做了」+「不该做的没做」
+- **BDD 场景覆盖率**：VERIFY 阶段必须确认每个 Given-When-Then 都有对应 @Test 且 PASS
 - **轻量任务直写**：纯命令/查询/文档修改类任务，Hermes 直接执行
 
 ### 2.4 文档提交规范
