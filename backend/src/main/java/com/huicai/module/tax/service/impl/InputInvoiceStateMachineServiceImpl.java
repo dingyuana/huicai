@@ -52,7 +52,7 @@ public class InputInvoiceStateMachineServiceImpl implements InputInvoiceStateMac
     private static final long VOUCHER_TYPE_ID = 2L; // FK 付款凭证
 
     @Override
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public void submitForReview(Long invoiceId, Long userId) {
         InputInvoiceEntity entity = getEntity(invoiceId);
         if (!InvoiceStatus.isPendingConfirm(entity.getStatus())) {
@@ -65,7 +65,7 @@ public class InputInvoiceStateMachineServiceImpl implements InputInvoiceStateMac
     }
 
     @Override
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public void confirm(Long invoiceId, Long userId) {
         InputInvoiceEntity entity = getEntity(invoiceId);
         if (!InvoiceStatus.PENDING_REVIEW.equals(entity.getStatus())) {
@@ -86,7 +86,7 @@ public class InputInvoiceStateMachineServiceImpl implements InputInvoiceStateMac
     }
 
     @Override
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public void reject(Long invoiceId, Long userId, String reason) {
         if (reason == null || reason.trim().isEmpty()) {
             throw BusinessException.badRequest("驳回必须填写原因");
@@ -103,7 +103,7 @@ public class InputInvoiceStateMachineServiceImpl implements InputInvoiceStateMac
     }
 
     @Override
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public void revertToReview(Long invoiceId, Long userId) {
         InputInvoiceEntity entity = getEntity(invoiceId);
         if (!InvoiceStatus.isConfirmed(entity.getStatus())) {
@@ -116,7 +116,7 @@ public class InputInvoiceStateMachineServiceImpl implements InputInvoiceStateMac
     }
 
     @Override
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public void markVouchered(Long invoiceId, Long voucherId, String voucherNo, Long userId) {
         InputInvoiceEntity entity = getEntity(invoiceId);
         if (!InvoiceStatus.isVoucherable(entity.getStatus())) {
@@ -131,7 +131,7 @@ public class InputInvoiceStateMachineServiceImpl implements InputInvoiceStateMac
     }
 
     @Override
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public void onReconciliationUpdate(Long invoiceId, BigDecimal unsettledAmount, Long userId) {
         InputInvoiceEntity entity = getEntity(invoiceId);
         if (!InvoiceStatus.isVouchered(entity.getStatus())) {
@@ -148,7 +148,7 @@ public class InputInvoiceStateMachineServiceImpl implements InputInvoiceStateMac
     }
 
     @Override
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public void voidInvoice(Long invoiceId, Long userId, String reason) {
         if (reason == null || reason.trim().isEmpty()) {
             throw BusinessException.badRequest("作废必须填写原因");
@@ -165,7 +165,7 @@ public class InputInvoiceStateMachineServiceImpl implements InputInvoiceStateMac
     }
 
     @Override
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public Long reverseInvoice(Long invoiceId, Long userId, String reason) {
         if (reason == null || reason.trim().isEmpty()) {
             throw BusinessException.badRequest("红冲必须填写原因");

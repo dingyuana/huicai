@@ -123,8 +123,8 @@ const fetchAging = async () => {
   loading.aging = true
   try {
     const res: any = await request.get('/aging-analysis/summary', { params: { period: query.period } })
-    agingList.value = res || []
-  } finally {
+    agingList.value = res?.agingBuckets || []
+  } catch { agingList.value = [] } finally {
     loading.aging = false
   }
 }
@@ -135,9 +135,10 @@ const dueList = ref<any[]>([])
 const fetchDue = async () => {
   loading.due = true
   try {
-    const res: any = await request.get('/aging-analysis/due-receivables', { params: { date: query.period } })
-    dueList.value = res || []
-  } finally {
+    const dateStr = dayjs().format('YYYY-MM-DD')
+    const res: any = await request.get('/aging-analysis/due-receivables', { params: { date: dateStr } })
+    dueList.value = res?.rows || res || []
+  } catch { dueList.value = [] } finally {
     loading.due = false
   }
 }
@@ -157,7 +158,7 @@ const fetchAlerts = async () => {
     if (alertQuery.status) params.status = alertQuery.status
     const res: any = await request.get('/aging-analysis/alerts', { params })
     alertList.value = res || []
-  } finally {
+  } catch { alertList.value = [] } finally {
     loading.alerts = false
   }
 }

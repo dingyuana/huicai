@@ -19,7 +19,9 @@ public class AiTaskEntity {
     private Long bizId;
     @StatusChangeable(entity = "AI_TASK", fieldName = "status")
     private String status;
+    @TableField(value = "input_data", typeHandler = com.huicai.module.system.handler.JsonbTypeHandler.class)
     private String inputData;
+    @TableField(value = "output_data", typeHandler = com.huicai.module.system.handler.JsonbTypeHandler.class)
     private String outputData;
     private String errorMessage;
     private java.math.BigDecimal confidence;

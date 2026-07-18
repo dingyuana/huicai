@@ -6,13 +6,13 @@
 
 > **更新基准**：commit `65e8d66` (2026-07-09) — P44/P45 核销列表修复 + 上游追溯
 > **当前分支**：`ai-evolution`
-> **关联文档**：[DESIGN.md](docs/DESIGN.md)、[需求登记册](docs/requirements/REQUIREMENTS_REGISTRY.md)、[DOCUMENT_REGISTRY.md](docs/DOCUMENT_REGISTRY.md)
+> **关联文档**：[DESIGN.md](docs/DESIGN.md)、[需求登记册](docs/requirements/REQUIREMENTS_REGISTRY.md)、[DOCUMENT_REGISTRY.md](docs/DOCUMENT_REGISTRY.md)、[Flyway治理规范](docs/development/flyway-governance.md)
 
 | 维度 | 数据 |
 |------|------|
 | 后端代码 | 345 Java 文件 |
 | 测试用例 | 579 个 `@Test` 方法 / 78 个测试类 |
-| 数据库 | PostgreSQL 16 / V1-V83 Flyway migration |
+| 数据库 | PostgreSQL 16 / V1 baseline (merged V1-V91) |
 | API 端点 | 433 个后端端点 |
 | 核心模块 | 基础数据、总账、应收应付、现金管理、固定资产、费用报销、发票税务、预算、财务报表、存储管理 |
 | AI 服务 | Python FastAPI 5 端点（health/anomaly/embedding/match/ocr）|
