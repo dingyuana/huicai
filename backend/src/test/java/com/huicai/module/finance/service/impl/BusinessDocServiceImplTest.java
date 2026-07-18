@@ -87,7 +87,7 @@ class BusinessDocServiceImplTest {
     void setUp() {
         // periodService.lambdaQuery()...one() 链式调用 → 返回 OPEN 期间
         PeriodEntity openPeriod = new PeriodEntity();
-        openPeriod.setStatus("OPEN");
+        openPeriod.setStatus("open");
         when(periodService.lambdaQuery()).thenReturn(mock(com.baomidou.mybatisplus.extension.conditions.query.LambdaQueryChainWrapper.class));
         var chain = periodService.lambdaQuery();
         when(chain.eq(any(), any())).thenReturn(chain);

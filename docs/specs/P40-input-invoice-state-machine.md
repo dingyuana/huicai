@@ -1,9 +1,24 @@
 # P40 - 进项发票状态机与下游流程衔接
 
 > **版本**：V1.0 | **日期**：2026-07-17 | **作者**：Hermes
+> **编号**：HUICAI-SPC-040B
 > **状态**：**✅ 已实现**
 
 ---
+
+## 0. SDD 四段结构索引
+
+### 1. 输入契约
+→ 见本文 [## 3. 详细设计 — 数据库 Migration / 状态机接口 / API 端点](#3-详细设计)
+
+### 2. 输出契约
+→ 见本文 [## 4. 测试计划 — 单元测试与集成测试断言](#4-测试计划)
+
+### 3. 状态流转
+→ 见本文 [## 3.2 状态机定义 — InvoiceStatus 8态流转图](#32-状态机定义)
+
+### 4. 异常处理
+→ 见本文各 BusinessException 抛出点 / ## 6. 待确认问题
 
 ## 1. 问题背景
 
@@ -204,3 +219,22 @@ InputInvoiceImportService 现有逻辑：导入时一步到位创建 BusinessDoc
 1. **导入服务是否改为不自动创建单据？** 当前导入一步到位创建 BusinessDoc+Voucher，如果改为审核后创建，现有导入流程会变。建议改，但需要确认。
 2. **历史数据如何处理？** 已有导入的进项发票已有 doc_id/voucher_id，status 应初始化为 CONFIRMED 还是 VOUCHERED？建议 VOUCHERED。
 3. **凭证科目方向确认**：进项发票凭证应该是 借:存货/费用+进项税 / 贷:应付账款。当前导入服务用的科目是 5001(销售收入)而不是存货科目，这是否正确？5001 是收入科目，进项应该用 1601(原材料)或 6601(销售费用)等。需要确认。
+
+---
+
+## 7. BDD 验收标准
+
+### 场景 1：进项发票审核通过后自动创建业务单据和凭证
+**Given** 一张进项发票处于 PENDING_REVIEW 状态，尚未创建 BusinessDoc 和 Voucher
+**When** 用户调用 confirm(invoiceId, userId)
+**Then** 发票状态变为 CONFIRMED/VOUCHERED，自动创建 BusinessDoc(INVOICE_IN, DRAFT) 和 Voucher(DRAFT)，凭证科目方向为 借:存货/费用+进项税 / 贷:应付账款
+
+### 场景 2：进项发票导入时不自动创建单据
+**Given** 进项发票成功导入系统
+**When** 导入流程完成
+**Then** 发票状态为 PENDING_CONFIRM，不自动创建 BusinessDoc 和 Voucher（等待人工审核通过后再创建）
+
+### 场景 3：进项发票作废后不可继续流转
+**Given** 一张进项发票处于 PENDING_CONFIRM 状态
+**When** 用户调用 voidInvoice(invoiceId, userId, reason)
+**Then** 发票状态变为 VOIDED，后续所有状态转换操作（submitReview / confirm 等）均抛出 BusinessException

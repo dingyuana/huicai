@@ -13,6 +13,20 @@
 ---
 
 > **关联需求**: REQ-2026-029
+> **说明**：本 SPEC 已被 P34 取代，归档仅作参考
+
+## 1. 输入契约
+→ 见本文 [## 2. 详细设计 — 数据模型与 API 变更](#2-详细设计)
+
+## 2. 输出契约
+→ 见本文 [## 6. 验收标准 — 验收检查清单](#6-验收标准)
+
+## 3. 状态流转
+→ 见本文 [## 2.1 状态机变更 — OutputInvoice 状态转换](#21-状态机变更)
+
+## 4. 异常处理
+→ 见本文各 BusinessException 抛出点 / ## 4. 风险评估
+
 ## 0. 改动清单总览
 
 | # | 改动 | 文件 | 风险 | 状态 |
@@ -359,3 +373,22 @@ void confirm_shouldCreateReceivableAndVoucherDirectly() {
 | `docs/linkage-map.md` | 更新 L1 链路验证脚本 |
 | `docs/DESIGN.md` | 更新架构流程图 |
 | `docs/tasks/P31-auto-flow-after-import_任务书.md` | 更新为简化流程 |
+
+---
+
+## 7. BDD 验收标准
+
+### 场景 1：销售发票审核后自动生成应收单和凭证
+**Given** 一张销售发票处于 PENDING_REVIEW 状态，尚未关联任何业务单、应收单或凭证
+**When** 用户调用 confirm(invoiceId, userId)
+**Then** 发票状态变为 CONFIRMED，应收单（Receivable, DRAFT）和凭证（Voucher, DRAFT）自动创建，且应收单的 invoiceId 直接指向该发票
+
+### 场景 2：应收单防重复创建
+**Given** 一张销售发票已有对应的应收单记录（invoiceId 已存在）
+**When** 用户再次调用 confirm(invoiceId, userId)
+**Then** 系统跳过应收单创建，日志记录"发票已有应收单: invoiceId=...，skip"，凭证正常生成
+
+### 场景 3：编号关联链路完整追溯
+**Given** 一张销售发票已完成审核，生成了应收单和凭证
+**When** 通过 trace API 查询发票编号
+**Then** 返回的链路包含发票→应收单→凭证（不经过 BusinessDoc），且双向追溯字段（invoiceId、voucherId、sourceDocId）非空

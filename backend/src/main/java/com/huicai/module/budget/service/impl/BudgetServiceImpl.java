@@ -213,7 +213,7 @@ public class BudgetServiceImpl implements BudgetService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public BudgetAdjustmentEntity createAdjustment(BudgetAdjustmentEntity entity) {
-        if (entity.getStatus() == null) entity.setStatus(BudgetStatus.BUDGET_DRAFT);
+        if (entity.getStatus() == null) entity.setStatus(BudgetStatus.ADJUSTMENT_PENDING);
         if (entity.getAdjustmentDate() == null) entity.setAdjustmentDate(LocalDate.now());
         adjustmentMapper.insert(entity);
         return entity;
@@ -224,8 +224,8 @@ public class BudgetServiceImpl implements BudgetService {
     public BudgetAdjustmentEntity approveAdjustment(Long id) {
         BudgetAdjustmentEntity entity = adjustmentMapper.selectById(id);
         if (entity == null) throw new BusinessException("调整单不存在");
-        if (!BudgetStatus.BUDGET_DRAFT.equals(entity.getStatus())) {
-            throw new BusinessException("仅草稿状态可审批");
+        if (!BudgetStatus.ADJUSTMENT_PENDING.equals(entity.getStatus())) {
+            throw new BusinessException("仅待审批状态可批准");
         }
         BudgetEntity budget = getById(entity.getBudgetId());
         if ("INCREASE".equals(entity.getAdjustmentType())) {

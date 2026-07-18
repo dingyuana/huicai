@@ -6,6 +6,18 @@
 
 ---
 
+## 1. 输入契约
+→ 见本文 [## 1. 修复方案 — ArapSettlementVO / Mapper 自定义查询 / 详情接口](#1-修复方案)
+
+## 2. 输出契约
+→ 见本文 [## 2. 验收标准 — AT-P44-1 至 AT-P44-4 验收清单](#2-验收标准)
+
+## 3. 状态流转
+→ 见本文 [## 1.5 P44-5：状态机说明 — DRAFT→CONFIRMED→VOUCHERED 流转](#15-p44-5状态机说明)
+
+## 4. 异常处理
+→ 见本文各 BusinessException 抛出点（如核销明细查询失败、数据校验异常）
+
 ## 0. 现状审计
 
 访问 `/arap/settlement` 页面，核销单列表存在 5 个显示缺陷：
@@ -134,3 +146,22 @@ DRAFT ──→ CONFIRMED ──→ VOUCHERED ──→ (凭证过账)
 | 3 | P44-2/P44-5：前端标签修正 | 1 | 0.2h |
 | 4 | 后端编译 + 前端构建 + 部署 | — | 0.3h |
 | 5 | 验证 | — | 0.3h |
+
+---
+
+## 5. BDD 验收标准
+
+### 场景 1：核销单列表正确显示客户/供应商名称
+**Given** 核销单数据存在，t_arap_settlement 表记录有 partyId 和 partyType
+**When** 用户访问核销单列表页，调用 pageQuery 接口
+**Then** 返回的每行记录中包含 customer_name（partyType=CUSTOMER）或 vendor_name（partyType=VENDOR），且不为空
+
+### 场景 2：类型列兼容 RECEIVE/RECEIVABLE 两种取值
+**Given** 数据库中存在 settlement_type='RECEIVE' 的核销单记录
+**When** 前端调用 settlementTypeLabel('RECEIVE')
+**Then** 返回"应收核销"，与 settlementTypeLabel('RECEIVABLE') 返回结果一致
+
+### 场景 3：详情弹窗展示核销明细表格
+**Given** 一张核销单存在多条关联的核销明细（t_arap_settlement_entry）
+**When** 用户点击该核销单查看详情
+**Then** 弹窗中显示核销明细表格，包含来源单据号、目标单据号、核销金额等字段，且明细行数 > 0

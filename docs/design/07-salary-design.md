@@ -1,10 +1,12 @@
 # 07-工资薪酬管理设计
 
 > **编号**：HUICAI-DES-008
-> **版本**：V1.0 | **修改日期**：2026-07-07 | **修改人**：Hermes | **修改内容**：初始创建（待建蓝图）
-> 状态：❌ 待建 — 传统8模块中唯一未实现的模块
-> 代码包：无（待创建 `com.huicai.module.salary`）
-> 设计文档：[主文档](../DESIGN.md)
+> **版本**：V1.1 | **修改日期**：2026-07-18 | **修改人**：Hermes | **修改内容**：扩展为完整设计文档，引用 S-14/S-15 SPEC
+> **状态**：⚠️ 待建 — 传统8模块中唯一未实现的模块
+> **代码包**：待创建 `com.huicai.module.salary`
+> **设计文档**：[主文档](../DESIGN.md)
+> **关联 SPEC**：[\`S-14-薪酬核算与个税引擎\`](../specs/S-14-薪酬核算与个税引擎.md)、[\`S-15-农民工工资专户与代发\`](../specs/S-15-农民工工资专户与代发.md)
+> **设计原则**：所有审核必须人工完成（符合 Human-in-the-loop 铁律）
 
 ---
 
@@ -12,62 +14,227 @@
 
 传统定位：人力资源与财务的交叉模块。设定薪资公式，计算基本工资、绩效、社保公积金及个税代扣代缴，月末生成工资汇总表，将人工成本按部门分摊生成凭证传入总账。
 
-**当前状态：零代码实现。**
+**当前状态：零代码实现。** 传统 8 大财务模块中唯一的缺口（其余 7/8 均已实现）。
 
-## 2. 传统功能清单（待实现）
+---
 
-| 功能 | 传统实现 | 优先级 |
-|------|---------|--------|
-| 工资项目维护 | 基本工资/绩效/补贴/扣款 | P0 |
-| 薪资结构 | 固定工资+浮动工资+津贴 | P0 |
-| 个税计算 | 累计预扣法 | P0 |
-| 社保公积金 | 按基数+比例计算 | P1 |
-| 工资表管理 | 月度工资表+历史查询 | P0 |
-| 成本分摊 | 按部门/项目分摊生成工资凭证 | P1 |
-| 工资条 | 员工查询 | P2 |
-| 与总账对接 | 自动生成工资凭证 | P1 |
+## 2. 核心业务模型
 
-## 3. 建议数据模型（蓝图）
+### 2.1 工资项目与薪资结构
 
 | 表名 | 说明 | 关键字段 |
 |------|------|---------|
-| t_salary_item | 工资项目 | code, name, calculation_type(fixed/formula), amount |
-| t_salary_structure | 薪资结构 | employee_id, salary_item_id, amount, effective_date |
-| t_salary_sheet | 工资表 | period, employee_id, total_amount, status |
-| t_salary_sheet_entry | 工资表明细 | sheet_id, salary_item_id, amount |
-| t_social_insurance | 社保公积金 | employee_id, base, pension_rate, medical_rate, unemployment_rate, housing_rate |
+| t_salary_item | 工资项目定义库 | id, code, name, item_type(fixed/formula), formula_expr, sort_order, is_active |
+| t_salary_structure | 员工薪资结构 | id, employee_id, salary_item_id, amount, effective_date, expired_date |
+| t_salary_adjustment | 调薪记录 | id, employee_id, old_amount, new_amount, reason, approved_by, adjustment_date |
 
-## 4. 建议状态机
+### 2.2 工资表与计算
+
+| 表名 | 说明 | 关键字段 |
+|------|------|---------|
+| t_salary_sheet | 工资表主表 | id, period_id, employee_id, total_amount, status, approved_by, approved_at |
+| t_salary_sheet_entry | 工资表明细 | id, sheet_id, salary_item_id, amount, deduction_amount |
+| t_salary_sheet_summary | 工资表汇总 | id, sheet_id, department_id, total_wages, total_deductions, net_pay, status |
+
+### 2.3 社保与个税
+
+| 表名 | 说明 | 关键字段 |
+|------|------|---------|
+| t_social_insurance | 社保公积金配置 | id, employee_id, base, pension_rate, medical_rate, unemployment_rate, injury_rate, maternity_rate, housing_rate, housing_fund_rate |
+| t_tax_cumulative | 个税累计预扣数据 | id, employee_id, year, cumulative_income, cumulative_deductions, cumulative_tax_paid, tax_exempt_income |
+
+---
+
+## 3. 状态机
+
+### 3.1 工资表状态机
 
 ```
 DRAFT → SUBMITTED → APPROVED → VOUCHERED → CLOSED
+                      ↓
+                  REJECTED → DRAFT
 ```
 
-## 5. 建议 API 端点
+| 转换 | 触发条件 | 前置条件 | 副作用 |
+|------|---------|---------|--------|
+| DRAFT→SUBMITTED | 提交审核 | 所有必填项已填写 | 无 |
+| SUBMITTED→APPROVED | 人工审批通过 | 逻辑校验通过 | 锁定工资表 |
+| SUBMITTED→REJECTED | 人工驳回 | — | 工资表回到可编辑状态 |
+| APPROVED→VOUCHERED | 人工生单 | 期间未锁定 | 生成 t_voucher + t_voucher_entry |
+| VOUCHERED→CLOSED | 期间结账 | 凭证已过账 | 期间锁定，不可再修改 |
+
+### 3.2 负向断言
+
+- DRAFT 不能直接跳到 APPROVED（必须经过 SUBMITTED 审核流程）
+- REJECTED 不能直接跳到 APPROVED（必须重新 DRAFT→SUBMITTED）
+- CLOSED 状态不可逆（只能反结账后重开）
+
+---
+
+## 4. 与现有模块的集成
+
+### 4.1 与总账的凭证集成（关键路径）
+
+工资审核通过后，人工触发「生成凭证」→ 调用现有 VoucherService 创建凭证：
+
+```
+工资表 APPROVED → 人工点击「生成凭证」
+  → 按部门/项目分摊人工成本
+  → 贷方：应付职工薪酬（科目编码 22101）
+  → 借方：管理费用/销售费用/生产成本等（按部门映射）
+  → 创建 VoucherEntity(status=DRAFT)
+  → 沿用现有 VoucherStateMachine 审核流程
+```
+
+### 4.2 与科目体系的集成
+
+| 科目编码 | 科目名称 | 使用场景 |
+|---------|---------|---------|
+| 22101 | 应付职工薪酬-工资 | 工资计提 |
+| 22102 | 应付职工薪酬-社保 | 社保计提 |
+| 22103 | 应付职工薪酬-公积金 | 公积金计提 |
+| 22104 | 应付职工薪酬-个税 | 个税代扣 |
+| 660201 | 管理费用-工资 | 管理部门人工成本 |
+| 660101 | 销售费用-工资 | 销售部门人工成本 |
+
+### 4.3 与会计期间的集成
+
+工资表必须关联到现有 t_period（会计期间），校验逻辑：
+- 期间状态必须为 OPEN（已 LOCKED/CLOSED 的期间不能创建工资表）
+- 跨期间工资分摊需生成多张凭证
+
+### 4.4 与员工基础数据的集成
+
+复用现有 EmployeeServiceImpl（arap 模块），t_employee 作为员工主数据源：
+- 工资表创建时从 Employee 获取员工信息
+- 离职/停用员工不允许出现在当月的工资表中
+
+---
+
+## 5. API 设计
+
+### 5.1 工资项目管理
 
 | 端点 | 方法 | 说明 |
 |------|------|------|
-| /api/v1/salary/items/** | CRUD | 工资项目 |
-| /api/v1/salary/structures/** | CRUD | 薪资结构 |
-| /api/v1/salary/sheets/page | GET | 工资表分页 |
-| /api/v1/salary/sheets/calculate | POST | 计算工资 |
-| /api/v1/salary/sheets/{id}/approve | POST | 审批 |
-| /api/v1/salary/sheets/{id}/generate-voucher | POST | 生成凭证 |
+| /api/v1/salary/items | GET | 工资项目列表（分页） |
+| /api/v1/salary/items | POST | 新建工资项目 |
+| /api/v1/salary/items/{id} | PUT | 更新工资项目 |
+| /api/v1/salary/items/{id} | DELETE | 删除工资项目 |
 
-## 6. AI 叠加场景
+### 5.2 薪资结构
+
+| 端点 | 方法 | 说明 |
+|------|------|------|
+| /api/v1/salary/structures/{employeeId} | GET | 获取员工薪资结构 |
+| /api/v1/salary/structures | POST | 设置/调整员工薪资 |
+| /api/v1/salary/structures/{id}/adjust | POST | 调薪（记录调薪历史） |
+
+### 5.3 工资表
+
+| 端点 | 方法 | 说明 |
+|------|------|------|
+| /api/v1/salary/sheets | GET | 工资表列表（按期间/部门筛选） |
+| /api/v1/salary/sheets/calculate | POST | 计算生成工资表（DRAFT） |
+| /api/v1/salary/sheets/{id} | GET | 工资表明细 |
+| /api/v1/salary/sheets/{id}/submit | POST | 提交审核 |
+| /api/v1/salary/sheets/{id}/approve | POST | 审批通过 |
+| /api/v1/salary/sheets/{id}/reject | POST | 驳回 |
+| /api/v1/salary/sheets/{id}/generate-voucher | POST | 生成凭证（调用 VoucherService） |
+| /api/v1/salary/sheets/{id}/export | GET | 导出工资条 |
+
+### 5.4 个税与社保
+
+| 端点 | 方法 | 说明 |
+|------|------|------|
+| /api/v1/salary/tax/cumulative/{employeeId} | GET | 累计预扣信息 |
+| /api/v1/salary/tax/calculate | POST | 个税试算 |
+| /api/v1/salary/insurance/{employeeId} | GET | 社保公积金信息 |
+| /api/v1/salary/insurance | POST | 设置社保基数 |
+
+---
+
+## 6. 个税算法（累计预扣法）
+
+采用国家个人所得税法规定的累计预扣法：
+
+```
+本期应预扣预缴税额 = 
+  (累计收入 − 累计免税收入 − 累计减除费用 − 累计专项扣除 − 累计专项附加扣除 − 累计依法确定的其他扣除) × 预扣率 − 速算扣除数 − 累计减免税额 − 累计已预扣预缴税额
+```
+
+| 级数 | 累计预扣预缴应纳税所得额 | 预扣率 | 速算扣除数 |
+|------|------------------------|--------|-----------|
+| 1 | 不超过36,000元 | 3% | 0 |
+| 2 | 36,000~144,000元 | 10% | 2,520 |
+| 3 | 144,000~300,000元 | 20% | 16,920 |
+| 4 | 300,000~420,000元 | 25% | 31,920 |
+| 5 | 420,000~660,000元 | 30% | 52,920 |
+| 6 | 660,000~960,000元 | 35% | 85,920 |
+| 7 | 超过960,000元 | 45% | 181,920 |
+
+---
+
+## 7. 异常处理
+
+| 异常场景 | 错误码 | 处理方式 |
+|---------|--------|---------|
+| 员工在同一期间已有工资表 | 20501 | 拒绝重复创建，提示"该员工本月已有工资表" |
+| 期间已锁定/已结账 | 20502 | 拒绝创建/修改，提示"会计期间已锁定" |
+| 员工已离职/停用 | 20503 | 提示"员工状态异常，请确认" |
+| 工资表含未配置的项目 | 20504 | 提示"XX 项目未设置金额或公式，请补全" |
+| 个税计算异常 | 20505 | 提示"个税计算异常，请检查累计预扣数据" |
+| 生成凭证时借贷不平衡 | 20506（复用20101） | 回滚，提示"凭证借贷不平衡" |
+| 部门科目映射未配置 | 20507 | 提示"XX 部门未配置对应成本科目，请先在科目映射中设置" |
+
+---
+
+## 8. AI 叠加场景（远期）
 
 | 场景 | 说明 | 优先级 |
 |------|------|--------|
-| 薪资异常检测 | 与历史对比：异常涨薪/漏发 | 🟡 P3 |
-| 社保预测 | 下月社保基数预测 | 🟢 远期 |
+| 薪资异常检测 | 与历史对比：异常涨薪/漏发 | 🟡 P2 |
+| 社保预测 | 下月社保基数预测 | 🟢 P3 |
+| 个税智能提醒 | 年度累计预扣阈值预警 | 🟡 P2 |
+| 人员成本分析 | 按部门/项目的成本归因分析 | 🟢 P3 |
 
-## 7. 对传统覆盖度
+---
 
-| 维度 | 状态 | 备注 |
-|------|------|------|
-| 后端 | ❌ 零实现 | 需从零开始 |
-| 前端 | ❌ 零实现 | 需配套 |
-| 个税算法 | ❌ 需实现 | 累计预扣法 |
-| 社保 | ❌ 需实现 | 各地比例不同 |
+## 9. 非功能性约束
 
-> **文档结束。该模块待 P3 或独立阶段开发。**
+| 约束 | 说明 |
+|------|------|
+| 精度 | 所有金额使用 BigDecimal，数据库 NUMERIC(18,2) |
+| 审计 | 所有审核操作记录到现有 t_audit_log（AOP + jsonb 快照） |
+| 状态铁律 | 工资表审核必须人工操作，系统不允许自动 APPROVED |
+| 凭证铁律 | 工资凭证生成后沿用现有凭证状态机（DRAFT→SUBMITTED→AUDITED→POSTED） |
+| 期间约束 | 工资表必须关联 t_period，已结账期间不可修改 |
+
+---
+
+## 10. 依赖关系
+
+| 依赖模块 | 依赖内容 | 是否已实现 |
+|---------|---------|-----------|
+| 基础数据（system） | 员工、部门、科目体系 | ✅ 已实现 |
+| 会计期间（system） | t_period 期间校验 | ✅ 已实现 |
+| 凭证引擎（finance） | VoucherService 创建凭证 | ✅ 已实现 |
+| 审计日志（system） | AuditLog AOP | ✅ 已实现 |
+| 权限（system） | RBAC 权限控制 | ✅ 已实现 |
+
+---
+
+## 11. 开发估算
+
+| 阶段 | 工作量 | 内容 |
+|------|--------|------|
+| Phase 1 | 3-5 天 | 工资项目管理 + 薪资结构 CRUD + 工资表计算 + 基础后端 |
+| Phase 2 | 2-3 天 | 工资表审批流 + 凭证生成集成 + 前端 |
+| Phase 3 | 3-5 天 | 个税累计预扣算法 + 社保公积金 + 前端配套 |
+| Phase 4 | 2-3 天 | 测试覆盖 + 工资条导出 + 批量处理 |
+
+> **合计**：约 10-16 天（单人开发）。建议优先开发 Phase 1（工资表计算+审批流+凭证集成），其余逐步迭代。
+
+---
+
+> **文档结束。该模块待独立阶段开发。详细 SPEC 见 [S-14-薪酬核算与个税引擎](../specs/S-14-薪酬核算与个税引擎.md) 和 [S-15-农民工工资专户与代发](../specs/S-15-农民工工资专户与代发.md)。**

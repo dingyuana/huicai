@@ -7,6 +7,19 @@
 ---
 
 > **关联需求**: REQ-2026-049
+
+## 1. 输入契约
+→ 见本文 §1 问题诊断（16 errors 分布、PG 特有语法清单）、§2 三方案详细对比
+
+## 2. 输出契约
+→ 见本文 §5 验收标准（5 条验收条件）
+
+## 3. 状态流转
+→ 见本文 §3 决策矩阵（A schema.sql → B Flyway+H2 → C 改单测的方案对比）
+
+## 4. 异常处理
+→ 见本文 §4 推荐方案 C 的风险对冲（将来集成测试应使用 Testcontainers 而非 H2）
+
 ## 1. 问题诊断
 
 **当前配置**（每个 IntegrationTest 独立写死的）：
@@ -151,3 +164,25 @@
 四、**自定义**
 
 **我倾向 C**。答单字：**A / B / C / 自定义**。
+
+---
+
+## §7 BDD 验收标准
+
+### 场景 1：全量测试零错误
+**Given** 5 个 IntegrationTest 已改为 Mockito 单测  
+**When** 运行 `mvn test`  
+**Then** Tests run ≥ 211  
+**And** Failures: 0, Errors: 0
+
+### 场景 2：不修改产品代码
+**Given** 改动已提交  
+**When** 审查 git diff  
+**Then** 只修改测试文件  
+**And** 不改任何产品代码（src/main 下的文件）
+
+### 场景 3：测试方法名和断言逻辑保留
+**Given** 重构后的测试文件  
+**When** 比较原 IntegrationTest 与新 Mockito 测试  
+**Then** 测试方法名和业务断言逻辑保持不变  
+**And** 不使用 Testcontainers

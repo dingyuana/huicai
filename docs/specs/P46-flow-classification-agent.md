@@ -8,6 +8,18 @@
 
 > **关联需求**: REQ-2026-058
 
+## 1. 输入契约
+→ 见本文 §1.2 ClassificationAgent 输入输出定义、§4 YAML 契约 endpoints
+
+## 2. 输出契约
+→ 见本文 §2 验证清单、§4 YAML 契约 acceptance_tests
+
+## 3. 状态流转
+→ 见本文 §1.1 核心流程（规则引擎 → ClassificationAgent → 前端展示）
+
+## 4. 异常处理
+→ 见本文 §1.5 安全机制（confidence < 0.5 强制人工选择、规则引擎优先于 AI 推荐）
+
 ---
 
 ## §0 当前状态
@@ -115,3 +127,25 @@ acceptance_tests:
 ```
 
 > **文档结束**
+
+---
+
+## §5 BDD 验收标准
+
+### 场景 1：规则引擎确定分类时 AI 不介入
+**Given** 银行流水导入后规则引擎置信度 ≥ 0.8  
+**When** 调用分类流程  
+**Then** FallbackHeuristicService 不触发 MQ 消息  
+**And** 流水自动按规则引擎结果分类
+
+### 场景 2：规则引擎未知时 AI 返回 top-3 候选
+**Given** 规则引擎置信度 < 0.8 或返回未知  
+**When** MQ 触发 ClassificationAgent  
+**Then** 返回 top-3 候选分类及对应置信度  
+**And** 前端预览页展示 AI 推荐标签
+
+### 场景 3：低置信度强制人工选择
+**Given** AI 推荐置信度 < 0.5  
+**When** 前端展示 AI 推荐结果  
+**Then** 不自动填入分类  
+**And** 显示人工选择提示，等待用户确认

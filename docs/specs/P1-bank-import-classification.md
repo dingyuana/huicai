@@ -11,6 +11,23 @@
 - **参考实现**: `/root/data/disk/huihua-finance`（Go 版，业务逻辑可直接移植）
 
 > **关联需求**: REQ-2026-017, REQ-2026-018, REQ-2026-019
+
+## SDD 四段结构索引
+
+### 1. 输入契约
+→ 见本文 [## 具体要求（数据库表定义/规则模型/导入流程/API 端点）](#具体要求) 及 [## 接口设计（API 端点列表）](#接口设计)
+
+### 2. 输出契约
+→ 见本文 [## 验收标准（10 条验收项）](#验收标准)
+
+### 3. 状态流转
+→ 见本文 [数据库表中 review_status 的 PENDING/CONFIRMED/RECLASSIFIED 状态流转](#1-数据库表)
+
+### 4. 异常处理
+→ 见本文各规则匹配/导入流程中的异常/去重检测逻辑
+
+---
+
 ## 背景
 
 当前慧财财务（huicai/Java）已具备基础骨架（Spring Boot + MyBatis-Plus + Vue 3）和 AI 微服务（Python FastAPI + RabbitMQ），但核心的**银行流水批量导入**和**智能分类**功能尚未实现。
@@ -355,3 +372,22 @@ AiTaskService.createAndDispatch("ANOMALY", "voucher", voucherId, inputData)
 - 不影响现有模块（凭证/单据/税务/报表等）
 
 **验收标准**：见上方 8 条验收标准
+
+---
+
+## BDD 验收标准
+
+### 场景 1：Excel 银行流水导入后自动分类
+**Given** 用户上传一份包含交易日期、摘要、金额列的 Excel 银行流水文件
+**When** 导入流程执行完毕
+**Then** 每条流水记录的 `classification` 字段非空，且 `review_status` 被正确设置为 `classified` 或 `PENDING`
+
+### 场景 2：关键词规则命中后高置信度标记
+**Given** 一条银行流水摘要包含"手续费"关键词
+**When** 规则引擎执行匹配
+**Then** 该流水命中 `bank_fee` 分类，`ai_confidence >= 90`，且 `rule_id` 指向对应的规则记录
+
+### 场景 3：兜底分类后流水进入待处理池
+**Given** 一条银行流水未命中任何关键词规则且无方向信息
+**When** 兜底启发式分类执行完毕
+**Then** 该流水的 `classification = "pending"`，`ai_confidence = 50`，在前端待处理池中优先展示

@@ -4,6 +4,19 @@
 > **版本**：V1.0 | **日期**：2026-07-11
 > **状态**：📝 草案（待审核）
 > **关联需求**：REQ-2026-015（坏账计提）
+
+## 1. 输入契约
+→ 见本文 二、详细设计（2.1 核心数据表、2.2 对账单生成）、三、API 端点
+
+## 2. 输出契约
+→ 见本文 一、需求概述（1.3 验收标准）、三、API 端点（响应结构示例）
+
+## 3. 状态流转
+→ 见本文 2.3 对账状态流转（DRAFT→GENERATED→SENT→CONFIRMED/DISPUTED→CONFIRMED）
+
+## 4. 异常处理
+→ 见本文 2.6 与坏账计提的联动（差异未解决前不纳入计提范围）
+
 > **关联文档**：[DESIGN.md](../DESIGN.md), [02-arap-design.md](../design/02-arap-design.md), [P43-bad-debt-provision.md](P43-bad-debt-provision.md), [P51-aging-analysis.md](P51-aging-analysis.md)
 > **版本历史**：
 > - V1.0 (2026-07-11): 初始版本
@@ -444,4 +457,26 @@ dispute:
 | 自动邮件发送对账单 | 一期仅标记已发送，后续对接邮件模块 |
 | 客户自助平台查看对账单 | 需独立门户，后续 |
 | 催收工单自动生成 | 逾期催收可后续结合预警扩展 |
-| 批量对账差异自动处理 | 需规则引擎，非核心场景 |
+|| 批量对账差异自动处理 | 需规则引擎，非核心场景 |
+
+---
+
+## 七、BDD 验收标准
+
+### 场景 1：对账单生成与状态流转
+**Given** 选择客户 A 和期间 202612  
+**When** 调用 POST /api/v1/customer-statements/generate  
+**Then** 生成 DRAFT 状态的对账单  
+**And** 对账单包含应收/已收/未收汇总及账龄分布
+
+### 场景 2：客户确认差异后状态变为 DISPUTED
+**Given** 对账单状态为 SENT，客户反馈金额不符  
+**When** 调用 POST /api/v1/customer-statements/{id}/dispute  
+**Then** 对账单状态变为 DISPUTED  
+**And** 创建差异记录（dispute_type/amount/reason）
+
+### 场景 3：坏账计提自动跳过有差异客户
+**Given** 客户 A 有未解决差异记录  
+**When** P43 坏账计提执行  
+**Then** 客户 A 的全部应收不纳入计提基数  
+**And** 差异解决后重新计提时纳入计算

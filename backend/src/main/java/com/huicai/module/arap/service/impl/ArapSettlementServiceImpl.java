@@ -17,6 +17,7 @@ import com.huicai.module.arap.mapper.CustomerMapper;
 import com.huicai.module.arap.mapper.ReconciliationLogMapper;
 import com.huicai.module.arap.mapper.VendorMapper;
 import com.huicai.module.arap.service.ArapSettlementService;
+import com.huicai.module.finance.constant.BusinessDocStatus;
 import com.huicai.module.finance.constant.VoucherType;
 import com.huicai.module.finance.entity.BusinessDocEntity;
 import com.huicai.module.finance.entity.VoucherEntity;
@@ -341,7 +342,7 @@ public class ArapSettlementServiceImpl implements ArapSettlementService {
                 if (doc != null && doc.getVoucherNo() == null) {
                     doc.setVoucherNo(voucherNo);
                     doc.setVoucherId(voucher.getId());
-                    doc.setStatus("VOUCHERED"); // P38-F8: 推进BusinessDoc状态
+                    doc.setStatus(BusinessDocStatus.VOUCHERED); // P38-F8: 推进BusinessDoc状态
                     if (businessDocMapper.updateById(doc) == 0) {
                         throw new OptimisticLockingFailureException("BusinessDoc回写凭证版本冲突, id=" + doc.getId());
                     }

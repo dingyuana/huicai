@@ -96,7 +96,7 @@
 | 04 | 固定资产管理 | `asset` | [04-asset-design.md](design/04-asset-design.md) | 及格 | 卡片/折旧/处置/盘点 |
 | 05 | 费用报销管理 | `arap` | [05-expense-design.md](design/05-expense-design.md) | 较差 | 报销/审批/打款 |
 | 06 | 发票与税务管理 | `tax` | [06-tax-design.md](design/06-tax-design.md) | 良好 | 进销项/税务申报 |
-| 07 | 工资薪酬管理 | — | [07-salary-design.md](design/07-salary-design.md) | ❌待建 | 传统8模块唯一缺口 |
+| 07 | 工资薪酬管理 | — | [07-salary-design.md](design/07-salary-design.md) | ⚠️ 待建 | 设计文档已完整（V1.1），代码零实现 |
 | 08 | 预算管理 | `budget` | [08-budget-design.md](design/08-budget-design.md) | 及格 | 编制/控制/调整 |
 | 09 | 财务报表与分析 | `report` | [09-report-design.md](design/09-report-design.md) | 及格 | 三大报表/杜邦分析 |
 | 10 | AI 智能体编排层 | `ai` | [10-ai-orchestration-design.md](design/10-ai-orchestration-design.md) | 初始 | 横切能力 |

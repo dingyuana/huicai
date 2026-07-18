@@ -50,6 +50,31 @@ class ReportServiceImplTest {
     }
 
     @Test
+    void balanceSheet_groups_3xxx_as_equity() {
+        // 模拟科目数据: 1xxx=资产, 2xxx=负债, 3xxx=权益, 4xxx=权益
+        List<Map<String, Object>> balances = new ArrayList<>();
+        Map<String, Object> a1 = new HashMap<>(); a1.put("code", "1002"); a1.put("name", "银行存款"); a1.put("end_balance", 5000.0); a1.put("direction", "debit"); balances.add(a1);
+        Map<String, Object> l1 = new HashMap<>(); l1.put("code", "2001"); l1.put("name", "短期借款"); l1.put("end_balance", 3000.0); l1.put("direction", "credit"); balances.add(l1);
+        Map<String, Object> e1 = new HashMap<>(); e1.put("code", "3001"); e1.put("name", "实收资本"); e1.put("end_balance", 1000.0); e1.put("direction", "credit"); balances.add(e1);
+        Map<String, Object> e2 = new HashMap<>(); e2.put("code", "4001"); e2.put("name", "资本公积"); e2.put("end_balance", 500.0); e2.put("direction", "credit"); balances.add(e2);
+        when(reportDataMapper.balanceSheetAggregate("202606")).thenReturn(new HashMap<>());
+        when(reportDataMapper.subjectBalance("202606")).thenReturn(balances);
+
+        Map<String, Object> r = service.balanceSheet("202606");
+        List<Map<String, Object>> assets = (List<Map<String, Object>>) r.get("assets");
+        List<Map<String, Object>> liab = (List<Map<String, Object>>) r.get("liabilities");
+        List<Map<String, Object>> equity = (List<Map<String, Object>>) r.get("equity");
+
+        assertEquals(1, assets.size(), "1xxx 应归为资产");
+        assertEquals("1002", assets.get(0).get("code"));
+        assertEquals(1, liab.size(), "2xxx 应归为负债");
+        assertEquals("2001", liab.get(0).get("code"));
+        assertEquals(2, equity.size(), "3xxx/4xxx 应归为权益");
+        assertEquals("3001", equity.get(0).get("code"));
+        assertEquals("4001", equity.get(1).get("code"));
+    }
+
+    @Test
     void incomeStatement_returns_period_map() {
         Map<String, Object> periodData = new HashMap<>();
         periodData.put("revenue", 10000.0);

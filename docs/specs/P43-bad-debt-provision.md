@@ -5,6 +5,21 @@
 > **状态**：📝 草案（待审核）
 > **关联需求**：REQ-2026-015（坏账计提）
 > **关联文档**：[DESIGN.md](../DESIGN.md), [02-arap-design.md](../design/02-arap-design.md), [P34-receivable-payable-to-businessdoc.md](P34-receivable-payable-to-businessdoc.md)
+
+## 0. SDD 四段结构索引
+
+### 1. 输入契约
+→ 见本文 [## 三、详细设计 — 数据库 Migration / API 端点 / 科目种子数据](#三详细设计)
+
+### 2. 输出契约
+→ 见本文 [## 一、需求概述 验收标准项 / ## 四 YAML 契约](#一需求概述)
+
+### 3. 状态流转
+→ 见本文 [## 3.9 状态机 — DRAFT→VOUCHERED 状态转换](#39-状态机)
+
+### 4. 异常处理
+→ 见本文各 BusinessException 抛出点（如凭证生成失败、科目余额查询异常）
+
 > **版本历史**：
 > - V1.0 (2026-07-11): 初始版本
 
@@ -308,7 +323,7 @@ entity.setAdjustmentAmount(adjustment);
 
 | 方法 | 端点 | 说明 |
 |------|------|------|
-| GET | `/api/v1/bad-debts/aging-preview?period=YYYYMM` | 账龄分析预览（返回各区间分布 + 预计金额） |
+| GET | `/api/v1/aging-analysis/summary?period=YYYYMM` | 账龄分析预览（AgingAnalysisController 已实现，返回各区间分布 + 预计金额） |
 | GET | `/api/v1/bad-debts/scheme` | 获取当前生效的计提方案 |
 | PUT | `/api/v1/bad-debts/scheme` | 更新方案区间比例 |
 | POST | `/api/v1/bad-debts/write-off` | 坏账核销（应收确实无法收回） |
@@ -342,7 +357,7 @@ DRAFT ──delete──→ (删除)
 | 列表列 | period/method/金额/状态 | +应有余额/已有余额/补提金额/调整类型 |
 | 计提弹窗 | 手动输入各区间比例 | **从默认方案加载比例**，可直接在弹窗中修改 |
 | 确认按钮 | 仅改状态 | **确认后自动生成凭证**，状态变为 VOUCHERED |
-| 账龄预览 | ❌ 不存在 | 计提前展示账龄分布预览（按区间+金额） |
+| 账龄预览 | ✅ 已实现 | AgingAnalysisController 提供 /api/v1/aging-analysis/* 套件（summary/by-customer/due-receivables 等） |
 | 方案管理 | ❌ 不存在 | **在弹窗中直接修改比例**，无需独立页面 |
 
 ---
@@ -354,7 +369,8 @@ DRAFT ──delete──→ (删除)
 
 aging-preview:
   method: GET
-  path: /api/v1/bad-debts/aging-preview
+  path: /api/v1/aging-analysis/summary  # 已迁移到 AgingAnalysisController
+  note: 通过 AgingAnalysisController 实现，非 BadDebtController
   params:
     period: { type: string, required: true, desc: "期间 YYYYMM" }
     schemeId: { type: integer, required: false, desc: "方案ID，缺省用默认" }
@@ -477,3 +493,22 @@ write-off:
 |------|------|
 | [P51-aging-analysis.md](P51-aging-analysis.md) | 账龄分析与逾期预警（独立模块规格） |
 | [P52-customer-reconciliation.md](P52-customer-reconciliation.md) | 客户对账与差异处理（独立模块规格） |
+
+---
+
+## 八、BDD 验收标准
+
+### 场景 1：账龄分析引擎按配置区间正确划分应收并计算计提金额
+**Given** 存在多笔未清应收（INVOICE_OUT / PREPAYMENT / OTHER_RECEIVABLE / NOTE_RECEIVABLE），系统预置了默认计提方案（含 7 个账龄区间）
+**When** 用户调用 aging-preview API，传入期间参数
+**Then** 返回每个区间的应收笔数、未清总额、计提比例和计提金额，且各区间计提金额之和等于 expectedBalance
+
+### 场景 2：确认计提后自动生成坏账准备凭证
+**Given** 账龄分析已完成，provisionByAging 计算出了补提金额（expectedBalance > existingBalance）
+**When** 用户调用 confirm 确认计提
+**Then** 系统自动生成一张凭证（DRAFT），借方为 6701 信用减值损失，贷方为 1231 坏账准备，金额等于 adjustmentAmount，且 BadDebtProvision 状态变为 VOUCHERED
+
+### 场景 3：计提方案修改后即时生效
+**Given** 默认计提方案已存在，某一区间比例为 5%
+**When** 用户通过 PUT /api/v1/bad-debts/scheme 将该区间比例修改为 10%
+**Then** 修改后立即查询 aging-preview，该区间的 provisionAmount 按新比例 10% 重新计算

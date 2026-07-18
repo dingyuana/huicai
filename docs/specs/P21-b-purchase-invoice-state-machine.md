@@ -8,6 +8,23 @@
 ---
 
 > **关联需求**: REQ-2026-026
+
+## SDD 四段结构索引
+
+### 1. 输入契约
+→ 见本文 [## 2. 现状实测（Schema/业务代码/数据现状）](#2-现状实测schema--业务--数据)
+
+### 2. 输出契约
+→ 见本文 [## 5. 实施清单（改动项/验收条件）](#5-实施清单)
+
+### 3. 状态流转
+→ 见本文 [certification_status 4 态枚举（UNCERTIFIED/CERTIFIED/INVALID/CANCELLED）](#21-schema-现状)
+
+### 4. 异常处理
+→ 见本文 [InputInvoiceImportService:404 的 PENDING 写入违反 V8 CHECK 约束的 P0 bug](#22-业务代码现状)
+
+---
+
 ## 1. 背景
 
 原 P21-b SPEC（2026-06-21 起草）假设：
@@ -118,3 +135,22 @@ SELECT COUNT(*) FROM t_input_invoice;  -- 返回 0
 - 2026-06-22 重构 by Hermes：原 P21-b SPEC 整个假设错（t_input_invoice 无 status 字段），改写为"分析报告"
 - 2026-06-22 标 [已废弃] by Hermes：实施前置实测发现 SPEC 错位
 - 2026-06-21 创建原 P21-b SPEC（已废弃）
+
+---
+
+## BDD 验收标准
+
+### 场景 1：采购发票导入时 certification_status 写入合法值
+**Given** 用户导入一张采购发票 Excel
+**When** `InputInvoiceImportService` 执行导入
+**Then** 该发票的 `certification_status` 字段值为 `UNCERTIFIED`（而非 `PENDING`），不违反 CHECK 约束
+
+### 场景 2：采购发票已生成凭证通过 voucher_id 表达
+**Given** 一条采购发票记录已生成凭证
+**When** 查询该发票详情
+**Then** 该发票的 `voucher_id` 字段非空，且可通过 JOIN 查询到对应的 `t_voucher` 记录
+
+### 场景 3：采购发票无独立 status 字段，通过 certification_status 和 voucher_id 覆盖业务
+**Given** 数据库中 `t_input_invoice` 表无 `status` 字段
+**When** 查询任一采购发票
+**Then** 其业务状态可通过 `certification_status`（认证状态）+ `voucher_id`（是否已制证）完整表达

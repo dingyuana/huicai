@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.huicai.common.exception.BusinessException;
+import com.huicai.module.finance.constant.BusinessDocStatus;
 import com.huicai.module.finance.dto.BusinessDocDTO;
 import com.huicai.module.finance.dto.BusinessDocQueryDTO;
 import com.huicai.module.finance.dto.BusinessDocVO;
@@ -183,7 +184,7 @@ public class BusinessDocServiceImpl implements BusinessDocService {
             entity.setDocNo(generateDocNo(entity.getDocType(), entity.getPeriod()));
         }
         if (StrUtil.isBlank(entity.getStatus())) {
-            entity.setStatus("DRAFT");
+            entity.setStatus(BusinessDocStatus.DRAFT);
         }
         if (StrUtil.isBlank(entity.getSource())) {
             entity.setSource("MANUAL");
@@ -257,7 +258,7 @@ public class BusinessDocServiceImpl implements BusinessDocService {
         if (!"DRAFT".equals(entity.getStatus())) {
             throw BusinessException.badRequest("仅草稿状态可提交");
         }
-        entity.setStatus("SUBMITTED");
+        entity.setStatus(BusinessDocStatus.SUBMITTED);
         entity.setSubmittedBy(userId);
         entity.setSubmittedAt(LocalDateTime.now());
         entity.setUpdatedBy(userId);
@@ -272,7 +273,7 @@ public class BusinessDocServiceImpl implements BusinessDocService {
         if (!"SUBMITTED".equals(entity.getStatus())) {
             throw BusinessException.badRequest("仅已提交状态可审批");
         }
-        entity.setStatus("APPROVED");
+        entity.setStatus(BusinessDocStatus.APPROVED);
         entity.setApprovedBy(userId);
         entity.setApprovedAt(LocalDateTime.now());
         entity.setUpdatedBy(userId);
@@ -287,7 +288,7 @@ public class BusinessDocServiceImpl implements BusinessDocService {
         if (!"SUBMITTED".equals(entity.getStatus())) {
             throw BusinessException.badRequest("仅已提交状态可驳回");
         }
-        entity.setStatus("REJECTED");
+        entity.setStatus(BusinessDocStatus.REJECTED);
         entity.setUpdatedBy(userId);
         entity.setUpdatedAt(LocalDateTime.now());
         docMapper.updateById(entity);
@@ -403,7 +404,7 @@ public class BusinessDocServiceImpl implements BusinessDocService {
 
         entity.setVoucherId(voucher.getId());
         entity.setVoucherNo(voucher.getVoucherNo());
-        entity.setStatus("VOUCHERED");
+        entity.setStatus(BusinessDocStatus.VOUCHERED);
         entity.setUpdatedBy(userId);
         entity.setUpdatedAt(LocalDateTime.now());
         docMapper.updateById(entity);
@@ -429,7 +430,7 @@ public class BusinessDocServiceImpl implements BusinessDocService {
         reverse.setDocDate(entity.getDocDate());
         reverse.setPeriod(entity.getPeriod());
         reverse.setAmount(entity.getAmount().negate());
-        reverse.setStatus("DRAFT");
+        reverse.setStatus(BusinessDocStatus.DRAFT);
         reverse.setSupplierId(entity.getSupplierId());
         reverse.setCustomerId(entity.getCustomerId());
         reverse.setApplicantId(entity.getApplicantId());
@@ -531,7 +532,7 @@ public class BusinessDocServiceImpl implements BusinessDocService {
 
         entity.setVoucherId(voucher.getId());
         entity.setVoucherNo(voucher.getVoucherNo());
-        entity.setStatus("VOUCHERED");
+        entity.setStatus(BusinessDocStatus.VOUCHERED);
         entity.setUpdatedBy(userId);
         entity.setUpdatedAt(LocalDateTime.now());
         docMapper.updateById(entity);
@@ -598,7 +599,7 @@ public class BusinessDocServiceImpl implements BusinessDocService {
         PeriodEntity p = periodService.lambdaQuery()
                 .eq(PeriodEntity::getPeriodCode, period).one();
         if (p == null) throw BusinessException.badRequest("会计期间不存在: " + period);
-        if ("CLOSED".equals(p.getStatus()) || "LOCKED".equals(p.getStatus())) {
+        if ("closed".equals(p.getStatus()) || "locked".equals(p.getStatus())) {
             throw BusinessException.badRequest("会计期间不可操作: " + period);
         }
     }

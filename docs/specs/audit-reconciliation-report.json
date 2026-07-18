@@ -1,0 +1,311 @@
+{
+  "auditDate": "2026-07-18",
+  "module": "核销与应收应付模块",
+  "specsAudited": ["P20", "P5", "P30", "P43"],
+  "overallStatus": "部分实现 — SPEC定义的50-70%已在代码中实现，其余有计划偏差(P34迁移中)",
+
+  "specs": {
+    "P20": {
+      "title": "应收应付状态机 (HUICAI-SPC-020)",
+      "status": "待废弃 — P34迁移中",
+      "deviationScore": "65% (与SPEC自评一致)",
+
+      "statesFromYaml": [
+        "DRAFT", "SUBMITTED", "CONFIRMED", "VOUCHERED",
+        "SETTLED", "PARTIALLY_SETTLED", "REJECTED", "CANCELLED", "REVERSED"
+      ],
+      "statesInCode": [
+        "DRAFT", "SUBMITTED", "CONFIRMED", "REJECTED", "REVERSED",
+        "SETTLED", "VOUCHERED", "EXECUTED", "LOG_REJECTED", "CANCELLED", "APPLIED"
+      ],
+      "stateDifferences": [
+        {
+          "type": "MISSING_IN_CODE",
+          "state": "PARTIALLY_SETTLED",
+          "note": "SPEC YAML定义该状态，但ArapStatus.java中不存在"
+        },
+        {
+          "type": "EXTRA_IN_CODE",
+          "state": "SUBMITTED",
+          "note": "SPEC原始状态机未定义(仅YAML有)，代码中ArapStatus.java已有，用于ArapSettlement提交/审批流程"
+        },
+        {
+          "type": "EXTRA_IN_CODE",
+          "state": "EXECUTED",
+          "note": "ReconciliationLog专用状态，不属于Receivable/Payable状态机"
+        },
+        {
+          "type": "RENAMED_IN_CODE",
+          "state": "LOG_REJECTED (代码) vs REJECTED (SPEC)",
+          "note": "代码使用LOG_REJECTED避免与通用REJECTED冲突"
+        }
+      ],
+
+      "yamlTransitions": [
+        {"id": "T-01", "from": "DRAFT", "to": "SUBMITTED", "trigger": "submit", "implemented": false, "note": "Receivable/Payable无submit()。但ArapSettlementServiceImpl有submit()实现此转换"},
+        {"id": "T-02", "from": "SUBMITTED", "to": "CONFIRMED", "trigger": "confirm", "implemented": false, "note": "Receivable/Payable无此链路。ArapSettlementServiceImpl.approve()实现此转换"},
+        {"id": "T-03", "from": "SUBMITTED", "to": "DRAFT", "trigger": "reject", "implemented": false, "note": "Receivable/Payable无驳回流程。ArapSettlementServiceImpl.reject()实现此转换"},
+        {"id": "T-04", "from": "CONFIRMED", "to": "VOUCHERED", "trigger": "generateVoucher", "implemented": true, "note": "ArapSettlementServiceImpl.generateVoucher()实现"},
+        {"id": "T-05", "from": "VOUCHERED", "to": "SETTLED", "trigger": "markSettled", "implemented": "partial", "note": "代码实现CONFIRMED→SETTLED，非VOUCHERED→SETTLED"},
+        {"id": "T-06", "from": "VOUCHERED", "to": "PARTIALLY_SETTLED", "trigger": "onSettlementUpdate", "implemented": false, "note": "unsettledAmount>0时保持CONFIRMED，不切PARTIALLY_SETTLED"},
+        {"id": "T-07", "from": "CONFIRMED", "to": "REVERSED", "trigger": "reverse", "implemented": true, "note": "ArapSettlementServiceImpl.reverse()已实现"},
+        {"id": "T-08", "from": "DRAFT", "to": "CANCELLED", "trigger": "cancel", "implemented": true, "note": "ArapSettlementServiceImpl.cancel()已实现"},
+        {"id": "T-09", "from": "DRAFT", "to": "CONFIRMED", "trigger": "confirm (直接)", "implemented": true, "note": "实际实现 — 跳过SUBMITTED一步到位"},
+        {"id": "T-10", "from": "CONFIRMED", "to": "SETTLED", "trigger": "markSettled/onReconciliationUpdate", "implemented": true, "note": "实际实现 — unsettledAmount=0时"},
+        {"id": "T-11", "from": "CONFIRMED", "to": "REVERSED", "trigger": "reverse", "implemented": true, "note": "实际实现"},
+        {"id": "T-12", "from": "CONFIRMED", "to": "CONFIRMED", "trigger": "onReconciliationUpdate(partial)", "implemented": true, "note": "部分核销时保持CONFIRMED"}
+      ],
+
+      "impacts": [
+        "ReceivableStateMachineService/PayableStateMachineService类已不存在代码中 — 被P34重构移除",
+        "状态机逻辑迁移至ArapSettlementServiceImpl和ReconciliationServiceImpl",
+        "ArapStatus.java新增SUBMITTED、EXECUTED等常量，SPEC需同步更新",
+        "PARTIALLY_SETTLED完全未实现（SPEC也承认P34后由BusinessDocEntity的PARTIALLY_RECONCILED替代）"
+      ],
+
+      "apiEndpoints": {
+        "spec": [
+          "POST /api/v1/receivables/{id}/confirm",
+          "POST /api/v1/receivables/{id}/reverse",
+          "POST /api/v1/payables/{id}/confirm",
+          "POST /api/v1/payables/{id}/reverse",
+          "POST /api/v1/arap/settlements/{id}/generate-voucher",
+          "POST /api/v1/arap/settlements/{id}/reverse"
+        ],
+        "found": [
+          {"endpoint": "POST /api/v1/arap-settlements/{id}/generate-voucher", "status": "✅", "note": "路径/arap-settlements/而非/arap/settlements/"},
+          {"endpoint": "POST /api/v1/arap-settlements/{id}/reverse", "status": "✅"},
+          {"endpoint": "POST /api/v1/arap-settlements/{id}/submit", "status": "✅", "note": "超SPEC新增"},
+          {"endpoint": "POST /api/v1/arap-settlements/{id}/approve", "status": "✅", "note": "超SPEC新增"},
+          {"endpoint": "POST /api/v1/arap-settlements/{id}/reject", "status": "✅", "note": "超SPEC新增"},
+          {"endpoint": "POST /api/v1/arap-settlements/{id}/cancel", "status": "✅", "note": "超SPEC新增"}
+        ],
+        "notFound": [
+          {"endpoint": "POST /api/v1/receivables/{id}/confirm", "note": "无ReceivableController，SPEC自身声明不创建"},
+          {"endpoint": "POST /api/v1/receivables/{id}/reverse", "note": "同上"},
+          {"endpoint": "POST /api/v1/payables/{id}/confirm", "note": "无PayableController，SPEC自身声明不创建"},
+          {"endpoint": "POST /api/v1/payables/{id}/reverse", "note": "同上"}
+        ]
+      },
+
+      "recommendations": [
+        "P34完成后废弃本SPEC，不再维护PARTIALLY_SETTLED等未实现状态",
+        "更新ArapStatus.java文档注释，删除/标记废弃常量如CANCELLED/EXECUTED/REJECTED",
+        "确认ArapSettlement的submit→approve→reject流程在SPEC中有完整记录"
+      ]
+    },
+
+    "P5": {
+      "title": "自动核销 (HUICAI-SPC-005)",
+      "status": "被P30替换 — 部分实现",
+      "deviationScore": "N/A (SPEC被替换)",
+
+      "apiEndpoints": {
+        "spec": [
+          "POST /api/v1/reconciliation/receipt/{id}/recommend",
+          "POST /api/v1/reconciliation/payment/{id}/recommend",
+          "POST /api/v1/reconciliation/auto-recommend/{statementId}",
+          "POST /api/v1/reconciliation/execute",
+          "POST /api/v1/reconciliation/batch-execute",
+          "GET /api/v1/reconciliation/{docType}/{docId}/records",
+          "POST /api/v1/reconciliation/{id}/reverse"
+        ],
+        "found": [
+          {"endpoint": "POST /api/v1/reconciliation/receipt/{receiptId}/recommend", "status": "✅"},
+          {"endpoint": "POST /api/v1/reconciliation/payment/{paymentId}/recommend", "status": "✅"},
+          {"endpoint": "POST /api/v1/reconciliation/execute", "status": "✅"},
+          {"endpoint": "POST /api/v1/reconciliation/batch-execute", "status": "✅"},
+          {"endpoint": "GET /api/v1/reconciliation/records?sourceDocType=...&sourceDocId=...", "status": "⚠️", "note": "路由不同：用query params而非path params"},
+          {"endpoint": "POST /api/v1/reconciliation/{id}/reverse", "status": "✅"}
+        ],
+        "notFound": [
+          {"endpoint": "POST /api/v1/reconciliation/auto-recommend/{statementId}", "note": "P30移除了银行流水直连核销方案，未实现"}
+        ]
+      },
+
+      "reconciliationLogSpecVsCode": {
+        "tableExists": "✅ t_reconciliation_log",
+        "entityExists": "✅ ReconciliationLogEntity",
+        "specFieldsPresent": "✅ tenant_id, source_doc_type, source_doc_id, target_doc_type, target_doc_id, allocated_amount, discount_amount, match_score, match_method, status, remark, created_by, created_at",
+        "extraFields": ["targetBusinessDocId (V81)", "operationType (P30-4)", "ruleId (P30-4)"],
+        "statusValues": "✅ CONFIRMED / EXECUTED / REJECTED / CANCELLED"
+      },
+
+      "note": "P5 SPEC标记为'被P30替换'，核心推荐算法已实现在ReconciliationServiceImpl中（L1-L6匹配级别、Jaccard相似度、Levenshtein模糊匹配），但银行流水自动匹配核销(FR-RECON-03)未按计划实现"
+    },
+
+    "P30": {
+      "title": "核销工作台增强 (HUICAI-SPC-030)",
+      "status": "大部分已实现",
+      "deviationScore": "~85%",
+
+      "existingApiEndpoints": {
+        "specTable": [
+          {"endpoint": "POST /reconciliation/receipt/{receiptId}/recommend", "status": "✅"},
+          {"endpoint": "POST /reconciliation/payment/{paymentId}/recommend", "status": "✅"},
+          {"endpoint": "POST /reconciliation/execute", "status": "✅"},
+          {"endpoint": "POST /reconciliation/batch-execute", "status": "✅"},
+          {"endpoint": "POST /reconciliation/execute-with-adjustment", "status": "✅"},
+          {"endpoint": "POST /reconciliation/{id}/approve", "status": "✅"},
+          {"endpoint": "POST /reconciliation/{id}/reject", "status": "✅"},
+          {"endpoint": "POST /reconciliation/{id}/reverse", "status": "✅"},
+          {"endpoint": "GET /reconciliation/logs/page", "status": "✅"},
+          {"endpoint": "GET /reconciliation/exceptions/page", "status": "✅"},
+          {"endpoint": "POST /reconciliation/pre-check", "status": "✅", "note": "超SPEC新增"},
+          {"endpoint": "POST /reconciliation/exceptions/{id}/resolve", "status": "✅"},
+          {"endpoint": "POST /reconciliation/exceptions/{id}/ignore", "status": "✅", "note": "超SPEC新增"},
+          {"endpoint": "POST /reconciliation/exceptions/{id}/retry", "status": "✅", "note": "超SPEC新增"},
+          {"endpoint": "POST /reconciliation/auto-fifo", "status": "✅", "note": "FIFO自动核销"},
+          {"endpoint": "POST /reconciliation/split-allocate", "status": "✅", "note": "超SPEC新增"},
+          {"endpoint": "POST /reconciliation/smart-allocate", "status": "✅", "note": "超SPEC新增"}
+        ]
+      },
+
+      "p30_4_additions": {
+        "trace": {"endpoint": "GET /reconciliation/{id}/trace", "status": "✅", "note": "全链路追溯已实现"},
+        "toleranceDefault": {"endpoint": "GET /reconciliation/tolerance/default", "status": "✅"},
+        "toleranceByParty": {"endpoint": "GET /reconciliation/tolerance/{partyId}/{partyType}", "status": "✅"},
+        "toleranceCreate": {"endpoint": "POST /reconciliation/tolerance", "status": "✅"},
+        "toleranceUpdate": {"endpoint": "PUT /reconciliation/tolerance/{id}", "status": "✅"},
+        "toleranceDelete": {"endpoint": "DELETE /reconciliation/tolerance/{id}", "status": "✅"},
+        "beforeAfterBalance": "✅ ArapSettlementEntry有beforeBalance/afterBalance字段",
+        "operationType": "✅ ReconciliationLogEntity有operationType字段",
+        "ruleId": "✅ ReconciliationLogEntity有ruleId字段"
+      },
+
+      "frontendImpl": {
+        "ReconciliationApproval.vue": "✅ 存在",
+        "ReconciliationExceptionList.vue": "✅ 存在(日志+异常池)",
+        "ReconciliationWorkbench.vue": "❌ 未在期望路径找到（/arap/reconciliation-workbench/）",
+        "BusinessDocList.vue": "✅ 存在，展示核销状态和金额",
+        "P30-1工作台tab改造": "⚠️ 工作台入口文件未找到，可能需要检查是否以其他名称存在"
+      },
+
+      "fifoImpl": "✅ ReconciliationServiceImpl.autoReconcileFifo已实现，按dueDate升序FIFO匹配BusinessDocEntity"
+    },
+
+    "P43": {
+      "title": "坏账准备 (HUICAI-SPC-043)",
+      "status": "大部分已实现（草案阶段）",
+      "deviationScore": "~80%",
+
+      "states": {
+        "spec": ["DRAFT → DRAFT (反复重算) → VOUCHERED (确认+凭证)"],
+        "code": "✅ DRAFT→VOUCHERED，confirm自动生成凭证",
+        "stateMachineServiceImpl": "✅ BadDebtProvisionStateMachineServiceImpl已实现"
+      },
+
+      "apiEndpoints": {
+        "spec": [
+          "GET /api/v1/bad-debts/aging-preview",
+          "GET /api/v1/bad-debts/scheme",
+          "PUT /api/v1/bad-debts/scheme",
+          "POST /api/v1/bad-debts/write-off",
+          "POST /api/v1/bad-debts/recovery"
+        ],
+        "found": [
+          {"endpoint": "GET /page", "status": "✅", "note": "返回expectedBalance/existingBalance/adjustmentAmount/adjustmentType"},
+          {"endpoint": "GET /{id}", "status": "✅"},
+          {"endpoint": "POST /provision/aging", "status": "✅", "note": "4数据源+补提/冲回+凭证自动生成"},
+          {"endpoint": "POST /provision/percentage", "status": "✅", "note": "余新增额百分比法"},
+          {"endpoint": "POST /{id}/confirm", "status": "✅", "note": "自动生成凭证"},
+          {"endpoint": "DELETE /{id}", "status": "✅"},
+          {"endpoint": "GET /scheme", "status": "✅"},
+          {"endpoint": "PUT /scheme", "status": "✅"},
+          {"endpoint": "POST /write-off", "status": "✅"},
+          {"endpoint": "POST /recovery", "status": "✅"}
+        ],
+        "notFound": [
+          {"endpoint": "GET /api/v1/bad-debts/aging-preview", "note": "SPEC定义但Controller中未实现 — 可通过POST /provision/aging 替代预览功能"}
+        ]
+      },
+
+      "entityFields": {
+        "BadDebtProvisionEntity": {
+          "specFields": ["expectedBalance", "existingBalance", "adjustmentAmount", "adjustmentType", "schemeId"],
+          "codeFields": "✅ 全部实现"
+        },
+        "BadDebtProvisionDetailEntity": {
+          "specFields": ["provisionId", "sourceType", "sourceId", "sourceNo", "customerName", "dueDate", "agingDays", "bucketLabel", "unsettledAmount", "provisionAmount", "ratio"],
+          "codeFields": "⚠️ 部分差异",
+          "differences": [
+            "sourceNo字段 → 代码用docNo替代(功能等价)",
+            "customerName字段 → 代码用customerId替代(需JOIN)",
+            "agingDays字段 → 未单独存储，通过agingBucket推断",
+            "bucketLabel字段 → 代码用agingBucket(功能等价)"
+          ]
+        }
+      },
+
+      "coreLogicVerification": {
+        "agingEngine": {
+          "spec": "4数据源(INVOICE_OUT, OTHER_RECEIVABLE, NOTE_RECEIVABLE, PREPAYMENT)",
+          "code": "✅ 全部4个数据源都已实现",
+          "note": "NOTE_RECEIVABLE需要V81扩展chk_doc_type CHECK约束"
+        },
+        "computeAgingBucket": {
+          "spec": "动态从方案表读取区间",
+          "code": "⚠️ 硬编码6个区间(current/days_0_30/days_31_60/days_61_90/days_91_180/days_181_365/over_365)",
+          "note": "SPEC也建议一期保留硬编码"
+        },
+        "querySubjectBalance": {
+          "spec": "查询科目1231当前余额",
+          "code": "✅ 已实现 — 汇总t_voucher_entry"
+        },
+        "confirmAutoVoucher": {
+          "spec": "DRAFT→VOUCHERED + 自动生成凭证",
+          "code": "✅ 已实现 — 补提借6701贷1231，冲回借1231贷6701"
+        },
+        "writeOff": {
+          "spec": "坏账核销",
+          "code": "✅ 已实现 — 支持INVOICE_OUT/OTHER_RECEIVABLE/NOTE_RECEIVABLE/PREPAYMENT"
+        },
+        "recovery": {
+          "spec": "已核销收回",
+          "code": "✅ 已实现 — 恢复BusinessDoc或Prepayment的unsettledAmount"
+        },
+        "schemeManagement": {
+          "spec": "t_bad_debt_provision_scheme + scheme_item",
+          "code": "✅ 存在对应Mapper/Service引用"
+        },
+        "subjects1231_6701": {
+          "spec": "V81迁移添加",
+          "code": "⚠️ 代码查询subjectMapper，若无则抛异常(非自动创建)"
+        }
+      },
+
+      "gaps": [
+        "aging-preview GET端点未实现 — 仅能通过POST /provision/aging执行计提前查看",
+        "NOTE_RECEIVABLE的chk_doc_type CHECK约束扩展(V81)需验证是否已执行",
+        "凭证模板(NOTE_RECEIVABLE类型)未确认是否存在",
+        "前端账龄预览功能需核实BadDebtList.vue是否包含"
+      ]
+    }
+  },
+
+  "crossCuttingIssues": [
+    {
+      "issue": "P34迁移导致多处二写/三写过渡代码",
+      "affected": ["P20", "P30"],
+      "detail": "核销结算同时更新ReceivableEntity + PayableEntity + BusinessDocEntity，代码中有throw提示旧格式使用"
+    },
+    {
+      "issue": "ArapStatus常量类同时服务多个子模块",
+      "affected": ["P20"],
+      "detail": "EXECUTED/REJECTED/APPLIED等常量定义在ArapStatus中但实际无代码引用(SPEC自评确认)"
+    },
+    {
+      "issue": "历史的ReceivableStateMachineService/PayableStateMachineService已被删除",
+      "affected": ["P20"],
+      "detail": "状态机逻辑完全迁移到ArapSettlementServiceImpl和ReconciliationServiceImpl"
+    }
+  ],
+
+  "recommendations": [
+    "立即废弃P20 SPEC(SPEC自评已标注待废弃) — 当前代码实际状态机是ArapSettlement状态机（DRAFT→SUBMITTED→CONFIRMED→VOUCHERED/REVERSED/CANCELLED）",
+    "更新P30 SPEC补充新增端点(pre-check, exceptions/ignore, exceptions/retry, smart-allocate, split-allocate)",
+    "P43中添加aging-preview GET端点实现（当前仅POST /provision/aging可用）",
+    "整理ArapStatus常量，移除无效常量或增加注解说明",
+    "补充NOTE_RECEIVABLE CHECK约束扩展和凭证模板"
+  ]
+}

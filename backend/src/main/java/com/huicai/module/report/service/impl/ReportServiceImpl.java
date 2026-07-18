@@ -53,10 +53,10 @@ public class ReportServiceImpl implements ReportService {
             if (code.startsWith("1")) {
                 assets.add(row);
                 totalAssets = totalAssets.add(signedBalance);
-            } else if (code.startsWith("2") || code.startsWith("3")) {
+            } else if (code.startsWith("2")) {
                 liab.add(row);
                 totalLiab = totalLiab.add(signedBalance);
-            } else if (code.startsWith("4")) {
+            } else if (code.startsWith("3") || code.startsWith("4")) {
                 equity.add(row);
                 totalEquity = totalEquity.add(signedBalance);
             }

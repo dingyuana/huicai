@@ -7,6 +7,19 @@
 ---
 
 > **关联需求**: REQ-2026-031, REQ-2026-032, REQ-2026-033
+
+## 1. 输入契约
+→ 见本文 [现状摸底 / 预算编制与控制参数定义] 章节
+
+## 2. 输出契约
+→ 见本文 [验收标准 / 测试用例 / 响应结构] 章节
+
+## 3. 状态流转
+→ 见本文 [预算状态机图 / 状态常量 / 状态转换方法] 章节
+
+## 4. 异常处理
+→ 见本文 [BusinessException 抛出点 / 错误码定义] 章节
+
 ## 1. 现状摸底 (2026-06-15)
 
 | 文件 | 状态 |
@@ -42,7 +55,7 @@
 ```
 DRAFT ──→ approve ──→ APPROVED ──→ activate ──→ ACTIVE
                                        ↓
-                              createAdjustment (DRAFT) ──→ approveAdjustment ──→ APPROVED
+                              createAdjustment (PENDING) ──→ approveAdjustment ──→ APPROVED
                                                               └─→ 调增/调减 totalAmount
 ```
 
@@ -65,7 +78,15 @@ DRAFT ──→ approve ──→ APPROVED ──→ activate ──→ ACTIVE
 
 ---
 
-## 4. 测试验收
+## 4. 变更记录
+
+| 日期 | 变更 | 原因 |
+|------|------|------|
+| 2026-07-18 | 调整单初始状态 `DRAFT` → `PENDING` | Bug fix: DRAFT 无法通过审批检查 `isAdjustmentApprovable()` 需 `PENDING` |
+
+---
+
+## 5. 测试验收
 
 **目标**: 295 → 300 (+5 测试)
 

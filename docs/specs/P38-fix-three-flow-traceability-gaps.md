@@ -8,6 +8,19 @@
 ---
 
 > **关联需求**: REQ-2026-011
+
+## 1. 输入契约
+→ 见本文 [## 2. 详细修改设计 — 各 F1-F10 修复的代码变更与数据模型](#2-详细修改设计)
+
+## 2. 输出契约
+→ 见本文 [## 8. 验收标准 — AT-F1 至 AT-F8 验收场景表](#8-验收标准)
+
+## 3. 状态流转
+→ 见本文 [## 4. 状态机变更 — OutputInvoice/BusinessDoc 状态转换规则](#4-状态机变更)
+
+## 4. 异常处理
+→ 见本文 [## 7. 风险评估 — BusinessException 抛出点与降级处理](#7-风险评估)
+
 ## 0. 问题清单总览
 
 | # | 优先级 | 流程 | 问题 | 文件 | 行号 |
@@ -538,4 +551,23 @@ out_of_scope:
 dependencies:
   - spec: P34
     relation: "F5 依赖 P34 V73 数据迁移完成，旧格式数据已清理"
+
+---
+
+## 11. BDD 验收标准
+
+### 场景 1：发票 confirm 后 BusinessDoc 状态正确更新
+**Given** 销项发票处于 PENDING_REVIEW 状态，BusinessDoc 草稿已创建（status=DRAFT）
+**When** 用户执行发票 confirm 操作
+**Then** BusinessDoc.status 变为 "VOUCHERED"，而非 "DRAFT"，且 voucherId/voucherNo 非空
+
+### 场景 2：银行流水制证后 Voucher 可追溯到源头
+**Given** 银行流水记录已审核，触发自动制证
+**When** 系统执行 createVoucher() 创建凭证
+**Then** Voucher.sourceDocType == "BANK_STMT"，sourceDocId 指向银行流水 ID，sourceDocNo 为流水外部编号
+
+### 场景 3：核销后发票状态同步更新
+**Given** 发票状态为 VOUCHERED，关联的 BusinessDoc 有 unsettledAmount > 0
+**When** 对关联 BusinessDoc 执行全额核销（核销金额 = unsettledAmount）
+**Then** 发票状态变为 FULLY_RECONCILED（unsettledAmount = 0）或 PARTIALLY_RECONCILED（unsettledAmount > 0）
 ```

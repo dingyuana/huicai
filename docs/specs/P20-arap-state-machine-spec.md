@@ -1,15 +1,38 @@
 # P20 SPEC — AR/AP 状态机实现规格书（待废弃）
 
 > **编号**：HUICAI-SPC-020 | 优先级：低
+> **状态**：❌ 已废弃 — 被 P34 替代（V73/V74 已删除 t_receivable/t_payable，统一走 BusinessDocEntity）
 > 依据：docs/design/P20-arap-state-machine-design.md
 > **2026-07-01 标注**：P34 架构已决定将应收/应付合并到业务单据体系，
 > ReceivableEntity/PayableEntity 将在 P34 M4（V72）阶段删除。
 > 本 SPEC 仅在 P34 完全实施前作为历史参考，不再维护。
 > 核心流程已迁移到 P34 SPEC 和 BusinessDocEntity。
 
+> ⚠️ **废弃声明**：本 SPEC 描述的 t_receivable/t_payable 独立应收/应付表已在 P34 重构中删除（V73/V74 migration）。
+> 所有应收/应付数据现已统一存储在 `t_business_doc` 表中，通过 docType=INVOICE_OUT/INVOICE_IN 区分。
+> 核销结算统一走 ArapSettlementEntity + ReconciliationServiceImpl。
+> **请参考 P34-receivable-payable-to-businessdoc.md 作为替代文档。**
+
 ---
 
 > **关联需求**: REQ-2026-015
+
+## SDD 四段结构索引
+
+### 1. 输入契约
+→ 见本文 [## 1. 枚举常量（ArapStatus 常量类）](#1-枚举常量) 及 [## 2. 实体变更（ReceivableEntity/PayableEntity）](#2-实体变更)
+
+### 2. 输出契约
+→ 见本文 [## 7. 测试要点（测试场景/验收条件）](#7-测试要点) 及 [## 8. API 变更](#8-api-变更)
+
+### 3. 状态流转
+→ 见本文 [## 4. Service 状态机实现（DRAFT/CONFIRMED/SETTLED/REVERSED）](#4-service-状态机实现--当前实际-vs-spec-定义) 及 MACHINE-READABLE CONTRACT 中的 states/transitions
+
+### 4. 异常处理
+→ 见本文各状态机方法中的 BusinessException 抛出点（状态校验/前置条件检查）
+
+---
+
 ## 0. P34 架构变更说明
 
 P34 决定将应收/应付合并到业务单据体系：
@@ -693,3 +716,22 @@ dependencies:
     entity: OutputInvoiceEntity
     relation: "红冲级联"
 ```
+
+---
+
+## BDD 验收标准
+
+### 场景 1：应收单核销后自动标记为 SETTLED
+**Given** 一条应收单的 `unsettled_amount = 1000.00`
+**When** 核销操作执行，核销金额 `settled_amount = 1000.00`
+**Then** 应收单 `unsettled_amount = 0.00`，`status` 自动变为 `SETTLED`
+
+### 场景 2：已 SETTLED 的应收单可红冲为 REVERSED
+**Given** 一条应收单的 `status = SETTLED`
+**When** 调用 `reverse(id, userId, reason)`
+**Then** 应收单 `status = REVERSED`，`reason` 字段被记录
+
+### 场景 3：非法状态转移抛出 BusinessException
+**Given** 一条应收单的 `status = SETTLED`
+**When** 尝试再次调用 `confirm(id, userId)`
+**Then** 系统抛出 `BusinessException`，提示"仅 DRAFT 状态可确认"

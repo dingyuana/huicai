@@ -201,7 +201,7 @@ public class BankJournalServiceImpl implements BankJournalService {
     private void validatePeriodOpen(String period) {
         PeriodEntity p = periodService.lambdaQuery().eq(PeriodEntity::getPeriodCode, period).one();
         if (p == null) throw BusinessException.badRequest("会计期间不存在: " + period);
-        if ("CLOSED".equals(p.getStatus()) || "LOCKED".equals(p.getStatus())) {
+        if ("closed".equals(p.getStatus()) || "locked".equals(p.getStatus())) {
             throw BusinessException.badRequest("会计期间不可操作: " + period);
         }
     }

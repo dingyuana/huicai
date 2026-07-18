@@ -14,6 +14,19 @@
 | 实施方式 | **OpenCode 串行委派**（§15 硬约束） |
 
 > **关联需求**: REQ-2026-005
+
+## 1. 输入契约
+→ 见本文 §3.1 改动清单（C1-C7 具体修改内容）、§3.2 关键代码（ServiceImpl 字段注入 + generateVoucher 改写）
+
+## 2. 输出契约
+→ 见本文 §4 验收清单（V1-V6 共 6 条验收条件）
+
+## 3. 状态流转
+→ 见本文 §6 委派计划（Phase 1-4 的串行执行路径：代码改动 → 单文件测试 → 全量测试 → commit）
+
+## 4. 异常处理
+→ 见本文 §5.1 风险（R1 N+1 查询、R2 @TableLogic 软删除、R3 批量查询优化）
+
 ## 1. 背景与教训
 
 ### 1.1 父任务 P27 A 方案失败事实（自我报告）
@@ -217,4 +230,60 @@ Phase 4: 单 commit + push
 - 2026-06-23 老丁确认 D 选项 + D4=单 commit
 - 改动清单从 5 项扩展到 7 项（C6 修 TaxServiceImpl 2 处 invoiceId；C7 加 2 个新单测）
 - 验收目标更新：21/0/0（单文件）+ 392/0/0（全量）+ 3 个文件改动（ServiceImpl + TaxServiceImpl + Test）
-- 下一步：OpenCode 串行委派 Phase 1 实施 C1-C7
+|- 下一步：OpenCode 串行委派 Phase 1 实施 C1-C7
+
+---
+
+## 九、BDD 验收标准
+
+### 场景 1：编译修复成功
+**Given** BusinessDocServiceImpl.java:317-318 有编译错误  
+**When** 应用 C1-C3 改动  
+**Then** `mvn clean compile` BUILD SUCCESS
+
+### 场景 2：4 个 fail 单测修复
+**Given** 原有 4 个 generateVoucher 单测 fail  
+**When** 补 C4+C5 mock 假设  
+**Then** `BusinessDocServiceImplTest` 全绿  
+**And** 21/0/0（19 原有 + 2 新增 C7）
+
+### 场景 3：不破坏原有测试
+**Given** 原有测试 390 个通过  
+**When** 全量 `mvn test`  
+**Then** 392/0/0（390 原有 + 2 新增 C7）  
+**And** 不出现新 ERROR
+
+---
+
+## 十、YAML 契约
+
+```yaml
+---
+# === MACHINE-READABLE CONTRACT ===
+contract_version: "1.0"
+states:
+  - DRAFT
+  - COMPILED
+  - TEST_PASSED
+  - COMMITTED
+transitions:
+  - from: DRAFT
+    to: COMPILED
+    trigger: mvn_compile
+  - from: COMPILED
+    to: TEST_PASSED
+    trigger: mvn_test
+  - from: TEST_PASSED
+    to: COMMITTED
+    trigger: git_commit
+acceptance_tests:
+  - id: AT-C1
+    description: "修复编译失败"
+    assertion: "mvn clean compile BUILD SUCCESS"
+  - id: AT-C2
+    description: "修复 4 个 fail 单测"
+    assertion: "BusinessDocServiceImplTest 21/0/0"
+  - id: AT-C3
+    description: "不破坏原有测试"
+    assertion: "全量 mvn test 392/0/0"
+```

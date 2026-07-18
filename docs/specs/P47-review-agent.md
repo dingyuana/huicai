@@ -8,6 +8,18 @@
 
 > **关联需求**: REQ-2026-059
 
+## 1. 输入契约
+→ 见本文 §1.2 ReviewAgent 输入输出定义、§4 YAML 契约 endpoints
+
+## 2. 输出契约
+→ 见本文 §2 验证清单、§4 YAML 契约 acceptance_tests
+
+## 3. 状态流转
+→ 见本文 §1.1 核心流程（SUBMITTED → MQ → ReviewAgent → 结果写入 t_ai_anomaly_tag）
+
+## 4. 异常处理
+→ 见本文 §1.5 安全机制（AI 建议不影响状态机流转、不自动审批/拒绝）
+
 ---
 
 ## §0 当前状态
@@ -120,3 +132,25 @@ acceptance_tests:
 ```
 
 > **文档结束**
+
+---
+
+## §5 BDD 验收标准
+
+### 场景 1：合规发票审核通过
+**Given** 费用报销提交，发票抬头/金额/税率一致  
+**When** ReviewAgent 完成审核  
+**Then** verdict = "PASS"  
+**And** 前端审核页展示绿色通过面板
+
+### 场景 2：异常发票触发警告
+**Given** 费用报销提交，发票金额超出历史均值 50%  
+**When** ReviewAgent 完成审核  
+**Then** checks 中包含异常维度  
+**And** verdict = "WARN" 或 "REJECT"
+
+### 场景 3：AI 建议不影响状态机
+**Given** ReviewAgent 返回 REJECT  
+**When** 状态机流转  
+**Then** 报销单状态仍为 SUBMITTED  
+**And** 审核员可自由决定审批结果

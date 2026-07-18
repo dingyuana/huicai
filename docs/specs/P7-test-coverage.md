@@ -8,6 +8,19 @@
 ---
 
 > **关联需求**: REQ-2026-007, REQ-2026-008
+
+## 1. 输入契约
+→ 见本文 §3 测试用例清单（3.1 BankReconciliationServiceImplTest、3.2 ReconciliationServiceImplTest、3.3 SalesInvoiceImportServiceTest 的 Mock 依赖和测试方法）
+
+## 2. 输出契约
+→ 见本文 §4 验收标准（5 条验收条件）
+
+## 3. 状态流转
+→ 见本文 §2 测试策略（JUnit 5 + Mockito 纯单测、不启动 Spring 上下文、不依赖数据库）
+
+## 4. 异常处理
+→ 见本文 §6 风险与决策点（private 方法测试方案、RedisTemplate mock 链处理）
+
 ## 1. 背景与动机
 
 2026-06-15 工作树清理中入库的 P1-P5 集成代码（commit cef3a6f），其中 3 个核心 service 新增了关键业务逻辑但**完全无单测**：
@@ -209,3 +222,25 @@
 ---
 
 _创建于 2026-06-15 14:xx_ · _作者: Hermes (待 OpenCode 执行)_
+
+---
+
+## §8 BDD 验收标准
+
+### 场景 1：3 个 Service 测试全部编写完成
+**Given** 3 个 Test 文件已创建  
+**When** 运行 `mvn test -pl backend`  
+**Then** 0 failure  
+**And** 新增测试总数 ≥ 40
+
+### 场景 2：所有测试命名遵循三段式
+**Given** 新增测试代码已提交  
+**When** 审查代码  
+**Then** 所有测试方法命名 = `方法_场景_预期`  
+**And** 不使用 AssertJ 或 Testcontainers
+
+### 场景 3：不破坏原有测试
+**Given** 原有测试已通过（110/0/16，16 errors 与 P7 无关）  
+**When** P7 测试新增后运行全量测试  
+**Then** 原 16 errors 数量不变  
+**And** 无新增错误

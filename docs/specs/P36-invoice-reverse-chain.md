@@ -5,6 +5,19 @@
 > **已验证**：三层单据级联状态回写模式已落地
 
 > **关联需求**: REQ-2026-028
+
+## 1. 输入契约
+→ 见本文 [## 方案 §1 — 销售发票 reverseInvoice 接口与数据库变更](#方案)
+
+## 2. 输出契约
+→ 见本文 [acceptance_tests — 验收测试清单](#machine-readable-contract)
+
+## 3. 状态流转
+→ 见本文 [## 方案 §4 — InvoiceStatus 状态机扩展及 isReversible()方法](#方案)
+
+## 4. 异常处理
+→ 见本文 [## 风险与注意事项 — BusinessException 边界校验](#风险与注意事项)
+
 ## 背景
 
 当前红冲机制在三处不完整：
@@ -274,3 +287,22 @@ out_of_scope:
   - "进项发票红冲（P37 或后续迭代）"
   - "红冲后自动调整纳税申报（P37 或后续迭代）"
   - "批量红冲（P37 或后续迭代）"
+
+---
+
+## 7. BDD 验收标准
+
+### 场景 1：CONFIRMED 状态发票可正常红冲
+**Given** 一张销售发票处于 CONFIRMED 状态，有关联的业务单和凭证
+**When** 用户调用 reverseInvoice(invoiceId, userId, reason)
+**Then** 系统创建一张红字发票（金额取反，status=PENDING_CONFIRM），原发票标记为 REVERSED，记录 reversedByInvoiceId
+
+### 场景 2：终态发票不可红冲
+**Given** 一张销售发票处于 FULLY_RECONCILED 终态
+**When** 用户调用 reverseInvoice(invoiceId, userId, reason)
+**Then** 系统抛出 BusinessException，拒绝红冲操作，提示"终态不可红冲"
+
+### 场景 3：红冲发票审核通过后级联创建红字凭证
+**Given** 原发票已生成凭证（voucherId 非空），红字发票已创建并处于 PENDING_CONFIRM 状态
+**When** 红字发票审核通过（confirm）
+**Then** 系统自动调用 VoucherServiceImpl.reverse() 生成红字凭证（DRAFT），reversedFrom 指向原凭证

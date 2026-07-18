@@ -38,7 +38,7 @@ class PeriodServiceImplTest {
         e.setPeriodCode("202607");
         e.setStartDate(LocalDate.of(2026, 7, 1));
         e.setEndDate(LocalDate.of(2026, 7, 31));
-        e.setStatus("OPEN");
+        e.setStatus("open");
         return e;
     }
 

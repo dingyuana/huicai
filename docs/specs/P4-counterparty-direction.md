@@ -8,6 +8,19 @@
 ---
 
 > **关联需求**: REQ-2026-005
+
+## 1. 输入契约
+→ 见本文 二、功能规格（FR-COUNTERPARTY-01 至 FR-COUNTERPARTY-03）、四、接口设计
+
+## 2. 输出契约
+→ 见本文 五、验收标准（8 条验收条件）
+
+## 3. 状态流转
+→ 见本文 二、功能规格（INCOME/EXPENSE 方向判断规则、回退链）
+
+## 4. 异常处理
+→ 见本文 三、影响范围（BusinessException 抛出点不在本 SPEC 范围内，改动均为内部逻辑修正）
+
 ## 一、现状与问题
 
 ### 1.1 当前行为
@@ -150,3 +163,24 @@ EXPENSE → 对方账号 = PAYEE_ACCOUNT（收款人账号）
 | 4 | 用真实银行对账单 Excel 验证导入 | 10 min |
 | 5 | commit + push | 5 min |
 | **合计** | | **~40 min** |
+
+---
+
+## 七、BDD 验收标准
+
+### 场景 1：INCOME 流水正确识别对方
+**Given** 导入 INCOME 类型银行流水，PAYER_NAME 列有值  
+**When** parseRow() 执行对手方提取  
+**Then** counter_account = PAYER_NAME 列的值  
+**And** 不等于己方名称
+
+### 场景 2：PAYER_NAME 为空时自动回退
+**Given** 导入 INCOME 流水，PAYER_NAME 列为空  
+**When** parseRow() 执行  
+**Then** 回退到 PAYEE_NAME 列  
+**And** 若 PAYEE_NAME 也为空则继续回退到 COUNTER_ACCOUNT
+
+### 场景 3：txType 为空时按 direction 推断
+**Given** txType 为空但 direction = "in"  
+**When** parseRow() 执行  
+**Then** 按收款规则处理（counterparty = PAYER_NAME）

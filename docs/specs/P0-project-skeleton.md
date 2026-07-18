@@ -9,6 +9,19 @@
 - **执行工具**: OpenCode
 
 > **关联需求**: REQ-2026-001, REQ-2026-003, REQ-2026-004, REQ-2026-005, REQ-2026-006
+
+## 1. 输入契约
+→ 见本文 具体要求（1 后端、2 前端、3 Docker Compose、4 文档的详细技术约束）
+
+## 2. 输出契约
+→ 见本文 验收标准（6 条验收条件：编译/构建/Docker/扩展/Health/登录页）
+
+## 3. 状态流转
+→ 见本文 目录结构（backend → frontend → docker-compose 的全项目文件组织）
+
+## 4. 异常处理
+→ 见本文 技术约束（PostgreSQL 16 + pgvector、Maven、JDK 17 等强制技术栈约束）
+
 ## 背景
 慧财财务为新项目，需要从零搭建 Spring Boot + Vue 3 项目骨架，包含基础的开发环境和部署配置。
 
@@ -139,3 +152,58 @@
 - 本项目已经有 .gitignore、README.md、docs/ 目录，不要覆盖它们
 - docker-compose.yml 放在项目根目录
 - 后端不产生任何业务逻辑代码，只是骨架
+
+---
+
+## 五、BDD 验收标准
+
+### 场景 1：后端编译通过
+**Given** Spring Boot 3.x + Maven + JDK 17 环境就绪  
+**When** 运行 `cd backend && ./mvnw clean compile -DskipTests`  
+**Then** BUILD SUCCESS
+
+### 场景 2：前端构建通过
+**Given** Node.js 环境就绪  
+**When** 运行 `cd frontend && npm install && npm run build`  
+**Then** 构建成功，无报错
+
+### 场景 3：Docker 基础设施就绪
+**Given** Docker Compose 配置完成  
+**When** 运行 `docker compose up -d`  
+**Then** PostgreSQL 16、Redis 7、MinIO 全部启动  
+**And** pgvector + pg_trgm 扩展已安装
+
+---
+
+## 六、YAML 契约
+
+```yaml
+---
+# === MACHINE-READABLE CONTRACT ===
+contract_version: "1.0"
+states:
+  - DRAFT
+  - COMPILED
+  - BUILT
+  - DEPLOYED
+transitions:
+  - from: DRAFT
+    to: COMPILED
+    trigger: mvn_compile
+  - from: COMPILED
+    to: BUILT
+    trigger: npm_build
+  - from: BUILT
+    to: DEPLOYED
+    trigger: docker_up
+acceptance_tests:
+  - id: AT-001
+    description: "mvn compile 通过"
+    assertion: "BUILD SUCCESS"
+  - id: AT-002
+    description: "npm run build 通过"
+    assertion: "构建成功无报错"
+  - id: AT-003
+    description: "docker compose 拉起所有服务"
+    assertion: "PG/Redis/MinIO 全部正常运行"
+```

@@ -7,6 +7,18 @@
 
 ---
 
+## 1. 输入契约
+→ 见本文 [## 3. P43-3：核销单状态机管理 — 状态定义与转换规则](#3-p43-3核销单状态机管理)
+
+## 2. 输出契约
+→ 见本文 [## 4. 验收标准 — AT-P43-1 至 AT-P43-7 验收清单](#4-验收标准)
+
+## 3. 状态流转
+→ 见本文 [## 3.1 状态定义 — ArapSettlement 状态机流转图](#31-状态定义)
+
+## 4. 异常处理
+→ 见本文 [## 3.4 状态校验 — BusinessException 前置校验逻辑](#34-状态校验)
+
 ## 0. 现状审计
 
 ### 审计项 1：核销日志为什么没有数据
@@ -243,4 +255,23 @@ constraints:
     type: state_machine
     rule: "核销单状态必须按 DRAFT→CONFIRMED→VOUCHERED→POSTED/CANCELLED 顺序转换"
     enforcement: "ArapStatus.canTransition() 前置校验"
+
+---
+
+## 8. BDD 验收标准
+
+### 场景 1：核销单 DRAFT→CONFIRMED 状态转换成功
+**Given** 一张核销单处于 DRAFT 状态，核销金额校验通过
+**When** 用户调用 confirm(id)
+**Then** 核销单状态变为 CONFIRMED，且校验通过后不抛出 BusinessException
+
+### 场景 2：非法状态转换抛出异常
+**Given** 一张核销单处于 DRAFT 状态
+**When** 用户调用 reverse(id) 尝试反核销
+**Then** 系统抛出 BusinessException，提示"核销单状态不允许此操作"
+
+### 场景 3：清空核销数据后业务单据核销金额重置
+**Given** 存在多条核销单记录和对应的业务单据（已结算金额非零）
+**When** 用户执行清空核销数据操作
+**Then** t_arap_settlement 表数据被清除，t_business_doc 的 settled_amount 重置为 0，unsettled_amount 恢复为原金额
 ```

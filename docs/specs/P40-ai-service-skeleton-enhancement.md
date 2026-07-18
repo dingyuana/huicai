@@ -8,6 +8,19 @@
 ---
 
 > **关联需求**: REQ-2026-038, REQ-2026-043
+
+## 1. 输入契约
+→ 见本文 [## 2. API 契约 — 健康检查 / Swagger / 统一响应格式](#2-api-契约)
+
+## 2. 输出契约
+→ 见本文 [## 4. 验收标准 — Docker build / 健康检查 / Swagger / CORS 验收项](#4-验收标准)
+
+## 3. 状态流转
+→ 见本文 [## 1.2 具体改动 — 依赖注入与模块初始化顺序](#12-具体改动)
+
+## 4. 异常处理
+→ 见本文 [## 6. 风险与应对 — 降级策略与缺失依赖处理](#6-风险与应对)
+
 ## 0. 现状摸底
 
 ### 现有能力（ai-service）
@@ -228,3 +241,22 @@ constraints:
     type: compatibility
     rule: "保持现有 docker-compose.yml 配置不变"
     enforcement: "不修改 docker-compose.yml 中的 ai-service 配置"
+
+---
+
+## 7. BDD 验收标准
+
+### 场景 1：Docker 构建成功后服务健康检查正常
+**Given** ai-service 的 Dockerfile 和 requirements.txt 已就绪
+**When** 执行 `docker build -t huicai-ai-service ./ai-service` 构建成功，然后执行 `docker-compose up -d ai-service` 启动服务
+**Then** `curl http://localhost:8000/ai/v1/health` 返回 `{"status":"ok"}`，HTTP 状态码为 200
+
+### 场景 2：Swagger 文档页面可访问
+**Given** ai-service 已启动运行
+**When** 通过浏览器访问 `http://localhost:8000/docs`
+**Then** 页面返回 Swagger UI 界面，且 `http://localhost:8000/openapi.json` 返回有效的 OpenAPI Schema
+
+### 场景 3：CORS 配置允许前端跨域访问
+**Given** ai-service 已启动，前端运行在 `http://localhost:3001`
+**When** 从前端浏览器发起跨域请求到 ai-service API
+**Then** 响应头中包含 `Access-Control-Allow-Origin: http://localhost:3001`，且预检请求（OPTIONS）正常通过

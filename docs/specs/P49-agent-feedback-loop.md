@@ -8,6 +8,18 @@
 
 > **关联需求**: REQ-2026-061
 
+## 1. 输入契约
+→ 见本文 §1.2 前端反馈按钮（👍/👎/✏️）、§4 YAML 契约 endpoints（POST /api/v1/ai/feedback）
+
+## 2. 输出契约
+→ 见本文 §2 验证清单、§4 YAML 契约 acceptance_tests
+
+## 3. 状态流转
+→ 见本文 §1.1 核心流程（AI 结果展示 → 用户反馈 → 写入 t_ai_feedback_log → 统计仪表盘）
+
+## 4. 异常处理
+→ 见本文 §1.3 Java 端 AiFeedbackLogService 统计 API 错误处理
+
 ---
 
 ## §0 当前状态
@@ -109,3 +121,23 @@ acceptance_tests:
 ```
 
 > **文档结束**
+
+---
+
+## §5 BDD 验收标准
+
+### 场景 1：用户反馈写入数据库
+**Given** AI 结果展示区有反馈按钮  
+**When** 用户点击 👍（接受）  
+**Then** 反馈数据写入 t_ai_feedback_log  
+**And** 记录包含 task_id、feedback_type、user_id
+
+### 场景 2：统计 API 正确聚合
+**Given** 10 条反馈记录，其中 7 条 ACCEPT、3 条 REJECT  
+**When** 调用统计 API  
+**Then** 返回各 Agent 接受率 70%、拒绝率 30%
+
+### 场景 3：仪表盘展示效果指标
+**Given** 统计 API 数据已就绪  
+**When** 访问仪表盘页面  
+**Then** 展示各 Agent 接受率、拒绝率、总反馈数

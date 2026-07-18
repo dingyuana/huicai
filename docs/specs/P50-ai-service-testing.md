@@ -8,6 +8,18 @@
 
 > **关联需求**: REQ-2026-062
 
+## 1. 输入契约
+→ 见本文 §1.1 测试架构（test_*.py 测试文件定义）、§1.2 测试类型
+
+## 2. 输出契约
+→ 见本文 §2 验收标准（AT-001 至 AT-008）、§4 YAML 契约 acceptance_tests
+
+## 3. 状态流转
+→ 见本文 §1.1 测试架构层级（单元测试 → API 测试 → CI 集成）
+
+## 4. 异常处理
+→ 见本文 §1.3 Mock 策略（mock 外部依赖、不启动真实 PG/MQ/NVIDIA）
+
 ---
 
 ## §0 当前状态
@@ -116,3 +128,24 @@ acceptance_tests:
 ```
 
 > **文档结束**
+
+---
+
+## §5 BDD 验收标准
+
+### 场景 1：单元测试数量达标
+**Given** pytest 已安装，ai-service/tests/ 目录存在  
+**When** 运行 `pytest --collect-only`  
+**Then** 收集到至少 5 个单元测试用例（test_ 前缀）
+
+### 场景 2：全部测试通过
+**Given** 所有测试已编写，mock 环境就绪  
+**When** 运行 `pytest ai-service/tests/ -v`  
+**Then** exit code = 0  
+**And** 所有测试绿色通过
+
+### 场景 3：MockAgent 三阶段管道被覆盖
+**Given** test_match.py 存在  
+**When** 审查测试代码  
+**Then** 覆盖清洗→检索→重排三阶段  
+**And** 不使用真实外部依赖

@@ -1,6 +1,6 @@
 # 慧财财务系统 — 文档注册表
 
-> 版本：V1.0 | 日期：2026-07-07
+> 版本：V1.1 | 日期：2026-07-18
 > 维护人：Hermes
 > 说明：本文档是所有项目文档的权威索引，每份文档分配唯一编号。
 > 编号格式：`HUICAI-{分类}-{序号}`（MAIN=主文档, DES=设计, ARC=架构, SPC=规格, DEV=开发, TST=测试, REF=参考）
@@ -11,7 +11,7 @@
 
 | 编号 | 文件名 | 版本 | 最后修改 | 修改人 | 说明 |
 |------|--------|------|---------|--------|------|
-| HUICAI-MAIN-001 | DESIGN.md | V4.3 | 2026-07-08 | Hermes | 综合设计主文档，含模块索引和全局决策 |
+| HUICAI-MAIN-001 | DESIGN.md | V4.4 | 2026-07-08 | Hermes | 综合设计主文档，含模块索引和全局决策 |
 
 ## 二、设计文档（design/）
 
@@ -41,14 +41,19 @@
 
 ## 四、规格文档（specs/）
 
-规格文档已使用 P 系列编号（P0-P41），保持现有编号不变。共 38 份 SPEC 文件。
+规格文档包含两套编号体系（共 66 份）：
 
-| 编号范围 | 说明 |
-|----------|------|
-| P0-P45 | 功能规格文档，详见 specs/ 目录 |
-| P42 | 核销前端增强 — Timeline 视图、穿透点击、FIFO 自动核销 |
-| P44 | 核销单列表显示修复 — 客户名/类型/核销依据 |
-| P45 | 核销上游来源追溯修复 — targetBusinessDocId 回填 |
+**P系列（P0~P53）**：共 49 份功能规格文档，按开发顺序增量编号，HUICAI-SPC 编号头部 100% 覆盖。多数已有 YAML 契约块，部分已有 BDD 验收标准。
+
+**S系列（S-00~S-26）**：共 14 份系统级规格文档，按业务域分层编号。HUICAI-SPC-100~113。全部已含 SDD 四段结构 + BDD + YAML 契约，4/4 完全合规。
+
+两套编号体系不强制迁移，新 SPEC 用 S 编号，旧 P 编号自然迭代替换。详见 development/workflows/s-p-spec-mapping.md。
+
+| 编号范围 | 编号 | 说明 |
+|----------|------|------|
+| S-01~S-26 | HUICAI-SPC-100~113 | 系统级规范文档，详见 specs/ 目录（14份，全部 4/4 合规） |
+| P0~P53 | HUICAI-SPC-000~053 | 功能规格文档，详见 specs/ 目录（49份） |
+| SPEC-CONTRACT-SCHEMA.md | HUICAI-SPC-099 | S-00 全局契约规范 v2.0（4/4 合规） |
 
 ## 五、开发文档（development/）
 
@@ -72,7 +77,8 @@
 || HUICAI-DEV-037 | requirements/REQUIREMENTS_REGISTRY.md | V1.1 | 2026-07-08 | Hermes | 需求登记册（REQ-2026-001~057，57 条需求） |
 || HUICAI-DEV-038 | lessons/002-period-constraint-testing-gap.md | V1.0 | 2026-07-07 | Hermes | 期间约束测试盲区复盘 |
 || HUICAI-DEV-039 | lessons/003-cross-module-integration-gap.md | — | — | — | 跨模块集成空白复盘 |
-|| HUICAI-DEV-040 | lessons/004-api-contract-gap-after-architecture-migration.md | — | — | — | 架构迁移API契约空白复盘 |
+||| HUICAI-DEV-040 | lessons/004-api-contract-gap-after-architecture-migration.md | — | — | — | 架构迁移API契约空白复盘 |
+||| HUICAI-DEV-041 | workflows/s-p-spec-mapping.md | V1.1 | 2026-07-18 | Hermes | S编号↔P编号映射关系（含代码实现度评估） |
 
 ## 六、测试文档（testing/）
 
@@ -106,7 +112,16 @@
 | HUICAI-REF-003 | MCP实战_Git操作前后对比.md | MCP 实操对比 |
 | HUICAI-REF-004 | 项目说明书影响分析_银行流水导入分类.md | 需求影响分析 |
 
-## 八、文档更新规范
+## 九、phase2 设计文档
+
+| 编号 | 文件名 | 版本 | 说明 |
+|------|--------|------|------|
+| HUICAI-PH2-001 | phase2/项目说明报告.md | V1.0 | 项目愿景与战略定位、SDD 体系、Loop Engineering |
+| HUICAI-PH2-002 | phase2/需求方案（PRD）.md | V1.0 | 产品定位、核心功能需求矩阵、非功能性需求 |
+| HUICAI-PH2-003 | phase2/技术架构.md | V1.0 | 技术架构设计、技术栈选型（已选择性采纳） |
+| HUICAI-PH2-004 | phase2/Spec 规范报告.md | V1.0 | Spec 分层详解、S-00 全局契约定义 |
+
+## 十、文档更新规范
 
 1. **新增文档**：分配 HUICAI-{CAT}-{NEXT} 编号，在注册表登记
 2. **修改文档**：更新文件头部的版本号 + 修改日期，注册表对应行更新

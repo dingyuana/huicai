@@ -561,10 +561,10 @@ public class VoucherServiceImpl extends ServiceImpl<VoucherMapper, VoucherEntity
         if (periodEntity == null) {
             throw BusinessException.badRequest("会计期间不存在: " + period);
         }
-        if ("CLOSED".equals(periodEntity.getStatus())) {
+        if ("closed".equals(periodEntity.getStatus())) {
             throw BusinessException.badRequest("会计期间已结账, 不可操作: " + period);
         }
-        if ("LOCKED".equals(periodEntity.getStatus())) {
+        if ("locked".equals(periodEntity.getStatus())) {
             throw BusinessException.badRequest("会计期间已锁定, 不可操作: " + period);
         }
     }

@@ -7,6 +7,23 @@
 ---
 
 > **关联需求**: REQ-2026-036, REQ-2026-037
+
+## SDD 四段结构索引
+
+### 1. 输入契约
+→ 见本文 [## 2. P18-1 任务（接口定义/Controller 端点）](#2-p18-1-任务-本批)
+
+### 2. 输出契约
+→ 见本文 [## 4. 测试验收（测试目标/验收条件）](#4-测试验收)
+
+### 3. 状态流转
+→ 见本文 [## 1. 现状摸底（DRAFT/SUBMITTED/APPROVED/REJECTED 状态机）](#1-现状摸底-2026-06-15) 及 MACHINE-READABLE CONTRACT 中的 states/transitions
+
+### 4. 异常处理
+→ 见本文各状态机前置校验中的 BusinessException 抛出点
+
+---
+
 ## 1. 现状摸底 (2026-06-15)
 
 | 文件 | 状态 |
@@ -186,3 +203,22 @@ dependencies:
     entity: VoucherEntity
     relation: "生成凭证"
 ```
+
+---
+
+## BDD 验收标准
+
+### 场景 1：申报提交后审批通过流转
+**Given** 一条状态为 `SUBMITTED` 的申报记录
+**When** 调用 `approveDeclaration(id, approver)`
+**Then** 记录状态变为 `APPROVED`，`approver` 和 `approvedAt` 字段被正确写入
+
+### 场景 2：申报提交后审批驳回回退
+**Given** 一条状态为 `SUBMITTED` 的申报记录
+**When** 调用 `rejectDeclaration(id, approver, reason)`，且 `reason` 不为空
+**Then** 记录状态变为 `REJECTED`，`approver`、`reason` 和 `rejectedAt` 字段被正确写入
+
+### 场景 3：非法状态转移被拒绝
+**Given** 一条状态为 `DRAFT` 的申报记录
+**When** 尝试调用 `approveDeclaration(id, approver)`
+**Then** 系统抛出 `BusinessException`，提示"仅已提交状态可审批"

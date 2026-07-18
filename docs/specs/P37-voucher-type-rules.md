@@ -8,6 +8,19 @@
 ---
 
 > **关联需求**: REQ-2026-007
+
+## 1. 输入契约
+→ 见本文 [## 1. 凭证类型表 — VoucherType 常量类与数据库映射](#1-凭证类型表)
+
+## 2. 输出契约
+→ 见本文 [## 6. 验收标准 — AT-01 至 AT-08 验收场景表](#6-验收标准)
+
+## 3. 状态流转
+→ 见本文 [## 2. 映射规则总表 — 各制证路径的凭证类型映射规则](#2-映射规则总表)
+
+## 4. 异常处理
+→ 见本文 [## 4. 边界情况 — 分类为空/无 settlement_type 的降级与异常处理](#4-边界情况)
+
 ## 0. 改动清单总览
 
 | # | 改动 | 文件 | 风险 |
@@ -235,3 +248,22 @@ acceptance_tests:
 | AT-06 | 进项发票导入生成 FK 凭证 | 进项发票导入完成，处于待制证状态 | ① 执行进项发票导入制证 | 生成凭证的 voucher_type_id = 3（FK 付款凭证） |
 | AT-07 | 核销结算应收方向制证 SK | settlement_type='receivable' 的核销结算记录，BusinessDoc 已创建 | ① 执行核销结算制证 | 生成凭证的 voucher_type_id = 2（SK 收款凭证） |
 | AT-08 | 对账制证应付方向生成 FK 凭证 | 对账方向为 INVOICE_IN（应付方向），BusinessDoc 已到位 | ① 执行对账制证 | 生成凭证的 voucher_type_id = 3（FK 付款凭证） |
+
+---
+
+## 7. BDD 验收标准
+
+### 场景 1：银行流水 business_receipt 自动制证为收款凭证
+**Given** 银行流水记录存在，classification='business_receipt'，未审核
+**When** 用户触发自动制证流程
+**Then** 生成凭证的 voucher_type_id = 2（SK 收款凭证），且 resolveVoucherType() 方法返回 VoucherType.SK
+
+### 场景 2：销项发票导入自动制证为收款凭证
+**Given** 销项发票导入完成，处于待制证状态
+**When** 执行销项发票导入制证
+**Then** 生成凭证的 voucher_type_id = 2（SK 收款凭证），借方科目为 1122 应收账款
+
+### 场景 3：银行流水分类为空降级为 JZ 记账凭证
+**Given** 银行流水记录存在，classification 为 null 或未识别分类（如 salary_social）
+**When** 用户触发自动制证流程
+**Then** resolveVoucherType() 走 default 分支，生成凭证的 voucher_type_id = 1（JZ 记账凭证，兜底）

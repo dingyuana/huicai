@@ -7,6 +7,23 @@
 ---
 
 > **关联需求**: REQ-2026-005
+
+## SDD 四段结构索引
+
+### 1. 输入契约
+→ 见本文 [## 1. 实体变更（BusinessDocEntity 新增字段/字段定义）](#1-实体变更76-五步实测已确认) 及 [## 2. 写入点（4 个写入位置）](#2-写入点4-个)
+
+### 2. 输出契约
+→ 见本文 [## 4. 验证清单（编译/测试/端到端验证条件）](#4-验证清单)
+
+### 3. 状态流转
+→ 本文不涉及独立状态机，BusinessDoc 状态机详见 P34 SPEC
+
+### 4. 异常处理
+→ 本文不涉及新增 BusinessException
+
+---
+
 ## 0. 改动清单总览
 
 | # | 改动 | 文件 | 风险 | 批次 |
@@ -110,3 +127,22 @@ private String supplierName;
 - **风险**：写入点改 4 处，可能漏改某个路径 → 用 `grep -rn setCustomerName` 全量验证
 - **回退**：4 commit 串行，任意一步 mvn test 红即可 `git reset --hard HEAD~1` 回退
 - **数据兼容**：ALTER TABLE 加列（默认 NULL）不影响存量数据
+
+---
+
+## BDD 验收标准
+
+### 场景 1：创建业务单据时自动回填客户/供应商名称
+**Given** 用户创建一张业务单据，`customerId = 1` 且 `supplierId = null`
+**When** `BusinessDocServiceImpl.create()` 执行
+**Then** 该单据的 `customer_name` 字段被自动填充为 Customer 表对应 ID 的名称，`supplier_name = null`
+
+### 场景 2：编译通过且 getCustomerName/getSupplierName 可用
+**Given** `BusinessDocServiceImpl.generateVoucher()` 第 317 行调用了 `entity.getCustomerName()`
+**When** 执行 `mvn compile`
+**Then** 编译成功，无 `getCustomerName undefined` 错误
+
+### 场景 3：模板上下文中 customerName 有值
+**Given** 一张业务单据关联了客户且 `customer_name` 已填充
+**When** 凭证模板引擎渲染时引用 `{客户名称}` 变量
+**Then** 模板上下文中 `customerName` 字段非空且等于客户名称

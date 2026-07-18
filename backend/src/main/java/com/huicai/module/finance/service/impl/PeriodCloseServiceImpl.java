@@ -40,10 +40,10 @@ public class PeriodCloseServiceImpl implements PeriodCloseService {
         List<String> issues = new ArrayList<>();
 
         PeriodEntity periodEntity = findPeriod(period);
-        if ("CLOSED".equals(periodEntity.getStatus())) {
+        if ("closed".equals(periodEntity.getStatus())) {
             throw BusinessException.badRequest("期间已结账");
         }
-        if ("LOCKED".equals(periodEntity.getStatus())) {
+        if ("locked".equals(periodEntity.getStatus())) {
             throw BusinessException.badRequest("期间已锁定, 不能结账");
         }
 
@@ -146,7 +146,7 @@ public class PeriodCloseServiceImpl implements PeriodCloseService {
         }
 
         PeriodEntity periodEntity = findPeriod(period);
-        periodEntity.setStatus("CLOSED");
+        periodEntity.setStatus("closed");
         periodEntity.setUpdatedBy(userId);
         periodEntity.setUpdatedAt(LocalDateTime.now());
         periodService.updateById(periodEntity);
@@ -158,10 +158,10 @@ public class PeriodCloseServiceImpl implements PeriodCloseService {
     @Transactional(rollbackFor = Exception.class)
     public void reopenPeriod(String period, Long userId) {
         PeriodEntity periodEntity = findPeriod(period);
-        if (!"CLOSED".equals(periodEntity.getStatus())) {
+        if (!"closed".equals(periodEntity.getStatus())) {
             throw BusinessException.badRequest("仅已结账期间可反结账");
         }
-        periodEntity.setStatus("OPEN");
+        periodEntity.setStatus("open");
         periodEntity.setUpdatedBy(userId);
         periodEntity.setUpdatedAt(LocalDateTime.now());
         periodService.updateById(periodEntity);

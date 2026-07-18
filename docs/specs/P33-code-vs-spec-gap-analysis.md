@@ -7,6 +7,23 @@
 ---
 
 > **关联需求**: REQ-2026-007, REQ-2026-008
+
+## SDD 四段结构索引
+
+### 1. 输入契约
+→ 见本文 [## 一、已完成项（SPEC 要求 vs 实际代码对比中的 API/Entity 定义）](#一已完成项-)
+
+### 2. 输出契约
+→ 见本文 [## 三、总结（完成项/差距项汇总/处理建议）](#三总结)
+
+### 3. 状态流转
+→ 本文不涉及独立状态机，销售发票/应收单状态流转详见 P21/P20 SPEC
+
+### 4. 异常处理
+→ 见本文差距项分析中的 BusinessException/状态校验失败场景
+
+---
+
 ## 一、已完成项 ✅
 
 ### 1. 核心流程简化
@@ -153,3 +170,22 @@ WHERE r.invoice_id IS NULL AND r.invoice_no IS NOT NULL;
 1. 🔴 `confirm()` 中补充 `generateVoucherFromInvoiceDirect()` 调用（实现审核后自动生成凭证）
 2. 🔴 确认 V66 migration 包含 `invoice_id` 字段和历史数据补全
 3. 🟡 更新测试用例
+
+---
+
+## BDD 验收标准
+
+### 场景 1：代码已移除过期的 createBusinessDocAndReceivableAfterConfirm 方法
+**Given** P33 SPEC 要求简化销售发票审核流程，移除业务单创建
+**When** 搜索代码中是否存在 `createBusinessDocAndReceivableAfterConfirm` 方法
+**Then** 该方法在代码中已不存在，应收单通过 `createReceivableFromInvoiceDirect()` 直接创建
+
+### 场景 2：发票审核后应收单 invoice_id 正确关联
+**Given** 一张销售发票通过 `confirm()` 审核通过
+**When** 查询该发票对应的应收单
+**Then** 应收单的 `invoice_id` 字段指向该发票，且发票的 `receivable_id` 字段指向该应收单
+
+### 场景 3：凭证生成时机差距已被修复
+**Given** P33 差距分析指出 `confirm()` 缺少 `generateVoucherFromInvoiceDirect()` 调用
+**When** 审计 `OutputInvoiceStateMachineServiceImpl.confirm()` 代码
+**Then** 调用链中包含 `generateVoucherFromInvoiceDirect()`，实现审核后自动生成凭证

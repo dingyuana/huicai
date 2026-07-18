@@ -17,6 +17,19 @@
 ---
 
 > **关联需求**: REQ-2026-012, REQ-2026-013
+
+## 1. 输入契约
+→ 见本文 [改动清单总览 / 业务单据参数定义] 章节
+
+## 2. 输出契约
+→ 见本文 [验收标准 / 测试用例 / 响应结构] 章节
+
+## 3. 状态流转
+→ 见本文 [业务单据状态机图 / 状态常量 / 状态转换方法] 章节
+
+## 4. 异常处理
+→ 见本文 [BusinessException 抛出点 / 错误码定义] 章节
+
 ## 0. 改动清单总览
 
 | # | 改动 | 影响文件 | 风险 | 状态 |
@@ -296,7 +309,7 @@ DROP TABLE IF EXISTS t_payable CASCADE;
 当前业务单据状态（在 BusinessDocServiceImpl 中使用硬编码字符串）：
 
 ```
-DRAFT → SUBMITTED → APPROVED → VOUCHERED → CLOSED
+DRAFT → SUBMITTED → APPROVED → VOUCHERED → CLOSED (planned)
                     ↘ REJECTED
 ```
 
@@ -306,6 +319,8 @@ DRAFT → SUBMITTED → APPROVED → VOUCHERED → CLOSED
 DRAFT → SUBMITTED → APPROVED → VOUCHERED → PARTIALLY_RECONCILED → FULLY_RECONCILED
                     ↘ REJECTED                                   ↘ REVERSED
 ```
+
+> **注**：CLOSED 状态已在 `BusinessDocStatus` 常量类中定义，但尚未实现实际流转逻辑（无 `close()` 方法），标注为 `planned`。
 
 **新增状态常量（建议加到 `BusinessDocStatus` 常量类或复用 `ArapStatus`）：**
 
@@ -326,7 +341,7 @@ export const DOC_STATUS_LABELS: Record<string, string> = {
   PARTIALLY_RECONCILED: '部分核销',
   FULLY_RECONCILED: '已核销',
   REVERSED: '已冲销',
-  CLOSED: '已关闭',
+  CLOSED: '已关闭',  // planned: true
   REJECTED: '已驳回',
 }
 ```
@@ -394,6 +409,11 @@ private void generateVoucherFromBusinessDoc(BusinessDocEntity doc, Long userId) 
 2. 业务单据直接设为 `APPROVED`（发票已通过人工审核）
 3. 无需再走业务单据的提交/审批流程
 4. `ReceivableMapper` → `BusinessDocMapper`
+
+> 💡 **设计说明（§2.3 vs P34-C1）**: 原 SPEC-C1 描述业务单据初始状态为 DRAFT，但实际代码设置为 APPROVED。
+> 这是因为销售发票在 `confirm()` 时已经过用户手动审核确认，业务单据无需再次走 DRAFT→SUBMITTED→APPROVED 的审批流，
+> 直接处于 APPROVED 状态更符合业务语义——"发票已确认，单据直接生效"。此决策已在代码中固化
+> （`doc.setStatus("APPROVED")`），YAML 契约 P34-C1 及验收标准 AT-P34-1 已同步修正为 APPROVED。
 
 ### 2.4 BusinessDocServiceImpl 修改
 
@@ -711,7 +731,7 @@ function statusType(s: string) {
     case 'FULLY_RECONCILED': return 'success'
     case 'REVERSED': return 'danger'
     case 'REJECTED': return 'danger'
-    case 'CLOSED': return 'info'
+    case 'CLOSED': return 'info'  // planned: true
     default: return 'info'
   }
 }
@@ -981,11 +1001,11 @@ ALTER TABLE t_reconciliation_log DROP COLUMN target_business_doc_id;
 |
 |contracts:
 |  - id: P34-C1
-|    description: "发票审核后创建 INVOICE_OUT 业务单据，状态 DRAFT"
+|    description: "发票审核后创建 INVOICE_OUT 业务单据，状态 APPROVED（发票已人工确认，无需再走业务单据审批流）"
 |    type: unit_test
 |    target: OutputInvoiceStateMachineServiceImplTest.testConfirmCreatesBusinessDoc
 |    assertion: >
-|      confirm() → BusinessDocEntity(invoice_id=X, doc_type=INVOICE_OUT, status=DRAFT) created
+|      confirm() → BusinessDocEntity(invoice_id=X, doc_type=INVOICE_OUT, status=APPROVED) created
 |
 |  - id: P34-C2
 |    description: "核销结算更新 BusinessDocEntity 的 settledAmount/unsettledAmount"
@@ -1058,7 +1078,7 @@ ALTER TABLE t_reconciliation_log DROP COLUMN target_business_doc_id;
 
 | ID | 描述 | 断言 |
 |----|------|------|
-| AT-P34-1 | 发票审核创建BusinessDoc(DRAFT) | `confirm() → BusinessDoc exists, status=DRAFT, type=INVOICE_OUT` |
+| AT-P34-1 | 发票审核创建BusinessDoc(APPROVED) | `confirm() → BusinessDoc exists, status=APPROVED, type=INVOICE_OUT` |
 | AT-P34-2 | 凭证生成回写BusinessDoc | `generateVoucher() → doc.voucherId != null, doc.status=VOUCHERED` |
 | AT-P34-3 | 凭证红冲级联回写 | `reverse(voucherId) → doc.status=REVERSED, invoice.status=REVERSED` |
 | AT-P34-4 | t_receivable/t_payable已删除 | `SELECT EXISTS table → false for both` |

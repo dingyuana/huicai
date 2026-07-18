@@ -2,9 +2,9 @@
 
 > **编号**：HUICAI-SPC-022 | 优先级：高（P22）
 > 依据：`docs/需求分析书_发票与凭证状态机_V1.0.md` §3.2 凭证状态机
-> 目标：扩展 `VoucherEntity` 增加 rejected_reason/reverse_reason 字段，不破坏现有 4 状态数据
+> 目标：扩展 `VoucherEntity` 增加 rejected_reason/reverse_reason 字段，支持 5 状态数据
 > 工期：单批交付，3 个 commit
-> 核心决策：保持现有 `VoucherEntity.status` 4 状态（DRAFT/SUBMITTED/AUDITED/POSTED），REJECTED/REVERSED 作为**附属字段**（详见需求文档 §3.2 决议）
+> 核心决策：`VoucherEntity.status` 5 状态（DRAFT/SUBMITTED/AUDITED/POSTED/CLOSED），REJECTED/REVERSED 作为**附属字段**（详见需求文档 §3.2 决议）
 >
 > **2026-06-22 修订内容**：
 > - V41 → V47（V41-V44 + V46 已被占用）
@@ -14,15 +14,34 @@
 > - 保留 `rejected_reason`（驳回原因，便于审计）
 >
 > **2026-07-01 P22 偏差说明**（审计发现）：
+> - 2026-07-09 代码新增 CLOSED 状态，SPEC 未同步更新
+> **2026-07-18 路由修正**：SPEC §7 API 中红冲路由 `/reversal` 与代码实现不符。实际代码为 `POST /api/v1/vouchers/{id}/reverse`（Controller 定义 + 前端调用一致），已更新 SPEC 匹配代码。
 
 ---
 
 > **关联需求**: REQ-2026-007
+
+## SDD 四段结构索引
+
+### 1. 输入契约
+→ 见本文 [## 1. 枚举常量（VoucherStatus 常量类）](#1-枚举常量) 及 [## 2. 实体变更（VoucherEntity 新增字段）](#2-实体变更)
+
+### 2. 输出契约
+→ 见本文 [## 6. 测试要点（测试场景/验收条件）](#6-测试要点) 及 [## 7. API 变更](#7-api-变更)
+
+### 3. 状态流转
+→ 见本文 MACHINE-READABLE CONTRACT 中的 states/transitions（DRAFT/SUBMITTED/AUDITED/POSTED/CLOSED 5 态）
+
+### 4. 异常处理
+→ 见本文 [§4.2 关键实现骨架（BusinessException 抛出点）](#42-关键实现骨架)
+
+---
+
 ## 0. 改动清单总览
 
 | # | 改动 | 文件 | 风险 |
 |---|------|------|------|
-| 1 | 创建 `VoucherStatus` 常量类（封装 4 状态 + 2 附属检查）| `backend/.../finance/constant/VoucherStatus.java` | ✅ 低 |
+| 1 | 更新 `VoucherStatus` 常量类（封装 5 状态 + CLOSED 结账方法）| `backend/.../finance/constant/VoucherStatus.java` | ✅ 低 |
 | 2 | `VoucherEntity` 新增 2 字段：`rejected_reason` / `reverse_reason`（`reversedFrom` 已存在不新增）| Entity 文件 | 🟡 中 |
 | 3 | V47 迁移: t_voucher 加 2 字段（无 CHECK 约束，2 字段都是 nullable text）| Flyway | 🟡 中 |
 | 4 | 创建 `VoucherStateMachineService`（含反向/驳回/红冲方法）| Service 文件 | 🟡 中 |
@@ -43,18 +62,20 @@ package com.huicai.module.finance.constant;
 
 /**
  * 凭证模块状态常量.
- * 核心 4 状态（status 字段）+ REJECTED/REVERSED 作为附属字段.
- * 详见 docs/需求分析书_发票与凭证状态机_V1.0.md §3.2.
+ * 核心 5 状态（status 字段）+ REJECTED/REVERSED 作为附属字段.
+ * 详见 docs/specs/P22-voucher-state-machine.md
+ * 2026-06-22 P22 创建 | 2026-07-09 新增 CLOSED 状态
  */
 public final class VoucherStatus {
 
     private VoucherStatus() {}
 
-    // ====== status 字段 4 状态 ======
+    // ====== status 字段 5 状态 ======
     public static final String DRAFT = "DRAFT";
     public static final String SUBMITTED = "SUBMITTED";
     public static final String AUDITED = "AUDITED";
     public static final String POSTED = "POSTED";
+    public static final String CLOSED = "CLOSED";
 
     // ====== 附属字段值（不进入 status 字段）======
     // REJECTED 用 status=DRAFT + rejected_reason 非空表达
@@ -73,16 +94,20 @@ public final class VoucherStatus {
     public static boolean isPostable(String status) {
         return AUDITED.equals(status);
     }
-    public static boolean isPosted(String status) {
+    /** 仅 POSTED 可结账 */
+    public static boolean isClosable(String status) {
         return POSTED.equals(status);
+    }
+    public static boolean isPosted(String status) {
+        return POSTED.equals(status) || CLOSED.equals(status);
     }
     public static boolean isModifiable(String status) {
-        // POSTED 不可修改（铁律）
-        return !POSTED.equals(status);
+        // POSTED 和 CLOSED 不可修改（铁律）
+        return !POSTED.equals(status) && !CLOSED.equals(status);
     }
     public static boolean isReversible(String status) {
-        // 仅 POSTED 可冲销
-        return POSTED.equals(status);
+        // POSTED 和 CLOSED 均可冲销
+        return POSTED.equals(status) || CLOSED.equals(status);
     }
 }
 ```
@@ -257,7 +282,8 @@ public Long generateReversalVoucher(Long originalVoucherId, Long userId) {
 
 | 边界 | 本 SPEC 范围 | 其他 SPEC |
 |:---|:---|:---|
-| **凭证**核心 4 状态 | ✅ 本 SPEC 定义 | — |
+| **凭证**核心 5 状态 | ✅ 本 SPEC 定义 | — |
+| **凭证** CLOSED 结账 | ✅ 本 SPEC 定义（POSTED → CLOSED） | — |
 | **凭证** REVERSED/REJECTED 字段 | ✅ 本 SPEC 定义 | — |
 | **销售/采购发票**状态 | ❌ 不涉及 | P21-a / P21-b |
 | 凭证生成的现金折扣凭证 | ⚠️ 本 SPEC 提供 `generateReversalVoucher` 模式 | P21-b 调用 |
@@ -280,6 +306,9 @@ public Long generateReversalVoucher(Long originalVoucherId, Long userId) {
 | POSTED → 生成红字 | reversalId 返回，original.reversed_voucher_id 写入 |
 | 已冲销凭证再冲销 | 抛 BusinessException |
 | POSTED → 反过账 → AUDITED | unpost 成功 |
+| POSTED → CLOSED | close 成功，status=CLOSED |
+| CLOSED 修改 | 抛 BusinessException |
+| CLOSED 红冲 | 可正常生成红字凭证 |
 
 **Mockito 单测要求**：≥10 @Test，参考 `huicai-java-backend` skill §9 R5 + §12 P9 模式。
 
@@ -294,13 +323,14 @@ public Long generateReversalVoucher(Long originalVoucherId, Long userId) {
 | POST | `/api/v1/vouchers/{id}/reject` | 审核驳回 |
 | POST | `/api/v1/vouchers/{id}/post` | 过账 |
 | POST | `/api/v1/vouchers/{id}/unpost` | 反过账 |
-| POST | `/api/v1/vouchers/{id}/reversal` | 生成红字 |
+| POST | `/api/v1/vouchers/{id}/close` | 结账 |
+| POST | `/api/v1/vouchers/{id}/reverse` | 生成红字 |
 
 ---
 
 ## 8. 不做事项
 
-- ❌ 不修改 VoucherEntity.status 的 4 状态值（沿用现有）
+- ❌ 不修改 VoucherEntity.status 的 5 状态值（沿用现有）
 - ❌ 不实现"POSTED 后允许修改"的反向（业务铁律）
 - ❌ 不实现凭证模板的批量提交
 - ❌ 不实现跨期凭证的强制阻断（账期控制由后续 SPEC 处理）
@@ -324,22 +354,23 @@ spec_id: P22
 entity: VoucherEntity
 module: finance
 table: t_voucher
-last_updated: "2026-07-01"
+last_updated: "2026-07-18"
 implementation_status: implemented
-deviation_score: 25%
+deviation_score: 10%
 
 # P22 偏差说明：
 # - VoucherStateMachineService 仅为状态检查（assert 方法），不含状态变更
 # - 状态变更方法在 VoucherServiceImpl 中实现
 # - 红冲方法名从 generateReversalVoucher 改为 reverse
+# - 红冲路由从 /reversal 改为 /reverse（SPEC §7 已同步修正）
 # - 红字凭证状态为 POSTED（非 DRAFT）
 # - rejectedReason/reverseReason 字段存在（V47 migration 已落地）
+# - CLOSED 状态及 close 方法已在代码中完整实现（2026-07-09），SPEC 已同步更新
 
 deviations:
   - "§4.1: VoucherStateMachineService 接口仅有 assert 方法，无 submit/audit/post/unpost/reverse"
   - "§4.2: 实现骨架位置错误，方法在 VoucherServiceImpl 而非 VoucherStateMachineService"
   - "reverse() 不返回 Long，红字凭证直接 POSTED（非 DRAFT）"
-  - "使用 reversedFrom 双向绑定（非 reversalPairId）
 
 states:
   DRAFT:
@@ -361,6 +392,11 @@ states:
     description: "已过账"
     initial: false
     terminal: false
+
+  CLOSED:
+    description: "已结账"
+    initial: false
+    terminal: true
 
 transitions:
   - id: T-01
@@ -421,6 +457,15 @@ transitions:
     side_effects: []
     test_ref: unpost_positive
 
+  - id: T-07
+    from: POSTED
+    to: CLOSED
+    trigger: close
+    precondition: "status == POSTED"
+    postcondition: "status == CLOSED"
+    side_effects: []
+    test_ref: close_positive
+
 constraints:
   - id: C-01
     type: database
@@ -429,7 +474,7 @@ constraints:
 
   - id: C-02
     type: immutability
-    rule: "已过账凭证不可修改，只能红冲"
+    rule: "已过账/已结账凭证不可修改，只能红冲"
     enforcement: "StateMachineService 前置检查"
 
   - id: C-03
@@ -475,6 +520,12 @@ acceptance_tests:
     status: covered
     deviation: "SPEC 原写 DRAFT，实际红字凭证直接 POSTED。方法名从 generateReversalVoucher 改为 reverse。" 
 
+  - id: AT-007
+    description: "POSTED → CLOSED (结账)"
+    method: close_positive
+    assertion: "status == CLOSED"
+    status: covered 
+
 out_of_scope:
   - "OutputInvoiceEntity 状态机 (P21 范围)"
   - "ReceivableEntity/PayableEntity 状态机 (P20 范围)"
@@ -487,3 +538,37 @@ dependencies:
     entity: AuditLog
     relation: "审计日志"
 ```
+
+---
+
+## BDD 验收标准
+
+### 场景 1：凭证提交审核后状态正常流转
+**Given** 一张状态为 `DRAFT` 的凭证
+**When** 调用 `submit(voucherId, userId)`
+**Then** 凭证状态变为 `SUBMITTED`
+
+### 场景 2：已过账凭证红冲生成红字凭证
+**Given** 一张状态为 `POSTED` 的凭证
+**When** 调用 `generateReversalVoucher(originalVoucherId, userId)`
+**Then** 原凭证 `status` 保持 `POSTED`，`reversedFrom` 指向新生成的凭证，新凭证 `status = POSTED`
+
+### 场景 3：非法状态流转被 BusinessException 拦截
+**Given** 一张状态为 `AUDITED` 的凭证
+**When** 尝试调用 `submit(voucherId, userId)`
+**Then** 系统抛出 `BusinessException`，提示"仅 DRAFT 状态可提交"
+
+### 场景 4：已过账凭证结账
+**Given** 一张状态为 `POSTED` 的凭证
+**When** 调用 `close(voucherId, userId)`
+**Then** 凭证状态变为 `CLOSED`
+
+### 场景 5：已结账凭证不可修改
+**Given** 一张状态为 `CLOSED` 的凭证
+**When** 尝试修改凭证内容
+**Then** 系统抛出 `BusinessException`，提示不可修改
+
+### 场景 6：已结账凭证可红冲
+**Given** 一张状态为 `CLOSED` 的凭证
+**When** 调用 `reverse(voucherId, userId)`
+**Then** 红冲凭证创建成功，原凭证保持 `CLOSED` 状态

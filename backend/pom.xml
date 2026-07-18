@@ -231,7 +231,7 @@
                     </excludes>
                     <!-- 测试分组配置：默认跳过慢测试（需要 Docker） -->
                     <!-- 如需执行完整测试，请使用：mvn test -DexcludedGroups="" -->
-                    <excludedGroups>slow</excludedGroups>
+                    <excludedGroups>${excludedGroups}</excludedGroups>
                     <!-- 测试失败立即停止构建 -->
                     <testFailureIgnore>false</testFailureIgnore>
                     <!-- 禁用并行执行 - Testcontainers 容器共享需要顺序执行 -->

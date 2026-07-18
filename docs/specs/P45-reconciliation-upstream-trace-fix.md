@@ -6,6 +6,18 @@
 
 ---
 
+## 1. 输入契约
+→ 见本文 [## 1. 修复方案 — ReconciliationLogEntity 补充 targetBusinessDocId 字段](#1-修复方案)
+
+## 2. 输出契约
+→ 见本文 [## 3. 验收标准 — AT-P45-1 至 AT-P45-3 验收清单](#3-验收标准)
+
+## 3. 状态流转
+→ 见本文 [## 1. 修复方案 — trace 接口降级匹配逻辑的数据流](#1-修复方案)
+
+## 4. 异常处理
+→ 见本文各 BusinessException 抛出点（如 trace 查询失败、日志回填异常）
+
 ## 0. 现状与根因分析
 
 ### 数据流
@@ -136,8 +148,27 @@ contracts:
     type: code_audit
     expected: "execute() 中 reconLog.setTargetBusinessDocId(request.targetDocId())"
   - id: P45-C3
-    description: "trace 接口通过 settlement ID 查到上游数据"
+    description: "trace 接口通过 settlement ID 查到 upstream 数据"
     type: api
     endpoint: GET /api/v1/reconciliation/{settlementId}/trace
     expected: "response.upstream.receipt != null"
+
+---
+
+## 6. BDD 验收标准
+
+### 场景 1：核销执行后 targetBusinessDocId 正确回填
+**Given** 核销执行前 ReconciliationLog 表存在一条待写入的日志记录
+**When** ReconciliationServiceImpl.execute() 执行核销，创建日志时调用 setTargetBusinessDocId(request.targetDocId())
+**Then** t_reconciliation_log 表中该记录的 target_business_doc_id 不为空，且等于请求的 targetDocId
+
+### 场景 2：通过 settlement ID 调用 trace 接口可返回上游数据
+**Given** 一张核销单（settlement）已执行完成，对应的 reconciliation_log 记录了上游来源
+**When** 调用 GET /api/v1/reconciliation/{settlementId}/trace
+**Then** 返回的 response.upstream.receipt 不为 null，且包含来源单据信息
+
+### 场景 3：前端上游来源抽屉正常展示追溯数据
+**Given** trace 接口返回了完整数据，前端 SettlementList.vue 已渲染核销单详情
+**When** 用户点击"上游来源"按钮
+**Then** 抽屉面板中展示上游来源单据明细，且所有字段正常显示
 ```

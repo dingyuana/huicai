@@ -10,6 +10,19 @@
 ---
 
 > **关联需求**: REQ-2026-029
+
+## 1. 输入契约
+→ 见本文 [## §4 API 契约 — 批量合并制单 / 科目映射规则 CRUD](#4-api-契约)
+
+## 2. 输出契约
+→ 见本文 [## §5 YAML 契约 — AT-R1 至 AT-R2 验收标准](#5-yaml-契约)
+
+## 3. 状态流转
+→ 见本文 [## §2 执行计划 — 任务 R-1 / R-2 / R-3 的交付顺序与依赖](#2-执行计划)
+
+## 4. 异常处理
+→ 见本文各 BusinessException 抛出点（如不同客户批量生成失败）
+
 ## §0 当前状态（2026-07-07 审计）
 
 | 任务 | 内容 | 原估工时 | 当前状态 | 说明 |
@@ -171,4 +184,23 @@ tasks:
       - id: AT-R2-3
         description: "不同客户发票批量生成失败"
         assertion: "mixed customer_ids → BusinessException"
+
+---
+
+## 6. BDD 验收标准
+
+### 场景 1：同客户多张发票批量合并制单成功
+**Given** 5 张同一客户的销项发票均已审核通过（CONFIRMED），尚未生成凭证
+**When** 用户调用 `POST /api/v1/tax/invoice/batch/generate-voucher`，传入这 5 张发票 ID
+**Then** 成功生成 1 张合并凭证（DRAFT），凭证包含多条分录（多条借方和多条贷方），且借贷平衡（total_debit == total_credit）
+
+### 场景 2：不同客户发票批量合并制单失败
+**Given** 3 张不同客户（customer_id 不一致）的销项发票均已审核通过
+**When** 用户尝试调用批量合并制单接口
+**Then** 系统抛出 BusinessException，拒绝合并，提示"不同客户发票不可合并制单"
+
+### 场景 3：科目映射规则种子数据可正常查询
+**Given** V80 migration 已执行完成
+**When** 查询 `t_account_mapping_rule` 表
+**Then** 返回的种子数据行数 > 0，且字段（item_keyword, account_code, direction）非空
 ```

@@ -8,6 +8,19 @@
 Jackson 默认将 `LocalDateTime` 序列化为 ISO-8601 格式（如 `2026-06-25T21:41:11.643184`），包含毫秒/纳秒精度。业务上不需要此精度，冗余信息徒增数据量且无实际用途。
 
 > **关联需求**: REQ-2026-049
+
+## 1. 输入契约
+→ 见本文 决定（Jackson 全局配置 + application.yml 时间格式约束）
+
+## 2. 输出契约
+→ 见本文 影响评估（输出格式从含毫秒变秒级，前端 JSON 解析兼容）
+
+## 3. 状态流转
+→ 见本文 改动范围（JacksonConfig → application.yml → DB timestamp 精度：统一秒级序列化）
+
+## 4. 异常处理
+→ 见本文 不变（LocalDate 格式、DB 列类型、前端格式化逻辑均不受影响）
+
 ## 决定
 
 **全项目统一：`LocalDateTime` 序列化/反序列化格式为 `yyyy-MM-dd'T'HH:mm:ss`（秒级精度），去除毫秒和纳秒。**
@@ -46,3 +59,55 @@ PostgreSQL `timestamp` 默认精度为 `timestamp(6)`（微秒）。改为 `time
 
 - **无破坏性变更**：输出格式从 `2026-06-25T21:41:11.643184` 变为 `2026-06-25T21:41:11`，前端 JSON 解析兼容
 - **测试**：涉及时间断言的测试可能需要调整预期值
+
+---
+
+## 四、BDD 验收标准
+
+### 场景 1：LocalDateTime 序列化为秒级精度
+**Given** 任何 Controller 返回 LocalDateTime 字段  
+**When** Jackson 序列化 JSON 响应  
+**Then** 格式为 `yyyy-MM-dd'T'HH:mm:ss`  
+**And** 不包含毫秒/纳秒部分
+
+### 场景 2：请求体反序列化兼容
+**Given** 前端发送 `2026-06-25T21:41:11` 格式的请求体  
+**When** Jackson 反序列化为 LocalDateTime  
+**Then** 解析成功，无异常
+
+### 场景 3：不影响 LocalDate 格式
+**Given** 有 LocalDate 字段需要序列化  
+**When** 应用全局配置  
+**Then** LocalDate 格式保持默认 `yyyy-MM-dd`  
+**And** 不受秒级精度配置影响
+
+---
+
+## 五、YAML 契约
+
+```yaml
+---
+# === MACHINE-READABLE CONTRACT ===
+contract_version: "1.0"
+states:
+  - DRAFT
+  - CONFIGURED
+  - VERIFIED
+transitions:
+  - from: DRAFT
+    to: CONFIGURED
+    trigger: jackson_config_applied
+  - from: CONFIGURED
+    to: VERIFIED
+    trigger: api_response_verified
+acceptance_tests:
+  - id: AT-001
+    description: "LocalDateTime 输出为秒级精度 yyyy-MM-dd'T'HH:mm:ss"
+    assertion: "不含毫秒/纳秒"
+  - id: AT-002
+    description: "请求体反序列化兼容秒级格式"
+    assertion: "解析无异常"
+  - id: AT-003
+    description: "不影响 LocalDate 默认格式"
+    assertion: "LocalDate 仍为 yyyy-MM-dd"
+```

@@ -83,6 +83,23 @@ class BudgetServiceImplTest {
     }
 
     @Test
+    void createAdjustment_creates_with_pending_status() {
+        com.huicai.module.budget.entity.BudgetAdjustmentEntity adjustment =
+                new com.huicai.module.budget.entity.BudgetAdjustmentEntity();
+        adjustment.setAdjustmentNo("ADJ-202607-001");
+        adjustment.setBudgetId(1L);
+        adjustment.setPeriod("202607");
+        adjustment.setAdjustmentAmount(new BigDecimal("2000.00"));
+        adjustment.setStatus("PENDING");
+        when(adjustmentMapper.insert(adjustment)).thenReturn(1);
+
+        com.huicai.module.budget.entity.BudgetAdjustmentEntity r = service.createAdjustment(adjustment);
+
+        assertEquals("PENDING", r.getStatus());
+        verify(adjustmentMapper).insert(adjustment);
+    }
+
+    @Test
     void executionAnalysis_with_data_returns_summary() {
         BudgetEntity b = stubBudget(1L, "ACTIVE");
         when(budgetMapper.selectList(any())).thenReturn(List.of(b));

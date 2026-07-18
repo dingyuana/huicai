@@ -9,6 +9,23 @@
 ---
 
 > **关联需求**: REQ-2026-012
+
+## SDD 四段结构索引
+
+### 1. 输入契约
+→ 见本文 [## 0. 现状摸底（现有 API 端点/数据结构）](#0-现状摸底) 及 [## 7. P30-4（全链路追溯 API/容差配置 API 定义）](#7-p30-4核销全链路追溯--余额快照--容差配置化)
+
+### 2. 输出契约
+→ 见本文 [## 7.5 P30-4 验收标准（AT-P30-4-1 至 AT-P30-4-4）](#75-p30-4-验收标准) 及 MACHINE-READABLE CONTRACT 中的 acceptance_tests
+
+### 3. 状态流转
+→ 见本文各批次中的核销状态流转（CONFIRMED→EXECUTED/REJECTED/CANCELLED）
+
+### 4. 异常处理
+→ 见本文 [MACHINE-READABLE CONTRACT constraints（乐观锁/状态校验/数据完整性约束）](#machine-readable-contract)
+
+---
+
 ## 0. 现状摸底
 
 ### 现有能力（后端 ✅）
@@ -442,3 +459,22 @@ out_of_scope:
   - "差额调整逻辑变更（后端已完整）"
   - "银行对账页面变更（独立模块）"
   - "多币种/信用期/账龄分析"
+
+---
+
+## BDD 验收标准
+
+### 场景 1：收款单 Tab 点击后显示核销推荐
+**Given** 用户进入核销工作台，切换到"收款单"Tab
+**When** 点击一条未核销收款单的"核销推荐"按钮
+**Then** 系统调用 `POST /reconciliation/receipt/{receiptId}/recommend`，返回推荐匹配列表
+
+### 场景 2：核销审批通过后状态变为 EXECUTED
+**Given** 一条核销记录 `status = CONFIRMED`
+**When** 调用 `POST /reconciliation/{id}/approve`
+**Then** 核销记录 `status = EXECUTED`，业务单据的 `unsettled_amount` 相应扣减
+
+### 场景 3：全链路追溯 API 返回完整上下游数据
+**Given** 一条已执行核销的记录
+**When** 调用 `GET /api/v1/reconciliation/{id}/trace`
+**Then** 响应中包含 `upstream`（银行流水/收款单）、`downstream`（业务单据/发票）、`operationTrail`（操作日志）和 `voucher`（凭证）四段完整链路

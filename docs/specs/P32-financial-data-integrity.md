@@ -7,6 +7,23 @@
 ---
 
 > **关联需求**: REQ-2026-050
+
+## SDD 四段结构索引
+
+### 1. 输入契约
+→ 见本文 [## 1. P0 修复：核心实体乐观锁（Entity @Version 字段定义）](#1-p0-修复核心实体乐观锁) 及 [## 3. P2 修复：数据一致性健康检查 API（请求参数/响应格式）](#3-p2-修复数据一致性健康检查-api)
+
+### 2. 输出契约
+→ 见本文 [## 5. 验收标准（AC1-AC8）](#5-验收标准)
+
+### 3. 状态流转
+→ 本文不涉及独立状态机，各实体状态机详见 P21/P22/P23 SPEC
+
+### 4. 异常处理
+→ 见本文 [## 1.1 设计原则（OptimisticLockingFailureException → BusinessException.conflict）](#11-设计原则)
+
+---
+
 ## 0. 问题背景与修复范围
 
 ### 0.1 发现的核心问题 (2026-06-27)
@@ -395,3 +412,22 @@ dependencies:
 out_of_scope:
   - "数据库级 SEQUENCE 备份方案（编号连续性 - 低优先级）"
   - "业财对账 API 的自动修复能力（只检测不修复）"
+
+---
+
+## BDD 验收标准
+
+### 场景 1：乐观锁拦截并发重复审核
+**Given** 一条销售发票记录上开启两个并发事务
+**When** 两个事务同时调用 `confirm()`
+**Then** 其中一个事务成功，另一个抛出 `OptimisticLockingFailureException`，提示"数据已被他人修改，请刷新后重试"
+
+### 场景 2：凭证摘要自动追加发票号后缀
+**Given** 一张业务单据关联了发票且 `invoiceNo = "25922000000054246714"`
+**When** 调用 `enrichSummary()` 生成摘要
+**Then** 摘要末尾包含 `[25922000000054246714]` 发票号后缀，可通过 SQL `LIKE '%25922000000054246714%'` 模糊查询到该凭证
+
+### 场景 3：健康检查 API 检测到 status=VOUCHERED 但 voucher_id IS NULL 的异常
+**Given** 数据库中存在一条业务单据 `status = VOUCHERED` 但 `voucher_id IS NULL`
+**When** 调用 `POST /api/v1/finance/health/integrity` 指定 `checks: ["CHK-002"]`
+**Then** 返回结果中 CHK-002 的 `status = FAILED`，`affectedRows > 0`，且 `details` 中包含该问题记录

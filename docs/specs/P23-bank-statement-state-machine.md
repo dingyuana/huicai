@@ -8,6 +8,29 @@
 ---
 
 > **关联需求**: REQ-2026-017, REQ-2026-018
+>
+> ⚠️ **DEVIATION NOTE（审计修复）**: 本节下方 MACHINE-READABLE CONTRACT 中的 YAML 状态机定义已根据实际代码（`StatementStatus.java` / `BankStatementServiceImpl.java`）重新校正。
+> - **原 YAML** 定义了 7 条转换（T-01~T-07），仅 T-01 与代码基本匹配
+> - **修正后 YAML** 改为反映代码实际的 6 条核心转换 + 2 条管理操作
+> - 状态枚举中 `UNCONFIRMED` / `DUPLICATE` / `RECLASSIFIED` 标记为兼容旧数据，非主流程状态
+> - 见 `docs/specs/P23-yaml-audit-fix-log.md`（如有）
+
+## SDD 四段结构索引
+
+### 1. 输入契约
+→ 见本文 [## 1. 状态枚举（StatementStatus 常量类）](#1-状态枚举) 及 [## 4. Service 状态机方法契约](#4-service-状态机方法契约)
+
+### 2. 输出契约
+→ 见本文 [## 5. 测试契约（正向断言/负向断言/全流程测试）](#5-测试契约每方法必须覆盖) 及 MACHINE-READABLE CONTRACT 中的 acceptance_tests
+
+### 3. 状态流转
+→ 见本文 [## 2. 状态转换图（PENDING→CONFIRMED→voucher_generated/payment_created→approved）](#2-状态转换图) 及 [## 3. 状态转换表](#3-状态转换表)
+
+### 4. 异常处理
+→ 见本文 [## 6. 陷阱与经验（已修复缺陷/前置守卫验证）](#6-陷阱与经验登记到-agentsmd-4)
+
+---
+
 ## 0. 改动清单总览
 
 | # | 改动 | 文件 | 风险 |
@@ -269,114 +292,147 @@ implementation_status: implemented
 
 states:
   PENDING:
-    description: "待确认"
+    description: "待确认（Excel导入初始状态）"
+    initial: true
+    terminal: false
+
+  CLASSIFIED:
+    description: "已分类（CSV导入后未设置reviewStatus，隐含状态）"
     initial: true
     terminal: false
 
   CONFIRMED:
-    description: "已确认"
+    description: "已出纳确认"
     initial: false
     terminal: false
-
-  UNCONFIRMED:
-    description: "未确认（需人工处理）"
-    initial: false
-    terminal: false
-
-  DUPLICATE:
-    description: "重复流水"
-    initial: false
-    terminal: true
 
   MANUAL_PENDING:
-    description: "待人工分类"
-    initial: false
-    terminal: false
-
-  APPROVED:
-    description: "已审批"
-    initial: false
-    terminal: false
-
-  PAYMENT_CREATED:
-    description: "已生成收付款单"
+    description: "待人工分类（C类路由）"
     initial: false
     terminal: false
 
   VOUCHER_GENERATED:
-    description: "已生成凭证"
+    description: "已生成凭证（A类路由）"
     initial: false
     terminal: false
 
+  PAYMENT_CREATED:
+    description: "已生成收付款单（B类路由）"
+    initial: false
+    terminal: false
+
+  APPROVED:
+    description: "已核准过账（终态）"
+    initial: false
+    terminal: true
+
+  # ====== 以下为兼容旧数据的状态，非主流程 ======
+  UNCONFIRMED:
+    description: "[兼容] 旧数据未确认状态"
+    initial: false
+    terminal: false
+    legacy: true
+
+  DUPLICATE:
+    description: "[兼容] 旧数据重复流水标记"
+    initial: false
+    terminal: true
+    legacy: true
+
+  RECLASSIFIED:
+    description: "[兼容] 旧数据重新分类标记"
+    initial: false
+    terminal: false
+    legacy: true
+
 transitions:
   - id: T-01
-    from: PENDING
+    from: [null, PENDING, CLASSIFIED, MANUAL_PENDING, RECLASSIFIED]
     to: CONFIRMED
-    trigger: confirm
-    precondition: "status == PENDING"
-    postcondition: "status == CONFIRMED"
-    side_effects: []
-    test_ref: confirm_positive
+    trigger: review
+    method: BankStatementServiceImpl.review()
+    precondition: "reviewStatus ∈ {null, PENDING, CLASSIFIED, MANUAL_PENDING, RECLASSIFIED}"
+    postcondition: "reviewStatus == CONFIRMED"
+    side_effects:
+      - "设置 reviewedBy / reviewedAt"
+      - "不调用 autoGenerationService.autoGenerateInNewTx()"
+    test_ref: review_positive
 
   - id: T-02
-    from: PENDING
-    to: UNCONFIRMED
-    trigger: unconfirm
-    precondition: "status == PENDING"
-    postcondition: "status == UNCONFIRMED"
-    side_effects: []
-    test_ref: unconfirm_positive
+    from: CONFIRMED
+    to: [VOUCHER_GENERATED, PAYMENT_CREATED]
+    trigger: audit
+    method: BankStatementServiceImpl.audit()
+    precondition: "reviewStatus == CONFIRMED"
+    postcondition: "reviewStatus == voucher_generated (A类) / payment_created (B类)"
+    side_effects:
+      - "调用 autoGenerationService.autoGenerateInNewTx()"
+      - "生成凭证 + 业务单据"
+    test_ref: audit_positive
 
   - id: T-03
-    from: PENDING
-    to: DUPLICATE
-    trigger: markDuplicate
-    precondition: "status == PENDING"
-    postcondition: "status == DUPLICATE"
-    side_effects: []
-    test_ref: mark_duplicate_positive
+    from: [CONFIRMED, AUDITED]
+    to: [VOUCHER_GENERATED, PAYMENT_CREATED]
+    trigger: generateVoucher
+    method: BankStatementServiceImpl.generateVoucher()
+    precondition: "reviewStatus == CONFIRMED（新流程重试）或 AUDITED（旧数据过渡）"
+    postcondition: "reviewStatus == voucher_generated / payment_created"
+    side_effects:
+      - "调用 autoGenerationService.autoGenerateInNewTx()"
+      - "仅用于恢复/重试场景"
+    test_ref: generate_voucher_positive
 
   - id: T-04
-    from: MANUAL_PENDING
+    from: [VOUCHER_GENERATED, PAYMENT_CREATED]
     to: APPROVED
     trigger: approve
-    precondition: "status == MANUAL_PENDING"
-    postcondition: "status == APPROVED"
+    method: BankStatementServiceImpl.approve()
+    precondition: "reviewStatus ∈ {voucher_generated, payment_created}"
+    postcondition: "reviewStatus == approved"
     side_effects: []
     test_ref: approve_positive
 
   - id: T-05
-    from: APPROVED
-    to: PAYMENT_CREATED
-    trigger: generatePayment
-    precondition: "status == APPROVED"
-    postcondition: "status == PAYMENT_CREATED"
+    from: MANUAL_PENDING
+    to: VOUCHER_GENERATED
+    trigger: processManual(A)
+    method: BankStatementServiceImpl.processManual()
+    precondition: "reviewStatus == MANUAL_PENDING, targetType == A"
+    postcondition: "reviewStatus == voucher_generated"
     side_effects:
-      - entity: ArapSettlementEntity
-        action: create
-        status: DRAFT
-    test_ref: generate_payment_positive
+      - "调用 autoGenerationService.autoGenerateInNewTx()"
+    test_ref: process_manual_a_positive
 
   - id: T-06
-    from: PAYMENT_CREATED
-    to: VOUCHER_GENERATED
-    trigger: generateVoucher
-    precondition: "status == PAYMENT_CREATED"
-    postcondition: "status == VOUCHER_GENERATED"
+    from: MANUAL_PENDING
+    to: PAYMENT_CREATED
+    trigger: processManual(B)
+    method: BankStatementServiceImpl.processManual()
+    precondition: "reviewStatus == MANUAL_PENDING, targetType == B"
+    postcondition: "reviewStatus == payment_created"
     side_effects:
-      - entity: VoucherEntity
-        action: create
-        status: DRAFT
-    test_ref: generate_voucher_positive
+      - "调用 autoGenerationService.autoGenerateInNewTx()"
+    test_ref: process_manual_b_positive
 
   - id: T-07
-    from: PENDING
-    to: MANUAL_PENDING
-    trigger: review
-    precondition: "status in (PENDING, CONFIRMED, UNCONFIRMED)"
-    postcondition: "status == MANUAL_PENDING"
+    from: "*"
+    to: "*"
+    trigger: updateClassification
+    method: BankStatementServiceImpl.updateClassification()
+    precondition: "reviewStatus 非锁定状态（CONFIRMED/VOUCHER_GENERATED/PAYMENT_CREATED/APPROVED）"
+    postcondition: "reviewStatus 不变（仅修改 classification 字段）"
     side_effects: []
-    test_ref: review_positive
+    test_ref: update_classification_positive
+
+  - id: T-08
+    from: "*"
+    to: DELETED
+    trigger: deleteStatement
+    method: BankStatementServiceImpl.deleteStatement()
+    precondition: "reviewStatus 非锁定状态"
+    postcondition: "记录被删除"
+    side_effects: []
+    test_ref: delete_statement_positive
 
 constraints:
   - id: C-01
@@ -391,33 +447,39 @@ constraints:
 
 acceptance_tests:
   - id: AT-001
-    description: "PENDING → CONFIRMED"
-    method: confirm_positive
-    assertion: "status == CONFIRMED"
+    description: "review() — null/PENDING/classified → CONFIRMED"
+    method: review_positive
+    assertion: "reviewStatus == CONFIRMED"
     status: covered
 
   - id: AT-002
-    description: "PENDING → DUPLICATE"
-    method: mark_duplicate_positive
-    assertion: "status == DUPLICATE"
+    description: "audit() — CONFIRMED → voucher_generated/payment_created"
+    method: audit_positive
+    assertion: "reviewStatus == voucher_generated (A类) / payment_created (B类)"
     status: covered
 
   - id: AT-003
-    description: "MANUAL_PENDING → APPROVED"
-    method: approve_positive
-    assertion: "status == APPROVED"
+    description: "generateVoucher() — CONFIRMED/AUDITED → voucher_generated/payment_created"
+    method: generate_voucher_positive
+    assertion: "reviewStatus == voucher_generated / payment_created"
     status: covered
 
   - id: AT-004
-    description: "APPROVED → PAYMENT_CREATED"
-    method: generate_payment_positive
-    assertion: "status == PAYMENT_CREATED"
+    description: "approve() — voucher_generated/payment_created → approved"
+    method: approve_positive
+    assertion: "reviewStatus == approved"
     status: covered
 
   - id: AT-005
-    description: "PAYMENT_CREATED → VOUCHER_GENERATED"
-    method: generate_voucher_positive
-    assertion: "status == VOUCHER_GENERATED"
+    description: "processManual(A) — manual_pending → voucher_generated"
+    method: process_manual_a_positive
+    assertion: "reviewStatus == voucher_generated"
+    status: covered
+
+  - id: AT-006
+    description: "processManual(B) — manual_pending → payment_created"
+    method: process_manual_b_positive
+    assertion: "reviewStatus == payment_created"
     status: covered
 
 out_of_scope:
@@ -435,3 +497,22 @@ dependencies:
     entity: ArapSettlementEntity
     relation: "核销"
 ```
+
+---
+
+## BDD 验收标准
+
+### 场景 1：出纳确认银行流水后状态变为 CONFIRMED
+**Given** 一条银行流水 `review_status = PENDING`
+**When** 调用 `review(statementId, userId)`
+**Then** `review_status = CONFIRMED`，`reviewedBy = userId`，且 `autoGenerationService.autoGenerateInNewTx()` **未被调用**
+
+### 场景 2：主管审核生成凭证/单据草稿
+**Given** 一条银行流水 `review_status = CONFIRMED`
+**When** 调用 `audit(statementId, userId)`
+**Then** `review_status = voucher_generated`（A 类）或 `payment_created`（B 类），`autoGenerationService.autoGenerateInNewTx()` 被调用
+
+### 场景 3：前置状态不符时拒绝操作
+**Given** 一条银行流水 `review_status = PENDING`
+**When** 尝试调用 `approve(statementId)`
+**Then** 系统抛出 `BusinessException`，提示"仅已制证/已生单状态可核准"
