@@ -1,4 +1,4 @@
-package com.huicai.sme.arap.controller;
+package com.huicai.base.system.controller;
 
 import com.huicai.base.system.entity.Subject;
 import com.huicai.base.system.model.vo.SubjectTreeVO;

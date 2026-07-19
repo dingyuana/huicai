@@ -1,4 +1,4 @@
-package com.huicai.base.voucher.controller;
+package com.huicai.base.system.controller;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.huicai.base.system.entity.VoucherTypeEntity;

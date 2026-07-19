@@ -1,4 +1,4 @@
-package com.huicai.sme.arap.controller;
+package com.huicai.base.balance.controller;
 
 import com.huicai.base.balance.entity.SubjectBalanceEntity;
 import com.huicai.base.balance.service.SubjectBalanceService;
