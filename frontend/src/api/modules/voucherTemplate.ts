@@ -50,17 +50,17 @@ export interface VoucherTemplateCreateRequest {
 export function listTemplates(classification?: string) {
   const params: Record<string, string> = {}
   if (classification) params.classification = classification
-  return request.get<VoucherTemplateVO[]>('/voucher-templates', { params })
+  return request.get<VoucherTemplateVO[]>('/base/voucher/v1/voucher-templates', { params })
 }
 
 /** 获取单个模板详情 */
 export function getTemplate(id: number) {
-  return request.get<VoucherTemplateVO>(`/voucher-templates/${id}`)
+  return request.get<VoucherTemplateVO>(`/base/voucher/v1/voucher-templates/${id}`)
 }
 
 /** 创建模板 */
 export function createTemplate(data: VoucherTemplateCreateRequest) {
-  return request.post<VoucherTemplateVO>('/voucher-templates', data)
+  return request.post<VoucherTemplateVO>('/base/voucher/v1/voucher-templates', data)
 }
 
 /** 更新模板基本信息 */
@@ -69,20 +69,20 @@ export function updateTemplate(id: number, data: {
   source?: string; businessType?: string; direction?: string; matchPriority?: number;
   numberPrefix?: string;
 }) {
-  return request.put(`/voucher-templates/${id}`, data)
+  return request.put(`/base/voucher/v1/voucher-templates/${id}`, data)
 }
 
 /** 更新模板分录行 (全量替换) */
 export function updateTemplateLines(id: number, lines: TemplateLineVO[]) {
-  return request.put(`/voucher-templates/${id}/lines`, lines)
+  return request.put(`/base/voucher/v1/voucher-templates/${id}/lines`, lines)
 }
 
 /** 激活/停用模板 */
 export function toggleTemplateActive(id: number, active: boolean) {
-  return request.post(`/voucher-templates/${id}/toggle-active`, null, { params: { active } })
+  return request.post(`/base/voucher/v1/voucher-templates/${id}/toggle-active`, null, { params: { active } })
 }
 
 /** 删除模板 */
 export function deleteTemplate(id: number) {
-  return request.delete(`/voucher-templates/${id}`)
+  return request.delete(`/base/voucher/v1/voucher-templates/${id}`)
 }

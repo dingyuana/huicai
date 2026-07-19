@@ -37,15 +37,15 @@ export function executeReconciliation(data: {
   period?: string
   remark?: string
 }): Promise<any> {
-  return request.post('/reconciliation/execute', data)
+  return request.post('/sme/arap/v1/reconciliation/execute', data)
 }
 
 export function reverseReconciliation(logId: number, reason?: string): Promise<void> {
-  return request.post(`/reconciliation/${logId}/reverse`, null, { params: { reason: reason || '' } })
+  return request.post(`/sme/arap/v1/reconciliation/${logId}/reverse`, null, { params: { reason: reason || '' } })
 }
 
 export function getReconciliationRecords(sourceDocType: string, sourceDocId: number): Promise<any[]> {
-  return request.get('/reconciliation/records', { params: { sourceDocType, sourceDocId } })
+  return request.get('/sme/arap/v1/reconciliation/records', { params: { sourceDocType, sourceDocId } })
 }
 
 export interface PreCheckItem {
@@ -105,12 +105,12 @@ export function preCheckReconciliation(data: {
   vendorId?: number
   period?: string
 }): Promise<PreCheckResult> {
-  return request.post('/reconciliation/pre-check', data)
+  return request.post('/sme/arap/v1/reconciliation/pre-check', data)
 }
 
 /** 核销单全链路追溯 */
 export function getReconciliationTrace(id: number): Promise<ReconciliationTraceVO> {
-  return request.get(`/reconciliation/${id}/trace`)
+  return request.get(`/sme/arap/v1/reconciliation/${id}/trace`)
 }
 
 /** FIFO 自动核销匹配（仅匹配，不执行） */
@@ -123,24 +123,24 @@ export function autoFifoReconciliation(params: {
   period?: string
   summary?: string
 }): Promise<any> {
-  return request.post('/reconciliation/auto-fifo', null, { params })
+  return request.post('/sme/arap/v1/reconciliation/auto-fifo', null, { params })
 }
 
 /** 编号全链路追溯（按单据号/凭证号） */
 export function getNumberingTrace(docNo: string): Promise<any> {
-  return request.get(`/trace/by-doc-no?docNo=${docNo}`)
+  return request.get(`/base/voucher/v1/vouchers/trace?no=${docNo}`)
 }
 
 export function getReceiptRecommend(
   receiptId: number,
   params: { sourceDocType: string; customerId: number; amount: number; summary?: string; counterpartyName?: string }
 ): Promise<ReconciliationRecommendResult> {
-  return request.post(`/reconciliation/receipt/${receiptId}/recommend`, null, { params })
+  return request.post(`/sme/arap/v1/reconciliation/receipt/${receiptId}/recommend`, null, { params })
 }
 
 export function getPaymentRecommend(
   paymentId: number,
   params: { sourceDocType: string; vendorId: number; amount: number; summary?: string; counterpartyName?: string }
 ): Promise<ReconciliationRecommendResult> {
-  return request.post(`/reconciliation/payment/${paymentId}/recommend`, null, { params })
+  return request.post(`/sme/arap/v1/reconciliation/payment/${paymentId}/recommend`, null, { params })
 }

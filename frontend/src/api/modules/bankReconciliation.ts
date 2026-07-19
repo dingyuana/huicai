@@ -52,23 +52,23 @@ export interface MatchResult {
 }
 
 export function getAdjustment(accountId: number, period: string): Promise<Adjustment> {
-  return request.get('/bank-reconciliation/adjustment', { params: { accountId, period } })
+  return request.get('/sme/cash/v1/bank-reconciliation/adjustment', { params: { accountId, period } })
 }
 export function getReconciliationSummary(accountId: number, period: string): Promise<ReconciliationSummary> {
-  return request.get('/bank-reconciliation/summary', { params: { accountId, period } })
+  return request.get('/sme/cash/v1/bank-reconciliation/summary', { params: { accountId, period } })
 }
 export function getUnmatchedItems(accountId: number, period: string): Promise<UnmatchedItem[]> {
-  return request.get('/bank-reconciliation/unmatched', { params: { accountId, period } })
+  return request.get('/sme/cash/v1/bank-reconciliation/unmatched', { params: { accountId, period } })
 }
 export function calculateScore(accountId: number, statementId: number, journalId: number): Promise<ScoreResult> {
-  return request.get('/bank-reconciliation/score', { params: { accountId, statementId, journalId } })
+  return request.get('/sme/cash/v1/bank-reconciliation/score', { params: { accountId, statementId, journalId } })
 }
 export function runMatching(accountId: number, period: string): Promise<MatchResult[]> {
-  return request.post('/bank-reconciliation/run-matching', null, { params: { accountId, period } })
+  return request.post('/sme/cash/v1/bank-reconciliation/run-matching', null, { params: { accountId, period } })
 }
 export function lockReconciliation(accountId: number, period: string, operator: string, ttlSeconds = 300): Promise<boolean> {
-  return request.post('/bank-reconciliation/lock', null, { params: { accountId, period, operator, ttlSeconds } })
+  return request.post('/sme/cash/v1/bank-reconciliation/lock', null, { params: { accountId, period, operator, ttlSeconds } })
 }
 export function unlockReconciliation(accountId: number, period: string, operator: string): Promise<void> {
-  return request.post('/bank-reconciliation/unlock', null, { params: { accountId, period, operator } })
+  return request.post('/sme/cash/v1/bank-reconciliation/unlock', null, { params: { accountId, period, operator } })
 }

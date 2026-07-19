@@ -33,58 +33,58 @@ export interface UserParam {
 }
 
 export function getUserPage(params: { page: number; size: number; keyword?: string; deptId?: number; status?: string }): Promise<PageResult<UserVO>> {
-  return request.get('/system/user/page', { params })
+  return request.get('/v1/system/user/page', { params })
 }
 
 export function getUser(id: number): Promise<UserVO> {
-  return request.get(`/system/user/${id}`)
+  return request.get(`/v1/system/user/${id}`)
 }
 
 export function createUser(data: UserParam): Promise<void> {
-  return request.post('/system/user', data)
+  return request.post('/v1/system/user', data)
 }
 
 export function updateUser(id: number, data: UserParam): Promise<void> {
-  return request.put(`/system/user/${id}`, data)
+  return request.put(`/v1/system/user/${id}`, data)
 }
 
 export function updateUserStatus(id: number, status: string): Promise<void> {
-  return request.put(`/system/user/${id}/status`, { status })
+  return request.put(`/v1/system/user/${id}/status`, { status })
 }
 
 export function resetPwd(id: number, newPassword: string): Promise<void> {
-  return request.put(`/system/user/${id}/reset-pwd`, { newPassword })
+  return request.put(`/v1/system/user/${id}/reset-pwd`, { newPassword })
 }
 
 export function deleteUser(id: number): Promise<void> {
-  return request.delete(`/system/user/${id}`)
+  return request.delete(`/v1/system/user/${id}`)
 }
 
 // ==================== 数据维护 ====================
 export function clearBankStatements(): Promise<{ deleted: number; message: string }> {
-  return request.post('/system/clear-bank-statements')
+  return request.post('/v1/system/clear-bank-statements')
 }
 export function clearInvoiceRecords(): Promise<{ deleted: number; message: string }> {
-  return request.post('/system/clear-invoice-records')
+  return request.post('/v1/system/clear-invoice-records')
 }
 export function clearVouchers(): Promise<{ deleted: number; message: string }> {
-  return request.post('/system/clear-vouchers')
+  return request.post('/v1/system/clear-vouchers')
 }
 export function clearBusinessDocs(): Promise<{ deleted: number; message: string }> {
-  return request.post('/system/clear-business-docs')
+  return request.post('/v1/system/clear-business-docs')
 }
 export function clearAll(): Promise<{ deleted: number; message: string }> {
-  return request.post('/system/clear-all')
+  return request.post('/v1/system/clear-all')
 }
 export function clearReceivables(): Promise<{ deleted: number; message: string }> {
-  return request.post('/system/clear-receivables')
+  return request.post('/v1/system/clear-receivables')
 }
 export function clearPayables(): Promise<{ deleted: number; message: string }> {
-  return request.post('/system/clear-payables')
+  return request.post('/v1/system/clear-payables')
 }
 
 export function clearSettlements(): Promise<{ deleted: number; message: string }> {
-  return request.post('/system/clear-settlements')
+  return request.post('/v1/system/clear-settlements')
 }
 
 // ==================== Role ====================
@@ -107,39 +107,39 @@ export interface RoleParam {
 }
 
 export function getRolePage(params: { page: number; size: number; keyword?: string; status?: string }): Promise<PageResult<RoleVO>> {
-  return request.get('/system/role/page', { params })
+  return request.get('/v1/system/role/page', { params })
 }
 
 export function getRole(id: number): Promise<RoleVO> {
-  return request.get(`/system/role/${id}`)
+  return request.get(`/v1/system/role/${id}`)
 }
 
 export function createRole(data: RoleParam): Promise<RoleVO> {
-  return request.post('/system/role', data)
+  return request.post('/v1/system/role', data)
 }
 
 export function updateRole(id: number, data: RoleParam): Promise<void> {
-  return request.put(`/system/role/${id}`, data)
+  return request.put(`/v1/system/role/${id}`, data)
 }
 
 export function updateRoleStatus(id: number, status: string): Promise<void> {
-  return request.put(`/system/role/${id}/status`, { status })
+  return request.put(`/v1/system/role/${id}/status`, { status })
 }
 
 export function deleteRole(id: number): Promise<void> {
-  return request.delete(`/system/role/${id}`)
+  return request.delete(`/v1/system/role/${id}`)
 }
 
 export function getRoleMenus(id: number): Promise<number[]> {
-  return request.get(`/system/role/${id}/menus`)
+  return request.get(`/v1/system/role/${id}/menus`)
 }
 
 export function assignRoleMenus(id: number, menuIds: number[]): Promise<void> {
-  return request.put(`/system/role/${id}/menus`, { menuIds })
+  return request.put(`/v1/system/role/${id}/menus`, { menuIds })
 }
 
 export function getAllRoles(): Promise<RoleVO[]> {
-  return request.get('/system/user/roles')
+  return request.get('/v1/system/user/roles')
 }
 
 // ==================== Menu ====================
@@ -176,27 +176,27 @@ export interface MenuParam {
 }
 
 export function getMenuTree(): Promise<MenuVO[]> {
-  return request.get('/system/menu/tree')
+  return request.get('/v1/system/menu/tree')
 }
 
 export function getMenuOptions(): Promise<MenuVO[]> {
-  return request.get('/system/menu/options')
+  return request.get('/v1/system/menu/options')
 }
 
 export function getMenu(id: number): Promise<MenuVO> {
-  return request.get(`/system/menu/${id}`)
+  return request.get(`/v1/system/menu/${id}`)
 }
 
 export function createMenu(data: MenuParam): Promise<void> {
-  return request.post('/system/menu', data)
+  return request.post('/v1/system/menu', data)
 }
 
 export function updateMenu(id: number, data: MenuParam): Promise<void> {
-  return request.put(`/system/menu/${id}`, data)
+  return request.put(`/v1/system/menu/${id}`, data)
 }
 
 export function deleteMenu(id: number): Promise<void> {
-  return request.delete(`/system/menu/${id}`)
+  return request.delete(`/v1/system/menu/${id}`)
 }
 
 // ==================== Dept ====================
@@ -223,23 +223,23 @@ export interface DeptParam {
 }
 
 export function getDeptTree(): Promise<DeptVO[]> {
-  return request.get('/system/dept/tree')
+  return request.get('/v1/system/dept/tree')
 }
 
 export function getDept(id: number): Promise<DeptVO> {
-  return request.get(`/system/dept/${id}`)
+  return request.get(`/v1/system/dept/${id}`)
 }
 
 export function createDept(data: DeptParam): Promise<void> {
-  return request.post('/system/dept', data)
+  return request.post('/v1/system/dept', data)
 }
 
 export function updateDept(id: number, data: DeptParam): Promise<void> {
-  return request.put(`/system/dept/${id}`, data)
+  return request.put(`/v1/system/dept/${id}`, data)
 }
 
 export function deleteDept(id: number): Promise<void> {
-  return request.delete(`/system/dept/${id}`)
+  return request.delete(`/v1/system/dept/${id}`)
 }
 
 // ==================== Audit Log ====================
@@ -259,9 +259,9 @@ export interface AuditLogVO {
 }
 
 export function getAuditLogPage(params: { page: number; size: number; module?: string; status?: string; startDate?: string; endDate?: string }): Promise<PageResult<AuditLogVO>> {
-  return request.get('/system/audit-log/page', { params })
+  return request.get('/v1/system/audit-log/page', { params })
 }
 
 export function getAuditLog(id: number): Promise<AuditLogVO> {
-  return request.get(`/system/audit-log/${id}`)
+  return request.get(`/v1/system/audit-log/${id}`)
 }

@@ -27,41 +27,41 @@ export interface PeriodUpdateParam {
 }
 
 export function getPeriodPage(params: { page: number; size: number }): Promise<PageResult<PeriodVO>> {
-  return request.get('/periods', { params })
+  return request.get('/v1/periods', { params })
 }
 
 export function getAllPeriods(): Promise<PeriodVO[]> {
-  return request.get('/periods/all')
+  return request.get('/v1/periods/all')
 }
 
 export function getPeriod(id: number): Promise<PeriodVO> {
-  return request.get(`/periods/${id}`)
+  return request.get(`/v1/periods/${id}`)
 }
 
 export function createPeriod(data: PeriodCreateParam): Promise<void> {
-  return request.post('/periods', data)
+  return request.post('/v1/periods', data)
 }
 
 export function updatePeriod(id: number, data: PeriodUpdateParam): Promise<void> {
-  return request.put(`/periods/${id}`, data)
+  return request.put(`/v1/periods/${id}`, data)
 }
 
 export function deletePeriod(id: number): Promise<void> {
-  return request.delete(`/periods/${id}`)
+  return request.delete(`/v1/periods/${id}`)
 }
 
 export function openPeriod(id: number): Promise<void> {
-  return request.post(`/periods/${id}/open`)
+  return request.post(`/v1/periods/${id}/open`)
 }
 
 export function closePeriod(id: number): Promise<void> {
-  return request.post(`/periods/${id}/close`)
+  return request.post(`/v1/periods/${id}/close`)
 }
 
 export function lockPeriod(id: number): Promise<void> {
-  return request.post(`/periods/${id}/lock`)
+  return request.post(`/v1/periods/${id}/lock`)
 }
 
 export function unlockPeriod(id: number): Promise<void> {
-  return request.post(`/periods/${id}/unlock`)
+  return request.post(`/v1/periods/${id}/unlock`)
 }

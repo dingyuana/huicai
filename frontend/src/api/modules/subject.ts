@@ -38,37 +38,37 @@ export interface SubjectUpdateParam {
 }
 
 export function getSubjectTree(): Promise<SubjectVO[]> {
-  return request.get('/subjects/tree')
+  return request.get('/v1/subjects/tree')
 }
 
 export function getSubject(id: string): Promise<SubjectVO> {
-  return request.get(`/subjects/${id}`)
+  return request.get(`/v1/subjects/${id}`)
 }
 
 export function createSubject(data: SubjectCreateParam): Promise<void> {
-  return request.post('/subjects', data)
+  return request.post('/v1/subjects', data)
 }
 
 export function updateSubject(id: string, data: SubjectUpdateParam): Promise<void> {
-  return request.put(`/subjects/${id}`, data)
+  return request.put(`/v1/subjects/${id}`, data)
 }
 
 export function deleteSubject(id: string): Promise<void> {
-  return request.delete(`/subjects/${id}`)
+  return request.delete(`/v1/subjects/${id}`)
 }
 
 export function importStandardSubjects(): Promise<number> {
-  return request.post('/subjects/import-standard')
+  return request.post('/v1/subjects/import-standard')
 }
 
 export function initOpeningBalances(period: string, balances: Record<number, number>): Promise<void> {
-  return request.post('/subject-balances/init', balances, { params: { period } })
+  return request.post('/v1/subject-balances/init', balances, { params: { period } })
 }
 
 export function getSubjectBalances(period: string): Promise<any[]> {
-  return request.get('/subject-balances', { params: { period } })
+  return request.get('/v1/subject-balances', { params: { period } })
 }
 
 export function checkTrialBalance(period: string): Promise<any> {
-  return request.get('/subject-balances/trial-balance', { params: { period } })
+  return request.get('/v1/subject-balances/trial-balance', { params: { period } })
 }

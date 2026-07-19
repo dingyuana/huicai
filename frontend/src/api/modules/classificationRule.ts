@@ -23,35 +23,35 @@ export function pageRules(params: {
   current?: number
   size?: number
 }): Promise<any> {
-  return request.get('/classification-rules', { params })
+  return request.get('/sme/cash/v1/classification-rules', { params })
 }
 
 export function getRule(id: number): Promise<ClassificationRule> {
-  return request.get(`/classification-rules/${id}`)
+  return request.get(`/sme/cash/v1/classification-rules/${id}`)
 }
 
 export function createRule(data: ClassificationRule): Promise<ClassificationRule> {
-  return request.post('/classification-rules', data)
+  return request.post('/sme/cash/v1/classification-rules', data)
 }
 
 export function updateRule(id: number, data: ClassificationRule): Promise<ClassificationRule> {
-  return request.put(`/classification-rules/${id}`, data)
+  return request.put(`/sme/cash/v1/classification-rules/${id}`, data)
 }
 
 export function deleteRule(id: number): Promise<void> {
-  return request.delete(`/classification-rules/${id}`)
+  return request.delete(`/sme/cash/v1/classification-rules/${id}`)
 }
 
 export function reorderRules(ids: number[]): Promise<void> {
-  return request.post('/classification-rules/reorder', ids)
+  return request.post('/sme/cash/v1/classification-rules/reorder', ids)
 }
 
 export function seedRules(tenantId: number): Promise<number> {
-  return request.post('/classification-rules/seed', null, { params: { tenantId } })
+  return request.post('/sme/cash/v1/classification-rules/seed', null, { params: { tenantId } })
 }
 
 export function testMatch(description: string, direction?: string, counterparty?: string): Promise<ClassificationRule | null> {
-  return request.post('/classification-rules/match', null, {
+  return request.post('/sme/cash/v1/classification-rules/match', null, {
     params: { description, direction, counterparty },
   })
 }

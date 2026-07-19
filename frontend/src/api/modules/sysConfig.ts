@@ -12,29 +12,29 @@ export interface SysConfigVO {
 }
 
 export function getConfigPage(params: { page: number; size: number; keyword?: string; configType?: string }): Promise<PageResult<SysConfigVO>> {
-  return request.get('/configs', { params })
+  return request.get('/v1/configs', { params })
 }
 
 export function getAllConfigs(): Promise<SysConfigVO[]> {
-  return request.get('/configs/all')
+  return request.get('/v1/configs/all')
 }
 
 export function getConfigValues(keys: string[]): Promise<Record<string, string>> {
-  return request.get('/configs/values', { params: { keys } })
+  return request.get('/v1/configs/values', { params: { keys } })
 }
 
 export function getConfig(id: number): Promise<SysConfigVO> {
-  return request.get(`/configs/${id}`)
+  return request.get(`/v1/configs/${id}`)
 }
 
 export function createConfig(data: Partial<SysConfigVO>): Promise<void> {
-  return request.post('/configs', data)
+  return request.post('/v1/configs', data)
 }
 
 export function updateConfig(id: number, data: Partial<SysConfigVO>): Promise<void> {
-  return request.put(`/configs/${id}`, data)
+  return request.put(`/v1/configs/${id}`, data)
 }
 
 export function deleteConfig(id: number): Promise<void> {
-  return request.delete(`/configs/${id}`)
+  return request.delete(`/v1/configs/${id}`)
 }

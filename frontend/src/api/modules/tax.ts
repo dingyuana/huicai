@@ -46,86 +46,86 @@ export interface OutputInvoice {
 }
 
 export function pageTaxType(params: any): Promise<any> {
-  return request.get('/tax/types/page', { params })
+  return request.get('/sme/tax/v1/tax/types/page', { params })
 }
 export function listTaxType(): Promise<TaxType[]> {
-  return request.get('/tax/types/list')
+  return request.get('/sme/tax/v1/tax/types/list')
 }
 export function createTaxType(data: TaxType): Promise<TaxType> {
-  return request.post('/tax/types', data)
+  return request.post('/sme/tax/v1/tax/types', data)
 }
 export function deleteTaxType(id: number): Promise<void> {
-  return request.delete(`/tax/types/${id}`)
+  return request.delete(`/sme/tax/v1/tax/types/${id}`)
 }
 export function pageInputInvoice(params: any): Promise<any> {
-  return request.get('/tax/input-invoices/page', { params })
+  return request.get('/sme/tax/v1/input-invoices/page', { params })
 }
 export function createInputInvoice(data: InputInvoice): Promise<InputInvoice> {
-  return request.post('/tax/input-invoices', data)
+  return request.post('/sme/tax/v1/input-invoices', data)
 }
 export function certifyInputInvoice(id: number, deductionPeriod?: string): Promise<InputInvoice> {
-  return request.post(`/tax/input-invoices/${id}/certify`, null, { params: { deductionPeriod } })
+  return request.post(`/sme/tax/v1/input-invoices/${id}/certify`, null, { params: { deductionPeriod } })
 }
 export function inputInvoiceSummary(period: string): Promise<any> {
-  return request.get('/tax/input-invoices/summary', { params: { period } })
+  return request.get('/sme/tax/v1/input-invoices/summary', { params: { period } })
 }
 // ====== 进项发票状态机 (P40) ======
 export function submitInputReview(id: number): Promise<void> {
-  return request.post(`/tax/input-invoices/${id}/submit-review`)
+  return request.post(`/sme/tax/v1/input-invoices/${id}/submit-review`)
 }
 export function confirmInputInvoice(id: number): Promise<void> {
-  return request.post(`/tax/input-invoices/${id}/confirm`)
+  return request.post(`/sme/tax/v1/input-invoices/${id}/confirm`)
 }
 export function rejectInputInvoice(id: number, reason: string): Promise<void> {
-  return request.post(`/tax/input-invoices/${id}/reject`, null, { params: { reason } })
+  return request.post(`/sme/tax/v1/input-invoices/${id}/reject`, null, { params: { reason } })
 }
 export function revertInputInvoice(id: number): Promise<void> {
-  return request.post(`/tax/input-invoices/${id}/revert`)
+  return request.post(`/sme/tax/v1/input-invoices/${id}/revert`)
 }
 export function voidInputInvoice(id: number, reason: string): Promise<void> {
-  return request.post(`/tax/input-invoices/${id}/void`, null, { params: { reason } })
+  return request.post(`/sme/tax/v1/input-invoices/${id}/void`, null, { params: { reason } })
 }
 export function reverseInputInvoice(id: number, reason: string): Promise<number> {
-  return request.post(`/tax/input-invoices/${id}/reverse`, null, { params: { reason } })
+  return request.post(`/sme/tax/v1/input-invoices/${id}/reverse`, null, { params: { reason } })
 }
 export function pageOutputInvoice(params: any): Promise<any> {
-  return request.get('/tax/output-invoices/page', { params })
+  return request.get('/sme/tax/v1/output-invoices/page', { params })
 }
 export function getOutputInvoice(id: number): Promise<OutputInvoice> {
-  return request.get(`/tax/output-invoices/${id}`)
+  return request.get(`/sme/tax/v1/output-invoices/${id}`)
 }
 export function deleteOutputInvoice(id: number): Promise<void> {
-  return request.delete(`/tax/output-invoices/${id}`)
+  return request.delete(`/sme/tax/v1/output-invoices/${id}`)
 }
 // ====== 销项发票状态机 ======
 export function submitForReview(id: number): Promise<void> {
-  return request.post(`/tax/output-invoices/${id}/submit-review`)
+  return request.post(`/sme/tax/v1/output-invoices/${id}/submit-review`)
 }
 export function confirmOutputInvoice(id: number): Promise<void> {
-  return request.post(`/tax/output-invoices/${id}/confirm`)
+  return request.post(`/sme/tax/v1/output-invoices/${id}/confirm`)
 }
 export function rejectOutputInvoice(id: number, reason: string): Promise<void> {
-  return request.post(`/tax/output-invoices/${id}/reject`, null, { params: { reason } })
+  return request.post(`/sme/tax/v1/output-invoices/${id}/reject`, null, { params: { reason } })
 }
 export function revertOutputInvoice(id: number): Promise<void> {
-  return request.post(`/tax/output-invoices/${id}/revert`)
+  return request.post(`/sme/tax/v1/output-invoices/${id}/revert`)
 }
 export function voidOutputInvoice(id: number, reason: string): Promise<void> {
-  return request.post(`/tax/output-invoices/${id}/void`, null, { params: { reason } })
+  return request.post(`/sme/tax/v1/output-invoices/${id}/void`, null, { params: { reason } })
 }
 export function markVouchered(id: number): Promise<void> {
-  return request.post(`/tax/output-invoices/${id}/mark-vouchered`)
+  return request.post(`/sme/tax/v1/output-invoices/${id}/mark-vouchered`)
 }
 export function createOutputInvoice(data: OutputInvoice): Promise<OutputInvoice> {
-  return request.post('/tax/output-invoices', data)
+  return request.post('/sme/tax/v1/output-invoices', data)
 }
 export function outputInvoiceSummary(period?: string): Promise<any> {
   const params: any = {}
   if (period) params.period = period
-  return request.get('/tax/output-invoices/summary', { params })
+  return request.get('/sme/tax/v1/output-invoices/summary', { params })
 }
 export function calculateVat(period: string): Promise<any> {
-  return request.get('/tax/vat/calculate', { params: { period } })
+  return request.get('/sme/tax/v1/tax/vat/calculate', { params: { period } })
 }
 // ====== P2-7 AI 辅助 ======
 export function aiSubjectMapping(itemName: string, amount?: number, counterparty?: string): Promise<any> {

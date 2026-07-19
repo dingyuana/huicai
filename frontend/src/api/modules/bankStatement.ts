@@ -69,28 +69,28 @@ export const REVIEW_STATUS_LABELS: Record<string, string> = {
 }
 
 export function getBankStatementPage(params: { accountId?: string; status?: string; classification?: string; reviewStatus?: string; current?: number; size?: number }): Promise<PageResult<BankStatementVO>> {
-  return request.get('/bank-statements/page', { params })
+  return request.get('/sme/cash/v1/bank-statements/page', { params })
 }
 export function getClassificationCounts(accountId: string, reviewStatus?: string): Promise<Record<string, number>> {
-  return request.get('/bank-statements/classification-counts', { params: { accountId, reviewStatus } })
+  return request.get('/sme/cash/v1/bank-statements/classification-counts', { params: { accountId, reviewStatus } })
 }
 export function getBankStatementDetail(id: number): Promise<BankStatementVO> {
-  return request.get(`/bank-statements/${id}`)
+  return request.get(`/sme/cash/v1/bank-statements/${id}`)
 }
 export function importStatementCsv(accountId: string, csvContent: string): Promise<number> {
-  return request.post('/bank-statements/import-csv', csvContent, { params: { accountId }, headers: { 'Content-Type': 'text/plain' } })
+  return request.post('/sme/cash/v1/bank-statements/import-csv', csvContent, { params: { accountId }, headers: { 'Content-Type': 'text/plain' } })
 }
 export function importStatementExcel(accountId: string, file: File): Promise<{ total: number; success: number; classified: number; errors: Array<{ row: number; message: string }>; batchId: string }> {
   const formData = new FormData()
   formData.append('file', file)
-  return request.post('/bank-statements/import-excel', formData, { params: { accountId }, headers: { 'Content-Type': 'multipart/form-data' } })
+  return request.post('/sme/cash/v1/bank-statements/import-excel', formData, { params: { accountId }, headers: { 'Content-Type': 'multipart/form-data' } })
 }
 export function previewStatementExcel(accountId: string, file: File): Promise<{
   total: number; valid: number; errors: any[]; batchId: string; previews: any[]; headers?: string[]
 }> {
   const formData = new FormData()
   formData.append('file', file)
-  return request.post('/bank-statements/preview-excel', formData, { params: { accountId }, headers: { 'Content-Type': 'multipart/form-data' } })
+  return request.post('/sme/cash/v1/bank-statements/preview-excel', formData, { params: { accountId }, headers: { 'Content-Type': 'multipart/form-data' } })
 }
 
 /** 带自定义列映射的 Excel 预览 */
@@ -100,7 +100,7 @@ export function previewStatementExcelWithMapping(accountId: string, file: File, 
   const formData = new FormData()
   formData.append('file', file)
   formData.append('columnMappingJson', JSON.stringify(columnMapping))
-  return request.post('/bank-statements/preview-excel', formData, { params: { accountId }, headers: { 'Content-Type': 'multipart/form-data' } })
+  return request.post('/sme/cash/v1/bank-statements/preview-excel', formData, { params: { accountId }, headers: { 'Content-Type': 'multipart/form-data' } })
 }
 
 /** 解析 Excel 表头 */
@@ -109,52 +109,52 @@ export function parseExcelHeaders(file: File): Promise<{
 }> {
   const formData = new FormData()
   formData.append('file', file)
-  return request.post('/bank-statements/parse-headers', formData, { headers: { 'Content-Type': 'multipart/form-data' } })
+  return request.post('/sme/cash/v1/bank-statements/parse-headers', formData, { headers: { 'Content-Type': 'multipart/form-data' } })
 }
 export function confirmStatementImport(batchId: string): Promise<{ total: number; success: number; classified: number; batchId: string }> {
-  return request.post('/bank-statements/confirm-import', null, { params: { batchId } })
+  return request.post('/sme/cash/v1/bank-statements/confirm-import', null, { params: { batchId } })
 }
 export function classifyStatement(id: number): Promise<BankStatementVO> {
-  return request.post(`/bank-statements/${id}/classify`)
+  return request.post(`/sme/cash/v1/bank-statements/${id}/classify`)
 }
 export function reviewStatement(id: number): Promise<BankStatementVO> {
-  return request.post(`/bank-statements/${id}/review`)
+  return request.post(`/sme/cash/v1/bank-statements/${id}/review`)
 }
 export function batchReviewStatements(ids: number[]): Promise<number> {
-  return request.post('/bank-statements/batch-review', ids)
+  return request.post('/sme/cash/v1/bank-statements/batch-review', ids)
 }
 export function batchConfirmStatements(ids: number[]): Promise<number> {
-  return request.post('/bank-statements/batch-review', ids)
+  return request.post('/sme/cash/v1/bank-statements/batch-review', ids)
 }
 export function auditStatement(id: number): Promise<BankStatementVO> {
-  return request.post(`/bank-statements/${id}/audit`)
+  return request.post(`/sme/cash/v1/bank-statements/${id}/audit`)
 }
 export function batchAuditStatements(ids: number[]): Promise<number> {
-  return request.post('/bank-statements/batch-audit', ids)
+  return request.post('/sme/cash/v1/bank-statements/batch-audit', ids)
 }
 export function approveStatement(id: number): Promise<void> {
-  return request.post(`/bank-statements/${id}/approve`)
+  return request.post(`/sme/cash/v1/bank-statements/${id}/approve`)
 }
 export function autoMatchStatements(accountId: string): Promise<MatchSuggestion[]> {
-  return request.get('/bank-statements/auto-match', { params: { accountId } })
+  return request.get('/sme/cash/v1/bank-statements/auto-match', { params: { accountId } })
 }
 export function confirmStatementMatch(statementId: number, journalId: number): Promise<number> {
-  return request.post(`/bank-statements/${statementId}/confirm-match`, null, { params: { journalId } })
+  return request.post(`/sme/cash/v1/bank-statements/${statementId}/confirm-match`, null, { params: { journalId } })
 }
 export function ignoreStatement(statementId: number): Promise<number> {
-  return request.post(`/bank-statements/${statementId}/ignore`)
+  return request.post(`/sme/cash/v1/bank-statements/${statementId}/ignore`)
 }
 export function deleteStatement(id: number): Promise<void> {
-  return request.delete(`/bank-statements/${id}`)
+  return request.delete(`/sme/cash/v1/bank-statements/${id}`)
 }
 export function updateStatementClassification(id: number, classification: string): Promise<BankStatementVO> {
-  return request.put(`/bank-statements/${id}/classification`, { classification })
+  return request.put(`/sme/cash/v1/bank-statements/${id}/classification`, { classification })
 }
 export function processManualStatement(id: number, targetType: string, paymentType?: string): Promise<BankStatementVO> {
-  return request.post(`/bank-statements/${id}/process-manual`, null, {
+  return request.post(`/sme/cash/v1/bank-statements/${id}/process-manual`, null, {
     params: { targetType, paymentType },
   })
 }
 export function previewDraftStatement(id: number): Promise<any[]> {
-  return request.get(`/bank-statements/${id}/preview-draft`)
+  return request.get(`/sme/cash/v1/bank-statements/${id}/preview-draft`)
 }

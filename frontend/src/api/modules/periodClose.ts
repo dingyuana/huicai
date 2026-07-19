@@ -18,17 +18,17 @@ export interface CloseCheckResult {
 }
 
 export function checkClose(period: string): Promise<CloseCheckResult> {
-  return request.get('/period-close/check', { params: { period } })
+  return request.get('/base/voucher/v1/period-close/check', { params: { period } })
 }
 
 export function profitCarryover(period: string): Promise<number> {
-  return request.post('/period-close/profit-carryover', null, { params: { period } })
+  return request.post('/base/voucher/v1/period-close/profit-carryover', null, { params: { period } })
 }
 
 export function closePeriod(period: string): Promise<void> {
-  return request.post('/period-close/close', null, { params: { period } })
+  return request.post('/base/voucher/v1/period-close/close', null, { params: { period } })
 }
 
 export function reopenPeriod(period: string): Promise<void> {
-  return request.post('/period-close/reopen', null, { params: { period } })
+  return request.post('/base/voucher/v1/period-close/reopen', null, { params: { period } })
 }

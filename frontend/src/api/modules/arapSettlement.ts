@@ -53,15 +53,15 @@ export function pageSettlements(params: {
   current?: number
   size?: number
 }): Promise<any> {
-  return request.get('/arap-settlements/page', { params })
+  return request.get('/sme/arap/v1/arap-settlements/page', { params })
 }
 
 export function getSettlementDetail(id: number): Promise<ArapSettlement> {
-  return request.get(`/arap-settlements/${id}`)
+  return request.get(`/sme/arap/v1/arap-settlements/${id}`)
 }
 
 export function getSettlementEntries(id: number): Promise<any[]> {
-  return request.get(`/arap-settlements/${id}/entries`)
+  return request.get(`/sme/arap/v1/arap-settlements/${id}/entries`)
 }
 
 export function createSettlement(data: {
@@ -70,24 +70,24 @@ export function createSettlement(data: {
   totalAmount: number
   remark?: string
 }): Promise<ArapSettlement> {
-  return request.post('/arap-settlements', data)
+  return request.post('/sme/arap/v1/arap-settlements', data)
 }
 
 export function confirmSettlement(id: number): Promise<ArapSettlement> {
-  return request.post(`/arap-settlements/${id}/confirm`)
+  return request.post(`/sme/arap/v1/arap-settlements/${id}/confirm`)
 }
 
 export function deleteSettlement(id: number): Promise<void> {
-  return request.delete(`/arap-settlements/${id}`)
+  return request.delete(`/sme/arap/v1/arap-settlements/${id}`)
 }
 
 // Reconciliation Log APIs
 export function getReconRecords(sourceDocType: string, sourceDocId: number): Promise<ReconciliationLog[]> {
-  return request.get('/reconciliation/records', { params: { sourceDocType, sourceDocId } })
+  return request.get('/sme/arap/v1/reconciliation/records', { params: { sourceDocType, sourceDocId } })
 }
 
 export function reverseRecon(logId: number, reason?: string): Promise<void> {
-  return request.post(`/reconciliation/${logId}/reverse`, null, { params: { reason: reason || '' } })
+  return request.post(`/sme/arap/v1/reconciliation/${logId}/reverse`, null, { params: { reason: reason || '' } })
 }
 
 export function pageReconLogs(params: {
@@ -95,17 +95,17 @@ export function pageReconLogs(params: {
   current?: number
   size?: number
 }): Promise<any> {
-  return request.get('/reconciliation/logs/page', { params })
+  return request.get('/sme/arap/v1/reconciliation/logs/page', { params })
 }
 
 // ====== 核销审批 ======
 
 export function approveReconciliation(id: number): Promise<any> {
-  return request.post(`/reconciliation/${id}/approve`)
+  return request.post(`/sme/arap/v1/reconciliation/${id}/approve`)
 }
 
 export function rejectReconciliation(id: number, reason?: string): Promise<void> {
-  return request.post(`/reconciliation/${id}/reject`, null, { params: { reason: reason || '' } })
+  return request.post(`/sme/arap/v1/reconciliation/${id}/reject`, null, { params: { reason: reason || '' } })
 }
 
 // ====== 核销异常池 ======
@@ -141,17 +141,17 @@ export function pageReconciliationExceptions(params: {
   current?: number
   size?: number
 }): Promise<any> {
-  return request.get('/reconciliation/exceptions/page', { params })
+  return request.get('/sme/arap/v1/reconciliation/exceptions/page', { params })
 }
 
 export function resolveException(id: number, remark?: string): Promise<void> {
-  return request.post(`/reconciliation/exceptions/${id}/resolve`, null, { params: { remark: remark || '' } })
+  return request.post(`/sme/arap/v1/reconciliation/exceptions/${id}/resolve`, null, { params: { remark: remark || '' } })
 }
 
 export function ignoreException(id: number, reason: string): Promise<void> {
-  return request.post(`/reconciliation/exceptions/${id}/ignore`, null, { params: { reason } })
+  return request.post(`/sme/arap/v1/reconciliation/exceptions/${id}/ignore`, null, { params: { reason } })
 }
 
 export function retryException(id: number): Promise<any> {
-  return request.post(`/reconciliation/exceptions/${id}/retry`, null, { params: { userId: 0 } })
+  return request.post(`/sme/arap/v1/reconciliation/exceptions/${id}/retry`, null, { params: { userId: 0 } })
 }

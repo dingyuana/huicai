@@ -102,75 +102,75 @@ export const VOUCHER_STATUS_OPTIONS = [
 
 /** 分页查询凭证 */
 export function getVoucherPage(params: VoucherQueryDTO): Promise<PageResult<VoucherVO>> {
-  return request.post('/vouchers/page', params)
+  return request.post('/base/voucher/v1/vouchers/page', params)
 }
 
 /** 获取凭证详情 */
 export function getVoucher(id: number): Promise<VoucherVO> {
-  return request.get(`/vouchers/${id}`)
+  return request.get(`/base/voucher/v1/vouchers/${id}`)
 }
 
 /** 创建凭证 */
 export function createVoucher(data: VoucherCreateDTO): Promise<VoucherVO> {
-  return request.post('/vouchers', data)
+  return request.post('/base/voucher/v1/vouchers', data)
 }
 
 /** 修改凭证 */
 export function updateVoucher(id: number, data: VoucherCreateDTO): Promise<VoucherVO> {
-  return request.put(`/vouchers/${id}`, data)
+  return request.put(`/base/voucher/v1/vouchers/${id}`, data)
 }
 
 /** 删除凭证 */
 export function deleteVoucher(id: number): Promise<void> {
-  return request.delete(`/vouchers/${id}`)
+  return request.delete(`/base/voucher/v1/vouchers/${id}`)
 }
 
 /** 提交凭证 */
 export function submitVoucher(id: number): Promise<void> {
-  return request.post(`/vouchers/${id}/submit`)
+  return request.post(`/base/voucher/v1/vouchers/${id}/submit`)
 }
 
 /** 批量提交 */
 export function batchSubmitVouchers(data: VoucherStatusDTO): Promise<void> {
-  return request.post('/vouchers/batch-submit', data)
+  return request.post('/base/voucher/v1/vouchers/batch-submit', data)
 }
 
 /** 审核凭证 */
 export function auditVoucher(id: number): Promise<void> {
-  return request.post(`/vouchers/${id}/audit`)
+  return request.post(`/base/voucher/v1/vouchers/${id}/audit`)
 }
 
 /** 批量审核 */
 export function batchAuditVouchers(data: VoucherStatusDTO): Promise<void> {
-  return request.post('/vouchers/batch-audit', data)
+  return request.post('/base/voucher/v1/vouchers/batch-audit', data)
 }
 
 /** 记账 */
 export function postVoucher(id: number): Promise<void> {
-  return request.post(`/vouchers/${id}/post`)
+  return request.post(`/base/voucher/v1/vouchers/${id}/post`)
 }
 
 /** 批量记账 */
 export function batchPostVouchers(data: VoucherStatusDTO): Promise<void> {
-  return request.post('/vouchers/batch-post', data)
+  return request.post('/base/voucher/v1/vouchers/batch-post', data)
 }
 
 /** 红冲凭证 */
 export function reverseVoucher(id: number): Promise<VoucherVO> {
-  return request.post(`/vouchers/${id}/reverse`)
+  return request.post(`/base/voucher/v1/vouchers/${id}/reverse`)
 }
 
 /** 驳回凭证 (SUBMITTED → DRAFT) */
 export function rejectVoucher(id: number, reason: string): Promise<void> {
-  return request.post(`/vouchers/${id}/reject`, null, { params: { reason } })
+  return request.post(`/base/voucher/v1/vouchers/${id}/reject`, null, { params: { reason } })
 }
 
 /** 反过账 (POSTED → AUDITED) */
 export function unpostVoucher(id: number): Promise<void> {
-  return request.post(`/vouchers/${id}/unpost`)
+  return request.post(`/base/voucher/v1/vouchers/${id}/unpost`)
 }
 
 /** 根据凭证类型 ID 获取绑定的模板 (用于手工新增凭证预填分录) */
 export function getTemplateByVoucherType(typeId: number): Promise<VoucherTemplateVO | null> {
-  return request.get(`/vouchers/template-by-type/${typeId}`)
+  return request.get(`/base/voucher/v1/vouchers/template-by-type/${typeId}`)
 }

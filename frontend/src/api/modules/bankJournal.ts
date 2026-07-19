@@ -24,20 +24,20 @@ export const TX_TYPE_LABELS: Record<string, string> = {
 }
 
 export function getBankJournalPage(params: { accountId?: number; period?: string; txType?: string; current?: number; size?: number }): Promise<PageResult<BankJournalVO>> {
-  return request.get('/bank-journals/page', { params })
+  return request.get('/sme/cash/v1/bank-journals/page', { params })
 }
 export function createBankJournal(data: Partial<BankJournalVO>): Promise<BankJournalVO> {
-  return request.post('/bank-journals', data)
+  return request.post('/sme/cash/v1/bank-journals', data)
 }
 export function updateBankJournal(id: number, data: Partial<BankJournalVO>): Promise<BankJournalVO> {
-  return request.put(`/bank-journals/${id}`, data)
+  return request.put(`/sme/cash/v1/bank-journals/${id}`, data)
 }
 export function deleteBankJournal(id: number): Promise<void> {
-  return request.delete(`/bank-journals/${id}`)
+  return request.delete(`/sme/cash/v1/bank-journals/${id}`)
 }
 export function generateVoucherFromJournal(id: number): Promise<number> {
-  return request.post(`/bank-journals/${id}/generate-voucher`)
+  return request.post(`/sme/cash/v1/bank-journals/${id}/generate-voucher`)
 }
 export function getJournalBalance(accountId: number): Promise<number> {
-  return request.get('/bank-journals/balance', { params: { accountId } })
+  return request.get('/sme/cash/v1/bank-journals/balance', { params: { accountId } })
 }
