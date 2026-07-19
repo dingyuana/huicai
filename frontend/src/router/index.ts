@@ -1,10 +1,14 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import type { RouteRecordRaw } from 'vue-router'
 import baseRoutes from './routes/base'
+import smeRoutes from './routes/sme'
+import agencyRoutes from './routes/agency'
 import { useAuthStore } from '@/stores/auth.store'
 
 export const routes: RouteRecordRaw[] = [
   ...baseRoutes,
+  ...smeRoutes,
+  ...agencyRoutes,
 ]
 
 const router = createRouter({
