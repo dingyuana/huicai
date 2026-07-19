@@ -186,14 +186,14 @@ public class AuditTrackingAspect {
 
     private boolean isBusinessModuleEntity(String className) {
         return className.startsWith("com.huicai.module.finance.entity.")
-                || className.startsWith("com.huicai.module.arap.entity.")
-                || className.startsWith("com.huicai.module.tax.entity.");
+                || className.startsWith("com.huicai.sme.arap.entity.")
+                || className.startsWith("com.huicai.sme.tax.entity.");
     }
 
     private boolean isBusinessModuleMapper(String className) {
         return className.startsWith("com.huicai.module.finance.mapper.")
-                || className.startsWith("com.huicai.module.arap.mapper.")
-                || className.startsWith("com.huicai.module.tax.mapper.");
+                || className.startsWith("com.huicai.sme.arap.mapper.")
+                || className.startsWith("com.huicai.sme.tax.mapper.");
     }
 
     private String getCurrentUsername() {

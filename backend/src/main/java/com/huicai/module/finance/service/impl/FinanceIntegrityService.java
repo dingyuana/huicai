@@ -5,7 +5,7 @@ import com.huicai.module.finance.dto.IntegrityCheckResult;
 import com.huicai.module.finance.mapper.BankStatementMapper;
 import com.huicai.module.finance.mapper.BusinessDocMapper;
 import com.huicai.module.finance.mapper.VoucherMapper;
-import com.huicai.module.tax.mapper.OutputInvoiceMapper;
+import com.huicai.sme.tax.mapper.OutputInvoiceMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;

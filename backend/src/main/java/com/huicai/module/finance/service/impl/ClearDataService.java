@@ -1,16 +1,16 @@
 package com.huicai.module.finance.service.impl;
 
-import com.huicai.module.arap.mapper.ArapSettlementEntryMapper;
-import com.huicai.module.arap.mapper.ArapSettlementMapper;
-import com.huicai.module.arap.mapper.ReconciliationLogMapper;
+import com.huicai.sme.arap.mapper.ArapSettlementEntryMapper;
+import com.huicai.sme.arap.mapper.ArapSettlementMapper;
+import com.huicai.sme.arap.mapper.ReconciliationLogMapper;
 import com.huicai.module.finance.mapper.BankJournalMapper;
 import com.huicai.module.finance.mapper.BankStatementMapper;
 import com.huicai.module.finance.mapper.BusinessDocMapper;
 import com.huicai.module.finance.mapper.BusinessDocEntryMapper;
 import com.huicai.module.finance.mapper.VoucherEntryMapper;
 import com.huicai.module.finance.mapper.VoucherMapper;
-import com.huicai.module.tax.mapper.InputInvoiceMapper;
-import com.huicai.module.tax.mapper.OutputInvoiceMapper;
+import com.huicai.sme.tax.mapper.InputInvoiceMapper;
+import com.huicai.sme.tax.mapper.OutputInvoiceMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;

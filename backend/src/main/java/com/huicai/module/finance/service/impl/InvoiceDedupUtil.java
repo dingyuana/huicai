@@ -3,10 +3,10 @@ package com.huicai.module.finance.service.impl;
 import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.huicai.common.exception.BusinessException;
-import com.huicai.module.tax.entity.InputInvoiceEntity;
-import com.huicai.module.tax.entity.OutputInvoiceEntity;
-import com.huicai.module.tax.mapper.InputInvoiceMapper;
-import com.huicai.module.tax.mapper.OutputInvoiceMapper;
+import com.huicai.sme.tax.entity.InputInvoiceEntity;
+import com.huicai.sme.tax.entity.OutputInvoiceEntity;
+import com.huicai.sme.tax.mapper.InputInvoiceMapper;
+import com.huicai.sme.tax.mapper.OutputInvoiceMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 

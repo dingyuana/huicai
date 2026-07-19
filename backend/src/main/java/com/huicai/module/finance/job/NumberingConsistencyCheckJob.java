@@ -1,14 +1,14 @@
 package com.huicai.module.finance.job;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.huicai.module.arap.entity.ArapSettlementEntity;
-import com.huicai.module.arap.mapper.ArapSettlementMapper;
+import com.huicai.sme.arap.entity.ArapSettlementEntity;
+import com.huicai.sme.arap.mapper.ArapSettlementMapper;
 import com.huicai.module.finance.entity.BusinessDocEntity;
 import com.huicai.module.finance.entity.VoucherEntity;
 import com.huicai.module.finance.mapper.BusinessDocMapper;
 import com.huicai.module.finance.mapper.VoucherMapper;
-import com.huicai.module.tax.entity.InputInvoiceEntity;
-import com.huicai.module.tax.mapper.InputInvoiceMapper;
+import com.huicai.sme.tax.entity.InputInvoiceEntity;
+import com.huicai.sme.tax.mapper.InputInvoiceMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;

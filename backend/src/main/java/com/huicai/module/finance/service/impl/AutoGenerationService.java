@@ -3,13 +3,18 @@ package com.huicai.module.finance.service.impl;
 import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.huicai.common.exception.BusinessException;
-import com.huicai.module.arap.dto.ExpenseReimbursementVO;
-import com.huicai.module.arap.constant.ArapStatus;
-import com.huicai.module.arap.entity.*;
-import com.huicai.module.arap.mapper.*;
-import com.huicai.module.arap.service.EmployeeService;
-import com.huicai.module.arap.service.ExpenseReimbursementService;
-import com.huicai.module.arap.service.ReconciliationService;
+import com.huicai.sme.arap.dto.ExpenseReimbursementVO;
+import com.huicai.sme.arap.constant.ArapStatus;
+import com.huicai.sme.arap.mapper.PrepaymentMapper;
+import com.huicai.sme.arap.entity.PrepaymentEntity;
+import com.huicai.base.masterdata.service.EmployeeService;
+import com.huicai.sme.arap.service.ExpenseReimbursementService;
+import com.huicai.sme.arap.service.ReconciliationService;
+import com.huicai.base.masterdata.entity.CustomerEntity;
+import com.huicai.base.masterdata.entity.VendorEntity;
+import com.huicai.base.masterdata.entity.EmployeeEntity;
+import com.huicai.base.masterdata.mapper.CustomerMapper;
+import com.huicai.base.masterdata.mapper.VendorMapper;
 import com.huicai.module.finance.constant.BankClassification;
 import com.huicai.module.finance.constant.StatementStatus;
 import com.huicai.module.finance.constant.VoucherType;
@@ -643,18 +648,18 @@ public class AutoGenerationService {
      */
     private Long findCustomerByName(String name) {
         if (StrUtil.isBlank(name)) return null;
-        List<com.huicai.module.arap.entity.CustomerEntity> list = customerMapper.selectList(
-                new LambdaQueryWrapper<com.huicai.module.arap.entity.CustomerEntity>()
-                        .eq(com.huicai.module.arap.entity.CustomerEntity::getName, name)
+        List<com.huicai.base.masterdata.entity.CustomerEntity> list = customerMapper.selectList(
+                new LambdaQueryWrapper<com.huicai.base.masterdata.entity.CustomerEntity>()
+                        .eq(com.huicai.base.masterdata.entity.CustomerEntity::getName, name)
                         .last("LIMIT 1"));
         return list.isEmpty() ? null : list.get(0).getId();
     }
 
     private Long findVendorByName(String name) {
         if (StrUtil.isBlank(name)) return null;
-        List<com.huicai.module.arap.entity.VendorEntity> list = vendorMapper.selectList(
-                new LambdaQueryWrapper<com.huicai.module.arap.entity.VendorEntity>()
-                        .eq(com.huicai.module.arap.entity.VendorEntity::getName, name)
+        List<com.huicai.base.masterdata.entity.VendorEntity> list = vendorMapper.selectList(
+                new LambdaQueryWrapper<com.huicai.base.masterdata.entity.VendorEntity>()
+                        .eq(com.huicai.base.masterdata.entity.VendorEntity::getName, name)
                         .last("LIMIT 1"));
         return list.isEmpty() ? null : list.get(0).getId();
     }
