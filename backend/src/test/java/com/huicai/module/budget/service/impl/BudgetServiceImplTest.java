@@ -1,10 +1,10 @@
-package com.huicai.module.budget.service.impl;
+package com.huicai.sme.budget.service.impl;
 
 import com.huicai.common.exception.BusinessException;
-import com.huicai.module.budget.entity.BudgetEntity;
-import com.huicai.module.budget.mapper.BudgetAdjustmentMapper;
-import com.huicai.module.budget.mapper.BudgetEntryMapper;
-import com.huicai.module.budget.mapper.BudgetMapper;
+import com.huicai.sme.budget.entity.BudgetEntity;
+import com.huicai.sme.budget.mapper.BudgetAdjustmentMapper;
+import com.huicai.sme.budget.mapper.BudgetEntryMapper;
+import com.huicai.sme.budget.mapper.BudgetMapper;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -84,8 +84,8 @@ class BudgetServiceImplTest {
 
     @Test
     void createAdjustment_creates_with_pending_status() {
-        com.huicai.module.budget.entity.BudgetAdjustmentEntity adjustment =
-                new com.huicai.module.budget.entity.BudgetAdjustmentEntity();
+        com.huicai.sme.budget.entity.BudgetAdjustmentEntity adjustment =
+                new com.huicai.sme.budget.entity.BudgetAdjustmentEntity();
         adjustment.setAdjustmentNo("ADJ-202607-001");
         adjustment.setBudgetId(1L);
         adjustment.setPeriod("202607");
@@ -93,7 +93,7 @@ class BudgetServiceImplTest {
         adjustment.setStatus("PENDING");
         when(adjustmentMapper.insert(adjustment)).thenReturn(1);
 
-        com.huicai.module.budget.entity.BudgetAdjustmentEntity r = service.createAdjustment(adjustment);
+        com.huicai.sme.budget.entity.BudgetAdjustmentEntity r = service.createAdjustment(adjustment);
 
         assertEquals("PENDING", r.getStatus());
         verify(adjustmentMapper).insert(adjustment);
@@ -104,8 +104,8 @@ class BudgetServiceImplTest {
         BudgetEntity b = stubBudget(1L, "ACTIVE");
         when(budgetMapper.selectList(any())).thenReturn(List.of(b));
         // entry 累计 usedAmount
-        com.huicai.module.budget.entity.BudgetEntryEntity e =
-                new com.huicai.module.budget.entity.BudgetEntryEntity();
+        com.huicai.sme.budget.entity.BudgetEntryEntity e =
+                new com.huicai.sme.budget.entity.BudgetEntryEntity();
         e.setUsedAmount(new BigDecimal("3000.00"));
         when(entryMapper.selectList(any())).thenReturn(List.of(e));
 

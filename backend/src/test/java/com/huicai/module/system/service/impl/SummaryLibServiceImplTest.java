@@ -1,7 +1,7 @@
-package com.huicai.module.system.service.impl;
+package com.huicai.base.system.service.impl;
 
-import com.huicai.module.system.entity.SummaryLibEntity;
-import com.huicai.module.system.mapper.SummaryLibMapper;
+import com.huicai.base.system.entity.SummaryLibEntity;
+import com.huicai.base.system.mapper.SummaryLibMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;

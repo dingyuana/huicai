@@ -1,6 +1,6 @@
-package com.huicai.module.asset.mapper;
+package com.huicai.sme.asset.mapper;
 
-import com.huicai.module.asset.entity.AssetDepreciationEntity;
+import com.huicai.sme.asset.entity.AssetDepreciationEntity;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.DisplayName;
 import org.mockito.Mockito;

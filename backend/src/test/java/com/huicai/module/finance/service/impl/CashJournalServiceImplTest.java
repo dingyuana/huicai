@@ -1,9 +1,9 @@
-package com.huicai.module.finance.service.impl;
+package com.huicai.sme.cash.service.impl;
 
 import com.huicai.common.exception.BusinessException;
-import com.huicai.module.finance.entity.CashJournalEntity;
-import com.huicai.module.finance.mapper.CashJournalMapper;
-import com.huicai.module.finance.service.VoucherService;
+import com.huicai.sme.cash.entity.CashJournalEntity;
+import com.huicai.sme.cash.mapper.CashJournalMapper;
+import com.huicai.base.voucher.service.VoucherService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;

@@ -21,7 +21,7 @@ import java.util.Map;
 
 @Tag(name = "智能核销")
 @RestController
-@RequestMapping("/api/v1/reconciliation")
+@RequestMapping("/api/sme/arap/v1/reconciliation")
 @RequiredArgsConstructor
 public class ReconciliationController {
 

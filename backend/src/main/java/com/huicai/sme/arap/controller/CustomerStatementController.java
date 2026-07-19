@@ -14,7 +14,7 @@ import java.util.Map;
 
 @Tag(name = "客户对账与差异处理")
 @RestController
-@RequestMapping("/api/v1")
+@RequestMapping("/api/sme/arap/v1")
 @RequiredArgsConstructor
 public class CustomerStatementController {
 

@@ -1,9 +1,9 @@
-package com.huicai.module.asset.service.impl;
+package com.huicai.sme.asset.service.impl;
 
 import com.huicai.common.exception.BusinessException;
-import com.huicai.module.asset.entity.AssetDisposalEntity;
-import com.huicai.module.asset.mapper.AssetCardMapper;
-import com.huicai.module.asset.mapper.AssetDisposalMapper;
+import com.huicai.sme.asset.entity.AssetDisposalEntity;
+import com.huicai.sme.asset.mapper.AssetCardMapper;
+import com.huicai.sme.asset.mapper.AssetDisposalMapper;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;

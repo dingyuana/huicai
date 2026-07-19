@@ -1,18 +1,18 @@
-package com.huicai.module.tax.service.impl;
+package com.huicai.sme.tax.service.impl;
 
 import com.huicai.common.exception.BusinessException;
 import com.huicai.common.test.StateMachineTestHelper;
-import com.huicai.module.finance.entity.BusinessDocEntity;
-import com.huicai.module.finance.entity.VoucherEntity;
-import com.huicai.module.finance.mapper.BusinessDocMapper;
-import com.huicai.module.finance.mapper.VoucherEntryMapper;
-import com.huicai.module.finance.mapper.VoucherMapper;
-import com.huicai.module.finance.service.VoucherNoService;
-import com.huicai.module.system.entity.Subject;
-import com.huicai.module.system.mapper.SubjectMapper;
-import com.huicai.module.tax.constant.InvoiceStatus;
-import com.huicai.module.tax.entity.InputInvoiceEntity;
-import com.huicai.module.tax.mapper.InputInvoiceMapper;
+import com.huicai.sme.arap.entity.BusinessDocEntity;
+import com.huicai.base.voucher.entity.VoucherEntity;
+import com.huicai.sme.arap.mapper.BusinessDocMapper;
+import com.huicai.base.voucher.mapper.VoucherEntryMapper;
+import com.huicai.base.voucher.mapper.VoucherMapper;
+import com.huicai.base.voucher.service.VoucherNoService;
+import com.huicai.base.system.entity.Subject;
+import com.huicai.base.system.mapper.SubjectMapper;
+import com.huicai.sme.tax.constant.InvoiceStatus;
+import com.huicai.sme.tax.entity.InputInvoiceEntity;
+import com.huicai.sme.tax.mapper.InputInvoiceMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -154,7 +154,7 @@ class InputInvoiceStateMachineServiceImplTest {
         // 创建凭证
         verify(voucherMapper).insert(any(VoucherEntity.class));
         // 创建凭证分录（借:存货 + 借:进项税 + 贷:应付 = 3条）
-        verify(voucherEntryMapper, atLeast(1)).insert(any(com.huicai.module.finance.entity.VoucherEntryEntity.class));
+        verify(voucherEntryMapper, atLeast(1)).insert(any(com.huicai.base.voucher.entity.VoucherEntryEntity.class));
     }
 
     @Test

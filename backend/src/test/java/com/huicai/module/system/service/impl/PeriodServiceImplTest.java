@@ -1,7 +1,7 @@
-package com.huicai.module.system.service.impl;
+package com.huicai.base.system.service.impl;
 
-import com.huicai.module.system.entity.PeriodEntity;
-import com.huicai.module.system.mapper.PeriodMapper;
+import com.huicai.base.system.entity.PeriodEntity;
+import com.huicai.base.system.mapper.PeriodMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;

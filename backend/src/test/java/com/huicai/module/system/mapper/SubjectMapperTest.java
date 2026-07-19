@@ -1,7 +1,7 @@
-package com.huicai.module.system.mapper;
+package com.huicai.base.system.mapper;
 
 import com.huicai.common.test.AbstractMapperTest;
-import com.huicai.module.system.entity.Subject;
+import com.huicai.base.system.entity.Subject;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 

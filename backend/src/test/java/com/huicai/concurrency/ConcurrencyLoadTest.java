@@ -5,7 +5,7 @@ import org.slf4j.LoggerFactory;
 
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.huicai.module.arap.dto.*;
+import com.huicai.sme.arap.dto.*;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.Disabled;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -61,7 +61,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         List<Long> responseTimes = Collections.synchronizedList(new ArrayList<>());
 
         // 预热请求
-        mvc.perform(get("/api/v1/reconciliations/recommend-receipt"));
+        mvc.perform(get("/api/sme/arap/v1/reconciliations/recommend-receipt"));
 
         long startTime = System.currentTimeMillis();
 
@@ -73,7 +73,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
                     for (int j = 0; j < REQUESTS_PER_THREAD; j++) {
                         long reqStart = System.nanoTime();
                         try {
-                            mvc.perform(get("/api/v1/reconciliations/recommend-receipt")
+                            mvc.perform(get("/api/sme/arap/v1/reconciliations/recommend-receipt")
                                             .param("receiptId", String.valueOf(threadId * 100 + j)));
                             successCount.incrementAndGet();
                         } catch (Exception e) {
@@ -158,7 +158,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
         // 预热
         String warmupBody = "{\"current\":1,\"size\":10}";
-        mvc.perform(post("/api/v1/business-docs/page")
+        mvc.perform(post("/api/sme/arap/v1/business-docs/page")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(warmupBody));
 
@@ -172,7 +172,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
                         long reqStart = System.nanoTime();
                         try {
                             String body = "{\"current\":" + (1 + (j % 5)) + ",\"size\":10,\"status\":\"PENDING\"}";
-                            mvc.perform(post("/api/v1/business-docs/page")
+                            mvc.perform(post("/api/sme/arap/v1/business-docs/page")
                                     .contentType(MediaType.APPLICATION_JSON)
                                     .content(body))
                                     .andExpect(status().isOk());
@@ -255,25 +255,25 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
                         try {
                             switch (apiChoice) {
                                 case 0:
-                                    mvc.perform(get("/api/v1/reconciliations/recommend-receipt"))
+                                    mvc.perform(get("/api/sme/arap/v1/reconciliations/recommend-receipt"))
                                             ;
                                     successByApi.get("recommend-receipt").incrementAndGet();
                                     break;
                                 case 1:
-                                    mvc.perform(get("/api/v1/business-docs/page")
+                                    mvc.perform(get("/api/sme/arap/v1/business-docs/page")
                                                     .param("current", "1")
                                                     .param("size", "10"))
                                             ;
                                     successByApi.get("business-doc-page").incrementAndGet();
                                     break;
                                 case 2:
-                                    mvc.perform(get("/api/v1/bank-reconciliations/score")
+                                    mvc.perform(get("/api/sme/cash/v1/bank-reconciliation/score")
                                                     .param("period", "202606"))
                                             ;
                                     successByApi.get("bank-recon-score").incrementAndGet();
                                     break;
                                 case 3:
-                                    mvc.perform(get("/api/v1/vouchers/page")
+                                    mvc.perform(get("/api/base/voucher/v1/vouchers/page")
                                                     .param("current", "1")
                                                     .param("size", "10"))
                                             ;
@@ -339,7 +339,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
                 try {
                     barrier.await();  // 等待所有线程就绪
                     // 同时发起请求
-                    mvc.perform(get("/api/v1/reconciliations/recommend-receipt"))
+                    mvc.perform(get("/api/sme/arap/v1/reconciliations/recommend-receipt"))
                             ;
                     successCount.incrementAndGet();
                 } catch (Exception e) {

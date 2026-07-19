@@ -1,10 +1,10 @@
-package com.huicai.module.system.controller;
+package com.huicai.base.system.controller;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
-import com.huicai.module.system.entity.RoleEntity;
-import com.huicai.module.system.service.MenuService;
-import com.huicai.module.system.service.RoleService;
+import com.huicai.base.system.entity.RoleEntity;
+import com.huicai.base.system.service.MenuService;
+import com.huicai.base.system.service.RoleService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;

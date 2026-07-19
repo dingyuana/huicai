@@ -1,6 +1,6 @@
-package com.huicai.module.report.mapper;
+package com.huicai.base.report.mapper;
 
-import com.huicai.module.report.entity.ReportTemplateEntity;
+import com.huicai.base.report.entity.ReportTemplateEntity;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.DisplayName;
 import org.mockito.Mockito;

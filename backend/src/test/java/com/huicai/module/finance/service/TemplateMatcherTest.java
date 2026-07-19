@@ -1,8 +1,8 @@
-package com.huicai.module.finance.service;
+package com.huicai.sme.arap.service;
 
 import com.huicai.common.util.TemplateContext;
-import com.huicai.module.finance.entity.VoucherTemplateEntity;
-import com.huicai.module.finance.mapper.VoucherTemplateMapper;
+import com.huicai.base.voucher.entity.VoucherTemplateEntity;
+import com.huicai.base.voucher.mapper.VoucherTemplateMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;

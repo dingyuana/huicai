@@ -23,7 +23,7 @@ import java.util.Map;
 
 @Tag(name = "核销报表")
 @RestController
-@RequestMapping("/api/v1/reconciliation/report")
+@RequestMapping("/api/sme/arap/v1/reconciliation/report")
 @RequiredArgsConstructor
 public class ReconciliationReportController {
 

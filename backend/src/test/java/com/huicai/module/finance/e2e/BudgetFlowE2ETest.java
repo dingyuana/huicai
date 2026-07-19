@@ -1,13 +1,13 @@
-package com.huicai.module.finance.e2e;
+package com.huicai.sme.arap.e2e;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.huicai.common.test.AbstractMapperTest;
-import com.huicai.module.budget.constant.BudgetStatus;
-import com.huicai.module.budget.entity.BudgetEntity;
-import com.huicai.module.budget.entity.BudgetEntryEntity;
-import com.huicai.module.budget.mapper.BudgetEntryMapper;
-import com.huicai.module.budget.mapper.BudgetMapper;
-import com.huicai.module.budget.service.BudgetService;
+import com.huicai.sme.budget.constant.BudgetStatus;
+import com.huicai.sme.budget.entity.BudgetEntity;
+import com.huicai.sme.budget.entity.BudgetEntryEntity;
+import com.huicai.sme.budget.mapper.BudgetEntryMapper;
+import com.huicai.sme.budget.mapper.BudgetMapper;
+import com.huicai.sme.budget.service.BudgetService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 

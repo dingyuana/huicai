@@ -1,12 +1,12 @@
-package com.huicai.module.finance.e2e;
+package com.huicai.sme.arap.e2e;
 
 import com.huicai.common.test.AbstractMapperTest;
-import com.huicai.module.asset.entity.AssetCardEntity;
-import com.huicai.module.asset.entity.AssetCategoryEntity;
-import com.huicai.module.asset.entity.AssetDisposalEntity;
-import com.huicai.module.asset.mapper.AssetCardMapper;
-import com.huicai.module.asset.mapper.AssetCategoryMapper;
-import com.huicai.module.asset.mapper.AssetDisposalMapper;
+import com.huicai.sme.asset.entity.AssetCardEntity;
+import com.huicai.sme.asset.entity.AssetCategoryEntity;
+import com.huicai.sme.asset.entity.AssetDisposalEntity;
+import com.huicai.sme.asset.mapper.AssetCardMapper;
+import com.huicai.sme.asset.mapper.AssetCategoryMapper;
+import com.huicai.sme.asset.mapper.AssetDisposalMapper;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 

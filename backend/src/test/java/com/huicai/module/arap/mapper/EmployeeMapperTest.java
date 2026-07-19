@@ -1,6 +1,7 @@
-package com.huicai.module.arap.mapper;
+package com.huicai.base.masterdata.mapper;
 
-import com.huicai.module.arap.entity.EmployeeEntity;
+import com.huicai.base.masterdata.entity.EmployeeEntity;
+import com.huicai.base.masterdata.mapper.EmployeeMapper;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.DisplayName;
 import org.mockito.Mockito;

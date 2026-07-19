@@ -1,7 +1,8 @@
-package com.huicai.module.finance.mapper;
+package com.huicai.sme.arap.mapper;
 
 import com.huicai.common.test.AbstractMapperTest;
-import com.huicai.module.finance.entity.BusinessDocEntity;
+import com.huicai.sme.arap.entity.BusinessDocEntity;
+import com.huicai.sme.arap.mapper.BusinessDocMapper;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 

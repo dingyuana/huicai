@@ -1,9 +1,9 @@
-package com.huicai.module.arap.service.impl;
+package com.huicai.base.masterdata.service.impl;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.huicai.common.exception.BusinessException;
-import com.huicai.module.arap.entity.EmployeeEntity;
-import com.huicai.module.arap.mapper.EmployeeMapper;
+import com.huicai.base.masterdata.entity.EmployeeEntity;
+import com.huicai.base.masterdata.mapper.EmployeeMapper;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;

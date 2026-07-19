@@ -13,7 +13,7 @@ import java.util.List;
 
 @Tag(name = "分类规则管理")
 @RestController
-@RequestMapping("/api/v1/classification-rules")
+@RequestMapping("/api/sme/cash/v1/classification-rules")
 @RequiredArgsConstructor
 public class ClassificationRuleController {
 

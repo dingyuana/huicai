@@ -15,7 +15,7 @@ import java.util.Map;
 
 @Tag(name = "报表中心")
 @RestController
-@RequestMapping("/api/v1/reports")
+@RequestMapping("/api/base/report/v1/reports")
 @RequiredArgsConstructor
 public class ReportController {
 

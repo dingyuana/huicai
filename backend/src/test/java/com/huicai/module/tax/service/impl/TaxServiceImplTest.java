@@ -1,12 +1,12 @@
-package com.huicai.module.tax.service.impl;
+package com.huicai.sme.tax.service.impl;
 
 import com.huicai.common.exception.BusinessException;
-import com.huicai.module.tax.entity.InputInvoiceEntity;
-import com.huicai.module.tax.entity.TaxDeclarationEntity;
-import com.huicai.module.tax.mapper.InputInvoiceMapper;
-import com.huicai.module.tax.mapper.OutputInvoiceMapper;
-import com.huicai.module.tax.mapper.TaxDeclarationMapper;
-import com.huicai.module.tax.mapper.TaxTypeMapper;
+import com.huicai.sme.tax.entity.InputInvoiceEntity;
+import com.huicai.sme.tax.entity.TaxDeclarationEntity;
+import com.huicai.sme.tax.mapper.InputInvoiceMapper;
+import com.huicai.sme.tax.mapper.OutputInvoiceMapper;
+import com.huicai.sme.tax.mapper.TaxDeclarationMapper;
+import com.huicai.sme.tax.mapper.TaxTypeMapper;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;

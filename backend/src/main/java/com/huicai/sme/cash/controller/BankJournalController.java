@@ -4,7 +4,7 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.huicai.common.response.R;
 import com.huicai.sme.cash.entity.BankJournalEntity;
 import com.huicai.sme.cash.service.BankJournalService;
-import com.huicai.base.auth.util.SecurityUtils;
+import com.huicai.base.system.util.SecurityUtils;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
@@ -16,7 +16,7 @@ import java.util.Map;
 
 @Tag(name = "银行日记账")
 @RestController
-@RequestMapping("/api/v1/bank-journals")
+@RequestMapping("/api/sme/cash/v1/bank-journals")
 @RequiredArgsConstructor
 public class BankJournalController {
 

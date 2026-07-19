@@ -2,7 +2,7 @@
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.huicai.base.voucher.mapper.VoucherTemplateLineMapper">
 
-    <resultMap id="lineMap" type="com.huicai.module.finance.entity.VoucherTemplateLineEntity">
+    <resultMap id="lineMap" type="com.huicai.base.voucher.entity.VoucherTemplateLineEntity">
         <id column="id" property="id"/>
         <result column="template_id" property="templateId"/>
         <result column="subject_id" property="subjectId"/>

@@ -1,8 +1,8 @@
 package com.huicai.suite;
 
-import com.huicai.module.system.mapper.SubjectMapperTest;
-import com.huicai.module.tax.mapper.OutputInvoiceMapperTest;
-import com.huicai.module.finance.mapper.VoucherMapperTest;
+import com.huicai.base.system.mapper.SubjectMapperTest;
+import com.huicai.sme.tax.mapper.OutputInvoiceMapperTest;
+import com.huicai.base.voucher.mapper.VoucherMapperTest;
 import org.junit.platform.suite.api.SelectClasses;
 import org.junit.platform.suite.api.Suite;
 import org.junit.platform.suite.api.SuiteDisplayName;

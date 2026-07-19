@@ -1,7 +1,7 @@
 package com.huicai.module;
 
-import com.huicai.module.report.service.AnalysisService;
-import com.huicai.module.report.service.ReportService;
+import com.huicai.base.report.service.AnalysisService;
+import com.huicai.base.report.service.ReportService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;

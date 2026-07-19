@@ -1,7 +1,7 @@
-package com.huicai.module.system.service.impl;
+package com.huicai.base.system.service.impl;
 
-import com.huicai.module.system.entity.VoucherTypeEntity;
-import com.huicai.module.system.mapper.VoucherTypeMapper;
+import com.huicai.base.system.entity.VoucherTypeEntity;
+import com.huicai.base.system.mapper.VoucherTypeMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;

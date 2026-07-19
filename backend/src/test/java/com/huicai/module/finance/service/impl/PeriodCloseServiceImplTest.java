@@ -1,14 +1,14 @@
-package com.huicai.module.finance.service.impl;
+package com.huicai.base.voucher.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.conditions.query.LambdaQueryChainWrapper;
 import com.huicai.common.exception.BusinessException;
-import com.huicai.module.finance.mapper.VoucherEntryMapper;
-import com.huicai.module.finance.mapper.VoucherMapper;
-import com.huicai.module.finance.service.SubjectBalanceService;
-import com.huicai.module.system.entity.PeriodEntity;
-import com.huicai.module.system.service.PeriodService;
-import com.huicai.module.system.service.SubjectService;
+import com.huicai.base.voucher.mapper.VoucherEntryMapper;
+import com.huicai.base.voucher.mapper.VoucherMapper;
+import com.huicai.base.balance.service.SubjectBalanceService;
+import com.huicai.base.system.entity.PeriodEntity;
+import com.huicai.base.system.service.PeriodService;
+import com.huicai.base.system.service.SubjectService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;

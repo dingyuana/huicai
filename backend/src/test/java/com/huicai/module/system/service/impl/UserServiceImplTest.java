@@ -1,9 +1,9 @@
-package com.huicai.module.system.service.impl;
+package com.huicai.base.system.service.impl;
 
-import com.huicai.module.system.entity.UserEntity;
-import com.huicai.module.system.mapper.DeptMapper;
-import com.huicai.module.system.mapper.UserMapper;
-import com.huicai.module.system.mapper.UserRoleMapper;
+import com.huicai.base.system.entity.UserEntity;
+import com.huicai.base.system.mapper.DeptMapper;
+import com.huicai.base.system.mapper.UserMapper;
+import com.huicai.base.system.mapper.UserRoleMapper;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;

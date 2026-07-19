@@ -1,6 +1,6 @@
-package com.huicai.module;
+package com.huicai;
 
-import com.huicai.module.tax.service.TaxService;
+import com.huicai.sme.tax.service.TaxService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -51,7 +51,7 @@ class TaxIntegrationTest {
 
     @Test
     void testInputInvoiceCreate() {
-        com.huicai.module.tax.entity.InputInvoiceEntity invoice = new com.huicai.module.tax.entity.InputInvoiceEntity();
+        com.huicai.sme.tax.entity.InputInvoiceEntity invoice = new com.huicai.sme.tax.entity.InputInvoiceEntity();
         invoice.setInvoiceNo("TEST-INV-001");
         invoice.setInvoiceDate(java.time.LocalDate.of(2026, 1, 15));
         invoice.setVendorName("测试供应商");
@@ -59,7 +59,7 @@ class TaxIntegrationTest {
         invoice.setTaxRate(new BigDecimal("0.13"));
         invoice.setInvoiceType("SPECIAL");
 
-        com.huicai.module.tax.entity.InputInvoiceEntity created = new com.huicai.module.tax.entity.InputInvoiceEntity();
+        com.huicai.sme.tax.entity.InputInvoiceEntity created = new com.huicai.sme.tax.entity.InputInvoiceEntity();
         created.setId(100L);
         created.setTaxAmount(new BigDecimal("130.00"));
         when(taxService.createInput(any())).thenReturn(created);

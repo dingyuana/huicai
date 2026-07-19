@@ -15,7 +15,7 @@ import java.util.List;
 
 @Tag(name = "票据管理")
 @RestController
-@RequestMapping("/api/v1/tickets")
+@RequestMapping("/api/sme/cash/v1/tickets")
 @RequiredArgsConstructor
 public class TicketController {
 

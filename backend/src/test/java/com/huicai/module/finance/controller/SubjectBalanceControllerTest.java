@@ -1,7 +1,7 @@
-package com.huicai.module.finance.controller;
+package com.huicai.sme.arap.controller;
 
-import com.huicai.module.finance.entity.SubjectBalanceEntity;
-import com.huicai.module.finance.service.SubjectBalanceService;
+import com.huicai.base.balance.entity.SubjectBalanceEntity;
+import com.huicai.base.balance.service.SubjectBalanceService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -43,7 +43,7 @@ class SubjectBalanceControllerTest {
 
         when(subjectBalanceService.queryByPeriod(eq("202607"))).thenReturn(List.of(balance));
 
-        mvc.perform(get("/api/v1/subject-balances")
+        mvc.perform(get("/api/base/balance/v1/subject-balances")
                         .param("period", "202607"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(200))
@@ -56,7 +56,7 @@ class SubjectBalanceControllerTest {
     void listByPeriod_emptyResult_returnsEmptyList() throws Exception {
         when(subjectBalanceService.queryByPeriod(eq("202608"))).thenReturn(List.of());
 
-        mvc.perform(get("/api/v1/subject-balances")
+        mvc.perform(get("/api/base/balance/v1/subject-balances")
                         .param("period", "202608"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(200))
@@ -75,7 +75,7 @@ class SubjectBalanceControllerTest {
 
         when(subjectBalanceService.checkTrialBalance(eq("202607"))).thenReturn(result);
 
-        mvc.perform(get("/api/v1/subject-balances/trial-balance")
+        mvc.perform(get("/api/base/balance/v1/subject-balances/trial-balance")
                         .param("period", "202607"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(200))
@@ -87,7 +87,7 @@ class SubjectBalanceControllerTest {
     void initOpening_paramsBoundCorrectly() throws Exception {
         doNothing().when(subjectBalanceService).initOpeningBalances(anyString(), anyMap());
 
-        mvc.perform(post("/api/v1/subject-balances/init")
+        mvc.perform(post("/api/base/balance/v1/subject-balances/init")
                         .param("period", "202607")
                         .contentType("application/json")
                         .content("""

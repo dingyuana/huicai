@@ -1,12 +1,12 @@
-package com.huicai.module.system.controller;
+package com.huicai.base.system.controller;
 
 import com.huicai.config.security.JwtProvider;
-import com.huicai.module.system.entity.UserEntity;
-import com.huicai.module.system.mapper.MenuMapper;
-import com.huicai.module.system.mapper.RoleMenuMapper;
-import com.huicai.module.system.mapper.UserMapper;
-import com.huicai.module.system.mapper.UserRoleMapper;
-import com.huicai.module.system.service.MenuService;
+import com.huicai.base.system.entity.UserEntity;
+import com.huicai.base.system.mapper.MenuMapper;
+import com.huicai.base.system.mapper.RoleMenuMapper;
+import com.huicai.base.system.mapper.UserMapper;
+import com.huicai.base.system.mapper.UserRoleMapper;
+import com.huicai.base.system.service.MenuService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;

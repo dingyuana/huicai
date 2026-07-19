@@ -14,7 +14,7 @@ import java.util.List;
 
 @Tag(name = "费用报销单 - P11-2")
 @RestController
-@RequestMapping("/api/v1/expense-reimbursements")
+@RequestMapping("/api/sme/arap/v1/expense-reimbursements")
 @RequiredArgsConstructor
 public class ExpenseReimbursementController {
 

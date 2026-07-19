@@ -1,12 +1,12 @@
-package com.huicai.module.arap.controller;
+package com.huicai.sme.arap.controller;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.huicai.module.arap.dto.vo.ArapSettlementVO;
-import com.huicai.module.arap.entity.ArapSettlementEntity;
-import com.huicai.module.arap.entity.ArapSettlementEntryEntity;
-import com.huicai.module.arap.service.ArapSettlementService;
+import com.huicai.sme.arap.dto.vo.ArapSettlementVO;
+import com.huicai.sme.arap.entity.ArapSettlementEntity;
+import com.huicai.sme.arap.entity.ArapSettlementEntryEntity;
+import com.huicai.sme.arap.service.ArapSettlementService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -43,7 +43,7 @@ class ArapSettlementControllerTest {
         IPage<ArapSettlementVO> page = new Page<>(1, 20);
         when(service.pageQueryWithPartyName(isNull(), isNull(), eq(1), eq(20))).thenReturn(page);
 
-        mvc.perform(get("/api/v1/arap-settlements/page"))
+        mvc.perform(get("/api/sme/arap/v1/arap-settlements/page"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(200));
     }
@@ -54,7 +54,7 @@ class ArapSettlementControllerTest {
         IPage<ArapSettlementVO> page = new Page<>(2, 50);
         when(service.pageQueryWithPartyName(eq("CONFIRMED"), eq("STL-2024-001"), eq(2), eq(50))).thenReturn(page);
 
-        mvc.perform(get("/api/v1/arap-settlements/page")
+        mvc.perform(get("/api/sme/arap/v1/arap-settlements/page")
                         .param("status", "CONFIRMED")
                         .param("voucherNo", "STL-2024-001")
                         .param("current", "2")
@@ -71,7 +71,7 @@ class ArapSettlementControllerTest {
         vo.setTotalAmount(new BigDecimal("10000.00"));
         when(service.getDetailWithPartyName(eq(1L))).thenReturn(vo);
 
-        mvc.perform(get("/api/v1/arap-settlements/1"))
+        mvc.perform(get("/api/sme/arap/v1/arap-settlements/1"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.id").value(1))
                 .andExpect(jsonPath("$.data.status").value("DRAFT"));
@@ -96,7 +96,7 @@ class ArapSettlementControllerTest {
         created.setStatus("DRAFT");
         when(service.create(any(), anyList())).thenReturn(created);
 
-        mvc.perform(post("/api/v1/arap-settlements")
+        mvc.perform(post("/api/sme/arap/v1/arap-settlements")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(om.writeValueAsString(request)))
                 .andExpect(status().isOk())
@@ -117,7 +117,7 @@ class ArapSettlementControllerTest {
         entity.setStatus("CONFIRMED");
         when(service.confirm(eq(1L))).thenReturn(entity);
 
-        mvc.perform(post("/api/v1/arap-settlements/1/confirm"))
+        mvc.perform(post("/api/sme/arap/v1/arap-settlements/1/confirm"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.status").value("CONFIRMED"));
 
@@ -129,7 +129,7 @@ class ArapSettlementControllerTest {
     void generateVoucher_pathVariable_boundCorrectly() throws Exception {
         doNothing().when(service).generateVoucher(anyLong());
 
-        mvc.perform(post("/api/v1/arap-settlements/1/generate-voucher"))
+        mvc.perform(post("/api/sme/arap/v1/arap-settlements/1/generate-voucher"))
                 .andExpect(status().isOk());
 
         verify(service).generateVoucher(eq(1L));
@@ -140,7 +140,7 @@ class ArapSettlementControllerTest {
     void reverse_pathVariable_boundCorrectly() throws Exception {
         doNothing().when(service).reverse(anyLong());
 
-        mvc.perform(post("/api/v1/arap-settlements/1/reverse"))
+        mvc.perform(post("/api/sme/arap/v1/arap-settlements/1/reverse"))
                 .andExpect(status().isOk());
 
         verify(service).reverse(eq(1L));
@@ -151,7 +151,7 @@ class ArapSettlementControllerTest {
     void cancel_pathVariable_boundCorrectly() throws Exception {
         doNothing().when(service).cancel(anyLong());
 
-        mvc.perform(post("/api/v1/arap-settlements/1/cancel"))
+        mvc.perform(post("/api/sme/arap/v1/arap-settlements/1/cancel"))
                 .andExpect(status().isOk());
 
         verify(service).cancel(eq(1L));
@@ -166,7 +166,7 @@ class ArapSettlementControllerTest {
         entry.setSettledAmount(new BigDecimal("5000.00"));
         when(service.getEntries(eq(1L))).thenReturn(List.of(entry));
 
-        mvc.perform(get("/api/v1/arap-settlements/1/entries"))
+        mvc.perform(get("/api/sme/arap/v1/arap-settlements/1/entries"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data[0].settlementId").value(1));
     }
@@ -176,7 +176,7 @@ class ArapSettlementControllerTest {
     void delete_pathVariable_boundCorrectly() throws Exception {
         doNothing().when(service).delete(anyLong());
 
-        mvc.perform(delete("/api/v1/arap-settlements/1"))
+        mvc.perform(delete("/api/sme/arap/v1/arap-settlements/1"))
                 .andExpect(status().isOk());
 
         verify(service).delete(eq(1L));

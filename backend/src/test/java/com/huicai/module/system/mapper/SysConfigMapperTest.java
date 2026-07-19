@@ -1,6 +1,6 @@
-package com.huicai.module.system.mapper;
+package com.huicai.base.system.mapper;
 
-import com.huicai.module.system.entity.SysConfigEntity;
+import com.huicai.base.system.entity.SysConfigEntity;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.DisplayName;
 import org.mockito.Mockito;

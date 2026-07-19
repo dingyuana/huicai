@@ -15,7 +15,7 @@ import java.util.List;
 
 @Tag(name = "核销管理")
 @RestController
-@RequestMapping("/api/v1/arap-settlements")
+@RequestMapping("/api/sme/arap/v1/arap-settlements")
 @RequiredArgsConstructor
 public class ArapSettlementController {
 

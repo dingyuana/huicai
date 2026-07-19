@@ -14,7 +14,7 @@ import java.util.List;
 
 @Tag(name = "账龄分析")
 @RestController
-@RequestMapping("/api/v1/aging-analysis")
+@RequestMapping("/api/sme/arap/v1/aging-analysis")
 @RequiredArgsConstructor
 public class AgingAnalysisController {
 

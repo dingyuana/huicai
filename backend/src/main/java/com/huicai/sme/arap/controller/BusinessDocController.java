@@ -8,7 +8,7 @@ import com.huicai.sme.arap.dto.BusinessDocVO;
 import com.huicai.base.voucher.entity.VoucherTemplateEntity;
 import com.huicai.base.voucher.mapper.VoucherTemplateMapper;
 import com.huicai.sme.arap.service.BusinessDocService;
-import com.huicai.base.auth.util.SecurityUtils;
+import com.huicai.base.system.util.SecurityUtils;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
@@ -18,7 +18,7 @@ import java.util.List;
 
 @Tag(name = "业务单据")
 @RestController
-@RequestMapping("/api/v1/business-docs")
+@RequestMapping("/api/sme/arap/v1/business-docs")
 @RequiredArgsConstructor
 public class BusinessDocController {
 

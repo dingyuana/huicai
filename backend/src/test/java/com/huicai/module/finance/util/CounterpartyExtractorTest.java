@@ -1,4 +1,4 @@
-package com.huicai.module.finance.util;
+package com.huicai.sme.cash.util;
 
 import org.junit.jupiter.api.Test;
 

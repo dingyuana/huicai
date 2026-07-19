@@ -3,7 +3,7 @@
 <mapper namespace="com.huicai.base.voucher.mapper.VoucherTemplateMapper">
 
     <select id="selectActiveByClassification"
-            resultType="com.huicai.module.finance.entity.VoucherTemplateEntity">
+            resultType="com.huicai.base.voucher.entity.VoucherTemplateEntity">
         SELECT * FROM t_voucher_template
         WHERE classification = #{classification}
           AND is_active = TRUE
@@ -12,7 +12,7 @@
     </select>
 
     <select id="selectAllActive"
-            resultType="com.huicai.module.finance.entity.VoucherTemplateEntity">
+            resultType="com.huicai.base.voucher.entity.VoucherTemplateEntity">
         SELECT * FROM t_voucher_template
         WHERE is_active = TRUE AND deleted = 0
         ORDER BY classification

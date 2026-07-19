@@ -13,7 +13,7 @@ import java.util.List;
 
 @Tag(name = "采购退货（财务）")
 @RestController
-@RequestMapping("/api/v1/purchase-returns")
+@RequestMapping("/api/sme/arap/v1/purchase-returns")
 @RequiredArgsConstructor
 public class PurchaseReturnController {
 

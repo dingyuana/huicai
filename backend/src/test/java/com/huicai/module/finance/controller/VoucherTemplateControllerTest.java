@@ -1,10 +1,10 @@
-package com.huicai.module.finance.controller;
+package com.huicai.base.voucher.controller;
 
-import com.huicai.module.finance.entity.VoucherTemplateEntity;
-import com.huicai.module.finance.entity.VoucherTemplateLineEntity;
-import com.huicai.module.finance.service.VoucherTemplateService;
-import com.huicai.module.system.entity.Subject;
-import com.huicai.module.system.mapper.SubjectMapper;
+import com.huicai.base.voucher.entity.VoucherTemplateEntity;
+import com.huicai.base.voucher.entity.VoucherTemplateLineEntity;
+import com.huicai.base.voucher.service.VoucherTemplateService;
+import com.huicai.base.system.entity.Subject;
+import com.huicai.base.system.mapper.SubjectMapper;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -47,7 +47,7 @@ class VoucherTemplateControllerTest {
         when(templateService.listAllActive()).thenReturn(List.of(tpl));
         when(templateService.getLines(eq(1L))).thenReturn(List.of());
 
-        mvc.perform(get("/api/v1/voucher-templates"))
+        mvc.perform(get("/api/base/voucher/v1/voucher-templates"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(200))
                 .andExpect(jsonPath("$.data[0].name").value("银行手续费"))
@@ -65,7 +65,7 @@ class VoucherTemplateControllerTest {
         when(templateService.matchByClassification(eq("bank_fee"))).thenReturn(tpl);
         when(templateService.getLines(eq(1L))).thenReturn(List.of());
 
-        mvc.perform(get("/api/v1/voucher-templates")
+        mvc.perform(get("/api/base/voucher/v1/voucher-templates")
                         .param("classification", "bank_fee"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(200))
@@ -82,7 +82,7 @@ class VoucherTemplateControllerTest {
         when(templateService.getById(eq(1L))).thenReturn(tpl);
         when(templateService.getLines(eq(1L))).thenReturn(List.of());
 
-        mvc.perform(get("/api/v1/voucher-templates/1"))
+        mvc.perform(get("/api/base/voucher/v1/voucher-templates/1"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(200))
                 .andExpect(jsonPath("$.data.name").value("银行手续费"));
@@ -93,7 +93,7 @@ class VoucherTemplateControllerTest {
     void getById_notExists_returns400() throws Exception {
         when(templateService.getById(eq(999L))).thenReturn(null);
 
-        mvc.perform(get("/api/v1/voucher-templates/999"))
+        mvc.perform(get("/api/base/voucher/v1/voucher-templates/999"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(400))
                 .andExpect(jsonPath("$.msg").value("模板不存在"));
@@ -117,7 +117,7 @@ class VoucherTemplateControllerTest {
                 {"name":"银行手续费","classification":"bank_fee"}
                 """;
 
-        mvc.perform(post("/api/v1/voucher-templates")
+        mvc.perform(post("/api/base/voucher/v1/voucher-templates")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json))
                 .andExpect(status().isOk())
@@ -134,7 +134,7 @@ class VoucherTemplateControllerTest {
                 {"name":"银行手续费-更新"}
                 """;
 
-        mvc.perform(put("/api/v1/voucher-templates/1")
+        mvc.perform(put("/api/base/voucher/v1/voucher-templates/1")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json))
                 .andExpect(status().isOk())
@@ -148,7 +148,7 @@ class VoucherTemplateControllerTest {
     void delete_pathVariable_boundCorrectly() throws Exception {
         doNothing().when(templateService).delete(anyLong());
 
-        mvc.perform(delete("/api/v1/voucher-templates/1"))
+        mvc.perform(delete("/api/base/voucher/v1/voucher-templates/1"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(200));
 

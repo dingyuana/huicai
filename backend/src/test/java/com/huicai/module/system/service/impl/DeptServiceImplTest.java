@@ -1,7 +1,7 @@
-package com.huicai.module.system.service.impl;
+package com.huicai.base.system.service.impl;
 
-import com.huicai.module.system.entity.DeptEntity;
-import com.huicai.module.system.mapper.DeptMapper;
+import com.huicai.base.system.entity.DeptEntity;
+import com.huicai.base.system.mapper.DeptMapper;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;

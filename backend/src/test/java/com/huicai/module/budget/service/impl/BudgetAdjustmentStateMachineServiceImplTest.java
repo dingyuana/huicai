@@ -1,7 +1,7 @@
-package com.huicai.module.budget.service.impl;
+package com.huicai.sme.budget.service.impl;
 
 import com.huicai.common.exception.BusinessException;
-import com.huicai.module.budget.entity.BudgetAdjustmentEntity;
+import com.huicai.sme.budget.entity.BudgetAdjustmentEntity;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 

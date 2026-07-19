@@ -17,7 +17,7 @@ import java.util.Map;
 
 @Tag(name = "往来管理")
 @RestController
-@RequestMapping("/api/v1")
+@RequestMapping("/api/sme/arap/v1")
 @RequiredArgsConstructor
 public class ArapController {
 

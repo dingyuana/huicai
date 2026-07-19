@@ -158,7 +158,7 @@ class ExpenseReimbursementServiceImplTest {
         when(mapper.selectById(1L)).thenReturn(stub(1L, "SUBMITTED"));
         stubPartyMappers();
         ExpenseReimbursementVO r = service.approve(1L, "zhangsan");
-        assertEquals("VOUCHERED", r.getStatus());
+        assertEquals("APPROVED", r.getStatus());
         assertEquals("zhangsan", r.getApprovedBy());
     }
 

@@ -5,7 +5,7 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.huicai.common.response.R;
 import com.huicai.sme.cash.entity.BankStatementEntity;
 import com.huicai.sme.cash.service.BankStatementService;
-import com.huicai.base.auth.util.SecurityUtils;
+import com.huicai.base.system.util.SecurityUtils;
 import com.huicai.sme.arap.service.impl.AutoGenerationService;
 import com.huicai.sme.cash.service.impl.BankStatementExcelImportService;
 import com.huicai.sme.cash.service.impl.ColumnMappingResolver;
@@ -21,7 +21,7 @@ import java.util.stream.Collectors;
 
 @Tag(name = "银行对账单")
 @RestController
-@RequestMapping("/api/v1/bank-statements")
+@RequestMapping("/api/sme/cash/v1/bank-statements")
 @RequiredArgsConstructor
 public class BankStatementController {
 

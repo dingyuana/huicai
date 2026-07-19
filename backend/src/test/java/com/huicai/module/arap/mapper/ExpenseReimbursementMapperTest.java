@@ -1,6 +1,6 @@
-package com.huicai.module.arap.mapper;
+package com.huicai.sme.arap.mapper;
 
-import com.huicai.module.arap.entity.ExpenseReimbursementEntity;
+import com.huicai.sme.arap.entity.ExpenseReimbursementEntity;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.DisplayName;
 import org.mockito.Mockito;

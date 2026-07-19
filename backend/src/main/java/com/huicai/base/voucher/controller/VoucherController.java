@@ -21,7 +21,7 @@ import java.util.List;
 
 @Tag(name = "凭证管理")
 @RestController
-@RequestMapping("/api/v1/vouchers")
+@RequestMapping("/api/base/voucher/v1/vouchers")
 @RequiredArgsConstructor
 public class VoucherController {
 

@@ -16,7 +16,7 @@ import java.util.Map;
 
 @Tag(name = "账簿查询")
 @RestController
-@RequestMapping("/api/v1/ledgers")
+@RequestMapping("/api/base/voucher/v1/ledgers")
 @RequiredArgsConstructor
 public class LedgerController {
 

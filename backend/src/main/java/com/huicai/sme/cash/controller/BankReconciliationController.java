@@ -12,7 +12,7 @@ import java.util.Map;
 
 @Tag(name = "银行对账")
 @RestController
-@RequestMapping("/api/v1/bank-reconciliation")
+@RequestMapping("/api/sme/cash/v1/bank-reconciliation")
 @RequiredArgsConstructor
 public class BankReconciliationController {
 

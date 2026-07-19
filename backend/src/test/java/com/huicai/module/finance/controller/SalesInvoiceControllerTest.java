@@ -1,12 +1,12 @@
-package com.huicai.module.finance.controller;
+package com.huicai.sme.tax.controller;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.huicai.module.finance.dto.BusinessDocQueryDTO;
-import com.huicai.module.finance.dto.BusinessDocVO;
-import com.huicai.module.finance.service.BusinessDocService;
-import com.huicai.module.finance.service.impl.SalesInvoiceImportService;
+import com.huicai.sme.arap.dto.BusinessDocQueryDTO;
+import com.huicai.sme.arap.dto.BusinessDocVO;
+import com.huicai.sme.arap.service.BusinessDocService;
+import com.huicai.sme.tax.service.impl.SalesInvoiceImportService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -70,7 +70,7 @@ class SalesInvoiceControllerTest {
         );
 
         // when & then
-        mvc.perform(multipart("/api/v1/sales-invoices/preview")
+        mvc.perform(multipart("/api/sme/tax/v1/sales-invoices/preview")
                         .file(file))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(200))
@@ -102,7 +102,7 @@ class SalesInvoiceControllerTest {
         );
 
         // when & then
-        mvc.perform(multipart("/api/v1/sales-invoices/import")
+        mvc.perform(multipart("/api/sme/tax/v1/sales-invoices/import")
                         .file(file))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.batchId").value("BATCH-001"))
@@ -124,7 +124,7 @@ class SalesInvoiceControllerTest {
         ));
 
         // when & then
-        mvc.perform(post("/api/v1/sales-invoices/confirm-import")
+        mvc.perform(post("/api/sme/tax/v1/sales-invoices/confirm-import")
                         .param("batchId", "BATCH-12345")
                         .contentType(MediaType.APPLICATION_FORM_URLENCODED))
                 .andExpect(status().isOk())
@@ -149,7 +149,7 @@ class SalesInvoiceControllerTest {
         ));
 
         // when & then
-        mvc.perform(post("/api/v1/sales-invoices/batch-link-red-flush"))
+        mvc.perform(post("/api/sme/tax/v1/sales-invoices/batch-link-red-flush"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.scanned").value(100))
                 .andExpect(jsonPath("$.data.matched").value(15));
@@ -167,7 +167,7 @@ class SalesInvoiceControllerTest {
         when(businessDocService.pageQuery(any(BusinessDocQueryDTO.class))).thenReturn(page);
 
         // when & then - 不传参数，使用默认值 current=1, size=20
-        mvc.perform(get("/api/v1/sales-invoices/page"))
+        mvc.perform(get("/api/sme/tax/v1/sales-invoices/page"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(200));
 
@@ -186,7 +186,7 @@ class SalesInvoiceControllerTest {
         when(businessDocService.pageQuery(any(BusinessDocQueryDTO.class))).thenReturn(page);
 
         // when & then
-        mvc.perform(get("/api/v1/sales-invoices/page")
+        mvc.perform(get("/api/sme/tax/v1/sales-invoices/page")
                         .param("current", "3")
                         .param("size", "100"))
                 .andExpect(status().isOk());

@@ -1,6 +1,6 @@
-package com.huicai.module.budget.mapper;
+package com.huicai.sme.budget.mapper;
 
-import com.huicai.module.budget.entity.BudgetEntity;
+import com.huicai.sme.budget.entity.BudgetEntity;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.DisplayName;
 import org.mockito.Mockito;

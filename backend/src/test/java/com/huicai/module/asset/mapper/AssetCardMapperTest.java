@@ -1,8 +1,8 @@
-package com.huicai.module.asset.mapper;
+package com.huicai.sme.asset.mapper;
 
 import com.huicai.common.test.AbstractMapperTest;
-import com.huicai.module.asset.entity.AssetCardEntity;
-import com.huicai.module.asset.entity.AssetCategoryEntity;
+import com.huicai.sme.asset.entity.AssetCardEntity;
+import com.huicai.sme.asset.entity.AssetCategoryEntity;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;

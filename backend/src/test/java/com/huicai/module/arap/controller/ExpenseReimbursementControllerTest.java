@@ -1,11 +1,11 @@
-package com.huicai.module.arap.controller;
+package com.huicai.sme.arap.controller;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.huicai.module.arap.dto.ExpenseReimbursementVO;
-import com.huicai.module.arap.entity.ExpenseReimbursementEntity;
-import com.huicai.module.arap.service.ExpenseReimbursementService;
+import com.huicai.sme.arap.dto.ExpenseReimbursementVO;
+import com.huicai.sme.arap.entity.ExpenseReimbursementEntity;
+import com.huicai.sme.arap.service.ExpenseReimbursementService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -56,7 +56,7 @@ class ExpenseReimbursementControllerTest {
         when(service.pageQuery(isNull(), isNull(), eq(1), eq(20))).thenReturn(page);
 
         // when & then - 不传任何可选参数
-        mvc.perform(get("/api/v1/expense-reimbursements/page"))
+        mvc.perform(get("/api/sme/arap/v1/expense-reimbursements/page"))
                 .andExpect(status().isOk());
 
         verify(service).pageQuery(isNull(), isNull(), eq(1), eq(20));
@@ -70,7 +70,7 @@ class ExpenseReimbursementControllerTest {
         when(service.pageQuery(eq(10L), eq("APPROVED"), eq(2), eq(50))).thenReturn(page);
 
         // when & then
-        mvc.perform(get("/api/v1/expense-reimbursements/page")
+        mvc.perform(get("/api/sme/arap/v1/expense-reimbursements/page")
                         .param("employeeId", "10")
                         .param("status", "APPROVED")
                         .param("current", "2")
@@ -87,7 +87,7 @@ class ExpenseReimbursementControllerTest {
         when(service.listAll()).thenReturn(List.of());
 
         // when & then
-        mvc.perform(get("/api/v1/expense-reimbursements/list"))
+        mvc.perform(get("/api/sme/arap/v1/expense-reimbursements/list"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(200))
                 .andExpect(jsonPath("$.data").isArray());
@@ -105,7 +105,7 @@ class ExpenseReimbursementControllerTest {
         when(service.getById(eq(123L))).thenReturn(vo);
 
         // when & then
-        mvc.perform(get("/api/v1/expense-reimbursements/123"))
+        mvc.perform(get("/api/sme/arap/v1/expense-reimbursements/123"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(200))
                 .andExpect(jsonPath("$.data.id").value(123))
@@ -130,7 +130,7 @@ class ExpenseReimbursementControllerTest {
         entity.setExpenseType("TRAVEL");
 
         // when & then
-        mvc.perform(post("/api/v1/expense-reimbursements")
+        mvc.perform(post("/api/sme/arap/v1/expense-reimbursements")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(om.writeValueAsString(entity)))
                 .andExpect(status().isOk())
@@ -156,7 +156,7 @@ class ExpenseReimbursementControllerTest {
         entity.setEmployeeId(10L);
 
         // when & then
-        mvc.perform(put("/api/v1/expense-reimbursements/999")
+        mvc.perform(put("/api/sme/arap/v1/expense-reimbursements/999")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(om.writeValueAsString(entity)))
                 .andExpect(status().isOk());
@@ -177,7 +177,7 @@ class ExpenseReimbursementControllerTest {
         when(service.submit(eq(50L))).thenReturn(vo);
 
         // when & then
-        mvc.perform(post("/api/v1/expense-reimbursements/50/submit"))
+        mvc.perform(post("/api/sme/arap/v1/expense-reimbursements/50/submit"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.id").value(50))
                 .andExpect(jsonPath("$.data.status").value("PENDING_REVIEW"));
@@ -195,7 +195,7 @@ class ExpenseReimbursementControllerTest {
         when(service.approve(eq(50L), isNull())).thenReturn(vo);
 
         // when & then - 不传 approver
-        mvc.perform(post("/api/v1/expense-reimbursements/50/approve"))
+        mvc.perform(post("/api/sme/arap/v1/expense-reimbursements/50/approve"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.status").value("APPROVED"));
 
@@ -210,7 +210,7 @@ class ExpenseReimbursementControllerTest {
         when(service.approve(eq(50L), eq("manager"))).thenReturn(vo);
 
         // when & then
-        mvc.perform(post("/api/v1/expense-reimbursements/50/approve")
+        mvc.perform(post("/api/sme/arap/v1/expense-reimbursements/50/approve")
                         .param("approver", "manager"))
                 .andExpect(status().isOk());
 
@@ -227,7 +227,7 @@ class ExpenseReimbursementControllerTest {
         when(service.reject(eq(50L), eq("manager"), eq("金额超标"))).thenReturn(vo);
 
         // when & then
-        mvc.perform(post("/api/v1/expense-reimbursements/50/reject")
+        mvc.perform(post("/api/sme/arap/v1/expense-reimbursements/50/reject")
                         .param("reason", "金额超标")
                         .param("approver", "manager"))
                 .andExpect(status().isOk())
@@ -250,7 +250,7 @@ class ExpenseReimbursementControllerTest {
         when(service.generateVoucher(eq(50L), eq(1000L))).thenReturn(vo);
 
         // when & then
-        mvc.perform(post("/api/v1/expense-reimbursements/50/generate-voucher")
+        mvc.perform(post("/api/sme/arap/v1/expense-reimbursements/50/generate-voucher")
                         .param("voucherId", "1000"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.status").value("VOUCHERED"));

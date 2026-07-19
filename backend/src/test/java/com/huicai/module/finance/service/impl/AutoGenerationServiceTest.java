@@ -1,26 +1,32 @@
-package com.huicai.module.finance.service.impl;
+package com.huicai.sme.arap.service.impl;
 
 import cn.hutool.core.util.StrUtil;
 import com.huicai.common.exception.BusinessException;
-import com.huicai.module.arap.entity.CustomerEntity;
-import com.huicai.module.arap.entity.EmployeeEntity;
-import com.huicai.module.arap.entity.ExpenseReimbursementEntity;
-import com.huicai.module.arap.entity.PrepaymentEntity;
-import com.huicai.module.arap.entity.VendorEntity;
-import com.huicai.module.arap.mapper.CustomerMapper;
-import com.huicai.module.arap.mapper.PrepaymentMapper;
-import com.huicai.module.arap.mapper.VendorMapper;
-import com.huicai.module.arap.service.EmployeeService;
-import com.huicai.module.arap.service.ExpenseReimbursementService;
-import com.huicai.module.arap.service.ReconciliationService;
-import com.huicai.module.finance.entity.BankStatementEntity;
-import com.huicai.module.finance.entity.BusinessDocEntity;
-import com.huicai.module.finance.entity.VoucherEntity;
-import com.huicai.module.finance.mapper.*;
-import com.huicai.module.finance.service.VoucherNoService;
-import com.huicai.module.finance.service.VoucherTemplateService;
-import com.huicai.module.system.entity.Subject;
-import com.huicai.module.system.mapper.SubjectMapper;
+import com.huicai.base.masterdata.entity.CustomerEntity;
+import com.huicai.base.masterdata.entity.EmployeeEntity;
+import com.huicai.sme.arap.entity.ExpenseReimbursementEntity;
+import com.huicai.sme.arap.entity.PrepaymentEntity;
+import com.huicai.base.masterdata.entity.VendorEntity;
+import com.huicai.base.masterdata.mapper.CustomerMapper;
+import com.huicai.sme.arap.mapper.PrepaymentMapper;
+import com.huicai.base.masterdata.mapper.VendorMapper;
+import com.huicai.base.masterdata.service.EmployeeService;
+import com.huicai.sme.arap.service.ExpenseReimbursementService;
+import com.huicai.sme.arap.service.ReconciliationService;
+import com.huicai.sme.cash.entity.BankStatementEntity;
+import com.huicai.sme.arap.entity.BusinessDocEntity;
+import com.huicai.base.voucher.entity.VoucherEntity;
+import com.huicai.sme.arap.mapper.BusinessDocMapper;
+import com.huicai.sme.arap.mapper.BusinessDocEntryMapper;
+import com.huicai.base.voucher.mapper.VoucherMapper;
+import com.huicai.base.voucher.mapper.VoucherEntryMapper;
+import com.huicai.base.system.mapper.SubjectMapper;
+import com.huicai.base.masterdata.mapper.CustomerMapper;
+import com.huicai.sme.cash.mapper.*;
+import com.huicai.base.voucher.service.VoucherNoService;
+import com.huicai.base.voucher.service.VoucherTemplateService;
+import com.huicai.base.system.entity.Subject;
+import com.huicai.base.system.mapper.SubjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -479,7 +485,7 @@ class AutoGenerationServiceTest {
             setId(50L); setName("张三");
         }});
         when(expenseReimbursementService.autoCreateForBankStmt(eq(1L), eq(50L), any(BigDecimal.class), anyString()))
-                .thenReturn(new com.huicai.module.arap.dto.ExpenseReimbursementVO() {{
+                .thenReturn(new com.huicai.sme.arap.dto.ExpenseReimbursementVO() {{
                     setId(200L); setStatus("DRAFT");
                 }});
 

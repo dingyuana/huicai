@@ -14,7 +14,7 @@ import java.time.LocalDate;
 
 @Tag(name = "现金日记账")
 @RestController
-@RequestMapping("/api/v1/cash-journals")
+@RequestMapping("/api/sme/cash/v1/cash-journals")
 @RequiredArgsConstructor
 public class CashJournalController {
 

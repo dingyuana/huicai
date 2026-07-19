@@ -1,7 +1,7 @@
-package com.huicai.module.arap.controller;
+package com.huicai.sme.arap.controller;
 
-import com.huicai.module.arap.service.AgingAnalysisService;
-import com.huicai.module.arap.service.AgingAnalysisService.*;
+import com.huicai.sme.arap.service.AgingAnalysisService;
+import com.huicai.sme.arap.service.AgingAnalysisService.*;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -39,7 +39,7 @@ class AgingAnalysisControllerTest {
         );
         when(service.getAgingSummary(eq("202612"), isNull())).thenReturn(vo);
 
-        mvc.perform(get("/api/v1/aging-analysis/summary")
+        mvc.perform(get("/api/sme/arap/v1/aging-analysis/summary")
                         .param("period", "202612"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(200));
@@ -52,7 +52,7 @@ class AgingAnalysisControllerTest {
                 BigDecimal.valueOf(50000), 2, List.of());
         when(service.getDueReceivables(any(), isNull())).thenReturn(vo);
 
-        mvc.perform(get("/api/v1/aging-analysis/due-receivables")
+        mvc.perform(get("/api/sme/arap/v1/aging-analysis/due-receivables")
                         .param("date", "2026-12-31"))
                 .andExpect(status().isOk());
     }
@@ -63,7 +63,7 @@ class AgingAnalysisControllerTest {
         when(service.getAlerts(eq("MODERATE"), eq("ACTIVE"), isNull()))
                 .thenReturn(List.of());
 
-        mvc.perform(get("/api/v1/aging-analysis/alerts")
+        mvc.perform(get("/api/sme/arap/v1/aging-analysis/alerts")
                         .param("alertLevel", "MODERATE")
                         .param("status", "ACTIVE"))
                 .andExpect(status().isOk());
@@ -74,7 +74,7 @@ class AgingAnalysisControllerTest {
     void generateAlerts_returnsCount() throws Exception {
         when(service.generateAlerts("202612")).thenReturn(5);
 
-        mvc.perform(post("/api/v1/aging-analysis/alerts/generate")
+        mvc.perform(post("/api/sme/arap/v1/aging-analysis/alerts/generate")
                         .param("period", "202612"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data").value(5));
@@ -83,7 +83,7 @@ class AgingAnalysisControllerTest {
     @Test
     @DisplayName("忽略预警_返回成功")
     void dismissAlert_returnsOk() throws Exception {
-        mvc.perform(post("/api/v1/aging-analysis/alerts/1/dismiss"))
+        mvc.perform(post("/api/sme/arap/v1/aging-analysis/alerts/1/dismiss"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(200));
     }

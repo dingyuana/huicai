@@ -1,10 +1,10 @@
-package com.huicai.module.arap.controller;
+package com.huicai.sme.arap.controller;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.huicai.module.arap.entity.PrepaymentEntity;
-import com.huicai.module.arap.service.PrepaymentService;
+import com.huicai.sme.arap.entity.PrepaymentEntity;
+import com.huicai.sme.arap.service.PrepaymentService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -41,7 +41,7 @@ class PrepaymentControllerTest {
         IPage<PrepaymentEntity> page = new Page<>(1, 20);
         when(prepaymentService.pageQuery(isNull(), isNull(), isNull(), eq(1), eq(20))).thenReturn(page);
 
-        mvc.perform(get("/api/v1/prepayment/page"))
+        mvc.perform(get("/api/sme/arap/v1/prepayment/page"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(200));
     }
@@ -52,7 +52,7 @@ class PrepaymentControllerTest {
         IPage<PrepaymentEntity> page = new Page<>(2, 50);
         when(prepaymentService.pageQuery(eq(100L), eq(200L), eq("CONFIRMED"), eq(2), eq(50))).thenReturn(page);
 
-        mvc.perform(get("/api/v1/prepayment/page")
+        mvc.perform(get("/api/sme/arap/v1/prepayment/page")
                         .param("vendorId", "100")
                         .param("customerId", "200")
                         .param("status", "CONFIRMED")
@@ -70,7 +70,7 @@ class PrepaymentControllerTest {
         entity.setStatus("CONFIRMED");
         when(prepaymentService.getById(eq(1L))).thenReturn(entity);
 
-        mvc.perform(get("/api/v1/prepayment/1"))
+        mvc.perform(get("/api/sme/arap/v1/prepayment/1"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.id").value(1))
                 .andExpect(jsonPath("$.data.status").value("CONFIRMED"));
@@ -88,7 +88,7 @@ class PrepaymentControllerTest {
         created.setStatus("DRAFT");
         when(prepaymentService.create(any())).thenReturn(created);
 
-        mvc.perform(post("/api/v1/prepayment")
+        mvc.perform(post("/api/sme/arap/v1/prepayment")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(om.writeValueAsString(entity)))
                 .andExpect(status().isOk())
@@ -109,7 +109,7 @@ class PrepaymentControllerTest {
         entity.setStatus("CONFIRMED");
         when(prepaymentService.confirm(eq(1L))).thenReturn(entity);
 
-        mvc.perform(post("/api/v1/prepayment/1/confirm"))
+        mvc.perform(post("/api/sme/arap/v1/prepayment/1/confirm"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.status").value("CONFIRMED"));
 
@@ -125,7 +125,7 @@ class PrepaymentControllerTest {
         when(prepaymentService.applyToPayable(anyLong(), anyLong(), any(), anyString(), anyLong(), anyString()))
                 .thenReturn(entity);
 
-        mvc.perform(post("/api/v1/prepayment/1/apply-to-payable/2")
+        mvc.perform(post("/api/sme/arap/v1/prepayment/1/apply-to-payable/2")
                         .param("applyAmount", "1000.00")
                         .param("period", "2024-01")
                         .param("userId", "5")
@@ -146,7 +146,7 @@ class PrepaymentControllerTest {
         when(prepaymentService.applyToReceivable(anyLong(), anyLong(), any(), anyString(), anyLong(), anyString()))
                 .thenReturn(entity);
 
-        mvc.perform(post("/api/v1/prepayment/1/apply-to-receivable/2")
+        mvc.perform(post("/api/sme/arap/v1/prepayment/1/apply-to-receivable/2")
                         .param("applyAmount", "2000.00")
                         .param("period", "2024-02")
                         .contentType(MediaType.APPLICATION_FORM_URLENCODED))
@@ -160,7 +160,7 @@ class PrepaymentControllerTest {
     void reverse_requiredReason_boundCorrectly() throws Exception {
         doNothing().when(prepaymentService).reverse(anyLong(), anyLong(), anyString());
 
-        mvc.perform(post("/api/v1/prepayment/1/reverse")
+        mvc.perform(post("/api/sme/arap/v1/prepayment/1/reverse")
                         .param("reason", "业务取消")
                         .param("userId", "3")
                         .contentType(MediaType.APPLICATION_FORM_URLENCODED))
@@ -174,7 +174,7 @@ class PrepaymentControllerTest {
     void getOpenPrepayments_pathVariable_boundCorrectly() throws Exception {
         when(prepaymentService.getOpenPrepayments(eq(100L))).thenReturn(List.of());
 
-        mvc.perform(get("/api/v1/prepayment/open/100"))
+        mvc.perform(get("/api/sme/arap/v1/prepayment/open/100"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data").isArray());
     }
@@ -184,7 +184,7 @@ class PrepaymentControllerTest {
     void getOpenPrepaymentsForCustomer_pathVariable_boundCorrectly() throws Exception {
         when(prepaymentService.getOpenPrepaymentsForCustomer(eq(200L))).thenReturn(List.of());
 
-        mvc.perform(get("/api/v1/prepayment/open-customer/200"))
+        mvc.perform(get("/api/sme/arap/v1/prepayment/open-customer/200"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data").isArray());
     }

@@ -1,9 +1,9 @@
-package com.huicai.module.system.controller;
+package com.huicai.base.system.controller;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
-import com.huicai.module.arap.entity.CustomerEntity;
-import com.huicai.module.arap.service.CustomerService;
+import com.huicai.base.masterdata.entity.CustomerEntity;
+import com.huicai.base.masterdata.service.CustomerService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;

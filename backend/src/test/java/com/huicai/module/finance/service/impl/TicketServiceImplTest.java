@@ -1,10 +1,10 @@
-package com.huicai.module.finance.service.impl;
+package com.huicai.sme.cash.service.impl;
 
 import com.huicai.common.exception.BusinessException;
-import com.huicai.module.finance.entity.TicketEntity;
-import com.huicai.module.finance.entity.TicketTransactionEntity;
-import com.huicai.module.finance.mapper.TicketMapper;
-import com.huicai.module.finance.mapper.TicketTransactionMapper;
+import com.huicai.sme.cash.entity.TicketEntity;
+import com.huicai.sme.cash.entity.TicketTransactionEntity;
+import com.huicai.sme.cash.mapper.TicketMapper;
+import com.huicai.sme.cash.mapper.TicketTransactionMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;

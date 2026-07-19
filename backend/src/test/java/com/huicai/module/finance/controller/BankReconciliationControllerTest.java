@@ -1,7 +1,7 @@
-package com.huicai.module.finance.controller;
+package com.huicai.sme.cash.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.huicai.module.finance.service.BankReconciliationService;
+import com.huicai.sme.cash.service.BankReconciliationService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -46,7 +46,7 @@ class BankReconciliationControllerTest {
                 .thenReturn(Map.of("balance", new BigDecimal("10000.00")));
 
         // when & then
-        mvc.perform(get("/api/v1/bank-reconciliation/adjustment")
+        mvc.perform(get("/api/sme/cash/v1/bank-reconciliation/adjustment")
                         .param("accountId", "1")
                         .param("period", "202606"))
                 .andExpect(status().isOk())
@@ -63,7 +63,7 @@ class BankReconciliationControllerTest {
                 .thenReturn(Map.of("total", 100, "matched", 80));
 
         // when & then
-        mvc.perform(get("/api/v1/bank-reconciliation/summary")
+        mvc.perform(get("/api/sme/cash/v1/bank-reconciliation/summary")
                         .param("accountId", "1")
                         .param("period", "202606"))
                 .andExpect(status().isOk())
@@ -81,7 +81,7 @@ class BankReconciliationControllerTest {
                 .thenReturn(List.of());
 
         // when & then
-        mvc.perform(get("/api/v1/bank-reconciliation/unmatched")
+        mvc.perform(get("/api/sme/cash/v1/bank-reconciliation/unmatched")
                         .param("accountId", "1")
                         .param("period", "202606"))
                 .andExpect(status().isOk())
@@ -97,7 +97,7 @@ class BankReconciliationControllerTest {
         when(service.calculateScore(eq(1L), eq(100L), eq(200L))).thenReturn(null);
 
         // when & then
-        mvc.perform(get("/api/v1/bank-reconciliation/score")
+        mvc.perform(get("/api/sme/cash/v1/bank-reconciliation/score")
                         .param("accountId", "1")
                         .param("statementId", "100")
                         .param("journalId", "200"))
@@ -116,7 +116,7 @@ class BankReconciliationControllerTest {
         when(service.runMatching(eq(1L), eq("202606"))).thenReturn(null);
 
         // when & then
-        mvc.perform(post("/api/v1/bank-reconciliation/run-matching")
+        mvc.perform(post("/api/sme/cash/v1/bank-reconciliation/run-matching")
                         .param("accountId", "1")
                         .param("period", "202606")
                         .contentType(MediaType.APPLICATION_FORM_URLENCODED))
@@ -134,7 +134,7 @@ class BankReconciliationControllerTest {
                 .thenReturn(true);
 
         // when & then
-        mvc.perform(post("/api/v1/bank-reconciliation/lock")
+        mvc.perform(post("/api/sme/cash/v1/bank-reconciliation/lock")
                         .param("accountId", "1")
                         .param("period", "202606")
                         .param("operator", "admin")
@@ -154,7 +154,7 @@ class BankReconciliationControllerTest {
                 .thenReturn(true);
 
         // when & then - 不传 ttlSeconds，使用默认值 300
-        mvc.perform(post("/api/v1/bank-reconciliation/lock")
+        mvc.perform(post("/api/sme/cash/v1/bank-reconciliation/lock")
                         .param("accountId", "1")
                         .param("period", "202606")
                         .param("operator", "admin")
@@ -171,7 +171,7 @@ class BankReconciliationControllerTest {
         doNothing().when(service).unlockReconciliation(anyLong(), anyString(), anyString());
 
         // when & then
-        mvc.perform(post("/api/v1/bank-reconciliation/unlock")
+        mvc.perform(post("/api/sme/cash/v1/bank-reconciliation/unlock")
                         .param("accountId", "1")
                         .param("period", "202606")
                         .param("operator", "admin")
@@ -188,7 +188,7 @@ class BankReconciliationControllerTest {
         when(service.confirmMatch(eq(1L), eq(100L), eq("system"))).thenReturn(null);
 
         // when & then - 不传 operator，使用默认值 "system"
-        mvc.perform(post("/api/v1/bank-reconciliation/confirm")
+        mvc.perform(post("/api/sme/cash/v1/bank-reconciliation/confirm")
                         .param("statementId", "1")
                         .param("journalId", "100")
                         .contentType(MediaType.APPLICATION_FORM_URLENCODED))
@@ -205,7 +205,7 @@ class BankReconciliationControllerTest {
         when(service.confirmMatch(eq(1L), eq(100L), eq("tester"))).thenReturn(null);
 
         // when & then
-        mvc.perform(post("/api/v1/bank-reconciliation/confirm")
+        mvc.perform(post("/api/sme/cash/v1/bank-reconciliation/confirm")
                         .param("statementId", "1")
                         .param("journalId", "100")
                         .param("operator", "tester")
@@ -223,7 +223,7 @@ class BankReconciliationControllerTest {
         when(service.rejectMatch(eq(1L), eq(100L), eq("system"))).thenReturn(null);
 
         // when & then - 不传 operator，使用默认值 "system"
-        mvc.perform(post("/api/v1/bank-reconciliation/reject")
+        mvc.perform(post("/api/sme/cash/v1/bank-reconciliation/reject")
                         .param("statementId", "1")
                         .param("journalId", "100")
                         .contentType(MediaType.APPLICATION_FORM_URLENCODED))
@@ -239,7 +239,7 @@ class BankReconciliationControllerTest {
         when(service.rejectMatch(eq(1L), eq(100L), eq("tester"))).thenReturn(null);
 
         // when & then
-        mvc.perform(post("/api/v1/bank-reconciliation/reject")
+        mvc.perform(post("/api/sme/cash/v1/bank-reconciliation/reject")
                         .param("statementId", "1")
                         .param("journalId", "100")
                         .param("operator", "tester")

@@ -1,6 +1,6 @@
-package com.huicai.module.arap.mapper;
+package com.huicai.sme.arap.mapper;
 
-import com.huicai.module.arap.entity.BadDebtProvisionEntity;
+import com.huicai.sme.arap.entity.BadDebtProvisionEntity;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.DisplayName;
 import org.mockito.Mockito;

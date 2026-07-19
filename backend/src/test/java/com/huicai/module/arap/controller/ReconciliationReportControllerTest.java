@@ -1,11 +1,11 @@
-package com.huicai.module.arap.controller;
+package com.huicai.sme.arap.controller;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
-import com.huicai.module.arap.entity.ReconciliationLogEntity;
-import com.huicai.module.arap.mapper.ReconciliationLogMapper;
-import com.huicai.module.finance.entity.BusinessDocEntity;
-import com.huicai.module.finance.mapper.BusinessDocMapper;
+import com.huicai.sme.arap.entity.ReconciliationLogEntity;
+import com.huicai.sme.arap.mapper.ReconciliationLogMapper;
+import com.huicai.sme.arap.entity.BusinessDocEntity;
+import com.huicai.sme.arap.mapper.BusinessDocMapper;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -41,7 +41,7 @@ class ReconciliationReportControllerTest {
         Page<BusinessDocEntity> page = new Page<>(1, 20);
         when(businessDocMapper.selectPage(any(Page.class), any(LambdaQueryWrapper.class))).thenReturn(page);
 
-        mvc.perform(get("/api/v1/reconciliation/report/unmatched-receivables"))
+        mvc.perform(get("/api/sme/arap/v1/reconciliation/report/unmatched-receivables"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(200));
     }
@@ -52,7 +52,7 @@ class ReconciliationReportControllerTest {
         Page<BusinessDocEntity> page = new Page<>(2, 50);
         when(businessDocMapper.selectPage(any(Page.class), any(LambdaQueryWrapper.class))).thenReturn(page);
 
-        mvc.perform(get("/api/v1/reconciliation/report/unmatched-receivables")
+        mvc.perform(get("/api/sme/arap/v1/reconciliation/report/unmatched-receivables")
                         .param("customerId", "100")
                         .param("period", "2024-01")
                         .param("current", "2")
@@ -66,7 +66,7 @@ class ReconciliationReportControllerTest {
         Page<BusinessDocEntity> page = new Page<>(1, 20);
         when(businessDocMapper.selectPage(any(Page.class), any(LambdaQueryWrapper.class))).thenReturn(page);
 
-        mvc.perform(get("/api/v1/reconciliation/report/unmatched-payables"))
+        mvc.perform(get("/api/sme/arap/v1/reconciliation/report/unmatched-payables"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(200));
     }
@@ -77,7 +77,7 @@ class ReconciliationReportControllerTest {
         Page<BusinessDocEntity> page = new Page<>(3, 30);
         when(businessDocMapper.selectPage(any(Page.class), any(LambdaQueryWrapper.class))).thenReturn(page);
 
-        mvc.perform(get("/api/v1/reconciliation/report/unmatched-payables")
+        mvc.perform(get("/api/sme/arap/v1/reconciliation/report/unmatched-payables")
                         .param("vendorId", "200")
                         .param("period", "2024-02")
                         .param("current", "3")
@@ -91,7 +91,7 @@ class ReconciliationReportControllerTest {
         Page<ReconciliationLogEntity> page = new Page<>(1, 20);
         when(logMapper.selectPage(any(Page.class), any(LambdaQueryWrapper.class))).thenReturn(page);
 
-        mvc.perform(get("/api/v1/reconciliation/report/logs")
+        mvc.perform(get("/api/sme/arap/v1/reconciliation/report/logs")
                         .param("sourceDocType", "receipt")
                         .param("sourceDocId", "1")
                         .param("status", "EXECUTED")
@@ -109,7 +109,7 @@ class ReconciliationReportControllerTest {
         log.setAllocatedAmount(new BigDecimal("10000.00"));
         when(logMapper.selectList(any(LambdaQueryWrapper.class))).thenReturn(List.of(log));
 
-        mvc.perform(get("/api/v1/reconciliation/report/summary"))
+        mvc.perform(get("/api/sme/arap/v1/reconciliation/report/summary"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(200))
                 .andExpect(jsonPath("$.data").isArray());

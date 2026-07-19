@@ -1,6 +1,7 @@
-package com.huicai.module.finance.mapper;
+package com.huicai.sme.arap.mapper;
 
-import com.huicai.module.finance.entity.BusinessDocEntryEntity;
+import com.huicai.sme.arap.entity.BusinessDocEntryEntity;
+import com.huicai.sme.arap.mapper.BusinessDocEntryMapper;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.DisplayName;
 import org.mockito.Mockito;

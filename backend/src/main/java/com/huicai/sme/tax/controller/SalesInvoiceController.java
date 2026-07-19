@@ -2,9 +2,9 @@ package com.huicai.sme.tax.controller;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.huicai.common.response.R;
-import com.huicai.module.finance.dto.BusinessDocQueryDTO;
-import com.huicai.module.finance.dto.BusinessDocVO;
-import com.huicai.module.finance.service.BusinessDocService;
+import com.huicai.sme.arap.dto.BusinessDocQueryDTO;
+import com.huicai.sme.arap.dto.BusinessDocVO;
+import com.huicai.sme.arap.service.BusinessDocService;
 import com.huicai.sme.tax.service.impl.SalesInvoiceImportService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -16,7 +16,7 @@ import java.util.Map;
 
 @Tag(name = "销售发票导入")
 @RestController
-@RequestMapping("/api/v1/sales-invoices")
+@RequestMapping("/api/sme/tax/v1/sales-invoices")
 @RequiredArgsConstructor
 public class SalesInvoiceController {
 

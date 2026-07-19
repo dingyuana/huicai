@@ -12,7 +12,6 @@ import com.huicai.sme.cash.mapper.CashJournalMapper;
 import com.huicai.sme.cash.service.CashJournalService;
 import com.huicai.base.voucher.service.VoucherService;
 import lombok.RequiredArgsConstructor;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;

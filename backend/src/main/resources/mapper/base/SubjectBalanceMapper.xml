@@ -2,7 +2,7 @@
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.huicai.base.balance.mapper.SubjectBalanceMapper">
 
-    <select id="selectFromPeriod" resultType="com.huicai.module.finance.entity.SubjectBalanceEntity">
+    <select id="selectFromPeriod" resultType="com.huicai.base.balance.entity.SubjectBalanceEntity">
         SELECT * FROM t_subject_balance
         WHERE subject_id = #{subjectId}
         AND period >= #{period}

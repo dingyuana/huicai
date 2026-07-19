@@ -1,11 +1,11 @@
-package com.huicai.module.arap.controller;
+package com.huicai.sme.arap.controller;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.huicai.module.arap.entity.ReconciliationLogEntity;
-import com.huicai.module.arap.service.ReconciliationService;
-import com.huicai.module.arap.service.impl.ReconciliationServiceImpl;
+import com.huicai.sme.arap.entity.ReconciliationLogEntity;
+import com.huicai.sme.arap.service.ReconciliationService;
+import com.huicai.sme.arap.service.impl.ReconciliationServiceImpl;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -57,7 +57,7 @@ class ReconciliationControllerTest {
                 .thenReturn(null);
 
         // when & then
-        mvc.perform(post("/api/v1/reconciliation/receipt/1/recommend")
+        mvc.perform(post("/api/sme/arap/v1/reconciliation/receipt/1/recommend")
                         .param("sourceDocType", "RECEIPT")
                         .param("customerId", "10")
                         .param("amount", "500.00")
@@ -76,7 +76,7 @@ class ReconciliationControllerTest {
         when(reconciliationService.recommendPayment(anyLong(), anyString(), anyLong(), any(), any(), any()))
                 .thenReturn(null);
 
-        mvc.perform(post("/api/v1/reconciliation/payment/1/recommend")
+        mvc.perform(post("/api/sme/arap/v1/reconciliation/payment/1/recommend")
                         .param("sourceDocType", "PAYMENT")
                         .param("vendorId", "20")
                         .param("amount", "1234.56")
@@ -106,7 +106,7 @@ class ReconciliationControllerTest {
         );
 
         // when & then
-        mvc.perform(post("/api/v1/reconciliation/execute")
+        mvc.perform(post("/api/sme/arap/v1/reconciliation/execute")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(om.writeValueAsString(request)))
                 .andExpect(status().isOk())
@@ -137,7 +137,7 @@ class ReconciliationControllerTest {
         );
 
         // when & then - body + query params 组合
-        mvc.perform(post("/api/v1/reconciliation/execute-with-adjustment")
+        mvc.perform(post("/api/sme/arap/v1/reconciliation/execute-with-adjustment")
                         .param("adjustAmount", "10.00")
                         .param("adjustType", "FEE")
                         .param("adjustSubjectId", "123")
@@ -162,7 +162,7 @@ class ReconciliationControllerTest {
         doNothing().when(reconciliationService).reverse(anyLong(), anyString());
 
         // when & then
-        mvc.perform(post("/api/v1/reconciliation/123/reverse")
+        mvc.perform(post("/api/sme/arap/v1/reconciliation/123/reverse")
                         .param("reason", "操作失误")
                         .contentType(MediaType.APPLICATION_FORM_URLENCODED))
                 .andExpect(status().isOk());
@@ -179,7 +179,7 @@ class ReconciliationControllerTest {
         when(reconciliationService.approve(anyLong())).thenReturn(log);
 
         // when & then
-        mvc.perform(post("/api/v1/reconciliation/999/approve"))
+        mvc.perform(post("/api/sme/arap/v1/reconciliation/999/approve"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.id").value(999));
 
@@ -193,7 +193,7 @@ class ReconciliationControllerTest {
         doNothing().when(reconciliationService).reject(anyLong(), any());
 
         // when & then - 不传 reason
-        mvc.perform(post("/api/v1/reconciliation/999/reject"))
+        mvc.perform(post("/api/sme/arap/v1/reconciliation/999/reject"))
                 .andExpect(status().isOk());
 
         verify(reconciliationService).reject(eq(999L), isNull());
@@ -209,7 +209,7 @@ class ReconciliationControllerTest {
         when(reconciliationService.pageLogs(isNull(), eq(1), eq(20))).thenReturn(page);
 
         // when & then - 不传 current 和 size，使用默认值
-        mvc.perform(get("/api/v1/reconciliation/logs/page"))
+        mvc.perform(get("/api/sme/arap/v1/reconciliation/logs/page"))
                 .andExpect(status().isOk());
 
         verify(reconciliationService).pageLogs(isNull(), eq(1), eq(20));
@@ -223,7 +223,7 @@ class ReconciliationControllerTest {
         when(reconciliationService.pageLogs(eq("receipt"), eq(2), eq(50))).thenReturn(page);
 
         // when & then
-        mvc.perform(get("/api/v1/reconciliation/logs/page")
+        mvc.perform(get("/api/sme/arap/v1/reconciliation/logs/page")
                         .param("sourceDocType", "receipt")
                         .param("current", "2")
                         .param("size", "50"))
@@ -239,7 +239,7 @@ class ReconciliationControllerTest {
         when(reconciliationService.getRecords(anyString(), anyLong())).thenReturn(List.of());
 
         // when & then
-        mvc.perform(get("/api/v1/reconciliation/records")
+        mvc.perform(get("/api/sme/arap/v1/reconciliation/records")
                         .param("sourceDocType", "bank_txn")
                         .param("sourceDocId", "1"))
                 .andExpect(status().isOk());
@@ -263,7 +263,7 @@ class ReconciliationControllerTest {
         );
 
         // when & then
-        mvc.perform(post("/api/v1/reconciliation/batch-execute")
+        mvc.perform(post("/api/sme/arap/v1/reconciliation/batch-execute")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(om.writeValueAsString(requests)))
                 .andExpect(status().isOk())

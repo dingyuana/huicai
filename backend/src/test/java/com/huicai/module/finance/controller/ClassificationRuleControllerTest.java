@@ -1,9 +1,9 @@
-package com.huicai.module.finance.controller;
+package com.huicai.sme.cash.controller;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
-import com.huicai.module.finance.entity.ClassificationRuleEntity;
-import com.huicai.module.finance.service.ClassificationRuleService;
+import com.huicai.sme.cash.entity.ClassificationRuleEntity;
+import com.huicai.sme.cash.service.ClassificationRuleService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -40,7 +40,7 @@ class ClassificationRuleControllerTest {
         IPage<ClassificationRuleEntity> page = new Page<>(1, 20);
         when(classificationRuleService.page(any(), anyInt(), anyInt())).thenReturn(page);
 
-        mvc.perform(get("/api/v1/classification-rules"))
+        mvc.perform(get("/api/sme/cash/v1/classification-rules"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(200));
     }
@@ -51,7 +51,7 @@ class ClassificationRuleControllerTest {
         IPage<ClassificationRuleEntity> page = new Page<>(2, 10);
         when(classificationRuleService.page(eq(1001L), eq(2), eq(10))).thenReturn(page);
 
-        mvc.perform(get("/api/v1/classification-rules")
+        mvc.perform(get("/api/sme/cash/v1/classification-rules")
                         .param("tenantId", "1001")
                         .param("current", "2")
                         .param("size", "10"))
@@ -79,7 +79,7 @@ class ClassificationRuleControllerTest {
 
         when(classificationRuleService.create(any())).thenReturn(created);
 
-        mvc.perform(post("/api/v1/classification-rules")
+        mvc.perform(post("/api/sme/cash/v1/classification-rules")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(om.writeValueAsString(input)))
                 .andExpect(status().isOk())
@@ -100,7 +100,7 @@ class ClassificationRuleControllerTest {
 
         when(classificationRuleService.getById(eq(1L))).thenReturn(entity);
 
-        mvc.perform(get("/api/v1/classification-rules/1"))
+        mvc.perform(get("/api/sme/cash/v1/classification-rules/1"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(200))
                 .andExpect(jsonPath("$.data.name").value("银行手续费"));
@@ -111,7 +111,7 @@ class ClassificationRuleControllerTest {
     void getById_notExists_returns400() throws Exception {
         when(classificationRuleService.getById(eq(999L))).thenReturn(null);
 
-        mvc.perform(get("/api/v1/classification-rules/999"))
+        mvc.perform(get("/api/sme/cash/v1/classification-rules/999"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(400))
                 .andExpect(jsonPath("$.msg").value("规则不存在"));

@@ -12,7 +12,7 @@ import java.util.List;
 
 @Tag(name = "付款计划")
 @RestController
-@RequestMapping("/api/v1/payment-plans")
+@RequestMapping("/api/sme/arap/v1/payment-plans")
 @RequiredArgsConstructor
 public class PaymentPlanController {
 

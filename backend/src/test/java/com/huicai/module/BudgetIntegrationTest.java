@@ -1,6 +1,6 @@
-package com.huicai.module;
+package com.huicai;
 
-import com.huicai.module.budget.service.BudgetService;
+import com.huicai.sme.budget.service.BudgetService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -25,33 +25,33 @@ class BudgetIntegrationTest {
 
     @Test
     void testCreateAndApproveBudget() {
-        com.huicai.module.budget.entity.BudgetEntity budget = new com.huicai.module.budget.entity.BudgetEntity();
+        com.huicai.sme.budget.entity.BudgetEntity budget = new com.huicai.sme.budget.entity.BudgetEntity();
         budget.setBudgetNo("BUD-2026-01");
         budget.setPeriod("202601");
         budget.setBudgetType("EXPENSE");
         budget.setStatus("DRAFT");
 
-        com.huicai.module.budget.entity.BudgetEntryEntity entry = new com.huicai.module.budget.entity.BudgetEntryEntity();
+        com.huicai.sme.budget.entity.BudgetEntryEntity entry = new com.huicai.sme.budget.entity.BudgetEntryEntity();
         entry.setSubjectId(6601L);
         entry.setAmount(new BigDecimal("50000"));
-        List<com.huicai.module.budget.entity.BudgetEntryEntity> entries = List.of(entry);
+        List<com.huicai.sme.budget.entity.BudgetEntryEntity> entries = List.of(entry);
 
-        com.huicai.module.budget.entity.BudgetEntity created = new com.huicai.module.budget.entity.BudgetEntity();
+        com.huicai.sme.budget.entity.BudgetEntity created = new com.huicai.sme.budget.entity.BudgetEntity();
         created.setId(100L);
         created.setTotalAmount(new BigDecimal("50000"));
         created.setStatus("DRAFT");
         when(budgetService.create(any(), anyList())).thenReturn(created);
 
-        com.huicai.module.budget.entity.BudgetEntity approved = new com.huicai.module.budget.entity.BudgetEntity();
+        com.huicai.sme.budget.entity.BudgetEntity approved = new com.huicai.sme.budget.entity.BudgetEntity();
         approved.setId(100L);
         approved.setStatus("APPROVED");
         when(budgetService.approve(100L)).thenReturn(approved);
 
-        com.huicai.module.budget.entity.BudgetEntity r1 = budgetService.create(budget, entries);
+        com.huicai.sme.budget.entity.BudgetEntity r1 = budgetService.create(budget, entries);
         assertNotNull(r1.getId());
         assertEquals(0, r1.getTotalAmount().compareTo(new BigDecimal("50000")));
 
-        com.huicai.module.budget.entity.BudgetEntity r2 = budgetService.approve(r1.getId());
+        com.huicai.sme.budget.entity.BudgetEntity r2 = budgetService.approve(r1.getId());
         assertEquals("APPROVED", r2.getStatus());
     }
 

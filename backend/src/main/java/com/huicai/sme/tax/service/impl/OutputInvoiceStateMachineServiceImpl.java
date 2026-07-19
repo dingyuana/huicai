@@ -2,9 +2,9 @@ package com.huicai.sme.tax.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.huicai.common.exception.BusinessException;
-import com.huicai.module.finance.entity.BusinessDocEntity;
+import com.huicai.sme.arap.entity.BusinessDocEntity;
 import com.huicai.base.voucher.entity.VoucherEntity;
-import com.huicai.module.finance.mapper.BusinessDocMapper;
+import com.huicai.sme.arap.mapper.BusinessDocMapper;
 import com.huicai.base.voucher.mapper.VoucherMapper;
 import com.huicai.sme.tax.constant.InvoiceStatus;
 import com.huicai.sme.tax.entity.OutputInvoiceEntity;

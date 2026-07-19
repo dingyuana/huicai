@@ -1,9 +1,9 @@
-package com.huicai.module.asset.controller;
+package com.huicai.sme.asset.controller;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
-import com.huicai.module.asset.entity.AssetCardEntity;
-import com.huicai.module.asset.service.AssetCardService;
+import com.huicai.sme.asset.entity.AssetCardEntity;
+import com.huicai.sme.asset.service.AssetCardService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;

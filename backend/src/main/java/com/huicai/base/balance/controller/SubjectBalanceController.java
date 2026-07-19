@@ -14,7 +14,7 @@ import java.util.Map;
 
 @Tag(name = "科目余额")
 @RestController
-@RequestMapping("/api/v1/subject-balances")
+@RequestMapping("/api/base/balance/v1/subject-balances")
 @RequiredArgsConstructor
 public class SubjectBalanceController {
 

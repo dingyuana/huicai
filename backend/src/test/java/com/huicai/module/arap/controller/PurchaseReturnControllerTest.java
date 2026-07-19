@@ -1,8 +1,8 @@
-package com.huicai.module.arap.controller;
+package com.huicai.sme.arap.controller;
 
-import com.huicai.module.arap.service.PurchaseReturnService;
-import com.huicai.module.arap.service.PurchaseReturnService.PurchaseReturnRequest;
-import com.huicai.module.arap.service.PurchaseReturnService.PurchaseReturnVO;
+import com.huicai.sme.arap.service.PurchaseReturnService;
+import com.huicai.sme.arap.service.PurchaseReturnService.PurchaseReturnRequest;
+import com.huicai.sme.arap.service.PurchaseReturnService.PurchaseReturnVO;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -50,7 +50,7 @@ class PurchaseReturnControllerTest {
                 }
                 """;
 
-        mvc.perform(post("/api/v1/purchase-returns")
+        mvc.perform(post("/api/sme/arap/v1/purchase-returns")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json))
                 .andExpect(status().isOk())
@@ -70,7 +70,7 @@ class PurchaseReturnControllerTest {
         );
         when(service.getById(1L)).thenReturn(vo);
 
-        mvc.perform(get("/api/v1/purchase-returns/1"))
+        mvc.perform(get("/api/sme/arap/v1/purchase-returns/1"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.returnAmount").value(10000.00));
     }

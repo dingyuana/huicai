@@ -1,8 +1,8 @@
-package com.huicai.module.finance.controller;
+package com.huicai.sme.arap.controller;
 
-import com.huicai.module.system.entity.Subject;
-import com.huicai.module.system.model.vo.SubjectTreeVO;
-import com.huicai.module.system.service.SubjectService;
+import com.huicai.base.system.entity.Subject;
+import com.huicai.base.system.model.vo.SubjectTreeVO;
+import com.huicai.base.system.service.SubjectService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;

@@ -1,6 +1,7 @@
-package com.huicai.module.finance.mapper;
+package com.huicai.base.voucher.mapper;
 
-import com.huicai.module.finance.entity.VoucherTemplateEntity;
+import com.huicai.base.voucher.entity.VoucherTemplateEntity;
+import com.huicai.base.voucher.mapper.VoucherTemplateMapper;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.DisplayName;
 import org.mockito.Mockito;

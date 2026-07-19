@@ -1,11 +1,12 @@
-package com.huicai.module.finance.service.impl;
+package com.huicai.sme.cash.service.impl;
 
 import com.huicai.common.exception.BusinessException;
 import com.huicai.common.test.StateMachineTestHelper;
-import com.huicai.module.finance.entity.BankStatementEntity;
-import com.huicai.module.finance.mapper.BankJournalMapper;
-import com.huicai.module.finance.mapper.BankStatementMapper;
-import com.huicai.module.finance.service.ClassificationRuleService;
+import com.huicai.sme.arap.service.impl.AutoGenerationService;
+import com.huicai.sme.cash.entity.BankStatementEntity;
+import com.huicai.sme.cash.mapper.BankJournalMapper;
+import com.huicai.sme.cash.mapper.BankStatementMapper;
+import com.huicai.sme.cash.service.ClassificationRuleService;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;

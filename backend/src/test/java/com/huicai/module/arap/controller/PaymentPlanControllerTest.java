@@ -1,8 +1,8 @@
-package com.huicai.module.arap.controller;
+package com.huicai.sme.arap.controller;
 
-import com.huicai.module.arap.service.PaymentPlanService;
-import com.huicai.module.arap.service.PaymentPlanService.PaymentPlanGroupVO;
-import com.huicai.module.arap.service.PaymentPlanService.PaymentPlanItemVO;
+import com.huicai.sme.arap.service.PaymentPlanService;
+import com.huicai.sme.arap.service.PaymentPlanService.PaymentPlanGroupVO;
+import com.huicai.sme.arap.service.PaymentPlanService.PaymentPlanItemVO;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -43,7 +43,7 @@ class PaymentPlanControllerTest {
         ));
         when(service.generatePaymentPlan(eq("202612"), isNull())).thenReturn(groups);
 
-        mvc.perform(get("/api/v1/payment-plans")
+        mvc.perform(get("/api/sme/arap/v1/payment-plans")
                         .param("period", "202612"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(200))
@@ -55,7 +55,7 @@ class PaymentPlanControllerTest {
     void generatePaymentPlan_vendorParam_applied() throws Exception {
         when(service.generatePaymentPlan(isNull(), eq(1L))).thenReturn(List.of());
 
-        mvc.perform(get("/api/v1/payment-plans")
+        mvc.perform(get("/api/sme/arap/v1/payment-plans")
                         .param("vendorId", "1"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(200));

@@ -1,7 +1,8 @@
-package com.huicai.module.finance.mapper;
+package com.huicai.base.voucher.mapper;
 
 import com.huicai.common.test.AbstractMapperTest;
-import com.huicai.module.finance.entity.VoucherEntity;
+import com.huicai.base.voucher.entity.VoucherEntity;
+import com.huicai.base.voucher.mapper.VoucherMapper;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 

@@ -1,7 +1,7 @@
-package com.huicai.module.system.controller;
+package com.huicai.base.system.controller;
 
-import com.huicai.module.system.entity.MenuEntity;
-import com.huicai.module.system.service.MenuService;
+import com.huicai.base.system.entity.MenuEntity;
+import com.huicai.base.system.service.MenuService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;

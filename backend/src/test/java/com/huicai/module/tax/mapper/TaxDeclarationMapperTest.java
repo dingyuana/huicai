@@ -1,6 +1,6 @@
-package com.huicai.module.tax.mapper;
+package com.huicai.sme.tax.mapper;
 
-import com.huicai.module.tax.entity.TaxDeclarationEntity;
+import com.huicai.sme.tax.entity.TaxDeclarationEntity;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.DisplayName;
 import org.mockito.Mockito;

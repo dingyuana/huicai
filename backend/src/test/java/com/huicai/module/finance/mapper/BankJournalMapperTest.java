@@ -1,6 +1,7 @@
-package com.huicai.module.finance.mapper;
+package com.huicai.sme.cash.mapper;
 
-import com.huicai.module.finance.entity.BankJournalEntity;
+import com.huicai.sme.cash.entity.BankJournalEntity;
+import com.huicai.sme.cash.mapper.BankJournalMapper;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.DisplayName;
 import org.mockito.Mockito;

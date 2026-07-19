@@ -1,7 +1,7 @@
-package com.huicai.module.finance.service.impl;
+package com.huicai.base.voucher.service.impl;
 
 import com.huicai.common.exception.BusinessException;
-import com.huicai.module.finance.entity.VoucherEntity;
+import com.huicai.base.voucher.entity.VoucherEntity;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 

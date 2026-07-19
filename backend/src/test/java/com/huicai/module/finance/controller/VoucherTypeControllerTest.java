@@ -1,8 +1,8 @@
-package com.huicai.module.finance.controller;
+package com.huicai.base.voucher.controller;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
-import com.huicai.module.system.entity.VoucherTypeEntity;
-import com.huicai.module.system.service.VoucherTypeService;
+import com.huicai.base.system.entity.VoucherTypeEntity;
+import com.huicai.base.system.service.VoucherTypeService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;

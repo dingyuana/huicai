@@ -1,6 +1,6 @@
-package com.huicai.module.report.service.impl;
+package com.huicai.base.report.service.impl;
 
-import com.huicai.module.report.mapper.ReportDataMapper;
+import com.huicai.base.report.mapper.ReportDataMapper;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;

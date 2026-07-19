@@ -1,4 +1,4 @@
-package com.huicai.module.finance.mapper;
+package com.huicai.sme.arap.mapper;
 
 import com.huicai.common.test.AbstractMapperTest;
 import com.huicai.common.test.SlowTest;

@@ -14,7 +14,7 @@ import java.util.Map;
 
 @Tag(name = "坏账准备")
 @RestController
-@RequestMapping("/api/v1/bad-debts")
+@RequestMapping("/api/sme/arap/v1/bad-debts")
 @RequiredArgsConstructor
 public class BadDebtController {
 

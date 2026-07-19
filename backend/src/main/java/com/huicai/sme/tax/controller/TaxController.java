@@ -9,7 +9,7 @@ import com.huicai.sme.tax.entity.TaxTypeEntity;
 import com.huicai.sme.tax.service.InputInvoiceStateMachineService;
 import com.huicai.sme.tax.service.OutputInvoiceStateMachineService;
 import com.huicai.sme.tax.service.TaxService;
-import com.huicai.base.auth.util.SecurityUtils;
+import com.huicai.base.system.util.SecurityUtils;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
@@ -20,7 +20,7 @@ import java.util.Map;
 
 @Tag(name = "税务管理")
 @RestController
-@RequestMapping("/api/v1/tax")
+@RequestMapping("/api/sme/tax/v1/tax")
 @RequiredArgsConstructor
 public class TaxController {
 

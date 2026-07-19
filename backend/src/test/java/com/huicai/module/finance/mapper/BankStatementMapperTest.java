@@ -1,7 +1,7 @@
-package com.huicai.module.finance.mapper;
+package com.huicai.sme.cash.mapper;
 
 import com.huicai.common.test.AbstractMapperTest;
-import com.huicai.module.finance.entity.BankStatementEntity;
+import com.huicai.sme.cash.entity.BankStatementEntity;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 

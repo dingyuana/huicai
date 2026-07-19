@@ -14,7 +14,7 @@ import java.util.List;
 
 @Tag(name = "预收/预付管理")
 @RestController
-@RequestMapping("/api/v1/prepayment")
+@RequestMapping("/api/sme/arap/v1/prepayment")
 @RequiredArgsConstructor
 public class PrepaymentController {
 

@@ -15,7 +15,7 @@ import java.util.Map;
  */
 @Tag(name = "采购发票导入")
 @RestController
-@RequestMapping("/api/v1/input-invoices")
+@RequestMapping("/api/sme/tax/v1/input-invoices")
 @RequiredArgsConstructor
 public class InputInvoiceController {
 

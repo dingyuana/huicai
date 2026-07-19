@@ -1,7 +1,7 @@
-package com.huicai.module.arap.service.impl;
+package com.huicai.sme.arap.service.impl;
 
 import com.huicai.common.exception.BusinessException;
-import com.huicai.module.arap.entity.BadDebtProvisionEntity;
+import com.huicai.sme.arap.entity.BadDebtProvisionEntity;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 

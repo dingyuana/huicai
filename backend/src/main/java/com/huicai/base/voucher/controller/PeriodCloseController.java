@@ -13,7 +13,7 @@ import java.util.Map;
 
 @Tag(name = "期末结账")
 @RestController
-@RequestMapping("/api/v1/period-close")
+@RequestMapping("/api/base/voucher/v1/period-close")
 @RequiredArgsConstructor
 public class PeriodCloseController {
 

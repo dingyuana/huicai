@@ -1,8 +1,8 @@
-package com.huicai.module.system.service.impl;
+package com.huicai.base.system.service.impl;
 
 import com.huicai.common.exception.BusinessException;
-import com.huicai.module.system.entity.Subject;
-import com.huicai.module.system.mapper.SubjectMapper;
+import com.huicai.base.system.entity.Subject;
+import com.huicai.base.system.mapper.SubjectMapper;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;

@@ -1,4 +1,4 @@
-package com.huicai.module.finance.service.impl;
+package com.huicai.base.voucher.service.impl;
 
 import org.junit.jupiter.api.Test;
 

@@ -1,10 +1,10 @@
-package com.huicai.module.arap.controller;
+package com.huicai.sme.arap.controller;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.huicai.module.arap.entity.BadDebtProvisionEntity;
-import com.huicai.module.arap.service.BadDebtService;
+import com.huicai.sme.arap.entity.BadDebtProvisionEntity;
+import com.huicai.sme.arap.service.BadDebtService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -41,7 +41,7 @@ class BadDebtControllerTest {
         IPage<BadDebtProvisionEntity> page = new Page<>(1, 20);
         when(service.pageQuery(isNull(), eq(1), eq(20))).thenReturn(page);
 
-        mvc.perform(get("/api/v1/bad-debts/page"))
+        mvc.perform(get("/api/sme/arap/v1/bad-debts/page"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(200));
     }
@@ -52,7 +52,7 @@ class BadDebtControllerTest {
         IPage<BadDebtProvisionEntity> page = new Page<>(2, 50);
         when(service.pageQuery(eq("CONFIRMED"), eq(2), eq(50))).thenReturn(page);
 
-        mvc.perform(get("/api/v1/bad-debts/page")
+        mvc.perform(get("/api/sme/arap/v1/bad-debts/page")
                         .param("status", "CONFIRMED")
                         .param("current", "2")
                         .param("size", "50"))
@@ -69,7 +69,7 @@ class BadDebtControllerTest {
         entity.setTotalAmount(new BigDecimal("50000.00"));
         when(service.getById(eq(1L))).thenReturn(entity);
 
-        mvc.perform(get("/api/v1/bad-debts/1"))
+        mvc.perform(get("/api/sme/arap/v1/bad-debts/1"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.id").value(1))
                 .andExpect(jsonPath("$.data.period").value("2024-01"));
@@ -85,7 +85,7 @@ class BadDebtControllerTest {
 
         Map<String, BigDecimal> ratios = Map.of("0-30", new BigDecimal("0.01"), "31-60", new BigDecimal("0.05"));
 
-        mvc.perform(post("/api/v1/bad-debts/provision/aging")
+        mvc.perform(post("/api/sme/arap/v1/bad-debts/provision/aging")
                         .param("period", "2024-01")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(om.writeValueAsString(ratios)))
@@ -103,7 +103,7 @@ class BadDebtControllerTest {
         entity.setMethod("PERCENTAGE");
         when(service.provisionByPercentage(anyString(), any())).thenReturn(entity);
 
-        mvc.perform(post("/api/v1/bad-debts/provision/percentage")
+        mvc.perform(post("/api/sme/arap/v1/bad-debts/provision/percentage")
                         .param("period", "2024-01")
                         .param("ratio", "0.05")
                         .contentType(MediaType.APPLICATION_FORM_URLENCODED))
@@ -121,7 +121,7 @@ class BadDebtControllerTest {
         entity.setStatus("VOUCHERED");
         when(service.confirm(eq(1L), anyLong())).thenReturn(entity);
 
-        mvc.perform(post("/api/v1/bad-debts/1/confirm")
+        mvc.perform(post("/api/sme/arap/v1/bad-debts/1/confirm")
                         .param("userId", "1"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.status").value("VOUCHERED"));
@@ -134,7 +134,7 @@ class BadDebtControllerTest {
     void delete_pathVariable_boundCorrectly() throws Exception {
         doNothing().when(service).delete(anyLong());
 
-        mvc.perform(delete("/api/v1/bad-debts/1"))
+        mvc.perform(delete("/api/sme/arap/v1/bad-debts/1"))
                 .andExpect(status().isOk());
 
         verify(service).delete(eq(1L));

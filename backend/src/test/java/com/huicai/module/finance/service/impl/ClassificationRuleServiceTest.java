@@ -1,7 +1,7 @@
-package com.huicai.module.finance.service.impl;
+package com.huicai.sme.cash.service.impl;
 
-import com.huicai.module.finance.entity.ClassificationRuleEntity;
-import com.huicai.module.finance.mapper.ClassificationRuleMapper;
+import com.huicai.sme.cash.entity.ClassificationRuleEntity;
+import com.huicai.sme.cash.mapper.ClassificationRuleMapper;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;

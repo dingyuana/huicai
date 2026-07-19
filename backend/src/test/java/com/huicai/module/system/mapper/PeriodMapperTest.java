@@ -1,8 +1,8 @@
-package com.huicai.module.system.mapper;
+package com.huicai.base.system.mapper;
 
 import com.huicai.common.test.AbstractMapperTest;
-import com.huicai.module.system.entity.PeriodEntity;
-import com.huicai.module.system.mapper.PeriodMapper;
+import com.huicai.base.system.entity.PeriodEntity;
+import com.huicai.base.system.mapper.PeriodMapper;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 

@@ -1,9 +1,9 @@
-package com.huicai.module.finance.controller;
+package com.huicai.base.voucher.controller;
 
 import com.huicai.common.test.FastTest;
-import com.huicai.module.finance.dto.NumberingTraceVO;
-import com.huicai.module.finance.service.NumberingTraceService;
-import com.huicai.module.finance.service.VoucherService;
+import com.huicai.base.voucher.dto.NumberingTraceVO;
+import com.huicai.base.voucher.service.NumberingTraceService;
+import com.huicai.base.voucher.service.VoucherService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -26,7 +26,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 /**
  * 编号关联体系 - 追溯接口测试 (L1 / FastTest)
  *
- * 验证 GET /api/v1/vouchers/trace?no={编号} 接口的 MockMvc 测试。
+ * 验证 GET /api/base/voucher/v1/vouchers/trace?no={编号} 接口的 MockMvc 测试。
  * 使用 @SpringBootTest + @AutoConfigureMockMvc(addFilters = false) 
  * 避免 JWT 过滤器导致的 ApplicationContext 加载失败。
  */
@@ -71,7 +71,7 @@ public class NumberingTraceControllerTest {
         when(numberingTraceService.traceByNumber("9999.E2E.SALE.INV.001"))
             .thenReturn(mockTrace);
 
-        mvc.perform(get("/api/v1/vouchers/trace")
+        mvc.perform(get("/api/base/voucher/v1/vouchers/trace")
                 .param("no", "9999.E2E.SALE.INV.001"))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.code").value(200))
@@ -98,7 +98,7 @@ public class NumberingTraceControllerTest {
         when(numberingTraceService.traceByNumber("9999.E2E.SALE.VCH.001"))
             .thenReturn(voucherTrace);
 
-        mvc.perform(get("/api/v1/vouchers/trace")
+        mvc.perform(get("/api/base/voucher/v1/vouchers/trace")
                 .param("no", "9999.E2E.SALE.VCH.001"))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.code").value(200))
@@ -122,7 +122,7 @@ public class NumberingTraceControllerTest {
         when(numberingTraceService.traceByNumber("9999.E2E.DOC.001"))
             .thenReturn(docTrace);
 
-        mvc.perform(get("/api/v1/vouchers/trace")
+        mvc.perform(get("/api/base/voucher/v1/vouchers/trace")
                 .param("no", "9999.E2E.DOC.001"))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.code").value(200))
@@ -151,7 +151,7 @@ public class NumberingTraceControllerTest {
         when(numberingTraceService.traceByNumber("9999.E2E.SETTLE.001"))
             .thenReturn(settleTrace);
 
-        mvc.perform(get("/api/v1/vouchers/trace")
+        mvc.perform(get("/api/base/voucher/v1/vouchers/trace")
                 .param("no", "9999.E2E.SETTLE.001"))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.code").value(200))
@@ -172,7 +172,7 @@ public class NumberingTraceControllerTest {
         when(numberingTraceService.traceByNumber("NONEXISTENT"))
             .thenReturn(unknownTrace);
 
-        mvc.perform(get("/api/v1/vouchers/trace")
+        mvc.perform(get("/api/base/voucher/v1/vouchers/trace")
                 .param("no", "NONEXISTENT"))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.code").value(200))
@@ -182,14 +182,14 @@ public class NumberingTraceControllerTest {
     @Test
     @DisplayName("失败: 缺少 no 参数返回 500")
     void trace_missing_no_param_returns_500() throws Exception {
-        mvc.perform(get("/api/v1/vouchers/trace"))
+        mvc.perform(get("/api/base/voucher/v1/vouchers/trace"))
             .andExpect(status().isInternalServerError());
     }
 
     @Test
     @DisplayName("失败: no 参数为空返回 200（空字符串视为合法查询）")
     void trace_empty_no_param_returns_200() throws Exception {
-        mvc.perform(get("/api/v1/vouchers/trace")
+        mvc.perform(get("/api/base/voucher/v1/vouchers/trace")
                 .param("no", ""))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.code").value(200));

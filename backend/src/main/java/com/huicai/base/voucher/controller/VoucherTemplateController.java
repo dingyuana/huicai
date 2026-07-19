@@ -20,7 +20,7 @@ import java.util.stream.Collectors;
  */
 @Tag(name = "凭证模板管理")
 @RestController
-@RequestMapping("/api/v1/voucher-templates")
+@RequestMapping("/api/base/voucher/v1/voucher-templates")
 @RequiredArgsConstructor
 public class VoucherTemplateController {
 

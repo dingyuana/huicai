@@ -1,22 +1,26 @@
-package com.huicai.module.arap.service.impl;
+package com.huicai.sme.arap.service.impl;
 
 import com.huicai.common.exception.BusinessException;
-import com.huicai.module.arap.entity.*;
-import com.huicai.module.arap.mapper.*;
-import com.huicai.module.arap.service.ArapSettlementService;
-import com.huicai.module.arap.service.ReconciliationService;
-import com.huicai.module.arap.service.ReconciliationService.AllocationItem;
-import com.huicai.module.arap.service.ReconciliationService.ExecuteRequest;
-import com.huicai.module.arap.service.ReconciliationService.PreCheckResult;
-import com.huicai.module.arap.service.ReconciliationService.RecommendResult;
-import com.huicai.module.finance.entity.BusinessDocEntity;
-import com.huicai.module.finance.entity.VoucherEntity;
-import com.huicai.module.finance.mapper.BusinessDocMapper;
-import com.huicai.module.finance.mapper.VoucherEntryMapper;
-import com.huicai.module.finance.mapper.VoucherMapper;
-import com.huicai.module.finance.service.VoucherNoService;
-import com.huicai.module.finance.service.VoucherTemplateService;
-import com.huicai.module.tax.service.OutputInvoiceStateMachineService;
+import com.huicai.sme.arap.entity.*;
+import com.huicai.sme.arap.mapper.*;
+import com.huicai.base.masterdata.entity.CustomerEntity;
+import com.huicai.base.masterdata.entity.VendorEntity;
+import com.huicai.base.masterdata.mapper.CustomerMapper;
+import com.huicai.base.masterdata.mapper.VendorMapper;
+import com.huicai.sme.arap.service.ArapSettlementService;
+import com.huicai.sme.arap.service.ReconciliationService;
+import com.huicai.sme.arap.service.ReconciliationService.AllocationItem;
+import com.huicai.sme.arap.service.ReconciliationService.ExecuteRequest;
+import com.huicai.sme.arap.service.ReconciliationService.PreCheckResult;
+import com.huicai.sme.arap.service.ReconciliationService.RecommendResult;
+import com.huicai.sme.arap.entity.BusinessDocEntity;
+import com.huicai.base.voucher.entity.VoucherEntity;
+import com.huicai.sme.arap.mapper.BusinessDocMapper;
+import com.huicai.base.voucher.mapper.VoucherEntryMapper;
+import com.huicai.base.voucher.mapper.VoucherMapper;
+import com.huicai.base.voucher.service.VoucherNoService;
+import com.huicai.base.voucher.service.VoucherTemplateService;
+import com.huicai.sme.tax.service.OutputInvoiceStateMachineService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -45,7 +49,7 @@ class ReconciliationServiceImplTest {
     @Mock private VoucherTemplateService voucherTemplateService;
     @Mock private VoucherNoService voucherNoService;
     @Mock private OutputInvoiceStateMachineService outputInvoiceStateMachineService;
-    @Mock private com.huicai.module.arap.service.ReconciliationToleranceService toleranceService;
+    @Mock private com.huicai.sme.arap.service.ReconciliationToleranceService toleranceService;
 
     @InjectMocks private ReconciliationServiceImpl service;
 
