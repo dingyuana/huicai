@@ -1,7 +1,7 @@
 package com.huicai.base.auth.controller;
 
 import com.huicai.common.response.R;
-import com.huicai.module.system.aspect.Log;
+import com.huicai.base.audit.aspect.Log;
 import com.huicai.base.auth.entity.UserEntity;
 import com.huicai.base.auth.service.RoleService;
 import com.huicai.base.auth.service.UserService;

@@ -1,7 +1,7 @@
 package com.huicai.base.auth.controller;
 
 import com.huicai.common.response.R;
-import com.huicai.module.system.aspect.Log;
+import com.huicai.base.audit.aspect.Log;
 import com.huicai.base.auth.entity.DeptEntity;
 import com.huicai.base.auth.service.DeptService;
 import lombok.RequiredArgsConstructor;

@@ -1,4 +1,4 @@
-package com.huicai.base.auth.util.util;
+package com.huicai.base.auth.util;
 
 import com.huicai.config.security.LoginUser;
 import com.huicai.common.exception.BusinessException;
