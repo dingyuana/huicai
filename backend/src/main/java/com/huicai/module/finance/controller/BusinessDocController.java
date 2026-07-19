@@ -8,7 +8,7 @@ import com.huicai.module.finance.dto.BusinessDocVO;
 import com.huicai.module.finance.entity.VoucherTemplateEntity;
 import com.huicai.module.finance.mapper.VoucherTemplateMapper;
 import com.huicai.module.finance.service.BusinessDocService;
-import com.huicai.module.system.util.SecurityUtils;
+import com.huicai.base.system.util.SecurityUtils;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;

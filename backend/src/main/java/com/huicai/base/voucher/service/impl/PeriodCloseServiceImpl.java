@@ -10,7 +10,7 @@ import com.huicai.base.voucher.service.PeriodCloseService;
 import com.huicai.base.balance.service.SubjectBalanceService;
 import com.huicai.base.period.entity.PeriodEntity;
 import com.huicai.base.period.service.PeriodService;
-import com.huicai.module.system.service.SubjectService;
+import com.huicai.base.system.service.SubjectService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;

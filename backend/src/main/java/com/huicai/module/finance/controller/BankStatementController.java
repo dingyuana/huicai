@@ -5,7 +5,7 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.huicai.common.response.R;
 import com.huicai.module.finance.entity.BankStatementEntity;
 import com.huicai.module.finance.service.BankStatementService;
-import com.huicai.module.system.util.SecurityUtils;
+import com.huicai.base.system.util.SecurityUtils;
 import com.huicai.module.finance.service.impl.AutoGenerationService;
 import com.huicai.module.finance.service.impl.BankStatementExcelImportService;
 import com.huicai.module.finance.service.impl.ColumnMappingResolver;

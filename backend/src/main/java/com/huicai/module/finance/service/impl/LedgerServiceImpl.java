@@ -6,8 +6,8 @@ import com.huicai.module.finance.entity.VoucherEntryEntity;
 import com.huicai.module.finance.mapper.SubjectBalanceMapper;
 import com.huicai.module.finance.mapper.VoucherEntryMapper;
 import com.huicai.module.finance.service.LedgerService;
-import com.huicai.module.system.entity.Subject;
-import com.huicai.module.system.service.SubjectService;
+import com.huicai.base.system.entity.Subject;
+import com.huicai.base.system.service.SubjectService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 

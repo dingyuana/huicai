@@ -1,7 +1,7 @@
 package com.huicai.base.voucher.entity;
 
 import com.baomidou.mybatisplus.annotation.*;
-import com.huicai.module.system.handler.JsonbTypeHandler;
+import com.huicai.base.system.handler.JsonbTypeHandler;
 import lombok.Data;
 
 import java.math.BigDecimal;

@@ -1,7 +1,7 @@
 package com.huicai.config.security;
 
 import com.huicai.common.response.R;
-import com.huicai.module.system.service.impl.UserDetailsServiceImpl;
+import com.huicai.base.system.service.impl.UserDetailsServiceImpl;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;

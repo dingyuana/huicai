@@ -1,7 +1,7 @@
 package com.huicai.common.aspect;
 
 import com.huicai.common.annotation.StatusChangeable;
-import com.huicai.module.system.service.AuditLogService;
+import com.huicai.base.system.service.AuditLogService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.aspectj.lang.ProceedingJoinPoint;

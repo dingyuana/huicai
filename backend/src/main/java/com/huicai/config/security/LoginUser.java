@@ -1,6 +1,6 @@
 package com.huicai.config.security;
 
-import com.huicai.module.system.entity.UserEntity;
+import com.huicai.base.system.entity.UserEntity;
 import lombok.Getter;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.User;

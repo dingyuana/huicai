@@ -2,8 +2,8 @@ package com.huicai.common.aspect;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.huicai.common.annotation.Auditable;
-import com.huicai.module.system.entity.AuditLogEntity;
-import com.huicai.module.system.service.AuditLogService;
+import com.huicai.base.system.entity.AuditLogEntity;
+import com.huicai.base.system.service.AuditLogService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.aspectj.lang.ProceedingJoinPoint;
@@ -111,7 +111,7 @@ public class AuditTrackingAspect {
         }
     }
 
-    @Around("execution(* com.baomidou.mybatisplus.core.mapper.BaseMapper.insert(..)) && args(entity) && !args(com.huicai.module.system.entity.AuditLogEntity)")
+    @Around("execution(* com.baomidou.mybatisplus.core.mapper.BaseMapper.insert(..)) && args(entity) && !args(com.huicai.base.system.entity.AuditLogEntity)")
     public Object aroundInsert(ProceedingJoinPoint pjp, Object entity) throws Throwable {
         if (AUDITING.get()) {
             return pjp.proceed();

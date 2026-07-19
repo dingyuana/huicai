@@ -2,7 +2,7 @@ package com.huicai.sme.tax.entity;
 
 import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableName;
-import com.huicai.module.system.handler.JsonbTypeHandler;
+import com.huicai.base.system.handler.JsonbTypeHandler;
 import lombok.Data;
 
 import java.math.BigDecimal;

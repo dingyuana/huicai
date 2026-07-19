@@ -2,7 +2,7 @@ package com.huicai.base.voucher.controller;
 
 import com.huicai.common.response.R;
 import com.huicai.base.voucher.service.PeriodCloseService;
-import com.huicai.module.system.util.SecurityUtils;
+import com.huicai.base.system.util.SecurityUtils;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;

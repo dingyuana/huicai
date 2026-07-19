@@ -10,7 +10,7 @@ import com.huicai.module.finance.dto.VoucherTemplateVO;
 import com.huicai.module.finance.dto.VoucherVO;
 import com.huicai.module.finance.service.NumberingTraceService;
 import com.huicai.module.finance.service.VoucherService;
-import com.huicai.module.system.util.SecurityUtils;
+import com.huicai.base.system.util.SecurityUtils;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
