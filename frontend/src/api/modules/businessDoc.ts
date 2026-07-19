@@ -98,32 +98,32 @@ export const DOC_STATUS_LABELS: Record<string, string> = {
 }
 
 export function getBusinessDocPage(params: BusinessDocQuery): Promise<PageResult<BusinessDocVO>> {
-  return request.post('/business-docs/page', params)
+  return request.post('/sme/arap/v1/business-docs/page', params)
 }
 export function getBusinessDoc(id: number): Promise<BusinessDocVO> {
-  return request.get(`/business-docs/${id}`)
+  return request.get(`/sme/arap/v1/business-docs/${id}`)
 }
 export function createBusinessDoc(data: BusinessDocDTO): Promise<BusinessDocVO> {
-  return request.post('/business-docs', data)
+  return request.post('/sme/arap/v1/business-docs', data)
 }
 export function updateBusinessDoc(id: number, data: BusinessDocDTO): Promise<BusinessDocVO> {
-  return request.put(`/business-docs/${id}`, data)
+  return request.put(`/sme/arap/v1/business-docs/${id}`, data)
 }
 export function deleteBusinessDoc(id: number): Promise<void> {
-  return request.delete(`/business-docs/${id}`)
+  return request.delete(`/sme/arap/v1/business-docs/${id}`)
 }
 export function submitBusinessDoc(id: number): Promise<void> {
-  return request.post(`/business-docs/${id}/submit`)
+  return request.post(`/sme/arap/v1/business-docs/${id}/submit`)
 }
 export function approveBusinessDoc(id: number): Promise<void> {
-  return request.post(`/business-docs/${id}/approve`)
+  return request.post(`/sme/arap/v1/business-docs/${id}/approve`)
 }
 export function rejectBusinessDoc(id: number): Promise<void> {
-  return request.post(`/business-docs/${id}/reject`)
+  return request.post(`/sme/arap/v1/business-docs/${id}/reject`)
 }
 export function generateVoucherFromDoc(id: number): Promise<BusinessDocVO> {
-  return request.post(`/business-docs/${id}/generate-voucher`)
+  return request.post(`/sme/arap/v1/business-docs/${id}/generate-voucher`)
 }
 export function reverseBusinessDoc(id: number): Promise<BusinessDocVO> {
-  return request.post(`/business-docs/${id}/reverse`)
+  return request.post(`/sme/arap/v1/business-docs/${id}/reverse`)
 }

@@ -38,17 +38,17 @@ export interface TrialBalance {
 }
 
 export function getSubjectBalance(period: string): Promise<SubjectBalanceRow[]> {
-  return request.get('/ledgers/subject-balance', { params: { period } })
+  return request.get('/base/voucher/v1/ledgers/subject-balance', { params: { period } })
 }
 
 export function getGeneralLedger(subjectId: number, period: string): Promise<LedgerRow[]> {
-  return request.get('/ledgers/general', { params: { subjectId, period } })
+  return request.get('/base/voucher/v1/ledgers/general', { params: { subjectId, period } })
 }
 
 export function getSubsidiaryLedger(subjectId: number, period: string): Promise<LedgerRow[]> {
-  return request.get('/ledgers/subsidiary', { params: { subjectId, period } })
+  return request.get('/base/voucher/v1/ledgers/subsidiary', { params: { subjectId, period } })
 }
 
 export function getTrialBalance(period: string): Promise<TrialBalance> {
-  return request.get('/ledgers/trial-balance', { params: { period } })
+  return request.get('/base/voucher/v1/ledgers/trial-balance', { params: { period } })
 }

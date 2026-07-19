@@ -12,37 +12,37 @@ export interface ExpenseReimbursement {
 }
 
 export function pageExpense(params: any): Promise<any> {
-  return request.get('/expense-reimbursements/page', { params })
+  return request.get('/sme/arap/v1/expense-reimbursements/page', { params })
 }
 
 export function getExpense(id: number): Promise<ExpenseReimbursement> {
-  return request.get(`/expense-reimbursements/${id}`)
+  return request.get(`/sme/arap/v1/expense-reimbursements/${id}`)
 }
 
 export function createExpense(data: ExpenseReimbursement): Promise<ExpenseReimbursement> {
-  return request.post('/expense-reimbursements', data)
+  return request.post('/sme/arap/v1/expense-reimbursements', data)
 }
 
 export function updateExpense(id: number, data: ExpenseReimbursement): Promise<ExpenseReimbursement> {
-  return request.put(`/expense-reimbursements/${id}`, data)
+  return request.put(`/sme/arap/v1/expense-reimbursements/${id}`, data)
 }
 
 export function submitExpense(id: number): Promise<ExpenseReimbursement> {
-  return request.post(`/expense-reimbursements/${id}/submit`)
+  return request.post(`/sme/arap/v1/expense-reimbursements/${id}/submit`)
 }
 
 export function approveExpense(id: number, approver?: string): Promise<ExpenseReimbursement> {
-  return request.post(`/expense-reimbursements/${id}/approve`, null, { params: { approver } })
+  return request.post(`/sme/arap/v1/expense-reimbursements/${id}/approve`, null, { params: { approver } })
 }
 
 export function rejectExpense(id: number, reason: string): Promise<ExpenseReimbursement> {
-  return request.post(`/expense-reimbursements/${id}/reject`, null, { params: { reason } })
+  return request.post(`/sme/arap/v1/expense-reimbursements/${id}/reject`, null, { params: { reason } })
 }
 
 export function generateVoucher(id: number, voucherId: number): Promise<ExpenseReimbursement> {
-  return request.post(`/expense-reimbursements/${id}/generate-voucher`, null, { params: { voucherId } })
+  return request.post(`/sme/arap/v1/expense-reimbursements/${id}/generate-voucher`, null, { params: { voucherId } })
 }
 
 export function autoVoucher(id: number): Promise<ExpenseReimbursement> {
-  return request.post(`/expense-reimbursements/${id}/auto-voucher`)
+  return request.post(`/sme/arap/v1/expense-reimbursements/${id}/auto-voucher`)
 }

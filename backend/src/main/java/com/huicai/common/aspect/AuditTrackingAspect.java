@@ -2,8 +2,8 @@ package com.huicai.common.aspect;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.huicai.common.annotation.Auditable;
-import com.huicai.module.system.entity.AuditLogEntity;
-import com.huicai.module.system.service.AuditLogService;
+import com.huicai.base.system.entity.AuditLogEntity;
+import com.huicai.base.system.service.AuditLogService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.aspectj.lang.ProceedingJoinPoint;
@@ -111,7 +111,7 @@ public class AuditTrackingAspect {
         }
     }
 
-    @Around("execution(* com.baomidou.mybatisplus.core.mapper.BaseMapper.insert(..)) && args(entity) && !args(com.huicai.module.system.entity.AuditLogEntity)")
+    @Around("execution(* com.baomidou.mybatisplus.core.mapper.BaseMapper.insert(..)) && args(entity) && !args(com.huicai.base.system.entity.AuditLogEntity)")
     public Object aroundInsert(ProceedingJoinPoint pjp, Object entity) throws Throwable {
         if (AUDITING.get()) {
             return pjp.proceed();
@@ -185,15 +185,17 @@ public class AuditTrackingAspect {
     }
 
     private boolean isBusinessModuleEntity(String className) {
-        return className.startsWith("com.huicai.module.finance.entity.")
-                || className.startsWith("com.huicai.module.arap.entity.")
-                || className.startsWith("com.huicai.module.tax.entity.");
+        return className.startsWith("com.huicai.base.voucher.entity.") ||
+               className.startsWith("com.huicai.sme.arap.entity.") ||
+               className.startsWith("com.huicai.sme.tax.entity.") ||
+               className.startsWith("com.huicai.sme.cash.entity.");
     }
 
     private boolean isBusinessModuleMapper(String className) {
-        return className.startsWith("com.huicai.module.finance.mapper.")
-                || className.startsWith("com.huicai.module.arap.mapper.")
-                || className.startsWith("com.huicai.module.tax.mapper.");
+        return className.startsWith("com.huicai.base.voucher.mapper.") ||
+               className.startsWith("com.huicai.sme.arap.mapper.") ||
+               className.startsWith("com.huicai.sme.tax.mapper.") ||
+               className.startsWith("com.huicai.sme.cash.mapper.");
     }
 
     private String getCurrentUsername() {

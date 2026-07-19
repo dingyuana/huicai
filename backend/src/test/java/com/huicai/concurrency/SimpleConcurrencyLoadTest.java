@@ -49,7 +49,7 @@ class SimpleConcurrencyLoadTest {
                     for (int j = 0; j < REQUESTS_PER_THREAD; j++) {
                         long t0 = System.nanoTime();
                         try {
-                            mvc.perform(get("/api/v1/reconciliations/recommend-receipt"));
+                            mvc.perform(get("/api/sme/arap/v1/reconciliations/recommend-receipt"));
                             success.incrementAndGet();
                         } catch (Exception e) {
                             failed.incrementAndGet();
@@ -95,7 +95,7 @@ class SimpleConcurrencyLoadTest {
                     for (int j = 0; j < REQUESTS_PER_THREAD; j++) {
                         long t0 = System.nanoTime();
                         try {
-                            mvc.perform(get("/api/v1/receivables/page")
+                            mvc.perform(get("/api/sme/arap/v1/receivables/page")
                                     .param("current", "1")
                                     .param("size", "10"));
                             success.incrementAndGet();
@@ -143,7 +143,7 @@ class SimpleConcurrencyLoadTest {
                     for (int j = 0; j < REQUESTS_PER_THREAD; j++) {
                         long t0 = System.nanoTime();
                         try {
-                            mvc.perform(get("/api/v1/payables/page")
+                            mvc.perform(get("/api/sme/arap/v1/payables/page")
                                     .param("current", "1")
                                     .param("size", "10"));
                             success.incrementAndGet();
@@ -191,7 +191,7 @@ class SimpleConcurrencyLoadTest {
                     for (int j = 0; j < REQUESTS_PER_THREAD; j++) {
                         long t0 = System.nanoTime();
                         try {
-                            mvc.perform(get("/api/v1/bank-reconciliations/score")
+                            mvc.perform(get("/api/sme/cash/v1/bank-reconciliation/score")
                                     .param("period", "202606"));
                             success.incrementAndGet();
                         } catch (Exception e) {
@@ -238,7 +238,7 @@ class SimpleConcurrencyLoadTest {
                     barrier.await();  // 所有线程同时开始
                     long t0 = System.nanoTime();
                     try {
-                        mvc.perform(get("/api/v1/reconciliations/recommend-receipt"));
+                        mvc.perform(get("/api/sme/arap/v1/reconciliations/recommend-receipt"));
                         success.incrementAndGet();
                     } catch (Exception e) {
                         failed.incrementAndGet();

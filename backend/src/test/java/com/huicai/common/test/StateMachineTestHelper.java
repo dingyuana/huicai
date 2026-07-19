@@ -2,16 +2,16 @@ package com.huicai.common.test;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.huicai.common.exception.BusinessException;
-import com.huicai.module.arap.constant.ArapStatus;
-import com.huicai.module.finance.entity.BusinessDocEntity;
-import com.huicai.module.finance.entity.BusinessDocEntryEntity;
-import com.huicai.module.finance.entity.VoucherEntity;
-import com.huicai.module.finance.entity.VoucherEntryEntity;
-import com.huicai.module.finance.mapper.BusinessDocEntryMapper;
-import com.huicai.module.finance.mapper.BusinessDocMapper;
-import com.huicai.module.finance.mapper.VoucherEntryMapper;
-import com.huicai.module.finance.mapper.VoucherMapper;
-import com.huicai.module.tax.entity.OutputInvoiceEntity;
+import com.huicai.sme.arap.constant.ArapStatus;
+import com.huicai.sme.arap.entity.BusinessDocEntity;
+import com.huicai.sme.arap.entity.BusinessDocEntryEntity;
+import com.huicai.base.voucher.entity.VoucherEntity;
+import com.huicai.base.voucher.entity.VoucherEntryEntity;
+import com.huicai.sme.arap.mapper.BusinessDocEntryMapper;
+import com.huicai.sme.arap.mapper.BusinessDocMapper;
+import com.huicai.base.voucher.mapper.VoucherEntryMapper;
+import com.huicai.base.voucher.mapper.VoucherMapper;
+import com.huicai.sme.tax.entity.OutputInvoiceEntity;
 import org.mockito.ArgumentCaptor;
 
 import java.math.BigDecimal;

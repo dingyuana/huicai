@@ -26,9 +26,9 @@ export interface LoginResult {
 }
 
 export function login(data: LoginParams): Promise<LoginResult> {
-  return request.post('/auth/login', data)
+  return request.post('/v1/auth/login', data)
 }
 
 export function getUserInfo(): Promise<UserInfo> {
-  return request.get('/auth/userinfo')
+  return request.get('/v1/auth/userinfo')
 }

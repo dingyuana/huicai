@@ -20,37 +20,37 @@ export interface Prepayment {
 }
 
 export function pagePrepayment(params: any): Promise<any> {
-  return request.get('/prepayment/page', { params })
+  return request.get('/sme/arap/v1/prepayment/page', { params })
 }
 
 export function getPrepayment(id: number): Promise<Prepayment> {
-  return request.get(`/prepayment/${id}`)
+  return request.get(`/sme/arap/v1/prepayment/${id}`)
 }
 
 export function createPrepayment(data: Partial<Prepayment>): Promise<Prepayment> {
-  return request.post('/prepayment', data)
+  return request.post('/sme/arap/v1/prepayment', data)
 }
 
 export function confirmPrepayment(id: number): Promise<Prepayment> {
-  return request.post(`/prepayment/${id}/confirm`)
+  return request.post(`/sme/arap/v1/prepayment/${id}/confirm`)
 }
 
 export function applyToPayable(prepayId: number, payableId: number, params?: any): Promise<any> {
-  return request.post(`/prepayment/${prepayId}/apply-to-payable/${payableId}`, null, { params })
+  return request.post(`/sme/arap/v1/prepayment/${prepayId}/apply-to-payable/${payableId}`, null, { params })
 }
 
 export function applyToReceivable(prepayId: number, receivableId: number, params?: any): Promise<any> {
-  return request.post(`/prepayment/${prepayId}/apply-to-receivable/${receivableId}`, null, { params })
+  return request.post(`/sme/arap/v1/prepayment/${prepayId}/apply-to-receivable/${receivableId}`, null, { params })
 }
 
 export function reversePrepayment(id: number, params: any): Promise<any> {
-  return request.post(`/prepayment/${id}/reverse`, null, { params })
+  return request.post(`/sme/arap/v1/prepayment/${id}/reverse`, null, { params })
 }
 
 export function getOpenPrepayments(vendorId: number): Promise<Prepayment[]> {
-  return request.get(`/prepayment/open/${vendorId}`)
+  return request.get(`/sme/arap/v1/prepayment/open/${vendorId}`)
 }
 
 export function getOpenPrepaymentsForCustomer(customerId: number): Promise<Prepayment[]> {
-  return request.get(`/prepayment/open-customer/${customerId}`)
+  return request.get(`/sme/arap/v1/prepayment/open-customer/${customerId}`)
 }

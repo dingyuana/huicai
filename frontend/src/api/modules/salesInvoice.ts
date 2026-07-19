@@ -9,7 +9,7 @@ export function previewSalesInvoices(file: File): Promise<{
 }> {
   const formData = new FormData()
   formData.append('file', file)
-  return request.post('/sales-invoices/preview', formData, {
+  return request.post('/sme/tax/v1/sales-invoices/preview', formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
   })
 }
@@ -22,7 +22,7 @@ export function confirmSalesInvoicesImport(batchId: string): Promise<{
   errors: Array<{ row: number; invoiceNo: string; message: string }>
   batchId: string
 }> {
-  return request.post('/sales-invoices/confirm-import', null, { params: { batchId } })
+  return request.post('/sme/tax/v1/sales-invoices/confirm-import', null, { params: { batchId } })
 }
 
 export function importSalesInvoices(file: File): Promise<{
@@ -35,11 +35,11 @@ export function importSalesInvoices(file: File): Promise<{
 }> {
   const formData = new FormData()
   formData.append('file', file)
-  return request.post('/sales-invoices/import', formData, {
+  return request.post('/sme/tax/v1/sales-invoices/import', formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
   })
 }
 
 export function batchLinkRedFlush(): Promise<{ matched: number; skipped: number; total: number }> {
-  return request.post('/sales-invoices/batch-link-red-flush')
+  return request.post('/sme/tax/v1/sales-invoices/batch-link-red-flush')
 }

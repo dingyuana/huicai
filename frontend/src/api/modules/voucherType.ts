@@ -13,25 +13,25 @@ export interface VoucherTypeVO {
 }
 
 export function getVoucherTypePage(params: { page: number; size: number }): Promise<PageResult<VoucherTypeVO>> {
-  return request.get('/voucher-types', { params })
+  return request.get('/v1/voucher-types', { params })
 }
 
 export function getAllVoucherTypes(): Promise<VoucherTypeVO[]> {
-  return request.get('/voucher-types/all')
+  return request.get('/v1/voucher-types/all')
 }
 
 export function getVoucherType(id: number): Promise<VoucherTypeVO> {
-  return request.get(`/voucher-types/${id}`)
+  return request.get(`/v1/voucher-types/${id}`)
 }
 
 export function createVoucherType(data: Partial<VoucherTypeVO>): Promise<void> {
-  return request.post('/voucher-types', data)
+  return request.post('/v1/voucher-types', data)
 }
 
 export function updateVoucherType(id: number, data: Partial<VoucherTypeVO>): Promise<void> {
-  return request.put(`/voucher-types/${id}`, data)
+  return request.put(`/v1/voucher-types/${id}`, data)
 }
 
 export function deleteVoucherType(id: number): Promise<void> {
-  return request.delete(`/voucher-types/${id}`)
+  return request.delete(`/v1/voucher-types/${id}`)
 }

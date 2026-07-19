@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.huicai.base.balance.mapper.SubjectBalanceMapper">
+
+    <select id="selectFromPeriod" resultType="com.huicai.base.balance.entity.SubjectBalanceEntity">
+        SELECT * FROM t_subject_balance
+        WHERE subject_id = #{subjectId}
+        AND period >= #{period}
+        ORDER BY period ASC
+    </select>
+
+    <insert id="batchUpsert">
+        INSERT INTO t_subject_balance (id, subject_id, year, period, begin_balance, debit_total, credit_total, end_balance)
+        VALUES
+        <foreach collection="list" item="item" separator=",">
+            (#{item.id}, #{item.subjectId}, #{item.year}, #{item.period},
+             #{item.beginBalance}, #{item.debitTotal}, #{item.creditTotal}, #{item.endBalance})
+        </foreach>
+        ON CONFLICT (subject_id, period)
+        DO UPDATE SET
+            debit_total = EXCLUDED.debit_total,
+            credit_total = EXCLUDED.credit_total,
+            end_balance = EXCLUDED.end_balance,
+            updated_at = CURRENT_TIMESTAMP
+    </insert>
+
+</mapper>

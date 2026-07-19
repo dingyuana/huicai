@@ -18,21 +18,21 @@ export interface AiTask {
 }
 
 export function dispatchTask(taskType: string, bizType: string, bizId: number, inputData: any): Promise<AiTask> {
-  return request.post('/ai/tasks', { taskType, bizType, bizId, inputData })
+  return request.post('/v1/ai/tasks', { taskType, bizType, bizId, inputData })
 }
 
 export function pageAiTask(params: any): Promise<any> {
-  return request.get('/ai/tasks/page', { params })
+  return request.get('/v1/ai/tasks/page', { params })
 }
 
 export function getAiTask(id: number): Promise<AiTask> {
-  return request.get(`/ai/tasks/${id}`)
+  return request.get(`/v1/ai/tasks/${id}`)
 }
 
 export function reviewAiTask(id: number, reviewerId: number, approved: boolean): Promise<AiTask> {
-  return request.post(`/ai/tasks/${id}/review`, null, { params: { reviewerId, approved } })
+  return request.post(`/v1/ai/tasks/${id}/review`, null, { params: { reviewerId, approved } })
 }
 
 export function listAnomalies(bizType?: string, resolved?: boolean): Promise<any[]> {
-  return request.get('/ai/anomalies', { params: { bizType, resolved } })
+  return request.get('/v1/ai/anomalies', { params: { bizType, resolved } })
 }
