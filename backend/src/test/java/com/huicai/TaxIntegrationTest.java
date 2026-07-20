@@ -51,7 +51,7 @@ class TaxIntegrationTest {
 
     @Test
     void testInputInvoiceCreate() {
-        com.huicai.sme.tax.entity.InputInvoiceEntity invoice = new com.huicai.sme.tax.entity.InputInvoiceEntity();
+        com.huicai.base.business.entity.InputInvoiceEntity invoice = new com.huicai.base.business.entity.InputInvoiceEntity();
         invoice.setInvoiceNo("TEST-INV-001");
         invoice.setInvoiceDate(java.time.LocalDate.of(2026, 1, 15));
         invoice.setVendorName("测试供应商");
@@ -59,7 +59,7 @@ class TaxIntegrationTest {
         invoice.setTaxRate(new BigDecimal("0.13"));
         invoice.setInvoiceType("SPECIAL");
 
-        com.huicai.sme.tax.entity.InputInvoiceEntity created = new com.huicai.sme.tax.entity.InputInvoiceEntity();
+        com.huicai.base.business.entity.InputInvoiceEntity created = new com.huicai.base.business.entity.InputInvoiceEntity();
         created.setId(100L);
         created.setTaxAmount(new BigDecimal("130.00"));
         when(taxService.createInput(any())).thenReturn(created);

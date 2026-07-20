@@ -1,7 +1,7 @@
-package com.huicai.sme.arap.mapper;
+package com.huicai.base.business.mapper;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
-import com.huicai.sme.arap.entity.ArapSettlementEntryEntity;
+import com.huicai.base.business.entity.ArapSettlementEntryEntity;
 import org.apache.ibatis.annotations.Delete;
 import org.apache.ibatis.annotations.Mapper;
 

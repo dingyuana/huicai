@@ -1,4 +1,4 @@
-package com.huicai.sme.cash.service.impl;
+package com.huicai.base.business.util;
 
 import cn.hutool.core.util.StrUtil;
 import lombok.Getter;

@@ -42,7 +42,7 @@ class AssetCardControllerTest {
         IPage<AssetCardEntity> page = new Page<>(1, 20);
         when(service.pageQuery(isNull(), isNull(), isNull(), eq(1), eq(20))).thenReturn(page);
 
-        mvc.perform(get("/api/v1/asset-cards/page"))
+        mvc.perform(get("/api/sme/asset/v1/asset-cards/page"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(200));
     }
@@ -53,7 +53,7 @@ class AssetCardControllerTest {
         IPage<AssetCardEntity> page = new Page<>(2, 10);
         when(service.pageQuery(eq("电脑"), eq("IN_USE"), eq(1L), eq(2), eq(10))).thenReturn(page);
 
-        mvc.perform(get("/api/v1/asset-cards/page")
+        mvc.perform(get("/api/sme/asset/v1/asset-cards/page")
                         .param("keyword", "电脑")
                         .param("status", "IN_USE")
                         .param("categoryId", "1")
@@ -73,7 +73,7 @@ class AssetCardControllerTest {
         card.setOriginalValue(new BigDecimal("50000.00"));
         when(service.getById(eq(1L))).thenReturn(card);
 
-        mvc.perform(get("/api/v1/asset-cards/1"))
+        mvc.perform(get("/api/sme/asset/v1/asset-cards/1"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(200))
                 .andExpect(jsonPath("$.data.id").value(1))
@@ -86,7 +86,7 @@ class AssetCardControllerTest {
     void getById_notExists_returnsNull() throws Exception {
         when(service.getById(eq(999L))).thenReturn(null);
 
-        mvc.perform(get("/api/v1/asset-cards/999"))
+        mvc.perform(get("/api/sme/asset/v1/asset-cards/999"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(200))
                 .andExpect(jsonPath("$.data").doesNotExist());
@@ -110,7 +110,7 @@ class AssetCardControllerTest {
         saved.setAssetCode("ZC-002");
         when(service.create(any(AssetCardEntity.class))).thenReturn(saved);
 
-        mvc.perform(post("/api/v1/asset-cards")
+        mvc.perform(post("/api/sme/asset/v1/asset-cards")
                         .contentType("application/json")
                         .content(om.writeValueAsString(input)))
                 .andExpect(status().isOk())
@@ -124,7 +124,7 @@ class AssetCardControllerTest {
     void delete_success() throws Exception {
         doNothing().when(service).delete(eq(1L));
 
-        mvc.perform(delete("/api/v1/asset-cards/1"))
+        mvc.perform(delete("/api/sme/asset/v1/asset-cards/1"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(200));
 

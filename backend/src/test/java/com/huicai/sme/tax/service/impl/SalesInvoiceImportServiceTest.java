@@ -2,15 +2,15 @@ package com.huicai.sme.tax.service.impl;
 
 import com.huicai.base.masterdata.entity.CustomerEntity;
 import com.huicai.base.masterdata.mapper.CustomerMapper;
-import com.huicai.sme.arap.entity.BusinessDocEntity;
-import com.huicai.sme.arap.mapper.BusinessDocEntryMapper;
-import com.huicai.sme.arap.mapper.BusinessDocMapper;
+import com.huicai.base.business.entity.BusinessDocEntity;
+import com.huicai.base.business.mapper.BusinessDocEntryMapper;
+import com.huicai.base.business.mapper.BusinessDocMapper;
 import com.huicai.base.voucher.mapper.VoucherEntryMapper;
 import com.huicai.base.voucher.mapper.VoucherMapper;
 import com.huicai.base.voucher.service.VoucherNoService;
 import com.huicai.base.system.entity.Subject;
 import com.huicai.base.system.mapper.SubjectMapper;
-import com.huicai.sme.tax.mapper.OutputInvoiceMapper;
+import com.huicai.base.business.mapper.OutputInvoiceMapper;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -39,7 +39,7 @@ class SalesInvoiceImportServiceTest {
     @Mock private CustomerMapper customerMapper;
     @Mock private SubjectMapper subjectMapper;
     @Mock private OutputInvoiceMapper outputInvoiceMapper;
-    @Mock private com.huicai.sme.cash.service.impl.ColumnMappingResolver columnMappingResolver;
+    @Mock private com.huicai.base.business.util.ColumnMappingResolver columnMappingResolver;
 
     @InjectMocks private com.huicai.sme.tax.service.impl.SalesInvoiceImportService service;
 

@@ -1,4 +1,4 @@
-package com.huicai.sme.cash.constant;
+package com.huicai.base.business.constant;
 
 /**
  * 银行流水对账单 reviewStatus 状态常量.

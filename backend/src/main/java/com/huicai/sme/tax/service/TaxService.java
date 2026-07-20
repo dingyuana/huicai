@@ -1,8 +1,8 @@
 package com.huicai.sme.tax.service;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
-import com.huicai.sme.tax.entity.InputInvoiceEntity;
-import com.huicai.sme.tax.entity.OutputInvoiceEntity;
+import com.huicai.base.business.entity.InputInvoiceEntity;
+import com.huicai.base.business.entity.OutputInvoiceEntity;
 import com.huicai.sme.tax.entity.TaxDeclarationEntity;
 import com.huicai.sme.tax.entity.TaxTypeEntity;
 

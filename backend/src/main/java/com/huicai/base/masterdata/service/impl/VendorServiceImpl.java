@@ -8,7 +8,7 @@ import com.huicai.common.exception.BusinessException;
 import com.huicai.base.masterdata.entity.VendorEntity;
 import com.huicai.base.masterdata.mapper.VendorMapper;
 import com.huicai.base.masterdata.service.VendorService;
-import com.huicai.sme.arap.mapper.BusinessDocMapper;
+import com.huicai.base.business.mapper.BusinessDocMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 

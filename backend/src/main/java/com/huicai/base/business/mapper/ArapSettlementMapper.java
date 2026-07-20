@@ -1,10 +1,10 @@
-package com.huicai.sme.arap.mapper;
+package com.huicai.base.business.mapper;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
-import com.huicai.sme.arap.dto.vo.ArapSettlementVO;
-import com.huicai.sme.arap.entity.ArapSettlementEntity;
+import com.huicai.base.business.dto.vo.ArapSettlementVO;
+import com.huicai.base.business.entity.ArapSettlementEntity;
 import org.apache.ibatis.annotations.Delete;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;

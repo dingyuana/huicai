@@ -2,9 +2,9 @@ package com.huicai.sme.arap.controller;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.huicai.common.response.R;
-import com.huicai.sme.arap.dto.vo.ArapSettlementVO;
-import com.huicai.sme.arap.entity.ArapSettlementEntity;
-import com.huicai.sme.arap.entity.ArapSettlementEntryEntity;
+import com.huicai.base.business.dto.vo.ArapSettlementVO;
+import com.huicai.base.business.entity.ArapSettlementEntity;
+import com.huicai.base.business.entity.ArapSettlementEntryEntity;
 import com.huicai.sme.arap.service.ArapSettlementService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;

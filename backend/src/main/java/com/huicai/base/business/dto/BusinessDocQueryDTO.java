@@ -1,4 +1,4 @@
-package com.huicai.sme.arap.dto;
+package com.huicai.base.business.dto;
 
 import lombok.Data;
 

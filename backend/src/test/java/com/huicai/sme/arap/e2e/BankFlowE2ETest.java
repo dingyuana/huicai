@@ -1,11 +1,11 @@
 package com.huicai.sme.arap.e2e;
 
 import com.huicai.common.test.AbstractMapperTest;
-import com.huicai.sme.cash.entity.BankStatementEntity;
-import com.huicai.sme.arap.entity.BusinessDocEntity;
+import com.huicai.base.business.entity.BankStatementEntity;
+import com.huicai.base.business.entity.BusinessDocEntity;
 import com.huicai.base.voucher.entity.VoucherEntity;
-import com.huicai.sme.cash.mapper.BankStatementMapper;
-import com.huicai.sme.arap.mapper.BusinessDocMapper;
+import com.huicai.base.business.mapper.BankStatementMapper;
+import com.huicai.base.business.mapper.BusinessDocMapper;
 import com.huicai.base.voucher.mapper.VoucherMapper;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;

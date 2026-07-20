@@ -1,4 +1,4 @@
-package com.huicai.sme.tax.entity;
+package com.huicai.base.business.entity;
 
 import com.baomidou.mybatisplus.annotation.*;
 import com.huicai.common.annotation.StatusChangeable;

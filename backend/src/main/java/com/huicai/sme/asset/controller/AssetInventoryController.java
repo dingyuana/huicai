@@ -14,7 +14,7 @@ import java.util.List;
 
 @Tag(name = "资产盘点")
 @RestController
-@RequestMapping("/api/v1/asset-inventories")
+@RequestMapping("/api/sme/asset/v1/asset-inventories")
 @RequiredArgsConstructor
 public class AssetInventoryController {
 

@@ -1,7 +1,7 @@
-package com.huicai.sme.arap.dto;
+package com.huicai.base.business.dto;
 
-import com.huicai.sme.arap.entity.BusinessDocEntity;
-import com.huicai.sme.arap.entity.BusinessDocEntryEntity;
+import com.huicai.base.business.entity.BusinessDocEntity;
+import com.huicai.base.business.entity.BusinessDocEntryEntity;
 import lombok.Data;
 
 import java.math.BigDecimal;

@@ -2,9 +2,9 @@ package com.huicai.sme.tax.controller;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.huicai.common.response.R;
-import com.huicai.sme.arap.dto.BusinessDocQueryDTO;
-import com.huicai.sme.arap.dto.BusinessDocVO;
-import com.huicai.sme.arap.service.BusinessDocService;
+import com.huicai.base.business.dto.BusinessDocQueryDTO;
+import com.huicai.base.business.dto.BusinessDocVO;
+import com.huicai.base.business.service.BusinessDocService;
 import com.huicai.sme.tax.service.impl.SalesInvoiceImportService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;

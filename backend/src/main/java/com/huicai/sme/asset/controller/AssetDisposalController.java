@@ -11,7 +11,7 @@ import org.springframework.web.bind.annotation.*;
 
 @Tag(name = "资产处置")
 @RestController
-@RequestMapping("/api/v1/asset-disposals")
+@RequestMapping("/api/sme/asset/v1/asset-disposals")
 @RequiredArgsConstructor
 public class AssetDisposalController {
 

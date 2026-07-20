@@ -1,7 +1,7 @@
-package com.huicai.sme.cash.mapper;
+package com.huicai.base.business.mapper;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
-import com.huicai.sme.cash.entity.ClassificationRuleEntity;
+import com.huicai.base.business.entity.ClassificationRuleEntity;
 import org.apache.ibatis.annotations.Mapper;
 
 /**

@@ -1,6 +1,6 @@
 package com.huicai.sme.arap.service;
 
-import com.huicai.sme.arap.mapper.BusinessDocMapper;
+import com.huicai.base.business.mapper.BusinessDocMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 

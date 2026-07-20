@@ -2,6 +2,8 @@ package com.huicai.sme.cash.service.impl;
 
 import org.junit.jupiter.api.Test;
 
+import com.huicai.base.business.util.ColumnMappingResolver;
+
 import static org.junit.jupiter.api.Assertions.*;
 
 /**

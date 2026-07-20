@@ -2,7 +2,7 @@ package com.huicai.sme.arap.service;
 
 import com.huicai.sme.arap.entity.ReconciliationExceptionEntity;
 import com.huicai.sme.arap.entity.ReconciliationLogEntity;
-import com.huicai.sme.arap.entity.BusinessDocEntity;
+import com.huicai.base.business.entity.BusinessDocEntity;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;

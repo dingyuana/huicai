@@ -1,16 +1,16 @@
 package com.huicai.base.voucher.e2e;
 
 import com.huicai.common.test.AbstractMapperTest;
-import com.huicai.sme.arap.entity.ArapSettlementEntity;
-import com.huicai.sme.arap.entity.ArapSettlementEntryEntity;
-import com.huicai.sme.arap.mapper.ArapSettlementEntryMapper;
-import com.huicai.sme.arap.mapper.ArapSettlementMapper;
-import com.huicai.sme.arap.entity.BusinessDocEntity;
-import com.huicai.sme.arap.mapper.BusinessDocMapper;
-import com.huicai.sme.tax.entity.InputInvoiceEntity;
-import com.huicai.sme.tax.entity.OutputInvoiceEntity;
-import com.huicai.sme.tax.mapper.InputInvoiceMapper;
-import com.huicai.sme.tax.mapper.OutputInvoiceMapper;
+import com.huicai.base.business.entity.ArapSettlementEntity;
+import com.huicai.base.business.entity.ArapSettlementEntryEntity;
+import com.huicai.base.business.mapper.ArapSettlementEntryMapper;
+import com.huicai.base.business.mapper.ArapSettlementMapper;
+import com.huicai.base.business.entity.BusinessDocEntity;
+import com.huicai.base.business.mapper.BusinessDocMapper;
+import com.huicai.base.business.entity.InputInvoiceEntity;
+import com.huicai.base.business.entity.OutputInvoiceEntity;
+import com.huicai.base.business.mapper.InputInvoiceMapper;
+import com.huicai.base.business.mapper.OutputInvoiceMapper;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;

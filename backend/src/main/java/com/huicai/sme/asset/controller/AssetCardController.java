@@ -14,7 +14,7 @@ import java.util.Map;
 
 @Tag(name = "资产卡片")
 @RestController
-@RequestMapping("/api/v1/asset-cards")
+@RequestMapping("/api/sme/asset/v1/asset-cards")
 @RequiredArgsConstructor
 public class AssetCardController {
 

@@ -1,4 +1,4 @@
-package com.huicai.sme.arap.service;
+package com.huicai.base.business.util;
 
 import cn.hutool.core.util.StrUtil;
 import com.huicai.common.util.TemplateContext;

@@ -1,10 +1,10 @@
 package com.huicai.sme.tax.service.impl;
 
 import com.huicai.common.exception.BusinessException;
-import com.huicai.sme.tax.entity.InputInvoiceEntity;
+import com.huicai.base.business.entity.InputInvoiceEntity;
 import com.huicai.sme.tax.entity.TaxDeclarationEntity;
-import com.huicai.sme.tax.mapper.InputInvoiceMapper;
-import com.huicai.sme.tax.mapper.OutputInvoiceMapper;
+import com.huicai.base.business.mapper.InputInvoiceMapper;
+import com.huicai.base.business.mapper.OutputInvoiceMapper;
 import com.huicai.sme.tax.mapper.TaxDeclarationMapper;
 import com.huicai.sme.tax.mapper.TaxTypeMapper;
 import org.junit.jupiter.api.Test;

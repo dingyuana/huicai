@@ -4,9 +4,9 @@ import cn.hutool.core.util.StrUtil;
 import cn.hutool.json.JSONObject;
 import cn.hutool.json.JSONUtil;
 import com.huicai.common.exception.BusinessException;
-import com.huicai.sme.cash.constant.StatementStatus;
-import com.huicai.sme.cash.entity.BankStatementEntity;
-import com.huicai.sme.cash.mapper.BankStatementMapper;
+import com.huicai.base.business.constant.StatementStatus;
+import com.huicai.base.business.entity.BankStatementEntity;
+import com.huicai.base.business.mapper.BankStatementMapper;
 import com.huicai.sme.cash.service.BankStatementService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -27,6 +27,7 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 import java.util.stream.Collectors;
+import com.huicai.base.business.util.ColumnMappingResolver;
 
 @Slf4j
 @Service

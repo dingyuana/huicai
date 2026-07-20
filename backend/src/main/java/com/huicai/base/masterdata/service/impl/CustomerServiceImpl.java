@@ -8,7 +8,7 @@ import com.huicai.common.exception.BusinessException;
 import com.huicai.base.masterdata.entity.CustomerEntity;
 import com.huicai.base.masterdata.mapper.CustomerMapper;
 import com.huicai.base.masterdata.service.CustomerService;
-import com.huicai.sme.arap.mapper.BusinessDocMapper;
+import com.huicai.base.business.mapper.BusinessDocMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 

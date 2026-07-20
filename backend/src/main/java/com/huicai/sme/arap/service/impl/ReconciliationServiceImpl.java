@@ -4,26 +4,26 @@ import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.huicai.common.exception.BusinessException;
 import com.huicai.sme.arap.constant.ArapStatus;
-import com.huicai.sme.arap.entity.BusinessDocEntity;
+import com.huicai.base.business.entity.BusinessDocEntity;
 import com.huicai.sme.arap.entity.PrepaymentEntity;
 import com.huicai.sme.arap.entity.ReconciliationExceptionEntity;
 import com.huicai.sme.arap.entity.ReconciliationLogEntity;
-import com.huicai.sme.arap.entity.ArapSettlementEntity;
-import com.huicai.sme.arap.entity.ArapSettlementEntryEntity;
-import com.huicai.sme.arap.mapper.ArapSettlementEntryMapper;
-import com.huicai.sme.arap.mapper.BusinessDocMapper;
+import com.huicai.base.business.entity.ArapSettlementEntity;
+import com.huicai.base.business.entity.ArapSettlementEntryEntity;
+import com.huicai.base.business.mapper.ArapSettlementEntryMapper;
+import com.huicai.base.business.mapper.BusinessDocMapper;
 import com.huicai.sme.arap.mapper.ReconciliationExceptionMapper;
 import com.huicai.sme.arap.mapper.ReconciliationLogMapper;
 import com.huicai.sme.arap.service.ArapSettlementService;
 import com.huicai.sme.arap.service.ReconciliationService;
 import com.huicai.sme.arap.service.ReconciliationToleranceService;
-import com.huicai.sme.tax.service.OutputInvoiceStateMachineService;
+import com.huicai.base.business.service.OutputInvoiceStateMachineService;
 import com.huicai.base.voucher.constant.VoucherType;
 import com.huicai.base.voucher.entity.VoucherEntity;
 import com.huicai.base.voucher.entity.VoucherEntryEntity;
 import com.huicai.base.voucher.entity.VoucherTemplateEntity;
 import com.huicai.base.voucher.entity.VoucherTemplateLineEntity;
-import com.huicai.sme.cash.mapper.BankStatementMapper;
+import com.huicai.base.business.mapper.BankStatementMapper;
 import com.huicai.base.voucher.mapper.VoucherEntryMapper;
 import com.huicai.base.voucher.mapper.VoucherMapper;
 import com.huicai.base.voucher.service.VoucherNoService;
@@ -404,7 +404,7 @@ public class ReconciliationServiceImpl implements ReconciliationService {
         if ("bank_txn".equals(request.sourceDocType())) {
             try {
                 // 将银行流水标记为已核销, 不再出现在核销工作台
-                com.huicai.sme.cash.entity.BankStatementEntity stmt =
+                com.huicai.base.business.entity.BankStatementEntity stmt =
                         bankStatementMapper.selectById(request.sourceDocId());
                 if (stmt != null && "UNMATCHED".equals(stmt.getMatchStatus())) {
                     stmt.setMatchStatus("MATCHED");
@@ -422,7 +422,7 @@ public class ReconciliationServiceImpl implements ReconciliationService {
 
     private void createReconciliationVoucher(ExecuteRequest request, ReconciliationLogEntity reconLog) {
         if ("bank_txn".equals(request.sourceDocType()) && request.sourceDocId() != null) {
-            com.huicai.sme.cash.entity.BankStatementEntity stmt =
+            com.huicai.base.business.entity.BankStatementEntity stmt =
                     bankStatementMapper.selectById(request.sourceDocId());
             if (stmt == null || stmt.getGeneratedVoucherId() != null) return;
         }
@@ -506,7 +506,7 @@ public class ReconciliationServiceImpl implements ReconciliationService {
 
         if ("bank_txn".equals(request.sourceDocType()) && request.sourceDocId() != null) {
             try {
-                com.huicai.sme.cash.entity.BankStatementEntity stmt =
+                com.huicai.base.business.entity.BankStatementEntity stmt =
                         bankStatementMapper.selectById(request.sourceDocId());
                 if (stmt != null && stmt.getGeneratedVoucherId() == null) {
                     stmt.setGeneratedVoucherId(voucher.getId());
@@ -1105,7 +1105,7 @@ public class ReconciliationServiceImpl implements ReconciliationService {
         com.huicai.sme.arap.dto.vo.ReconciliationTraceVO.UpstreamInfo upstream = new com.huicai.sme.arap.dto.vo.ReconciliationTraceVO.UpstreamInfo();
         
         if ("bank_txn".equals(log.getSourceDocType()) && log.getSourceDocId() != null) {
-            com.huicai.sme.cash.entity.BankStatementEntity stmt = bankStatementMapper.selectById(log.getSourceDocId());
+            com.huicai.base.business.entity.BankStatementEntity stmt = bankStatementMapper.selectById(log.getSourceDocId());
             if (stmt != null) {
                 com.huicai.sme.arap.dto.vo.ReconciliationTraceVO.BankTransaction bankTxn = new com.huicai.sme.arap.dto.vo.ReconciliationTraceVO.BankTransaction();
                 bankTxn.setId(stmt.getId());

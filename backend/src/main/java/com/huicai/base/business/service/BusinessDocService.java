@@ -1,9 +1,9 @@
-package com.huicai.sme.arap.service;
+package com.huicai.base.business.service;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
-import com.huicai.sme.arap.dto.BusinessDocDTO;
-import com.huicai.sme.arap.dto.BusinessDocQueryDTO;
-import com.huicai.sme.arap.dto.BusinessDocVO;
+import com.huicai.base.business.dto.BusinessDocDTO;
+import com.huicai.base.business.dto.BusinessDocQueryDTO;
+import com.huicai.base.business.dto.BusinessDocVO;
 
 import java.util.List;
 

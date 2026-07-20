@@ -1,7 +1,7 @@
 package com.huicai.sme.cash.service;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
-import com.huicai.sme.cash.entity.ClassificationRuleEntity;
+import com.huicai.base.business.entity.ClassificationRuleEntity;
 
 import java.util.List;
 

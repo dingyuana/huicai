@@ -2,12 +2,12 @@ package com.huicai.sme.tax.controller;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.huicai.common.response.R;
-import com.huicai.sme.tax.entity.InputInvoiceEntity;
-import com.huicai.sme.tax.entity.OutputInvoiceEntity;
+import com.huicai.base.business.entity.InputInvoiceEntity;
+import com.huicai.base.business.entity.OutputInvoiceEntity;
 import com.huicai.sme.tax.entity.TaxDeclarationEntity;
 import com.huicai.sme.tax.entity.TaxTypeEntity;
 import com.huicai.sme.tax.service.InputInvoiceStateMachineService;
-import com.huicai.sme.tax.service.OutputInvoiceStateMachineService;
+import com.huicai.base.business.service.OutputInvoiceStateMachineService;
 import com.huicai.sme.tax.service.TaxService;
 import com.huicai.base.system.util.SecurityUtils;
 import io.swagger.v3.oas.annotations.Operation;

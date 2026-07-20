@@ -1,4 +1,4 @@
-package com.huicai.sme.cash.constant;
+package com.huicai.base.business.constant;
 
 /**
  * 银行流水业务分类常量 (8类体系).

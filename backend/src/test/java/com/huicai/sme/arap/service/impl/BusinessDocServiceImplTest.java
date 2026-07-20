@@ -5,6 +5,6 @@ import com.huicai.base.masterdata.entity.VendorEntity;
 import com.huicai.base.masterdata.mapper.CustomerMapper;
 
 import com.huicai.base.masterdata.mapper.VendorMapper;
-import com.huicai.sme.arap.dto.BusinessDocDTO;
-import com.huicai.sme.arap.dto.BusinessDocQueryDTO;
-import com.huicai.sme.arap.dto.BusinessDocVO;
+import com.huicai.base.business.dto.BusinessDocDTO;
+import com.huicai.base.business.dto.BusinessDocQueryDTO;
+import com.huicai.base.business.dto.BusinessDocVO;

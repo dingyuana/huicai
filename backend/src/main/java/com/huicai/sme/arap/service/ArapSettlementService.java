@@ -1,9 +1,9 @@
 package com.huicai.sme.arap.service;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
-import com.huicai.sme.arap.dto.vo.ArapSettlementVO;
-import com.huicai.sme.arap.entity.ArapSettlementEntity;
-import com.huicai.sme.arap.entity.ArapSettlementEntryEntity;
+import com.huicai.base.business.dto.vo.ArapSettlementVO;
+import com.huicai.base.business.entity.ArapSettlementEntity;
+import com.huicai.base.business.entity.ArapSettlementEntryEntity;
 
 import java.util.List;
 

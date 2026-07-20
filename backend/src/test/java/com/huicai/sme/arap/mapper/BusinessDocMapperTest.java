@@ -1,8 +1,8 @@
 package com.huicai.sme.arap.mapper;
 
 import com.huicai.common.test.AbstractMapperTest;
-import com.huicai.sme.arap.entity.BusinessDocEntity;
-import com.huicai.sme.arap.mapper.BusinessDocMapper;
+import com.huicai.base.business.entity.BusinessDocEntity;
+import com.huicai.base.business.mapper.BusinessDocMapper;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 

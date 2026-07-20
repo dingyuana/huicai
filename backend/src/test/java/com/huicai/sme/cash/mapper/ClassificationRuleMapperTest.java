@@ -1,7 +1,7 @@
 package com.huicai.sme.cash.mapper;
 
-import com.huicai.sme.cash.entity.ClassificationRuleEntity;
-import com.huicai.sme.cash.mapper.ClassificationRuleMapper;
+import com.huicai.base.business.entity.ClassificationRuleEntity;
+import com.huicai.base.business.mapper.ClassificationRuleMapper;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.DisplayName;
 import org.mockito.Mockito;

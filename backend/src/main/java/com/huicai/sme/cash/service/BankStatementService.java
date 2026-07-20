@@ -1,7 +1,7 @@
 package com.huicai.sme.cash.service;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
-import com.huicai.sme.cash.entity.BankStatementEntity;
+import com.huicai.base.business.entity.BankStatementEntity;
 
 import java.util.List;
 import java.util.Map;

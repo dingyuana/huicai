@@ -1,6 +1,6 @@
-package com.huicai.sme.arap.dto.vo;
+package com.huicai.base.business.dto.vo;
 
-import com.huicai.sme.arap.entity.ArapSettlementEntity;
+import com.huicai.base.business.entity.ArapSettlementEntity;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 

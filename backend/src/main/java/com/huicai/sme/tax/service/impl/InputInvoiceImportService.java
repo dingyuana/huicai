@@ -1,5 +1,5 @@
 package com.huicai.sme.tax.service.impl;
-import com.huicai.sme.cash.service.impl.ColumnMappingResolver;
+import com.huicai.base.business.util.ColumnMappingResolver;
 
 import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
@@ -7,19 +7,19 @@ import com.huicai.common.exception.BusinessException;
 import com.huicai.base.masterdata.entity.VendorEntity;
 import com.huicai.base.masterdata.mapper.VendorMapper;
 import com.huicai.base.voucher.constant.VoucherType;
-import com.huicai.sme.arap.entity.BusinessDocEntity;
+import com.huicai.base.business.entity.BusinessDocEntity;
 import com.huicai.base.voucher.entity.VoucherEntity;
 import com.huicai.base.voucher.entity.VoucherEntryEntity;
-import com.huicai.sme.arap.mapper.BusinessDocEntryMapper;
-import com.huicai.sme.arap.mapper.BusinessDocMapper;
+import com.huicai.base.business.mapper.BusinessDocEntryMapper;
+import com.huicai.base.business.mapper.BusinessDocMapper;
 import com.huicai.base.voucher.mapper.VoucherEntryMapper;
 import com.huicai.base.voucher.mapper.VoucherMapper;
 import com.huicai.base.voucher.service.VoucherNoService;
 import com.huicai.base.system.entity.Subject;
 import com.huicai.base.system.mapper.SubjectMapper;
-import com.huicai.sme.tax.entity.InputInvoiceEntity;
+import com.huicai.base.business.entity.InputInvoiceEntity;
 import com.huicai.sme.tax.constant.InvoiceStatus;
-import com.huicai.sme.tax.mapper.InputInvoiceMapper;
+import com.huicai.base.business.mapper.InputInvoiceMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -360,8 +360,8 @@ public class InputInvoiceImportService {
         docMapper.insert(doc);
 
         // 创建业务单分录（供 generateVoucher 使用），带入发票号
-        com.huicai.sme.arap.entity.BusinessDocEntryEntity entry =
-                new com.huicai.sme.arap.entity.BusinessDocEntryEntity();
+        com.huicai.base.business.entity.BusinessDocEntryEntity entry =
+                new com.huicai.base.business.entity.BusinessDocEntryEntity();
         entry.setDocId(doc.getId());
         entry.setAmount(row.totalAmount);
         entry.setSummary(row.goodsName);

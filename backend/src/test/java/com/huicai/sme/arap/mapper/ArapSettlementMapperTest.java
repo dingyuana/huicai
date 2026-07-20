@@ -1,6 +1,7 @@
 package com.huicai.sme.arap.mapper;
 
-import com.huicai.sme.arap.entity.ArapSettlementEntity;
+import com.huicai.base.business.entity.ArapSettlementEntity;
+import com.huicai.base.business.mapper.ArapSettlementMapper;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.DisplayName;
 import org.mockito.Mockito;

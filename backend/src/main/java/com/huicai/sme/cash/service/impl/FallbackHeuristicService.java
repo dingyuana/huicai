@@ -2,9 +2,9 @@ package com.huicai.sme.cash.service.impl;
 
 import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.huicai.sme.cash.constant.BankClassification;
-import com.huicai.sme.cash.entity.ClassificationRuleEntity;
-import com.huicai.sme.cash.mapper.ClassificationRuleMapper;
+import com.huicai.base.business.constant.BankClassification;
+import com.huicai.base.business.entity.ClassificationRuleEntity;
+import com.huicai.base.business.mapper.ClassificationRuleMapper;
 import jakarta.annotation.PostConstruct;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;

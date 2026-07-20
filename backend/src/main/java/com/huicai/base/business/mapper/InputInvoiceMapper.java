@@ -1,7 +1,7 @@
-package com.huicai.sme.tax.mapper;
+package com.huicai.base.business.mapper;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
-import com.huicai.sme.tax.entity.InputInvoiceEntity;
+import com.huicai.base.business.entity.InputInvoiceEntity;
 import org.apache.ibatis.annotations.Delete;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;

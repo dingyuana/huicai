@@ -1,7 +1,7 @@
 package com.huicai.sme.arap.mapper;
 
-import com.huicai.sme.arap.entity.BusinessDocEntryEntity;
-import com.huicai.sme.arap.mapper.BusinessDocEntryMapper;
+import com.huicai.base.business.entity.BusinessDocEntryEntity;
+import com.huicai.base.business.mapper.BusinessDocEntryMapper;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.DisplayName;
 import org.mockito.Mockito;

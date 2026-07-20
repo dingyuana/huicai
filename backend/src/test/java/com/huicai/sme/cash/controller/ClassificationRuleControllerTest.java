@@ -2,7 +2,7 @@ package com.huicai.sme.cash.controller;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
-import com.huicai.sme.cash.entity.ClassificationRuleEntity;
+import com.huicai.base.business.entity.ClassificationRuleEntity;
 import com.huicai.sme.cash.service.ClassificationRuleService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;

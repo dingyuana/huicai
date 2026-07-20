@@ -1,7 +1,8 @@
 package com.huicai.sme.tax.mapper;
 
 import com.huicai.common.test.AbstractMapperTest;
-import com.huicai.sme.tax.entity.InputInvoiceEntity;
+import com.huicai.base.business.entity.InputInvoiceEntity;
+import com.huicai.base.business.mapper.InputInvoiceMapper;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 

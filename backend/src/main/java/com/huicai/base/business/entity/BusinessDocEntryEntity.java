@@ -1,4 +1,4 @@
-package com.huicai.sme.arap.entity;
+package com.huicai.base.business.entity;
 
 import com.baomidou.mybatisplus.annotation.*;
 import lombok.Data;

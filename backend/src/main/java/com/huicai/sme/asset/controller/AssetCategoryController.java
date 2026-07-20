@@ -13,7 +13,7 @@ import java.util.List;
 
 @Tag(name = "资产类别")
 @RestController
-@RequestMapping("/api/v1/asset-categories")
+@RequestMapping("/api/sme/asset/v1/asset-categories")
 @RequiredArgsConstructor
 public class AssetCategoryController {
 

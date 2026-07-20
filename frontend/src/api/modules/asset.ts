@@ -37,63 +37,63 @@ export interface AssetCard {
 }
 
 export function pageAssetCategory(params: any): Promise<any> {
-  return request.get('/v1/asset-categories/page', { params })
+  return request.get('/sme/asset/v1/asset-categories/page', { params })
 }
 
 export function listAssetCategory(): Promise<AssetCategory[]> {
-  return request.get('/v1/asset-categories/list')
+  return request.get('/sme/asset/v1/asset-categories/list')
 }
 
 export function createAssetCategory(data: AssetCategory): Promise<AssetCategory> {
-  return request.post('/v1/asset-categories', data)
+  return request.post('/sme/asset/v1/asset-categories', data)
 }
 
 export function updateAssetCategory(id: number, data: AssetCategory): Promise<AssetCategory> {
-  return request.put(`/v1/asset-categories/${id}`, data)
+  return request.put(`/sme/asset/v1/asset-categories/${id}`, data)
 }
 
 export function deleteAssetCategory(id: number): Promise<void> {
-  return request.delete(`/v1/asset-categories/${id}`)
+  return request.delete(`/sme/asset/v1/asset-categories/${id}`)
 }
 
 export function pageAssetCard(params: any): Promise<any> {
-  return request.get('/v1/asset-cards/page', { params })
+  return request.get('/sme/asset/v1/asset-cards/page', { params })
 }
 
 export function getAssetCard(id: number): Promise<AssetCard> {
-  return request.get(`/v1/asset-cards/${id}`)
+  return request.get(`/sme/asset/v1/asset-cards/${id}`)
 }
 
 export function createAssetCard(data: AssetCard): Promise<AssetCard> {
-  return request.post('/v1/asset-cards', data)
+  return request.post('/sme/asset/v1/asset-cards', data)
 }
 
 export function updateAssetCard(id: number, data: AssetCard): Promise<AssetCard> {
-  return request.put(`/v1/asset-cards/${id}`, data)
+  return request.put(`/sme/asset/v1/asset-cards/${id}`, data)
 }
 
 export function deleteAssetCard(id: number): Promise<void> {
-  return request.delete(`/v1/asset-cards/${id}`)
+  return request.delete(`/sme/asset/v1/asset-cards/${id}`)
 }
 
 export function calculateDepreciation(id: number, period: string): Promise<number> {
-  return request.get(`/v1/asset-cards/${id}/depreciation`, { params: { period } })
+  return request.get(`/sme/asset/v1/asset-cards/${id}/depreciation`, { params: { period } })
 }
 
 export function depreciatePeriod(period: string): Promise<void> {
-  return request.post(`/v1/asset-cards/depreciate/${period}`)
+  return request.post(`/sme/asset/v1/asset-cards/depreciate/${period}`)
 }
 
 export function depreciateOne(id: number, period: string): Promise<void> {
-  return request.post(`/v1/asset-cards/${id}/depreciate`, null, { params: { period } })
+  return request.post(`/sme/asset/v1/asset-cards/${id}/depreciate`, null, { params: { period } })
 }
 
 export function recentAssetCards(limit = 10): Promise<any[]> {
-  return request.get('/v1/asset-cards/recent', { params: { limit } })
+  return request.get('/sme/asset/v1/asset-cards/recent', { params: { limit } })
 }
 
 export function getAssetCategory(id: number): Promise<AssetCategory> {
-  return request.get(`/v1/asset-categories/${id}`)
+  return request.get(`/sme/asset/v1/asset-categories/${id}`)
 }
 
 // ==================== 资产处置 ====================
@@ -111,23 +111,23 @@ export interface AssetDisposal {
 }
 
 export function pageAssetDisposal(params: any): Promise<any> {
-  return request.get('/v1/asset-disposals/page', { params })
+  return request.get('/sme/asset/v1/asset-disposals/page', { params })
 }
 
 export function getAssetDisposal(id: number): Promise<AssetDisposal> {
-  return request.get(`/v1/asset-disposals/${id}`)
+  return request.get(`/sme/asset/v1/asset-disposals/${id}`)
 }
 
 export function createAssetDisposal(data: AssetDisposal): Promise<AssetDisposal> {
-  return request.post('/v1/asset-disposals', data)
+  return request.post('/sme/asset/v1/asset-disposals', data)
 }
 
 export function approveAssetDisposal(id: number): Promise<AssetDisposal> {
-  return request.post(`/v1/asset-disposals/${id}/approve`)
+  return request.post(`/sme/asset/v1/asset-disposals/${id}/approve`)
 }
 
 export function deleteAssetDisposal(id: number): Promise<void> {
-  return request.delete(`/v1/asset-disposals/${id}`)
+  return request.delete(`/sme/asset/v1/asset-disposals/${id}`)
 }
 
 // ==================== 资产盘点 ====================
@@ -146,21 +146,21 @@ export interface AssetInventory {
 }
 
 export function pageAssetInventory(params: any): Promise<any> {
-  return request.get('/v1/asset-inventories/page', { params })
+  return request.get('/sme/asset/v1/asset-inventories/page', { params })
 }
 
 export function getAssetInventory(id: number): Promise<AssetInventory> {
-  return request.get(`/v1/asset-inventories/${id}`)
+  return request.get(`/sme/asset/v1/asset-inventories/${id}`)
 }
 
 export function createAssetInventory(data: AssetInventory): Promise<AssetInventory> {
-  return request.post('/v1/asset-inventories', data)
+  return request.post('/sme/asset/v1/asset-inventories', data)
 }
 
 export function completeAssetInventory(id: number): Promise<AssetInventory> {
-  return request.post(`/v1/asset-inventories/${id}/complete`)
+  return request.post(`/sme/asset/v1/asset-inventories/${id}/complete`)
 }
 
 export function deleteAssetInventory(id: number): Promise<void> {
-  return request.delete(`/v1/asset-inventories/${id}`)
+  return request.delete(`/sme/asset/v1/asset-inventories/${id}`)
 }

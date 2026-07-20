@@ -2,12 +2,12 @@ package com.huicai.sme.arap.controller;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.huicai.common.response.R;
-import com.huicai.sme.arap.dto.BusinessDocDTO;
-import com.huicai.sme.arap.dto.BusinessDocQueryDTO;
-import com.huicai.sme.arap.dto.BusinessDocVO;
+import com.huicai.base.business.dto.BusinessDocDTO;
+import com.huicai.base.business.dto.BusinessDocQueryDTO;
+import com.huicai.base.business.dto.BusinessDocVO;
 import com.huicai.base.voucher.entity.VoucherTemplateEntity;
 import com.huicai.base.voucher.mapper.VoucherTemplateMapper;
-import com.huicai.sme.arap.service.BusinessDocService;
+import com.huicai.base.business.service.BusinessDocService;
 import com.huicai.base.system.util.SecurityUtils;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
