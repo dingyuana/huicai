@@ -2,7 +2,7 @@
 
 > **分支**：`ai-evolution-v2`（基于 main）
 > **日期**：2026-07-09
-> **关联文档**：[AI辅助能力开发计划](../plans/慧财财务系统 AI 辅助能力开发计划.md) V2.0、[P0-P3-roadmap](../plans/P0-P3-roadmap.md) V4.0、[10-ai-orchestration-design.md](../../design/10-ai-orchestration-design.md)
+> **关联文档**：[AI辅助能力开发计划](../plans/慧财财务系统 AI 辅助能力开发计划.md) V2.0、[P0-P3-roadmap](../plans/P0-P3-roadmap.md) V4.0、[10-ai-orchestration-design.md](../../design/10-AI编排层.md)
 
 ---
 

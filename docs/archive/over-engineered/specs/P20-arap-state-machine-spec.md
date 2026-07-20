@@ -2,7 +2,7 @@
 
 > **编号**：HUICAI-SPC-020 | 优先级：低
 > **状态**：❌ 已废弃 — 被 P34 替代（V73/V74 已删除 t_receivable/t_payable，统一走 BusinessDocEntity）
-> 依据：docs/design/P20-arap-state-machine-design.md
+> 依据：docs/design/P20-应收应付状态机设计.md
 > **2026-07-01 标注**：P34 架构已决定将应收/应付合并到业务单据体系，
 > ReceivableEntity/PayableEntity 将在 P34 M4（V72）阶段删除。
 > 本 SPEC 仅在 P34 完全实施前作为历史参考，不再维护。

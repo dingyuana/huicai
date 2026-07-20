@@ -3,6 +3,8 @@ package com.huicai.common.exception;
 import com.huicai.common.response.R;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -24,6 +26,26 @@ public class GlobalExceptionHandler {
         String msg = fieldError != null ? fieldError.getDefaultMessage() : "参数校验失败";
         log.warn("参数校验异常: {}", msg);
         return R.badRequest(msg);
+    }
+
+    /**
+     * 认证异常 - 用户名或密码错误
+     */
+    @ExceptionHandler(BadCredentialsException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public R<Void> handleBadCredentials(BadCredentialsException e) {
+        log.warn("认证失败: {}", e.getMessage());
+        return R.badRequest("用户名或密码错误");
+    }
+
+    /**
+     * 用户不存在异常
+     */
+    @ExceptionHandler(UsernameNotFoundException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public R<Void> handleUsernameNotFound(UsernameNotFoundException e) {
+        log.warn("用户不存在: {}", e.getMessage());
+        return R.badRequest("用户名或密码错误");
     }
 
     /**

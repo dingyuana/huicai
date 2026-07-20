@@ -4,7 +4,7 @@
 > **版本**：V1.0 | **日期**：2026-07-11
 > **状态**：📝 草案（待审核）
 > **关联需求**：REQ-2026-015（坏账计提）
-> **关联文档**：[DESIGN.md](../DESIGN.md), [02-arap-design.md](../design/02-arap-design.md), [P34-receivable-payable-to-businessdoc.md](P34-receivable-payable-to-businessdoc.md)
+> **关联文档**：[项目说明](../项目说明.md), [技术方案](../技术方案.md), [需求分析](../需求分析.md), [02-arap-design.md](../design/02-应收应付管理.md), [P34-receivable-payable-to-businessdoc.md](P34-receivable-payable-to-businessdoc.md)
 
 ## 0. SDD 四段结构索引
 

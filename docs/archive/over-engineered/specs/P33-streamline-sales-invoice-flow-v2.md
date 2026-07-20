@@ -371,7 +371,7 @@ void confirm_shouldCreateReceivableAndVoucherDirectly() {
 | `VoucherEntity.java` | 确认 `sourceDocType` 枚举值 |
 | `NumberingTraceServiceImpl.java` | 更新链路图 |
 | `docs/linkage-map.md` | 更新 L1 链路验证脚本 |
-| `docs/DESIGN.md` | 更新架构流程图 |
+| `docs/技术方案.md` | 更新架构流程图 |
 | `docs/tasks/P31-auto-flow-after-import_任务书.md` | 更新为简化流程 |
 
 ---

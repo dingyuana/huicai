@@ -17,7 +17,7 @@
 ## 4. 异常处理
 → 见本文 2.6 与坏账计提的联动（差异未解决前不纳入计提范围）
 
-> **关联文档**：[DESIGN.md](../DESIGN.md), [02-arap-design.md](../design/02-arap-design.md), [P43-bad-debt-provision.md](P43-bad-debt-provision.md), [P51-aging-analysis.md](P51-aging-analysis.md)
+> **关联文档**：[项目说明](../项目说明.md), [技术方案](../技术方案.md), [需求分析](../需求分析.md), [02-arap-design.md](../design/02-应收应付管理.md), [P43-bad-debt-provision.md](P43-bad-debt-provision.md), [P51-aging-analysis.md](P51-aging-analysis.md)
 > **版本历史**：
 > - V1.0 (2026-07-11): 初始版本
 

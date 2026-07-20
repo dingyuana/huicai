@@ -1,4 +1,6 @@
 # P33 代码与SPEC差距分析
+> **版本**：V1.0 | **最后修改**：2026-07-19 | **作者**：Hermes
+> **状态**：✅ 生效
 
 > **编号**：HUICAI-SPC-033A
 > 依据: `docs/specs/P33-streamline-sales-invoice-flow.md` + `docs/tasks/P33-streamline-sales-invoice-flow_开发计划.md`

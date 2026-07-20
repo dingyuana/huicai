@@ -40,11 +40,11 @@ public class UserDetailsServiceImpl implements UserDetailsService {
             throw new UsernameNotFoundException("用户不存在: " + username);
         }
 
-        if ("inactive".equals(userEntity.getStatus())) {
+        if ("INACTIVE".equals(userEntity.getStatus())) {
             throw new UsernameNotFoundException("用户已被停用");
         }
 
-        if ("locked".equals(userEntity.getStatus())) {
+        if ("LOCKED".equals(userEntity.getStatus())) {
             throw new UsernameNotFoundException("用户已被锁定");
         }
 

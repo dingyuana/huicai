@@ -180,10 +180,15 @@ CREATE TABLE IF NOT EXISTS t_user (
     username        VARCHAR(50)  NOT NULL,
     password        VARCHAR(255) NOT NULL,
     real_name       VARCHAR(100),
-    phone           VARCHAR(32),
+    nickname        VARCHAR(100),
     email           VARCHAR(128),
+    phone           VARCHAR(32),
+    avatar          VARCHAR(255),
     dept_id         BIGINT,
     status          VARCHAR(20)  NOT NULL DEFAULT 'ACTIVE',
+    remark          VARCHAR(500),
+    last_login_ip   VARCHAR(50),
+    last_login_at   TIMESTAMP,
     created_by      BIGINT,
     created_at      TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_by      BIGINT,
@@ -198,10 +203,15 @@ COMMENT ON COLUMN t_user.id             IS '主键';
 COMMENT ON COLUMN t_user.username       IS '用户名';
 COMMENT ON COLUMN t_user.password       IS '密码(BCrypt)';
 COMMENT ON COLUMN t_user.real_name      IS '真实姓名';
+COMMENT ON COLUMN t_user.nickname       IS '昵称';
 COMMENT ON COLUMN t_user.phone          IS '手机号';
 COMMENT ON COLUMN t_user.email          IS '邮箱';
+COMMENT ON COLUMN t_user.avatar         IS '头像URL';
 COMMENT ON COLUMN t_user.dept_id        IS '所属部门ID';
 COMMENT ON COLUMN t_user.status         IS '状态: ACTIVE-启用, INACTIVE-禁用, LOCKED-锁定';
+COMMENT ON COLUMN t_user.remark         IS '备注';
+COMMENT ON COLUMN t_user.last_login_ip  IS '最后登录IP';
+COMMENT ON COLUMN t_user.last_login_at  IS '最后登录时间';
 COMMENT ON COLUMN t_user.deleted        IS '逻辑删除(0-未删,1-已删)';
 
 -- 角色表
@@ -330,8 +340,7 @@ CREATE TABLE IF NOT EXISTS t_voucher (
     CONSTRAINT uq_voucher_no UNIQUE (voucher_no),
     CONSTRAINT chk_voucher_status CHECK (status IN ('DRAFT', 'SUBMITTED', 'AUDITED', 'POSTED', 'CLOSED', 'REVERSED')),
     CONSTRAINT chk_voucher_source CHECK (source IN ('MANUAL', 'TEMPLATE', 'GENERATED', 'REVERSAL')),
-    CONSTRAINT fk_voucher_type FOREIGN KEY (voucher_type_id) REFERENCES t_voucher_type(id),
-    CONSTRAINT fk_voucher_business_doc FOREIGN KEY (business_doc_id) REFERENCES t_business_doc(id)
+    CONSTRAINT fk_voucher_type FOREIGN KEY (voucher_type_id) REFERENCES t_voucher_type(id)
 );
 
 CREATE INDEX IF NOT EXISTS idx_voucher_period ON t_voucher(period);
@@ -1478,6 +1487,12 @@ CREATE TABLE IF NOT EXISTS t_employee (
 );
 
 COMMENT ON TABLE  t_employee IS '员工档案';
+
+-- ============================================================
+-- 后添加的外键约束 (解决表创建顺序问题)
+-- ============================================================
+
+ALTER TABLE t_voucher ADD CONSTRAINT fk_voucher_business_doc FOREIGN KEY (business_doc_id) REFERENCES t_business_doc(id);
 
 -- ============================================================
 -- 初始数据

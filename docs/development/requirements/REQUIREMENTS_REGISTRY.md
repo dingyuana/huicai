@@ -2,7 +2,7 @@
 
 > 版本：V1.0
 > 日期：2026-07-07
-> 关联文档：[DESIGN.md](../../DESIGN.md)、[P0-P3 路线图](../../development/plans/P0-P3-roadmap.md)、[DOCUMENT_REGISTRY.md](../../DOCUMENT_REGISTRY.md)
+> 关联文档：[项目说明](../../项目说明.md)、[技术方案](../../技术方案.md)、[需求分析](../../需求分析.md)、[P0-P3 路线图](../../development/plans/P0-P3-roadmap.md)、[文档注册表](../../文档注册表.md)
 >
 > 本文件是系统所有功能需求的唯一权威来源。每条需求有唯一编号 REQ-2026-XXX，关联到 SPEC 文档和实现模块。
 > 新增/修改需求必须在此登记并更新版本号。

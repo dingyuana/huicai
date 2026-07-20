@@ -37,6 +37,7 @@ public class AuthController {
     private final RoleMenuMapper roleMenuMapper;
     private final MenuMapper menuMapper;
     private final MenuService menuService;
+    private final PasswordEncoder passwordEncoder;
 
     @PostMapping("/login")
     public R<LoginResponse> login(@RequestBody LoginRequest request) {
@@ -67,6 +68,13 @@ public class AuthController {
                 user.getAvatar(), user.getDeptId(), roleIds, permissions));
 
         return R.ok(response);
+    }
+
+    @GetMapping("/test-password")
+    public R<String> testPassword(@RequestParam String rawPassword, @RequestParam String encodedPassword) {
+        boolean matches = passwordEncoder.matches(rawPassword, encodedPassword);
+        String encoded = passwordEncoder.encode(rawPassword);
+        return R.ok("matches: " + matches + ", newEncoded: " + encoded);
     }
 
     @GetMapping("/userinfo")

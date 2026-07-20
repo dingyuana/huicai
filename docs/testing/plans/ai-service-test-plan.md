@@ -3,7 +3,7 @@
 > **编号**：HUICAI-TST-009
 > **版本**：V1.0 | **修改日期**：2026-07-07 | **修改人**：Hermes
 > **修改内容**：初始创建——ai-service Python 端测试从零搭建方案
-> **关联文档**：[10-ai-orchestration-design.md](../design/10-ai-orchestration-design.md)、[AI_ARCHITECTURE_EVOLUTION.md](../architecture/AI_ARCHITECTURE_EVOLUTION.md)
+> **关联文档**：[10-ai-orchestration-design.md](../design/10-AI编排层.md)、[AI_ARCHITECTURE_EVOLUTION.md](../architecture/AI架构演进.md)
 
 ---
 

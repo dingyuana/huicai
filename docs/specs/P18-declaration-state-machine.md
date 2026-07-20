@@ -1,4 +1,6 @@
 # P18 SPEC — 申报状态机扩展 (SUBMITTED → APPROVED/REJECTED)
+> **版本**：V1.0 | **最后修改**：2026-07-19 | **作者**：Hermes
+> **状态**：✅ 生效
 
 > **编号**：HUICAI-SPC-018（P13 已实现 submitDeclaration, 缺 approve/reject）
 > 目标：完整 5 态状态机 (DRAFT/SUBMITTED/APPROVED/REJECTED)

@@ -98,8 +98,8 @@ class AuthControllerTest {
     }
 
     @Test
-    @DisplayName("登录失败_用户名或密码错误_返回500")
-    void login_failed_wrongCredentials_returns500() throws Exception {
+    @DisplayName("登录失败_用户名或密码错误_返回400")
+    void login_failed_wrongCredentials_returns400() throws Exception {
         // given
         when(authenticationManager.authenticate(any()))
                 .thenThrow(new org.springframework.security.authentication.BadCredentialsException("用户名或密码错误"));
@@ -108,12 +108,12 @@ class AuthControllerTest {
         request.setUsername("admin");
         request.setPassword("wrong");
 
-        // when & then - BadCredentialsException → GlobalExceptionHandler → 500
+        // when & then - BadCredentialsException → GlobalExceptionHandler → 400
         mvc.perform(post("/api/v1/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(om.writeValueAsString(request)))
-                .andExpect(status().isInternalServerError())
-                .andExpect(jsonPath("$.code").value(500));
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value(400));
     }
 
     @Test
@@ -130,7 +130,7 @@ class AuthControllerTest {
         request.setUsername("ghost");
         request.setPassword("any");
 
-        // when & then
+        // when & then - NullPointerException → GlobalExceptionHandler → 500
         mvc.perform(post("/api/v1/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(om.writeValueAsString(request)))

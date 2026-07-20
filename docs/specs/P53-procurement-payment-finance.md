@@ -17,7 +17,7 @@
 ## 4. 异常处理
 → 见本文 3.4 重复付款拦截（BusinessException 抛出）、3.5 预付冲应付自动化
 
-> **关联文档**：[DESIGN.md](../DESIGN.md), [02-arap-design.md](../design/02-arap-design.md), [P51-aging-analysis.md](P51-aging-analysis.md)
+> **关联文档**：[项目说明](../项目说明.md), [技术方案](../技术方案.md), [需求分析](../需求分析.md), [02-arap-design.md](../design/02-应收应付管理.md), [P51-aging-analysis.md](P51-aging-analysis.md)
 > **版本历史**：
 > - V1.1 (2026-07-11): M2付款计划+M3采购退货+M4预付款提示+重复付款拦截 已实现
 > - V1.0 (2026-07-11): 初始版本

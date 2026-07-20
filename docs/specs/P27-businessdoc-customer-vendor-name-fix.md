@@ -1,4 +1,6 @@
 # P27 SPEC — BusinessDoc 客户/供应商名称字段补齐
+> **版本**：V1.0 | **最后修改**：2026-07-19 | **作者**：Hermes
+> **状态**：✅ 生效
 
 > **编号**：HUICAI-SPC-027 | 优先级：P0（编译失败，mvn test 红）
 > 修复目标：`BusinessDocServiceImpl.generateVoucher()` 第 317 行调用 `entity.getCustomerName()/getSupplierName()` 时 `BusinessDocEntity` 上不存在这 2 个字段，导致 4 个测试 fail、整体 BUILD FAILURE。
