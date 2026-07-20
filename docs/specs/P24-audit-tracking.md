@@ -323,7 +323,7 @@ private String status;
 - 防止普通用户查到他人的操作历史
 
 **审计日志写入必须 fail-fast**：审计失败必须让业务事务回滚（按 §6 测试场景），不允许"业务成功但审计丢失"。
----
+|---
 ## 验收标准
 
 | ID | 描述 | 断言 |
@@ -332,3 +332,333 @@ private String status;
 | AT-P24-2 | 审计日志含旧值新值 | `audit_log.oldSnapshot != null AND newSnapshot != null` |
 | AT-P24-3 | 审核人ID记录 | `audit_log.userId == current user` |
 | AT-P24-4 | 非状态变更不写审计 | `updateById without status change → audit_log count unchanged` |
+
+---
+
+## 11. BDD 验收场景（Given-When-Then）
+
+### 11.1 状态变更 — 正常写入审计日志
+
+```gherkin
+Scenario: 状态变更时自动写入审计日志
+  Given 存在一条 OUTPUT_INVOICE 记录，其 status = "DRAFT"
+    And 当前登录用户为审核员张三
+  When 调用 OutputInvoiceStateMachineService.confirm() 将 status 改为 "CONFIRMED"
+  Then t_audit_log 表应新增 1 条记录
+    And 该记录的 module = "state-machine"
+    And 该记录的 operation = "STATUS_CHANGE"
+    And 该记录的 userId = 张三
+    And 该记录的 oldSnapshot 包含 "status": "DRAFT"
+    And 该记录的 newSnapshot 包含 "status": "CONFIRMED"
+```
+
+### 11.2 状态不变 — 不写入审计日志
+
+```gherkin
+Scenario: 状态值未变化时不写入审计日志
+  Given 存在一条 OUTPUT_INVOICE 记录，其 status = "CONFIRMED"
+  When 调用 updateById 且 status 仍为 "CONFIRMED"（未实际变更）
+  Then t_audit_log 表应无新增记录
+```
+
+### 11.3 多实体审计覆盖
+
+```gherkin
+Scenario Outline: 各类实体状态变更均被审计
+  Given 存在一条 <entity> 记录，其 status = "<oldStatus>"
+  When 调用 updateById 将 status 改为 "<newStatus>"
+  Then t_audit_log 表新增 1 条记录
+    And 该记录的 entityType = "<entityType>"
+
+  Examples:
+    | entity            | entityType      | oldStatus | newStatus   |
+    | OUTPUT_INVOICE    | OUTPUT_INVOICE  | DRAFT     | CONFIRMED    |
+    | INPUT_INVOICE     | INPUT_INVOICE   | DRAFT     | VERIFIED     |
+    | VOUCHER           | VOUCHER         | DRAFT     | POSTED       |
+```
+
+### 11.4 红字冲销 — 双审计记录
+
+```gherkin
+Scenario: 红字冲销生成两条审计日志
+  Given 存在一条 VOUCHER 记录，其 status = "POSTED"
+  When 调用 VoucherStateMachineService.generateReversalVoucher()
+  Then t_audit_log 表应新增 2 条记录
+    And 第 1 条记录：原凭证 status 从 "POSTED" → "REVERSED"
+    And 第 2 条记录：红字凭证 INSERT 后的 status 审计
+```
+
+### 11.5 审计写入失败 — 业务事务回滚
+
+```gherkin
+Scenario: 审计日志写入失败时业务事务回滚
+  Given 存在一条 OUTPUT_INVOICE 记录，其 status = "DRAFT"
+    And AuditLogService 抛出异常（如数据库不可用）
+  When 调用 updateById 试图将 status 改为 "CONFIRMED"
+  Then 业务事务应回滚
+    And 该记录的 status 仍为 "DRAFT"
+    And t_audit_log 表无新增记录
+```
+
+### 11.6 无用户上下文 — 安全降级
+
+```gherkin
+Scenario: SecurityContext 中无用户信息时审计写入失败
+  Given 存在一条 OUTPUT_INVOICE 记录，其 status = "DRAFT"
+    And SecurityContextHolder.getUserId() 返回 null
+  When 调用 updateById 将 status 改为 "CONFIRMED"
+  Then 应抛出异常
+    And 业务事务回滚
+    And t_audit_log 表无新增记录
+```
+
+### 11.7 无 @StatusChangeable 注解 — 不审计
+
+```gherkin
+Scenario: 未标记 @StatusChangeable 的字段不触发审计
+  Given 存在一条 Entity 记录，其字段未标注 @StatusChangeable
+  When 调用 updateById 修改该字段值
+  Then t_audit_log 表无新增记录
+    And 业务更新正常执行
+```
+
+### 11.8 审计日志查询 API
+
+```gherkin
+Scenario: 按 entityType + entityId 查询审计日志
+  Given 存在 3 条审计日志，entityType = "OUTPUT_INVOICE", entityId = 123
+  When 当前用户是 ADMIN 角色
+    And 发送 GET /api/v1/audit-logs?entityType=OUTPUT_INVOICE&entityId=123
+  Then 响应状态码为 200
+    And 响应 body 包含 3 条记录
+    And 每条记录的 userId 不为空
+    And 每条记录的 oldSnapshot 和 newSnapshot 均为有效 JSON
+
+Scenario: 无权限用户查询审计日志返回 403
+  Given 当前用户是普通用户（无 ADMIN / FINANCE / AUDITOR 角色）
+  When 发送 GET /api/v1/audit-logs?entityType=OUTPUT_INVOICE&entityId=123
+  Then 响应状态码为 403
+```
+
+### 11.9 字段值含特殊字符
+
+```gherkin
+Scenario: 状态字段值包含 JSON 特殊字符时正确转义
+  Given 存在一条 VOUCHER 记录，其 rejectedReason = "金额不符，请"重新"提交"
+  When 调用 updateById 记录驳回原因
+  Then t_audit_log 的 oldSnapshot/newSnapshot 为合法 Jsonb
+    And 特殊字符（引号、反斜杠等）被正确转义
+```
+
+---
+
+## 12. 输出契约 — YAML 合约
+
+### 12.1 审计日志查询 API
+
+```yaml
+openapi: 3.0.3
+info:
+  title: 审计追踪查询 API
+  version: "1.0.0"
+  description: P24 状态变更审计日志查询接口
+
+paths:
+  /api/v1/audit-logs:
+    get:
+      summary: 查询审计日志
+      description: 按实体类型 + 实体 ID 查询状态变更审计日志
+      operationId: queryAuditLogs
+      tags:
+        - 审计追踪
+      parameters:
+        - name: entityType
+          in: query
+          description: 实体类型
+          required: true
+          schema:
+            type: string
+            enum: [OUTPUT_INVOICE, INPUT_INVOICE, VOUCHER]
+          example: OUTPUT_INVOICE
+        - name: entityId
+          in: query
+          description: 实体 ID
+          required: true
+          schema:
+            type: integer
+            format: int64
+          example: 123
+        - name: pageNum
+          in: query
+          description: 页码
+          required: false
+          schema:
+            type: integer
+            default: 1
+        - name: pageSize
+          in: query
+          description: 每页条数
+          required: false
+          schema:
+            type: integer
+            default: 20
+            maximum: 100
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: 成功返回审计日志列表
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                    example: 200
+                  message:
+                    type: string
+                    example: "success"
+                  data:
+                    type: object
+                    properties:
+                      records:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/AuditLogResponse"
+                      total:
+                        type: integer
+                        description: 总记录数
+                        example: 1
+                      pageNum:
+                        type: integer
+                        example: 1
+                      pageSize:
+                        type: integer
+                        example: 20
+        "403":
+          description: 无权限
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: 服务器内部错误
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    AuditLogResponse:
+      type: object
+      description: 审计日志响应
+      properties:
+        id:
+          type: integer
+          format: int64
+          description: 审计日志 ID
+        userId:
+          type: integer
+          format: int64
+          description: 操作人 ID
+        username:
+          type: string
+          description: 操作人用户名
+        operation:
+          type: string
+          description: 操作类型（固定为 "STATUS_CHANGE"）
+          example: STATUS_CHANGE
+        method:
+          type: string
+          description: 方法名
+          example: OUTPUT_INVOICE.updateStatus
+        module:
+          type: string
+          description: 模块名（固定为 "state-machine"）
+          example: state-machine
+        oldSnapshot:
+          type: string
+          description: 变更前快照（Jsonb 格式：{"fieldName": "value"}）
+          example: '{"status": "DRAFT"}'
+        newSnapshot:
+          type: string
+          description: 变更后快照（Jsonb 格式：{"fieldName": "value"}）
+          example: '{"status": "CONFIRMED"}'
+        requestParams:
+          type: string
+          description: 请求参数
+          example: "entityId=123, field=status"
+        responseResult:
+          type: string
+          description: 响应结果
+          example: "newValue=CONFIRMED"
+        status:
+          type: string
+          description: 日志状态（固定为 "SUCCESS"）
+          example: SUCCESS
+        createTime:
+          type: string
+          format: date-time
+          description: 创建时间
+          example: "2026-07-19T14:30:00"
+
+    ErrorResponse:
+      type: object
+      description: 错误响应
+      properties:
+        code:
+          type: integer
+          example: 403
+        message:
+          type: string
+          example: "权限不足"
+```
+
+### 12.2 内部服务接口 — AuditLogService
+
+```yaml
+service:
+  name: AuditLogService
+  description: 审计日志写入服务（内部调用，非 REST）
+  methods:
+    recordStatusChange:
+      description: 记录状态变更审计日志
+      transactional: MANDATORY  # 必须在调用方事务内
+      parameters:
+        - name: entityType
+          type: string
+          required: true
+          description: 实体类型（OUTPUT_INVOICE / INPUT_INVOICE / VOUCHER）
+        - name: entityId
+          type: integer
+          format: int64
+          required: true
+          description: 实体 ID
+        - name: fieldName
+          type: string
+          required: true
+          description: 变更字段名（如 "status"）
+        - name: oldValue
+          type: string
+          required: true
+          description: 变更前值
+        - name: newValue
+          type: string
+          required: true
+          description: 变更后值
+        - name: changeReason
+          type: string
+          required: false
+          description: 变更原因（作废/驳回时必填）
+      throws:
+        - exception: 审计写入异常
+          description: 写入失败时抛出，导致业务事务回滚
+```

@@ -154,7 +154,347 @@ CREATE INDEX idx_t_prepayment_status ON t_prepayment(status);
 
 ---
 
-## 5. 测试验收
+## 5. BDD 验收场景 (Given-When-Then)
+
+### 5.1 P12-1: 核销审批/驳回
+
+```gherkin
+Feature: 核销审批与驳回 (P12-1)
+  As 财务审核员
+  I want 对已确认的核销单进行审批或驳回
+  So that 核销流程可以闭环
+
+  Background:
+    Given 存在一笔核销单，状态为 CONFIRMED
+
+  Scenario: 审批通过 — CONFIRMED → EXECUTED
+    Given 核销单状态为 CONFIRMED
+    When 用户调用 POST /api/v1/reconciliations/{id}/approve
+    Then 核销单状态变为 EXECUTED
+    And 记录 approvedBy 为当前操作人
+    And 记录 approvedAt 为当前时间戳
+    And 应收/应付的 unsettled_amount 已扣减
+
+  Scenario: 审批通过 — 状态校验失败 (非 CONFIRMED)
+    Given 核销单状态为 PENDING
+    When 用户调用 POST /api/v1/reconciliations/{id}/approve
+    Then 系统抛出 BusinessException
+    And 错误码为 RECONCILIATION_STATUS_INVALID
+    And 核销单状态不变
+
+  Scenario: 驳回 — CONFIRMED → REJECTED
+    Given 核销单状态为 CONFIRMED
+    When 用户调用 POST /api/v1/reconciliations/{id}/reject?reason=金额有误
+    Then 核销单状态变为 REJECTED
+    And 应收/应付的 unsettled_amount 已回滚至核销前金额
+
+  Scenario: 驳回 — reason 为空
+    Given 核销单状态为 CONFIRMED
+    When 用户调用 POST /api/v1/reconciliations/{id}/reject?reason=
+    Then 系统抛出 BusinessException
+    And 错误码为 REJECT_REASON_REQUIRED
+
+  Scenario: 反核销 — EXECUTED → CANCELLED
+    Given 核销单状态为 EXECUTED
+    When 用户调用 reverse 操作
+    Then 核销单状态变为 CANCELLED
+    And 应收/应付的 unsettled_amount 已回滚
+```
+
+### 5.2 P12-2: 差额调整
+
+```gherkin
+Feature: 核销差额调整 (P12-2)
+  As 财务审核员
+  I want 在收款金额与应收金额不一致时自动生成差额调整分录
+  So that 核销差异可计入相应科目
+
+  Background:
+    Given 存在一笔应收 10,000.00
+    And 存在一笔银行收款 9,800.00
+
+  Scenario: 手续费差额 (FEE)
+    Given 差额类型为 FEE，差额 200.00
+    When 调用 executeWithAdjustment(request, 200.00, "FEE", 6601)
+    Then 主核销日志金额为 10,000.00 (source → target)
+    And 生成第二条核销日志 (RECON_TYPE=ADJUSTMENT, source=bank_txn, target=6601)
+    And 调整金额 200.00 计入财务费用科目
+
+  Scenario: 折扣让零差额 (DISCOUNT)
+    Given 差额类型为 DISCOUNT，差额 50.00
+    When 调用 executeWithAdjustment(request, 50.00, "DISCOUNT", 6603)
+    Then 主核销日志金额为 10,000.00
+    And 调整金额 50.00 计入销售折扣科目
+
+  Scenario: 尾差差额 (TAIL)
+    Given 差额类型为 TAIL，差额 100.00
+    When 调用 executeWithAdjustment(request, 100.00, "TAIL", 5711)
+    Then 主核销日志金额为 10,000.00
+    And 调整金额 100.00 计入营业外收入/支出科目
+```
+
+### 5.3 P12-3: 预收/预付
+
+```gherkin
+Feature: 预收预付完整实现 (P12-3)
+  As 财务系统
+  I want 在供应商无未结清应付时自动走预付账款路径
+  So that 符合会计实务
+
+  Scenario: 供应商无未结清应付 — 走预付路径
+    Given 供应商"广州建材公司"无未结清应付
+    When 向该供应商付款 50,000.00
+    Then 系统检测到 hasOpenPayables = false
+    And 创建 t_prepayment 记录
+    And prepayment.vendor_id = 供应商ID
+    And prepayment.amount = 50,000.00
+    And prepayment.status = 'DRAFT'
+
+  Scenario: 供应商有未结清应付 — 走应付路径
+    Given 供应商"广州建材公司"存在未结清应付 30,000.00
+    When 向该供应商付款 50,000.00
+    Then 系统检测到 hasOpenPayables = true
+    And 按 P10-3/4 老逻辑生成 t_payable
+    And 不创建 t_prepayment
+
+  Scenario: 预付款数据模型
+    Given t_prepayment 表已创建
+    Then 表包含字段: id, tenant_id, vendor_id, doc_id, voucher_id, period, tx_date, amount, settled_amount, unsettled_amount, summary, status, source_doc_type, source_doc_id, remark, created_by, created_at, updated_at, deleted
+    And 表包含索引: idx_t_prepayment_vendor, idx_t_prepayment_status
+```
+
+## 6. YAML 契约
+
+```yaml
+openapi: 3.0.3
+info:
+  title: 核销业务闭环 API (P12)
+  version: "1.0.0"
+  description: 审批/驳回/差额调整/预收预付
+
+paths:
+  /api/v1/reconciliations/{id}/approve:
+    post:
+      summary: 核销审批 — CONFIRMED → EXECUTED
+      tags: [核销审批]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      requestBody:
+        content: {}
+      responses:
+        "200":
+          description: 审批成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReconciliationApproveResponse"
+        "400":
+          description: 状态校验失败
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/reconciliations/{id}/reject:
+    post:
+      summary: 核销驳回 — CONFIRMED → REJECTED
+      tags: [核销审批]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+        - name: reason
+          in: query
+          required: true
+          schema:
+            type: string
+            minLength: 1
+      responses:
+        "200":
+          description: 驳回成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReconciliationRejectResponse"
+        "400":
+          description: reason 为空或状态校验失败
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/reconciliations/{id}/executeWithAdjustment:
+    post:
+      summary: 差额调整核销
+      tags: [差额调整]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ExecuteWithAdjustmentRequest"
+      responses:
+        "200":
+          description: 差额核销成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReconciliationLogEntity"
+        "400":
+          description: 参数校验失败
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/reconciliations/{id}/reverse:
+    post:
+      summary: 反核销 — EXECUTED → CANCELLED
+      tags: [核销审批]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        "200":
+          description: 反核销成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReconciliationReverseResponse"
+
+components:
+  schemas:
+    ReconciliationApproveResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+          description: 核销单 ID
+        status:
+          type: string
+          enum: [EXECUTED]
+          description: 审批后状态
+        approvedBy:
+          type: string
+          description: 审批人
+        approvedAt:
+          type: string
+          format: date-time
+          description: 审批时间
+      required: [id, status, approvedBy, approvedAt]
+
+    ReconciliationRejectResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        status:
+          type: string
+          enum: [REJECTED]
+        reason:
+          type: string
+      required: [id, status, reason]
+
+    ReconciliationReverseResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        status:
+          type: string
+          enum: [CANCELLED]
+      required: [id, status]
+
+    ExecuteWithAdjustmentRequest:
+      type: object
+      properties:
+        executeRequest:
+          $ref: "#/components/schemas/ExecuteRequest"
+        adjustAmount:
+          type: number
+          format: bigdecimal
+          description: 差额
+        adjustType:
+          type: string
+          enum: [FEE, DISCOUNT, TAIL]
+          description: 差额类型: 手续费/折扣让零/尾差
+        adjustSubjectId:
+          type: integer
+          format: int64
+          description: 差额科目 ID
+      required: [executeRequest, adjustAmount, adjustType, adjustSubjectId]
+
+    ExecuteRequest:
+      type: object
+      description: 标准核销请求
+      properties:
+        sourceId:
+          type: integer
+          format: int64
+        targetId:
+          type: integer
+          format: int64
+        amount:
+          type: number
+          format: bigdecimal
+
+    ReconciliationLogEntity:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        reconType:
+          type: string
+          enum: [NORMAL, ADJUSTMENT]
+        sourceId:
+          type: integer
+          format: int64
+        targetId:
+          type: integer
+          format: int64
+        amount:
+          type: number
+          format: bigdecimal
+        status:
+          type: string
+          enum: [CONFIRMED, EXECUTED, REJECTED, CANCELLED]
+
+    ErrorResponse:
+      type: object
+      properties:
+        code:
+          type: string
+          description: 错误码 (e.g. RECONCILIATION_STATUS_INVALID, REJECT_REASON_REQUIRED)
+        message:
+          type: string
+          description: 错误描述
+      required: [code, message]
+```
+
+## 7. 测试验收
 
 | 批 | 新增测试 | 关键桩 |
 |---|---|---|
@@ -166,7 +506,7 @@ CREATE INDEX idx_t_prepayment_status ON t_prepayment(status);
 
 ---
 
-## 6. 不在 P12 范围
+## 8. 不在 P12 范围
 
 - 退/红字对冲 (P13 候选)
 - 多笔合并核销 (一笔收款核销多张发票) — 当前已是 N:1 模型

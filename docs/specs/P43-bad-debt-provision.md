@@ -512,3 +512,224 @@ write-off:
 **Given** 默认计提方案已存在，某一区间比例为 5%
 **When** 用户通过 PUT /api/v1/bad-debts/scheme 将该区间比例修改为 10%
 **Then** 修改后立即查询 aging-preview，该区间的 provisionAmount 按新比例 10% 重新计算
+
+### 场景 4：冲回场景 — 已有余额大于应有余额
+**Given** 科目 1231 坏账准备已有余额 50000.00，账龄计算应有余额仅为 30000.00
+**When** 用户调用 provisionByAging 并确认
+**Then** adjustmentType 为 REVERSAL，adjustmentAmount 为 20000.00，凭证借方为 1231 坏账准备，贷方为 6701 信用减值损失
+
+### 场景 5：无需调整 — 应有余额等于已有余额
+**Given** 科目 1231 坏账准备已有余额等于账龄计算出的应有余额
+**When** 用户调用 provisionByAging 并确认
+**Then** adjustmentAmount 为 0，adjustmentType 为 null，凭证不生成或生成金额为 0 的凭证
+
+### 场景 6：DRAFT 状态反复重算
+**Given** 存在一笔 DRAFT 状态的计提记录
+**When** 用户反复调用 provisionByAging 传入不同比例
+**Then** 每次调用后预期金额、补提金额和明细数据均更新，状态保持 DRAFT
+
+### 场景 7：确认后不可重复确认
+**Given** 一笔计提记录状态为 VOUCHERED
+**When** 用户再次调用 confirm
+**Then** 返回业务异常，提示状态不允许重复确认
+
+### 场景 8：DRAFT 可删除，VOUCHERED 不可删除
+**Given** 一笔 DRAFT 状态的计提记录
+**When** 用户调用 delete
+**Then** 记录被逻辑删除
+
+**Given** 一笔 VOUCHERED 状态的计提记录
+**When** 用户调用 delete
+**Then** 返回业务异常，提示已凭证化不可删除
+
+### 场景 9：坏账核销并生成凭证
+**Given** 存在一笔已确认的应收账款（INVOICE_OUT）确实无法收回
+**When** 用户调用 POST /api/v1/bad-debts/write-off 传入 sourceId、writeOffAmount 和 reason
+**Then** 系统生成凭证（DRAFT），借方为 1231 坏账准备，贷方为 1122 应收账款，核销金额正确
+
+### 场景 10：已核销坏账收回
+**Given** 某笔应收账款已坏账核销
+**When** 用户调用 POST /api/v1/bad-debts/recovery 传入回收金额
+**Then** 系统生成凭证（DRAFT），借方为 1122 应收账款（或银行存款），贷方为 1231 坏账准备，冲回已核销金额
+
+### 场景 11：计提方案增删改查
+**Given** 系统存在默认计提方案
+**When** 用户通过 GET /api/v1/bad-debts/scheme 查询
+**Then** 返回当前生效方案及其所有区间明细和比例
+
+**Given** 用户通过 PUT /api/v1/bad-debts/scheme 提交新的区间比例列表
+**When** 方案更新成功
+**Then** 下次 provisionByAging 按新比例计算
+
+---
+
+## 九、状态机 YAML 契约
+
+```yaml
+# ===== 坏账准备计提 状态机契约 =====
+contract_version: "1.0"
+entity:
+  name: BadDebtProvision
+  table: t_bad_debt_provision
+  description: 坏账准备计提记录，采用备抵法按账龄分析法计提坏账准备
+  fields:
+    - name: id
+      type: BIGINT
+      desc: 主键
+    - name: period
+      type: VARCHAR(6)
+      desc: 计提期间 YYYYMM
+    - name: method
+      type: VARCHAR(30)
+      desc: 计提方法 (AGING_RATIO / PERCENTAGE / INDIVIDUAL)
+    - name: total_amount
+      type: NUMERIC(18,2)
+      desc: 本次计提总额
+    - name: expected_balance
+      type: NUMERIC(18,2)
+      desc: 应有余额（按账龄计算出的总额）
+    - name: existing_balance
+      type: NUMERIC(18,2)
+      desc: 科目已有余额（1231 坏账准备当前余额）
+    - name: adjustment_amount
+      type: NUMERIC(18,2)
+      desc: 补提(+) / 冲回(-) 金额
+    - name: adjustment_type
+      type: VARCHAR(10)
+      desc: 调整类型 — PROVISION（补提）/ REVERSAL（冲回）
+    - name: scheme_id
+      type: BIGINT
+      desc: 使用的计提方案 ID
+    - name: voucher_id
+      type: BIGINT
+      desc: 生成的凭证 ID（confirm 后回写）
+    - name: voucher_no
+      type: VARCHAR(64)
+      desc: 生成的凭证编号
+    - name: status
+      type: VARCHAR(20)
+      desc: 状态 — DRAFT / VOUCHERED
+    - name: deleted
+      type: INTEGER
+      desc: 逻辑删除标记 (0=正常, 1=删除)
+
+states:
+  - name: DRAFT
+    description: 草稿状态 — 计提计算完成，可反复重算、可删除
+    initial: true
+    allowed_actions:
+      - provisionByAging
+      - confirm
+      - delete
+  - name: VOUCHERED
+    description: 已凭证化 — 确认并生成凭证，不可逆、不可删除
+    initial: false
+    allowed_actions: []
+
+transitions:
+  - from: DRAFT
+    to: DRAFT
+    action: provisionByAging
+    description: 重新计算计提金额，更新明细
+    conditions:
+      - "记录状态为 DRAFT"
+    effects:
+      - "重新计算 expected_balance / existing_balance / adjustment_amount"
+      - "重新生成或更新 t_bad_debt_provision_detail 明细"
+      - "状态保持 DRAFT"
+
+  - from: DRAFT
+    to: VOUCHERED
+    action: confirm
+    description: 确认计提并自动生成凭证
+    conditions:
+      - "记录状态为 DRAFT"
+      - "adjustment_amount 已计算"
+    effects:
+      - "生成凭证（DRAFT 状态），等待人工审核"
+      - "补提场景：借 6701 信用减值损失 / 贷 1231 坏账准备"
+      - "冲回场景：借 1231 坏账准备 / 贷 6701 信用减值损失"
+      - "回写 voucher_id / voucher_no 到 t_bad_debt_provision"
+      - "状态变为 VOUCHERED"
+
+  - from: DRAFT
+    to: DELETED
+    action: delete
+    description: 逻辑删除草稿
+    conditions:
+      - "记录状态为 DRAFT"
+    effects:
+      - "deleted 标记设为 1"
+      - "记录不可再操作"
+
+acceptance_tests:
+  - scenario: "账龄分析引擎正确划分区间并计算计提金额"
+    gherkin: |
+      Given 存在多笔未清应收（INVOICE_OUT / PREPAYMENT / OTHER_RECEIVABLE / NOTE_RECEIVABLE）
+      And 系统预置了默认计提方案（含 7 个账龄区间）
+      When 用户调用 aging-preview API，传入期间参数
+      Then 返回每个区间的应收笔数、未清总额、计提比例和计提金额
+      And 各区间计提金额之和等于 expectedBalance
+
+  - scenario: "确认计提自动生成补提凭证"
+    gherkin: |
+      Given 账龄分析已完成，expectedBalance > existingBalance
+      When 用户调用 confirm 确认计提
+      Then 系统自动生成一张 DRAFT 凭证
+      And 借方为 6701 信用减值损失，贷方为 1231 坏账准备
+      And 金额等于 adjustmentAmount
+      And BadDebtProvision 状态变为 VOUCHERED
+
+  - scenario: "确认计提自动生成冲回凭证"
+    gherkin: |
+      Given 账龄分析已完成，expectedBalance < existingBalance
+      When 用户调用 confirm 确认计提
+      Then 系统自动生成一张 DRAFT 凭证
+      And 借方为 1231 坏账准备，贷方为 6701 信用减值损失
+      And 金额等于 adjustmentAmount 绝对值
+      And adjustmentType 为 REVERSAL
+      And BadDebtProvision 状态变为 VOUCHERED
+
+  - scenario: "计提方案修改即时生效"
+    gherkin: |
+      Given 默认计提方案某一区间比例为 5%
+      When 用户通过 PUT /api/v1/bad-debts/scheme 将该比例修改为 10%
+      Then 修改后立即查询 aging-preview，该区间的 provisionAmount 按 10% 重新计算
+
+  - scenario: "DRAFT 状态可反复重算"
+    gherkin: |
+      Given 存在一笔 DRAFT 状态的计提记录
+      When 用户反复调用 provisionByAging 传入不同比例
+      Then 每次调用后预期金额、补提金额和明细数据均更新
+      And 状态保持 DRAFT
+
+  - scenario: "VOUCHERED 不可重复确认"
+    gherkin: |
+      Given 一笔计提记录状态为 VOUCHERED
+      When 用户再次调用 confirm
+      Then 返回业务异常，提示状态不允许重复确认
+
+  - scenario: "DRAFT 可删除，VOUCHERED 不可删除"
+    gherkin: |
+      Given 一笔 DRAFT 状态的计提记录
+      When 用户调用 delete
+      Then 记录被逻辑删除
+
+      Given 一笔 VOUCHERED 状态的计提记录
+      When 用户调用 delete
+      Then 返回业务异常，提示已凭证化不可删除
+
+  - scenario: "坏账核销"
+    gherkin: |
+      Given 存在一笔已确认的应收账款确实无法收回
+      When 用户调用 POST /api/v1/bad-debts/write-off 传入 sourceId、writeOffAmount 和 reason
+      Then 系统生成 DRAFT 凭证，借方为 1231 坏账准备，贷方为 1122 应收账款
+      And 核销金额正确
+
+  - scenario: "已核销坏账收回"
+    gherkin: |
+      Given 某笔应收账款已坏账核销
+      When 用户调用 POST /api/v1/bad-debts/recovery 传入回收金额
+      Then 系统生成 DRAFT 凭证，借方为 1122 应收账款（或银行存款），贷方为 1231 坏账准备
+      And 冲回已核销金额
+```
