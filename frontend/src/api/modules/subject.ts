@@ -62,13 +62,13 @@ export function importStandardSubjects(): Promise<number> {
 }
 
 export function initOpeningBalances(period: string, balances: Record<number, number>): Promise<void> {
-  return request.post('/v1/subject-balances/init', balances, { params: { period } })
+  return request.post('/base/balance/v1/subject-balances/init', balances, { params: { period } })
 }
 
 export function getSubjectBalances(period: string): Promise<any[]> {
-  return request.get('/v1/subject-balances', { params: { period } })
+  return request.get('/base/balance/v1/subject-balances', { params: { period } })
 }
 
 export function checkTrialBalance(period: string): Promise<any> {
-  return request.get('/v1/subject-balances/trial-balance', { params: { period } })
+  return request.get('/base/balance/v1/subject-balances/trial-balance', { params: { period } })
 }
