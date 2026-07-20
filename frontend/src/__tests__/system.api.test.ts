@@ -23,7 +23,7 @@ describe('System API Module', () => {
       mockRequest.get.mockResolvedValue(mockPage)
 
       const result = await systemApi.getUserPage({ page: 1, size: 10 })
-      expect(mockRequest.get).toHaveBeenCalledWith('/system/user/page', {
+      expect(mockRequest.get).toHaveBeenCalledWith('/v1/system/user/page', {
         params: { page: 1, size: 10 },
       })
       expect(result).toEqual(mockPage)
@@ -39,14 +39,14 @@ describe('System API Module', () => {
         roleIds: [1],
       }
       await systemApi.createUser(params)
-      expect(mockRequest.post).toHaveBeenCalledWith('/system/user', params)
+      expect(mockRequest.post).toHaveBeenCalledWith('/v1/system/user', params)
     })
 
     it('deleteUser calls correct endpoint', async () => {
       mockRequest.delete.mockResolvedValue(undefined)
 
       await systemApi.deleteUser(2)
-      expect(mockRequest.delete).toHaveBeenCalledWith('/system/user/2')
+      expect(mockRequest.delete).toHaveBeenCalledWith('/v1/system/user/2')
     })
 
     it('getUser calls correct endpoint', async () => {
@@ -70,7 +70,7 @@ describe('System API Module', () => {
       mockRequest.get.mockResolvedValue(mockUser)
 
       const result = await systemApi.getUser(1)
-      expect(mockRequest.get).toHaveBeenCalledWith('/system/user/1')
+      expect(mockRequest.get).toHaveBeenCalledWith('/v1/system/user/1')
       expect(result).toEqual(mockUser)
     })
 
@@ -78,14 +78,14 @@ describe('System API Module', () => {
       mockRequest.put.mockResolvedValue(undefined)
 
       await systemApi.updateUser(1, { realName: '新名称' })
-      expect(mockRequest.put).toHaveBeenCalledWith('/system/user/1', { realName: '新名称' })
+      expect(mockRequest.put).toHaveBeenCalledWith('/v1/system/user/1', { realName: '新名称' })
     })
 
     it('resetPwd calls correct endpoint', async () => {
       mockRequest.put.mockResolvedValue(undefined)
 
       await systemApi.resetPwd(1, 'newpwd123')
-      expect(mockRequest.put).toHaveBeenCalledWith('/system/user/1/reset-pwd', { newPassword: 'newpwd123' })
+      expect(mockRequest.put).toHaveBeenCalledWith('/v1/system/user/1/reset-pwd', { newPassword: 'newpwd123' })
     })
   })
 
@@ -94,7 +94,7 @@ describe('System API Module', () => {
       mockRequest.get.mockResolvedValue({ records: [], total: 0, page: 1, size: 10, pages: 0 })
 
       await systemApi.getRolePage({ page: 1, size: 10 })
-      expect(mockRequest.get).toHaveBeenCalledWith('/system/role/page', {
+      expect(mockRequest.get).toHaveBeenCalledWith('/v1/system/role/page', {
         params: { page: 1, size: 10 },
       })
     })
@@ -103,14 +103,14 @@ describe('System API Module', () => {
       mockRequest.post.mockResolvedValue(undefined)
 
       await systemApi.createRole({ code: 'admin', name: '管理员' })
-      expect(mockRequest.post).toHaveBeenCalledWith('/system/role', { code: 'admin', name: '管理员' })
+      expect(mockRequest.post).toHaveBeenCalledWith('/v1/system/role', { code: 'admin', name: '管理员' })
     })
 
     it('deleteRole calls correct endpoint', async () => {
       mockRequest.delete.mockResolvedValue(undefined)
 
       await systemApi.deleteRole(1)
-      expect(mockRequest.delete).toHaveBeenCalledWith('/system/role/1')
+      expect(mockRequest.delete).toHaveBeenCalledWith('/v1/system/role/1')
     })
   })
 
@@ -137,7 +137,7 @@ describe('System API Module', () => {
       mockRequest.get.mockResolvedValue(mockTree)
 
       const result = await systemApi.getMenuTree()
-      expect(mockRequest.get).toHaveBeenCalledWith('/system/menu/tree')
+      expect(mockRequest.get).toHaveBeenCalledWith('/v1/system/menu/tree')
       expect(result).toEqual(mockTree)
     })
 
@@ -145,7 +145,7 @@ describe('System API Module', () => {
       mockRequest.post.mockResolvedValue(undefined)
 
       await systemApi.createMenu({ name: '报表管理', permissionCode: 'report:list', type: 'menu', path: '/report' })
-      expect(mockRequest.post).toHaveBeenCalledWith('/system/menu', {
+      expect(mockRequest.post).toHaveBeenCalledWith('/v1/system/menu', {
         name: '报表管理',
         permissionCode: 'report:list',
         type: 'menu',
@@ -162,7 +162,7 @@ describe('System API Module', () => {
       mockRequest.get.mockResolvedValue(mockTree)
 
       const result = await systemApi.getDeptTree()
-      expect(mockRequest.get).toHaveBeenCalledWith('/system/dept/tree')
+      expect(mockRequest.get).toHaveBeenCalledWith('/v1/system/dept/tree')
       expect(result).toEqual(mockTree)
     })
   })
