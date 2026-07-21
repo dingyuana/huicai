@@ -9,6 +9,11 @@ export const useAuthStore = defineStore('auth', () => {
 
   const isLoggedIn = computed(() => !!token.value)
 
+  /** 是否为超级管理员（角色 id=1 = ADMIN） */
+  const isSuperAdmin = computed(() => {
+    return userInfo.value?.roles?.includes(1) ?? false
+  })
+
   function hasPermission(perm: string): boolean {
     if (!perm) return true
     return permissions.value.includes(perm)
@@ -44,5 +49,5 @@ export const useAuthStore = defineStore('auth', () => {
     window.location.href = '/login'
   }
 
-  return { token, userInfo, permissions, isLoggedIn, hasPermission, login, fetchUserInfo, logout }
+  return { token, userInfo, permissions, isLoggedIn, isSuperAdmin, hasPermission, login, fetchUserInfo, logout }
 })
