@@ -89,7 +89,7 @@ const fmtAmount = (v: any) => Number(v || 0).toFixed(2)
 const fetchData = async () => {
   loading.value = true
   try {
-    const res: any = await request.get('/budgets/adjustments/page', { params: query })
+    const res: any = await request.get('/sme/budget/v1/budgets/adjustments/page', { params: query })
     list.value = res.records || []
     total.value = res.total || 0
   } finally {
@@ -101,7 +101,7 @@ const onCreate = async () => {
   if (!formRef.value) return
   await formRef.value.validate(async (valid) => {
     if (!valid) return
-    await request.post('/budgets/adjustments', form)
+    await request.post('/sme/budget/v1/budgets/adjustments', form)
     ElMessage.success('创建成功')
     dialogVisible.value = false
     fetchData()

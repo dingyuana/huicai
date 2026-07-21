@@ -122,7 +122,7 @@ const rules = {
 const fetchData = async () => {
   loading.value = true
   try {
-    const res: any = await request.get('/asset-disposals/page', { params: query })
+    const res: any = await request.get('/sme/asset/v1/asset-disposals/page', { params: query })
     list.value = res.records || []
     total.value = res.total || 0
   } finally {
@@ -142,7 +142,7 @@ const onSubmit = async () => {
   if (!formRef.value) return
   await formRef.value.validate(async (valid) => {
     if (!valid) return
-    await request.post('/asset-disposals', form)
+    await request.post('/sme/asset/v1/asset-disposals', form)
     ElMessage.success('创建成功')
     dialogVisible.value = false
     fetchData()

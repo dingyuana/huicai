@@ -53,21 +53,21 @@ const closing = ref(false)
 const checkResult = ref<any>(null)
 
 async function loadPeriods() {
-  const d: any[] = await request.get('/periods/list')
+  const d: any[] = await request.get('/v1/periods/all')
   periods.value = d.map((p: any) => p.period)
   if (periods.value.length) period.value = periods.value[periods.value.length - 1]
 }
 
 async function doCheck() {
   checking.value = true
-  try { checkResult.value = await request.get('/period-close/check', { params: { period: period.value } }) }
+  try { checkResult.value = await request.get('/base/voucher/v1/period-close/check', { params: { period: period.value } }) }
   finally { checking.value = false }
 }
 
 async function doProfitCarryover() {
   carrying.value = true
   try {
-    await request.post('/period-close/profit-carryover', null, { params: { period: period.value } })
+    await request.post('/base/voucher/v1/period-close/profit-carryover', null, { params: { period: period.value } })
     ElMessage.success('损益结转凭证已生成')
     activeStep.value++
   } finally { carrying.value = false }
@@ -76,7 +76,7 @@ async function doProfitCarryover() {
 async function doClose() {
   closing.value = true
   try {
-    await request.post('/period-close/close', null, { params: { period: period.value } })
+    await request.post('/base/voucher/v1/period-close/close', null, { params: { period: period.value } })
     ElMessage.success(`期间 ${period.value} 已结账`)
     activeStep.value++
   } finally { closing.value = false }

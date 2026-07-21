@@ -14,11 +14,15 @@ import java.util.List;
 public class RoleEntity {
     @TableId(type = IdType.AUTO)
     private Long id;
+    @TableField("role_code")
     private String code;
+    @TableField("role_name")
     private String name;
     private String description;
     private String status;
+    @TableField("sort_order")
     private Integer sortOrder;
+    @TableField("data_scope")
     private String dataScope;
     private Long createdBy;
     private Long updatedBy;

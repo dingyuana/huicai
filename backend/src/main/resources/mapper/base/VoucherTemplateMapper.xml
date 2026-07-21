@@ -5,7 +5,7 @@
     <select id="selectActiveByClassification"
             resultType="com.huicai.base.voucher.entity.VoucherTemplateEntity">
         SELECT * FROM t_voucher_template
-        WHERE classification = #{classification}
+        WHERE doc_type = #{classification}
           AND is_active = TRUE
           AND deleted = 0
         LIMIT 1
@@ -15,7 +15,7 @@
             resultType="com.huicai.base.voucher.entity.VoucherTemplateEntity">
         SELECT * FROM t_voucher_template
         WHERE is_active = TRUE AND deleted = 0
-        ORDER BY classification
+        ORDER BY template_code
     </select>
 
 </mapper>

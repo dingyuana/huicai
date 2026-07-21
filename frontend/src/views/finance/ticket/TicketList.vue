@@ -88,7 +88,7 @@ const form = ref({ ticketNo: '', ticketType: 'CHECK', amount: 0, issueDate: null
 async function fetchData() {
   loading.value = true
   try {
-    const res: any = await request.get('/tickets/page', { params: query.value })
+    const res: any = await request.get('/sme/cash/v1/tickets/page', { params: query.value })
     list.value = res.records; total.value = res.total
   } finally { loading.value = false }
 }
@@ -101,7 +101,7 @@ function openCreate() {
 async function handleSave() {
   saving.value = true
   try {
-    await request.post('/tickets', form.value)
+    await request.post('/sme/cash/v1/tickets', form.value)
     ElMessage.success('新增成功'); dialogVisible.value = false; fetchData()
   } finally { saving.value = false }
 }
@@ -113,7 +113,7 @@ async function doAction(id: number, action: string) {
 }
 
 async function showTransactions(row: any) {
-  transactions.value = await request.get(`/tickets/${row.id}/transactions`)
+  transactions.value = await request.get(`/sme/cash/v1/tickets/${row.id}/transactions`)
   txDialog.value = true
 }
 

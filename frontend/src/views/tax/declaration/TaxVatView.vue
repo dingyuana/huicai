@@ -101,8 +101,8 @@ const fetchAll = async () => {
   byRate.output = await outputInvoiceSummary(query.period).then(() => [])
   // 实际从 inputByTaxRate / outputByTaxRate 获取
   const { default: request } = await import('@/api/request')
-  byRate.input = await request.get('/tax/input-invoices/by-tax-rate', { params: { period: query.period } })
-  byRate.output = await request.get('/tax/output-invoices/by-tax-rate', { params: { period: query.period } })
+  byRate.input = await request.get('/sme/tax/v1/tax/input-invoices/by-tax-rate', { params: { period: query.period } })
+  byRate.output = await request.get('/sme/tax/v1/tax/output-invoices/by-tax-rate', { params: { period: query.period } })
 }
 
 onMounted(fetchAll)

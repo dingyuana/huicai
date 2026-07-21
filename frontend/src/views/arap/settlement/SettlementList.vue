@@ -297,8 +297,8 @@ import { useRouter } from 'vue-router'
 import {
   pageSettlements, getSettlementDetail, getSettlementEntries, createSettlement,
   confirmSettlement, deleteSettlement, confirmReconciliationLog,
-  getReconRecords, cancelReconciliationLog, type ArapSettlement,
-  type ReconciliationLog,
+  getReconRecords, cancelReconciliationLog, pageReconLogs, reverseRecon,
+  type ArapSettlement, type ReconciliationLog,
 } from '@/api/modules/arapSettlement'
 import { getReconciliationTrace, type ReconciliationTraceVO } from '@/api/modules/reconciliation'
 import ReconciliationTimeline from '@/views/arap/reconciliation-workbench/ReconciliationTimeline.vue'

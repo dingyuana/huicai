@@ -14,8 +14,11 @@ import java.util.List;
 public class MenuEntity {
     @TableId(type = IdType.AUTO)
     private Long id;
+    @TableField("menu_name")
     private String name;
+    @TableField("permission")
     private String permissionCode;
+    @TableField("menu_type")
     private String type;
     private Long parentId;
     private String path;
@@ -23,8 +26,11 @@ public class MenuEntity {
     private String icon;
     private Integer sortOrder;
     private Boolean isActive;
+    @TableField(exist = false)
     private Boolean isVisible;
+    @TableField(exist = false)
     private Boolean keepAlive;
+    @TableField(exist = false)
     private Boolean alwaysShow;
     private Long createdBy;
     private Long updatedBy;

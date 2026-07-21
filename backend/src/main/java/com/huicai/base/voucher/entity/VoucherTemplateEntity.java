@@ -16,40 +16,39 @@ public class VoucherTemplateEntity {
     @TableId(type = IdType.AUTO)
     private Long id;
 
-    /** 模板名称, 如 "银行手续费" */
+    @TableField("template_name")
     private String name;
 
-    /** 模板描述 */
+    @TableField(exist = false)
     private String description;
 
-    /** 绑定的分类: bank_fee / interest_income / tax_payment / ... */
+    @TableField(exist = false)
     private String classification;
 
-    /** 来源: BANK_STMT / BUSINESS_DOC / INVOICE / PERIOD_CLOSE */
+    @TableField(exist = false)
     private String source;
 
-    /** 业务类型: RECEIPT / PAYMENT / EXPENSE / INVOICE_OUT / ... */
+    @TableField("doc_type")
     private String businessType;
 
-    /** 方向: in(收/入) / out(付/出) / 空(双向) */
+    @TableField(exist = false)
     private String direction;
 
-    /** 匹配优先级（越小越优先，默认 0） */
+    @TableField(exist = false)
     private Integer matchPriority;
 
-    /** 凭证前缀, 如 JZ / CD / FPS */
+    @TableField(exist = false)
     private String numberPrefix;
 
-    /** 是否激活 (每个分类最多 1 个激活模板) */
     private Boolean isActive;
 
-    /** 制单人 */
+    @TableField(exist = false)
     private Long createdBy;
 
     @TableField(fill = FieldFill.INSERT)
     private LocalDateTime createdAt;
 
-    /** 更新人 */
+    @TableField(exist = false)
     private Long updatedBy;
 
     @TableField(fill = FieldFill.INSERT_UPDATE)

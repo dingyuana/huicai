@@ -176,7 +176,7 @@ const fmtAmount = (v: any) => Number(v || 0).toFixed(2)
 const fetchData = async () => {
   loading.value = true
   try {
-    const res: any = await request.get('/customer-statements/page', { params: query })
+    const res: any = await request.get('/sme/arap/v1/customer-statements/page', { params: query })
     list.value = res.records || []
     total.value = res.total || 0
   } finally {
@@ -213,7 +213,7 @@ const searchCustomer = async (keyword: string) => {
   if (!keyword) return
   customerLoading.value = true
   try {
-    const res: any = await request.get('/customers/page', { params: { name: keyword, current: 1, size: 20 } })
+    const res: any = await request.get('/v1/customers/page', { params: { name: keyword, current: 1, size: 20 } })
     customerOptions.value = res.records || []
   } finally {
     customerLoading.value = false
@@ -228,7 +228,7 @@ const onGenerate = async () => {
   generating.value = true
   try {
     const customerIds = generateForm.customerMode === 'ALL' ? [] : generateForm.customerIds
-    await request.post('/customer-statements/generate', { customerIds, period: generateForm.period })
+    await request.post('/sme/arap/v1/customer-statements/generate', { customerIds, period: generateForm.period })
     ElMessage.success('对账单生成成功')
     generateDialogVisible.value = false
     fetchData()

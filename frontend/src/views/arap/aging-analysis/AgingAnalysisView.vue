@@ -122,7 +122,7 @@ const agingList = ref<any[]>([])
 const fetchAging = async () => {
   loading.aging = true
   try {
-    const res: any = await request.get('/aging-analysis/summary', { params: { period: query.period } })
+    const res: any = await request.get('/sme/arap/v1/aging-analysis/summary', { params: { period: query.period } })
     agingList.value = res?.agingBuckets || []
   } catch { agingList.value = [] } finally {
     loading.aging = false
@@ -136,7 +136,7 @@ const fetchDue = async () => {
   loading.due = true
   try {
     const dateStr = dayjs().format('YYYY-MM-DD')
-    const res: any = await request.get('/aging-analysis/due-receivables', { params: { date: dateStr } })
+    const res: any = await request.get('/sme/arap/v1/aging-analysis/due-receivables', { params: { date: dateStr } })
     dueList.value = res?.rows || res || []
   } catch { dueList.value = [] } finally {
     loading.due = false
@@ -156,7 +156,7 @@ const fetchAlerts = async () => {
     const params: any = {}
     if (alertQuery.alertLevel) params.alertLevel = alertQuery.alertLevel
     if (alertQuery.status) params.status = alertQuery.status
-    const res: any = await request.get('/aging-analysis/alerts', { params })
+    const res: any = await request.get('/sme/arap/v1/aging-analysis/alerts', { params })
     alertList.value = res || []
   } catch { alertList.value = [] } finally {
     loading.alerts = false
@@ -164,7 +164,7 @@ const fetchAlerts = async () => {
 }
 
 const onDismissAlert = async (id: number) => {
-  await request.post(`/aging-analysis/alerts/${id}/dismiss`)
+  await request.post(`/sme/arap/v1/aging-analysis/alerts/${id}/dismiss`)
   ElMessage.success('已忽略')
   fetchAlerts()
 }
@@ -176,7 +176,7 @@ const onResolveAlert = async (id: number) => {
 }
 
 const onGenerateAlerts = async () => {
-  await request.post('/aging-analysis/alerts/generate', null, { params: { period: query.period } })
+  await request.post('/sme/arap/v1/aging-analysis/alerts/generate', null, { params: { period: query.period } })
   ElMessage.success('预警生成完成')
   fetchAlerts()
 }

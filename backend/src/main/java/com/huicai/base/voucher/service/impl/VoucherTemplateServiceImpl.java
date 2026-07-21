@@ -33,7 +33,7 @@ public class VoucherTemplateServiceImpl implements VoucherTemplateService {
         return templateMapper.selectList(
                 new LambdaQueryWrapper<VoucherTemplateEntity>()
                         .eq(VoucherTemplateEntity::getIsActive, true)
-                        .orderByAsc(VoucherTemplateEntity::getClassification));
+                        .orderByAsc(VoucherTemplateEntity::getId));
     }
 
     @Override
@@ -157,7 +157,7 @@ public class VoucherTemplateServiceImpl implements VoucherTemplateService {
     private void deactivateSiblings(String classification, Long excludeId) {
         List<VoucherTemplateEntity> siblings = templateMapper.selectList(
                 new LambdaQueryWrapper<VoucherTemplateEntity>()
-                        .eq(VoucherTemplateEntity::getClassification, classification)
+                        .eq(VoucherTemplateEntity::getBusinessType, classification)
                         .eq(VoucherTemplateEntity::getIsActive, true)
                         .ne(excludeId != null, VoucherTemplateEntity::getId, excludeId));
         for (VoucherTemplateEntity sib : siblings) {

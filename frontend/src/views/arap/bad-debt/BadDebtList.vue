@@ -168,7 +168,7 @@ import { onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import dayjs from 'dayjs'
 import request from '@/api/request'
-import { getBadDebtScheme, writeOffBadDebt, recoveryBadDebt } from '@/api/modules/arap'
+import { getBadDebtScheme, writeOffBadDebt, recoveryBadDebt, pageBadDebt, provisionBadDebtAging, provisionBadDebtPercentage, confirmBadDebt } from '@/api/modules/arap'
 
 const METHOD_MAP: Record<string, string> = {
   AGING_RATIO: '账龄比例法', PERCENTAGE: '余额百分比法', INDIVIDUAL: '个别认定法',
@@ -207,7 +207,7 @@ const fmtAmount = (v: any) => Number(v || 0).toFixed(2)
 const fetchData = async () => {
   loading.value = true
   try {
-    const res: any = await request.get('/bad-debts/page', { params: query })
+    const res: any = await pageBadDebt(query)
     list.value = res.records || []
     total.value = res.total || 0
   } finally {
@@ -230,9 +230,9 @@ const openDialog = async () => {
 
 const onSubmit = async () => {
   if (form.method === 'AGING_RATIO') {
-    await request.post('/bad-debts/provision/aging', form.ratios, { params: { period: form.period } })
+    await provisionBadDebtAging(form.period, form.ratios)
   } else {
-    await request.post('/bad-debts/provision/percentage', null, { params: { period: form.period, ratio: form.ratio } })
+    await provisionBadDebtPercentage({ period: form.period, ratio: form.ratio })
   }
   ElMessage.success('计提完成')
   dialogVisible.value = false
@@ -240,7 +240,7 @@ const onSubmit = async () => {
 }
 
 const onConfirm = async (row: any) => {
-  await request.post(`/bad-debts/${row.id}/confirm`)
+  await confirmBadDebt(row.id)
   ElMessage.success('确认成功')
   fetchData()
 }

@@ -82,7 +82,7 @@ const form = reactive({
 const fetchList = async () => {
   loading.value = true
   try {
-    const res: any = await request.get('/purchase-returns/list')
+    const res: any = await request.get('/sme/arap/v1/purchase-returns/list')
     list.value = res || []
   } catch {
     list.value = []

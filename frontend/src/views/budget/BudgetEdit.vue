@@ -74,14 +74,14 @@ async function handleSave() {
   saving.value = true
   try {
     // 后端要求 { budget: BudgetEntity, entries: List }
-    await request.post('/budgets', { budget: form.value, entries: form.value.entries })
+    await request.post('/sme/budget/v1/budgets', { budget: form.value, entries: form.value.entries })
     ElMessage.success('保存成功')
     router.push('/budget')
   } finally { saving.value = false }
 }
 
 onMounted(async () => {
-  subjectTree.value = await request.get('/subjects/tree')
+  subjectTree.value = await request.get('/v1/subjects/tree')
   const id = route.query.id
   if (id) {
     isEdit.value = true

@@ -66,7 +66,7 @@ const editId = ref<number | null>(null)
 async function fetchData() {
   loading.value = true
   try {
-    const res: any = await request.get('/cash-journals/page', { params: query.value })
+    const res: any = await request.get('/sme/cash/v1/cash-journals/page', { params: query.value })
     list.value = res.records; total.value = res.total
   } finally { loading.value = false }
 }
@@ -87,10 +87,10 @@ async function handleSave() {
   saving.value = true
   try {
     if (isEdit.value && editId.value) {
-      await request.put(`/cash-journals/${editId.value}`, form.value)
+      await request.put(`/sme/cash/v1/cash-journals/${editId.value}`, form.value)
       ElMessage.success('修改成功')
     } else {
-      await request.post('/cash-journals', form.value)
+      await request.post('/sme/cash/v1/cash-journals', form.value)
       ElMessage.success('新增成功')
     }
     dialogVisible.value = false; fetchData()
@@ -98,12 +98,12 @@ async function handleSave() {
 }
 
 async function handleDelete(row: any) {
-  await request.delete(`/cash-journals/${row.id}`)
+  await request.delete(`/sme/cash/v1/cash-journals/${row.id}`)
   ElMessage.success('删除成功'); fetchData()
 }
 
 async function genVoucher(row: any) {
-  await request.post(`/cash-journals/${row.id}/generate-voucher`)
+  await request.post(`/sme/cash/v1/cash-journals/${row.id}/generate-voucher`)
   ElMessage.success('凭证生成成功'); fetchData()
 }
 

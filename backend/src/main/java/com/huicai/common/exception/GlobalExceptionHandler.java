@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.multipart.MultipartException;
+import org.springframework.web.servlet.NoHandlerFoundException;
 
 @Slf4j
 @RestControllerAdvice
@@ -56,6 +57,16 @@ public class GlobalExceptionHandler {
     public R<Void> handleBusiness(BusinessException e) {
         log.warn("业务异常: code={}, msg={}", e.getCode(), e.getMessage());
         return R.fail(e.getCode(), e.getMessage());
+    }
+
+    /**
+     * 路由不存在 (404) — 前端请求了不存在的 API 路径
+     */
+    @ExceptionHandler(NoHandlerFoundException.class)
+    @ResponseStatus(HttpStatus.NOT_FOUND)
+    public R<Void> handleNoHandler(NoHandlerFoundException e) {
+        log.warn("路由不存在: {} {} (来自: {})", e.getHttpMethod(), e.getRequestURL(), e.getHeaders());
+        return R.fail(HttpStatus.NOT_FOUND.value(), "接口不存在: " + e.getHttpMethod() + " " + e.getRequestURL());
     }
 
     /**

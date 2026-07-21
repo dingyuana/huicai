@@ -72,6 +72,14 @@ public class SchemaValidator implements CommandLineRunner {
             report.append("  创建新 migration 执行修复后重启应用。\n");
             report.append("==============================\n");
             log.error(report.toString());
+            throw new IllegalStateException(
+                "Schema validation failed: t_ 表的 id 列缺少 IDENTITY 属性。\n" +
+                report.toString() +
+                "\n" +
+                "Entity 使用 @TableId(type = IdType.AUTO) 要求数据库自增，\n" +
+                "缺失 IDENTITY 会导致 INSERT 时 'null value in column \"id\" violates not-null constraint'。\n" +
+                "请创建 Flyway migration 执行修复后重启应用。"
+            );
         } else {
             report.append("  ✅ All ").append(rows.size()).append(" t_ tables have id IDENTITY\n");
             report.append("==============================\n");

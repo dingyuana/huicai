@@ -99,7 +99,7 @@ const entryForm = ref({ subjectId: null as number | null, amount: 0 })
 
 async function fetchPeriods() {
   const { default: request } = await import('@/api/request')
-  const d: any[] = await request.get('/periods/list')
+  const d: any[] = await request.get('/v1/periods/all')
   periods.value = d.map((p: any) => p.period)
   if (periods.value.length > 0 && !queryPeriod.value) {
     queryPeriod.value = periods.value[0]
