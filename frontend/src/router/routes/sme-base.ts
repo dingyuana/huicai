@@ -44,22 +44,16 @@ const routes: RouteRecordRaw[] = [
 
       // ─── 基础数据 ───
       {
-        path: 'basis/subject',
-        name: 'SubjectList',
-        component: () => import('@/views/system/subject/SubjectList.vue'),
-        meta: { title: '会计科目', permission: 'subjects:manage', keepAlive: true },
+        path: 'basis/account-and-summary',
+        name: 'AccountAndSummaryView',
+        component: () => import('@/views/basis/AccountAndSummaryView.vue'),
+        meta: { title: '会计科目/常用摘要', permission: 'subjects:manage', keepAlive: true },
       },
       {
         path: 'basis/period',
         name: 'PeriodList',
         component: () => import('@/views/system/period/PeriodList.vue'),
         meta: { title: '会计期间', permission: 'periods:manage', keepAlive: true },
-      },
-      {
-        path: 'basis/summary-lib',
-        name: 'SummaryLibList',
-        component: () => import('@/views/system/summary-lib/SummaryLibList.vue'),
-        meta: { title: '常用摘要', permission: 'summary:lib:list', keepAlive: true },
       },
       {
         path: 'basis/party',

@@ -24,13 +24,13 @@
           <el-icon><Notebook /></el-icon>
           <span>基础数据</span>
         </template>
-        <el-menu-item index="/basis/subject">会计科目</el-menu-item>
+        <el-menu-item index="/basis/subject">会计科目/常用摘要</el-menu-item>
         <el-menu-item index="/basis/period">会计期间</el-menu-item>
-        <el-menu-item index="/basis/summary-lib">常用摘要</el-menu-item>
         <el-menu-item index="/basis/party">客商档案</el-menu-item>
         <el-menu-item index="/system/classification-rule">分类规则</el-menu-item>
         <el-menu-item index="/basis/config">系统参数</el-menu-item>
         <el-menu-item index="/finance/voucher-setup?tab=type">凭证类型</el-menu-item>
+        <el-menu-item index="/finance/bank-account">银行账户</el-menu-item>
       </el-sub-menu>
 
       <!-- 财务核心 -->
@@ -54,7 +54,6 @@
           <span>业务单据</span>
         </template>
         <el-menu-item index="/finance/business-doc">业务单据</el-menu-item>
-        <el-menu-item index="/finance/bank-account">银行账户</el-menu-item>
         <el-menu-item index="/finance/bank-journal">银行日记账</el-menu-item>
         <el-menu-item index="/finance/bank-statement">银行对账单</el-menu-item>
         <el-menu-item index="/finance/bank-reconciliation">银行对账</el-menu-item>
