@@ -28,7 +28,14 @@
         <el-menu-item index="/basis/period">会计期间</el-menu-item>
         <el-menu-item index="/basis/party">客商档案</el-menu-item>
         <el-menu-item index="/system/classification-rule">分类规则</el-menu-item>
-        <el-menu-item index="/basis/config">系统参数</el-menu-item>
+        <el-sub-menu index="system">
+          <template #title>
+            <el-icon><Setting /></el-icon>
+            <span>系统参数</span>
+          </template>
+          <el-menu-item index="/basis/config">系统参数</el-menu-item>
+          <el-menu-item index="/system/clear-data">数据维护</el-menu-item>
+        </el-sub-menu>
         <el-menu-item index="/finance/voucher-setup?tab=type">凭证类型</el-menu-item>
         <el-menu-item index="/finance/bank-account">银行账户</el-menu-item>
       </el-sub-menu>
@@ -106,7 +113,7 @@
 import { useRoute } from 'vue-router'
 import { useAppStore } from '@/stores/app.store'
 import {
-  HomeFilled, Notebook, Coin, Document, Ticket, Box, DataAnalysis,
+  HomeFilled, Notebook, Coin, Document, Ticket, Box, DataAnalysis, Setting,
 } from '@element-plus/icons-vue'
 
 const route = useRoute()
