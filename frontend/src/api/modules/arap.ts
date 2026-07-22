@@ -76,6 +76,65 @@ export function deleteVendor(id: number): Promise<void> {
   return request.delete(`/v1/vendors/${id}`)
 }
 
+/** 批量导入结果 */
+export interface ImportResult {
+  total: number
+  success: number
+  errors: Array<{ row: number; message: string }>
+}
+
+/** 导入客户（Excel 批量上传） */
+export function importCustomers(file: File): Promise<ImportResult> {
+  const formData = new FormData()
+  formData.append('file', file)
+  return request.post('/v1/customers/import', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  })
+}
+
+/** 下载客户导入模板 */
+export function downloadCustomerTemplate(): Promise<void> {
+  return request.get('/v1/customers/export-template', {
+    responseType: 'blob',
+  }).then((res: any) => {
+    const blob = new Blob([res], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = '客户导入模板.xlsx'
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  })
+}
+
+/** 导入供应商（Excel 批量上传） */
+export function importVendors(file: File): Promise<ImportResult> {
+  const formData = new FormData()
+  formData.append('file', file)
+  return request.post('/v1/vendors/import', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  })
+}
+
+/** 下载供应商导入模板 */
+export function downloadVendorTemplate(): Promise<void> {
+  return request.get('/v1/vendors/export-template', {
+    responseType: 'blob',
+  }).then((res: any) => {
+    const blob = new Blob([res], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = '供应商导入模板.xlsx'
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  })
+}
+
 export function pageReceivable(params: any): Promise<any> {
   return request.get('/sme/arap/v1/receivables/page', { params })
 }

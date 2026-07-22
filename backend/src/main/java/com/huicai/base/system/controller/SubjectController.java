@@ -2,6 +2,7 @@ package com.huicai.base.system.controller;
 
 import com.huicai.common.response.R;
 import com.huicai.base.system.entity.Subject;
+import com.huicai.base.system.model.dto.ImportResult;
 import com.huicai.base.system.model.dto.SubjectCreateDTO;
 import com.huicai.base.system.model.dto.SubjectUpdateDTO;
 import com.huicai.base.system.model.vo.SubjectTreeVO;
@@ -10,8 +11,15 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.core.io.InputStreamResource;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.io.InputStream;
 import java.util.List;
 
 @Tag(name = "科目管理")
@@ -58,5 +66,24 @@ public class SubjectController {
     public R<Integer> importStandard() {
         int count = subjectService.importStandard();
         return R.ok(count);
+    }
+
+    @Operation(summary = "Excel 批量导入科目")
+    @PostMapping(value = "/import", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public R<ImportResult> importFromExcel(@RequestParam("file") MultipartFile file) {
+        ImportResult result = subjectService.importFromExcel(file);
+        return R.ok(result);
+    }
+
+    @Operation(summary = "下载科目导入模板")
+    @GetMapping("/export-template")
+    public ResponseEntity<InputStreamResource> exportTemplate() {
+        InputStream is = subjectService.createExportTemplate();
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_OCTET_STREAM);
+        headers.setContentDisposition(ContentDisposition.attachment().filename("subject-template.xlsx").build());
+        return ResponseEntity.ok()
+                .headers(headers)
+                .body(new InputStreamResource(is));
     }
 }

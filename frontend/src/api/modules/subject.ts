@@ -61,6 +61,38 @@ export function importStandardSubjects(): Promise<number> {
   return request.post('/v1/subjects/import-standard')
 }
 
+/** 导入科目（Excel 批量上传） */
+export interface ImportResult {
+  total: number
+  success: number
+  errors: Array<{ row: number; message: string }>
+}
+
+export function importSubjects(file: File): Promise<ImportResult> {
+  const formData = new FormData()
+  formData.append('file', file)
+  return request.post('/v1/subjects/import', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  })
+}
+
+/** 下载科目导入模板 */
+export function downloadSubjectTemplate(): Promise<void> {
+  return request.get('/v1/subjects/export-template', {
+    responseType: 'blob',
+  }).then((res: any) => {
+    const blob = new Blob([res], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = '科目导入模板.xlsx'
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  })
+}
+
 export function initOpeningBalances(period: string, balances: Record<number, number>): Promise<void> {
   return request.post('/base/balance/v1/subject-balances/init', balances, { params: { period } })
 }

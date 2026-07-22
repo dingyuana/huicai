@@ -6,6 +6,8 @@
         <div>
           <el-button type="primary" @click="openCreate(null)">新增一级科目</el-button>
           <el-button type="success" @click="handleImportStandard">一键导入常用科目</el-button>
+          <el-button type="primary" @click="showImportDialog = true">导入科目</el-button>
+          <el-button @click="downloadTemplate">下载模板</el-button>
           <el-button @click="fetchTree">刷新</el-button>
         </div>
       </div>
@@ -86,15 +88,57 @@
         <el-button type="primary" :loading="saving" @click="handleSave">保存</el-button>
       </template>
     </el-dialog>
+
+    <!-- 导入科目对话框 -->
+    <el-dialog v-model="showImportDialog" title="导入科目" width="640" destroy-on-close @closed="handleImportClose">
+      <template v-if="!importResult">
+        <el-upload
+          drag
+          accept=".xlsx"
+          :auto-upload="false"
+          :show-file-list="false"
+          :on-change="handleImportFileChange"
+        >
+          <el-icon class="el-icon--upload" :size="48"><UploadFilled /></el-icon>
+          <div class="el-upload__text">
+            将 Excel 文件拖到此处，或<em>点击选择</em>
+          </div>
+          <template #tip>
+            <div class="el-upload__tip">
+              仅支持 .xlsx 格式，请先<a href="javascript:void(0)" @click="downloadTemplate">下载模板</a>填写数据
+            </div>
+          </template>
+        </el-upload>
+      </template>
+
+      <template v-else>
+        <div class="import-result-summary">
+          <el-result
+            :icon="importResult.errors.length > 0 ? 'warning' : 'success'"
+            :title="importResult.errors.length > 0 ? '导入完成，部分失败' : '导入成功'"
+            :sub-title="`共 ${importResult.total} 行，成功 ${importResult.success} 行${importResult.errors.length > 0 ? `，失败 ${importResult.errors.length} 行` : ''}`"
+          />
+        </div>
+        <el-table v-if="importResult.errors.length > 0" :data="importResult.errors" border stripe max-height="300" style="width:100%">
+          <el-table-column prop="row" label="行号" width="80" align="center" />
+          <el-table-column prop="message" label="失败原因" min-width="200" />
+        </el-table>
+      </template>
+
+      <template #footer>
+        <el-button v-if="importResult" type="primary" @click="showImportDialog = false">关闭</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { UploadFilled } from '@element-plus/icons-vue'
 import type { FormInstance } from 'element-plus'
-import { getSubjectTree, createSubject, updateSubject, deleteSubject, getSubject, importStandardSubjects } from '@/api/modules/subject'
-import type { SubjectVO, SubjectCreateParam, SubjectUpdateParam } from '@/api/modules/subject'
+import { getSubjectTree, createSubject, updateSubject, deleteSubject, getSubject, importStandardSubjects, importSubjects, downloadSubjectTemplate } from '@/api/modules/subject'
+import type { SubjectVO, SubjectCreateParam, SubjectUpdateParam, ImportResult } from '@/api/modules/subject'
 
 const loading = ref(false)
 const saving = ref(false)
@@ -104,6 +148,10 @@ const isEdit = ref(false)
 const editId = ref<string | null>(null)
 const selectedParent = ref<SubjectVO | null>(null)
 const formRef = ref<FormInstance>()
+
+const showImportDialog = ref(false)
+const uploading = ref(false)
+const importResult = ref<ImportResult | null>(null)
 
 const form = ref({
   code: '',
@@ -213,7 +261,7 @@ async function handleDelete(row: SubjectVO) {
 async function handleImportStandard() {
   try {
     await ElMessageBox.confirm(
-      '确认一键导入国家标准科目？此操作会为所有6大类（资产/负债/共同/权益/成本/损益）创建一级科目。\n注意：科目表必须为空才能导入。',
+      '确认一键导入国家标准科目？此操作会为所有6大类（资产/负债/共同/权益/成本/损益）创建一级科目。\\n注意：科目表必须为空才能导入。',
       '导入确认',
       { confirmButtonText: '确认导入', cancelButtonText: '取消', type: 'warning' }
     )
@@ -223,6 +271,40 @@ async function handleImportStandard() {
   } catch {
     // cancelled or error
   }
+}
+
+async function handleImportFileChange(uploadFile: any) {
+  const file = uploadFile.raw
+  if (!file) return
+  uploading.value = true
+  importResult.value = null
+  try {
+    const res = await importSubjects(file)
+    importResult.value = res
+    if (res.errors.length === 0) {
+      ElMessage.success(`成功导入 ${res.success} 条科目`)
+    } else {
+      ElMessage.warning(`导入完成，${res.success}/${res.total} 成功，${res.errors.length} 条失败`)
+    }
+    await fetchTree()
+  } catch {
+    importResult.value = null
+  } finally {
+    uploading.value = false
+  }
+}
+
+async function downloadTemplate() {
+  try {
+    await downloadSubjectTemplate()
+    ElMessage.success('模板下载成功')
+  } catch {
+    // handled
+  }
+}
+
+function handleImportClose() {
+  importResult.value = null
 }
 
 onMounted(fetchTree)

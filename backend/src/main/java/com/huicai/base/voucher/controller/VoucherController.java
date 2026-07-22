@@ -15,8 +15,14 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.core.io.InputStreamResource;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 
 @Tag(name = "凭证管理")
@@ -139,5 +145,16 @@ public class VoucherController {
     @GetMapping("/trace")
     public R<NumberingTraceVO> traceByNumber(@RequestParam String no) {
         return R.ok(numberingTraceService.traceByNumber(no));
+    }
+
+    @Operation(summary = "导出凭证到 Excel")
+    @GetMapping("/export")
+    public ResponseEntity<InputStreamResource> export(VoucherQueryDTO queryDTO) {
+        String filename = "vouchers_" + LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMMdd")) + ".xlsx";
+        InputStreamResource resource = new InputStreamResource(voucherService.exportToExcel(queryDTO));
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + filename + "\"")
+                .contentType(MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+                .body(resource);
     }
 }

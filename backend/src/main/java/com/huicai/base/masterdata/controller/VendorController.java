@@ -4,11 +4,19 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.huicai.common.response.R;
 import com.huicai.base.masterdata.entity.VendorEntity;
 import com.huicai.base.masterdata.service.VendorService;
+import com.huicai.base.system.model.dto.ImportResult;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
+import org.springframework.core.io.InputStreamResource;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.io.InputStream;
 import java.util.List;
 import java.util.Map;
 
@@ -66,5 +74,24 @@ public class VendorController {
     @GetMapping("/unsettled-summary")
     public R<List<Map<String, Object>>> unsettledSummary() {
         return R.ok(service.unsettledSummary());
+    }
+
+    @Operation(summary = "Excel 批量导入供应商")
+    @PostMapping(value = "/import", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public R<ImportResult> importFromExcel(@RequestParam("file") MultipartFile file) {
+        ImportResult result = service.importFromExcel(file);
+        return R.ok(result);
+    }
+
+    @Operation(summary = "下载供应商导入模板")
+    @GetMapping("/export-template")
+    public ResponseEntity<InputStreamResource> exportTemplate() {
+        InputStream is = service.createExportTemplate();
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_OCTET_STREAM);
+        headers.setContentDisposition(ContentDisposition.attachment().filename("vendor-template.xlsx").build());
+        return ResponseEntity.ok()
+                .headers(headers)
+                .body(new InputStreamResource(is));
     }
 }

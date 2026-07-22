@@ -41,9 +41,16 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.apache.poi.ss.usermodel.*;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -749,5 +756,243 @@ public class VoucherServiceImpl extends ServiceImpl<VoucherMapper, VoucherEntity
         if (user.getRealName() != null && !user.getRealName().isBlank()) return user.getRealName();
         if (user.getNickname() != null && !user.getNickname().isBlank()) return user.getNickname();
         return user.getUsername();
+    }
+
+    @Override
+    public InputStream exportToExcel(VoucherQueryDTO queryDTO) {
+        // 1. 查询凭证列表
+        List<VoucherEntity> vouchers = voucherMapper.selectVoucherList(
+                queryDTO.getPeriod(),
+                queryDTO.getStatus(),
+                queryDTO.getVoucherTypeId(),
+                queryDTO.getKeyword(),
+                queryDTO.getVoucherNo(),
+                queryDTO.getSourceDocNo()
+        );
+
+        if (vouchers.isEmpty()) {
+            // 无数据时返回空 Excel
+            try (XSSFWorkbook workbook = new XSSFWorkbook()) {
+                workbook.createSheet("凭证");
+                ByteArrayOutputStream bos = new ByteArrayOutputStream();
+                workbook.write(bos);
+                return new ByteArrayInputStream(bos.toByteArray());
+            } catch (IOException e) {
+                throw new RuntimeException("导出凭证失败", e);
+            }
+        }
+
+        // 2. 批量加载用户姓名
+        Set<Long> userIds = new HashSet<>();
+        for (VoucherEntity v : vouchers) {
+            if (v.getCreatedBy() != null) userIds.add(v.getCreatedBy());
+            if (v.getSubmittedBy() != null) userIds.add(v.getSubmittedBy());
+            if (v.getAuditedBy() != null) userIds.add(v.getAuditedBy());
+            if (v.getPostedBy() != null) userIds.add(v.getPostedBy());
+        }
+        Map<Long, String> userNameMap = new HashMap<>();
+        if (!userIds.isEmpty()) {
+            userNameMap = userMapper.selectBatchIds(userIds).stream()
+                    .collect(Collectors.toMap(UserEntity::getId, this::resolveUserDisplayName));
+        }
+
+        // 3. 批量加载凭证类型名称
+        Set<Long> typeIds = vouchers.stream()
+                .map(VoucherEntity::getVoucherTypeId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        Map<Long, String> typeNameMap = new HashMap<>();
+        if (!typeIds.isEmpty()) {
+            typeNameMap = voucherTypeService.listByIds(typeIds).stream()
+                    .collect(Collectors.toMap(VoucherTypeEntity::getId, VoucherTypeEntity::getName));
+        }
+
+        // 4. 生成 Excel
+        try (XSSFWorkbook workbook = new XSSFWorkbook()) {
+            Sheet sheet = workbook.createSheet("凭证");
+
+            // 表头样式: 加粗 + 边框
+            CellStyle headerStyle = workbook.createCellStyle();
+            Font headerFont = workbook.createFont();
+            headerFont.setBold(true);
+            headerStyle.setFont(headerFont);
+            headerStyle.setBorderTop(BorderStyle.THIN);
+            headerStyle.setBorderBottom(BorderStyle.THIN);
+            headerStyle.setBorderLeft(BorderStyle.THIN);
+            headerStyle.setBorderRight(BorderStyle.THIN);
+            headerStyle.setAlignment(HorizontalAlignment.CENTER);
+            headerStyle.setVerticalAlignment(VerticalAlignment.CENTER);
+
+            // 数据行样式: 边框
+            CellStyle dataStyle = workbook.createCellStyle();
+            dataStyle.setBorderTop(BorderStyle.THIN);
+            dataStyle.setBorderBottom(BorderStyle.THIN);
+            dataStyle.setBorderLeft(BorderStyle.THIN);
+            dataStyle.setBorderRight(BorderStyle.THIN);
+            dataStyle.setVerticalAlignment(VerticalAlignment.CENTER);
+
+            // 金额样式: 边框 + 右对齐
+            CellStyle amountStyle = workbook.createCellStyle();
+            amountStyle.cloneStyleFrom(dataStyle);
+            amountStyle.setAlignment(HorizontalAlignment.RIGHT);
+
+            // 列头
+            String[] headers = {"凭证编号", "凭证类型", "日期", "摘要", "借方科目", "贷方科目", "金额", "制单人", "审核人", "状态"};
+            Row headerRow = sheet.createRow(0);
+            for (int i = 0; i < headers.length; i++) {
+                Cell cell = headerRow.createCell(i);
+                cell.setCellValue(headers[i]);
+                cell.setCellStyle(headerStyle);
+            }
+
+            // 状态映射
+            java.util.Map<String, String> statusMap = new java.util.HashMap<>();
+            statusMap.put("DRAFT", "草稿");
+            statusMap.put("SUBMITTED", "已提交");
+            statusMap.put("AUDITED", "已审核");
+            statusMap.put("POSTED", "已记账");
+            statusMap.put("CLOSED", "已结账");
+
+            int rowIdx = 1;
+            DateTimeFormatter dateFmt = DateTimeFormatter.ofPattern("yyyy-MM-dd");
+
+            // 5. 加载所有分录
+            for (VoucherEntity voucher : vouchers) {
+                List<VoucherEntryEntity> entries = voucherEntryMapper.selectByVoucherId(voucher.getId());
+                boolean hasDebitEntry = false;
+                boolean hasCreditEntry = false;
+
+                for (VoucherEntryEntity entry : entries) {
+                    Row row = sheet.createRow(rowIdx++);
+
+                    // 凭证编号
+                    row.createCell(0).setCellValue(voucher.getVoucherNo() != null ? voucher.getVoucherNo() : "");
+                    row.getCell(0).setCellStyle(dataStyle);
+
+                    // 凭证类型
+                    String typeName = typeNameMap.getOrDefault(voucher.getVoucherTypeId(), "");
+                    row.createCell(1).setCellValue(typeName);
+                    row.getCell(1).setCellStyle(dataStyle);
+
+                    // 日期
+                    String dateStr = voucher.getCreatedAt() != null ? voucher.getCreatedAt().format(dateFmt) : "";
+                    row.createCell(2).setCellValue(dateStr);
+                    row.getCell(2).setCellStyle(dataStyle);
+
+                    // 摘要
+                    String entrySummary = entry.getSummary() != null ? entry.getSummary() : "";
+                    row.createCell(3).setCellValue(entrySummary);
+                    row.getCell(3).setCellStyle(dataStyle);
+
+                    // 借方科目 / 贷方科目 / 金额
+                    String debitSubject = "";
+                    String creditSubject = "";
+                    BigDecimal amount = BigDecimal.ZERO;
+
+                    if (entry.getSubjectId() != null) {
+                        Subject subject = subjectService.getById(entry.getSubjectId());
+                        if (subject != null) {
+                            if (entry.getDebit() != null && entry.getDebit().compareTo(BigDecimal.ZERO) > 0) {
+                                debitSubject = subject.getCode() + " " + subject.getName();
+                                amount = entry.getDebit();
+                                hasDebitEntry = true;
+                            }
+                            if (entry.getCredit() != null && entry.getCredit().compareTo(BigDecimal.ZERO) > 0) {
+                                creditSubject = subject.getCode() + " " + subject.getName();
+                                amount = entry.getCredit();
+                                hasCreditEntry = true;
+                            }
+                        }
+                    }
+
+                    row.createCell(4).setCellValue(debitSubject);
+                    row.getCell(4).setCellStyle(dataStyle);
+
+                    row.createCell(5).setCellValue(creditSubject);
+                    row.getCell(5).setCellStyle(dataStyle);
+
+                    row.createCell(6).setCellValue(amount.doubleValue());
+                    row.getCell(6).setCellStyle(amountStyle);
+
+                    // 制单人
+                    String creatorName = userNameMap.getOrDefault(voucher.getCreatedBy(), "");
+                    row.createCell(7).setCellValue(creatorName);
+                    row.getCell(7).setCellStyle(dataStyle);
+
+                    // 审核人
+                    String auditorName = userNameMap.getOrDefault(voucher.getAuditedBy(), "");
+                    row.createCell(8).setCellValue(auditorName);
+                    row.getCell(8).setCellStyle(dataStyle);
+
+                    // 状态
+                    String statusLabel = statusMap.getOrDefault(voucher.getStatus(), voucher.getStatus());
+                    row.createCell(9).setCellValue(statusLabel);
+                    row.getCell(9).setCellStyle(dataStyle);
+                }
+
+                // 如果分录为空，至少输出一行含有凭证信息
+                if (entries.isEmpty()) {
+                    Row row = sheet.createRow(rowIdx++);
+                    row.createCell(0).setCellValue(voucher.getVoucherNo() != null ? voucher.getVoucherNo() : "");
+                    row.getCell(0).setCellStyle(dataStyle);
+                    String typeName = typeNameMap.getOrDefault(voucher.getVoucherTypeId(), "");
+                    row.createCell(1).setCellValue(typeName);
+                    row.getCell(1).setCellStyle(dataStyle);
+                    String dateStr = voucher.getCreatedAt() != null ? voucher.getCreatedAt().format(dateFmt) : "";
+                    row.createCell(2).setCellValue(dateStr);
+                    row.getCell(2).setCellStyle(dataStyle);
+                    row.createCell(3).setCellValue(voucher.getSummary() != null ? voucher.getSummary() : "");
+                    row.getCell(3).setCellStyle(dataStyle);
+                    for (int i = 4; i <= 9; i++) {
+                        row.createCell(i).setCellValue("");
+                        row.getCell(i).setCellStyle(dataStyle);
+                    }
+                    String creatorName = userNameMap.getOrDefault(voucher.getCreatedBy(), "");
+                    row.getCell(7).setCellValue(creatorName);
+                    String auditorName = userNameMap.getOrDefault(voucher.getAuditedBy(), "");
+                    row.getCell(8).setCellValue(auditorName);
+                    String statusLabel = statusMap.getOrDefault(voucher.getStatus(), voucher.getStatus());
+                    row.getCell(9).setCellValue(statusLabel);
+                }
+            }
+
+            // 6. 列宽自适应（基于表头文字长度 + 估算最大内容）
+            for (int i = 0; i < headers.length; i++) {
+                int maxWidth = headers[i].length() * 2 + 4; // 中文字符约2个字符宽度
+                // 遍历列数据估算最大宽度
+                for (int r = 1; r <= sheet.getLastRowNum(); r++) {
+                    Row rw = sheet.getRow(r);
+                    if (rw != null) {
+                        Cell cl = rw.getCell(i);
+                        if (cl != null) {
+                            String val = getCellStringValue(cl);
+                            int width = (int) (val.getBytes(java.nio.charset.StandardCharsets.UTF_8).length * 1.1);
+                            if (width > maxWidth) maxWidth = width;
+                        }
+                    }
+                }
+                // POI 列宽单位 = 1/256 字符宽度
+                int poiWidth = Math.min(maxWidth * 256, 100 * 256); // 最大 100 字符
+                sheet.setColumnWidth(i, poiWidth);
+            }
+
+            // 7. 写出到 ByteArrayOutputStream
+            ByteArrayOutputStream bos = new ByteArrayOutputStream();
+            workbook.write(bos);
+            return new ByteArrayInputStream(bos.toByteArray());
+
+        } catch (IOException e) {
+            throw new RuntimeException("导出凭证 Excel 失败", e);
+        }
+    }
+
+    private String getCellStringValue(Cell cell) {
+        if (cell == null) return "";
+        switch (cell.getCellType()) {
+            case STRING:  return cell.getStringCellValue();
+            case NUMERIC: return String.valueOf(cell.getNumericCellValue());
+            case BOOLEAN: return String.valueOf(cell.getBooleanCellValue());
+            default:      return "";
+        }
     }
 }

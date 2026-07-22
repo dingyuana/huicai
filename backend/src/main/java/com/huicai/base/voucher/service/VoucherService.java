@@ -5,8 +5,8 @@ import com.huicai.base.voucher.dto.VoucherCreateDTO;
 import com.huicai.base.voucher.dto.VoucherQueryDTO;
 import com.huicai.base.voucher.dto.VoucherTemplateVO;
 import com.huicai.base.voucher.dto.VoucherVO;
-import com.huicai.base.voucher.entity.VoucherEntity;
 
+import java.io.InputStream;
 import java.util.List;
 
 /**
@@ -93,4 +93,9 @@ public interface VoucherService {
      * 根据凭证类型 ID 获取绑定的模板 (含分录行), 无绑定返回 null
      */
     VoucherTemplateVO getTemplateByVoucherType(Long voucherTypeId);
+
+    /**
+     * 导出凭证到 Excel
+     */
+    InputStream exportToExcel(VoucherQueryDTO queryDTO);
 }

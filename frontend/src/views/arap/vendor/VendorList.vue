@@ -3,7 +3,11 @@
     <el-card shadow="never">
       <div class="page-header">
         <span class="page-title">供应商档案</span>
-        <el-button type="primary" @click="openEdit()">新增供应商</el-button>
+        <div>
+          <el-button type="primary" @click="openEdit()">新增供应商</el-button>
+          <el-button type="primary" @click="showImportDialog = true">导入供应商</el-button>
+          <el-button @click="downloadTemplate">下载模板</el-button>
+        </div>
       </div>
 
       <el-form :model="query" inline class="filter-form">
@@ -85,13 +89,56 @@
         <el-button type="primary" @click="onSubmit">确定</el-button>
       </template>
     </el-dialog>
+
+    <!-- 导入供应商对话框 -->
+    <el-dialog v-model="showImportDialog" title="导入供应商" width="640" destroy-on-close @closed="handleImportClose">
+      <template v-if="!importResult">
+        <el-upload
+          drag
+          accept=".xlsx"
+          :auto-upload="false"
+          :show-file-list="false"
+          :on-change="handleImportFileChange"
+        >
+          <el-icon class="el-icon--upload" :size="48"><UploadFilled /></el-icon>
+          <div class="el-upload__text">
+            将 Excel 文件拖到此处，或<em>点击选择</em>
+          </div>
+          <template #tip>
+            <div class="el-upload__tip">
+              仅支持 .xlsx 格式，请先<a href="javascript:void(0)" @click="downloadTemplate">下载模板</a>填写数据
+            </div>
+          </template>
+        </el-upload>
+      </template>
+
+      <template v-else>
+        <div class="import-result-summary">
+          <el-result
+            :icon="importResult.errors.length > 0 ? 'warning' : 'success'"
+            :title="importResult.errors.length > 0 ? '导入完成，部分失败' : '导入成功'"
+            :sub-title="`共 ${importResult.total} 行，成功 ${importResult.success} 行${importResult.errors.length > 0 ? `，失败 ${importResult.errors.length} 行` : ''}`"
+          />
+        </div>
+        <el-table v-if="importResult.errors.length > 0" :data="importResult.errors" border stripe max-height="300" style="width:100%">
+          <el-table-column prop="row" label="行号" width="80" align="center" />
+          <el-table-column prop="message" label="失败原因" min-width="200" />
+        </el-table>
+      </template>
+
+      <template #footer>
+        <el-button v-if="importResult" type="primary" @click="showImportDialog = false">关闭</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue'
 import { ElMessage, type FormInstance } from 'element-plus'
-import { pageVendor, createVendor, updateVendor, deleteVendor } from '@/api/modules/arap'
+import { UploadFilled } from '@element-plus/icons-vue'
+import { pageVendor, createVendor, updateVendor, deleteVendor, importVendors, downloadVendorTemplate } from '@/api/modules/arap'
+import type { ImportResult } from '@/api/modules/arap'
 
 const query = reactive({ keyword: '', current: 1, size: 20 })
 const list = ref<any[]>([])
@@ -104,6 +151,10 @@ const rules = {
   code: [{ required: true, message: '请输入编码', trigger: 'blur' }],
   name: [{ required: true, message: '请输入名称', trigger: 'blur' }],
 }
+
+const showImportDialog = ref(false)
+const uploading = ref(false)
+const importResult = ref<ImportResult | null>(null)
 
 const fetchData = async () => {
   loading.value = true
@@ -144,6 +195,40 @@ const onDelete = async (row: any) => {
   await deleteVendor(row.id)
   ElMessage.success('删除成功')
   fetchData()
+}
+
+async function handleImportFileChange(uploadFile: any) {
+  const file = uploadFile.raw
+  if (!file) return
+  uploading.value = true
+  importResult.value = null
+  try {
+    const res = await importVendors(file)
+    importResult.value = res
+    if (res.errors.length === 0) {
+      ElMessage.success(`成功导入 ${res.success} 条供应商`)
+    } else {
+      ElMessage.warning(`导入完成，${res.success}/${res.total} 成功，${res.errors.length} 条失败`)
+    }
+    await fetchData()
+  } catch {
+    importResult.value = null
+  } finally {
+    uploading.value = false
+  }
+}
+
+async function downloadTemplate() {
+  try {
+    await downloadVendorTemplate()
+    ElMessage.success('模板下载成功')
+  } catch {
+    // handled
+  }
+}
+
+function handleImportClose() {
+  importResult.value = null
 }
 
 onMounted(fetchData)

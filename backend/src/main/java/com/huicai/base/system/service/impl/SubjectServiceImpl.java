@@ -1,23 +1,29 @@
 package com.huicai.base.system.service.impl;
 
 import cn.hutool.core.bean.BeanUtil;
+import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.huicai.common.exception.BusinessException;
 import com.huicai.base.system.entity.Subject;
 import com.huicai.base.system.mapper.SubjectMapper;
+import com.huicai.base.system.model.dto.ImportResult;
 import com.huicai.base.system.model.dto.SubjectCreateDTO;
 import com.huicai.base.system.model.dto.SubjectUpdateDTO;
 import com.huicai.base.system.model.vo.SubjectTreeVO;
 import com.huicai.base.system.service.SubjectService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.poi.ss.usermodel.*;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
-import java.util.Map;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -30,6 +36,18 @@ public class SubjectServiceImpl implements SubjectService {
     // ===== 方向常量 =====
     private static final String DIRECTION_DEBIT = "debit";
     private static final String DIRECTION_CREDIT = "credit";
+
+    // ===== 模板列定义 =====
+    private static final List<String> TEMPLATE_HEADERS = List.of(
+            "科目编码", "科目名称", "借贷方向", "上级编码", "辅助核算类型", "是否启用", "备注"
+    );
+    private static final int COL_CODE = 0;
+    private static final int COL_NAME = 1;
+    private static final int COL_DIRECTION = 2;
+    private static final int COL_PARENT_CODE = 3;
+    private static final int COL_AUX_CALC_TYPE = 4;
+    private static final int COL_IS_ACTIVE = 5;
+    private static final int COL_REMARK = 6;
 
     @Override
     public List<SubjectTreeVO> getTree() {
@@ -282,6 +300,285 @@ public class SubjectServiceImpl implements SubjectService {
         }
         log.info("一键导入国家标准科目完成，共导入 {} 个一级科目", count);
         return count;
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public ImportResult importFromExcel(MultipartFile file) {
+        if (file == null || file.isEmpty()) {
+            throw BusinessException.badRequest("上传文件为空");
+        }
+        String filename = file.getOriginalFilename();
+        if (filename == null || !filename.endsWith(".xlsx")) {
+            throw BusinessException.badRequest("仅支持 .xlsx 格式文件");
+        }
+
+        List<ImportResult.ErrorItem> errors = new ArrayList<>();
+        List<Subject> validSubjects = new ArrayList<>();
+        // 在本次导入中已解析的科目编码 -> Subject（用于跨行引用上级编码）
+        Map<String, Subject> parsedSubjects = new HashMap<>();
+
+        // 加载数据库中已有的所有科目编码，用于校验唯一性
+        Set<String> existingCodes = new HashSet<>();
+        subjectMapper.selectList(new LambdaQueryWrapper<Subject>().select(Subject::getCode))
+                .forEach(s -> existingCodes.add(s.getCode()));
+
+        // 加载数据库中已有的所有科目编码 -> entity（用于上级编码查询）
+        Map<String, Subject> dbSubjectByCode = new HashMap<>();
+        subjectMapper.selectList(null)
+                .forEach(s -> dbSubjectByCode.put(s.getCode(), s));
+
+        try (InputStream is = file.getInputStream(); Workbook workbook = WorkbookFactory.create(is)) {
+            Sheet sheet = workbook.getSheetAt(0);
+            if (sheet == null) {
+                throw BusinessException.badRequest("Excel 中没有工作表");
+            }
+
+            int lastRowNum = sheet.getLastRowNum();
+            if (lastRowNum < 1) {
+                // 只有表头，没有数据行
+                ImportResult result = new ImportResult();
+                result.setTotal(0);
+                result.setSuccess(0);
+                result.setErrors(errors);
+                return result;
+            }
+
+            // 校验表头
+            Row headerRow = sheet.getRow(0);
+            if (headerRow == null) {
+                throw BusinessException.badRequest("Excel 表头行为空");
+            }
+            validateHeader(headerRow);
+
+            // 逐行解析数据（从第2行开始，行号从1开始）
+            for (int rowIdx = 1; rowIdx <= lastRowNum; rowIdx++) {
+                Row row = sheet.getRow(rowIdx);
+                if (row == null) continue;
+
+                int excelRowNum = rowIdx + 1; // Excel 显示的行号（从1开始）
+
+                try {
+                    Subject subject = parseRow(row, existingCodes, parsedSubjects, dbSubjectByCode);
+                    if (subject != null) {
+                        validSubjects.add(subject);
+                        // 记录本次解析的编码，用于后续行引用和唯一性校验
+                        parsedSubjects.put(subject.getCode(), subject);
+                        existingCodes.add(subject.getCode());
+                    }
+                } catch (Exception e) {
+                    errors.add(new ImportResult.ErrorItem(excelRowNum, e.getMessage()));
+                    log.warn("导入 Excel 第 {} 行解析失败: {}", excelRowNum, e.getMessage());
+                }
+            }
+
+            // 批量写入数据库
+            if (!validSubjects.isEmpty()) {
+                for (Subject subject : validSubjects) {
+                    subjectMapper.insert(subject);
+                }
+                log.info("Excel 导入科目完成，成功导入 {} 条", validSubjects.size());
+            }
+
+        } catch (IOException e) {
+            throw new BusinessException(500, "读取 Excel 文件失败: " + e.getMessage());
+        }
+
+        ImportResult result = new ImportResult();
+        result.setTotal(validSubjects.size() + errors.size());
+        result.setSuccess(validSubjects.size());
+        result.setErrors(errors);
+        return result;
+    }
+
+    @Override
+    public InputStream createExportTemplate() {
+        try (XSSFWorkbook workbook = new XSSFWorkbook()) {
+            Sheet sheet = workbook.createSheet("科目模板");
+
+            // 创建表头样式（加粗，背景色浅蓝）
+            CellStyle headerStyle = workbook.createCellStyle();
+            Font headerFont = workbook.createFont();
+            headerFont.setBold(true);
+            headerFont.setFontHeightInPoints((short) 12);
+            headerStyle.setFont(headerFont);
+            headerStyle.setFillForegroundColor(IndexedColors.LIGHT_CORNFLOWER_BLUE.getIndex());
+            headerStyle.setFillPattern(FillPatternType.SOLID_FOREGROUND);
+            headerStyle.setBorderTop(BorderStyle.THIN);
+            headerStyle.setBorderBottom(BorderStyle.THIN);
+            headerStyle.setBorderLeft(BorderStyle.THIN);
+            headerStyle.setBorderRight(BorderStyle.THIN);
+            headerStyle.setAlignment(HorizontalAlignment.CENTER);
+
+            // 创建普通单元格样式
+            CellStyle bodyStyle = workbook.createCellStyle();
+            bodyStyle.setBorderTop(BorderStyle.THIN);
+            bodyStyle.setBorderBottom(BorderStyle.THIN);
+            bodyStyle.setBorderLeft(BorderStyle.THIN);
+            bodyStyle.setBorderRight(BorderStyle.THIN);
+
+            // 写入表头
+            Row headerRow = sheet.createRow(0);
+            for (int i = 0; i < TEMPLATE_HEADERS.size(); i++) {
+                Cell cell = headerRow.createCell(i);
+                cell.setCellValue(TEMPLATE_HEADERS.get(i));
+                cell.setCellStyle(headerStyle);
+            }
+
+            // 设置列宽
+            sheet.setColumnWidth(COL_CODE, 4000);
+            sheet.setColumnWidth(COL_NAME, 6000);
+            sheet.setColumnWidth(COL_DIRECTION, 4000);
+            sheet.setColumnWidth(COL_PARENT_CODE, 4000);
+            sheet.setColumnWidth(COL_AUX_CALC_TYPE, 5000);
+            sheet.setColumnWidth(COL_IS_ACTIVE, 3000);
+            sheet.setColumnWidth(COL_REMARK, 6000);
+
+            // 写入一行示例数据
+            Row exampleRow = sheet.createRow(1);
+            String[] exampleData = {"1001", "库存现金", "debit", "", "", "是", "现金科目"};
+            for (int i = 0; i < exampleData.length; i++) {
+                Cell cell = exampleRow.createCell(i);
+                cell.setCellValue(exampleData[i]);
+                cell.setCellStyle(bodyStyle);
+            }
+
+            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            workbook.write(baos);
+            return new ByteArrayInputStream(baos.toByteArray());
+        } catch (IOException e) {
+            throw new BusinessException(500, "生成模板文件失败: " + e.getMessage());
+        }
+    }
+
+    // ===================== 私有方法 - Excel 导入 =====================
+
+    /**
+     * 校验表头与模板是否匹配
+     */
+    private void validateHeader(Row headerRow) {
+        for (int i = 0; i < TEMPLATE_HEADERS.size(); i++) {
+            Cell cell = headerRow.getCell(i);
+            String headerText = (cell != null) ? cell.toString().trim() : "";
+            if (!TEMPLATE_HEADERS.get(i).equals(headerText)) {
+                throw BusinessException.badRequest(
+                        String.format("表头第 %d 列不匹配: 期望 '%s', 实际 '%s'",
+                                i + 1, TEMPLATE_HEADERS.get(i), headerText));
+            }
+        }
+    }
+
+    /**
+     * 解析单行数据
+     */
+    private Subject parseRow(Row row, Set<String> existingCodes,
+                              Map<String, Subject> parsedSubjects,
+                              Map<String, Subject> dbSubjectByCode) {
+        String code = getCellStringValue(row.getCell(COL_CODE));
+        String name = getCellStringValue(row.getCell(COL_NAME));
+        String direction = getCellStringValue(row.getCell(COL_DIRECTION));
+        String parentCode = getCellStringValue(row.getCell(COL_PARENT_CODE));
+        String auxCalcType = getCellStringValue(row.getCell(COL_AUX_CALC_TYPE));
+        String isActiveStr = getCellStringValue(row.getCell(COL_IS_ACTIVE));
+        String remark = getCellStringValue(row.getCell(COL_REMARK));
+
+        // 校验科目编码
+        if (StrUtil.isBlank(code)) {
+            throw new IllegalArgumentException("科目编码不能为空");
+        }
+
+        // 校验科目编码唯一性
+        if (existingCodes.contains(code)) {
+            throw new IllegalArgumentException("科目编码 '" + code + "' 已存在");
+        }
+
+        // 校验科目名称
+        if (StrUtil.isBlank(name)) {
+            throw new IllegalArgumentException("科目名称不能为空");
+        }
+
+        // 校验借贷方向
+        if (StrUtil.isBlank(direction)) {
+            throw new IllegalArgumentException("借贷方向不能为空");
+        }
+        if (!DIRECTION_DEBIT.equals(direction) && !DIRECTION_CREDIT.equals(direction)) {
+            throw new IllegalArgumentException("借贷方向不合法: 只能为 debit(借方) 或 credit(贷方)");
+        }
+
+        // 查找上级科目
+        Long parentId = null;
+        int level = 1;
+        if (StrUtil.isNotBlank(parentCode)) {
+            Subject parent = parsedSubjects.get(parentCode);
+            if (parent == null) {
+                parent = dbSubjectByCode.get(parentCode);
+            }
+            if (parent == null) {
+                throw new IllegalArgumentException("上级编码 '" + parentCode + "' 对应的科目不存在");
+            }
+            parentId = parent.getId();
+            level = parent.getLevel() + 1;
+        }
+
+        // 校验辅助核算类型
+        if (StrUtil.isNotBlank(auxCalcType)) {
+            validateAuxCalcType(auxCalcType);
+        }
+
+        // 解析是否启用
+        boolean isActive = parseIsActive(isActiveStr);
+
+        // 构建科目对象
+        Subject subject = new Subject();
+        subject.setCode(code);
+        subject.setName(name);
+        subject.setDirection(direction);
+        subject.setParentId(parentId);
+        subject.setLevel(level);
+        subject.setIsLeaf(true);
+        subject.setIsActive(isActive);
+        subject.setAuxCalcType(StrUtil.isNotBlank(auxCalcType) ? auxCalcType : null);
+        subject.setRemark(StrUtil.isNotBlank(remark) ? remark : null);
+
+        return subject;
+    }
+
+    /**
+     * 获取单元格的字符串值，处理 null 和空值
+     */
+    private String getCellStringValue(Cell cell) {
+        if (cell == null) return "";
+        switch (cell.getCellType()) {
+            case STRING:
+                return cell.getStringCellValue().trim();
+            case NUMERIC:
+                // 处理数字类型的编码，如 1001
+                double val = cell.getNumericCellValue();
+                if (val == Math.floor(val) && !Double.isInfinite(val)) {
+                    return String.valueOf((long) val);
+                }
+                return String.valueOf(val);
+            case BOOLEAN:
+                return String.valueOf(cell.getBooleanCellValue());
+            case FORMULA:
+                try {
+                    return cell.getStringCellValue().trim();
+                } catch (Exception e) {
+                    return String.valueOf(cell.getNumericCellValue());
+                }
+            default:
+                return "";
+        }
+    }
+
+    /**
+     * 解析是否启用字段
+     */
+    private boolean parseIsActive(String value) {
+        if (StrUtil.isBlank(value)) return true; // 默认启用
+        value = value.trim().toLowerCase();
+        return "是".equals(value) || "true".equals(value) || "1".equals(value)
+                || "yes".equals(value) || "y".equals(value);
     }
 
     // ===================== 私有方法 =====================

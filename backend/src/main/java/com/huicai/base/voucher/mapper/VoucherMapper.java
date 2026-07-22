@@ -31,6 +31,17 @@ public interface VoucherMapper extends BaseMapper<VoucherEntity> {
                                            @Param("sourceDocNo") String sourceDocNo);
 
     /**
+     * 查询凭证列表（不分页，用于导出）
+     */
+    List<VoucherEntity> selectVoucherList(
+                                           @Param("period") String period,
+                                           @Param("status") String status,
+                                           @Param("voucherTypeId") Long voucherTypeId,
+                                           @Param("keyword") String keyword,
+                                           @Param("voucherNo") String voucherNo,
+                                           @Param("sourceDocNo") String sourceDocNo);
+
+    /**
      * 按ID查询凭证详情
      */
     VoucherEntity selectVoucherDetail(@Param("id") Long id);

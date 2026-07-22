@@ -5,6 +5,7 @@
         <span class="page-title">凭证管理</span>
         <div>
           <el-button type="primary" @click="goCreate">新增凭证</el-button>
+          <el-button @click="handleExport">导出Excel</el-button>
           <el-button @click="fetchData">刷新</el-button>
         </div>
       </div>
@@ -374,6 +375,38 @@ async function onBatchPost() {
 }
 
 onMounted(fetchData)
+
+/** 导出凭证到 Excel */
+async function handleExport() {
+  try {
+    // 构建查询参数（使用当前筛选条件）
+    const params = new URLSearchParams()
+    if (query.value.period) params.set('period', query.value.period)
+    if (query.value.status) params.set('status', query.value.status)
+    if (query.value.voucherTypeId) params.set('voucherTypeId', String(query.value.voucherTypeId))
+    if (query.value.keyword) params.set('keyword', query.value.keyword)
+
+    const token = localStorage.getItem('token')
+    const res = await fetch(`/api/base/voucher/v1/vouchers/export?${params}`, {
+      headers: { Authorization: `Bearer ${token}` }
+    })
+    if (!res.ok) throw new Error('导出失败')
+    const blob = await res.blob()
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    const now = new Date()
+    const dateStr = `${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}`
+    a.download = `vouchers_${dateStr}.xlsx`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+    ElMessage.success('导出成功')
+  } catch (e) {
+    ElMessage.error('导出失败: ' + (e.message || '未知错误'))
+  }
+}
 </script>
 
 <style scoped>

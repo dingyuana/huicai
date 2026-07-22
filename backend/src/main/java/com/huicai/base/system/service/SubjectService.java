@@ -1,10 +1,13 @@
 package com.huicai.base.system.service;
 
 import com.huicai.base.system.entity.Subject;
+import com.huicai.base.system.model.dto.ImportResult;
 import com.huicai.base.system.model.dto.SubjectCreateDTO;
 import com.huicai.base.system.model.dto.SubjectUpdateDTO;
 import com.huicai.base.system.model.vo.SubjectTreeVO;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.io.InputStream;
 import java.util.List;
 
 /**
@@ -42,4 +45,19 @@ public interface SubjectService {
      * @return 导入的科目数量
      */
     int importStandard();
+
+    /**
+     * 从 Excel 批量导入科目
+     *
+     * @param file 上传的 Excel 文件 (.xlsx)
+     * @return 导入结果
+     */
+    ImportResult importFromExcel(MultipartFile file);
+
+    /**
+     * 创建科目导入模板(.xlsx)
+     *
+     * @return 模板文件输入流
+     */
+    InputStream createExportTemplate();
 }

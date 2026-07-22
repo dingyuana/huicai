@@ -66,7 +66,37 @@ public class BankReconciliationServiceImpl implements BankReconciliationService 
             }
         }
 
-        BigDecimal diff = enterpriseBalance.subtract(bankBalance);
+        // 企业已收银行未收 (unmatched journal INCOME)
+        List<BankJournalEntity> unreconciledJournals = journalMapper.selectUnreconciled(accountId);
+        BigDecimal enterpriseReceipts = BigDecimal.ZERO;
+        BigDecimal enterprisePayments = BigDecimal.ZERO;
+        for (BankJournalEntity j : unreconciledJournals) {
+            if ("INCOME".equals(j.getTxType())) {
+                enterpriseReceipts = enterpriseReceipts.add(j.getAmount());
+            } else {
+                enterprisePayments = enterprisePayments.add(j.getAmount());
+            }
+        }
+
+        // 银行已收企业未收 / 银行已付企业未付 (unmatched statement)
+        LambdaQueryWrapper<BankStatementEntity> unmatachedStmtWrapper = new LambdaQueryWrapper<>();
+        unmatachedStmtWrapper.eq(BankStatementEntity::getAccountId, accountId)
+                .in(BankStatementEntity::getMatchStatus, "UNMATCHED", "PENDING_CONFIRM");
+        List<BankStatementEntity> unmatchedStmts = statementMapper.selectList(unmatachedStmtWrapper);
+        BigDecimal bankReceipts = BigDecimal.ZERO;
+        BigDecimal bankPayments = BigDecimal.ZERO;
+        for (BankStatementEntity s : unmatchedStmts) {
+            if ("INCOME".equals(s.getTxType()) || "TRANSFER_IN".equals(s.getTxType())) {
+                bankReceipts = bankReceipts.add(s.getAmount());
+            } else {
+                bankPayments = bankPayments.add(s.getAmount());
+            }
+        }
+
+        BigDecimal adjustedEnterpriseBalance = enterpriseBalance.add(enterpriseReceipts).subtract(enterprisePayments);
+        BigDecimal adjustedBankBalance = bankBalance.add(bankReceipts).subtract(bankPayments);
+
+        BigDecimal diff = adjustedEnterpriseBalance.subtract(adjustedBankBalance);
 
         Map<String, Object> result = new HashMap<>();
         result.put("accountId", accountId);
@@ -75,6 +105,12 @@ public class BankReconciliationServiceImpl implements BankReconciliationService 
         result.put("period", period);
         result.put("enterpriseBalance", enterpriseBalance);
         result.put("bankBalance", bankBalance);
+        result.put("enterpriseReceipts", enterpriseReceipts);
+        result.put("enterprisePayments", enterprisePayments);
+        result.put("bankReceipts", bankReceipts);
+        result.put("bankPayments", bankPayments);
+        result.put("adjustedEnterpriseBalance", adjustedEnterpriseBalance);
+        result.put("adjustedBankBalance", adjustedBankBalance);
         result.put("diff", diff);
         result.put("balanced", diff.compareTo(BigDecimal.ZERO) == 0);
         return result;

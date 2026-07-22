@@ -5,8 +5,18 @@ import com.huicai.sme.cash.service.BankReconciliationService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
+import org.apache.poi.ss.usermodel.*;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+import org.springframework.core.io.InputStreamResource;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.io.ByteArrayOutputStream;
+import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Map;
 
@@ -23,6 +33,88 @@ public class BankReconciliationController {
     public R<Map<String, Object>> adjustment(
             @RequestParam Long accountId, @RequestParam String period) {
         return R.ok(service.generateAdjustment(accountId, period));
+    }
+
+    @Operation(summary = "导出余额调节表 Excel")
+    @GetMapping("/adjustment/export")
+    public ResponseEntity<InputStreamResource> exportAdjustment(
+            @RequestParam Long accountId, @RequestParam String period) throws Exception {
+        Map<String, Object> data = service.generateAdjustment(accountId, period);
+
+        try (XSSFWorkbook wb = new XSSFWorkbook()) {
+            Sheet sheet = wb.createSheet("余额调节表");
+
+            // 样式
+            CellStyle labelStyle = wb.createCellStyle();
+            labelStyle.setAlignment(HorizontalAlignment.RIGHT);
+            labelStyle.setVerticalAlignment(VerticalAlignment.CENTER);
+            Font labelFont = wb.createFont();
+            labelFont.setBold(true);
+            labelFont.setFontHeightInPoints((short) 12);
+            labelStyle.setFont(labelFont);
+
+            CellStyle valueStyle = wb.createCellStyle();
+            valueStyle.setAlignment(HorizontalAlignment.LEFT);
+            valueStyle.setVerticalAlignment(VerticalAlignment.CENTER);
+            Font valueFont = wb.createFont();
+            valueFont.setFontHeightInPoints((short) 12);
+            valueStyle.setFont(valueFont);
+
+            // 列宽
+            sheet.setColumnWidth(0, 30 * 256);
+            sheet.setColumnWidth(1, 25 * 256);
+
+            int rowIdx = 0;
+
+            // 行1: 企业账面余额
+            rowIdx = writeRow(sheet, rowIdx, "企业账面余额", getBigDecimal(data, "enterpriseBalance"), labelStyle, valueStyle);
+            // 行2: 加: 企业已收银行未收
+            rowIdx = writeRow(sheet, rowIdx, "加: 企业已收银行未收", getBigDecimal(data, "enterpriseReceipts"), labelStyle, valueStyle);
+            // 行3: 减: 企业已付银行未付
+            rowIdx = writeRow(sheet, rowIdx, "减: 企业已付银行未付", getBigDecimal(data, "enterprisePayments"), labelStyle, valueStyle);
+            // 行4: 调整后企业余额
+            rowIdx = writeRow(sheet, rowIdx, "调整后企业余额", getBigDecimal(data, "adjustedEnterpriseBalance"), labelStyle, valueStyle);
+            // 空行
+            rowIdx++;
+            // 行6: 银行对账单余额
+            rowIdx = writeRow(sheet, rowIdx, "银行对账单余额", getBigDecimal(data, "bankBalance"), labelStyle, valueStyle);
+            // 行7: 加: 银行已收企业未收
+            rowIdx = writeRow(sheet, rowIdx, "加: 银行已收企业未收", getBigDecimal(data, "bankReceipts"), labelStyle, valueStyle);
+            // 行8: 减: 银行已付企业未付
+            rowIdx = writeRow(sheet, rowIdx, "减: 银行已付企业未付", getBigDecimal(data, "bankPayments"), labelStyle, valueStyle);
+            // 行9: 调整后银行余额
+            writeRow(sheet, rowIdx, "调整后银行余额", getBigDecimal(data, "adjustedBankBalance"), labelStyle, valueStyle);
+
+            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            wb.write(baos);
+
+            String filename = "adjustment_" + LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMMdd")) + ".xlsx";
+            return ResponseEntity.ok()
+                    .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + filename + "\"")
+                    .contentType(MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+                    .body(new InputStreamResource(new java.io.ByteArrayInputStream(baos.toByteArray())));
+        }
+    }
+
+    private int writeRow(Sheet sheet, int rowIdx, String label, BigDecimal value, CellStyle labelStyle, CellStyle valueStyle) {
+        Row row = sheet.createRow(rowIdx);
+        Cell labelCell = row.createCell(0);
+        labelCell.setCellValue(label);
+        labelCell.setCellStyle(labelStyle);
+
+        Cell valueCell = row.createCell(1);
+        if (value != null) {
+            valueCell.setCellValue(value.doubleValue());
+        }
+        valueCell.setCellStyle(valueStyle);
+        return rowIdx + 1;
+    }
+
+    private BigDecimal getBigDecimal(Map<String, Object> map, String key) {
+        Object v = map.get(key);
+        if (v instanceof BigDecimal) return (BigDecimal) v;
+        if (v instanceof Number) return BigDecimal.valueOf(((Number) v).doubleValue());
+        return BigDecimal.ZERO;
     }
 
     @Operation(summary = "对账汇总 (含 PENDING_CONFIRM 统计)")
