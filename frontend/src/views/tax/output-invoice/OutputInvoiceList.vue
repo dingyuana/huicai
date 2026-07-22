@@ -284,10 +284,10 @@
     <el-dialog v-model="detailVisible" title="发票详情" width="640px">
       <template v-if="detail">
         <el-descriptions :column="2" border>
-          <el-descriptions-item label="发票号" span="2">{{ detail.invoiceNo }}</el-descriptions-item>
+          <el-descriptions-item label="发票号" :span="2">{{ detail.invoiceNo }}</el-descriptions-item>
           <el-descriptions-item label="开票日期">{{ detail.invoiceDate }}</el-descriptions-item>
           <el-descriptions-item label="期间">{{ detail.period }}</el-descriptions-item>
-          <el-descriptions-item label="客户名称" span="2">{{ detail.customerName }}</el-descriptions-item>
+          <el-descriptions-item label="客户名称" :span="2">{{ detail.customerName }}</el-descriptions-item>
           <el-descriptions-item label="金额(不含税)">{{ fmtAmount(detail.amount) }}</el-descriptions-item>
           <el-descriptions-item label="税额">{{ fmtAmount(detail.taxAmount) }}</el-descriptions-item>
           <el-descriptions-item label="价税合计">{{ fmtAmount(detail.totalAmount) }}</el-descriptions-item>
@@ -298,7 +298,7 @@
               {{ STATUS_MAP[detail.status] || detail.status }}
             </el-tag>
           </el-descriptions-item>
-          <el-descriptions-item label="业务流程" span="2">
+          <el-descriptions-item label="业务流程" :span="2">
             <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
               <!-- 销售发票 -->
               <el-tag type="primary" effect="dark" size="small">销售发票</el-tag>
@@ -341,7 +341,7 @@
               <span style="margin-left:8px">被红字发票冲销: <a href="#" @click.prevent="jumpToRedInvoice(detail)" style="color:#F56C6C">{{ detail.reversedByInvoiceNo }}</a></span>
             </el-descriptions-item>
           </template>
-          <el-descriptions-item label="备注" span="2">{{ detail.remark || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="备注" :span="2">{{ detail.remark || '-' }}</el-descriptions-item>
         </el-descriptions>
       </template>
       <template #footer>
@@ -373,13 +373,14 @@
 import { onMounted, reactive, ref } from 'vue'
 import { ElMessage, type FormInstance } from 'element-plus'
 import { UploadFilled, Document, Money, Minus, Warning, Refresh, Delete, ArrowRight } from '@element-plus/icons-vue'
+import type { OutputInvoice } from '@/api/modules/tax'
 import { pageOutputInvoice, createOutputInvoice, getOutputInvoice, deleteOutputInvoice,
   outputInvoiceSummary,
   submitForReview, confirmOutputInvoice, rejectOutputInvoice, revertOutputInvoice, voidOutputInvoice, markVouchered } from '@/api/modules/tax'
 import { previewSalesInvoices, confirmSalesInvoicesImport } from '@/api/modules/salesInvoice'
 
 const detailVisible = ref(false)
-const detail = ref<any>(null)
+const detail = ref<OutputInvoice | null>(null)
 const deleting = ref(false)
 
 // 分类标签
@@ -451,7 +452,7 @@ const doAction = async (row: any, action: string) => {
     if (action === 'submitReview') await submitForReview(id)
     else if (action === 'confirm') await confirmOutputInvoice(id)
     else if (action === 'revert') await revertOutputInvoice(id)
-    else if (action === 'markVouchered') await markVouchered(id, 0)
+    else if (action === 'markVouchered') await markVouchered(id)
     ElMessage.success(`${label}成功`)
     detailVisible.value = false
     fetchData(); fetchStats()
@@ -596,7 +597,7 @@ const onImportConfirm = async () => {
   try {
     const res = await confirmSalesInvoicesImport(importPreview.value.batchId)
     let msg = `导入 ${fmtNum(res.success)} 张发票`
-    if (res.duplicateSkipped) msg += `，${fmtNum(res.duplicateSkipped)} 张重复已跳过`
+    if ((res as any).duplicateSkipped) msg += `，${fmtNum((res as any).duplicateSkipped)} 张重复已跳过`
     ElMessage.success(msg)
     importVisible.value = false
     importPreview.value = null

@@ -43,6 +43,13 @@ export interface OutputInvoice {
   status?: string
   remark?: string
   aiRiskTag?: string
+  originalInvoiceNo?: string
+  originalInvoiceId?: number
+  reversedByInvoiceId?: number
+  reversedByInvoiceNo?: string
+  docNo?: string
+  receivableNo?: string
+  voucherNo?: string
 }
 
 export function pageTaxType(params: any): Promise<any> {

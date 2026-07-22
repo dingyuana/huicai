@@ -51,6 +51,32 @@
         ORDER BY v.period DESC, v.voucher_no DESC
     </select>
 
+    <select id="selectVoucherList" resultMap="VoucherDetailMap">
+        SELECT v.*
+        FROM t_voucher v
+        WHERE v.deleted = 0
+        <if test="period != null and period != ''">
+            AND v.period = #{period}
+        </if>
+        <if test="status != null and status != ''">
+            AND v.status = #{status}
+        </if>
+        <if test="voucherTypeId != null">
+            AND v.voucher_type_id = #{voucherTypeId}
+        </if>
+        <if test="keyword != null and keyword != ''">
+            AND (v.voucher_no LIKE CONCAT('%', #{keyword}, '%')
+            OR v.summary LIKE CONCAT('%', #{keyword}, '%'))
+        </if>
+        <if test="voucherNo != null and voucherNo != ''">
+            AND v.voucher_no = #{voucherNo}
+        </if>
+        <if test="sourceDocNo != null and sourceDocNo != ''">
+            AND v.source_doc_no LIKE CONCAT('%', #{sourceDocNo}, '%')
+        </if>
+        ORDER BY v.period DESC, v.voucher_no DESC
+    </select>
+
     <select id="selectVoucherDetail" resultMap="VoucherDetailMap">
         SELECT v.*
         FROM t_voucher v

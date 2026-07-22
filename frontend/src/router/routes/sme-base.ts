@@ -1,5 +1,10 @@
 import type { RouteRecordRaw } from 'vue-router'
 import AppLayout from '@/layouts/AppLayout.vue'
+import smeBusinessRoutes from './sme-business'
+import smeTaxRoutes from './sme-tax'
+import smeAssetRoutes from './sme-asset'
+import smeReportRoutes from './sme-report'
+import labRoutes from './lab'
 
 /**
  * SME 基础路由 — 所有 SME 用户通用的财务骨架
@@ -112,6 +117,21 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/finance/period-close/CarryOverGuide.vue'),
         meta: { title: '结转向导', permission: 'period:carryover:guide', keepAlive: true },
       },
+
+      // ─── 业务单据 ───
+      ...smeBusinessRoutes,
+
+      // ─── 税务发票 ───
+      ...smeTaxRoutes,
+
+      // ─── 资产管理 ───
+      ...smeAssetRoutes,
+
+      // ─── 财务报表 ───
+      ...smeReportRoutes,
+
+      // ─── 实验室路由（始终注册，通过路由守卫控制访问）───
+      ...labRoutes,
     ],
   },
 ]

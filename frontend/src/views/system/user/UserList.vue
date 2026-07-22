@@ -38,17 +38,17 @@
         <el-table-column prop="createdAt" label="创建时间" width="170" />
         <el-table-column label="操作" width="220" fixed="right">
           <template #default="{ row }">
-            <el-button text size="small" @click="openEdit(row)">编辑</el-button>
-            <el-button text size="small" @click="handleResetPwd(row)">重置密码</el-button>
+            <el-button text size="small" @click="openEdit(row as UserVO)">编辑</el-button>
+            <el-button text size="small" @click="handleResetPwd(row as UserVO)">重置密码</el-button>
             <el-button
-              :type="row.status === 'active' ? 'warning' : 'success'"
+              :type="(row as UserVO).status === 'active' ? 'warning' : 'success'"
               text
               size="small"
-              @click="handleToggleStatus(row)"
+              @click="handleToggleStatus(row as UserVO)"
             >
-              {{ row.status === 'active' ? '禁用' : '启用' }}
+              {{ (row as UserVO).status === 'active' ? '禁用' : '启用' }}
             </el-button>
-            <el-popconfirm title="确认删除此用户？" @confirm="handleDelete(row)">
+            <el-popconfirm title="确认删除此用户？" @confirm="handleDelete(row as UserVO)">
               <template #reference>
                 <el-button text type="danger" size="small">删除</el-button>
               </template>

@@ -22,8 +22,8 @@
         <el-table-column prop="remark" label="备注" min-width="160" show-overflow-tooltip />
         <el-table-column label="操作" width="180" fixed="right">
           <template #default="{ row }">
-            <el-button text size="small" @click="openEdit(row)">编辑</el-button>
-            <el-popconfirm title="确认删除？" @confirm="handleDelete(row)">
+            <el-button text size="small" @click="openEdit(row as VoucherTypeVO)">编辑</el-button>
+            <el-popconfirm title="确认删除？" @confirm="handleDelete(row as VoucherTypeVO)">
               <template #reference>
                 <el-button text type="danger" size="small">删除</el-button>
               </template>

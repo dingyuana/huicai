@@ -10,28 +10,16 @@ import agencyRoutes from './routes/agency'
 import { useAuthStore } from '@/stores/auth.store'
 import { useLabStore } from '@/stores/lab.store'
 
-// 组装 SME 完整路由
-function buildSmeRoutes(): RouteRecordRaw[] {
-  const labStore = useLabStore()
-
-  const routes: RouteRecordRaw[] = [
-    ...smeBaseRoutes,
-    ...smeBusinessRoutes,
-    ...smeTaxRoutes,
-    ...smeAssetRoutes,
-    ...smeReportRoutes,
-  ]
-
-  // 实验室路由：仅在 Feature Flag 开启时注册
-  if (labStore.enabled) {
-    routes.push(...labRoutes)
-  }
-
-  return routes
-}
+// 基础 SME 路由（不含实验室路由）
+const baseSmeRoutes: RouteRecordRaw[] = [
+  ...smeBusinessRoutes,
+  ...smeTaxRoutes,
+  ...smeAssetRoutes,
+  ...smeReportRoutes,
+]
 
 export const routes: RouteRecordRaw[] = [
-  ...buildSmeRoutes(),
+  ...smeBaseRoutes, // 包含 /login、/403、404 和 / 路由（带 children）
   ...agencyRoutes, // Agency 分支：当前为空，Phase 2 实现
 ]
 
@@ -60,6 +48,15 @@ router.beforeEach(async (to, _from, next) => {
   // 已登录访问登录页 -> 首页
   if (to.path === '/login') {
     return next({ path: '/dashboard' })
+  }
+
+  // 页面刷新后重新获取用户信息（token存在但userInfo为空）
+  if (authStore.token && !authStore.userInfo) {
+    try {
+      await authStore.fetchUserInfo()
+    } catch {
+      return next({ path: '/login' })
+    }
   }
 
   // 权限校验
