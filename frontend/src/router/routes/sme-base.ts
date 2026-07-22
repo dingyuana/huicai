@@ -47,7 +47,7 @@ const routes: RouteRecordRaw[] = [
         path: 'basis/account-and-summary',
         name: 'AccountAndSummaryView',
         component: () => import('@/views/basis/AccountAndSummaryView.vue'),
-        meta: { title: '会计科目/常用摘要', permission: 'subjects:manage', keepAlive: true },
+        meta: { title: '科目摘要', permission: 'subjects:manage', keepAlive: true },
       },
       {
         path: 'basis/period',

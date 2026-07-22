@@ -24,7 +24,7 @@
           <el-icon><Notebook /></el-icon>
           <span>基础数据</span>
         </template>
-        <el-menu-item index="/basis/account-and-summary">会计科目/常用摘要</el-menu-item>
+        <el-menu-item index="/basis/account-and-summary">科目摘要</el-menu-item>
         <el-menu-item index="/basis/period">会计期间</el-menu-item>
         <el-menu-item index="/basis/party">客商档案</el-menu-item>
         <el-menu-item index="/system/classification-rule">分类规则</el-menu-item>
