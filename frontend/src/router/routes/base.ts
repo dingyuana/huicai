@@ -101,8 +101,8 @@ const routes: RouteRecordRaw[] = [
       },
       {
         path: 'basis/config',
-        name: 'SysConfigList',
-        component: () => import('@/views/system/config/SysConfigList.vue'),
+        name: 'SysConfigView',
+        component: () => import('@/views/system/config/SysConfigView.vue'),
         meta: { title: '系统参数', permission: 'sys:config:list', keepAlive: true },
       },
 
