@@ -34,6 +34,11 @@ public class UserEntity {
     private LocalDateTime updatedAt;
     private Integer deleted;
 
+    // S-26: 多租户字段
+    private String userType;
+    private Long agencyId;
+    private Long enterpriseId;
+
     @TableField(exist = false)
     private List<Long> roleIds;
 

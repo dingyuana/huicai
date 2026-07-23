@@ -135,7 +135,7 @@ class AuthControllerTest {
 
         when(userRoleMapper.getRoleIdsByUserId(eq(1L))).thenReturn(List.of(1L, 2L));
         when(menuService.getUserButtonPermissions(eq(1L))).thenReturn(List.of("system:user:list", "system:role:list"));
-        when(jwtProvider.generateAccessToken(anyString(), anyLong(), anyList())).thenReturn("mock-access-token");
+        when(jwtProvider.generateAccessToken(anyString(), anyLong(), anyList(), any(), any(), any())).thenReturn("mock-access-token");
         when(jwtProvider.generateRefreshToken(anyString())).thenReturn("mock-refresh-token");
 
         AuthController.LoginRequest request = new AuthController.LoginRequest();
@@ -156,7 +156,7 @@ class AuthControllerTest {
 
         verify(authenticationManager).authenticate(any());
         verify(userMapper).selectByUsername(eq("admin"));
-        verify(jwtProvider).generateAccessToken(eq("admin"), eq(1L), argThat(roles -> roles.contains("1") && roles.contains("2")));
+        verify(jwtProvider).generateAccessToken(eq("admin"), eq(1L), argThat(roles -> roles.contains("1") && roles.contains("2")), any(), any(), any());
     }
 
     @Test
@@ -213,7 +213,7 @@ class AuthControllerTest {
         when(userMapper.selectByUsername(eq("admin"))).thenReturn(user);
         when(userRoleMapper.getRoleIdsByUserId(eq(1L))).thenReturn(java.util.Collections.emptyList());
         when(menuService.getUserButtonPermissions(eq(1L))).thenReturn(java.util.Collections.emptyList());
-        when(jwtProvider.generateAccessToken(anyString(), anyLong(), anyList())).thenReturn("token");
+        when(jwtProvider.generateAccessToken(anyString(), anyLong(), anyList(), any(), any(), any())).thenReturn("token");
         when(jwtProvider.generateRefreshToken(anyString())).thenReturn("refresh");
 
         AuthController.LoginRequest request = new AuthController.LoginRequest();

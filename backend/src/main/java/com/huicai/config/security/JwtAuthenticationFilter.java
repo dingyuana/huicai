@@ -1,5 +1,6 @@
 package com.huicai.config.security;
 
+import com.huicai.common.context.EnterpriseContextHolder;
 import com.huicai.common.response.R;
 import com.huicai.base.system.service.impl.UserDetailsServiceImpl;
 import jakarta.servlet.FilterChain;
@@ -41,6 +42,10 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
             if (jwtProvider.validateToken(token)) {
                 String username = jwtProvider.getUsernameFromToken(token);
+                Long enterpriseId = jwtProvider.getEnterpriseIdFromToken(token);
+                Long agencyId = jwtProvider.getAgencyIdFromToken(token);
+                String userType = jwtProvider.getUserTypeFromToken(token);
+
                 UserDetails userDetails = userDetailsService.loadUserByUsername(username);
 
                 UsernamePasswordAuthenticationToken authentication =
@@ -48,10 +53,19 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
 
                 SecurityContextHolder.getContext().setAuthentication(authentication);
+
+                // S-26: 设置企业上下文
+                if (enterpriseId != null) {
+                    EnterpriseContextHolder.set(enterpriseId);
+                }
             }
         }
 
-        filterChain.doFilter(request, response);
+        try {
+            filterChain.doFilter(request, response);
+        } finally {
+            EnterpriseContextHolder.clear();
+        }
     }
 
     private String extractToken(HttpServletRequest request) {

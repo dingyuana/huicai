@@ -3,6 +3,7 @@ package com.huicai.sme.arap.service.impl;
 import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.huicai.common.exception.BusinessException;
+import com.huicai.base.system.util.SecurityUtils;
 import com.huicai.sme.arap.dto.ExpenseReimbursementVO;
 import com.huicai.sme.arap.constant.ArapStatus;
 import com.huicai.base.business.entity.BusinessDocEntity;
@@ -706,7 +707,7 @@ public class AutoGenerationService {
                 // P12-3: 无未结清应收，走预收款路径
                 log.info("P12-3 客户 '{}' 无未结清应收，走预收款路径", counterName);
                 PrepaymentEntity prepay = new PrepaymentEntity();
-                prepay.setTenantId(1L);
+                prepay.setEnterpriseId(SecurityUtils.getCurrentEnterpriseId());
                 prepay.setCustomerId(customerId);
                 prepay.setDocId(doc.getId());
                 prepay.setVoucherId(doc.getVoucherId());
@@ -746,7 +747,7 @@ public class AutoGenerationService {
                 // P12-3: 无未结清应付，走预付款路径
                 log.info("P12-3 供应商 '{}' 无未结清应付，走预付款路径", counterName);
                 PrepaymentEntity prepay = new PrepaymentEntity();
-                prepay.setTenantId(1L);
+                prepay.setEnterpriseId(SecurityUtils.getCurrentEnterpriseId());
                 prepay.setVendorId(vendorId);
                 prepay.setDocId(doc.getId());
                 prepay.setVoucherId(doc.getVoucherId());

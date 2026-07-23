@@ -32,4 +32,8 @@ public class BusinessException extends RuntimeException {
     public static BusinessException unauthorized(String msg) {
         return new BusinessException(401, msg);
     }
+
+    public static BusinessException forbidden(String msg) {
+        return new BusinessException(403, msg);
+    }
 }

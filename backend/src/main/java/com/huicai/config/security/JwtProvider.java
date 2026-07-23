@@ -40,12 +40,16 @@ public class JwtProvider {
         log.info("JWT 配置校验通过，secret 长度 {} 字节", key.getEncoded().length);
     }
 
-    public String generateAccessToken(String username, Long userId, List<String> roles) {
+    public String generateAccessToken(String username, Long userId, List<String> roles,
+                                       Long enterpriseId, Long agencyId, String userType) {
         Date now = new Date();
         return Jwts.builder()
                 .subject(username)
                 .claim("userId", userId)
                 .claim("roles", roles)
+                .claim("enterpriseId", enterpriseId)
+                .claim("agencyId", agencyId)
+                .claim("userType", userType)
                 .issuedAt(now)
                 .expiration(new Date(now.getTime() + accessTokenExpiration))
                 .signWith(key)
@@ -83,6 +87,23 @@ public class JwtProvider {
     @SuppressWarnings("unchecked")
     public List<String> getRolesFromToken(String token) {
         return getClaims(token).get("roles", List.class);
+    }
+
+    public Long getEnterpriseIdFromToken(String token) {
+        Object val = getClaims(token).get("enterpriseId");
+        if (val instanceof Integer) return ((Integer) val).longValue();
+        return (Long) val;
+    }
+
+    public Long getAgencyIdFromToken(String token) {
+        Object val = getClaims(token).get("agencyId");
+        if (val == null) return null;
+        if (val instanceof Integer) return ((Integer) val).longValue();
+        return (Long) val;
+    }
+
+    public String getUserTypeFromToken(String token) {
+        return getClaims(token).get("userType", String.class);
     }
 
     private Claims getClaims(String token) {

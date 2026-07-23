@@ -1,5 +1,10 @@
 package com.huicai.base.system.controller;
 
+import com.huicai.agency.tenant.entity.EnterpriseEntity;
+import com.huicai.agency.tenant.mapper.AgencyEnterpriseMapper;
+import com.huicai.agency.tenant.mapper.EnterpriseMapper;
+import com.huicai.agency.tenant.vo.EnterpriseSimpleVO;
+import com.huicai.common.context.EnterpriseContextHolder;
 import com.huicai.common.response.R;
 import com.huicai.config.security.JwtProvider;
 import com.huicai.base.system.entity.MenuEntity;
@@ -22,6 +27,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -38,6 +44,8 @@ public class AuthController {
     private final MenuMapper menuMapper;
     private final MenuService menuService;
     private final PasswordEncoder passwordEncoder;
+    private final AgencyEnterpriseMapper agencyEnterpriseMapper;
+    private final EnterpriseMapper enterpriseMapper;
 
     @PostMapping("/login")
     public R<LoginResponse> login(@RequestBody LoginRequest request) {
@@ -55,14 +63,43 @@ public class AuthController {
         // Get permissions
         List<String> permissions = menuService.getUserButtonPermissions(user.getId());
 
+        // S-26: 多租户字段
+        String userType = user.getUserType() != null ? user.getUserType() : "ENTERPRISE";
+        Long enterpriseId = user.getEnterpriseId();
+        Long agencyId = user.getAgencyId();
+
+        // AGENCY 用户登录时获取绑定的企业列表
+        List<EnterpriseSimpleVO> enterpriseList = new ArrayList<>();
+        if ("AGENCY".equals(userType) && agencyId != null) {
+            List<Long> enterpriseIds = agencyEnterpriseMapper.getEnterpriseIdsByAgencyId(agencyId);
+            for (Long eid : enterpriseIds) {
+                EnterpriseEntity ent = enterpriseMapper.selectById(eid);
+                if (ent != null) {
+                    enterpriseList.add(new EnterpriseSimpleVO(
+                            ent.getId(), ent.getEnterpriseName(),
+                            ent.getTaxId(), ent.getStatus(), ent.getSeedDataDone()));
+                }
+            }
+        }
+
+        // 设置企业上下文
+        if (enterpriseId != null) {
+            EnterpriseContextHolder.set(enterpriseId);
+        }
+
         String accessToken = jwtProvider.generateAccessToken(username, user.getId(),
-                roleIds.stream().map(String::valueOf).collect(Collectors.toList()));
+                roleIds.stream().map(String::valueOf).collect(Collectors.toList()),
+                enterpriseId, agencyId, userType);
         String refreshToken = jwtProvider.generateRefreshToken(username);
 
         LoginResponse response = new LoginResponse();
         response.setToken(accessToken);
         response.setRefreshToken(refreshToken);
         response.setTokenType("Bearer");
+        response.setUserType(userType);
+        response.setEnterpriseId(enterpriseId);
+        response.setAgencyId(agencyId);
+        response.setEnterpriseList(enterpriseList);
         response.setUserInfo(new UserInfoResponse(user.getId(), user.getUsername(),
                 user.getRealName(), user.getNickname(), user.getEmail(), user.getPhone(),
                 user.getAvatar(), user.getDeptId(), roleIds, permissions));
@@ -108,6 +145,10 @@ public class AuthController {
         private String token;
         private String refreshToken;
         private String tokenType;
+        private String userType;
+        private Long enterpriseId;
+        private Long agencyId;
+        private List<EnterpriseSimpleVO> enterpriseList;
         private UserInfoResponse userInfo;
     }
 

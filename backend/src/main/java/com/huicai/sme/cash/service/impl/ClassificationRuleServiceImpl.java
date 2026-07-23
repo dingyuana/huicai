@@ -7,6 +7,7 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.huicai.base.business.constant.BankClassification;
 import com.huicai.base.business.entity.ClassificationRuleEntity;
 import com.huicai.base.business.mapper.ClassificationRuleMapper;
+import com.huicai.base.system.util.SecurityUtils;
 import com.huicai.sme.cash.service.ClassificationRuleService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -125,8 +126,7 @@ public class ClassificationRuleServiceImpl implements ClassificationRuleService 
     public ClassificationRuleEntity match(String description, String direction, String counterparty) {
         if (StrUtil.isBlank(description) && StrUtil.isBlank(counterparty)) return null;
 
-        // @TODO P1 阶段硬编码 tenantId=1L, 后续从 SecurityContext 或 statement 反查
-        Long tenantId = 1L;
+        Long tenantId = SecurityUtils.getCurrentEnterpriseId();
 
         List<ClassificationRuleEntity> rules = mapper.selectList(
                 new LambdaQueryWrapper<ClassificationRuleEntity>()
