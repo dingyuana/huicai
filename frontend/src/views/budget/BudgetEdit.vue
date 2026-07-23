@@ -18,7 +18,7 @@
         <el-table :data="form.entries" border stripe style="width:100%">
           <el-table-column label="科目" width="200">
             <template #default="{ row, $index }">
-              <el-tree-select v-model="row.subjectId" :data="subjectTree" :props="{label:'name',value:'id'}"
+              <el-tree-select v-model="row.subjectId" :data="subjectTree" :props="({label:'name',value:'id'} as any)"
                 check-strictly style="width:100%" placeholder="选择科目" @change="calcTotal" />
             </template>
           </el-table-column>

@@ -94,6 +94,7 @@
     <update id="batchUpdateStatus">
         UPDATE t_voucher
         SET status = #{status},
+            version = version + 1,
             <choose>
                 <when test="status == 'SUBMITTED'">
                     submitted_by = #{userId}, submitted_at = CURRENT_TIMESTAMP
@@ -113,6 +114,9 @@
             #{id}
         </foreach>
         AND deleted = 0
+        <if test="version != null">
+            AND version = #{version}
+        </if>
     </update>
 
 </mapper>

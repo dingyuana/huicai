@@ -278,8 +278,8 @@ const reverseForm = reactive({
 })
 
 // status helpers
-function statusType(s: string): string {
-  const map: Record<string, string> = { DRAFT: 'info', CONFIRMED: 'primary', APPLIED: 'success', REVERSED: 'danger' }
+function statusType(s: string): 'success' | 'warning' | 'info' | 'primary' | 'danger' {
+  const map: Record<string, 'success' | 'warning' | 'info' | 'primary' | 'danger'> = { DRAFT: 'info', CONFIRMED: 'primary', APPLIED: 'success', REVERSED: 'danger' }
   return map[s] || 'info'
 }
 
@@ -399,7 +399,7 @@ async function openOffset(row: any) {
     const partyId = activeTab.value === 'vendor' ? row.vendorId : row.customerId
     if (!partyId) { ElMessage.warning('缺少客户/供应商信息'); return }
 
-    const pageParams = { current: 1, size: 200, status: 'CONFIRMED' }
+    const pageParams: Record<string, any> = { current: 1, size: 200, status: 'CONFIRMED' }
     if (activeTab.value === 'vendor') {
       pageParams['vendorId'] = partyId
       const res = await pagePayable(pageParams)

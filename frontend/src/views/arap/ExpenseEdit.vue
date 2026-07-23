@@ -47,7 +47,7 @@ const router = useRouter()
 const isEdit = ref(false)
 const saving = ref(false)
 const formRef = ref<FormInstance>()
-const form = ref({ employeeId: null, expenseType: 'OTHER', amount: 0, summary: '', remark: '' })
+const form = ref({ employeeId: undefined as unknown as number, expenseType: 'OTHER', amount: 0, summary: '', remark: '' })
 const rules = {
   employeeId: [{ required: true, message: '请输入员工ID', trigger: 'blur' }],
   expenseType: [{ required: true, message: '请选择费用类型', trigger: 'change' }],

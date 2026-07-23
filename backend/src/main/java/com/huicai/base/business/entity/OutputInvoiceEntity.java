@@ -130,9 +130,9 @@ public class OutputInvoiceEntity {
     @TableField(exist = false)
     private String voucherStatus = "";
 
-    /** 乐观锁版本号 — DB 无此列 */
-    @TableField(exist = false)
+    /** 乐观锁版本号 */
     @Version
+    @TableField("version")
     private Integer version;
 
     @TableLogic

@@ -13,9 +13,9 @@
         <el-table-column label="优先级" width="80" align="center">
           <template #default="{ row }">
             <el-space>
-              <el-button text size="small" :disabled="row.priority <= 1" @click="moveUp(row)">▲</el-button>
+              <el-button text size="small" :disabled="row.priority <= 1" @click="moveUp(row as ClassificationRule)">▲</el-button>
               <span>{{ row.priority }}</span>
-              <el-button text size="small" :disabled="row.priority >= list.length" @click="moveDown(row)">▼</el-button>
+              <el-button text size="small" :disabled="row.priority >= list.length" @click="moveDown(row as ClassificationRule)">▼</el-button>
             </el-space>
           </template>
         </el-table-column>
@@ -73,9 +73,9 @@
         </el-table-column>
         <el-table-column label="操作" width="140" fixed="right">
           <template #default="{ row }">
-            <el-button v-if="!row.isSystem" text size="small" type="primary" @click="openEdit(row)">编辑</el-button>
+            <el-button v-if="!row.isSystem" text size="small" type="primary" @click="openEdit(row as ClassificationRule)">编辑</el-button>
             <span v-else class="text-muted" style="font-size:12px">内置规则</span>
-            <el-popconfirm v-if="!row.isSystem" title="确认删除?" @confirm="onDelete(row)">
+            <el-popconfirm v-if="!row.isSystem" title="确认删除?" @confirm="onDelete(row as ClassificationRule)">
               <template #reference><el-button text size="small" type="danger">删除</el-button></template>
             </el-popconfirm>
           </template>

@@ -161,8 +161,8 @@ async function onPreview() {
   }
   previewing.value = true
   try {
-    previewData.value = await previewSalesInvoices(selectedFile.value)
-    if (previewData.value.total === 0) {
+    previewData.value = await previewSalesInvoices(selectedFile.value) as any
+    if (!previewData.value || previewData.value.total === 0) {
       ElMessage.warning('未解析到有效发票行')
     } else {
       ElMessage.success(`解析完成: ${previewData.value.total} 行, 有效 ${previewData.value.valid} 行`)

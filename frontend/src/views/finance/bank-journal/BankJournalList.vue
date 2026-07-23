@@ -61,9 +61,9 @@
         </el-table-column>
         <el-table-column label="操作" width="220" fixed="right">
           <template #default="{ row }">
-            <el-button text size="small" v-if="!row.voucherId" type="warning" @click="onGenerateVoucher(row)">生成凭证</el-button>
-            <el-button text size="small" v-if="!row.isReconciled && !row.voucherId" @click="openEdit(row)">编辑</el-button>
-            <el-popconfirm v-if="!row.isReconciled && !row.voucherId" title="确认删除?" @confirm="onDelete(row)">
+            <el-button text size="small" v-if="!row.voucherId" type="warning" @click="onGenerateVoucher(row as BankJournalVO)">生成凭证</el-button>
+            <el-button text size="small" v-if="!row.isReconciled && !row.voucherId" @click="openEdit(row as BankJournalVO)">编辑</el-button>
+            <el-popconfirm v-if="!row.isReconciled && !row.voucherId" title="确认删除?" @confirm="onDelete(row as BankJournalVO)">
               <template #reference>
                 <el-button text type="danger" size="small">删除</el-button>
               </template>
@@ -163,11 +163,11 @@ const formRules = {
 }
 
 function accountName(id?: number) {
-  const a = accounts.value.find((x) => x.id === id)
+  const a = accounts.value.find((x) => x.id === String(id))
   return a ? `${a.accountName} (${a.accountNo})` : `#${id}`
 }
 
-function txTypeTag(t: string) {
+function txTypeTag(t: string): 'success' | 'warning' | 'info' | 'primary' {
   switch (t) {
     case 'INCOME': return 'success'
     case 'EXPENSE': return 'warning'

@@ -99,7 +99,7 @@
           </el-table-column>
           <el-table-column label="操作" width="120" align="center" fixed="right">
             <template #default="{ row }">
-              <el-button text size="small" type="primary" :loading="row._executing" @click="onExecuteRecon(row)">执行核销</el-button>
+              <el-button text size="small" type="primary" :loading="row._executing" @click="onExecuteRecon(row as any)">执行核销</el-button>
             </template>
           </el-table-column>
         </el-table>

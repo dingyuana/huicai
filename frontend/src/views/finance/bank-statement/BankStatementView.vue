@@ -85,16 +85,16 @@
         <el-table-column label="操作" width="260" fixed="right">
           <template #default="{ row }">
             <el-button v-if="!row.classification || row.classification === 'other_unknown'"
-              text size="small" type="primary" @click="onClassify(row)">分类</el-button>
-            <el-button v-if="canReview(row)"
-              text size="small" type="success" @click.stop="onReview(row)">确认</el-button>
-            <el-button v-if="canAudit(row)"
-              text size="small" type="warning" @click.stop="onAudit(row)">审核</el-button>
+              text size="small" type="primary" @click="onClassify(row as BankStatementVO)">分类</el-button>
+            <el-button v-if="canReview(row as BankStatementVO)"
+              text size="small" type="success" @click.stop="onReview(row as BankStatementVO)">确认</el-button>
+            <el-button v-if="canAudit(row as BankStatementVO)"
+              text size="small" type="warning" @click.stop="onAudit(row as BankStatementVO)">审核</el-button>
             <el-button v-if="row.generatedVoucherId" text size="small" type="primary"
               @click="openVoucher(row.generatedVoucherId!)">查看凭证</el-button>
-            <el-button v-if="canApprove(row)"
-              text size="small" type="primary" @click="onApprove(row)">核准</el-button>
-            <el-popconfirm title="确定删除该条流水?" @confirm="onDelete(row)">
+            <el-button v-if="canApprove(row as BankStatementVO)"
+              text size="small" type="primary" @click="onApprove(row as BankStatementVO)">核准</el-button>
+            <el-popconfirm title="确定删除该条流水?" @confirm="onDelete(row as any)">
               <template #reference>
                 <el-button text size="small" type="danger">删除</el-button>
               </template>
@@ -384,7 +384,7 @@ const detailVisible = ref(false)
 const detailData = ref<any>(null)
 const detailEditable = ref(false)
 const editClassification = ref('')
-const bankNameMap = ref<Record<number, string>>({})
+const bankNameMap = ref<Record<string, string>>({})
 const batchConfirmed = ref(0)
 const csvContent = ref('')
 

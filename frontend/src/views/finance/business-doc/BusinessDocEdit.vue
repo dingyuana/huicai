@@ -53,7 +53,7 @@
             <el-tree-select
               v-model="row.subjectId"
               :data="leafSubjectOptions"
-              :props="{ value: 'id', label: 'name' }"
+              :props="({ value: 'id', label: 'name' } as any)"
               check-strictly
               :render-after-expand="false"
               placeholder="选择末级科目"

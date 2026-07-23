@@ -78,7 +78,7 @@ const STATUS_OPTIONS = [
   { value: 'VOUCHERED', label: '已制证' },
 ]
 const STATUS_MAP: Record<string, string> = Object.fromEntries(STATUS_OPTIONS.map((o) => [o.value, o.label]))
-const STATUS_TAG_MAP: Record<string, string> = { DRAFT: 'info', SUBMITTED: 'warning', APPROVED: 'success', REJECTED: 'danger', VOUCHERED: 'primary' }
+const STATUS_TAG_MAP: Record<string, 'success' | 'warning' | 'info' | 'primary' | 'danger'> = { DRAFT: 'info', SUBMITTED: 'warning', APPROVED: 'success', REJECTED: 'danger', VOUCHERED: 'primary' }
 
 const EXPENSE_TYPE_MAP: Record<string, string> = {
   TRAVEL: '差旅费', OFFICE: '办公费', ENTERTAINMENT: '招待费',

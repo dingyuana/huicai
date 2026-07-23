@@ -39,9 +39,9 @@
         </el-table-column>
         <el-table-column label="操作" width="200" fixed="right">
           <template #default="{ row }">
-            <el-button text size="small" type="primary" @click.stop="openProcess(row)">处理</el-button>
-            <el-button text size="small" type="primary" @click.stop="preview(row)">预览</el-button>
-            <el-popconfirm title="确定删除?" @confirm="onDelete(row)">
+            <el-button text size="small" type="primary" @click.stop="openProcess(row as BankStatementVO)">处理</el-button>
+            <el-button text size="small" type="primary" @click.stop="preview(row as BankStatementVO)">预览</el-button>
+            <el-popconfirm title="确定删除?" @confirm="onDelete(row as any)">
               <template #reference><el-button text size="small" type="danger" @click.stop>删除</el-button></template>
             </el-popconfirm>
           </template>

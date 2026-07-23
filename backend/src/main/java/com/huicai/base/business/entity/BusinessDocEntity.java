@@ -76,6 +76,7 @@ public class BusinessDocEntity {
     private String voucherNo;
 
     /** 被红冲单据ID */
+    @TableField("reversed_from")
     private Long reversedFrom;
 
     private Long createdBy;

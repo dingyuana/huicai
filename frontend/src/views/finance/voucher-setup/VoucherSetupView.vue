@@ -24,7 +24,7 @@ const activeTab = ref('type')
 const typeRef = ref()
 const templateRef = ref()
 
-function handleTabChange(tab: string) {
+function handleTabChange(tab: any) {
   // Update URL query param without pushing a full navigation
   router.replace({ query: { tab } })
 }

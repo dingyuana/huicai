@@ -141,15 +141,15 @@
         <el-table-column prop="createdAt" label="制单时间" width="160" />
         <el-table-column label="操作" width="380" fixed="right">
           <template #default="{ row }">
-            <el-button text size="small" @click="goDetail(row)">查看</el-button>
-            <el-button text size="small" v-if="row.status === 'DRAFT'" @click="goEdit(row)">编辑</el-button>
-            <el-button text size="small" v-if="row.status === 'DRAFT'" type="success" @click="onSubmit(row)">提交</el-button>
-            <el-button text size="small" v-if="row.status === 'SUBMITTED'" type="primary" @click="onAudit(row)">审核</el-button>
-            <el-button text size="small" v-if="row.status === 'SUBMITTED'" type="warning" @click="onReject(row)">驳回</el-button>
-            <el-button text size="small" v-if="row.status === 'AUDITED'" type="warning" @click="onPost(row)">记账</el-button>
-            <el-button text size="small" v-if="row.status === 'POSTED'" type="warning" @click="onUnpost(row)">反过账</el-button>
-            <el-button text size="small" v-if="row.status === 'POSTED' || row.status === 'AUDITED'" type="danger" @click="onReverse(row)">红冲</el-button>
-            <el-popconfirm v-if="row.status === 'DRAFT'" title="确认删除此凭证？" @confirm="onDelete(row)">
+            <el-button text size="small" @click="goDetail(row as VoucherVO)">查看</el-button>
+            <el-button text size="small" v-if="row.status === 'DRAFT'" @click="goEdit(row as VoucherVO)">编辑</el-button>
+            <el-button text size="small" v-if="row.status === 'DRAFT'" type="success" @click="onSubmit(row as VoucherVO)">提交</el-button>
+            <el-button text size="small" v-if="row.status === 'SUBMITTED'" type="primary" @click="onAudit(row as VoucherVO)">审核</el-button>
+            <el-button text size="small" v-if="row.status === 'SUBMITTED'" type="warning" @click="onReject(row as VoucherVO)">驳回</el-button>
+            <el-button text size="small" v-if="row.status === 'AUDITED'" type="warning" @click="onPost(row as VoucherVO)">记账</el-button>
+            <el-button text size="small" v-if="row.status === 'POSTED'" type="warning" @click="onUnpost(row as VoucherVO)">反过账</el-button>
+            <el-button text size="small" v-if="row.status === 'POSTED' || row.status === 'AUDITED'" type="danger" @click="onReverse(row as VoucherVO)">红冲</el-button>
+            <el-popconfirm v-if="row.status === 'DRAFT'" title="确认删除此凭证？" @confirm="onDelete(row as VoucherVO)">
               <template #reference>
                 <el-button text type="danger" size="small">删除</el-button>
               </template>
@@ -404,7 +404,7 @@ async function handleExport() {
     URL.revokeObjectURL(url)
     ElMessage.success('导出成功')
   } catch (e) {
-    ElMessage.error('导出失败: ' + (e.message || '未知错误'))
+    ElMessage.error('导出失败: ' + ((e as any)?.message || '未知错误'))
   }
 }
 </script>

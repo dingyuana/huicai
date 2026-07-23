@@ -101,6 +101,7 @@ public class VoucherEntity {
     private Long templateId;
 
     /** 被红冲凭证ID */
+    @TableField("reversed_from")
     private Long reversedFrom;
 
     /** 关联业务单据ID（P1 新增） */
@@ -119,8 +120,8 @@ public class VoucherEntity {
     @TableLogic
     private Integer deleted;
 
-    /** 乐观锁版本号 — DB 无此列 */
-    @TableField(exist = false)
+    /** 乐观锁版本号 */
     @Version
+    @TableField("version")
     private Integer version;
 }

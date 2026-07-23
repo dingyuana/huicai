@@ -151,8 +151,8 @@ const STATUS_MAP: Record<string, string> = {
   DISPUTED: '争议中',
 }
 
-const statusTagType = (status: string) => {
-  const map: Record<string, string> = {
+const statusTagType = (status: string): 'success' | 'warning' | 'info' | 'danger' | 'primary' => {
+  const map: Record<string, 'success' | 'warning' | 'info' | 'danger' | 'primary'> = {
     DRAFT: 'info',
     SENT: 'warning',
     CONFIRMED: 'success',
@@ -167,8 +167,8 @@ const total = ref(0)
 const loading = ref(false)
 const expandedRow = ref<number | null>(null)
 
-const onExpandChange = (row: any, expandedRows: any[]) => {
-  expandedRow.value = expandedRows.length > 0 ? row.id : null
+const onExpandChange = (row: any, expandedRows: any[] | boolean) => {
+  expandedRow.value = Array.isArray(expandedRows) && expandedRows.length > 0 ? row.id : null
 }
 
 const fmtAmount = (v: any) => Number(v || 0).toFixed(2)

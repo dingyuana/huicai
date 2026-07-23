@@ -40,7 +40,7 @@ describe('BusinessDocDetail — 业务单据详情', () => {
   it('加载时应调用 getBusinessDoc API', async () => {
     const { getBusinessDoc } = await import('@/api/modules/businessDoc')
     
-    const data = await getBusinessDoc('1')
+    const data = await getBusinessDoc(1)
     
     expect(getBusinessDoc).toHaveBeenCalledWith('1')
     expect(data.docNo).toBe('YS-001')
@@ -50,9 +50,9 @@ describe('BusinessDocDetail — 业务单据详情', () => {
   // === 维度 3：canReconcile 计算逻辑 ===
   it('有未结清金额且状态允许时应可核销', async () => {
     const { getBusinessDoc } = await import('@/api/modules/businessDoc')
-    const data = await getBusinessDoc('1')
+    const data = await getBusinessDoc(1)
     
-    const canReconcile = data.unsettledAmount > 0 && 
+    const canReconcile = (data.unsettledAmount ?? 0) > 0 && 
                          !['SETTLED', 'REVERSED', 'CANCELLED'].includes(data.status)
     
     expect(canReconcile).toBe(true)
@@ -63,10 +63,10 @@ describe('BusinessDocDetail — 业务单据详情', () => {
     vi.mocked(getBusinessDoc).mockResolvedValueOnce({
       id: 1, docNo: 'YS-001', docType: 'INVOICE_OUT', status: 'SETTLED',
       customerName: '客户A', amount: 10000, unsettledAmount: 0, dueDate: '2026-07-30',
-    })
+    } as any)
     
-    const data = await getBusinessDoc('1')
-    const canReconcile = data.unsettledAmount > 0 && 
+    const data = await getBusinessDoc(1)
+    const canReconcile = (data.unsettledAmount ?? 0) > 0 && 
                          !['SETTLED', 'REVERSED', 'CANCELLED'].includes(data.status)
     
     expect(canReconcile).toBe(false)
@@ -77,10 +77,10 @@ describe('BusinessDocDetail — 业务单据详情', () => {
     vi.mocked(getBusinessDoc).mockResolvedValueOnce({
       id: 1, docNo: 'YS-001', docType: 'INVOICE_OUT', status: 'REVERSED',
       customerName: '客户A', amount: 10000, unsettledAmount: 5000, dueDate: '2026-07-30',
-    })
+    } as any)
     
-    const data = await getBusinessDoc('1')
-    const canReconcile = data.unsettledAmount > 0 && 
+    const data = await getBusinessDoc(1)
+    const canReconcile = (data.unsettledAmount ?? 0) > 0 && 
                          !['SETTLED', 'REVERSED', 'CANCELLED'].includes(data.status)
     
     expect(canReconcile).toBe(false)
@@ -89,9 +89,9 @@ describe('BusinessDocDetail — 业务单据详情', () => {
   // === 维度 4：去核销按钮状态 ===
   it('可核销时"去核销"按钮应启用', async () => {
     const { getBusinessDoc } = await import('@/api/modules/businessDoc')
-    const data = await getBusinessDoc('1')
+    const data = await getBusinessDoc(1)
     
-    const canReconcile = data.unsettledAmount > 0 && 
+    const canReconcile = (data.unsettledAmount ?? 0) > 0 && 
                          !['SETTLED', 'REVERSED', 'CANCELLED'].includes(data.status)
     
     expect(canReconcile).toBe(true)
@@ -102,10 +102,10 @@ describe('BusinessDocDetail — 业务单据详情', () => {
     vi.mocked(getBusinessDoc).mockResolvedValueOnce({
       id: 1, docNo: 'YS-001', docType: 'INVOICE_OUT', status: 'SETTLED',
       customerName: '客户A', amount: 10000, unsettledAmount: 0, dueDate: '2026-07-30',
-    })
+    } as any)
     
-    const data = await getBusinessDoc('1')
-    const canReconcile = data.unsettledAmount > 0 && 
+    const data = await getBusinessDoc(1)
+    const canReconcile = (data.unsettledAmount ?? 0) > 0 && 
                          !['SETTLED', 'REVERSED', 'CANCELLED'].includes(data.status)
     
     expect(canReconcile).toBe(false)
@@ -114,7 +114,7 @@ describe('BusinessDocDetail — 业务单据详情', () => {
   // === 维度 5：穿透跳转参数 ===
   it('点击"去核销"应携带正确的 sourceDocType 和 sourceDocId', async () => {
     const { getBusinessDoc } = await import('@/api/modules/businessDoc')
-    const data = await getBusinessDoc('1')
+    const data = await getBusinessDoc(1)
     
     const expectedQuery = {
       sourceDocType: data.docType,
@@ -131,15 +131,15 @@ describe('BusinessDocDetail — 业务单据详情', () => {
     
     const { getBusinessDoc } = await import('@/api/modules/businessDoc')
     
-    await expect(getBusinessDoc('999')).rejects.toThrow('404 Not Found')
+    await expect(getBusinessDoc(999)).rejects.toThrow('404 Not Found')
   })
 
   // === 维度 7：边界 - 数据缺失字段 ===
   it('API 返回数据缺失字段时应有默认值不报错', async () => {
-    vi.mocked(await import('@/api/modules/businessDoc')).getBusinessDoc.mockResolvedValueOnce({ id: 1 })
+    vi.mocked(await import('@/api/modules/businessDoc')).getBusinessDoc.mockResolvedValueOnce({ id: 1 } as any)
     
     const { getBusinessDoc } = await import('@/api/modules/businessDoc')
-    const data = await getBusinessDoc('1')
+    const data = await getBusinessDoc(1)
     
     const canReconcile = (data.unsettledAmount || 0) > 0 && 
                          !['SETTLED', 'REVERSED', 'CANCELLED'].includes(data.status || '')

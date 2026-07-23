@@ -61,7 +61,7 @@
       <el-dialog v-model="dialogVisible" title="录入期初余额" width="500">
         <el-form :model="entryForm" label-width="100">
           <el-form-item label="科目">
-            <el-tree-select v-model="entryForm.subjectId" :data="subjectTree" :props="{label:'name',value:'id',children:'children'}"
+            <el-tree-select v-model="entryForm.subjectId" :data="subjectTree" :props="({label:'name',value:'id',children:'children'} as any)"
               check-strictly style="width:100%" placeholder="选择末级科目" />
           </el-form-item>
           <el-form-item label="期初余额">

@@ -240,7 +240,7 @@ const CHECK_LABELS: Record<string, string> = {
 }
 function checkLabel(name: string) { return CHECK_LABELS[name as keyof typeof CHECK_LABELS] || name }
 
-function matchLevelType(level: string) {
+function matchLevelType(level: string): 'success' | 'warning' | 'info' | 'danger' | 'primary' {
   switch (level) {
     case 'L1': return 'success'; case 'L2': return 'primary'; case 'L3': return 'primary'
     case 'L4': return 'warning'; case 'L5': return 'danger'; case 'L6': return 'info'
@@ -314,7 +314,7 @@ async function onRowClick(row: any) {
   }
 }
 
-function tagTypeForTarget(docType: string): string {
+function tagTypeForTarget(docType: string): 'success' | 'warning' | 'info' | 'danger' | 'primary' {
   switch (docType) {
     case 'INVOICE_OUT': case 'RECEIPT': return 'success'
     case 'INVOICE_IN': case 'PAYMENT': return 'warning'
@@ -521,7 +521,7 @@ async function onExecuteFromFifo(row: any) {
       targetDocType: row.targetDocType || (activeTab.value === 'RECEIPT' ? 'INVOICE_OUT' : 'INVOICE_IN'),
       targetDocId: row.targetDocId || row.targetBusinessDocId,
       amount: row.allocatedAmount || row.amount,
-    })
+    } as any)
     ElMessage.success('核销执行成功')
     fifoDialogVisible.value = false
     fetchData()

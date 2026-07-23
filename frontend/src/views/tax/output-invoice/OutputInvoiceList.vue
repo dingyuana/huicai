@@ -294,8 +294,8 @@
           <el-descriptions-item label="税率">{{ Number(detail.taxRate || 0).toFixed(2) }}%</el-descriptions-item>
           <el-descriptions-item label="发票类型">{{ detail.invoiceType === 'SPECIAL' ? '增值税专用发票' : '普通发票' }}</el-descriptions-item>
           <el-descriptions-item label="状态">
-            <el-tag :type="(STATUS_TAG_MAP[detail.status] || 'info') as any" size="small">
-              {{ STATUS_MAP[detail.status] || detail.status }}
+            <el-tag :type="(STATUS_TAG_MAP[detail.status!] || 'info') as any" size="small">
+              {{ STATUS_MAP[detail.status!] || detail.status }}
             </el-tag>
           </el-descriptions-item>
           <el-descriptions-item label="业务流程" :span="2">

@@ -54,10 +54,13 @@ public interface VoucherMapper extends BaseMapper<VoucherEntity> {
 
     /**
      * 批量更新凭证状态
+     *
+     * @param version 乐观锁版本号，非 null 时启用乐观锁检查（单条更新传版本，批量更新传 null）
      */
     int batchUpdateStatus(@Param("ids") List<Long> ids,
                           @Param("status") String status,
-                          @Param("userId") Long userId);
+                          @Param("userId") Long userId,
+                          @Param("version") Integer version);
 
     @Delete("DELETE FROM t_voucher WHERE source = #{source}")
     int deleteBySource(@Param("source") String source);

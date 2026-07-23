@@ -163,7 +163,7 @@ const onSubmitNew = async () => {
     if (!valid) return
     if (!form.entries) form.entries = []
     // 后端要求 { budget: BudgetEntity, entries: List }
-    await createBudget({ budget: form, entries: form.entries })
+    await createBudget({ budget: form, entries: form.entries } as any)
     ElMessage.success('创建成功')
     dialogVisible.value = false
     fetchData()

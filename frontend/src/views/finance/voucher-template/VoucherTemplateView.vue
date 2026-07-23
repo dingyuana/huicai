@@ -33,15 +33,15 @@
           <el-switch
             :model-value="row.isActive"
             :loading="togglingMap[row.id] ?? false"
-            @change="(val: string | number | boolean) => handleToggleActive(row, val as boolean)"
+            @change="(val: string | number | boolean) => handleToggleActive(row as VoucherTemplateVO, val as boolean)"
             size="small"
           />
         </template>
       </el-table-column>
       <el-table-column label="操作" width="160" fixed="right">
         <template #default="{ row }">
-          <el-button link type="primary" @click="handleEdit(row)">编辑</el-button>
-          <el-button link type="danger" @click="handleDelete(row)">删除</el-button>
+          <el-button link type="primary" @click="handleEdit(row as VoucherTemplateVO)">编辑</el-button>
+          <el-button link type="danger" @click="handleDelete(row as VoucherTemplateVO)">删除</el-button>
         </template>
       </el-table-column>
     </el-table>
@@ -124,7 +124,7 @@
               <el-tree-select
                 v-model="line.subjectId"
                 :data="subjectTree"
-                :props="{ label: 'name', value: 'id', children: 'children' }"
+                :props="({ label: 'name', value: 'id', children: 'children' } as any)"
                 placeholder="选择科目"
                 filterable clearable style="width: 100%"
               />
@@ -223,7 +223,7 @@ async function fetchTemplates() {
   loading.value = true
   try {
     const res = await listTemplates()
-    templates.value = res || []
+    templates.value = (res as any) || []
   } catch (e: any) {
     ElMessage.error('加载模板列表失败: ' + (e.message || ''))
   } finally {

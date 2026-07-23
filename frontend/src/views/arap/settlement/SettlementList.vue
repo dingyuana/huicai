@@ -62,9 +62,9 @@
             </el-table-column>
             <el-table-column label="操作" width="200" fixed="right">
               <template #default="{row}">
-                <el-button v-if="row.status==='DRAFT'" text size="small" type="success" @click="onConfirmSettlement(row)">确认</el-button>
-                <el-button text size="small" type="primary" @click="onViewSettlement(row)">详情</el-button>
-                <el-popconfirm v-if="row.status==='DRAFT'" title="确认删除?" @confirm="onDeleteSettlement(row)">
+                <el-button v-if="row.status==='DRAFT'" text size="small" type="success" @click="onConfirmSettlement(row as ArapSettlement)">确认</el-button>
+                <el-button text size="small" type="primary" @click="onViewSettlement(row as ArapSettlement)">详情</el-button>
+                <el-popconfirm v-if="row.status==='DRAFT'" title="确认删除?" @confirm="onDeleteSettlement(row as ArapSettlement)">
                   <template #reference><el-button text type="danger" size="small">删除</el-button></template>
                 </el-popconfirm>
               </template>
@@ -140,7 +140,7 @@
             <el-table-column prop="createdAt" label="创建时间" width="170" />
             <el-table-column label="操作" width="100" fixed="right">
               <template #default="{row}">
-                <el-button v-if="row.status==='CONFIRMED'" text size="small" type="warning" @click="onReverseRecon(row)">反核销</el-button>
+                <el-button v-if="row.status==='CONFIRMED'" text size="small" type="warning" @click="onReverseRecon(row as ReconciliationLog)">反核销</el-button>
               </template>
             </el-table-column>
           </el-table>
@@ -296,8 +296,8 @@ import { ArrowUp, ArrowDown } from '@element-plus/icons-vue'
 import { useRouter } from 'vue-router'
 import {
   pageSettlements, getSettlementDetail, getSettlementEntries, createSettlement,
-  confirmSettlement, deleteSettlement, confirmReconciliationLog,
-  getReconRecords, cancelReconciliationLog, pageReconLogs, reverseRecon,
+  confirmSettlement, deleteSettlement,
+  getReconRecords, pageReconLogs, reverseRecon,
   type ArapSettlement, type ReconciliationLog,
 } from '@/api/modules/arapSettlement'
 import { getReconciliationTrace, type ReconciliationTraceVO } from '@/api/modules/reconciliation'
@@ -309,7 +309,7 @@ function fmtAmount(v: number) {
   return v == null ? '' : Number(v).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
-function statusType(s: string) {
+function statusType(s: string): 'success' | 'warning' | 'info' | 'danger' | 'primary' {
   if (s === 'CONFIRMED' || s === 'VOUCHERED') return 'success'
   if (s === 'REVERSED') return 'danger'
   return 'info'

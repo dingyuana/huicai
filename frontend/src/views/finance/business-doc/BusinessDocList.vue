@@ -84,14 +84,14 @@
         </el-table-column>
         <el-table-column label="操作" width="320" fixed="right">
           <template #default="{ row }">
-            <el-button text size="small" @click="goDetail(row)">查看</el-button>
-            <el-button text size="small" v-if="row.status === 'DRAFT'" @click="goEdit(row)">编辑</el-button>
-            <el-button text size="small" v-if="row.status === 'DRAFT'" type="success" @click="onSubmit(row)">提交</el-button>
-            <el-button text size="small" v-if="row.status === 'SUBMITTED'" type="primary" @click="onApprove(row)">审批</el-button>
-            <el-button text size="small" v-if="row.status === 'SUBMITTED'" type="danger" @click="onReject(row)">驳回</el-button>
-            <el-button text size="small" v-if="row.status === 'APPROVED' && !row.voucherId" type="warning" @click="onGenerateVoucher(row)">生成凭证</el-button>
-            <el-button text size="small" v-if="(row.status === 'APPROVED' || row.status === 'VOUCHERED') && !row.voucherId" type="danger" @click="onReverse(row)">红冲</el-button>
-            <el-popconfirm v-if="row.status === 'DRAFT'" title="确认删除？" @confirm="onDelete(row)">
+            <el-button text size="small" @click="goDetail(row as BusinessDocVO)">查看</el-button>
+            <el-button text size="small" v-if="row.status === 'DRAFT'" @click="goEdit(row as BusinessDocVO)">编辑</el-button>
+            <el-button text size="small" v-if="row.status === 'DRAFT'" type="success" @click="onSubmit(row as BusinessDocVO)">提交</el-button>
+            <el-button text size="small" v-if="row.status === 'SUBMITTED'" type="primary" @click="onApprove(row as BusinessDocVO)">审批</el-button>
+            <el-button text size="small" v-if="row.status === 'SUBMITTED'" type="danger" @click="onReject(row as BusinessDocVO)">驳回</el-button>
+            <el-button text size="small" v-if="row.status === 'APPROVED' && !row.voucherId" type="warning" @click="onGenerateVoucher(row as BusinessDocVO)">生成凭证</el-button>
+            <el-button text size="small" v-if="(row.status === 'APPROVED' || row.status === 'VOUCHERED') && !row.voucherId" type="danger" @click="onReverse(row as BusinessDocVO)">红冲</el-button>
+            <el-popconfirm v-if="row.status === 'DRAFT'" title="确认删除？" @confirm="onDelete(row as BusinessDocVO)">
               <template #reference>
                 <el-button text type="danger" size="small">删除</el-button>
               </template>

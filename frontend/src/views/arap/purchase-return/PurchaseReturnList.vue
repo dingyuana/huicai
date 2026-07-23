@@ -49,7 +49,7 @@
           <el-input-number v-model="form.taxAmount" :precision="2" :min="0" style="width:100%" />
         </el-form-item>
         <el-form-item label="退货原因">
-          <el-input v-model="form.reason" type="textarea" rows="3" />
+          <el-input v-model="(form as any).reason" type="textarea" :rows="3" />
         </el-form-item>
       </el-form>
       <template #footer>

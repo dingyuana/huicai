@@ -50,6 +50,11 @@ public class PeriodEntity {
     @TableField(fill = FieldFill.INSERT_UPDATE)
     private LocalDateTime updatedAt;
 
+    /** 乐观锁版本号 */
+    @Version
+    @TableField("version")
+    private Integer version;
+
     /** 逻辑删除(0-未删,1-已删) */
     @TableLogic
     private Integer deleted;

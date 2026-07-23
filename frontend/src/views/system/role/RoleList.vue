@@ -37,19 +37,19 @@
         <el-table-column prop="dataScope" label="数据权限" width="100" />
         <el-table-column label="操作" width="280" fixed="right">
           <template #default="{ row }">
-            <el-button text size="small" @click="openEdit(row)">编辑</el-button>
-            <el-button text size="small" @click="openMenuAssign(row)">分配菜单</el-button>
-            <el-popconfirm title="确认禁用此角色？" @confirm="handleToggleStatus(row)" v-if="row.status === 'active'">
+            <el-button text size="small" @click="openEdit(row as RoleVO)">编辑</el-button>
+            <el-button text size="small" @click="openMenuAssign(row as RoleVO)">分配菜单</el-button>
+            <el-popconfirm title="确认禁用此角色？" @confirm="handleToggleStatus(row as RoleVO)" v-if="row.status === 'active'">
               <template #reference>
                 <el-button text type="warning" size="small">禁用</el-button>
               </template>
             </el-popconfirm>
-            <el-popconfirm title="确认启用此角色？" @confirm="handleToggleStatus(row)" v-else>
+            <el-popconfirm title="确认启用此角色？" @confirm="handleToggleStatus(row as any)" v-else>
               <template #reference>
                 <el-button text type="success" size="small">启用</el-button>
               </template>
             </el-popconfirm>
-            <el-popconfirm title="确认删除？" @confirm="handleDelete(row)">
+            <el-popconfirm title="确认删除？" @confirm="handleDelete(row as RoleVO)">
               <template #reference>
                 <el-button text type="danger" size="small">删除</el-button>
               </template>

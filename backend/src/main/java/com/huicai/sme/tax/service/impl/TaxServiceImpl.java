@@ -232,15 +232,16 @@ public class TaxServiceImpl implements TaxService {
         if (StrUtil.isNotBlank(invoiceType)) {
             if ("RED".equals(invoiceType)) {
                 // 红字发票：金额<0 或 有原蓝字发票号(红冲关联字段)
+                // originalInvoiceNo 是 @TableField(exist=false)，不能用 Lambda 映射，改用 apply
                 wrapper.and(w -> w
                         .lt(OutputInvoiceEntity::getAmount, BigDecimal.ZERO)
                         .or()
-                        .isNotNull(OutputInvoiceEntity::getOriginalInvoiceNo));
+                        .apply("reversed_by_invoice_id IS NOT NULL"));
             } else {
-                // 专用/普通发票：排除红字(金额<0)、红冲关联(originalInvoiceNo非空)、已冲销(status=REVERSED)
+                // 专用/普通发票：排除红字(金额<0)、红冲关联(reversed_by_invoice_id非空)、已冲销(status=REVERSED)
                 wrapper.eq(OutputInvoiceEntity::getInvoiceType, invoiceType)
                         .ge(OutputInvoiceEntity::getAmount, BigDecimal.ZERO)
-                        .isNull(OutputInvoiceEntity::getOriginalInvoiceNo)
+                        .apply("reversed_by_invoice_id IS NULL")
                         .ne(OutputInvoiceEntity::getStatus, InvoiceStatus.REVERSED);
             }
         }

@@ -37,9 +37,9 @@
         </el-table-column>
         <el-table-column label="操作" width="200" fixed="right">
           <template #default="{ row }">
-            <el-button text size="small" @click="openCreate(row)">新增子菜单</el-button>
-            <el-button text size="small" @click="openEdit(row)">编辑</el-button>
-            <el-popconfirm title="确认删除此菜单？" @confirm="handleDelete(row)">
+            <el-button text size="small" @click="openCreate(row as MenuVO)">新增子菜单</el-button>
+            <el-button text size="small" @click="openEdit(row as MenuVO)">编辑</el-button>
+            <el-popconfirm title="确认删除此菜单？" @confirm="handleDelete(row as MenuVO)">
               <template #reference>
                 <el-button text type="danger" size="small">删除</el-button>
               </template>
@@ -55,7 +55,7 @@
           <el-tree-select
             v-model="form.parentId"
             :data="menuOptions"
-            :props="{ label: 'name', children: 'children', value: 'id' }"
+            :props="({ label: 'name', children: 'children', value: 'id' } as any)"
             placeholder="顶级菜单"
             clearable
             check-strictly

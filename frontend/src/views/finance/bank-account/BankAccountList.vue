@@ -37,8 +37,8 @@
         <el-table-column prop="remark" label="备注" min-width="160" show-overflow-tooltip />
         <el-table-column label="操作" width="180" fixed="right">
           <template #default="{ row }">
-            <el-button text size="small" @click="openEdit(row)">编辑</el-button>
-            <el-popconfirm title="确认删除？" @confirm="onDelete(row)">
+            <el-button text size="small" @click="openEdit(row as BankAccountVO)">编辑</el-button>
+            <el-popconfirm title="确认删除？" @confirm="onDelete(row as BankAccountVO)">
               <template #reference>
                 <el-button text type="danger" size="small">删除</el-button>
               </template>
@@ -76,7 +76,7 @@
           <el-tree-select
             v-model="form.subjectId"
             :data="leafSubjectOptions"
-            :props="{ value: 'id', label: 'name' }"
+            :props="({ value: 'id', label: 'name' } as any)"
             check-strictly
             :render-after-expand="false"
             placeholder="选择末级科目(银行存款)"
@@ -176,13 +176,13 @@ function openCreate() {
 }
 function openEdit(row: BankAccountVO) {
   isEdit.value = true
-  editId.value = row.id
+  editId.value = row.id as any
   form.value = {
     accountNo: row.accountNo,
     accountName: row.accountName,
     bankName: row.bankName || '',
     currency: row.currency || 'CNY',
-    subjectId: row.subjectId || (undefined as unknown as number),
+    subjectId: row.subjectId as any || (undefined as unknown as number),
     isActive: row.isActive,
     remark: row.remark || '',
   }
@@ -195,10 +195,10 @@ async function onSave() {
   saving.value = true
   try {
     if (isEdit.value && editId.value) {
-      await updateBankAccount(editId.value, form.value)
+      await updateBankAccount(editId.value as any, form.value as any)
       ElMessage.success('修改成功')
     } else {
-      await createBankAccount({ ...form.value, balance: 0 })
+      await createBankAccount({ ...form.value, balance: 0 } as any)
       ElMessage.success('新增成功')
     }
     dialogVisible.value = false

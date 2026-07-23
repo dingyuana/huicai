@@ -86,9 +86,14 @@ class BankReconciliationServiceImplTest {
     void generateAdjustment_企业大于银行_diff为正_balancedFalse() {
         when(accountMapper.selectById(1L)).thenReturn(stubAccount(1L));
         when(journalMapper.sumAmountByAccount(1L)).thenReturn(new BigDecimal("1000.00"));
-        when(statementMapper.selectList(any())).thenReturn(List.of(
-                stubStmt(1L, "INCOME", new BigDecimal("800.00"), LocalDate.now())
-        ));
+        when(journalMapper.selectUnreconciled(1L)).thenReturn(List.of());
+        // generateAdjustment 调用了两次 statementMapper.selectList:
+        //   第1次: 所有非 IGNORED 流水 → bankBalance 计算
+        //   第2次: UNMATCHED/PENDING_CONFIRM 流水 → 银行已收/付企业未收/付
+        // 链式 thenReturn: 第1次返回有数据, 第2次返回空(无未匹配项)
+        when(statementMapper.selectList(any()))
+                .thenReturn(List.of(stubStmt(1L, "INCOME", new BigDecimal("800.00"), LocalDate.now())))
+                .thenReturn(List.of());
         Map<String, Object> r = service.generateAdjustment(1L, "202606");
         assertEquals(new BigDecimal("200.00"), r.get("diff"));
         assertEquals(false, r.get("balanced"));
@@ -98,9 +103,10 @@ class BankReconciliationServiceImplTest {
     void generateAdjustment_企业等于银行_balancedTrue() {
         when(accountMapper.selectById(1L)).thenReturn(stubAccount(1L));
         when(journalMapper.sumAmountByAccount(1L)).thenReturn(new BigDecimal("500.00"));
-        when(statementMapper.selectList(any())).thenReturn(List.of(
-                stubStmt(1L, "INCOME", new BigDecimal("500.00"), LocalDate.now())
-        ));
+        when(journalMapper.selectUnreconciled(1L)).thenReturn(List.of());
+        when(statementMapper.selectList(any()))
+                .thenReturn(List.of(stubStmt(1L, "INCOME", new BigDecimal("500.00"), LocalDate.now())))
+                .thenReturn(List.of());
         Map<String, Object> r = service.generateAdjustment(1L, "202606");
         assertEquals(0, ((BigDecimal) r.get("diff")).compareTo(BigDecimal.ZERO));
         assertEquals(true, r.get("balanced"));

@@ -24,12 +24,12 @@
         </el-table-column>
         <el-table-column label="操作" width="340" fixed="right">
           <template #default="{ row }">
-            <el-button text size="small" @click="openEdit(row)">编辑</el-button>
-            <el-button text size="small" v-if="row.status !== 'open'" type="success" @click="handleOpen(row)">开启</el-button>
-            <el-button text size="small" v-if="row.status === 'open'" type="warning" @click="handleClose(row)">结账</el-button>
-            <el-button text size="small" v-if="row.status === 'open'" @click="handleLock(row)">锁定</el-button>
-            <el-button text size="small" v-if="row.status === 'locked'" type="primary" @click="handleUnlock(row)">解锁</el-button>
-            <el-popconfirm title="确认删除此期间？" @confirm="handleDelete(row)">
+            <el-button text size="small" @click="openEdit(row as PeriodVO)">编辑</el-button>
+            <el-button text size="small" v-if="row.status !== 'open'" type="success" @click="handleOpen(row as PeriodVO)">开启</el-button>
+            <el-button text size="small" v-if="row.status === 'open'" type="warning" @click="handleClose(row as PeriodVO)">结账</el-button>
+            <el-button text size="small" v-if="row.status === 'open'" @click="handleLock(row as PeriodVO)">锁定</el-button>
+            <el-button text size="small" v-if="row.status === 'locked'" type="primary" @click="handleUnlock(row as PeriodVO)">解锁</el-button>
+            <el-popconfirm title="确认删除此期间？" @confirm="handleDelete(row as PeriodVO)">
               <template #reference>
                 <el-button text type="danger" size="small">删除</el-button>
               </template>

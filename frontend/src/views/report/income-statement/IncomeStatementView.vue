@@ -60,6 +60,10 @@ const fetchData = async () => {
   result.value = await incomeStatement(query.period)
 }
 
+const onExport = () => {
+  // 导出功能待实现
+}
+
 onMounted(fetchData)
 </script>
 

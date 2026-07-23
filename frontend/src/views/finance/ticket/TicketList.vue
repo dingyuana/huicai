@@ -19,15 +19,15 @@
       <el-table :data="list" v-loading="loading" border stripe style="width:100%">
         <el-table-column prop="ticketNo" label="票据编号" width="140" />
         <el-table-column prop="ticketType" label="类型" width="100">
-          <template #default="{row}">{{ {CHECK:'支票',DRAFT:'汇票',CASHIER_CHECK:'本票',BANK_ACCEPTANCE:'银行承兑'}[row.ticketType]||row.ticketType }}</template>
+          <template #default="{row}">{{ ({CHECK:'支票',DRAFT:'汇票',CASHIER_CHECK:'本票',BANK_ACCEPTANCE:'银行承兑'} as any)[row.ticketType]||row.ticketType }}</template>
         </el-table-column>
-        <el-table-column prop="amount" label="金额" width="130">{{ (row:any) => row.amount?.toFixed(2) }}</el-table-column>
+        <el-table-column prop="amount" label="金额" width="130" />
         <el-table-column prop="issueDate" label="开票日期" width="100" />
         <el-table-column prop="expireDate" label="到期日" width="100" />
         <el-table-column prop="status" label="状态" width="100">
           <template #default="{row}">
-            <el-tag :type="{IN_STOCK:'primary',ISSUED:'warning',ENDORSED:'info',CASHED:'success',VOIDED:'danger'}[row.status]||'info'" size="small">
-              {{ {IN_STOCK:'在库',ISSUED:'已领用',ENDORSED:'已背书',CASHED:'已兑现',VOIDED:'已作废'}[row.status]||row.status }}
+            <el-tag :type="({IN_STOCK:'primary' as const,ISSUED:'warning' as const,ENDORSED:'info' as const,CASHED:'success' as const,VOIDED:'danger' as const} as any)[row.status]||'info'" size="small">
+              {{ ({IN_STOCK:'在库',ISSUED:'已领用',ENDORSED:'已背书',CASHED:'已兑现',VOIDED:'已作废'} as any)[row.status]||row.status }}
             </el-tag>
           </template>
         </el-table-column>
@@ -49,7 +49,7 @@
     <el-dialog v-model="txDialog" title="交易流水" width="500">
       <el-timeline>
         <el-timeline-item v-for="tx in transactions" :key="tx.id" :timestamp="tx.transDate" placement="top">
-          <p>{{ {ISSUE:'领用',ENDORSE:'背书',CASH:'兑现',VOID:'作废',RETURN:'退回'}[tx.transType]||tx.transType }}</p>
+          <p>{{ ({ISSUE:'领用',ENDORSE:'背书',CASH:'兑现',VOID:'作废',RETURN:'退回'} as Record<string, string>)[(tx as any).transType]||(tx as any).transType }}</p>
           <p v-if="tx.remark" style="color:#909399">{{ tx.remark }}</p>
         </el-timeline-item>
       </el-timeline>

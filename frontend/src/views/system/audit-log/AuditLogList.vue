@@ -57,7 +57,7 @@
         <el-table-column prop="createdAt" label="操作时间" width="170" />
         <el-table-column label="操作" width="80" fixed="right">
           <template #default="{ row }">
-            <el-button text size="small" @click="openDetail(row)">详情</el-button>
+            <el-button text size="small" @click="openDetail(row as AuditLogVO)">详情</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -123,7 +123,7 @@ async function fetchData() {
     if (query.status) params.status = query.status
     if (query.startDate) params.startDate = query.startDate
     if (query.endDate) params.endDate = query.endDate
-    const res = await getAuditLogPage(params)
+    const res = await getAuditLogPage(params as any)
     list.value = res.records
     total.value = res.total
   } finally {

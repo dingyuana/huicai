@@ -38,6 +38,11 @@ public class AssetDisposalEntity {
     @TableField(fill = FieldFill.INSERT_UPDATE)
     private LocalDateTime updatedAt;
 
+    /** 乐观锁版本号 */
+    @Version
+    @TableField("version")
+    private Integer version;
+
     @TableLogic
     private Integer deleted;
 }

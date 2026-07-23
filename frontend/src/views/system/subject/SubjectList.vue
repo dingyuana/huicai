@@ -42,9 +42,9 @@
         </el-table-column>
         <el-table-column label="操作" width="260" fixed="right">
           <template #default="{ row }">
-            <el-button text size="small" @click="openCreate(row)">新增下级</el-button>
-            <el-button text size="small" @click="openEdit(row)">编辑</el-button>
-            <el-popconfirm title="确认删除此科目？如有下级科目无法删除" @confirm="handleDelete(row)">
+            <el-button text size="small" @click="openCreate(row as SubjectVO)">新增下级</el-button>
+            <el-button text size="small" @click="openEdit(row as SubjectVO)">编辑</el-button>
+            <el-popconfirm title="确认删除此科目？如有下级科目无法删除" @confirm="handleDelete(row as SubjectVO)">
               <template #reference>
                 <el-button text type="danger" size="small">删除</el-button>
               </template>

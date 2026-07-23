@@ -3,7 +3,7 @@
     <el-card shadow="never">
       <div class="page-header">
         <div class="header-left">
-          <el-button type="primary" @click="openCreate">新增部门</el-button>
+          <el-button type="primary" @click="openCreate()">新增部门</el-button>
           <el-button @click="fetchData">刷新</el-button>
         </div>
       </div>
@@ -32,9 +32,9 @@
         </el-table-column>
         <el-table-column label="操作" width="200" fixed="right">
           <template #default="{ row }">
-            <el-button text size="small" @click="openCreate(row)">新增下级</el-button>
-            <el-button text size="small" @click="openEdit(row)">编辑</el-button>
-            <el-popconfirm title="确认删除此部门？" @confirm="handleDelete(row)">
+            <el-button text size="small" @click="openCreate(row as DeptVO)">新增下级</el-button>
+            <el-button text size="small" @click="openEdit(row as DeptVO)">编辑</el-button>
+            <el-popconfirm title="确认删除此部门？" @confirm="handleDelete(row as DeptVO)">
               <template #reference>
                 <el-button text type="danger" size="small">删除</el-button>
               </template>
@@ -50,7 +50,7 @@
           <el-tree-select
             v-model="form.parentId"
             :data="list"
-            :props="{ label: 'name', value: 'id' }"
+            :props="({ label: 'name', value: 'id' } as any)"
             placeholder="顶级部门"
             clearable
             check-strictly

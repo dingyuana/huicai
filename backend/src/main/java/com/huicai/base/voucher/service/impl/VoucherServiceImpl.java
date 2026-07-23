@@ -244,8 +244,8 @@ public class VoucherServiceImpl extends ServiceImpl<VoucherMapper, VoucherEntity
         VoucherEntity entity = getValidVoucher(id);
         voucherStateMachineService.assertSubmittable(entity);
         assertPeriodOpen(entity.getPeriod());
-        voucherMapper.batchUpdateStatus(Collections.singletonList(id), "SUBMITTED", userId);
-        log.info("提交凭证: id={}, userId={}", id, userId);
+        voucherMapper.batchUpdateStatus(Collections.singletonList(id), "SUBMITTED", userId, entity.getVersion());
+        log.info("提交凭证: id={}, userId={}, version={}", id, userId, entity.getVersion());
     }
 
     @Override
@@ -256,7 +256,7 @@ public class VoucherServiceImpl extends ServiceImpl<VoucherMapper, VoucherEntity
             assertStatus(entity, "DRAFT");
             assertPeriodOpen(entity.getPeriod());
         }
-        voucherMapper.batchUpdateStatus(ids, "SUBMITTED", userId);
+        voucherMapper.batchUpdateStatus(ids, "SUBMITTED", userId, null);
         log.info("批量提交凭证: ids={}, userId={}", ids, userId);
     }
 
@@ -266,8 +266,8 @@ public class VoucherServiceImpl extends ServiceImpl<VoucherMapper, VoucherEntity
         VoucherEntity entity = getValidVoucher(id);
         voucherStateMachineService.assertAuditable(entity);
         assertPeriodOpen(entity.getPeriod());
-        voucherMapper.batchUpdateStatus(Collections.singletonList(id), "AUDITED", userId);
-        log.info("审核凭证: id={}, userId={}", id, userId);
+        voucherMapper.batchUpdateStatus(Collections.singletonList(id), "AUDITED", userId, entity.getVersion());
+        log.info("审核凭证: id={}, userId={}, version={}", id, userId, entity.getVersion());
     }
 
     @Override
@@ -278,7 +278,7 @@ public class VoucherServiceImpl extends ServiceImpl<VoucherMapper, VoucherEntity
             assertStatus(entity, "SUBMITTED");
             assertPeriodOpen(entity.getPeriod());
         }
-        voucherMapper.batchUpdateStatus(ids, "AUDITED", userId);
+        voucherMapper.batchUpdateStatus(ids, "AUDITED", userId, null);
         log.info("批量审核凭证: ids={}, userId={}", ids, userId);
     }
 
@@ -306,8 +306,8 @@ public class VoucherServiceImpl extends ServiceImpl<VoucherMapper, VoucherEntity
             throw BusinessException.badRequest("仅已记账凭证可反过账");
         }
         assertPeriodOpen(entity.getPeriod());
-        voucherMapper.batchUpdateStatus(Collections.singletonList(id), "AUDITED", userId);
-        log.info("反过账凭证: id={}, userId={}", id, userId);
+        voucherMapper.batchUpdateStatus(Collections.singletonList(id), "AUDITED", userId, entity.getVersion());
+        log.info("反过账凭证: id={}, userId={}, version={}", id, userId, entity.getVersion());
     }
 
     @Override
@@ -325,7 +325,7 @@ public class VoucherServiceImpl extends ServiceImpl<VoucherMapper, VoucherEntity
         assertPeriodOpen(entity.getPeriod());
 
         // 更新状态
-        voucherMapper.batchUpdateStatus(Collections.singletonList(id), "POSTED", userId);
+        voucherMapper.batchUpdateStatus(Collections.singletonList(id), "POSTED", userId, entity.getVersion());
 
         // 更新科目余额
         List<VoucherEntryEntity> entries = voucherEntryMapper.selectByVoucherId(id);
@@ -355,7 +355,7 @@ public class VoucherServiceImpl extends ServiceImpl<VoucherMapper, VoucherEntity
             assertPeriodOpen(entity.getPeriod());
         }
 
-        voucherMapper.batchUpdateStatus(ids, "POSTED", userId);
+        voucherMapper.batchUpdateStatus(ids, "POSTED", userId, null);
 
         for (Long id : ids) {
             VoucherEntity entity = getValidVoucher(id);

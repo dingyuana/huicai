@@ -115,7 +115,7 @@ const statItems = [
   { key: 'vouchers', label: '生成凭证', icon: List, color: 'indigo' },
 ]
 
-const normalOps = [
+const normalOps: Array<{ type: string; title: string; desc: string; icon: any; color: string; btnType: 'success' | 'warning' | 'info' | 'primary' | 'danger'; btnText: string }> = [
   { type: 'statements', title: '清空银行流水', desc: '删除所有银行流水、自动生成的业务单据(来源: FROM_BANK_TXN)及凭证', icon: Delete, color: 'orange', btnType: 'warning', btnText: '清空' },
   { type: 'invoices', title: '清空发票记录', desc: '删除所有发票导入记录、生成的业务单据(来源: INVOICE_IMPORT)及凭证', icon: FolderDelete, color: 'orange', btnType: 'warning', btnText: '清空' },
   { type: 'vouchers', title: '清空所有凭证', desc: '删除所有凭证及分录(保留业务单据、流水、发票；单据状态回退草稿)', icon: Remove, color: 'orange', btnType: 'warning', btnText: '清空' },
