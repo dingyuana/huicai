@@ -442,11 +442,11 @@ transitions:
     to: POSTED
     trigger: generateReversalVoucher
     precondition: "status == POSTED"
-    postcondition: "new reversal voucher created (DRAFT); original voucher stays POSTED"
+    postcondition: "new reversal voucher created (POSTED); original voucher stays POSTED"
     side_effects:
       - entity: VoucherEntity
         action: create_reversal
-        status: DRAFT
+        status: POSTED
     test_ref: generateReversalVoucher_positive
     note: "This is a creation transition, not a state change. The original voucher remains POSTED."
 

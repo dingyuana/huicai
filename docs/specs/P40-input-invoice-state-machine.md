@@ -224,20 +224,74 @@ InputInvoiceImportService 现有逻辑：导入时一步到位创建 BusinessDoc
 
 ## 7. BDD 验收标准
 
-### 场景 1：进项发票审核通过后自动创建业务单据和凭证
+> 规则：BDD 场景数量 = acceptance_tests 数量（SPEC-CONTRACT-SCHEMA §0.1 规则 4）。
+> 以下 10 个场景与 AT-01 ~ AT-10 一一对应，每个场景均含负向断言。
+
+### 场景 1 (AT-01)：进项发票审核通过后自动创建业务单据和凭证
 **Given** 一张进项发票处于 PENDING_REVIEW 状态，尚未创建 BusinessDoc 和 Voucher
 **When** 用户调用 confirm(invoiceId, userId)
-**Then** 发票状态变为 CONFIRMED/VOUCHERED，自动创建 BusinessDoc(INVOICE_IN, DRAFT) 和 Voucher(DRAFT)，凭证科目方向为 借:存货/费用+进项税 / 贷:应付账款
+**Then** 发票状态变为 VOUCHERED，自动创建 BusinessDoc(INVOICE_IN, DRAFT) 和 Voucher(DRAFT)，凭证科目方向为 借:存货/费用+进项税 / 贷:应付账款
+**And** 不应跳过 BusinessDoc 创建步骤而直接进入 VOUCHERED
+**And** 若发票状态不是 PENDING_REVIEW，调用 confirm() 应抛出 BusinessException，状态不变
 
-### 场景 2：进项发票导入时不自动创建单据
+### 场景 2 (AT-02)：进项发票导入时不自动创建单据
 **Given** 进项发票成功导入系统
 **When** 导入流程完成
 **Then** 发票状态为 PENDING_CONFIRM，不自动创建 BusinessDoc 和 Voucher（等待人工审核通过后再创建）
+**And** 不应存在 BusinessDoc 或 Voucher 关联到此发票（docId/voucherId 为空）
 
-### 场景 3：进项发票作废后不可继续流转
+### 场景 3 (AT-03)：进项发票作废后不可继续流转
 **Given** 一张进项发票处于 PENDING_CONFIRM 状态
 **When** 用户调用 voidInvoice(invoiceId, userId, reason)
-**Then** 发票状态变为 VOIDED，后续所有状态转换操作（submitReview / confirm 等）均抛出 BusinessException
+**Then** 发票状态变为 VOIDED
+**And** VOIDED 状态下调用 submitForReview() / confirm() / reject() / revertToReview() / markVouchered() 均应抛出 BusinessException，状态保持 VOIDED
+
+### 场景 4 (AT-04)：审核驳回后发票退回待确认状态
+**Given** 一张进项发票处于 PENDING_REVIEW 状态
+**When** 用户调用 reject(invoiceId, userId, reason)
+**Then** 发票状态变为 PENDING_CONFIRM，reject_reason 记录驳回原因
+**And** 不应在此步骤生成 BusinessDoc 或 Voucher
+**And** 若发票状态不是 PENDING_REVIEW，调用 reject() 应抛出 BusinessException，状态不变
+
+### 场景 5 (AT-05)：已确认发票可回退至待审核
+**Given** 一张进项发票处于 CONFIRMED 状态
+**When** 用户调用 revertToReview(invoiceId, userId)
+**Then** 发票状态变为 PENDING_REVIEW
+**And** 不应清除已有的 docId 关联（仅状态回退，业务单据保留）
+**And** 若发票状态不是 CONFIRMED，调用 revertToReview() 应抛出 BusinessException，状态不变
+
+### 场景 6 (AT-06)：已凭证发票全额核销后变为已全额核销
+**Given** 一张进项发票处于 VOUCHERED 状态，未核销余额 unsettledAmount = totalAmount
+**When** 核销系统调用 onReconciliationUpdate(invoiceId, unsettledAmount=0, userId)
+**Then** 发票状态变为 FULLY_RECONCILED
+**And** 若 unsettledAmount > 0，状态不应变为 FULLY_RECONCILED（应进入 PARTIALLY_RECONCILED）
+
+### 场景 7 (AT-07)：已凭证发票部分核销后变为部分核销
+**Given** 一张进项发票处于 VOUCHERED 状态，未核销余额 unsettledAmount = totalAmount
+**When** 核销系统调用 onReconciliationUpdate(invoiceId, unsettledAmount>0, userId)
+**Then** 发票状态变为 PARTIALLY_RECONCILED
+**And** 若 unsettledAmount = 0，状态不应变为 PARTIALLY_RECONCILED（应变为 FULLY_RECONCILED）
+
+### 场景 8 (AT-08)：已凭证发票红冲后变为已红冲
+**Given** 一张进项发票处于 VOUCHERED 状态
+**When** 用户调用 reverse(invoiceId, userId, reason)
+**Then** 发票状态变为 REVERSED（终态）
+**And** REVERSED 状态下任何状态转换操作均应抛出 BusinessException
+**And** 若发票状态不是 VOUCHERED，调用 reverse() 应抛出 BusinessException，状态不变
+
+### 场景 9 (AT-09)：待确认发票提交审核后进入待审核
+**Given** 一张进项发票处于 PENDING_CONFIRM 状态
+**When** 用户调用 submitForReview(invoiceId, userId)
+**Then** 发票状态变为 PENDING_REVIEW
+**And** 不应在提交审核阶段创建 BusinessDoc 或 Voucher（仅状态流转）
+**And** 若发票状态不是 PENDING_CONFIRM，调用 submitForReview() 应抛出 BusinessException，状态不变
+
+### 场景 10 (AT-10)：已确认发票手动标记凭证后变为已凭证
+**Given** 一张进项发票处于 CONFIRMED 状态（如历史数据迁移）
+**When** 用户调用 markVouchered(invoiceId, voucherId, voucherNo, userId)
+**Then** 发票状态变为 VOUCHERED，回写 voucherId / voucherNo
+**And** 不应在 markVouchered 中创建新的 BusinessDoc（仅回写凭证关联）
+**And** 若发票状态不是 CONFIRMED，调用 markVouchered() 应抛出 BusinessException，状态不变
 
 ---
 

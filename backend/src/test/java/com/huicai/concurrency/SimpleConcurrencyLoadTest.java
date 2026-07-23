@@ -10,6 +10,7 @@ import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 
 /**
@@ -291,5 +292,11 @@ class SimpleConcurrencyLoadTest {
                 avgTime, p95, p99);
         System.out.println("╚══════════════════════════════════════════════════════════════════╝");
         System.out.println();
+
+        // 性能断言：确保测试结果有意义，而非空跑
+        assertTrue(success > 0, testName + " — 应至少有1个成功请求");
+        assertTrue(successRate >= 50.0, testName + " — 成功率应 >= 50%（实际: " + successRate + "%）");
+        assertTrue(avgTime < 5000, testName + " — 平均响应应 < 5000ms（实际: " + avgTime + "ms）");
+        assertTrue(p99 < 10000, testName + " — P99 应 < 10000ms（实际: " + p99 + "ms）");
     }
 }
