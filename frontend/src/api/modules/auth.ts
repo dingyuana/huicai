@@ -18,10 +18,22 @@ export interface UserInfo {
   permissions: string[]
 }
 
+export interface EnterpriseSimple {
+  id: number
+  enterpriseName: string
+  taxId: string
+  status: string
+  seedDataDone: boolean
+}
+
 export interface LoginResult {
   token: string
   refreshToken: string
   tokenType: string
+  userType: string
+  enterpriseId: number | null
+  agencyId: number | null
+  enterpriseList: EnterpriseSimple[]
   userInfo: UserInfo
 }
 

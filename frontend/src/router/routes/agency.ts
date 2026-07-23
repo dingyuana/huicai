@@ -1,15 +1,24 @@
 import type { RouteRecordRaw } from 'vue-router'
 import AppLayout from '@/layouts/AppLayout.vue'
 
-/**
- * Agency 路由 — 代账公司批量处理引擎（待实现）
- * 占位文件，后续添加多客户账套管理、批量操作、CRM 等路由
- */
 const routes: RouteRecordRaw[] = [
   {
-    path: '/',
+    path: '/agency',
     component: AppLayout,
-    children: [],
+    children: [
+      {
+        path: 'enterprise-list',
+        name: 'AgencyEnterpriseList',
+        component: () => import('@/views/agency/EnterpriseList.vue'),
+        meta: { title: '客户列表' },
+      },
+      {
+        path: 'batch-operation',
+        name: 'AgencyBatchOperation',
+        component: () => import('@/views/agency/BatchOperation.vue'),
+        meta: { title: '批量操作' },
+      },
+    ],
   },
 ]
 

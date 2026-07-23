@@ -12,6 +12,10 @@ const mockLoginResult = {
   token: 'test-jwt-token',
   refreshToken: 'test-refresh-token',
   tokenType: 'Bearer',
+  userType: 'ENTERPRISE',
+  enterpriseId: 1,
+  agencyId: null,
+  enterpriseList: [],
   userInfo: {
     id: 1,
     username: 'admin',

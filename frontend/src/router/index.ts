@@ -45,9 +45,23 @@ router.beforeEach(async (to, _from, next) => {
     return next()
   }
 
-  // 已登录访问登录页 -> 首页
+  // 已登录访问登录页 -> 按 userType 分发首页
   if (to.path === '/login') {
+    const ut = authStore.userType
+    if (ut === 'SUPER_ADMIN') return next({ path: '/admin/dashboard' })
+    if (ut === 'AGENCY') {
+      if (!authStore.currentEnterpriseId) return next({ path: '/agency/enterprise-list' })
+      return next({ path: '/dashboard' })
+    }
     return next({ path: '/dashboard' })
+  }
+
+  // S-26: AGENCY 用户访问业务路由时，检查是否已选择企业
+  if (authStore.isAgency && !authStore.currentEnterpriseId) {
+    const allowedPaths = ['/agency/enterprise-list', '/agency/batch-operation', '/403', '/404']
+    if (!allowedPaths.includes(to.path)) {
+      return next({ path: '/agency/enterprise-list' })
+    }
   }
 
   // 页面刷新后重新获取用户信息（token存在但userInfo为空）

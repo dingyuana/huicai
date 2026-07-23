@@ -12,6 +12,7 @@
       </el-breadcrumb>
     </div>
     <div class="header-right">
+      <EnterpriseSwitcher />
       <el-dropdown trigger="click">
         <span class="header-user">
           <el-avatar :size="28" icon="UserFilled" />
@@ -31,6 +32,7 @@
 import { useRoute } from 'vue-router'
 import { useAppStore } from '@/stores/app.store'
 import { useAuthStore } from '@/stores/auth.store'
+import EnterpriseSwitcher from './components/EnterpriseSwitcher.vue'
 
 const route = useRoute()
 const appStore = useAppStore()
