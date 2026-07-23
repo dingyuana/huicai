@@ -1,17 +1,17 @@
 package com.huicai.base.system.entity;
 
-import com.baomidou.mybatisplus.annotation.TableField;
-import com.baomidou.mybatisplus.annotation.TableName;
-import com.huicai.common.entity.BaseEntity;
+import com.baomidou.mybatisplus.annotation.*;
 import lombok.Data;
-import lombok.EqualsAndHashCode;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 @Data
-@EqualsAndHashCode(callSuper = true)
 @TableName("t_menu")
-public class MenuEntity extends BaseEntity {
+public class MenuEntity {
+    @TableId(type = IdType.AUTO)
+    private Long id;
+
     @TableField("menu_name")
     private String name;
     @TableField("permission")
@@ -24,6 +24,18 @@ public class MenuEntity extends BaseEntity {
     private String icon;
     private Integer sortOrder;
     private Boolean isActive;
+
+    private Long createdBy;
+    @TableField(fill = FieldFill.INSERT)
+    private LocalDateTime createdAt;
+    private Long updatedBy;
+    @TableField(fill = FieldFill.INSERT_UPDATE)
+    private LocalDateTime updatedAt;
+    @TableLogic
+    private Integer deleted;
+    @Version
+    private Integer version;
+
     @TableField(exist = false)
     private Boolean isVisible;
     @TableField(exist = false)

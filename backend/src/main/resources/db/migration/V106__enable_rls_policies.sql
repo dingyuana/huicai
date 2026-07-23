@@ -22,9 +22,10 @@ BEGIN
         EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', tbl);
         -- 强制 RLS（表 owner 也受限制）
         EXECUTE format('ALTER TABLE %I FORCE ROW LEVEL SECURITY', tbl);
-        -- 创建策略：仅返回当前 enterprise_id 的数据
+        -- 创建策略：仅返回当前 enterprise_id 的数据（先删除再创建，避免重复）
+        EXECUTE format('DROP POLICY IF EXISTS enterprise_policy ON %I', tbl);
         EXECUTE format(
-            'CREATE POLICY IF NOT EXISTS enterprise_policy ON %I '
+            'CREATE POLICY enterprise_policy ON %I '
             || 'USING (enterprise_id = current_setting(''app.enterprise_id'', true)::bigint)',
             tbl
         );

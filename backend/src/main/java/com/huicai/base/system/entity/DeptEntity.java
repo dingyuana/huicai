@@ -1,22 +1,34 @@
 package com.huicai.base.system.entity;
 
-import com.baomidou.mybatisplus.annotation.TableField;
-import com.baomidou.mybatisplus.annotation.TableName;
-import com.huicai.common.entity.BaseEntity;
+import com.baomidou.mybatisplus.annotation.*;
 import lombok.Data;
-import lombok.EqualsAndHashCode;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 @Data
-@EqualsAndHashCode(callSuper = true)
 @TableName("t_dept")
-public class DeptEntity extends BaseEntity {
+public class DeptEntity {
+    @TableId(type = IdType.AUTO)
+    private Long id;
+
     @TableField("dept_name")
     private String name;
     private Long parentId;
     @TableField("sort_order")
     private Integer sortOrder;
+
+    private Long createdBy;
+    @TableField(fill = FieldFill.INSERT)
+    private LocalDateTime createdAt;
+    private Long updatedBy;
+    @TableField(fill = FieldFill.INSERT_UPDATE)
+    private LocalDateTime updatedAt;
+    @TableLogic
+    private Integer deleted;
+    @Version
+    private Integer version;
+
     @TableField(exist = false)
     private String status;
     @TableField(exist = false)
