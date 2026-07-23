@@ -54,7 +54,28 @@ function parseEntity(filePath) {
     fields.push({ fieldName, columnName, annotation });
   }
 
-  return { tableName, fields, filePath };
+  // H-17 增强：检查 String 类型字段映射到 JSONB 列时是否缺少 typeHandler
+  // AGENTS.md §4.2 第 6 条：String→JSONB 字段必须加 @TableField(typeHandler = JsonbTypeHandler.class)
+  const typeHandlerErrors = [];
+  const jsonbColumnPattern = /(?:aux_dimension|assist_json|ai_mapping_result|ai_risk_tag|ocr_data|auxiliary|extension|extra|metadata|config_json|payload|snapshot|change_before|change_after|before_snapshot|after_snapshot)\b/i;
+  const fieldsWithJsonbRisk = src.match(/private\s+String\s+(\w+)\s*;/g) || [];
+  for (const fieldDecl of fieldsWithJsonbRisk) {
+    const fieldName = fieldDecl.match(/private\s+String\s+(\w+)/)[1];
+    // 查找该字段前的 @TableField 注解
+    const fieldIdx = src.indexOf(fieldDecl);
+    const beforeText = src.slice(Math.max(0, fieldIdx - 500), fieldIdx);
+    const tableFieldMatch = beforeText.match(/@TableField\s*\(([^)]*)\)/g) || [];
+    const lastAnnotation = tableFieldMatch[tableFieldMatch.length - 1] || '';
+    // 如果字段名疑似 JSONB 列且没有 typeHandler 声明
+    if (jsonbColumnPattern.test(fieldName) && !/typeHandler\s*=/i.test(lastAnnotation)) {
+      typeHandlerErrors.push({
+        fieldName,
+        hint: `String 字段 "${fieldName}" 疑似 JSONB 列但缺少 @TableField(typeHandler = JsonbTypeHandler.class)`
+      });
+    }
+  }
+
+  return { tableName, fields, filePath, typeHandlerErrors };
 }
 
 // ── 获取 DB 表结构 ──
@@ -87,9 +108,38 @@ function findEntityFiles(dir) {
 
 const allErrors = [];
 
+// H-17 增强：DB 探活降级。docker postgres 不可用时跳过列检查（避免 pre-commit 阻塞）
+const dbAvailable = (() => {
+  try {
+    execSync('docker exec huicai-postgres pg_isready -U huicai -d huicai 2>/dev/null', { timeout: 3000 });
+    return true;
+  } catch {
+    return false;
+  }
+})();
+
+if (!dbAvailable) {
+  console.warn('⚠️  Docker postgres 不可用（huicai-postgres 容器未运行或 pg_isready 超时），跳过 Entity-DB 列一致性检查。');
+  console.warn('    本地开发可忽略此警告；CI 环境请确保 docker compose up -d 已启动 postgres。');
+}
+
+// H-17 增强：typeHandler 检查不依赖 DB，始终执行
+const typeHandlerErrors = [];
+
 for (const filePath of findEntityFiles(ENTITY_DIR)) {
   const entity = parseEntity(filePath);
   if (!entity) continue;
+
+  // 收集 typeHandler 警告（不依赖 DB）
+  if (entity.typeHandlerErrors && entity.typeHandlerErrors.length > 0) {
+    const relPath = relative(join(import.meta.dirname, '..'), filePath);
+    for (const thErr of entity.typeHandlerErrors) {
+      typeHandlerErrors.push(`  ${relPath}: ${thErr.hint}`);
+    }
+  }
+
+  // 列一致性检查依赖 DB，不可用时跳过
+  if (!dbAvailable) continue;
 
   const columns = getTableColumns(entity.tableName);
   if (columns === null) {
@@ -107,6 +157,22 @@ for (const filePath of findEntityFiles(ENTITY_DIR)) {
       allErrors.push(`  ${relPath}: 字段 "${field.fieldName}" → 列 "${colName}"，但 ${entity.tableName} 表没有此列`);
     }
   }
+}
+
+// 输出 typeHandler 警告（作为 warning，不阻断提交，但提示开发者关注）
+if (typeHandlerErrors.length > 0) {
+  console.warn(`\n⚠️  疑似 JSONB 列缺少 typeHandler（${typeHandlerErrors.length} 项，请人工确认）：\n`);
+  for (const err of typeHandlerErrors) {
+    console.warn(err);
+  }
+  console.warn('');
+  console.warn('修复方法：在对应 String 字段的 @TableField 注解中添加 typeHandler = JsonbTypeHandler.class');
+  console.warn('参考：AGENTS.md §4.2 第 6 条 / docs/specs/ 中的 Entity-DB 一致性章节\n');
+}
+
+// DB 不可用时，typeHandler 警告已输出，直接退出（不阻断 pre-commit）
+if (!dbAvailable) {
+  process.exit(0);
 }
 
 // 按表分组统计

@@ -6,12 +6,12 @@
 
 > **更新基准**：commit `65e8d66` (2026-07-09) — P44/P45 核销列表修复 + 上游追溯
 > **当前分支**：`ai-evolution`
-> **关联文档**：[DESIGN.md](docs/DESIGN.md)、[需求登记册](docs/requirements/REQUIREMENTS_REGISTRY.md)、[DOCUMENT_REGISTRY.md](docs/DOCUMENT_REGISTRY.md)、[Flyway治理规范](docs/development/flyway-governance.md)
+> **关联文档**：[项目说明](docs/项目说明.md)、[技术方案](docs/技术方案.md)、[需求分析](docs/需求分析.md)、[需求登记册](docs/development/requirements/REQUIREMENTS_REGISTRY.md)、[文档注册表](docs/文档注册表.md)、[Flyway治理规范](docs/development/flyway-governance.md)
 
 | 维度 | 数据 |
 |------|------|
 | 后端代码 | 345 Java 文件 |
-| 测试用例 | 579 个 `@Test` 方法 / 78 个测试类 |
+| 测试用例 | 1042 个 `@Test` 方法 / 134 个测试类（含并发测试）|
 | 数据库 | PostgreSQL 16 / V1 baseline (merged V1-V91) |
 | API 端点 | 433 个后端端点 |
 | 核心模块 | 基础数据、总账、应收应付、现金管理、固定资产、费用报销、发票税务、预算、财务报表、存储管理 |
@@ -119,6 +119,7 @@
    - `BankStatementEntity`：15+ 个字段无 `@TableField(exist = false)`，包括 `direction`、`batchId`、`purpose`、`transactionRemark`、`reviewedBy`、`reviewedAt`、`generatedDocId`、`generatedVoucherId`、`generatedAt`、`ruleId`、`aiConfidence`、`aiSuggestedAction`、`aiBusinessScene`、`version`
    - **根源**：Entity 按"未来完整 schema"写，但 DB 是另一个版本。注释写"Vxx 列已添加"但 migration 从未执行。
    - **预防**：统一用 `node backend/scripts/check-entity-schema.mjs` 在编译时检查字段映射一致性。后续每次改 Entity 都要跑这个检查。
+   - **H-17 已集成 pre-commit hook**（2026-07-23）：提交涉及 `*Entity.java` 的变更时自动运行检查脚本。docker postgres 未运行时自动降级跳过列检查，仅做 typeHandler 警告。首次克隆仓库后执行 `bash backend/scripts/install-hooks.sh` 安装。
 
 ### 4.3 测试类
 6. **测试假阳性**：测试通过 ≠ 功能完成。跨实体链路必须真实贯通，不能只测单个模块 CRUD。E2E 测试必须模拟真实用户操作路径
