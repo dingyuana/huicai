@@ -23,15 +23,19 @@ public class ReconciliationToleranceEntity {
     private String partyType;
 
     /** 容差金额阈值（默认5元） */
+    @TableField(exist = false)
     private BigDecimal toleranceAmount;
 
     /** 容差比例阈值（默认10%） */
+    @TableField(exist = false)
     private BigDecimal toleranceRate;
 
     /** 生效日期 */
+    @TableField(exist = false)
     private LocalDate effectiveFrom;
 
     /** 失效日期 */
+    @TableField(exist = false)
     private LocalDate effectiveTo;
 
     @TableField(fill = FieldFill.INSERT)
@@ -40,5 +44,6 @@ public class ReconciliationToleranceEntity {
     @TableField(fill = FieldFill.INSERT_UPDATE)
     private LocalDateTime updatedAt;
 
+    @TableField(exist = false)
     private Integer deleted;
 }

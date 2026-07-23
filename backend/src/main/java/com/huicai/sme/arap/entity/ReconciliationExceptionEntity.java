@@ -25,22 +25,27 @@ public class ReconciliationExceptionEntity {
     /** 来源单据 ID */
     private Long sourceDocId;
 
-    /** 目标单据类型: INVOICE_OUT / INVOICE_IN (可能为空) */
+    /** 目标单据类型: INVOICE_OUT / INVOICE_IN (可能为空) — DB 无此列 */
+    @TableField(exist = false)
     private String targetDocType;
 
-    /** 目标单据 ID (可能为空) */
+    /** 目标单据 ID (可能为空) — DB 无此列 */
+    @TableField(exist = false)
     private Long targetDocId;
 
-    /** 客户/供应商 ID */
+    /** 客户/供应商 ID — DB 无此列 */
+    @TableField(exist = false)
     private Long partyId;
 
-    /** 客户/供应商类型: CUSTOMER / VENDOR */
+    /** 客户/供应商类型: CUSTOMER / VENDOR — DB 无此列 */
+    @TableField(exist = false)
     private String partyType;
 
     /** 来源金额 */
     private BigDecimal amount;
 
-    /** 目标未结金额 */
+    /** 目标未结金额 — DB 无此列 */
+    @TableField(exist = false)
     private BigDecimal unsettledAmount;
 
     /**
@@ -53,20 +58,24 @@ public class ReconciliationExceptionEntity {
      */
     private String exceptionType;
 
-    /** 异常原因描述 */
+    /** 异常原因描述 — DB 无此列 */
+    @TableField(exist = false)
     private String exceptionReason;
 
-    /** AI/规则推荐的匹配方案 (JSON) */
+    /** AI/规则推荐的匹配方案 (JSON) — DB 无此列 */
+    @TableField(exist = false)
     private String matchSuggestion;
 
     /** 状态: OPEN / RESOLVED / IGNORED */
     @StatusChangeable(entity = "RECONCILIATION_EXCEPTION", fieldName = "status")
     private String status;
 
-    /** 重试次数 */
+    /** 重试次数 — DB 无此列 */
+    @TableField(exist = false)
     private Integer retryCount;
 
-    /** 处理人 */
+    /** 处理人 — DB 无此列 */
+    @TableField(exist = false)
     private Long assignedTo;
 
     /** 处理人 */
@@ -75,14 +84,18 @@ public class ReconciliationExceptionEntity {
     /** 处理时间 */
     private LocalDateTime resolvedAt;
 
-    /** 备注 */
+    /** 备注 — DB 无此列 */
+    @TableField(exist = false)
     private String remark;
 
+    /** 创建人 — DB 无此列 */
+    @TableField(exist = false)
     private Long createdBy;
 
     @TableField(fill = FieldFill.INSERT)
     private LocalDateTime createdAt;
 
-    @TableField(fill = FieldFill.INSERT_UPDATE)
+    /** 更新时间 — DB 无此列 */
+    @TableField(exist = false)
     private LocalDateTime updatedAt;
 }

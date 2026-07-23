@@ -24,8 +24,10 @@ public class ExpenseReimbursementEntity {
     private Long deptId;
 
     /** TRAVEL/OFFICE/ENTERTAIN/TRANSPORT/COMMUNICATION/OTHER */
+    @TableField(exist = false)
     private String expenseType;
 
+    @TableField(exist = false)
     private BigDecimal amount;
     private String summary;
 
@@ -35,13 +37,19 @@ public class ExpenseReimbursementEntity {
 
     private Long docId;
     private Long voucherId;
+    @TableField(exist = false)
     private Long bankStmtId;
+    @TableField(exist = false)
     private String attachmentIds;
 
+    @TableField(exist = false)
     private LocalDateTime submittedAt;
+    @TableField(exist = false)
     private LocalDateTime approvedAt;
     private Long createdBy;
+    @TableField(exist = false)
     private String approvedBy;
+    @TableField(exist = false)
     private String rejectReason;
 
     @TableField(fill = FieldFill.INSERT)

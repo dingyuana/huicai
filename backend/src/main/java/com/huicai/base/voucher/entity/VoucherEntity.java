@@ -46,21 +46,22 @@ public class VoucherEntity {
     private String attachmentIds;
 
     /**
-     * 溯源单据ID（生成该凭证的原始单据ID）
+     * 溯源单据ID（生成该凭证的原始单据ID）— DB 无此列
      */
-    @TableField("source_doc_id")
+    @TableField(exist = false)
     private Long sourceDocId;
 
     /**
-     * 溯源单据编号（冗余存储，用于快速查询）
+     * 溯源单据编号（冗余存储，用于快速查询）— DB 无此列
      */
-    @TableField("source_doc_no")
+    @TableField(exist = false)
     private String sourceDocNo;
 
     /**
      * 溯源单据类型：BUSINESS_DOC, OUTPUT_INVOICE, INPUT_INVOICE, RECEIVABLE, PAYABLE
+     * — DB 无此列
      */
-    @TableField("source_doc_type")
+    @TableField(exist = false)
     private String sourceDocType;
 
     /** 制单人 */
@@ -95,7 +96,8 @@ public class VoucherEntity {
     /** 记账时间 */
     private LocalDateTime postedAt;
 
-    /** 生成该凭证的模板ID (配置驱动, 替代硬编码) */
+    /** 生成该凭证的模板ID (配置驱动, 替代硬编码) — DB 无此列 */
+    @TableField(exist = false)
     private Long templateId;
 
     /** 被红冲凭证ID */
@@ -105,17 +107,20 @@ public class VoucherEntity {
     @TableField("business_doc_id")
     private Long businessDocId;
 
-    /** 驳回原因 (P22, 2026-06-22 新增) */
+    /** 驳回原因 (P22, 2026-06-22 新增) — DB 无此列 */
+    @TableField(exist = false)
     private String rejectedReason;
 
-    /** 红冲原因 (P22, 2026-06-22 新增) */
+    /** 红冲原因 (P22, 2026-06-22 新增) — DB 无此列 */
+    @TableField(exist = false)
     private String reverseReason;
 
     /** 逻辑删除(0-未删,1-已删) */
     @TableLogic
     private Integer deleted;
 
-    /** 乐观锁版本号 */
+    /** 乐观锁版本号 — DB 无此列 */
+    @TableField(exist = false)
     @Version
     private Integer version;
 }

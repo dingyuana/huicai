@@ -25,12 +25,13 @@ public class ArapSettlementEntity {
     private BigDecimal discountAmount;
     private Long voucherId;
     /**
-     * 凭证编号（冗余存储，用于快速查询）
+     * 凭证编号（冗余存储，用于快速查询）— DB 无此列
      */
-    @TableField("voucher_no")
+    @TableField(exist = false)
     private String voucherNo;
-    /** 被对冲的原核销单ID（红冲时指向原单） */
-    @TableField("reversed_from_settlement_id")
+
+    /** 被对冲的原核销单ID（红冲时指向原单）— DB 无此列 */
+    @TableField(value = "reversed_from_settlement_id", exist = false)
     private Long reversedFromSettlementId;
     @StatusChangeable(entity = "ARAP_SETTLEMENT", fieldName = "status")
     private String status;

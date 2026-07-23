@@ -326,6 +326,9 @@ public class BankStatementServiceImpl implements BankStatementService {
         BankStatementEntity stmt = statementMapper.selectById(statementId);
         if (stmt == null) throw BusinessException.notFound("对账单记录不存在");
 
+        // 从 tx_type 推导 direction（direction 字段不持久化到 DB）
+        String direction = deriveDirection(stmt.getTxType());
+
         // 合并多个文本字段: 业务类型 + 摘要 + 用途 + 交易附言
         String combinedText = Stream.of(stmt.getSummary(), stmt.getPurpose(), stmt.getTransactionRemark())
                 .filter(StrUtil::isNotBlank)
@@ -333,7 +336,7 @@ public class BankStatementServiceImpl implements BankStatementService {
 
         // 第一层: 规则引擎匹配 (合并字段 + 方向 + 对方户名)
         ClassificationRuleEntity rule = classificationRuleService.match(
-                combinedText, stmt.getDirection(), stmt.getCounterAccount()
+                combinedText, direction, stmt.getCounterAccount()
         );
 
         // 防误判: 摘要含社保关键词但对方是商业公司 → 跳过规则, 走兜底
@@ -361,14 +364,14 @@ public class BankStatementServiceImpl implements BankStatementService {
                 fbDescription = (fbDescription != null ? fbDescription + " " : "") + stmt.getCounterAccount();
             }
             FallbackHeuristicService.Result fb = fallbackHeuristic.classify(
-                    fbDescription, stmt.getDirection()
+                    fbDescription, direction
             );
 
             // 防误判: 兜底匹配社保但对方是商业公司 → 降级为方向兜底
             if (BankClassification.SALARY_SOCIAL.equals(fb.getClassification())
                     && StrUtil.isNotBlank(stmt.getCounterAccount())
                     && isCommercialEntity(stmt.getCounterAccount())) {
-                fb = fallbackHeuristic.classify("", stmt.getDirection());
+                fb = fallbackHeuristic.classify("", direction);
             }
 
             finalClassification = fb.getClassification();
@@ -383,6 +386,18 @@ public class BankStatementServiceImpl implements BankStatementService {
         stmt.setClassification(finalClassification);
         statementMapper.updateById(stmt);
         return stmt;
+    }
+
+    /**
+     * 从 tx_type 推导 direction（direction 字段不持久化到 DB，需要从 DB 中的 tx_type 推导）.
+     */
+    private String deriveDirection(String txType) {
+        if (txType == null) return null;
+        return switch (txType) {
+            case "INCOME", "TRANSFER_IN" -> "in";
+            case "EXPENSE", "TRANSFER_OUT" -> "out";
+            default -> null;
+        };
     }
 
     @Override

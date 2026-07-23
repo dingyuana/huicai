@@ -20,12 +20,18 @@ public class CustomerStatementEntity {
     private LocalDate statementDate;
 
     private BigDecimal totalOriginal;
+    /** 已结算金额 — DB 无此列 */
+    @TableField(exist = false)
     private BigDecimal totalSettled;
+    /** 未结算金额 — DB 无此列 */
+    @TableField(exist = false)
     private BigDecimal totalUnsettled;
 
     private String status;
 
     private LocalDateTime sentAt;
+    /** 确认时间 — DB 无此列 */
+    @TableField(exist = false)
     private LocalDateTime confirmedAt;
 
     @TableField(fill = FieldFill.INSERT)

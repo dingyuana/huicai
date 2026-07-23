@@ -18,27 +18,27 @@ public class AccountMappingRuleEntity {
     private Long id;
 
     /** 商品/费用名称关键字（支持 LIKE 匹配） */
-    @TableField("item_keyword")
+    @TableField(value = "item_keyword", exist = false)
     private String itemKeyword;
 
     /** 目标会计科目编码 */
-    @TableField("account_code")
+    @TableField(value = "account_code", exist = false)
     private String accountCode;
 
     /** 科目名称（冗余） */
-    @TableField("account_name")
+    @TableField(value = "account_name", exist = false)
     private String accountName;
 
     /** 适用方向: INPUT(进项)/OUTPUT(销项)/BOTH */
-    @TableField("direction")
+    @TableField(value = "direction", exist = false)
     private String direction;
 
     /** 辅助核算维度 */
-    @TableField(value = "aux_dimension", typeHandler = JsonbTypeHandler.class)
+    @TableField(value = "aux_dimension", typeHandler = JsonbTypeHandler.class, exist = false)
     private String auxDimension;
 
     /** 匹配优先级 */
-    @TableField("priority")
+    @TableField(value = "priority", exist = false)
     private Integer priority;
 
     /** 是否启用 */

@@ -19,11 +19,13 @@ public class BudgetEntryEntity {
     private Long projectId;
     private Integer periodMonth;
     private BigDecimal amount;
+    @TableField(exist = false)
     private String controlType;
+    @TableField(exist = false)
     private BigDecimal usedAmount;
 
     @TableField(fill = FieldFill.INSERT)
     private LocalDateTime createdAt;
-    @TableField(fill = FieldFill.INSERT_UPDATE)
+    @TableField(fill = FieldFill.INSERT_UPDATE, exist = false)
     private LocalDateTime updatedAt;
 }

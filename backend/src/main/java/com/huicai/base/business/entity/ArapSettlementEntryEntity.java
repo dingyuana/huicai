@@ -21,10 +21,12 @@ public class ArapSettlementEntryEntity {
     private BigDecimal settledAmount;
     private BigDecimal discountAmount;
 
-    /** 核销前单据余额快照 */
+    /** 核销前单据余额快照 — DB 无此列 */
+    @TableField(exist = false)
     private BigDecimal beforeBalance;
 
-    /** 核销后单据余额快照 */
+    /** 核销后单据余额快照 — DB 无此列 */
+    @TableField(exist = false)
     private BigDecimal afterBalance;
 
     @TableField(fill = FieldFill.INSERT)

@@ -25,10 +25,13 @@ public class BudgetEntity {
      */
     @StatusChangeable(entity = "BUDGET", fieldName = "status")
     private String status;
+    @TableField(exist = false)
     private Long approvedBy;
+    @TableField(exist = false)
     private LocalDateTime approvedAt;
     private String remark;
     private Long createdBy;
+    @TableField(exist = false)
     private Long updatedBy;
 
     @TableField(fill = FieldFill.INSERT)

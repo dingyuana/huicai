@@ -393,6 +393,10 @@ public class BankStatementExcelImportService {
             } else if (typeStr.contains("往账") || typeStr.contains("付") || typeStr.contains("借") || typeStr.toLowerCase().contains("out")) {
                 stmt.setTxType("EXPENSE"); stmt.setDirection("out");
             }
+            // 兜底: 列有值但不匹配关键词时, 默认 INCOME
+            if (stmt.getTxType() == null) {
+                stmt.setTxType("INCOME"); stmt.setDirection("in");
+            }
         } else {
             // 无交易类型列时, 根据金额正负推断
             if (stmt.getAmount() != null && stmt.getAmount().signum() >= 0) {
@@ -498,6 +502,8 @@ public class BankStatementExcelImportService {
                 inserted++;
             } catch (Exception e) {
                 failed++;
+                log.error("插入银行对账单失败: txDate={}, amount={}, externalNo={}, error={}",
+                        stmt.getTxDate(), stmt.getAmount(), stmt.getExternalNo(), e.getMessage(), e);
                 java.util.Map<String, Object> err = new java.util.LinkedHashMap<>();
                 err.put("row", stmt.getExternalNo());
                 err.put("message", "插入失败: " + e.getMessage());

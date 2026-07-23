@@ -27,21 +27,21 @@ public interface BankStatementMapper extends BaseMapper<BankStatementEntity> {
     @Update("UPDATE t_bank_statement SET generated_voucher_id = NULL WHERE generated_voucher_id IS NOT NULL")
     int nullOutGeneratedVoucherIds();
 
-    @Select("SELECT classification AS classification, COUNT(*) AS cnt "
+    @Select("SELECT category AS classification, COUNT(*) AS cnt "
           + "FROM t_bank_statement "
           + "WHERE account_id = #{accountId} AND deleted = 0 "
-          + "GROUP BY classification")
+          + "GROUP BY category")
     List<Map<String, Object>> countByClassification(@Param("accountId") Long accountId);
 
-    @Select("SELECT classification AS classification, COUNT(*) AS cnt "
+    @Select("SELECT category AS classification, COUNT(*) AS cnt "
           + "FROM t_bank_statement "
           + "WHERE account_id = #{accountId} AND deleted = 0 AND review_status = #{reviewStatus} "
-          + "GROUP BY classification")
+          + "GROUP BY category")
     List<Map<String, Object>> countByClassificationByReview(@Param("accountId") Long accountId,
                                                             @Param("reviewStatus") String reviewStatus);
 
     @Select("""
-        SELECT id, tx_date, amount, review_status, classification
+        SELECT id, tx_date, amount, review_status, category AS classification
         FROM t_bank_statement
         WHERE deleted = 0
           AND review_status IN ('voucher_generated', 'payment_created')

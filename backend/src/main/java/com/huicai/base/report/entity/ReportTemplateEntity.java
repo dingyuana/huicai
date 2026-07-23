@@ -17,6 +17,8 @@ public class ReportTemplateEntity {
     private String reportType;
     private String config;
     private Boolean isSystem;
+    /** 创建人 — DB 无此列 */
+    @TableField(exist = false)
     private Long createdBy;
 
     @TableField(fill = FieldFill.INSERT)

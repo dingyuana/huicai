@@ -27,25 +27,25 @@ public class OutputInvoiceEntity {
     private BigDecimal totalAmount;
 
     /**
-     * 不含税金额（价税分离计算）
+     * 不含税金额（价税分离计算）— DB 无此列
      */
-    @TableField("amount_ex_tax")
+    @TableField(exist = false)
     private BigDecimal amountExTax;
 
     /**
-     * AI 风险标签
+     * AI 风险标签 — DB 无此列
      */
-    @TableField("ai_risk_tag")
+    @TableField(exist = false)
     private String aiRiskTag;
 
     /**
-     * 处理状态: PENDING / PROCESSED / FAILED
+     * 处理状态: PENDING / PROCESSED / FAILED — DB 无此列
      */
-    @TableField("process_status")
+    @TableField(exist = false)
     private String processStatus;
 
-    /** AI 科目映射推荐结果（JSONB） */
-    @TableField(value = "ai_mapping_result", typeHandler = JsonbTypeHandler.class)
+    /** AI 科目映射推荐结果（JSONB）— DB 无此列 */
+    @TableField(exist = false)
     private String aiMappingResult;
 
     private String invoiceType;
@@ -59,6 +59,8 @@ public class OutputInvoiceEntity {
     private String status;
     private Long docId;
     private Long voucherId;
+    /** 关联应收单ID — DB 无此列 */
+    @TableField(exist = false)
     private Long receivableId;
     private String remark;
     private Long createdBy;
@@ -69,13 +71,15 @@ public class OutputInvoiceEntity {
     private Long reversedByInvoiceId;
 
     /**
-     * 被哪张蓝字发票红冲（指向蓝字发票 ID，P36 新增）
+     * 被哪张蓝字发票红冲（指向蓝字发票 ID，P36 新增）— DB 无此列
      */
+    @TableField(exist = false)
     private Long reversedFrom;
 
     /**
-     * 原蓝字发票号码（红字发票专用）
+     * 原蓝字发票号码（红字发票专用）— DB 无此列
      */
+    @TableField(exist = false)
     private String originalInvoiceNo;
 
     /**
@@ -93,12 +97,12 @@ public class OutputInvoiceEntity {
     @TableField(exist = false)
     private Long updatedBy;
 
-    /** 关联单据编号（冗余存储，用于快速查询） */
-    @TableField("doc_no")
+    /** 关联单据编号（冗余存储，用于快速查询）— DB 无此列 */
+    @TableField(exist = false)
     private String docNo;
 
-    /** 关联凭证编号（冗余存储，用于快速查询） */
-    @TableField("voucher_no")
+    /** 关联凭证编号（冗余存储，用于快速查询）— DB 无此列 */
+    @TableField(exist = false)
     private String voucherNo;
 
     /** 关联应收单编号（冗余存储，用于快速查询） */
@@ -126,7 +130,8 @@ public class OutputInvoiceEntity {
     @TableField(exist = false)
     private String voucherStatus = "";
 
-    /** 乐观锁版本号 */
+    /** 乐观锁版本号 — DB 无此列 */
+    @TableField(exist = false)
     @Version
     private Integer version;
 

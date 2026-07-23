@@ -27,28 +27,28 @@ public class InputInvoiceEntity {
     private BigDecimal totalAmount;
 
     /**
-     * 不含税金额（价税分离计算）
+     * 不含税金额（价税分离计算）— DB 无此列
      */
-    @TableField("amount_ex_tax")
+    @TableField(exist = false)
     private BigDecimal amountExTax;
 
     /**
-     * AI 风险标签
+     * AI 风险标签 — DB 无此列
      */
-    @TableField("ai_risk_tag")
+    @TableField(exist = false)
     private String aiRiskTag;
 
     /**
-     * 处理状态: PENDING / PROCESSED / FAILED
+     * 处理状态: PENDING / PROCESSED / FAILED — DB 无此列
      */
-    @TableField("process_status")
+    @TableField(exist = false)
     private String processStatus;
 
     /** 审核状态: PENDING_CONFIRM/PENDING_REVIEW/CONFIRMED/VOUCHERED/... */
     private String status;
 
-    /** AI 科目映射推荐结果（JSONB） */
-    @TableField(value = "ai_mapping_result", typeHandler = JsonbTypeHandler.class)
+    /** AI 科目映射推荐结果（JSONB）— DB 无此列 */
+    @TableField(exist = false)
     private String aiMappingResult;
 
     private String invoiceType;
@@ -65,15 +65,15 @@ public class InputInvoiceEntity {
     private Long docId;
 
     /**
-     * 业务单据编号（冗余存储，用于快速查询）
+     * 业务单据编号（冗余存储，用于快速查询）— DB 无此列
      */
-    @TableField("doc_no")
+    @TableField(exist = false)
     private String docNo;
 
     /**
-     * 凭证编号（冗余存储，用于快速查询）
+     * 凭证编号（冗余存储，用于快速查询）— DB 无此列
      */
-    @TableField("voucher_no")
+    @TableField(exist = false)
     private String voucherNo;
 
     private String remark;

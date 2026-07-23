@@ -27,12 +27,15 @@ public class EmployeeEntity {
     private String phone;
     private String email;
 
-    /** 工资卡银行 */
+    /** 工资卡银行 — DB 无此列 */
+    @TableField(exist = false)
     private String bankName;
-    /** 工资卡号 */
+    /** 工资卡号 — DB 无此列 */
+    @TableField(exist = false)
     private String bankAccount;
 
-    /** 身份证号 */
+    /** 身份证号 — DB 无此列 */
+    @TableField(exist = false)
     private String idCard;
 
     private Boolean isActive;

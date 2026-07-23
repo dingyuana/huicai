@@ -20,16 +20,20 @@ public class AuditLogEntity {
     private String method;
     @TableField(typeHandler = JsonbTypeHandler.class)
     private String requestParams;
-    @TableField(typeHandler = JsonbTypeHandler.class)
+    @TableField(typeHandler = JsonbTypeHandler.class, exist = false)
     private String responseResult;
-    @TableField(typeHandler = JsonbTypeHandler.class)
+    @TableField(typeHandler = JsonbTypeHandler.class, exist = false)
     private String oldSnapshot;
-    @TableField(typeHandler = JsonbTypeHandler.class)
+    @TableField(typeHandler = JsonbTypeHandler.class, exist = false)
     private String newSnapshot;
     private String ipAddress;
+    @TableField(exist = false)
     private String userAgent;
+    @TableField(exist = false)
     private Integer executionTimeMs;
+    @TableField(exist = false)
     private String status;
     private String module;
+    @TableField(exist = false)
     private LocalDateTime createdAt;
 }
