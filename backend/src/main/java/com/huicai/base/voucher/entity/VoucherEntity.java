@@ -101,4 +101,8 @@ public class VoucherEntity extends BaseEntity {
     /** 红冲原因 (P22, 2026-06-22 新增) — DB 无此列 */
     @TableField(exist = false)
     private String reverseReason;
+
+    /** 乐观锁版本号 */
+    @Version
+    private Integer version;
 }

@@ -40,7 +40,7 @@ public abstract class BaseEntity {
     @TableLogic
     private Integer deleted;
 
-    /** 乐观锁版本号 */
-    @Version
+    /** 乐观锁版本号 — 默认不持久化，仅在需要乐观锁的 Entity 中单独声明 @Version */
+    @TableField(exist = false)
     private Integer version;
 }

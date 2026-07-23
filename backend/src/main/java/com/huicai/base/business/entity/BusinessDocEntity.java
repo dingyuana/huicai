@@ -99,4 +99,8 @@ public class BusinessDocEntity extends BaseEntity {
     /** 来源银行流水ID（P38-F6: 反向追溯银行流水→单据） */
     @TableField("bank_stmt_id")
     private Long bankStatementId;
+
+    /** 乐观锁版本号 */
+    @Version
+    private Integer version;
 }

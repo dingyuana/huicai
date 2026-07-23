@@ -26,7 +26,7 @@ public class DeptEntity {
     private LocalDateTime updatedAt;
     @TableLogic
     private Integer deleted;
-    @Version
+    @TableField(exist = false)
     private Integer version;
 
     @TableField(exist = false)

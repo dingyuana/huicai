@@ -33,6 +33,6 @@ public class SysConfigEntity {
     private LocalDateTime updatedAt;
     @TableLogic
     private Integer deleted;
-    @Version
+    @TableField(exist = false)
     private Integer version;
 }
