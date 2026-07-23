@@ -2,18 +2,18 @@ package com.huicai.base.business.entity;
 
 import com.baomidou.mybatisplus.annotation.*;
 import com.huicai.common.annotation.StatusChangeable;
+import com.huicai.common.entity.BaseEntity;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 @Data
+@EqualsAndHashCode(callSuper = true)
 @TableName("t_arap_settlement")
-public class ArapSettlementEntity {
-
-    @TableId(type = IdType.AUTO)
-    private Long id;
+public class ArapSettlementEntity extends BaseEntity {
 
     private String settlementNo;
     private String settlementType;

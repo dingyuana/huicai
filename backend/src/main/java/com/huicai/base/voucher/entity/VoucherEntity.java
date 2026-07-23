@@ -2,7 +2,9 @@ package com.huicai.base.voucher.entity;
 
 import com.baomidou.mybatisplus.annotation.*;
 import com.huicai.common.annotation.StatusChangeable;
+import com.huicai.common.entity.BaseEntity;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -11,11 +13,9 @@ import java.time.LocalDateTime;
  * 凭证主表实体
  */
 @Data
+@EqualsAndHashCode(callSuper = true)
 @TableName("t_voucher")
-public class VoucherEntity {
-
-    @TableId(type = IdType.AUTO)
-    private Long id;
+public class VoucherEntity extends BaseEntity {
 
     /** 凭证号(格式: 类型+年份+月份+流水号) */
     private String voucherNo;
@@ -64,20 +64,6 @@ public class VoucherEntity {
     @TableField(exist = false)
     private String sourceDocType;
 
-    /** 制单人 */
-    private Long createdBy;
-
-    /** 制单时间 */
-    @TableField(fill = FieldFill.INSERT)
-    private LocalDateTime createdAt;
-
-    /** 更新人 */
-    private Long updatedBy;
-
-    /** 更新时间 */
-    @TableField(fill = FieldFill.INSERT_UPDATE)
-    private LocalDateTime updatedAt;
-
     /** 提交人 */
     private Long submittedBy;
 
@@ -115,13 +101,4 @@ public class VoucherEntity {
     /** 红冲原因 (P22, 2026-06-22 新增) — DB 无此列 */
     @TableField(exist = false)
     private String reverseReason;
-
-    /** 逻辑删除(0-未删,1-已删) */
-    @TableLogic
-    private Integer deleted;
-
-    /** 乐观锁版本号 */
-    @Version
-    @TableField("version")
-    private Integer version;
 }

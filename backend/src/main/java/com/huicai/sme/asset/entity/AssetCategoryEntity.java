@@ -1,17 +1,17 @@
 package com.huicai.sme.asset.entity;
 
 import com.baomidou.mybatisplus.annotation.*;
+import com.huicai.common.entity.BaseEntity;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @Data
+@EqualsAndHashCode(callSuper = true)
 @TableName("t_asset_category")
-public class AssetCategoryEntity {
-
-    @TableId(type = IdType.AUTO)
-    private Long id;
+public class AssetCategoryEntity extends BaseEntity {
 
     private String code;
     private String name;

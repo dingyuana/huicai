@@ -1,7 +1,9 @@
 package com.huicai.base.voucher.entity;
 
 import com.baomidou.mybatisplus.annotation.*;
+import com.huicai.common.entity.BaseEntity;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 
 import java.time.LocalDateTime;
 
@@ -10,11 +12,9 @@ import java.time.LocalDateTime;
  * 通过 template 表达式 (如 {{amount}}, {{summary}}) 实现动态填充.
  */
 @Data
+@EqualsAndHashCode(callSuper = true)
 @TableName("t_voucher_template_line")
-public class VoucherTemplateLineEntity {
-
-    @TableId(type = IdType.AUTO)
-    private Long id;
+public class VoucherTemplateLineEntity extends BaseEntity {
 
     /** 所属模板 ID */
     private Long templateId;

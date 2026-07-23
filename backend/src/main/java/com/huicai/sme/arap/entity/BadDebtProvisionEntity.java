@@ -2,18 +2,18 @@ package com.huicai.sme.arap.entity;
 
 import com.baomidou.mybatisplus.annotation.*;
 import com.huicai.common.annotation.StatusChangeable;
+import com.huicai.common.entity.BaseEntity;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 @Data
+@EqualsAndHashCode(callSuper = true)
 @TableName("t_bad_debt_provision")
-public class BadDebtProvisionEntity {
-
-    @TableId(type = IdType.AUTO)
-    private Long id;
+public class BadDebtProvisionEntity extends BaseEntity {
 
     private String period;
     private String method;

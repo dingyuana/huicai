@@ -2,7 +2,9 @@ package com.huicai.sme.arap.entity;
 
 import com.baomidou.mybatisplus.annotation.*;
 import com.huicai.common.annotation.StatusChangeable;
+import com.huicai.common.entity.BaseEntity;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -11,11 +13,9 @@ import java.time.LocalDateTime;
  * 核销异常记录 — 存储自动核销失败/需要人工介入的异常.
  */
 @Data
+@EqualsAndHashCode(callSuper = true)
 @TableName("t_reconciliation_exception")
-public class ReconciliationExceptionEntity {
-
-    @TableId(type = IdType.AUTO)
-    private Long id;
+public class ReconciliationExceptionEntity extends BaseEntity {
 
     private Long tenantId;
 

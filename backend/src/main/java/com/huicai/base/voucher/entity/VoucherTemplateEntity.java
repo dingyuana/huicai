@@ -1,7 +1,9 @@
 package com.huicai.base.voucher.entity;
 
 import com.baomidou.mybatisplus.annotation.*;
+import com.huicai.common.entity.BaseEntity;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 
 import java.time.LocalDateTime;
 
@@ -10,11 +12,9 @@ import java.time.LocalDateTime;
  * 每个模板绑定一个 classification, 用于银行流水 A 类自动制证.
  */
 @Data
+@EqualsAndHashCode(callSuper = true)
 @TableName("t_voucher_template")
-public class VoucherTemplateEntity {
-
-    @TableId(type = IdType.AUTO)
-    private Long id;
+public class VoucherTemplateEntity extends BaseEntity {
 
     @TableField("template_name")
     private String name;

@@ -1,17 +1,17 @@
 package com.huicai.sme.asset.entity;
 
 import com.baomidou.mybatisplus.annotation.*;
+import com.huicai.common.entity.BaseEntity;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 @Data
+@EqualsAndHashCode(callSuper = true)
 @TableName("t_asset_change")
-public class AssetChangeEntity {
-
-    @TableId(type = IdType.AUTO)
-    private Long id;
+public class AssetChangeEntity extends BaseEntity {
 
     private Long assetId;
     private String changeType;

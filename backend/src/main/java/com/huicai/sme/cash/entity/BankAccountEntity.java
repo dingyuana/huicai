@@ -1,17 +1,17 @@
 package com.huicai.sme.cash.entity;
 
 import com.baomidou.mybatisplus.annotation.*;
+import com.huicai.common.entity.BaseEntity;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @Data
+@EqualsAndHashCode(callSuper = true)
 @TableName("t_bank_account")
-public class BankAccountEntity {
-
-    @TableId(type = IdType.AUTO)
-    private Long id;
+public class BankAccountEntity extends BaseEntity {
 
     private String accountNo;
     private String accountName;

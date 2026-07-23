@@ -1,7 +1,9 @@
 package com.huicai.base.balance.entity;
 
 import com.baomidou.mybatisplus.annotation.*;
+import com.huicai.common.entity.BaseEntity;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -10,11 +12,9 @@ import java.time.LocalDateTime;
  * 科目余额表实体
  */
 @Data
+@EqualsAndHashCode(callSuper = true)
 @TableName("t_subject_balance")
-public class SubjectBalanceEntity {
-
-    @TableId(type = IdType.AUTO)
-    private Long id;
+public class SubjectBalanceEntity extends BaseEntity {
 
     /** 科目ID */
     private Long subjectId;

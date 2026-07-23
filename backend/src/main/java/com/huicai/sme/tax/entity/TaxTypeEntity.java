@@ -1,17 +1,17 @@
 package com.huicai.sme.tax.entity;
 
 import com.baomidou.mybatisplus.annotation.*;
+import com.huicai.common.entity.BaseEntity;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @Data
+@EqualsAndHashCode(callSuper = true)
 @TableName("t_tax_type")
-public class TaxTypeEntity {
-
-    @TableId(type = IdType.AUTO)
-    private Long id;
+public class TaxTypeEntity extends BaseEntity {
 
     private String code;
     private String name;

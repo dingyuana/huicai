@@ -1,17 +1,17 @@
 package com.huicai.sme.arap.entity;
 
 import com.baomidou.mybatisplus.annotation.*;
+import com.huicai.common.entity.BaseEntity;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @Data
+@EqualsAndHashCode(callSuper = true)
 @TableName("t_reconciliation_outstanding")
-public class OutstandingItemEntity {
-
-    @TableId(type = IdType.AUTO)
-    private Long id;
+public class OutstandingItemEntity extends BaseEntity {
 
     private Long customerId;
     private Long statementId;

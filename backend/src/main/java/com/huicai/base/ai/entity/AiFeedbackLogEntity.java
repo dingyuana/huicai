@@ -1,7 +1,9 @@
 package com.huicai.base.ai.entity;
 
 import com.baomidou.mybatisplus.annotation.*;
+import com.huicai.common.entity.BaseEntity;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 
 import java.time.LocalDateTime;
 
@@ -11,12 +13,9 @@ import java.time.LocalDateTime;
  * append-only 用户行为日志，不可更新删除
  */
 @Data
+@EqualsAndHashCode(callSuper = true)
 @TableName("t_ai_feedback_log")
-public class AiFeedbackLogEntity {
-
-    /** 主键 */
-    @TableId(type = IdType.AUTO)
-    private Long id;
+public class AiFeedbackLogEntity extends BaseEntity {
 
     /** 租户 ID */
     private Long tenantId;

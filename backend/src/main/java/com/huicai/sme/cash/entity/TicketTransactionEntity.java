@@ -1,7 +1,9 @@
 package com.huicai.sme.cash.entity;
 
 import com.baomidou.mybatisplus.annotation.*;
+import com.huicai.common.entity.BaseEntity;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -11,11 +13,9 @@ import java.time.LocalDateTime;
  * 票据交易流水
  */
 @Data
+@EqualsAndHashCode(callSuper = true)
 @TableName("t_ticket_transaction")
-public class TicketTransactionEntity {
-
-    @TableId(type = IdType.AUTO)
-    private Long id;
+public class TicketTransactionEntity extends BaseEntity {
 
     private Long ticketId;
 

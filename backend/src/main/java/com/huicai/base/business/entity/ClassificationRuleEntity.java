@@ -1,7 +1,9 @@
 package com.huicai.base.business.entity;
 
 import com.baomidou.mybatisplus.annotation.*;
+import com.huicai.common.entity.BaseEntity;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 
 import java.time.LocalDateTime;
 
@@ -10,12 +12,9 @@ import java.time.LocalDateTime;
  * 对应 t_classification_rule 表（V18）
  */
 @Data
+@EqualsAndHashCode(callSuper = true)
 @TableName("t_classification_rule")
-public class ClassificationRuleEntity {
-
-    /** 主键 */
-    @TableId(type = IdType.AUTO)
-    private Long id;
+public class ClassificationRuleEntity extends BaseEntity {
 
     /** 租户 ID */
     private Long tenantId;

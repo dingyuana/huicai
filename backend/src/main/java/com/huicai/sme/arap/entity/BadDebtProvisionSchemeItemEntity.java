@@ -1,7 +1,9 @@
 package com.huicai.sme.arap.entity;
 
 import com.baomidou.mybatisplus.annotation.*;
+import com.huicai.common.entity.BaseEntity;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -10,11 +12,9 @@ import java.time.LocalDateTime;
  * 坏账计提方案明细 — 每个账龄区间对应的计提比例
  */
 @Data
+@EqualsAndHashCode(callSuper = true)
 @TableName("t_bad_debt_provision_scheme_item")
-public class BadDebtProvisionSchemeItemEntity {
-
-    @TableId(type = IdType.AUTO)
-    private Long id;
+public class BadDebtProvisionSchemeItemEntity extends BaseEntity {
 
     /** 方案ID */
     private Long schemeId;

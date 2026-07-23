@@ -1,16 +1,16 @@
 package com.huicai.base.report.entity;
 
 import com.baomidou.mybatisplus.annotation.*;
+import com.huicai.common.entity.BaseEntity;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 
 import java.time.LocalDateTime;
 
 @Data
+@EqualsAndHashCode(callSuper = true)
 @TableName("t_report_template")
-public class ReportTemplateEntity {
-
-    @TableId(type = IdType.AUTO)
-    private Long id;
+public class ReportTemplateEntity extends BaseEntity {
 
     private String templateCode;
     private String templateName;

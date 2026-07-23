@@ -1,7 +1,9 @@
 package com.huicai.sme.cash.entity;
 
 import com.baomidou.mybatisplus.annotation.*;
+import com.huicai.common.entity.BaseEntity;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -11,11 +13,9 @@ import java.time.LocalDateTime;
  * 现金日记账
  */
 @Data
+@EqualsAndHashCode(callSuper = true)
 @TableName("t_cash_journal")
-public class CashJournalEntity {
-
-    @TableId(type = IdType.AUTO)
-    private Long id;
+public class CashJournalEntity extends BaseEntity {
 
     private String period;
 

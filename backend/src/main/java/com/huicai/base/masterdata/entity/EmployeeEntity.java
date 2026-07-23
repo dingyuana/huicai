@@ -1,7 +1,9 @@
 package com.huicai.base.masterdata.entity;
 
 import com.baomidou.mybatisplus.annotation.*;
+import com.huicai.common.entity.BaseEntity;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 
 import java.time.LocalDateTime;
 
@@ -9,11 +11,9 @@ import java.time.LocalDateTime;
  * 员工档案 - P11-1
  */
 @Data
+@EqualsAndHashCode(callSuper = true)
 @TableName("t_employee")
-public class EmployeeEntity {
-
-    @TableId(type = IdType.AUTO)
-    private Long id;
+public class EmployeeEntity extends BaseEntity {
 
     /** 工号 */
     private String code;

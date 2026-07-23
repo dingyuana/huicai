@@ -2,16 +2,16 @@ package com.huicai.base.ai.entity;
 
 import com.baomidou.mybatisplus.annotation.*;
 import com.huicai.common.annotation.StatusChangeable;
+import com.huicai.common.entity.BaseEntity;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 
 import java.time.LocalDateTime;
 
 @Data
+@EqualsAndHashCode(callSuper = true)
 @TableName("t_ai_task")
-public class AiTaskEntity {
-
-    @TableId(type = IdType.AUTO)
-    private Long id;
+public class AiTaskEntity extends BaseEntity {
 
     private String taskNo;
     private String taskType;

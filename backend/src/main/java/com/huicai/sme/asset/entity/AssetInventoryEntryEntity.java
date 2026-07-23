@@ -1,16 +1,16 @@
 package com.huicai.sme.asset.entity;
 
 import com.baomidou.mybatisplus.annotation.*;
+import com.huicai.common.entity.BaseEntity;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 
 import java.math.BigDecimal;
 
 @Data
+@EqualsAndHashCode(callSuper = true)
 @TableName("t_asset_inventory_entry")
-public class AssetInventoryEntryEntity {
-
-    @TableId(type = IdType.AUTO)
-    private Long id;
+public class AssetInventoryEntryEntity extends BaseEntity {
 
     private Long inventoryId;
     private Long assetId;

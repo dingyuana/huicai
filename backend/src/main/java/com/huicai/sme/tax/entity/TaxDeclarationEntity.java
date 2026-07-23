@@ -2,17 +2,17 @@ package com.huicai.sme.tax.entity;
 
 import com.baomidou.mybatisplus.annotation.*;
 import com.huicai.common.annotation.StatusChangeable;
+import com.huicai.common.entity.BaseEntity;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @Data
+@EqualsAndHashCode(callSuper = true)
 @TableName("t_tax_declaration")
-public class TaxDeclarationEntity {
-
-    @TableId(type = IdType.AUTO)
-    private Long id;
+public class TaxDeclarationEntity extends BaseEntity {
 
     private String declarationNo;
     private String period;

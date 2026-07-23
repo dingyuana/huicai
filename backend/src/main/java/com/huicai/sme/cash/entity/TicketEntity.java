@@ -2,7 +2,9 @@ package com.huicai.sme.cash.entity;
 
 import com.baomidou.mybatisplus.annotation.*;
 import com.huicai.common.annotation.StatusChangeable;
+import com.huicai.common.entity.BaseEntity;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -12,11 +14,9 @@ import java.time.LocalDateTime;
  * 票据管理（支票/汇票）
  */
 @Data
+@EqualsAndHashCode(callSuper = true)
 @TableName("t_ticket")
-public class TicketEntity {
-
-    @TableId(type = IdType.AUTO)
-    private Long id;
+public class TicketEntity extends BaseEntity {
 
     private String ticketNo;
 

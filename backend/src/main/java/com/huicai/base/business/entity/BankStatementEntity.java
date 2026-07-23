@@ -2,18 +2,18 @@ package com.huicai.base.business.entity;
 
 import com.baomidou.mybatisplus.annotation.*;
 import com.huicai.common.annotation.StatusChangeable;
+import com.huicai.common.entity.BaseEntity;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 @Data
+@EqualsAndHashCode(callSuper = true)
 @TableName("t_bank_statement")
-public class BankStatementEntity {
-
-    @TableId(type = IdType.AUTO)
-    private Long id;
+public class BankStatementEntity extends BaseEntity {
 
     private Long accountId;
     private LocalDate txDate;
@@ -30,7 +30,6 @@ public class BankStatementEntity {
     private Long matchedJournalId;
     private String matchStatus;
 
-    // P1 业务分类字段 (V17)
     // P1 业务分类字段 (V17) — DB 无对应列，仅内存缓存
     @TableField(exist = false)
     private String direction;             // 业务方向 in/out
@@ -71,6 +70,16 @@ public class BankStatementEntity {
 
     @TableField(fill = FieldFill.INSERT)
     private LocalDateTime importedAt;
+
+    // 覆盖 BaseEntity 字段，标记为不存在于 DB
+    @TableField(exist = false)
+    private Long createdBy;
+    @TableField(exist = false)
+    private LocalDateTime createdAt;
+    @TableField(exist = false)
+    private Long updatedBy;
+    @TableField(exist = false)
+    private LocalDateTime updatedAt;
 
     @TableLogic
     private Integer deleted;

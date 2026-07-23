@@ -3,18 +3,18 @@ package com.huicai.base.business.entity;
 import com.baomidou.mybatisplus.annotation.*;
 import com.huicai.common.annotation.StatusChangeable;
 import com.huicai.base.system.handler.JsonbTypeHandler;
+import com.huicai.common.entity.BaseEntity;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 @Data
+@EqualsAndHashCode(callSuper = true)
 @TableName("t_input_invoice")
-public class InputInvoiceEntity {
-
-    @TableId(type = IdType.AUTO)
-    private Long id;
+public class InputInvoiceEntity extends BaseEntity {
 
     private String invoiceNo;
     private LocalDate invoiceDate;

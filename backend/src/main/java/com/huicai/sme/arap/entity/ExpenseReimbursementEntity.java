@@ -2,7 +2,9 @@ package com.huicai.sme.arap.entity;
 
 import com.baomidou.mybatisplus.annotation.*;
 import com.huicai.common.annotation.StatusChangeable;
+import com.huicai.common.entity.BaseEntity;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -11,11 +13,9 @@ import java.time.LocalDateTime;
  * 费用报销单 - P11-2
  */
 @Data
+@EqualsAndHashCode(callSuper = true)
 @TableName("t_expense_reimbursement")
-public class ExpenseReimbursementEntity {
-
-    @TableId(type = IdType.AUTO)
-    private Long id;
+public class ExpenseReimbursementEntity extends BaseEntity {
 
     /** 报销单号 REIMB-YYYYMM-XXXX */
     private String reimbNo;

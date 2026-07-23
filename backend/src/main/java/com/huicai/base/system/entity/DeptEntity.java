@@ -1,19 +1,17 @@
 package com.huicai.base.system.entity;
 
 import com.baomidou.mybatisplus.annotation.TableField;
-import com.baomidou.mybatisplus.annotation.IdType;
-import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
+import com.huicai.common.entity.BaseEntity;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 
-import java.time.LocalDateTime;
 import java.util.List;
 
 @Data
+@EqualsAndHashCode(callSuper = true)
 @TableName("t_dept")
-public class DeptEntity {
-    @TableId(type = IdType.AUTO)
-    private Long id;
+public class DeptEntity extends BaseEntity {
     @TableField("dept_name")
     private String name;
     private Long parentId;
@@ -27,11 +25,6 @@ public class DeptEntity {
     private String phone;
     @TableField(exist = false)
     private String email;
-    private Long createdBy;
-    private Long updatedBy;
-    private LocalDateTime createdAt;
-    private LocalDateTime updatedAt;
-    private Integer deleted;
 
     @TableField(exist = false)
     private List<DeptEntity> children;

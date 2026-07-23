@@ -3,7 +3,9 @@ package com.huicai.base.business.entity;
 import com.baomidou.mybatisplus.annotation.*;
 import com.huicai.common.annotation.StatusChangeable;
 import com.huicai.base.system.handler.JsonbTypeHandler;
+import com.huicai.common.entity.BaseEntity;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -13,11 +15,9 @@ import java.time.LocalDateTime;
  * 业务单据主表实体
  */
 @Data
+@EqualsAndHashCode(callSuper = true)
 @TableName("t_business_doc")
-public class BusinessDocEntity {
-
-    @TableId(type = IdType.AUTO)
-    private Long id;
+public class BusinessDocEntity extends BaseEntity {
 
     /** 单据编号 */
     private String docNo;
@@ -79,21 +79,11 @@ public class BusinessDocEntity {
     @TableField("reversed_from")
     private Long reversedFrom;
 
-    private Long createdBy;
-    @TableField(fill = FieldFill.INSERT)
-    private LocalDateTime createdAt;
-    private Long updatedBy;
-    @TableField(fill = FieldFill.INSERT_UPDATE)
-    private LocalDateTime updatedAt;
-
     private Long submittedBy;
     private LocalDateTime submittedAt;
 
     private Long approvedBy;
     private LocalDateTime approvedAt;
-
-    @TableLogic
-    private Integer deleted;
 
     // ==================== P34 结算字段 ====================
 
@@ -109,10 +99,4 @@ public class BusinessDocEntity {
     /** 来源银行流水ID（P38-F6: 反向追溯银行流水→单据） */
     @TableField("bank_stmt_id")
     private Long bankStatementId;
-
-    // ==================== 乐观锁 ====================
-
-    /** 乐观锁版本号 */
-    @Version
-    private Integer version;
 }

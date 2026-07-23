@@ -1,19 +1,17 @@
 package com.huicai.base.system.entity;
 
-import com.baomidou.mybatisplus.annotation.*;
+import com.baomidou.mybatisplus.annotation.TableName;
+import com.huicai.common.entity.BaseEntity;
 import lombok.Data;
-
-import java.time.LocalDateTime;
+import lombok.EqualsAndHashCode;
 
 /**
  * 系统参数实体
  */
 @Data
+@EqualsAndHashCode(callSuper = true)
 @TableName("t_sys_config")
-public class SysConfigEntity {
-
-    @TableId(type = IdType.AUTO)
-    private Long id;
+public class SysConfigEntity extends BaseEntity {
 
     /** 参数键 */
     private String configKey;
@@ -29,22 +27,4 @@ public class SysConfigEntity {
 
     /** 是否启用 */
     private Boolean isActive;
-
-    /** 创建人 */
-    private Long createdBy;
-
-    /** 创建时间 */
-    @TableField(fill = FieldFill.INSERT)
-    private LocalDateTime createdAt;
-
-    /** 更新人 */
-    private Long updatedBy;
-
-    /** 更新时间 */
-    @TableField(fill = FieldFill.INSERT_UPDATE)
-    private LocalDateTime updatedAt;
-
-    /** 逻辑删除(0-未删,1-已删) */
-    @TableLogic
-    private Integer deleted;
 }

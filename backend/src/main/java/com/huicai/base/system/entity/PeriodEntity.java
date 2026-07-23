@@ -1,21 +1,20 @@
 package com.huicai.base.system.entity;
 
-import com.baomidou.mybatisplus.annotation.*;
+import com.baomidou.mybatisplus.annotation.TableName;
 import com.huicai.common.annotation.StatusChangeable;
+import com.huicai.common.entity.BaseEntity;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 
 import java.time.LocalDate;
-import java.time.LocalDateTime;
 
 /**
  * 会计期间实体
  */
 @Data
+@EqualsAndHashCode(callSuper = true)
 @TableName("t_period")
-public class PeriodEntity {
-
-    @TableId(type = IdType.AUTO)
-    private Long id;
+public class PeriodEntity extends BaseEntity {
 
     /** 会计年度 */
     private Integer year;
@@ -35,27 +34,4 @@ public class PeriodEntity {
     /** 状态: open-开启, closed-已结账, locked-已锁定 */
     @StatusChangeable(entity = "PERIOD", fieldName = "status")
     private String status;
-
-    /** 创建人 */
-    private Long createdBy;
-
-    /** 创建时间 */
-    @TableField(fill = FieldFill.INSERT)
-    private LocalDateTime createdAt;
-
-    /** 更新人 */
-    private Long updatedBy;
-
-    /** 更新时间 */
-    @TableField(fill = FieldFill.INSERT_UPDATE)
-    private LocalDateTime updatedAt;
-
-    /** 乐观锁版本号 */
-    @Version
-    @TableField("version")
-    private Integer version;
-
-    /** 逻辑删除(0-未删,1-已删) */
-    @TableLogic
-    private Integer deleted;
 }

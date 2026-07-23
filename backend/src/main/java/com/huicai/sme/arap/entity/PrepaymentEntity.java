@@ -9,6 +9,7 @@ import java.time.LocalDate;
 
 /**
  * 预付款/预收款实体 — 供应商预付或客户预收.
+ * 注意：不继承 BaseEntity，因为 createdBy(String)/createdAt(LocalDate)/updatedAt(LocalDate) 类型与基类不兼容。
  */
 @Data
 @TableName("t_prepayment")
@@ -18,6 +19,8 @@ public class PrepaymentEntity implements Serializable {
     private Long id;
 
     private Long tenantId;
+
+    private Long enterpriseId;
 
     @TableLogic
     private Integer deleted;

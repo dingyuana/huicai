@@ -1,16 +1,16 @@
 package com.huicai.base.report.entity;
 
 import com.baomidou.mybatisplus.annotation.*;
+import com.huicai.common.entity.BaseEntity;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 
 import java.time.LocalDateTime;
 
 @Data
+@EqualsAndHashCode(callSuper = true)
 @TableName("t_cash_flow_rule")
-public class CashFlowRuleEntity {
-
-    @TableId(type = IdType.AUTO)
-    private Long id;
+public class CashFlowRuleEntity extends BaseEntity {
 
     private String code;
     private String name;

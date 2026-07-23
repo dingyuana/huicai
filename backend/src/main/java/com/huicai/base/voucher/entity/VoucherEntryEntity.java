@@ -2,7 +2,9 @@ package com.huicai.base.voucher.entity;
 
 import com.baomidou.mybatisplus.annotation.*;
 import com.huicai.base.system.handler.JsonbTypeHandler;
+import com.huicai.common.entity.BaseEntity;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -11,11 +13,9 @@ import java.time.LocalDateTime;
  * 凭证分录表实体
  */
 @Data
+@EqualsAndHashCode(callSuper = true)
 @TableName("t_voucher_entry")
-public class VoucherEntryEntity {
-
-    @TableId(type = IdType.AUTO)
-    private Long id;
+public class VoucherEntryEntity extends BaseEntity {
 
     /** 凭证ID */
     private Long voucherId;
