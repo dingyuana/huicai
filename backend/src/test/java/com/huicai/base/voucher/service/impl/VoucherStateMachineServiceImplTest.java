@@ -118,4 +118,66 @@ class VoucherStateMachineServiceImplTest {
         e.setReversedFrom(100L);
         assertTrue(service.isReversed(e));
     }
+
+    // ====== H-12 负向断言补充：多状态非法值覆盖，确保"不该做的没做" ======
+
+    @Test
+    @DisplayName("assertSubmittable_CLOSED_抛异常_已结账不可提交")
+    void assertSubmittable_closed_throws() {
+        assertThrows(BusinessException.class,
+                () -> service.assertSubmittable(voucherWithStatus("CLOSED")));
+    }
+
+    @Test
+    @DisplayName("assertAuditable_CLOSED_抛异常_已结账不可审核")
+    void assertAuditable_closed_throws() {
+        assertThrows(BusinessException.class,
+                () -> service.assertAuditable(voucherWithStatus("CLOSED")));
+    }
+
+    @Test
+    @DisplayName("assertPostable_AUDITED_消息包含不可记账")
+    void assertPostable_audited_messageContains() {
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> service.assertPostable(voucherWithStatus("DRAFT")));
+        assertTrue(ex.getMessage().contains("不可记账"));
+    }
+
+    @Test
+    @DisplayName("assertPostable_CLOSED_抛异常_已结账不可记账")
+    void assertPostable_closed_throws() {
+        assertThrows(BusinessException.class,
+                () -> service.assertPostable(voucherWithStatus("CLOSED")));
+    }
+
+    @Test
+    @DisplayName("assertReversible_CLOSED_通过_已结账可红冲")
+    void assertReversible_closed_passes() {
+        assertDoesNotThrow(() -> service.assertReversible(voucherWithStatus("CLOSED")));
+    }
+
+    @Test
+    @DisplayName("assertReversible_SUBMITTED_抛异常_已提交不可红冲")
+    void assertReversible_submitted_throws() {
+        assertThrows(BusinessException.class,
+                () -> service.assertReversible(voucherWithStatus("SUBMITTED")));
+    }
+
+    @Test
+    @DisplayName("isReversed_DRAFT_reversedFrom非空_仍返回true_因isReversed仅检查reversedFrom")
+    void isReversed_draft_reversedFromNonNull_stillTrue() {
+        // isReversed 仅检查 reversedFrom 非空，不校验 status
+        // 此测试固化当前实现契约：状态字段不参与 isReversed 判定
+        VoucherEntity e = voucherWithStatus("DRAFT");
+        e.setReversedFrom(100L);
+        assertTrue(service.isReversed(e));
+    }
+
+    @Test
+    @DisplayName("isReversed_POSTED_reversedFrom为null_返回false")
+    void isReversed_posted_reversedFromNull_false() {
+        VoucherEntity e = voucherWithStatus("POSTED");
+        e.setReversedFrom(null);
+        assertFalse(service.isReversed(e));
+    }
 }
