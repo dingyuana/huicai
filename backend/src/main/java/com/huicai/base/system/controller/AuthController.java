@@ -82,8 +82,8 @@ public class AuthController {
             }
         }
 
-        // 设置企业上下文
-        if (enterpriseId != null) {
+        // 设置企业上下文（SUPER_ADMIN 不设，跳过数据权限拦截）
+        if (enterpriseId != null && !"SUPER_ADMIN".equals(userType)) {
             EnterpriseContextHolder.set(enterpriseId);
         }
 
@@ -102,7 +102,8 @@ public class AuthController {
         response.setEnterpriseList(enterpriseList);
         response.setUserInfo(new UserInfoResponse(user.getId(), user.getUsername(),
                 user.getRealName(), user.getNickname(), user.getEmail(), user.getPhone(),
-                user.getAvatar(), user.getDeptId(), roleIds, permissions));
+                user.getAvatar(), user.getDeptId(), roleIds, permissions,
+                userType, agencyId, enterpriseId, enterpriseList));
 
         return R.ok(response);
     }
@@ -127,9 +128,29 @@ public class AuthController {
         List<Long> roleIds = userRoleMapper.getRoleIdsByUserId(user.getId());
         List<String> permissions = menuService.getUserButtonPermissions(user.getId());
 
+        // S-26: 多租户字段
+        String userType = user.getUserType() != null ? user.getUserType() : "ENTERPRISE";
+        Long agencyId = user.getAgencyId();
+        Long enterpriseId = user.getEnterpriseId();
+
+        // AGENCY 用户获取绑定的企业列表
+        List<EnterpriseSimpleVO> enterpriseList = new ArrayList<>();
+        if ("AGENCY".equals(userType) && agencyId != null) {
+            List<Long> enterpriseIds = agencyEnterpriseMapper.getEnterpriseIdsByAgencyId(agencyId);
+            for (Long eid : enterpriseIds) {
+                EnterpriseEntity ent = enterpriseMapper.selectById(eid);
+                if (ent != null) {
+                    enterpriseList.add(new EnterpriseSimpleVO(
+                            ent.getId(), ent.getEnterpriseName(),
+                            ent.getTaxId(), ent.getStatus(), ent.getSeedDataDone()));
+                }
+            }
+        }
+
         UserInfoResponse userInfo = new UserInfoResponse(user.getId(), user.getUsername(),
                 user.getRealName(), user.getNickname(), user.getEmail(), user.getPhone(),
-                user.getAvatar(), user.getDeptId(), roleIds, permissions);
+                user.getAvatar(), user.getDeptId(), roleIds, permissions,
+                userType, agencyId, enterpriseId, enterpriseList);
 
         return R.ok(userInfo);
     }
@@ -165,5 +186,10 @@ public class AuthController {
         private Long deptId;
         private List<Long> roles;
         private List<String> permissions;
+        // S-26: 多租户字段
+        private String userType;
+        private Long agencyId;
+        private Long enterpriseId;
+        private List<EnterpriseSimpleVO> enterpriseList;
     }
 }

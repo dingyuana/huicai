@@ -69,6 +69,11 @@ export const useAuthStore = defineStore('auth', () => {
       const info = await getUserInfo()
       userInfo.value = info
       permissions.value = info.permissions
+      // S-26: 恢复多租户字段（刷新页面时从 userinfo 接口获取）
+      if (info.userType) userType.value = info.userType
+      if (info.agencyId !== undefined) agencyId.value = info.agencyId
+      if (info.enterpriseId !== undefined) currentEnterpriseId.value = info.enterpriseId
+      if (info.enterpriseList) enterpriseList.value = info.enterpriseList
     } catch {
       logout()
     }

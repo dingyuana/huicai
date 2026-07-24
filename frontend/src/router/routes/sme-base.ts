@@ -42,6 +42,38 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '首页', keepAlive: true },
       },
 
+      // ─── 系统管理（SUPER_ADMIN）───
+      {
+        path: 'system/user',
+        name: 'UserList',
+        component: () => import('@/views/system/user/UserList.vue'),
+        meta: { title: '用户管理', permission: 'system:user:list', keepAlive: true },
+      },
+      {
+        path: 'system/role',
+        name: 'RoleList',
+        component: () => import('@/views/system/role/RoleList.vue'),
+        meta: { title: '角色管理', permission: 'system:role:list', keepAlive: true },
+      },
+      {
+        path: 'system/menu',
+        name: 'MenuList',
+        component: () => import('@/views/system/menu/MenuList.vue'),
+        meta: { title: '菜单管理', permission: 'system:menu:list', keepAlive: true },
+      },
+      {
+        path: 'system/dept',
+        name: 'DeptList',
+        component: () => import('@/views/system/dept/DeptList.vue'),
+        meta: { title: '部门管理', permission: 'system:dept:list', keepAlive: true },
+      },
+      {
+        path: 'system/audit-log',
+        name: 'AuditLogList',
+        component: () => import('@/views/system/audit-log/AuditLogList.vue'),
+        meta: { title: '操作日志', permission: 'system:audit:list', keepAlive: true },
+      },
+
       // ─── 基础数据 ───
       {
         path: 'basis/account-and-summary',

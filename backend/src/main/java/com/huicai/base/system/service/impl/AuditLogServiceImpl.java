@@ -1,6 +1,7 @@
 package com.huicai.base.system.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.huicai.base.system.entity.AuditLogEntity;
@@ -24,20 +25,21 @@ public class AuditLogServiceImpl implements AuditLogService {
     @Override
     public IPage<AuditLogEntity> pageLog(long page, long size, String module, String status,
                                          String startDate, String endDate) {
-        LambdaQueryWrapper<AuditLogEntity> wrapper = new LambdaQueryWrapper<>();
+        // t_audit_log 表无 created_at 列，使用 operation_time 替代
+        QueryWrapper<AuditLogEntity> wrapper = new QueryWrapper<>();
         if (StringUtils.hasText(module)) {
-            wrapper.eq(AuditLogEntity::getModule, module);
+            wrapper.eq("module", module);
         }
         if (StringUtils.hasText(status)) {
-            wrapper.eq(AuditLogEntity::getStatus, status);
+            wrapper.eq("status", status);
         }
         if (StringUtils.hasText(startDate)) {
-            wrapper.ge(AuditLogEntity::getCreatedAt, startDate);
+            wrapper.ge("operation_time", startDate);
         }
         if (StringUtils.hasText(endDate)) {
-            wrapper.le(AuditLogEntity::getCreatedAt, endDate + " 23:59:59");
+            wrapper.le("operation_time", endDate + " 23:59:59");
         }
-        wrapper.orderByDesc(AuditLogEntity::getCreatedAt);
+        wrapper.orderByDesc("operation_time");
         return auditLogMapper.selectPage(new Page<>(page, size), wrapper);
     }
 

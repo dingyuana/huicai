@@ -48,7 +48,7 @@ router.beforeEach(async (to, _from, next) => {
   // 已登录访问登录页 -> 按 userType 分发首页
   if (to.path === '/login') {
     const ut = authStore.userType
-    if (ut === 'SUPER_ADMIN') return next({ path: '/admin/dashboard' })
+    if (ut === 'SUPER_ADMIN') return next({ path: '/dashboard' })
     if (ut === 'AGENCY') {
       if (!authStore.currentEnterpriseId) return next({ path: '/agency/enterprise-list' })
       return next({ path: '/dashboard' })
@@ -73,10 +73,12 @@ router.beforeEach(async (to, _from, next) => {
     }
   }
 
-  // 权限校验
-  const requiredPerm = to.meta.permission as string | undefined
-  if (requiredPerm && !authStore.hasPermission(requiredPerm)) {
-    return next({ path: '/403' })
+  // 权限校验（SUPER_ADMIN 跳过）
+  if (!authStore.isSuperAdmin) {
+    const requiredPerm = to.meta.permission as string | undefined
+    if (requiredPerm && !authStore.hasPermission(requiredPerm)) {
+      return next({ path: '/403' })
+    }
   }
 
   // 实验室路由保护：Flag 关闭时访问实验室路由 -> 404

@@ -54,8 +54,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
                 SecurityContextHolder.getContext().setAuthentication(authentication);
 
-                // S-26: 设置企业上下文
-                if (enterpriseId != null) {
+                // S-26: 设置企业上下文（SUPER_ADMIN 不设，跳过数据权限拦截）
+                if (enterpriseId != null && !"SUPER_ADMIN".equals(userType)) {
                     EnterpriseContextHolder.set(enterpriseId);
                 }
             }

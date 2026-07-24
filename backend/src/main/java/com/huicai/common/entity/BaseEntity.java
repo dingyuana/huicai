@@ -22,14 +22,16 @@ public abstract class BaseEntity {
     /** 多租户企业 ID（S-26 Agency 分支新增） */
     private Long enterpriseId;
 
-    /** 创建人 */
+    /** 创建人 — 由 Service 层手动 set，不参与 MyBatis-Plus 自动 SQL */
+    @TableField(exist = false)
     private Long createdBy;
 
     /** 创建时间 */
     @TableField(fill = FieldFill.INSERT)
     private LocalDateTime createdAt;
 
-    /** 更新人 */
+    /** 更新人 — 由 Service 层手动 set，不参与 MyBatis-Plus 自动 SQL */
+    @TableField(exist = false)
     private Long updatedBy;
 
     /** 更新时间 */

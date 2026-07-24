@@ -44,4 +44,9 @@ public class SubjectBalanceEntity extends BaseEntity {
     /** 更新时间 */
     @TableField(fill = FieldFill.INSERT_UPDATE)
     private LocalDateTime updatedAt;
+
+    /** t_subject_balance 表无 deleted 列，不使用逻辑删除 */
+    @TableField(exist = false)
+    private Integer deleted;
+
 }

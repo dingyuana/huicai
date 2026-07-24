@@ -47,7 +47,6 @@
           <span>财务核心</span>
         </template>
         <el-menu-item index="/finance/voucher">凭证管理</el-menu-item>
-        <el-menu-item index="/finance/voucher-setup?tab=template">凭证模板</el-menu-item>
         <el-menu-item index="/finance/ledger">账簿查询</el-menu-item>
         <el-menu-item index="/finance/period-close">期末结账</el-menu-item>
         <el-menu-item index="/finance/beginning-balance">期初建账</el-menu-item>
@@ -105,6 +104,43 @@
         <el-menu-item index="/report/income-statement">利润表</el-menu-item>
         <el-menu-item index="/report/cash-flow">现金流量表</el-menu-item>
       </el-sub-menu>
+
+      <!-- 代理公司（SUPER_ADMIN / AGENCY 可见） -->
+      <el-sub-menu v-if="authStore.isSuperAdmin || authStore.isAgency" index="agency">
+        <template #title>
+          <el-icon><OfficeBuilding /></el-icon>
+          <span>代理公司</span>
+        </template>
+        <el-menu-item index="/agency/enterprise-list">客户列表</el-menu-item>
+        <el-menu-item index="/agency/batch-operation">批量操作</el-menu-item>
+      </el-sub-menu>
+
+      <!-- 系统管理（所有用户可见） -->
+      <el-sub-menu index="system-mgmt">
+        <template #title>
+          <el-icon><Setting /></el-icon>
+          <span>系统管理</span>
+        </template>
+        <el-menu-item index="/system/user">用户管理</el-menu-item>
+        <el-menu-item index="/system/role">角色管理</el-menu-item>
+        <el-menu-item index="/system/menu">菜单管理</el-menu-item>
+        <el-menu-item index="/system/dept">部门管理</el-menu-item>
+        <el-menu-item index="/system/audit-log">操作日志</el-menu-item>
+      </el-sub-menu>
+
+      <!-- 实验室（SUPER_ADMIN 且 Flag 开启时可见） -->
+      <el-sub-menu v-if="authStore.isSuperAdmin && labStore.enabled" index="lab">
+        <template #title>
+          <el-icon><MagicStick /></el-icon>
+          <span>实验室</span>
+        </template>
+        <el-menu-item index="/budget">预算管理</el-menu-item>
+        <el-menu-item index="/analysis/key-metrics">关键指标</el-menu-item>
+        <el-menu-item index="/analysis/dupont">杜邦分析</el-menu-item>
+        <el-menu-item index="/salary">工资薪酬</el-menu-item>
+        <el-menu-item index="/ai/task">AI 任务</el-menu-item>
+        <el-menu-item index="/ai/anomaly">AI 异常</el-menu-item>
+      </el-sub-menu>
     </el-menu>
   </div>
 </template>
@@ -112,12 +148,17 @@
 <script setup lang="ts">
 import { useRoute } from 'vue-router'
 import { useAppStore } from '@/stores/app.store'
+import { useAuthStore } from '@/stores/auth.store'
+import { useLabStore } from '@/stores/lab.store'
 import {
   HomeFilled, Notebook, Coin, Document, Ticket, Box, DataAnalysis, Setting,
+  User, OfficeBuilding, Monitor, TrendCharts, MagicStick,
 } from '@element-plus/icons-vue'
 
 const route = useRoute()
 const appStore = useAppStore()
+const authStore = useAuthStore()
+const labStore = useLabStore()
 </script>
 
 <style scoped lang="scss">
