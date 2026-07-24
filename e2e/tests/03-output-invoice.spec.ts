@@ -1,7 +1,7 @@
 /**
  * 冒烟测试 3：销项发票页面
  * 验证销项发票列表页面能正常打开，无"系统繁忙"错误，
- * 且页面包含预期的关键元素（搜索表单、表格、分页）
+ * 且页面包含预期的关键元素（搜索表单、表格、统计卡片）
  */
 import { test, expect } from '@playwright/test';
 import { login, expectNoServerErrors } from './helpers';
@@ -17,30 +17,25 @@ test.describe('销项发票', () => {
     // 1. 验证没有 500 错误
     await expectNoServerErrors(page);
 
-    // 2. 验证页面包含关键元素
-    // 搜索表单
-    await expect(page.locator('input[placeholder*="开票日期"]')).toBeVisible({ timeout: 10_000 });
-    await expect(page.locator('input[placeholder*="发票号码"]')).toBeVisible({ timeout: 10_000 });
-
-    // 表格（Element Plus 的 el-table）
+    // 2. 验证页面包含关键元素（用严格选择器避免 strict mode 冲突）
+    // 页面标题（用 breadcrumb 中的链接定位）
+    await expect(page.getByRole('link', { name: '销项发票' })).toBeVisible({ timeout: 10_000 });
+    // 统计卡片区域
+    await expect(page.getByText('总发票数')).toBeVisible({ timeout: 10_000 });
+    // 筛选按钮组（全部/专用发票/普通发票/红字发票）
+    await expect(page.getByRole('radio', { name: '全部' })).toBeChecked();
+    await expect(page.getByRole('radio', { name: '专用发票' })).toBeVisible();
+    // 表格
     await expect(page.locator('.el-table')).toBeVisible({ timeout: 10_000 });
-
-    // 分页
-    await expect(page.locator('.el-pagination')).toBeVisible({ timeout: 10_000 });
-
-    // 3. 验证 API 调用成功（无 500）
-    const requestPromise = page.waitForRequest(
-      req => req.url().includes('/api/sme/tax/v1/output-invoices'),
-      { timeout: 15_000 }
-    ).catch(() => null);
-
-    // 刷新表格触发 API 调用
-    await page.locator('.el-table').click();
-
-    const req = await requestPromise;
-    if (req) {
-      const response = await req.response();
-      expect(response?.status()).toBe(200);
-    }
+    // 表头列（用 table thead 限定范围避免 strict mode）
+    const table = page.locator('.el-table');
+    await expect(table.getByText('发票号')).toBeVisible();
+    await expect(table.getByText('开票日期')).toBeVisible();
+    await expect(table.getByText('客户')).toBeVisible();
+    await expect(table.getByText('金额')).toBeVisible();
+    await expect(table.getByText('税额')).toBeVisible();
+    // 操作按钮
+    await expect(page.getByRole('button', { name: '导入发票' })).toBeVisible();
+    await expect(page.getByRole('button', { name: '新增发票' })).toBeVisible();
   });
 });

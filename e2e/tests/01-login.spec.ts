@@ -9,7 +9,7 @@ test.describe('登录', () => {
   test('admin/admin123 登录成功', async ({ page }) => {
     await login(page);
     // 验证首页标题出现
-    await expect(page.locator('text=欢迎使用慧财智能财务平台')).toBeVisible();
+    await expect(page.getByRole('heading', { name: '欢迎使用慧财智能财务平台' })).toBeVisible();
     await expectNoServerErrors(page);
   });
 

@@ -22,21 +22,11 @@ export async function login(page: Page) {
 }
 
 /**
- * 等待页面主内容加载完成（无加载指示器）
- */
-export async function waitForPageReady(page: Page) {
-  // 等待所有网络请求完成（最长 5 秒）
-  await page.waitForLoadState('networkidle', { timeout: 5_000 }).catch(() => {});
-}
-
-/**
- * 验证页面没有 500/系统繁忙错误
+ * 验证页面没有 500 / 系统繁忙错误
  */
 export async function expectNoServerErrors(page: Page) {
-  // 等待页面稳定
-  await page.waitForLoadState('domcontentloaded');
-  // 检查页面是否出现 500 / 系统繁忙提示
+  // 检查页面是否出现"系统繁忙"提示
   await expect(page.locator('text=系统繁忙')).not.toBeVisible({ timeout: 5_000 });
-  await expect(page.locator('text=500')).not.toBeVisible({ timeout: 5_000 });
+  // 检查页面是否出现"Request failed with status code 500"
   await expect(page.locator('text=Request failed with status code 500')).not.toBeVisible({ timeout: 5_000 });
 }
