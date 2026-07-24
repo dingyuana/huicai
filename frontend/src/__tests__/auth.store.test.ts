@@ -8,6 +8,12 @@ vi.mock('@/api/modules/auth', () => ({
   getUserInfo: vi.fn(),
 }))
 
+vi.mock('@/router', () => ({
+  default: {
+    replace: vi.fn(() => Promise.resolve()),
+  },
+}))
+
 const mockLoginResult = {
   token: 'test-jwt-token',
   refreshToken: 'test-refresh-token',
@@ -112,20 +118,17 @@ describe('useAuthStore', () => {
     store.userInfo = mockUserInfo as any
     store.permissions = ['system:user:list']
 
-    const originalLocation = window.location
-    const assignMock = vi.fn()
-    Object.defineProperty(window, 'location', { value: { href: '' }, writable: true })
+    const replaceMock = vi.fn()
+    vi.stubGlobal('location', { replace: replaceMock, href: '' })
 
     await store.fetchUserInfo()
 
     expect(store.token).toBe('')
     expect(store.userInfo).toBeNull()
     expect(store.permissions).toEqual([])
-
-    Object.defineProperty(window, 'location', { value: originalLocation, writable: true })
   })
 
-  it('logout clears all state', () => {
+  it('logout clears all state', async () => {
     const store = useAuthStore()
     store.token = 'some-token'
     store.userInfo = mockUserInfo as any
@@ -135,10 +138,11 @@ describe('useAuthStore', () => {
 
     expect(store.isLoggedIn).toBe(true)
 
-    const originalLocation = window.location
-    Object.defineProperty(window, 'location', { value: { href: '' }, writable: true })
+    const replaceMock = vi.fn()
+    vi.stubGlobal('location', { replace: replaceMock, href: '' })
 
     store.logout()
+    await new Promise(r => setTimeout(r, 0))
 
     expect(store.token).toBe('')
     expect(store.userInfo).toBeNull()
@@ -146,8 +150,6 @@ describe('useAuthStore', () => {
     expect(store.isLoggedIn).toBe(false)
     expect(localStorage.getItem('huicai_token')).toBeNull()
     expect(localStorage.getItem('huicai_refresh_token')).toBeNull()
-    expect(window.location.href).toBe('/login')
-
-    Object.defineProperty(window, 'location', { value: originalLocation, writable: true })
+    expect(replaceMock).toHaveBeenCalledWith('/login')
   })
 })

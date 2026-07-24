@@ -1,18 +1,19 @@
 # S-26 Agency 分支测试计划
 
-> **版本**：1.0 | **日期**：2026-07-23 | **关联 SPEC**：[S-26](../../specs/S-26-agency-branch-development.md)
+> **版本**：2.0 | **日期**：2026-07-24 | **关联 SPEC**：[S-26](../../specs/S-26-agency-branch-development.md)
 > **测试规范**：TDD-First (Red→Green) + 负向断言强制 + BDD 场景全覆盖
+> **V2.0 变更**：新增 Sprint 5-6 测试（20 后端 + 6 前端），BDD 场景 8→18，负向断言 11→17，测试总数 57→83
 
 ---
 
 ## 1. 测试金字塔
 
 ```
-E2E (Playwright)       ← 5 个：完整代理业务流程
-组件 (Vitest)           ← 8 个：Store/请求/路由/页面/组件
-集成 (SpringBootTest)   ← 15 个：登录/切换/拦截器/RLS/种子/批量
-单元 (JUnit 5)          ← 50+ 个：状态机/拦截器/ContextHolder/Service/Mapper
-契约 (YAML)             ← 8 个：AT-001~AT-008 逐条验证
+E2E (Playwright)       ← 7 个：+2 个（会计分配流程/角色权限验证）
+组件 (Vitest)           ← 12 个：+4 个（会计管理/分配页/角色切换器/角色路由）
+集成 (SpringBootTest)   ← 25 个：+10 个（AgencyUser CRUD/状态机/分配/权限分流）
+单元 (JUnit 5)          ← 70+ 个：+20 个（新 Entity/Mapper/Service/Controller）
+契约 (YAML)             ← 18 个：+10 个（AT-009~AT-018）
 ```
 
 ## 2. 测试清单（按 Sprint）
@@ -88,6 +89,42 @@ E2E (Playwright)       ← 5 个：完整代理业务流程
 | 50 | BatchOperation.test.ts | testBatchUI | 批量操作 |
 | 51 | agency-flow.spec.ts | testFullAgencyFlow | E2E 全流程 |
 
+### Sprint 5 测试（新增 20 个）— V2.0
+
+| # | 测试类 | 测试方法 | BDD 场景 | 负向断言 |
+|---|--------|---------|---------|---------|
+| 52 | AgencyUserServiceTest | testCreateAccountant | 场景 9 | — |
+| 53 | AgencyUserServiceTest | testSuspendUser | 场景 16 | — |
+| 54 | AgencyUserServiceTest | testReactivateUser | 场景 16 | — |
+| 55 | AgencyUserServiceTest | testTerminateUser | 场景 16 | — |
+| 56 | AgencyUserServiceTest | testNonAdminCannotManage | 场景 14 | 返回 20011 |
+| 57 | AgencyUserEnterpriseServiceTest | testAssignEnterprise | 场景 9 | — |
+| 58 | AgencyUserEnterpriseServiceTest | testUnassignEnterprise | 场景 15 | — |
+| 59 | AgencyUserEnterpriseServiceTest | testCrossAgencyBlocked | 场景 18 | 返回 20013 |
+| 60 | AgencyUserEnterpriseServiceTest | testAccountantOnlySeesOwn | 场景 10 | 不含其他企业 |
+| 61 | AgencyUserControllerTest | testCreateUser | 场景 9 | — |
+| 62 | AgencyUserControllerTest | testSuspendUser | 场景 16 | — |
+| 63 | AssignmentControllerTest | testAssignEnterprise | 场景 9 | — |
+| 64 | AssignmentControllerTest | testUnassignEnterprise | 场景 15 | — |
+| 65 | AuthControllerTest | testAgencyAdminLogin | 场景 12 | — |
+| 66 | AuthControllerTest | testAccountantLogin | 场景 10 | enterpriseList 仅含分配企业 |
+| 67 | EnterpriseControllerTest | testAccountantSwitchOwn | 场景 10 | — |
+| 68 | EnterpriseControllerTest | testAccountantSwitchBlocked | 场景 11 | 返回 20010 |
+| 69 | EnterpriseControllerTest | testReviewerReadOnly | 场景 17 | 返回 20011 |
+| 70 | EnterpriseControllerTest | testAssistantCannotAudit | 场景 13 | 返回 20011 |
+| 71 | AgencyUserStateMachineTest | testFullLifecycle | 场景 16 | TERMINATED 不可再转换 |
+
+### Sprint 6 测试（新增 6 个）— V2.0
+
+| # | 测试文件 | 测试方法 | 契约 |
+|---|---------|---------|------|
+| 72 | auth.store.test.ts | testAgencyRoleState | agencyRole 正确存储 |
+| 73 | auth.store.test.ts | testAccountantEnterpriseList | 仅含分配的企业 |
+| 74 | AccountantList.test.ts | testRenderList | 会计列表渲染 |
+| 75 | AssignmentManage.test.ts | testAssignUnassign | 分配/取消分配 |
+| 76 | EnterpriseSwitcher.test.ts | testRoleFilter | 按角色过滤企业 |
+| 77 | router.test.ts | testAgencyRoleGuard | 角色路由守卫 |
+
 ## 3. BDD 场景覆盖矩阵
 
 | BDD 场景 | 对应测试 | Sprint | 状态 |
@@ -100,6 +137,16 @@ E2E (Playwright)       ← 5 个：完整代理业务流程
 | 场景 6：ENTERPRISE 不能切换 | EnterpriseControllerTest.testEnterpriseUserCannotSwitch | S2 | 🆕 |
 | 场景 7：暂停不能创建 | EnterpriseStateMachineServiceImplTest.testSuspendBlocksCreate | S2 | 🆕 |
 | 场景 8：RLS 兜底 | RlsPolicyTest.testRlsEnabled | S1 | 🆕 |
+| 场景 9：AGENCY_ADMIN 创建会计并分配客户 | AgencyUserServiceTest.testCreateAccountant | S5 | 🆕 |
+| 场景 10：会计只能看到分配给自己的客户 | AuthControllerTest.testAccountantLogin | S5 | 🆕 |
+| 场景 11：会计不能切换到未分配的企业 | EnterpriseControllerTest.testAccountantSwitchBlocked | S5 | 🆕 |
+| 场景 12：AGENCY_ADMIN 查看全部客户 | AuthControllerTest.testAgencyAdminLogin | S5 | 🆕 |
+| 场景 13：ASSISTANT 不能执行审核操作 | EnterpriseControllerTest.testAssistantCannotAudit | S5 | 🆕 |
+| 场景 14：非 AGENCY_ADMIN 不能管理代理用户 | AgencyUserServiceTest.testNonAdminCannotManage | S5 | 🆕 |
+| 场景 15：AGENCY_ADMIN 取消会计的客户分配 | AgencyUserEnterpriseServiceTest.testUnassignEnterprise | S5 | 🆕 |
+| 场景 16：AGENCY_ADMIN 暂停会计账号 | AgencyUserServiceTest.testSuspendUser | S5 | 🆕 |
+| 场景 17：REVIEWER 可查看全部企业但不可修改 | EnterpriseControllerTest.testReviewerReadOnly | S5 | 🆕 |
+| 场景 18：跨代理公司分配被拦截 | AgencyUserEnterpriseServiceTest.testCrossAgencyBlocked | S5 | 🆕 |
 
 ## 4. 负向断言清单
 
@@ -116,6 +163,12 @@ E2E (Playwright)       ← 5 个：完整代理业务流程
 | BatchImportServiceTest | 导入数据不含其他企业 |
 | BatchAuditServiceTest | 不能审核其他企业凭证 |
 | ContractServiceTest | 未到期合同不出现在提醒列表 |
+| AgencyUserServiceTest | 非 AGENCY_ADMIN 调用返回 20011（新增） |
+| AgencyUserEnterpriseServiceTest | 跨代理公司分配返回 20013（新增） |
+| AgencyUserEnterpriseServiceTest | ACCOUNTANT 的 enterpriseList 不含未分配企业（新增） |
+| EnterpriseControllerTest | ACCOUNTANT 切换未分配企业返回 20010（新增） |
+| EnterpriseControllerTest | REVIEWER 写操作返回 20011（新增） |
+| EnterpriseControllerTest | ASSISTANT 审核操作返回 20011（新增） |
 
 ## 4.1 并发测试清单（2026-07-23 补充）
 
@@ -164,7 +217,7 @@ cd backend && mvn flyway:info
 - **E2E**：`npx playwright test` 全部通过
 - **契约**：`validate_spec_contract.py` exit code=0
 - **Entity-DB**：`check-entity-schema.mjs` 无不一致
-- **BDD 覆盖**：8 个场景全部有对应 @Test 且 PASS
-- **负向断言**：11 条负向断言全部 PASS
+- **BDD 覆盖**：18 个场景全部有对应 @Test 且 PASS
+- **负向断言**：17 条负向断言全部 PASS
 - **并发测试**：6 个并发测试（C1~C6）全部 PASS，成功率 ≥ 95%
-- **测试总数**：51 基础 + 6 并发 = 57 个 @Test
+- **测试总数**：51 基础 + 6 并发 + 20 Sprint5 + 6 Sprint6 = 83 个 @Test

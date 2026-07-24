@@ -1,25 +1,30 @@
 # S-26 Agency 分支开发计划
 
-> **版本**：1.0 | **日期**：2026-07-23 | **作者**：Hermes
-> **状态**：⚠️ 待老丁审核
+> **版本**：2.0 | **日期**：2026-07-24 | **作者**：Hermes
+> **状态**：✅ 已审核（2026-07-24 老丁确认通过）
 > **关联 SPEC**：[S-26-agency-branch-development](../../specs/S-26-agency-branch-development.md)
 > **关联设计**：[多租户架构设计](../../architecture/多租户架构设计.md)
 > **开发规范**：SDD 四段模板 + BDD Given-When-Then + TDD Red→Green + 微循环 5-15 分钟
+> **V2.0 变更**：新增 Sprint 5（代理内角色体系）+ Sprint 6（前端角色适配），共 21 个微循环
 
 ---
 
 ## 总览
 
-4 个 Sprint，每个 Sprint 含若干微循环，每个微循环对应一个可验证契约。
+6 个 Sprint，每个 Sprint 含若干微循环，每个微循环对应一个可验证契约。
 
 ```
-Sprint 1: 多租户基础设施（DB + 拦截器 + RLS）
+Sprint 1: 多租户基础设施（DB + 拦截器 + RLS）          ✅ 已完成
   ↓ 阻塞后续所有 Sprint
-Sprint 2: 用户认证与切换（JWT + 登录 + 切换接口）
+Sprint 2: 用户认证与切换（JWT + 登录 + 切换接口）       ✅ 已完成
   ↓ 阻塞 Sprint 4
-Sprint 3: 代账业务引擎（客户管理 + 批量操作 + CRM）
+Sprint 3: 代账业务引擎（客户管理 + 批量操作 + CRM）     ✅ 已完成
   ↓ 可与 Sprint 4 并行
-Sprint 4: 前端适配（代理工作台 + 客户切换 + 批量 UI）
+Sprint 4: 前端适配（代理工作台 + 客户切换 + 批量 UI）   ✅ 已完成
+  ↓ V2.0 新增
+Sprint 5: 代理内角色体系（建表 + Entity + Service + Controller + 权限分流） ✅ 已完成
+  ↓ 阻塞 Sprint 6
+Sprint 6: 前端角色适配（会计管理页 + 分配页 + 菜单权限） ✅ 已完成
 ```
 
 ---
@@ -430,117 +435,262 @@ jdbcTemplate.execute("SELECT set_config('app.enterprise_id', '', false)");
 
 ---
 
-## 测试计划
+## Sprint 5：代理内角色体系（V2.0 P0 阻塞项）
+
+### 微循环清单
+
+#### MC5-01：Flyway V111 — 创建 t_agency_user + t_agency_user_enterprise 表
+
+| 项 | 内容 |
+|----|------|
+| 目标 | 新建代理用户角色表和客户分配表 |
+| 契约 | `SELECT COUNT(*) FROM information_schema.tables WHERE table_name IN ('t_agency_user','t_agency_user_enterprise') → 2` |
+| 涉及文件 | `backend/src/main/resources/db/migration/V111__create_agency_user_tables.sql` |
+| 验证 | Flyway migrate 成功 + 两表存在 |
+
+#### MC5-02：Flyway V112 — t_user 加 agency_role 列
+
+| 项 | 内容 |
+|----|------|
+| 目标 | t_user 加 agency_role VARCHAR(20) 列（冗余字段） |
+| 契约 | `SELECT agency_role FROM t_user WHERE id=1 → NULL`（非 AGENCY 用户为 null） |
+| 涉及文件 | `V112__alter_user_add_agency_role.sql` |
+| 验证 | 列存在，现有用户 agency_role 为 null |
+
+#### MC5-03：AgencyUserEntity + AgencyUserEnterpriseEntity
+
+| 项 | 内容 |
+|----|------|
+| 目标 | 创建 Entity 类，映射 t_agency_user 和 t_agency_user_enterprise |
+| 契约 | `mvn compile` 通过 + check-entity-schema.mjs 通过 |
+| 涉及文件 | `agency/user/entity/AgencyUserEntity.java`、`AgencyUserEnterpriseEntity.java` |
+| 验证 | Entity-DB 一致性检查通过 |
+
+#### MC5-04：AgencyUserMapper + AgencyUserEnterpriseMapper
+
+| 项 | 内容 |
+|----|------|
+| 目标 | MyBatis-Plus Mapper，含按 agency_id 查询用户列表、按 agency_user_id 查询分配企业 |
+| 契约 | `agencyUserMapper.selectList()` 返回代理公司下所有用户 |
+| 涉及文件 | `agency/user/mapper/AgencyUserMapper.java`、`AgencyUserEnterpriseMapper.java` |
+| 验证 | Mapper 集成测试 |
+
+#### MC5-05：AgencyUserService + Impl（CRUD + 状态机）
+
+| 项 | 内容 |
+|----|------|
+| 目标 | 代理用户 CRUD + 状态机（ACTIVE→SUSPENDED→TERMINATED） |
+| 契约 | create 时同时插入 t_user 和 t_agency_user；suspend 后用户无法登录 |
+| 涉及文件 | `agency/user/service/AgencyUserService.java` + Impl + StateMachine |
+| 验证 | BDD 场景 9、16 |
+
+#### MC5-06：AgencyUserController（CRUD + 启停）
+
+| 项 | 内容 |
+|----|------|
+| 目标 | REST 端点：POST/GET/PUT/DELETE /api/v1/agency/users + POST suspend/reactivate |
+| 契约 | 仅 AGENCY_ADMIN 可调用；ACCOUNTANT 调用返回 20011 |
+| 涉及文件 | `agency/user/controller/AgencyUserController.java` |
+| 验证 | BDD 场景 9、14 |
+
+#### MC5-07：客户分配 Service（assign/unassign/list）
+
+| 项 | 内容 |
+|----|------|
+| 目标 | 分配/取消分配/查询分配列表 |
+| 契约 | assign 时校验目标用户 role 为 ACCOUNTANT/ASSISTANT 且同代理公司 |
+| 涉及文件 | `agency/user/service/AgencyUserEnterpriseService.java` + Impl |
+| 验证 | BDD 场景 9、15、18 |
+
+#### MC5-08：客户分配 Controller
+
+| 项 | 内容 |
+|----|------|
+| 目标 | REST 端点：POST/DELETE /api/v1/agency/assignments |
+| 契约 | 仅 AGENCY_ADMIN 可调用 |
+| 涉及文件 | `agency/user/controller/AssignmentController.java` |
+| 验证 | BDD 场景 9、15 |
+
+#### MC5-09：LoginUser + JWT + SecurityUtils 扩展 agencyRole
+
+| 项 | 内容 |
+|----|------|
+| 目标 | LoginUser 加 agencyRole 字段；JWT claims 加 agencyRole；SecurityUtils 加 getCurrentAgencyRole() |
+| 契约 | AGENCY_ADMIN 登录后 JWT 含 agencyRole=AGENCY_ADMIN |
+| 涉及文件 | `config/security/LoginUser.java`、`JwtProvider.java`、`SecurityUtils.java` |
+| 验证 | 单元测试 |
+
+#### MC5-10：AuthController 登录时查询 agencyRole
+
+| 项 | 内容 |
+|----|------|
+| 目标 | 登录时从 t_agency_user 查询 agencyRole，写入 LoginUser 和 JWT |
+| 契约 | AGENCY 用户登录返回 agencyRole 字段 |
+| 涉及文件 | `base/system/controller/AuthController.java` |
+| 验证 | BDD 场景 9 |
+
+#### MC5-11：EnterpriseController.switchEnterprise 按 agencyRole 分流
+
+| 项 | 内容 |
+|----|------|
+| 目标 | AGENCY_ADMIN/REVIEWER 校验 t_agency_enterprise；ACCOUNTANT/ASSISTANT 校验 t_agency_user_enterprise |
+| 契约 | ACCOUNTANT 切换到未分配企业返回 20010 |
+| 涉及文件 | `agency/tenant/controller/EnterpriseController.java` |
+| 验证 | BDD 场景 11、12 |
+
+#### MC5-12：测试：AgencyUser CRUD + 状态机 + 分配 + 权限分流
+
+| 项 | 内容 |
+|----|------|
+| 目标 | 覆盖 BDD 场景 9-18 的所有后端测试 |
+| 契约 | 所有新增 @Test PASS |
+| 涉及文件 | `AgencyUserServiceTest.java`、`AgencyUserEnterpriseServiceTest.java`、`AgencyUserControllerTest.java`、`AssignmentControllerTest.java` |
+| 验证 | mvn test 新增测试全部 PASS |
+
+#### MC5-13：种子数据：admin 设为 AGENCY_ADMIN + 创建测试会计
+
+| 项 | 内容 |
+|----|------|
+| 目标 | Flyway V113：admin 插入 t_agency_user (AGENCY_ADMIN) + 创建测试 ACCOUNTANT 用户 |
+| 契约 | admin 登录后 agencyRole=AGENCY_ADMIN |
+| 涉及文件 | `V113__seed_agency_users.sql` |
+| 验证 | 登录测试 |
+
+#### MC5-14：Sprint 5 全量回归
+
+| 项 | 内容 |
+|----|------|
+| 目标 | mvn test Failures=0 + BDD AT-009~AT-018 全部覆盖 |
+| 验证 | ✅ 已验证（2026-07-24）：2176 测试 0 Failure，Agency 模块 19 测试全部通过 |
+| 修复 | EnterpriseControllerTest 从 @WebMvcTest 改为 @SpringBootTest + JWT mock，3 个测试从 isNotFound() 改为 isOk() + jsonPath("$.code") |
+| 修复 | EnterpriseEntity 测试中补充 setDeleted(0) 避免 NPE |
+| 修复 | LoginUser 构造函数使用完整 7 参数版本（含 agencyId） |
+
+---
+
+## Sprint 6：前端角色适配
+
+### 微循环清单
+
+#### MC6-01：auth.store 加 agencyRole + 按角色过滤 enterpriseList
+
+| 项 | 内容 |
+|----|------|
+| 目标 | store 加 agencyRole 状态 + computed isAgencyAdmin/isAccountant/isReviewer/isAssistant |
+| 契约 | ACCOUNTANT 登录后 enterpriseList 仅包含分配的企业 |
+| 涉及文件 | `frontend/src/stores/auth.store.ts` |
+| 验证 | Vitest 单元测试 |
+
+#### MC6-02：会计管理页面（AGENCY_ADMIN 可见）
+
+| 项 | 内容 |
+|----|------|
+| 目标 | 代理用户列表 + 创建/启停操作 |
+| 契约 | AGENCY_ADMIN 可见，ACCOUNTANT 不可见 |
+| 涉及文件 | `frontend/src/views/agency/AccountantList.vue` |
+| 验证 | 组件测试 |
+
+#### MC6-03：客户分配页面（AGENCY_ADMIN 可见）
+
+| 项 | 内容 |
+|----|------|
+| 目标 | 为会计分配/取消分配客户企业 |
+| 契约 | 分配后会计登录可见该企业 |
+| 涉及文件 | `frontend/src/views/agency/AssignmentManage.vue` |
+| 验证 | 组件测试 |
+
+#### MC6-04：EnterpriseSwitcher 按 agencyRole 过滤可选企业
+
+| 项 | 内容 |
+|----|------|
+| 目标 | ACCOUNTANT 切换器仅显示分配的企业；AGENCY_ADMIN 显示全部 |
+| 契约 | ACCOUNTANT 切换器选项 = 分配的企业列表 |
+| 涉及文件 | `frontend/src/layouts/components/EnterpriseSwitcher.vue` |
+| 验证 | 组件测试 |
+
+#### MC6-05：路由守卫按 agencyRole 控制菜单可见性
+
+| 项 | 内容 |
+|----|------|
+| 目标 | ACCOUNTANT 看不到会计管理/客户分配菜单；ASSISTANT 看不到审核按钮 |
+| 契约 | 路由守卫按 isAgencyAdmin/isAccountant 控制 |
+| 涉及文件 | `frontend/src/router/index.ts` |
+| 验证 | 路由测试 |
+
+#### MC6-06：侧边栏按 agencyRole 控制菜单
+
+| 项 | 内容 |
+|----|------|
+| 目标 | AppSidebar 菜单按 agencyRole 显示/隐藏 |
+| 契约 | ACCOUNTANT 侧边栏无「会计管理」「客户分配」菜单 |
+| 涉及文件 | `frontend/src/layouts/AppSidebar.vue` |
+| 验证 | 组件测试 |
+
+#### MC6-07：Sprint 6 全量回归
+
+| 项 | 内容 |
+|----|------|
+| 目标 | npm test 全部通过 + 前端构建成功 |
+| 验证 | npm test + npm run build |
+
+---
+
+## 测试计划（V2.0 更新）
 
 ### 测试金字塔
 
 ```
-E2E (Playwright)     ← 5 个：登录分发/切换客户/跨企业拦截/种子数据/批量操作
-组件 (Vitest)         ← 8 个：auth.store/request/路由守卫/工作台/切换器/批量页
-集成 (SpringBootTest) ← 15 个：登录/切换/拦截器/RLS/种子数据/批量
-单元 (JUnit 5)        ← 50+ 个：状态机/拦截器/ContextHolder/Service/Mapper
-契约 (YAML)           ← 8 个：AT-001~AT-008 逐条验证
+E2E (Playwright)     ← 7 个：+2 个（会计分配流程/角色权限验证）
+组件 (Vitest)         ← 12 个：+4 个（会计管理/分配页/角色切换器/角色路由）
+集成 (SpringBootTest) ← 25 个：+10 个（AgencyUser CRUD/状态机/分配/权限分流）
+单元 (JUnit 5)        ← 70+ 个：+20 个（新 Entity/Mapper/Service/Controller）
+契约 (YAML)           ← 18 个：+10 个（AT-009~AT-018）
 ```
 
-### 测试清单（按 Sprint）
-
-#### Sprint 1 测试（18 个）
-
-| 测试类 | 测试方法 | 契约 | 负向断言 |
-|--------|---------|------|---------|
-| EnterpriseContextHolderTest | testSetGetClear | set→get→clear→null | — |
-| EnterpriseDataPermissionInterceptorTest | testSelectInjectEnterpriseId | SELECT 追加条件 | 共享表不注入 |
-| EnterpriseDataPermissionInterceptorTest | testInsertFillEnterpriseId | INSERT 自动填充 | — |
-| EnterpriseDataPermissionInterceptorTest | testSuperAdminBypass | 超管不拦截 | — |
-| EnterpriseDataPermissionInterceptorTest | testRecursiveGuard | 防递归预占 | — |
-| HikariRlsConfigTest | testConnectionCleanOnBorrow | 借出时清理 | — |
-| HikariRlsConfigTest | testRlsContextNotLeak | 归还后不串号 | — |
-| BaseEntityTest | testEnterpriseIdField | 字段存在 | — |
-| SubjectMapperTest | testEnterpriseIdColumn | DB 列存在 | 跨企业查询为空 |
-| VoucherMapperTest | testEnterpriseIdColumn | DB 列存在 | 跨企业查询为空 |
-| BusinessDocMapperTest | testEnterpriseIdColumn | DB 列存在 | 跨企业查询为空 |
-| OutputInvoiceMapperTest | testEnterpriseIdColumn | DB 列存在 | 跨企业查询为空 |
-| ... 其余 Mapper 同理 | ... | ... | ... |
-
-#### Sprint 2 测试（15 个）
+### Sprint 5 测试（新增 20 个）
 
 | 测试类 | 测试方法 | BDD 场景 |
 |--------|---------|---------|
-| AuthControllerTest | testSmeLoginDirect | 场景 1 |
-| AuthControllerTest | testAgencyLoginEnterpriseList | 场景 2 |
-| EnterpriseControllerTest | testSwitchEnterprise | 场景 3 |
-| EnterpriseControllerTest | testCrossEnterpriseBlocked | 场景 4 |
-| EnterpriseControllerTest | testEnterpriseUserCannotSwitch | 场景 6 |
-| EnterpriseStateMachineServiceImplTest | testActivateSeedsData | 场景 5 |
-| EnterpriseStateMachineServiceImplTest | testActivateDoesNotPolluteOthers | 负向 |
-| EnterpriseStateMachineServiceImplTest | testSuspendBlocksCreate | 场景 7 |
-| EnterpriseStateMachineServiceImplTest | testTerminateIsTerminal | 负向 |
-| SeedDataServiceImplTest | testCloneSubjects | 种子克隆 |
-| SeedDataServiceImplTest | testCloneVoucherTypes | 种子克隆 |
-| SeedDataServiceImplTest | testCloneSummaryLib | 种子克隆 |
-| SeedDataServiceImplTest | testClonePeriods | 种子克隆 |
-| JwtProviderTest | testExtendedClaims | JWT claims |
-| SecurityUtilsTest | testGetCurrentEnterpriseId | 上下文 |
+| AgencyUserServiceTest | testCreateAccountant | 场景 9 |
+| AgencyUserServiceTest | testSuspendUser | 场景 16 |
+| AgencyUserServiceTest | testReactivateUser | 场景 16 |
+| AgencyUserServiceTest | testTerminateUser | 场景 16 |
+| AgencyUserServiceTest | testNonAdminCannotManage | 场景 14 |
+| AgencyUserEnterpriseServiceTest | testAssignEnterprise | 场景 9 |
+| AgencyUserEnterpriseServiceTest | testUnassignEnterprise | 场景 15 |
+| AgencyUserEnterpriseServiceTest | testCrossAgencyBlocked | 场景 18 |
+| AgencyUserEnterpriseServiceTest | testAccountantOnlySeesOwn | 场景 10 |
+| AgencyUserControllerTest | testCreateUser | 场景 9 |
+| AgencyUserControllerTest | testSuspendUser | 场景 16 |
+| AssignmentControllerTest | testAssignEnterprise | 场景 9 |
+| AssignmentControllerTest | testUnassignEnterprise | 场景 15 |
+| AuthControllerTest | testAgencyAdminLogin | 场景 12 |
+| AuthControllerTest | testAccountantLogin | 场景 10 |
+| EnterpriseControllerTest | testAccountantSwitchOwn | 场景 10 |
+| EnterpriseControllerTest | testAccountantSwitchBlocked | 场景 11 |
+| EnterpriseControllerTest | testReviewerReadOnly | 场景 17 |
+| EnterpriseControllerTest | testAssistantCannotAudit | 场景 13 |
+| AgencyUserStateMachineTest | testFullLifecycle | 场景 16 |
 
-#### Sprint 3 测试（10 个）
-
-| 测试类 | 测试方法 |
-|--------|---------|
-| AgencyControllerTest | testCrud |
-| EnterpriseControllerTest | testCreateEnterprise |
-| BatchImportServiceTest | testBatchImportIsolated |
-| BatchAuditServiceTest | testBatchAuditIsolated |
-| BatchCloseServiceTest | testBatchCloseMultiEnterprise |
-| ContractServiceTest | testContractCrud |
-| ContractServiceTest | testRenewalReminder |
-| EnterpriseStateMachineServiceImplTest | testFullLifecycle |
-| SeedDataServiceImplTest | testIdempotentSeed |
-| AgencyE2ETest | testFullAgencyFlow |
-
-#### Sprint 4 测试（8 个）
+### Sprint 6 测试（新增 6 个）
 
 | 测试文件 | 测试方法 |
 |---------|---------|
-| auth.store.test.ts | testAgencyLoginStore |
-| auth.store.test.ts | testSwitchEnterprise |
-| request.test.ts | testEnterpriseHeader |
-| router.test.ts | testUserTypeDispatch |
-| EnterpriseList.test.ts | testRenderList |
-| EnterpriseSwitcher.test.ts | testSwitch |
-| BatchOperation.test.ts | testBatchUI |
-| agency-flow.spec.ts | testFullAgencyFlow |
+| auth.store.test.ts | testAgencyRoleState |
+| auth.store.test.ts | testAccountantEnterpriseList |
+| AccountantList.test.ts | testRenderList |
+| AssignmentManage.test.ts | testAssignUnassign |
+| EnterpriseSwitcher.test.ts | testRoleFilter |
+| router.test.ts | testAgencyRoleGuard |
 
-### 测试规范
+### 测试通过标准（V2.0 更新）
 
-- **TDD-First**：每个微循环先写测试（Red），再写实现（Green）
-- **负向断言强制**：状态机测试必须包含"不该做的没做"
-- **Mock 策略**：单元测试 Mock Mapper；集成测试用真实 DB（Testcontainers）
-- **契约验证**：每个 Sprint 结束时运行 `validate_spec_contract.py --path S-26`
-- **全量回归**：每个 Sprint 结束时 `mvn test` + `npm test` 必须 Failures=0
-- **Entity-DB 一致性**：每次改 Entity 后跑 `node backend/scripts/check-entity-schema.mjs`
-
----
-
-## Git 提交规范
-
-- 每个微循环独立 commit
-- 格式：`S26-MC{sprint}-{num}: {描述}`
-- 示例：`S26-MC1-01: V99 create agency/enterprise/agency_enterprise tables`
-- `git add` 必须指定具体文件路径
-- commit 前必须 `mvn test` 通过
-
----
-
-## 风险登记
-
-| 风险 | 概率 | 影响 | 缓解 |
-|------|------|------|------|
-| 69 表加列导致现有测试全部失败 | 高 | 高 | MC1-10 专门修复测试，Mock 数据加 enterpriseId |
-| RLS 连接池串号 | 中 | 高 | MC1-09 HikariCP 连接清理 |
-| BaseEntity 迁移遗漏 | 中 | 中 | 分批迁移 + check-entity-schema.mjs |
-| 拦截器递归 StackOverflow | 中 | 高 | ThreadLocal 预占，参考已有方案 |
-| 性能下降（enterprise_id 索引） | 低 | 低 | 加索引，RLS 无额外开销 |
-
----
-
-> **审核门**：本计划需老丁审核通过后方可进入执行阶段。
+- **后端**：`mvn test` Failures=0, Errors=0
+- **前端**：`npm test` 所有测试通过
+- **E2E**：`npx playwright test` 全部通过
+- **契约**：`validate_spec_contract.py` exit code=0
+- **Entity-DB**：`check-entity-schema.mjs` 无不一致
+- **BDD 覆盖**：18 个场景全部有对应 @Test 且 PASS
+- **负向断言**：17 条负向断言全部 PASS
+- **并发测试**：6 个并发测试全部 PASS
+- **测试总数**：V1.0 57 个 + V2.0 26 个 = 83 个 @Test

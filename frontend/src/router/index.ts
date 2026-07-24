@@ -73,6 +73,14 @@ router.beforeEach(async (to, _from, next) => {
     }
   }
 
+  // S-26: 代理角色路由守卫（仅 AGENCY_ADMIN 可访问会计管理/客户分配）
+  if (authStore.isAgency && !authStore.isAgencyAdmin) {
+    const agencyRoleRequired = to.meta.agencyRole as string | undefined
+    if (agencyRoleRequired && authStore.agencyRole !== agencyRoleRequired) {
+      return next({ path: '/403' })
+    }
+  }
+
   // 权限校验（SUPER_ADMIN 跳过）
   if (!authStore.isSuperAdmin) {
     const requiredPerm = to.meta.permission as string | undefined

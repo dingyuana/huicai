@@ -42,6 +42,9 @@ public class Subject {
     /** 备注 */
     private String remark;
 
+    /** 企业ID（多租户隔离） */
+    private Long enterpriseId;
+
     @TableField(fill = FieldFill.INSERT)
     private Long createdBy;
 

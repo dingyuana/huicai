@@ -4,14 +4,14 @@
 
 ## §0 项目状态（硬数字，每次 commit 后更新）
 
-> **更新基准**：commit `65e8d66` (2026-07-09) — P44/P45 核销列表修复 + 上游追溯
-> **当前分支**：`ai-evolution`
+> **更新基准**：commit `8486561` (2026-07-24) — Sprint 5 代理角色体系测试修复
+> **当前分支**：`feature/agency-business`
 > **关联文档**：[项目说明](docs/项目说明.md)、[技术方案](docs/技术方案.md)、[需求分析](docs/需求分析.md)、[需求登记册](docs/development/requirements/REQUIREMENTS_REGISTRY.md)、[文档注册表](docs/文档注册表.md)、[Flyway治理规范](docs/development/flyway-governance.md)
 
 | 维度 | 数据 |
 |------|------|
 | 后端代码 | 345 Java 文件 |
-| 测试用例 | 1042 个 `@Test` 方法 / 134 个测试类（含并发测试）|
+| 测试用例 | 1211 个 `@Test` 方法 / 163 个测试类（含并发测试）|
 | 数据库 | PostgreSQL 16 / V1 baseline (merged V1-V91) |
 | API 端点 | 433 个后端端点 |
 | 核心模块 | 基础数据、总账、应收应付、现金管理、固定资产、费用报销、发票税务、预算、财务报表、存储管理 |

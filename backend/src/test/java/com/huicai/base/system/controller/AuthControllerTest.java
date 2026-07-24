@@ -1,5 +1,11 @@
 package com.huicai.base.system.controller;
 
+import com.huicai.agency.tenant.entity.EnterpriseEntity;
+import com.huicai.agency.tenant.mapper.AgencyEnterpriseMapper;
+import com.huicai.agency.tenant.mapper.EnterpriseMapper;
+import com.huicai.agency.user.entity.AgencyUserEntity;
+import com.huicai.agency.user.mapper.AgencyUserEnterpriseMapper;
+import com.huicai.agency.user.mapper.AgencyUserMapper;
 import com.huicai.base.system.entity.MenuEntity;
 import com.huicai.base.system.entity.UserEntity;
 import com.huicai.base.system.mapper.MenuMapper;
@@ -78,6 +84,18 @@ class AuthControllerTest {
     @SuppressWarnings("rawtypes")
     private ValueOperations valueOperations;
 
+    @MockBean
+    private AgencyEnterpriseMapper agencyEnterpriseMapper;
+
+    @MockBean
+    private EnterpriseMapper enterpriseMapper;
+
+    @MockBean
+    private AgencyUserMapper agencyUserMapper;
+
+    @MockBean
+    private AgencyUserEnterpriseMapper agencyUserEnterpriseMapper;
+
     @AfterEach
     void clearSecurityContext() {
         org.springframework.security.core.context.SecurityContextHolder.clearContext();
@@ -135,7 +153,7 @@ class AuthControllerTest {
 
         when(userRoleMapper.getRoleIdsByUserId(eq(1L))).thenReturn(List.of(1L, 2L));
         when(menuService.getUserButtonPermissions(eq(1L))).thenReturn(List.of("system:user:list", "system:role:list"));
-        when(jwtProvider.generateAccessToken(anyString(), anyLong(), anyList(), any(), any(), any())).thenReturn("mock-access-token");
+        when(jwtProvider.generateAccessToken(anyString(), anyLong(), anyList(), any(), any(), any(), any())).thenReturn("mock-access-token");
         when(jwtProvider.generateRefreshToken(anyString())).thenReturn("mock-refresh-token");
 
         AuthController.LoginRequest request = new AuthController.LoginRequest();
@@ -156,7 +174,7 @@ class AuthControllerTest {
 
         verify(authenticationManager).authenticate(any());
         verify(userMapper).selectByUsername(eq("admin"));
-        verify(jwtProvider).generateAccessToken(eq("admin"), eq(1L), argThat(roles -> roles.contains("1") && roles.contains("2")), any(), any(), any());
+        verify(jwtProvider).generateAccessToken(eq("admin"), eq(1L), argThat(roles -> roles.contains("1") && roles.contains("2")), any(), any(), any(), any());
     }
 
     @Test
@@ -213,7 +231,7 @@ class AuthControllerTest {
         when(userMapper.selectByUsername(eq("admin"))).thenReturn(user);
         when(userRoleMapper.getRoleIdsByUserId(eq(1L))).thenReturn(java.util.Collections.emptyList());
         when(menuService.getUserButtonPermissions(eq(1L))).thenReturn(java.util.Collections.emptyList());
-        when(jwtProvider.generateAccessToken(anyString(), anyLong(), anyList(), any(), any(), any())).thenReturn("token");
+        when(jwtProvider.generateAccessToken(anyString(), anyLong(), anyList(), any(), any(), any(), any())).thenReturn("token");
         when(jwtProvider.generateRefreshToken(anyString())).thenReturn("refresh");
 
         AuthController.LoginRequest request = new AuthController.LoginRequest();
@@ -282,5 +300,160 @@ class AuthControllerTest {
         verify(jwtProvider, never()).getUsernameFromToken(anyString());
         verify(userMapper, never()).selectOne(any());
         verify(userMapper, never()).selectByUsername(anyString());
+    }
+
+    // ==================== AGENCY 登录场景 (Sprint 5) ====================
+
+    @Test
+    @DisplayName("场景12: AGENCY_ADMIN 登录返回全部客户企业列表")
+    void testAgencyAdminLogin() throws Exception {
+        // given
+        Authentication authentication = mock(Authentication.class);
+        when(authenticationManager.authenticate(any())).thenReturn(authentication);
+        when(authentication.getName()).thenReturn("admin");
+
+        UserEntity user = new UserEntity();
+        user.setId(1L);
+        user.setUsername("admin");
+        user.setUserType("AGENCY");
+        user.setAgencyId(1L);
+        user.setAgencyRole("AGENCY_ADMIN");
+        when(userMapper.selectByUsername(eq("admin"))).thenReturn(user);
+
+        when(userRoleMapper.getRoleIdsByUserId(eq(1L))).thenReturn(List.of(1L));
+        when(menuService.getUserButtonPermissions(eq(1L))).thenReturn(List.of());
+
+        when(jwtProvider.generateAccessToken(anyString(), anyLong(), anyList(), any(), any(), any(), any())).thenReturn("mock-access-token");
+        when(jwtProvider.generateRefreshToken(anyString())).thenReturn("mock-refresh-token");
+
+        // AGENCY_ADMIN 查看全部企业
+        when(agencyEnterpriseMapper.getEnterpriseIdsByAgencyId(1L)).thenReturn(List.of(1L, 2L, 3L));
+
+        EnterpriseEntity ent1 = new EnterpriseEntity();
+        ent1.setId(1L);
+        ent1.setEnterpriseName("企业A");
+        ent1.setTaxId("91100000MA001");
+        EnterpriseEntity ent2 = new EnterpriseEntity();
+        ent2.setId(2L);
+        ent2.setEnterpriseName("企业B");
+        ent2.setTaxId("91100000MA002");
+        when(enterpriseMapper.selectById(1L)).thenReturn(ent1);
+        when(enterpriseMapper.selectById(2L)).thenReturn(ent2);
+
+        AuthController.LoginRequest request = new AuthController.LoginRequest();
+        request.setUsername("admin");
+        request.setPassword("admin123");
+
+        // when & then
+        mvc.perform(post("/api/v1/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(om.writeValueAsString(request)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(200))
+                .andExpect(jsonPath("$.data.userType").value("AGENCY"))
+                .andExpect(jsonPath("$.data.agencyRole").value("AGENCY_ADMIN"))
+                .andExpect(jsonPath("$.data.enterpriseList.length()").value(2))
+                .andExpect(jsonPath("$.data.enterpriseList[0].enterpriseName").value("企业A"));
+
+        verify(agencyEnterpriseMapper).getEnterpriseIdsByAgencyId(1L);
+    }
+
+    @Test
+    @DisplayName("场景10: ACCOUNTANT 登录仅看到分配的企业")
+    void testAccountantLogin() throws Exception {
+        // given
+        Authentication authentication = mock(Authentication.class);
+        when(authenticationManager.authenticate(any())).thenReturn(authentication);
+        when(authentication.getName()).thenReturn("accountant01");
+
+        UserEntity user = new UserEntity();
+        user.setId(2L);
+        user.setUsername("accountant01");
+        user.setUserType("AGENCY");
+        user.setAgencyId(1L);
+        user.setAgencyRole("ACCOUNTANT");
+        when(userMapper.selectByUsername(eq("accountant01"))).thenReturn(user);
+
+        when(userRoleMapper.getRoleIdsByUserId(eq(2L))).thenReturn(List.of(1L));
+        when(menuService.getUserButtonPermissions(eq(2L))).thenReturn(List.of());
+
+        when(jwtProvider.generateAccessToken(anyString(), anyLong(), anyList(), any(), any(), any(), any())).thenReturn("mock-access-token");
+        when(jwtProvider.generateRefreshToken(anyString())).thenReturn("mock-refresh-token");
+
+        // ACCOUNTANT 通过 t_agency_user 查找分配
+        AgencyUserEntity agencyUser = new AgencyUserEntity();
+        agencyUser.setId(10L);
+        agencyUser.setUserId(2L);
+        agencyUser.setAgencyId(1L);
+        agencyUser.setAgencyRole("ACCOUNTANT");
+        when(agencyUserMapper.selectOne(any())).thenReturn(agencyUser);
+
+        when(agencyUserEnterpriseMapper.getEnterpriseIdsByAgencyUserId(10L)).thenReturn(List.of(1L));
+
+        EnterpriseEntity ent = new EnterpriseEntity();
+        ent.setId(1L);
+        ent.setEnterpriseName("企业A");
+        ent.setTaxId("91100000MA001");
+        when(enterpriseMapper.selectById(1L)).thenReturn(ent);
+
+        AuthController.LoginRequest request = new AuthController.LoginRequest();
+        request.setUsername("accountant01");
+        request.setPassword("admin123");
+
+        // when & then
+        mvc.perform(post("/api/v1/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(om.writeValueAsString(request)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(200))
+                .andExpect(jsonPath("$.data.userType").value("AGENCY"))
+                .andExpect(jsonPath("$.data.agencyRole").value("ACCOUNTANT"))
+                .andExpect(jsonPath("$.data.enterpriseList.length()").value(1))
+                .andExpect(jsonPath("$.data.enterpriseList[0].enterpriseName").value("企业A"));
+
+        verify(agencyUserMapper).selectOne(any());
+        verify(agencyUserEnterpriseMapper).getEnterpriseIdsByAgencyUserId(10L);
+    }
+
+    @Test
+    @DisplayName("场景10: ACCOUNTANT 无分配企业时返回空列表")
+    void testAccountantLoginNoAssignment() throws Exception {
+        // given
+        Authentication authentication = mock(Authentication.class);
+        when(authenticationManager.authenticate(any())).thenReturn(authentication);
+        when(authentication.getName()).thenReturn("accountant02");
+
+        UserEntity user = new UserEntity();
+        user.setId(3L);
+        user.setUsername("accountant02");
+        user.setUserType("AGENCY");
+        user.setAgencyId(1L);
+        user.setAgencyRole("ACCOUNTANT");
+        when(userMapper.selectByUsername(eq("accountant02"))).thenReturn(user);
+
+        when(userRoleMapper.getRoleIdsByUserId(eq(3L))).thenReturn(List.of(1L));
+        when(menuService.getUserButtonPermissions(eq(3L))).thenReturn(List.of());
+
+        when(jwtProvider.generateAccessToken(anyString(), anyLong(), anyList(), any(), any(), any(), any())).thenReturn("mock-access-token");
+        when(jwtProvider.generateRefreshToken(anyString())).thenReturn("mock-refresh-token");
+
+        // 无分配企业
+        AgencyUserEntity agencyUser = new AgencyUserEntity();
+        agencyUser.setId(11L);
+        agencyUser.setUserId(3L);
+        when(agencyUserMapper.selectOne(any())).thenReturn(agencyUser);
+        when(agencyUserEnterpriseMapper.getEnterpriseIdsByAgencyUserId(11L)).thenReturn(List.of());
+
+        AuthController.LoginRequest request = new AuthController.LoginRequest();
+        request.setUsername("accountant02");
+        request.setPassword("admin123");
+
+        // when & then
+        mvc.perform(post("/api/v1/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(om.writeValueAsString(request)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(200))
+                .andExpect(jsonPath("$.data.enterpriseList.length()").value(0));
     }
 }

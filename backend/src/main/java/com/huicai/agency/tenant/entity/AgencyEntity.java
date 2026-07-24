@@ -1,17 +1,28 @@
 package com.huicai.agency.tenant.entity;
 
-import com.baomidou.mybatisplus.annotation.TableName;
-import com.huicai.common.entity.BaseEntity;
+import com.baomidou.mybatisplus.annotation.*;
 import lombok.Data;
-import lombok.EqualsAndHashCode;
+
+import java.time.LocalDateTime;
 
 @Data
-@EqualsAndHashCode(callSuper = true)
 @TableName("t_agency")
-public class AgencyEntity extends BaseEntity {
+public class AgencyEntity {
+    @TableId(type = IdType.AUTO)
+    private Long id;
+
     private String agencyCode;
     private String agencyName;
     private String contactName;
     private String contactPhone;
     private String status;
+
+    @TableField(fill = FieldFill.INSERT)
+    private LocalDateTime createdAt;
+
+    @TableField(fill = FieldFill.INSERT_UPDATE)
+    private LocalDateTime updatedAt;
+
+    @TableLogic
+    private Integer deleted;
 }

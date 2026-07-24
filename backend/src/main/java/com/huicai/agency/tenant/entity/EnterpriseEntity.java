@@ -1,14 +1,16 @@
 package com.huicai.agency.tenant.entity;
 
-import com.baomidou.mybatisplus.annotation.TableName;
-import com.huicai.common.entity.BaseEntity;
+import com.baomidou.mybatisplus.annotation.*;
 import lombok.Data;
-import lombok.EqualsAndHashCode;
+
+import java.time.LocalDateTime;
 
 @Data
-@EqualsAndHashCode(callSuper = true)
 @TableName("t_enterprise")
-public class EnterpriseEntity extends BaseEntity {
+public class EnterpriseEntity {
+    @TableId(type = IdType.AUTO)
+    private Long id;
+
     private String enterpriseCode;
     private String enterpriseName;
     private String taxId;
@@ -16,4 +18,13 @@ public class EnterpriseEntity extends BaseEntity {
     private Long agencyId;
     private String status;
     private Boolean seedDataDone;
+
+    @TableField(fill = FieldFill.INSERT)
+    private LocalDateTime createdAt;
+
+    @TableField(fill = FieldFill.INSERT_UPDATE)
+    private LocalDateTime updatedAt;
+
+    @TableLogic
+    private Integer deleted;
 }

@@ -19,6 +19,7 @@ export interface UserInfo {
   // S-26: 多租户字段
   userType?: string
   agencyId?: number | null
+  agencyRole?: string
   enterpriseId?: number | null
   enterpriseList?: EnterpriseSimple[]
 }
@@ -36,6 +37,7 @@ export interface LoginResult {
   refreshToken: string
   tokenType: string
   userType: string
+  agencyRole?: string
   enterpriseId: number | null
   agencyId: number | null
   enterpriseList: EnterpriseSimple[]

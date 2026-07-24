@@ -49,6 +49,13 @@ public class SecurityUtils {
         return getLoginUser().getAgencyId();
     }
 
+    /**
+     * 获取当前代理内角色
+     */
+    public static String getCurrentAgencyRole() {
+        return getLoginUser().getAgencyRole();
+    }
+
     private static LoginUser getLoginUser() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         if (authentication == null || !authentication.isAuthenticated()) {

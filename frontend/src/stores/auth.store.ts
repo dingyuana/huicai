@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { login as loginApi, getUserInfo, type LoginParams, type UserInfo } from '@/api/modules/auth'
 import request from '@/api/request'
+import router from '@/router'
 
 export interface EnterpriseSimple {
   id: number
@@ -22,6 +23,7 @@ export const useAuthStore = defineStore('auth', () => {
   )
   const userType = ref<string>('')
   const agencyId = ref<number | null>(null)
+  const agencyRole = ref<string>('')
   const enterpriseList = ref<EnterpriseSimple[]>([])
 
   const isLoggedIn = computed(() => !!token.value)
@@ -31,6 +33,16 @@ export const useAuthStore = defineStore('auth', () => {
 
   /** 是否为代账公司用户 */
   const isAgency = computed(() => userType.value === 'AGENCY')
+
+  // S-26: 代理内角色判断
+  /** 是否为代账公司经理 */
+  const isAgencyAdmin = computed(() => agencyRole.value === 'AGENCY_ADMIN')
+  /** 是否为代账公司会计 */
+  const isAccountant = computed(() => agencyRole.value === 'ACCOUNTANT')
+  /** 是否为代账公司审核员 */
+  const isReviewer = computed(() => agencyRole.value === 'REVIEWER')
+  /** 是否为代账公司助理 */
+  const isAssistant = computed(() => agencyRole.value === 'ASSISTANT')
 
   function hasPermission(perm: string): boolean {
     if (!perm) return true
@@ -46,6 +58,7 @@ export const useAuthStore = defineStore('auth', () => {
     // S-26: 填充多租户字段
     userType.value = result.userType || 'ENTERPRISE'
     agencyId.value = result.agencyId || null
+    agencyRole.value = result.agencyRole || ''
     enterpriseList.value = result.enterpriseList || []
     if (result.enterpriseId) {
       currentEnterpriseId.value = result.enterpriseId
@@ -72,6 +85,7 @@ export const useAuthStore = defineStore('auth', () => {
       // S-26: 恢复多租户字段（刷新页面时从 userinfo 接口获取）
       if (info.userType) userType.value = info.userType
       if (info.agencyId !== undefined) agencyId.value = info.agencyId
+      if (info.agencyRole !== undefined) agencyRole.value = info.agencyRole
       if (info.enterpriseId !== undefined) currentEnterpriseId.value = info.enterpriseId
       if (info.enterpriseList) enterpriseList.value = info.enterpriseList
     } catch {
@@ -86,17 +100,21 @@ export const useAuthStore = defineStore('auth', () => {
     currentEnterpriseId.value = null
     userType.value = ''
     agencyId.value = null
+    agencyRole.value = ''
     enterpriseList.value = []
     localStorage.removeItem('huicai_token')
     localStorage.removeItem('huicai_refresh_token')
     localStorage.removeItem('huicai_current_enterprise_id')
-    window.location.href = '/login'
+    router.replace('/login').finally(() => {
+      window.location.replace('/login')
+    })
   }
 
   return {
     token, userInfo, permissions,
-    currentEnterpriseId, userType, agencyId, enterpriseList,
+    currentEnterpriseId, userType, agencyId, agencyRole, enterpriseList,
     isLoggedIn, isSuperAdmin, isAgency,
+    isAgencyAdmin, isAccountant, isReviewer, isAssistant,
     hasPermission, login, switchEnterprise, fetchUserInfo, logout,
   }
 })

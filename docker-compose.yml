@@ -126,6 +126,7 @@ services:
       MINIO_ENDPOINT: http://minio:9000
       MINIO_ACCESS_KEY: huicai
       MINIO_SECRET_KEY: huicai123
+      JWT_SECRET: huicai-finance-jwt-secret-key-2026-very-long-secret-string
     depends_on:
       postgres16:
         condition: service_healthy

@@ -31,7 +31,8 @@
       <el-input v-model="searchName" placeholder="企业名称" clearable style="width: 200px" />
       <el-input v-model="searchTaxId" placeholder="纳税人识别号" clearable style="width: 200px; margin-left: 12px" />
       <el-button type="primary" @click="fetchList" style="margin-left: 12px">搜索</el-button>
-      <el-button type="success" @click="router.push('/agency/batch-operation')" style="margin-left: auto">
+      <el-button type="success" @click="openCreateDialog" style="margin-left: 12px">新增企业</el-button>
+      <el-button @click="router.push('/agency/batch-operation')" style="margin-left: auto">
         批量操作
       </el-button>
     </div>
@@ -55,10 +56,13 @@
         </template>
       </el-table-column>
       <el-table-column prop="createdAt" label="创建时间" width="160" />
-      <el-table-column label="操作" width="280" fixed="right">
+      <el-table-column label="操作" width="360" fixed="right">
         <template #default="{ row }">
           <el-button size="small" type="primary" @click="enterEnterprise(row as EnterpriseVO)">
             进入
+          </el-button>
+          <el-button size="small" @click="openEditDialog(row as EnterpriseVO)">
+            编辑
           </el-button>
           <el-button
             v-if="(row as EnterpriseVO).status === 'PENDING'"
@@ -76,6 +80,13 @@
           >
             暂停
           </el-button>
+          <el-button
+            size="small"
+            type="danger"
+            @click="handleDelete(row as EnterpriseVO)"
+          >
+            删除
+          </el-button>
         </template>
       </el-table-column>
     </el-table>
@@ -88,6 +99,32 @@
       @current-change="fetchList"
       style="margin-top: 16px; justify-content: flex-end"
     />
+
+    <!-- 新增/编辑对话框 -->
+    <el-dialog
+      v-model="dialogVisible"
+      :title="dialogMode === 'create' ? '新增企业' : '编辑企业'"
+      width="500px"
+      :close-on-click-modal="false"
+    >
+      <el-form ref="formRef" :model="form" :rules="formRules" label-width="100px">
+        <el-form-item label="企业编码" prop="enterpriseCode">
+          <el-input v-model="form.enterpriseCode" :disabled="dialogMode === 'edit'" placeholder="企业编码" />
+        </el-form-item>
+        <el-form-item label="企业名称" prop="enterpriseName">
+          <el-input v-model="form.enterpriseName" placeholder="企业名称" />
+        </el-form-item>
+        <el-form-item label="纳税人识别号" prop="taxId">
+          <el-input v-model="form.taxId" placeholder="纳税人识别号" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="dialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="handleSubmit" :loading="submitting">
+          {{ dialogMode === 'create' ? '创建' : '保存' }}
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -95,8 +132,9 @@
 import { ref, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth.store'
-import { getEnterpriseList, activateEnterprise, suspendEnterprise, type EnterpriseVO } from '@/api/modules/agency'
+import { getEnterpriseList, createEnterprise, updateEnterprise, deleteEnterprise, activateEnterprise, suspendEnterprise, type EnterpriseVO, type EnterpriseCreateDTO } from '@/api/modules/agency'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import type { FormInstance, FormRules } from 'element-plus'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -108,6 +146,24 @@ const total = ref(0)
 const searchName = ref('')
 const searchTaxId = ref('')
 const tableData = ref<EnterpriseVO[]>([])
+
+// 对话框状态
+const dialogVisible = ref(false)
+const dialogMode = ref<'create' | 'edit'>('create')
+const submitting = ref(false)
+const editingId = ref<number | null>(null)
+const formRef = ref<FormInstance>()
+
+const form = reactive<EnterpriseCreateDTO>({
+  enterpriseCode: '',
+  enterpriseName: '',
+  taxId: '',
+})
+
+const formRules: FormRules = {
+  enterpriseCode: [{ required: true, message: '请输入企业编码', trigger: 'blur' }],
+  enterpriseName: [{ required: true, message: '请输入企业名称', trigger: 'blur' }],
+}
 
 const stats = reactive({
   total: 0,
@@ -165,6 +221,73 @@ async function handleSuspend(enterprise: EnterpriseVO) {
     fetchList()
   } catch {
     ElMessage.error('暂停失败')
+  }
+}
+
+// ===== 新增/编辑 =====
+
+function openCreateDialog() {
+  dialogMode.value = 'create'
+  editingId.value = null
+  form.enterpriseCode = ''
+  form.enterpriseName = ''
+  form.taxId = ''
+  formRef.value?.resetFields()
+  dialogVisible.value = true
+}
+
+function openEditDialog(enterprise: EnterpriseVO) {
+  dialogMode.value = 'edit'
+  editingId.value = enterprise.id
+  form.enterpriseCode = enterprise.enterpriseCode
+  form.enterpriseName = enterprise.enterpriseName
+  form.taxId = enterprise.taxId || ''
+  dialogVisible.value = true
+}
+
+async function handleSubmit() {
+  const valid = await formRef.value?.validate().catch(() => false)
+  if (!valid) return
+
+  submitting.value = true
+  try {
+    const payload: EnterpriseCreateDTO = {
+      enterpriseCode: form.enterpriseCode,
+      enterpriseName: form.enterpriseName,
+      taxId: form.taxId || undefined,
+      agencyId: authStore.agencyId ?? undefined,
+    }
+
+    if (dialogMode.value === 'create') {
+      await createEnterprise(payload)
+      ElMessage.success('创建成功')
+    } else {
+      await updateEnterprise(editingId.value!, payload)
+      ElMessage.success('保存成功')
+    }
+    dialogVisible.value = false
+    fetchList()
+  } catch {
+    ElMessage.error(dialogMode.value === 'create' ? '创建失败' : '保存失败')
+  } finally {
+    submitting.value = false
+  }
+}
+
+// ===== 删除 =====
+
+async function handleDelete(enterprise: EnterpriseVO) {
+  await ElMessageBox.confirm(
+    `确认删除企业「${enterprise.enterpriseName}」？此操作不可恢复。`,
+    '删除确认',
+    { confirmButtonText: '确认删除', cancelButtonText: '取消', type: 'warning' },
+  )
+  try {
+    await deleteEnterprise(enterprise.id)
+    ElMessage.success('已删除')
+    fetchList()
+  } catch {
+    ElMessage.error('删除失败')
   }
 }
 

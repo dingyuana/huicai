@@ -2,12 +2,19 @@ package com.huicai.sme.cash.service.impl;
 
 import com.huicai.base.business.entity.ClassificationRuleEntity;
 import com.huicai.base.business.mapper.ClassificationRuleMapper;
+import com.huicai.config.security.LoginUser;
+import com.huicai.base.system.entity.UserEntity;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.context.SecurityContextHolder;
 
 import java.util.List;
 
@@ -29,6 +36,24 @@ class ClassificationRuleServiceTest {
 
     @InjectMocks
     private ClassificationRuleServiceImpl service;
+
+    @BeforeEach
+    void setUpSecurityContext() {
+        UserEntity user = new UserEntity();
+        user.setId(1L);
+        user.setUsername("test");
+        user.setPassword("password");
+        user.setEnterpriseId(1L);
+        user.setUserType("ENTERPRISE");
+        LoginUser loginUser = new LoginUser(user, List.of(new SimpleGrantedAuthority("ROLE_USER")));
+        SecurityContextHolder.getContext().setAuthentication(
+                new UsernamePasswordAuthenticationToken(loginUser, null, loginUser.getAuthorities()));
+    }
+
+    @AfterEach
+    void clearSecurityContext() {
+        SecurityContextHolder.clearContext();
+    }
 
     // ==================== create ====================
 

@@ -46,6 +46,16 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 Long agencyId = jwtProvider.getAgencyIdFromToken(token);
                 String userType = jwtProvider.getUserTypeFromToken(token);
 
+                // S-26: 前端 X-Enterprise-Id 覆盖 JWT 中的 enterpriseId
+                // 切换企业后 JWT 未更新，由前端 header 传递当前选中企业
+                String xEnterpriseId = request.getHeader("X-Enterprise-Id");
+                if (xEnterpriseId != null) {
+                    try {
+                        enterpriseId = Long.parseLong(xEnterpriseId);
+                    } catch (NumberFormatException ignored) {
+                    }
+                }
+
                 UserDetails userDetails = userDetailsService.loadUserByUsername(username);
 
                 UsernamePasswordAuthenticationToken authentication =
@@ -54,8 +64,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
                 SecurityContextHolder.getContext().setAuthentication(authentication);
 
-                // S-26: 设置企业上下文（SUPER_ADMIN 不设，跳过数据权限拦截）
-                if (enterpriseId != null && !"SUPER_ADMIN".equals(userType)) {
+                // S-26: 设置企业上下文（SUPER_ADMIN 随 X-Enterprise-Id 头切换）
+                if (enterpriseId != null) {
                     EnterpriseContextHolder.set(enterpriseId);
                 }
             }

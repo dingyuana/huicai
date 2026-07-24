@@ -4,6 +4,10 @@ import com.huicai.agency.tenant.entity.EnterpriseEntity;
 import com.huicai.agency.tenant.mapper.AgencyEnterpriseMapper;
 import com.huicai.agency.tenant.mapper.EnterpriseMapper;
 import com.huicai.agency.tenant.vo.EnterpriseSimpleVO;
+import com.huicai.agency.user.entity.AgencyUserEntity;
+import com.huicai.agency.user.mapper.AgencyUserEnterpriseMapper;
+import com.huicai.agency.user.mapper.AgencyUserMapper;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.huicai.common.context.EnterpriseContextHolder;
 import com.huicai.common.response.R;
 import com.huicai.config.security.JwtProvider;
@@ -46,6 +50,8 @@ public class AuthController {
     private final PasswordEncoder passwordEncoder;
     private final AgencyEnterpriseMapper agencyEnterpriseMapper;
     private final EnterpriseMapper enterpriseMapper;
+    private final AgencyUserMapper agencyUserMapper;
+    private final AgencyUserEnterpriseMapper agencyUserEnterpriseMapper;
 
     @PostMapping("/login")
     public R<LoginResponse> login(@RequestBody LoginRequest request) {
@@ -67,11 +73,38 @@ public class AuthController {
         String userType = user.getUserType() != null ? user.getUserType() : "ENTERPRISE";
         Long enterpriseId = user.getEnterpriseId();
         Long agencyId = user.getAgencyId();
+        String agencyRole = user.getAgencyRole();
 
-        // AGENCY 用户登录时获取绑定的企业列表
+        // 登录时获取企业列表
         List<EnterpriseSimpleVO> enterpriseList = new ArrayList<>();
-        if ("AGENCY".equals(userType) && agencyId != null) {
-            List<Long> enterpriseIds = agencyEnterpriseMapper.getEnterpriseIdsByAgencyId(agencyId);
+        if ("SUPER_ADMIN".equals(userType)) {
+            // 超级管理员看全部企业
+            List<EnterpriseEntity> allEnterprises = enterpriseMapper.selectList(
+                    new LambdaQueryWrapper<EnterpriseEntity>()
+                            .eq(EnterpriseEntity::getDeleted, 0));
+            for (EnterpriseEntity ent : allEnterprises) {
+                enterpriseList.add(new EnterpriseSimpleVO(
+                        ent.getId(), ent.getEnterpriseName(),
+                        ent.getTaxId(), ent.getStatus(), ent.getSeedDataDone()));
+            }
+        } else if ("AGENCY".equals(userType) && agencyId != null) {
+            // V2.0: 按 agencyRole 过滤企业列表
+            List<Long> enterpriseIds;
+            if ("AGENCY_ADMIN".equals(agencyRole) || "REVIEWER".equals(agencyRole)) {
+                // 经理和审核员看代理公司下全部企业
+                enterpriseIds = agencyEnterpriseMapper.getEnterpriseIdsByAgencyId(agencyId);
+            } else {
+                // 会计和助理只看分配给自己的企业
+                AgencyUserEntity agencyUser = agencyUserMapper.selectOne(
+                        new LambdaQueryWrapper<AgencyUserEntity>()
+                                .eq(AgencyUserEntity::getUserId, user.getId())
+                                .eq(AgencyUserEntity::getDeleted, 0));
+                if (agencyUser != null) {
+                    enterpriseIds = agencyUserEnterpriseMapper.getEnterpriseIdsByAgencyUserId(agencyUser.getId());
+                } else {
+                    enterpriseIds = List.of();
+                }
+            }
             for (Long eid : enterpriseIds) {
                 EnterpriseEntity ent = enterpriseMapper.selectById(eid);
                 if (ent != null) {
@@ -89,7 +122,7 @@ public class AuthController {
 
         String accessToken = jwtProvider.generateAccessToken(username, user.getId(),
                 roleIds.stream().map(String::valueOf).collect(Collectors.toList()),
-                enterpriseId, agencyId, userType);
+                enterpriseId, agencyId, userType, agencyRole);
         String refreshToken = jwtProvider.generateRefreshToken(username);
 
         LoginResponse response = new LoginResponse();
@@ -99,11 +132,12 @@ public class AuthController {
         response.setUserType(userType);
         response.setEnterpriseId(enterpriseId);
         response.setAgencyId(agencyId);
+        response.setAgencyRole(agencyRole);
         response.setEnterpriseList(enterpriseList);
         response.setUserInfo(new UserInfoResponse(user.getId(), user.getUsername(),
                 user.getRealName(), user.getNickname(), user.getEmail(), user.getPhone(),
                 user.getAvatar(), user.getDeptId(), roleIds, permissions,
-                userType, agencyId, enterpriseId, enterpriseList));
+                userType, agencyId, enterpriseId, agencyRole, enterpriseList));
 
         return R.ok(response);
     }
@@ -131,12 +165,42 @@ public class AuthController {
         // S-26: 多租户字段
         String userType = user.getUserType() != null ? user.getUserType() : "ENTERPRISE";
         Long agencyId = user.getAgencyId();
-        Long enterpriseId = user.getEnterpriseId();
+        // 优先使用 EnterpriseContextHolder（由 X-Enterprise-Id header 设置）
+        // 避免覆盖前端切换后的企业 ID
+        Long enterpriseId = EnterpriseContextHolder.get();
+        if (enterpriseId == null) {
+            enterpriseId = user.getEnterpriseId();
+        }
+        String agencyRole = user.getAgencyRole();
 
         // AGENCY 用户获取绑定的企业列表
         List<EnterpriseSimpleVO> enterpriseList = new ArrayList<>();
-        if ("AGENCY".equals(userType) && agencyId != null) {
-            List<Long> enterpriseIds = agencyEnterpriseMapper.getEnterpriseIdsByAgencyId(agencyId);
+        if ("SUPER_ADMIN".equals(userType)) {
+            // 超级管理员看全部企业
+            List<EnterpriseEntity> allEnterprises = enterpriseMapper.selectList(
+                    new LambdaQueryWrapper<EnterpriseEntity>()
+                            .eq(EnterpriseEntity::getDeleted, 0));
+            for (EnterpriseEntity ent : allEnterprises) {
+                enterpriseList.add(new EnterpriseSimpleVO(
+                        ent.getId(), ent.getEnterpriseName(),
+                        ent.getTaxId(), ent.getStatus(), ent.getSeedDataDone()));
+            }
+        } else if ("AGENCY".equals(userType) && agencyId != null) {
+            // V2.0: 按 agencyRole 过滤企业列表
+            List<Long> enterpriseIds;
+            if ("AGENCY_ADMIN".equals(agencyRole) || "REVIEWER".equals(agencyRole)) {
+                enterpriseIds = agencyEnterpriseMapper.getEnterpriseIdsByAgencyId(agencyId);
+            } else {
+                AgencyUserEntity agencyUser = agencyUserMapper.selectOne(
+                        new LambdaQueryWrapper<AgencyUserEntity>()
+                                .eq(AgencyUserEntity::getUserId, user.getId())
+                                .eq(AgencyUserEntity::getDeleted, 0));
+                if (agencyUser != null) {
+                    enterpriseIds = agencyUserEnterpriseMapper.getEnterpriseIdsByAgencyUserId(agencyUser.getId());
+                } else {
+                    enterpriseIds = List.of();
+                }
+            }
             for (Long eid : enterpriseIds) {
                 EnterpriseEntity ent = enterpriseMapper.selectById(eid);
                 if (ent != null) {
@@ -150,7 +214,7 @@ public class AuthController {
         UserInfoResponse userInfo = new UserInfoResponse(user.getId(), user.getUsername(),
                 user.getRealName(), user.getNickname(), user.getEmail(), user.getPhone(),
                 user.getAvatar(), user.getDeptId(), roleIds, permissions,
-                userType, agencyId, enterpriseId, enterpriseList);
+                userType, agencyId, enterpriseId, agencyRole, enterpriseList);
 
         return R.ok(userInfo);
     }
@@ -169,6 +233,7 @@ public class AuthController {
         private String userType;
         private Long enterpriseId;
         private Long agencyId;
+        private String agencyRole;
         private List<EnterpriseSimpleVO> enterpriseList;
         private UserInfoResponse userInfo;
     }
@@ -190,6 +255,7 @@ public class AuthController {
         private String userType;
         private Long agencyId;
         private Long enterpriseId;
+        private String agencyRole;
         private List<EnterpriseSimpleVO> enterpriseList;
     }
 }

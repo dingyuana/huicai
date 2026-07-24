@@ -38,6 +38,7 @@ public class UserEntity {
     private String userType;
     private Long agencyId;
     private Long enterpriseId;
+    private String agencyRole;
 
     @TableField(exist = false)
     private List<Long> roleIds;

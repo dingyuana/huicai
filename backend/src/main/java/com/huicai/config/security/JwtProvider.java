@@ -41,7 +41,7 @@ public class JwtProvider {
     }
 
     public String generateAccessToken(String username, Long userId, List<String> roles,
-                                       Long enterpriseId, Long agencyId, String userType) {
+                                       Long enterpriseId, Long agencyId, String userType, String agencyRole) {
         Date now = new Date();
         return Jwts.builder()
                 .subject(username)
@@ -50,6 +50,7 @@ public class JwtProvider {
                 .claim("enterpriseId", enterpriseId)
                 .claim("agencyId", agencyId)
                 .claim("userType", userType)
+                .claim("agencyRole", agencyRole)
                 .issuedAt(now)
                 .expiration(new Date(now.getTime() + accessTokenExpiration))
                 .signWith(key)
@@ -104,6 +105,10 @@ public class JwtProvider {
 
     public String getUserTypeFromToken(String token) {
         return getClaims(token).get("userType", String.class);
+    }
+
+    public String getAgencyRoleFromToken(String token) {
+        return getClaims(token).get("agencyRole", String.class);
     }
 
     private Claims getClaims(String token) {

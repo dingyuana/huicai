@@ -42,7 +42,7 @@ describe('BusinessDocDetail — 业务单据详情', () => {
     
     const data = await getBusinessDoc(1)
     
-    expect(getBusinessDoc).toHaveBeenCalledWith('1')
+    expect(getBusinessDoc).toHaveBeenCalledWith(1)
     expect(data.docNo).toBe('YS-001')
     expect(data.customerName).toBe('客户A')
   })
