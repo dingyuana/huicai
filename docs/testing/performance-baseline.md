@@ -9,11 +9,9 @@
 
 | 指标名称 | 定义 | 阈值告警 | 基线值 |
 |----------|------|---------|--------|
-| `batch_import_duration_ms` | 批量导入10张发票的总响应时间 (P95) | > 2s (告发) / > 5s (阻断) | TBD (首次运行后确定) |
-| `subject_balance_duration_ms` | 科目余额表查询 P95 | > 1.5s (告发) / > 3s (阻断) | TBD |
-| `balance_sheet_duration_ms` | 资产负债表查询 P95 | > 3s (告发) / > 6s (阻断) | TBD |
-| `tps_batch_import` | 批量导入 QPS | < 5 (告发) | TBD |
-| `tps_report_query` | 报表查询 QPS | < 10 (告发) | TBD |
+| `batch_import_p95_ms` | 批量导入10张发票的总响应时间 P95 | > 2s (warning) / > 5s (block) | TBD (首次运行后确定) |
+| `subject_balance_p95_ms` | 科目余额表查询 P95 | > 1.5s (warning) / > 3s (block) | TBD |
+| `balance_sheet_p95_ms` | 资产负债表查询 P95 | > 3s (warning) / > 6s (block) | TBD |
 
 > 💡 **阈值说明**：P95 超过阈值触发 GitHub Actions warning；连续两次 PR 导致 P95 增长 >20% 则阻断 merge。
 
@@ -40,24 +38,32 @@ k6 run --env BASE_URL=http://staging.huicai.example.com \
 
 | 版本/Commit | 测试时间 | batch_import_P95(ms) | subject_balance_P95(ms) | balance_sheet_P95(ms) | 备注 |
 |-------------|----------|---------------------|------------------------|----------------------|------|
-| v1.0 (初始) | 2026-07-27 | `[待填充]` | `[待填充]` | `[待填充]` | 首次 baseline |
-|             |          |                     |                        |                      |      |
+| v1.0 (初始) | 2026-07-27 | `[待填充]` | `[待填充]` | `[待填充]` | 首次 baseline，需人工在 Staging 运行 |
 |             |          |                     |                        |                      |      |
 
 ---
 
 ## 4. 回归判断规则
 
-在 GitHub Actions 性能回归 Job 中，自动对比当前 commit 与 baseline 的 P95 值：
+CI 脚本 `scripts/performance/check_regression.py` 对比当前 commit 与 baseline JSON 的 P95 值：
 
 - **增长 ≤ 10%** → info 级别评论，不阻断
-- **增长 10%-20%** → warning 级别评论，不阻断但通知 Owner
-- **增长 > 20%** → error 级别评论，**阻断 merge**
+- **增长 10%-20%** → warning 级别评论，通知 Owner
+- **增长 > 20%** → error 级别，**阻断 merge**
 
 ---
 
-## 5. 后续计划
+## 5. 首次 Baseline 采集步骤
 
-- [ ] Sprint C: 实际运行 k6 获取真实基线值并填入上表
-- [ ] Sprint D: 将性能回归整合进 CI 流水线 (`performance-regression.yml`)
-- [ ] Sprint E: 增加更复杂场景（并发核销、多租户隔离压力）
+1. 配置 GitHub Secrets: `STAGING_URL` + `E2E_TEST_TOKEN`
+2. 在 Staging 环境执行 k6 脚本（手动或通过 workflow_dispatch）
+3. 运行后 `performance-regression.yml` 会首次创建 `performance-baseline.json`
+4. 提取 P95 值填入上表
+
+---
+
+## 6. 后续计划
+
+- [ ] **Sprint F（当前）**：完善 baseline 文档 + CI gate 配置
+- [ ] Sprint G：实际运行 k6 获取真实基线值
+- [ ] Sprint G+：增加更复杂场景（并发核销、多租户隔离压力）
