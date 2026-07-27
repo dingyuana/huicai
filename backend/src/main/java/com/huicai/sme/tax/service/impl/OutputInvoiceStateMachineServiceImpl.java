@@ -24,6 +24,8 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 
+import com.huicai.common.context.EnterpriseContextHolder;
+
 /**
  * 销售发票状态机实现（P34 恢复：业务单据体系）.
  *
@@ -276,6 +278,12 @@ this.applicationContext = applicationContext;
         doc.setUnsettledAmount(invoice.getTotalAmount());
         doc.setCreatedBy(userId);
         doc.setSubmittedBy(userId);
+        Long enterpriseId = EnterpriseContextHolder.get();
+        if (enterpriseId == null) {
+            // Fallback: 从当前认证用户获取 enterpriseId（理论上不应发生）
+            enterpriseId = 1L; // 默认企业 1
+        }
+        doc.setEnterpriseId(enterpriseId);
 
         // P36: 红字发票 → 关联被红冲的蓝字业务单据
         if (isRedInvoice && invoice.getReversedFrom() != null) {
