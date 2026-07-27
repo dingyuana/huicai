@@ -16,9 +16,11 @@ import java.time.LocalDateTime;
 public class EmployeeEntity extends BaseEntity {
 
     /** 工号 */
+    @TableField(value = "emp_code")
     private String code;
 
     /** 姓名 */
+    @TableField(value = "emp_name")
     private String name;
 
     /** 部门ID（关联 system/dept） */

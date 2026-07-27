@@ -15,8 +15,14 @@ public class BudgetEntryEntity extends BaseEntity {
 
     private Long budgetId;
     private Long subjectId;
+    /** DB 无此列 */
+    @TableField(exist = false)
     private Long deptId;
+    /** DB 无此列 */
+    @TableField(exist = false)
     private Long projectId;
+    /** DB 无此列（DB 用 period VARCHAR） */
+    @TableField(exist = false)
     private Integer periodMonth;
     private BigDecimal amount;
     @TableField(exist = false)

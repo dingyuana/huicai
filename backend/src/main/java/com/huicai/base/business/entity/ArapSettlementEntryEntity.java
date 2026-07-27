@@ -14,7 +14,11 @@ import java.time.LocalDateTime;
 public class ArapSettlementEntryEntity extends BaseEntity {
 
     private Long settlementId;
+    /** P34 移除 — 使用 businessDocId 替代 */
+    @TableField(exist = false)
     private Long receivableId;
+    /** P34 移除 — 使用 businessDocId 替代 */
+    @TableField(exist = false)
     private Long payableId;
     /** 业务单据ID（P34 替代 receivableId/payableId） */
     private Long businessDocId;

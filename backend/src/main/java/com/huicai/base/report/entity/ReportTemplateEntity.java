@@ -16,6 +16,8 @@ public class ReportTemplateEntity extends BaseEntity {
     private String templateName;
     private String reportType;
     private String config;
+    /** 是否系统模板 — DB 无此列 */
+    @TableField(exist = false)
     private Boolean isSystem;
     /** 创建人 — DB 无此列 */
     @TableField(exist = false)

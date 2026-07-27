@@ -15,10 +15,16 @@ import java.time.LocalDateTime;
 public class CustomerStatementEntity extends BaseEntity {
 
     private Long customerId;
+    /** 客户名 — 冗余字段，DB 无此列 */
+    @TableField(exist = false)
     private String customerName;
     private String period;
+    /** 报表日期 — 使用 period 字段替代，DB 无此列 */
+    @TableField(exist = false)
     private LocalDate statementDate;
 
+    /** 期初余额别名 — 使用 openingBalance，DB 无此列 */
+    @TableField(exist = false)
     private BigDecimal totalOriginal;
     /** 已结算金额 — DB 无此列 */
     @TableField(exist = false)

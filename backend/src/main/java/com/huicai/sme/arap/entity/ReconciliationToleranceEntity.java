@@ -14,6 +14,8 @@ import java.time.LocalDateTime;
 @TableName("t_reconciliation_tolerance")
 public class ReconciliationToleranceEntity extends BaseEntity {
 
+    /** DB 无此列 */
+    @TableField(exist = false)
     private Long tenantId;
 
     /** 客户/供应商ID（NULL表示全局配置） */

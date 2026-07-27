@@ -17,12 +17,16 @@ import java.time.LocalDateTime;
 @TableName("t_reconciliation_exception")
 public class ReconciliationExceptionEntity extends BaseEntity {
 
+    /** DB 列为 account_id，语义不匹配，暂不持久化 */
+    @TableField(exist = false)
     private Long tenantId;
 
     /** 来源单据类型: receipt / payment / bank_txn */
+    @TableField(exist = false)
     private String sourceDocType;
 
     /** 来源单据 ID */
+    @TableField(exist = false)
     private Long sourceDocId;
 
     /** 目标单据类型: INVOICE_OUT / INVOICE_IN (可能为空) — DB 无此列 */
