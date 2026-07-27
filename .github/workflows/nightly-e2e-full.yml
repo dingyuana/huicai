@@ -1,0 +1,54 @@
+name: Nightly Full E2E Suite
+
+on:
+  schedule:
+    - cron: '0 2 * * *'  # 每天北京时间 10:00
+  workflow_dispatch:
+
+jobs:
+  e2e-full:
+    name: 全量 E2E 测试（夜间）
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Browser Dependencies
+        run: |
+          apt-get update && apt-get install -y \
+            libgconf2 libglib2.0-0 libgtk-3-0 libnss3 libx11-6 \
+            libxcomposite1 libxdamage1 libextgrab1 libxfixes3 \
+            libxi6 libxrandr2 libxss1 libxtst6 x11-utils || true
+
+      - name: Install Node & Playwright
+        run: |
+          curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+          apt-get install -y nodejs
+          cd /data/disk/huicai/e2e
+          npm ci --prefer-offline
+          npx playwright install --with-deps
+
+      - name: Run Full E2E Suite
+        working-directory: /data/disk/huicai/e2e
+        run: npx playwright test --reporter=line,jupyter
+        env:
+          BASE_URL: ${{ secrets.STAGING_URL }}
+          AUTH_TOKEN: ${{ secrets.E2E_TEST_TOKEN }}
+
+      - name: Upload E2E Report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-full-report
+          path: |
+            e2e/test-results/**
+            e2e/report/**
+            e2e/videos/*
+            e2e/snapshots/*
+          retention-days: 7
+
+      - name: Notify on Failure
+        if: failure()
+        run: |
+          echo "🚨 Nightly E2E FAILED! Check: ${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          # 此处可接入 Slack/DingTalk/邮件通知

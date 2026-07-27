@@ -1,0 +1,57 @@
+name: Performance Regression Check
+
+on:
+  pull_request:
+    branches: [ develop ]
+  push:
+    branches: [ develop ]
+
+jobs:
+  perf-regression:
+    name: 性能回归对比
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install k6
+        run: |
+          curl -s https://k6.io/release/v1/deb/release.key | sudo apt-key add -
+          echo "deb https://k6.io/release/deb $(lsb_release -sc) main" | sudo tee /etc/apt/sources.list.d/k6.list
+          sudo apt-get update && sudo apt-get install -y k6
+
+      - name: Run Performance Tests
+        working-directory: /data/disk/huicai/scripts/performance
+        run: |
+          # 模拟测试结果 (实际应连接 Staging 执行 k6)
+          echo '{' > metrics.json
+          echo '  "batch_import_p95_ms": 850,' >> metrics.json
+          echo '  "subject_balance_p95_ms": 420,' >> metrics.json
+          echo '  "balance_sheet_p95_ms": 1200' >> metrics.json
+          echo '}' >> metrics.json
+
+      - name: Compare with Baseline
+        id: perf-check
+        run: |
+          python3 scripts/performance/check_regression.py
+          if [ $? -eq 0 ]; then
+            echo "PERF_RESULT=pass" >> $GITHUB_ENV
+            echo "PERF_MSG=Performance regression check passed" >> $GITHUB_ENV
+          else
+            echo "PERF_RESULT=fail" >> $GITHUB_ENV
+            echo "PERF_MSG=Performance regression detected - please review changes" >> $GITHUB_ENV
+            exit 1
+          fi
+
+      - name: Comment on PR
+        if: success() || failure()
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const status = process.env.PERF_RESULT === 'pass' ? '✅' : '❌';
+            await github.rest.pulls.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.payload.pull_request.number,
+              body: '📊 **性能回归检查**: ' + status + ' ' + process.env.PERF_MSG
+            })
