@@ -912,4 +912,79 @@ class OutputInvoiceStateMachineServiceImplTest {
         assertEquals(USER_ID, inv.getAuditedBy());
         assertNotNull(inv.getAuditedAt());
     }
+
+    // ==================== TDD Demo: reverseInvoice remark format (complementary coverage) ====================
+
+    @Test
+    @DisplayName("reverseInvoice_正向_备注格式_有原备注时正确拼接")
+    void reverseInvoice_existingRemark_appendsCorrectly() {
+        // GIVEN — 原发票已有备注
+        OutputInvoiceEntity original = invoice(InvoiceStatus.CONFIRMED);
+        original.setRemark("原始审核意见");
+        when(invoiceMapper.selectById(INVOICE_ID)).thenReturn(original);
+
+        // mock 返回一个新 ID
+        doAnswer(inv -> {
+            OutputInvoiceEntity e = inv.getArgument(0);
+            e.setId(999L);
+            return null;
+        }).when(invoiceMapper).insert(any(OutputInvoiceEntity.class));
+
+        // WHEN — 执行红冲
+        Long redId = service.reverseInvoice(INVOICE_ID, USER_ID, "金额更正");
+
+        // THEN — 验证新发票的 remark 格式： "原始审核意见 | [1] 金额更正"
+        ArgumentCaptor<OutputInvoiceEntity> captor = ArgumentCaptor.forClass(OutputInvoiceEntity.class);
+        verify(invoiceMapper).insert(captor.capture());
+        OutputInvoiceEntity red = captor.getValue();
+        assertEquals("原始审核意见 | [1] 金额更正", red.getRemark());
+    }
+
+    @Test
+    @DisplayName("reverseInvoice_正向_备注格式_无原备注时只记录新原因")
+    void reverseInvoice_noExistingRemark_setsJustReason() {
+        // GIVEN — 原发票无备注（null）
+        OutputInvoiceEntity original = invoice(InvoiceStatus.CONFIRMED);
+        original.setRemark(null);
+        when(invoiceMapper.selectById(INVOICE_ID)).thenReturn(original);
+
+        doAnswer(inv -> {
+            OutputInvoiceEntity e = inv.getArgument(0);
+            e.setId(888L);
+            return null;
+        }).when(invoiceMapper).insert(any(OutputInvoiceEntity.class));
+
+        // WHEN
+        Long redId = service.reverseInvoice(INVOICE_ID, USER_ID, "开票错误");
+
+        // THEN — remark 应为 "[1] 开票错误"（无前缀）
+        ArgumentCaptor<OutputInvoiceEntity> captor = ArgumentCaptor.forClass(OutputInvoiceEntity.class);
+        verify(invoiceMapper).insert(captor.capture());
+        OutputInvoiceEntity red = captor.getValue();
+        assertEquals("[1] 开票错误", red.getRemark());
+    }
+
+    @Test
+    @DisplayName("reverseInvoice_正向_备注格式_空原备注时正确处理")
+    void reverseInvoice_emptyOriginalRemark_handlesCorrectly() {
+        // GIVEN — 原发票备注为空字符串
+        OutputInvoiceEntity original = invoice(InvoiceStatus.CONFIRMED);
+        original.setRemark("");
+        when(invoiceMapper.selectById(INVOICE_ID)).thenReturn(original);
+
+        doAnswer(inv -> {
+            OutputInvoiceEntity e = inv.getArgument(0);
+            e.setId(777L);
+            return null;
+        }).when(invoiceMapper).insert(any(OutputInvoiceEntity.class));
+
+        // WHEN
+        Long redId = service.reverseInvoice(INVOICE_ID, USER_ID, "税号填错");
+
+        // THEN — remark 应为 "[1] 税号填错"（不是 "| [1] ..."）
+        ArgumentCaptor<OutputInvoiceEntity> captor = ArgumentCaptor.forClass(OutputInvoiceEntity.class);
+        verify(invoiceMapper).insert(captor.capture());
+        OutputInvoiceEntity red = captor.getValue();
+        assertEquals("[1] 税号填错", red.getRemark());
+    }
 }
