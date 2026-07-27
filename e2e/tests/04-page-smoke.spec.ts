@@ -4,6 +4,8 @@
  * 1. 页面能正常加载（无 500 错误）
  * 2. 主内容区域可见
  * 3. 无 console.error
+ * 
+ * @标签：@smoke @regression
  */
 import { test, expect } from '@playwright/test';
 import { login, createErrorTracker } from './helpers';
@@ -68,28 +70,30 @@ const PAGES = [
   { path: '/basis/party', title: '客商档案' },
 ];
 
-test.describe('全量页面加载', () => {
+test.describe('@smoke @regression 全量页面加载', () => {
   for (const pageConfig of PAGES) {
     test(`【${pageConfig.title}】${pageConfig.path} 加载正常`, async ({ page }) => {
       const tracker = createErrorTracker(page);
       await login(page);
 
-      // 导航到目标页面
+      // 导航到目标页面 — 使用 load 状态而非 networkidle（避免轮询页面卡住）
       await page.goto(pageConfig.path);
       await page.waitForLoadState('load');
-      // 给异步 API 请求完成时间（报表类页面可能加载较慢）
+
+      // 给异步 API 请求完成时间（缓冲期，避免漏掉短请求）
       await page.waitForTimeout(2_000);
 
       // 验证主内容区域可见
-      const mainContent = page.locator('.el-main, .app-main, main, [class*="main"]').first();
+      const mainContent = page.locator('.el-main, .app-main, main, [class*=\"main\"]').first();
       await expect(mainContent).toBeVisible({ timeout: 15_000 });
 
-      // 验证无 500 错误（用较短 networkidle 避免轮询页面卡住）
+      // 可选尝试 networkidle（但超时即放弃，不阻塞测试）
       try {
-        await page.waitForLoadState('networkidle', { timeout: 5_000 });
+        await page.waitForLoadState('networkidle', { timeout: 3_000 });
       } catch {
-        // 页面有轮询请求时 networkidle 可能超时，忽略
+        // 页面有持续轮询请求时 networkidle 可能超时，忽略不影响结果
       }
+
       tracker.assertNoErrors();
     });
   }

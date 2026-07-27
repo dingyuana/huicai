@@ -1,6 +1,8 @@
 /**
  * 冒烟测试 2：菜单导航
  * 验证所有一级菜单都能展开，子菜单可点击，页面无 500 错误
+ * 
+ * @标签：@smoke
  */
 import { test, expect } from '@playwright/test';
 import { login, createErrorTracker } from './helpers';

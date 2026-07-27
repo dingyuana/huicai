@@ -2,6 +2,8 @@
  * 冒烟测试 3：销项发票页面
  * 验证销项发票列表页面能正常打开，无"系统繁忙"错误，
  * 且页面包含预期的关键元素（搜索表单、表格、统计卡片）
+ * 
+ * @标签：@smoke
  */
 import { test, expect } from '@playwright/test';
 import { login, createErrorTracker } from './helpers';

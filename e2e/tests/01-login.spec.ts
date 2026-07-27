@@ -1,6 +1,8 @@
 /**
  * 冒烟测试 1：登录
  * 验证 admin/admin123 可以正常登录并跳转到首页
+ * 
+ * @标签：@smoke
  */
 import { test, expect } from '@playwright/test';
 import { login, createErrorTracker } from './helpers';

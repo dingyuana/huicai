@@ -274,15 +274,20 @@
                                 <rule>
                                     <element>BUNDLE</element>
                                     <limits>
-                                        <!-- 指令覆盖率最低 1%（P33 删除大量未测试代码后降至 ~1%） -->
+                                        <!-- 指令覆盖率最低要求：70% -->
                                         <limit>
                                             <counter>INSTRUCTION</counter>
-                                            <minimum>1%</minimum>
+                                            <minimum>70%</minimum>
                                         </limit>
-                                        <!-- 分支覆盖率最低 1% -->
+                                        <!-- 分支覆盖率最低要求：70%（重要！防止 if/else 漏测） -->
                                         <limit>
                                             <counter>BRANCH</counter>
-                                            <minimum>1%</minimum>
+                                            <minimum>70%</minimum>
+                                        </limit>
+                                        <!-- 方法覆盖率最低要求：70% -->
+                                        <limit>
+                                            <counter>METHOD</counter>
+                                            <minimum>70%</minimum>
                                         </limit>
                                     </limits>
                                 </rule>

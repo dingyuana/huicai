@@ -1,9 +1,12 @@
 package com.huicai.base.system.service.impl;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.huicai.base.system.entity.PeriodEntity;
 import com.huicai.base.system.mapper.PeriodMapper;
 import com.huicai.base.system.service.PeriodService;
+import com.huicai.common.context.EnterpriseContextHolder;
+import com.huicai.common.exception.BusinessException;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
@@ -30,6 +33,18 @@ public class PeriodServiceImpl extends ServiceImpl<PeriodMapper, PeriodEntity> i
             entity.setStartDate(LocalDate.of(year, month, 1));
             entity.setEndDate(LocalDate.of(year, month, 1).plusMonths(1).minusDays(1));
         }
+
+        // 查重：同一企业下期间编码不能重复
+        LambdaQueryWrapper<PeriodEntity> checkWrapper = new LambdaQueryWrapper<>();
+        checkWrapper.eq(PeriodEntity::getPeriodCode, entity.getPeriodCode());
+        Long enterpriseId = EnterpriseContextHolder.get();
+        if (enterpriseId != null) {
+            checkWrapper.eq(PeriodEntity::getEnterpriseId, enterpriseId);
+        }
+        if (baseMapper.selectCount(checkWrapper) > 0) {
+            throw BusinessException.conflict("期间编码已存在: " + entity.getPeriodCode());
+        }
+
         if (entity.getStatus() == null) entity.setStatus("open");
         if (entity.getDeleted() == null) entity.setDeleted(0);
         return super.save(entity);
