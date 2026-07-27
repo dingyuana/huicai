@@ -11,7 +11,7 @@ jobs:
   java-unit-tests:
     name: Java Unit Tests + Branch Coverage
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
 
@@ -29,26 +29,13 @@ jobs:
         env:
           MAVEN_OPTS: "-XX:+UseCompressedOops -X2g"
 
-      # === 分支覆盖率检查 ===
+      # === 分支覆盖率检查（利用 pom.xml 中配置的 jacoco:check 门槛） ===
       - name: Check Branch Coverage (≥70%)
-        id: coverage-check
         run: |
-          # 提取分支覆盖率（从 jacoco 报告中查找 BRANCH 行）
-          COVERAGE=$(grep -m1 "BRACK.*coverage" backend/target/site/jacoco/index.html || echo "0")
-          echo "Branch coverage: $COVERAGE"
-          
-          # 简单的数字检查（实际生产可用 codecov 或自建脚本）
-          if [[ "$COVERAGE" =~ ^([0-9]+)\.[0-9]+$ ]]; then
-            NUM=${BASH_REMATCH[1]}
-            if [ $NUM -lt 70 ]; then
-              echo "FAIL: Branch coverage $NUM% < 70%"
-              exit 1
-            else
-              echo "PASS: Branch coverage $NUM% >= 70%"
-            fi
-          else
-            echo "Warning: Could not parse coverage, continuing"
-          fi
+          cd backend
+          mvn jacoco:check
+        env:
+          MAVEN_OPTS: "-XX:+UseCompressedOops -X2g"
 
       - name: Upload JaCoCo Report
         uses: actions/upload-artifact@v4
@@ -62,7 +49,6 @@ jobs:
     name: Frontend Unit Tests + Coverage
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    needs: java-unit-tests  # 顺序执行可节省资源，也可改为并行
     steps:
       - uses: actions/checkout@v4
 
@@ -77,7 +63,7 @@ jobs:
 
       - name: Run Vitest with Coverage
         run: |
-          cd/frontend
+          cd frontend
           npm test -- --coverage
         env:
           CI: true
