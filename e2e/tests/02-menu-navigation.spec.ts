@@ -3,7 +3,7 @@
  * 验证所有一级菜单都能展开，子菜单可点击，页面无 500 错误
  */
 import { test, expect } from '@playwright/test';
-import { login, expectNoServerErrors } from './helpers';
+import { login, createErrorTracker } from './helpers';
 
 // 菜单项配置：name = 侧边栏显示的一级菜单名称，firstSubMenu = 第一个子菜单的文本
 const MENUS = [
@@ -18,6 +18,7 @@ const MENUS = [
 test.describe('菜单导航', () => {
   for (const menu of MENUS) {
     test(`展开【${menu.name}】并点击第一个子菜单`, async ({ page }) => {
+      const tracker = createErrorTracker(page);
       await login(page);
 
       // 点击一级菜单展开（Element Plus 侧边栏的 menuitem）
@@ -27,14 +28,16 @@ test.describe('菜单导航', () => {
       const firstSub = page.getByRole('menuitem', { name: menu.firstSubMenu });
       await expect(firstSub).toBeVisible({ timeout: 8_000 });
       await firstSub.click();
-      // 等待路由跳转完成 + Vue 渲染
+      // 等待路由跳转完成 + Vue 渲染 + 异步 API 请求完成
       await page.waitForTimeout(1_500);
 
       // 验证页面加载成功（主内容区域可见）
       const mainContent = page.locator('.el-main, .app-main, main, [class*="main"]').first();
       await expect(mainContent).toBeVisible({ timeout: 10_000 });
-      // 验证无 500 错误提示
-      await expectNoServerErrors(page);
+      // 等待网络静默后断言无 500 错误
+      await page.waitForLoadState('networkidle');
+      await page.waitForTimeout(500);
+      tracker.assertNoErrors();
     });
   }
 });

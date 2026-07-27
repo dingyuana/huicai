@@ -17,11 +17,13 @@
 
 ## 0. 总览（硬数字）
 
-| 指标 | 旧值 (V1.1) | 当前实测 (V1.2) | 校验命令 |
-|------|-------------|----------------|----------|
-| 后端 @Test 总数 | 389 | **1033** | `grep -rhE '^\s*@Test\b' --include='*Test.java' backend/ \| wc -l` |
-| 后端测试类数 | 37 | **133** | `find backend/ -name '*Test.java' -type f \| wc -l` |
-| 前端测试文件数 | 2 | **12** | `find frontend/src/__tests__ -name '*.test.ts' \| wc -l` |
+| 指标 | 旧值 (V1.2) | 当前实测 | 校验命令 |
+|------|-------------|----------|----------|
+| 后端 @Test 总数 | 1033 | **1033** | `grep -rhE '^\s*@Test\b' --include='*Test.java' backend/ \| wc -l` |
+| 后端测试类数 | 133 | **133** | `find backend/ -name '*Test.java' -type f \| wc -l` |
+| 前端 Vitest 测试文件数 | 12 | **12** | `find frontend/src/__tests__ -name '*.test.ts' \| wc -l` |
+| 前端 E2E 测试文件数 | 3 | **4** | `find e2e/tests -name '*.spec.ts' \| wc -l` |
+| E2E 测试用例数 | 9 | **48** | `npx playwright test --list` |
 
 > 注：AGENTS.md §0 仍记录 579 @Test / 78 测试类（commit `65e8d66` 基准），本次实测数字更高，建议下次 commit 后由负责人同步更新 AGENTS.md §0。
 
@@ -211,9 +213,13 @@
 | Unit | businessDoc.api.test.ts | 业务单据 API | 无 | - |
 | Unit | voucher.api.test.ts | 凭证 API | 无 | - |
 | Component | business-doc-detail.test.ts | 业务单据详情组件 | 无 ✅(V1.2修正) | - |
-| Component | BusinessDocDetail.test.ts | BusinessDocDetail.vue 真实组件 ✅(V1.2修复) | 无 | - |
-| Component | arap-reconciliation-core.test.ts | ReconciliationWorkbench.vue 真实组件 ✅(V1.2修复) | 无 | - |
-| Component | ComponentTestTemplate.test.ts | 组件测试模板 | 无 | - |
+| 组件 | BusinessDocDetail.test.ts | BusinessDocDetail.vue 真实组件 ✅(V1.2修复) | 无 | - |
+| 组件 | arap-reconciliation-core.test.ts | ReconciliationWorkbench.vue 真实组件 ✅(V1.2修复) | 无 | - |
+| 组件 | ComponentTestTemplate.test.ts | 组件测试模板 | 无 | - |
+| **E2E** | **01-login.spec.ts** | 登录成功/失败 2 测试 | 无 | - |
+| **E2E** | **02-menu-navigation.spec.ts** | 6 个菜单遍历 | 无 | - |
+| **E2E** | **03-output-invoice.spec.ts** | 销项发票页面内容验证 | 无 | - |
+| **E2E** | **04-page-smoke.spec.ts** | **39 个页面加载冒烟测试**（全量覆盖） | 见下方 §4 已知问题 | - |
 
 > **V1.2 修正 (前端组件测试)**：
 > - `BusinessDocDetail.test.ts`：原矩阵标注"零测试"，现已修复为**真实组件测试**（`import BusinessDocDetail from '@/views/finance/business-doc/BusinessDocDetail.vue'`，基于 `shallowMount` + vue-router + nextTick）。
@@ -243,10 +249,23 @@
 
 1. **P0**：pageQuery() 多 docType 测试（含 INVOICE_OUT/INVOICE_IN/OTHER_RECEIVABLE/OTHER_PAYABLE）
 2. **P0**：端到端核销链路 E2E（导入销项发票→工作台可见→核销匹配）
-3. ~~**P0**：前端 ReconciliationWorkbench 组件测试（tab 切换、docTypes 过滤）~~ ✅ 已完成 (V1.2，arap-reconciliation-core.test.ts)
-4. **P1**：所有 pageQuery() 方法的参数化测试（Customer/Vendor/Employee/BadDebt/Prepayment/Expense/Budget/Asset）
-5. **P1**：前端业务列表页组件测试
-6. **P2** (V1.2新增)：核实原矩阵标注的 `BusinessDocList.vue` / `*.spec.ts` E2E 测试是否仍存在或已合并
+3. **P1**：所有 pageQuery() 方法的参数化测试（Customer/Vendor/Employee/BadDebt/Prepayment/Expense/Budget/Asset）
+4. **P1**：前端业务列表页组件测试
+5. **P1**：修复 E2E 发现的 5 个已知问题（见 §5）
+
+---
+
+## 5. E2E 测试已知问题（后端待修复）
+
+| # | 页面 | 路径 | 错误 | 类型 |
+|---|------|------|------|------|
+| 1 | 科目余额表 | /report/subject-balance | API 500: `/reports/subject-balance?period=202607` | 后端报表服务异常 |
+| 2 | 资产负债表 | /report/balance-sheet | API 500: `/reports/balance-sheet?period=202607` | 后端报表服务异常 |
+| 3 | 利润表 | /report/income-statement | API 500: `/reports/income-statement?period=202607` | 后端报表服务异常 |
+| 4 | 现金流量表 | /report/cash-flow | API 500: `/reports/cash-flow?period=202607` | 后端报表服务异常 |
+| 5 | 客商档案 | /basis/party | Console 401 Unauthorized | 权限配置问题 |
+
+> **说明**：以上问题由 Playwright E2E 测试的 `createErrorTracker()` 在网络层捕获，旧版页面文本检查无法发现。
 
 ---
 

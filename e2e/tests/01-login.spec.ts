@@ -3,14 +3,18 @@
  * 验证 admin/admin123 可以正常登录并跳转到首页
  */
 import { test, expect } from '@playwright/test';
-import { login, expectNoServerErrors } from './helpers';
+import { login, createErrorTracker } from './helpers';
 
 test.describe('登录', () => {
   test('admin/admin123 登录成功', async ({ page }) => {
+    const tracker = createErrorTracker(page);
     await login(page);
     // 验证首页标题出现
     await expect(page.getByRole('heading', { name: '欢迎使用慧财智能财务平台' })).toBeVisible();
-    await expectNoServerErrors(page);
+    // 等待异步请求完成
+    await page.waitForLoadState('networkidle');
+    await page.waitForTimeout(1_000);
+    tracker.assertNoErrors();
   });
 
   test('登录失败（错误密码）', async ({ page }) => {
