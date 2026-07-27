@@ -1,0 +1,38 @@
+name: L2 Integration Tests (Testcontainers)
+
+on:
+  pull_request:
+    branches: [ develop ]  # 仅在 develop branch 的 PR 中运行，避免 feature branch 频繁跑耗时测试
+  push:
+    branches: [ develop ]
+  workflow_dispatch:
+
+jobs:
+  integration-test:
+    name: Integration Tests (DB/Redis)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: maven
+
+      - name: Run Integration Tests with Testcontainers
+        run: |
+          cd backend
+          # 运行所有测试（包括需要 Docker 的集成测试）
+          mvn verify -DexcludedGroups="" -DskipITs
+        env:
+          MAVEN_OPTS: "-XX:+UseCompressedOops -X2g"
+
+      - name: Upload Integration Test Results
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-results
+          path: backend/surefire-reports/*.xml
+          retention-days: 30
