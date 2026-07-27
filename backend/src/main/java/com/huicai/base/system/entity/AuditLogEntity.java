@@ -15,6 +15,7 @@ public class AuditLogEntity {
     @TableId(type = IdType.AUTO)
     private Long id;
     private Long userId;
+    @TableField(exist = false)
     private String username;
     private String operation;
     private String method;

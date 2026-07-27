@@ -50,6 +50,7 @@ public class AuditLogServiceImpl implements AuditLogService {
 
     @Override
     @Async
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void saveAsync(AuditLogEntity auditLog) {
         auditLogMapper.insert(auditLog);
     }
