@@ -68,4 +68,11 @@ public final class StatementStatus {
     public static boolean isApproved(String status) {
         return APPROVED.equals(status);
     }
+
+    public static boolean isProcessed(String status) {
+        return VOUCHER_GENERATED.equals(status)
+                || PAYMENT_CREATED.equals(status)
+                || APPROVED.equals(status)
+                || DUPLICATE.equals(status);
+    }
 }

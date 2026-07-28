@@ -438,9 +438,15 @@ public class BankStatementServiceImpl implements BankStatementService {
         if (stmt == null) {
             throw BusinessException.notFound("对账单记录不存在");
         }
-        if (!StatementStatus.CONFIRMED.equals(stmt.getReviewStatus())) {
+        // 幂等：已生单/制证的直接返回，避免重复生成（含 CHECK 约束修复前的回滚残留状态）
+        String status = stmt.getReviewStatus();
+        if (StatementStatus.isProcessed(status)) {
+            log.info("审核幂等跳过: statementId={}, status={}", statementId, status);
+            return stmt;
+        }
+        if (!StatementStatus.CONFIRMED.equals(status)) {
             throw BusinessException.badRequest(
-                "当前状态 " + stmt.getReviewStatus() + " 无法审核，请先完成出纳确认");
+                "当前状态 " + status + " 无法审核，请先完成出纳确认");
         }
         return doAutoGenerate(stmt, userId);
     }

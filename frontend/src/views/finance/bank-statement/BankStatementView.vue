@@ -421,7 +421,10 @@ function canReview(row: any): boolean {
 }
 
 function canAudit(row: any): boolean {
-  return row.reviewStatus === 'CONFIRMED' && !row.generatedVoucherId
+  // generatedVoucherId 在 DB 中不存在，改用返回的编号字段
+  return row.reviewStatus === 'CONFIRMED'
+    && !row.generatedVoucherNo
+    && !row.generatedDocNo
 }
 
 function canApprove(row: any): boolean {
