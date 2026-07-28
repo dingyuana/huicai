@@ -64,7 +64,7 @@ class AssetCategoryControllerTest {
         mvc.perform(get("/api/sme/asset/v1/asset-categories/1"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.id").value(1))
-                .andExpect(jsonPath("$.data.categoryName").value("电子设备"));
+                .andExpect(jsonPath("$.data.name").value("电子设备"));
     }
 
     @Test

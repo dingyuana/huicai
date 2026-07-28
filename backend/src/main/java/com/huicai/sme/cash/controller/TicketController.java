@@ -7,8 +7,8 @@ import com.huicai.sme.cash.entity.TicketTransactionEntity;
 import com.huicai.sme.cash.service.TicketService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import com.huicai.base.system.util.SecurityUtils;
 import lombok.RequiredArgsConstructor;
-import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -39,8 +39,8 @@ public class TicketController {
 
     @Operation(summary = "新增票据")
     @PostMapping
-    public R<TicketEntity> create(@RequestBody TicketEntity entity, Authentication auth) {
-        return R.ok(ticketService.create(entity, 0L));
+    public R<TicketEntity> create(@RequestBody TicketEntity entity) {
+        return R.ok(ticketService.create(entity, SecurityUtils.getCurrentUserId()));
     }
 
     @Operation(summary = "修改票据")
@@ -58,20 +58,20 @@ public class TicketController {
 
     @Operation(summary = "领用票据")
     @PostMapping("/{id}/issue")
-    public R<TicketEntity> issue(@PathVariable Long id, Authentication auth) {
-        return R.ok(ticketService.issue(id, 0L));
+    public R<TicketEntity> issue(@PathVariable Long id) {
+        return R.ok(ticketService.issue(id, SecurityUtils.getCurrentUserId()));
     }
 
     @Operation(summary = "兑现票据")
     @PostMapping("/{id}/cash")
-    public R<TicketEntity> cash(@PathVariable Long id, Authentication auth) {
-        return R.ok(ticketService.cash(id, 0L));
+    public R<TicketEntity> cash(@PathVariable Long id) {
+        return R.ok(ticketService.cash(id, SecurityUtils.getCurrentUserId()));
     }
 
     @Operation(summary = "作废票据")
     @PostMapping("/{id}/void")
-    public R<TicketEntity> voidTicket(@PathVariable Long id, Authentication auth) {
-        return R.ok(ticketService.voidTicket(id, 0L));
+    public R<TicketEntity> voidTicket(@PathVariable Long id) {
+        return R.ok(ticketService.voidTicket(id, SecurityUtils.getCurrentUserId()));
     }
 
     @Operation(summary = "交易流水")

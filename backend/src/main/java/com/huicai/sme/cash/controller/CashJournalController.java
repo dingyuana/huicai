@@ -6,8 +6,8 @@ import com.huicai.sme.cash.entity.CashJournalEntity;
 import com.huicai.sme.cash.service.CashJournalService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import com.huicai.base.system.util.SecurityUtils;
 import lombok.RequiredArgsConstructor;
-import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
@@ -39,9 +39,8 @@ public class CashJournalController {
 
     @Operation(summary = "新增")
     @PostMapping
-    public R<CashJournalEntity> create(@RequestBody CashJournalEntity entity, Authentication auth) {
-        String username = auth.getName();
-        return R.ok(cashJournalService.create(entity, 0L));
+    public R<CashJournalEntity> create(@RequestBody CashJournalEntity entity) {
+        return R.ok(cashJournalService.create(entity, SecurityUtils.getCurrentUserId()));
     }
 
     @Operation(summary = "修改")
@@ -59,8 +58,7 @@ public class CashJournalController {
 
     @Operation(summary = "生成凭证")
     @PostMapping("/{id}/generate-voucher")
-    public R<Long> generateVoucher(@PathVariable Long id, Authentication auth) {
-        String username = auth.getName();
-        return R.ok(cashJournalService.generateVoucher(id, 0L));
+    public R<Long> generateVoucher(@PathVariable Long id) {
+        return R.ok(cashJournalService.generateVoucher(id, SecurityUtils.getCurrentUserId()));
     }
 }

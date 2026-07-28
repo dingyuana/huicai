@@ -7,14 +7,22 @@ import com.huicai.base.voucher.dto.VoucherCreateDTO;
 import com.huicai.base.voucher.dto.VoucherQueryDTO;
 import com.huicai.base.voucher.dto.VoucherVO;
 import com.huicai.base.voucher.service.VoucherService;
+import com.huicai.config.security.LoginUser;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.BeforeEach;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.MediaType;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.test.web.servlet.MockMvc;
+
+import java.math.BigDecimal;
+import java.util.List;
 
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
@@ -33,6 +41,19 @@ class VoucherControllerTest {
 
     @MockBean
     private VoucherService voucherService;
+
+    @BeforeEach
+    void setUpSecurityContext() {
+        com.huicai.base.system.entity.UserEntity user = new com.huicai.base.system.entity.UserEntity();
+        user.setId(1L);
+        user.setUsername("test");
+        user.setPassword("test123");
+        user.setEnterpriseId(1L);
+        user.setUserType("ENTERPRISE");
+        LoginUser loginUser = new LoginUser(user, List.of(new SimpleGrantedAuthority("ROLE_USER")));
+        SecurityContextHolder.getContext().setAuthentication(
+                new UsernamePasswordAuthenticationToken(loginUser, null, loginUser.getAuthorities()));
+    }
 
     @Test
     @DisplayName("分页查询凭证_RequestBody正确解析")
@@ -69,6 +90,11 @@ class VoucherControllerTest {
         VoucherCreateDTO dto = new VoucherCreateDTO();
         dto.setPeriod("202601");
         dto.setVoucherTypeId(1L);
+        dto.setEntries(List.of(new VoucherCreateDTO.EntryDTO() {{
+            setSubjectId(1001L);
+            setDebit(BigDecimal.valueOf(1000));
+            setCredit(BigDecimal.ZERO);
+        }}));
 
         VoucherVO created = new VoucherVO();
         created.setId(1L);
@@ -86,6 +112,12 @@ class VoucherControllerTest {
     void update_requestBody_parsedCorrectly() throws Exception {
         VoucherCreateDTO dto = new VoucherCreateDTO();
         dto.setPeriod("202601");
+        dto.setVoucherTypeId(1L);
+        dto.setEntries(List.of(new VoucherCreateDTO.EntryDTO() {{
+            setSubjectId(1001L);
+            setDebit(BigDecimal.valueOf(1000));
+            setCredit(BigDecimal.ZERO);
+        }}));
 
         VoucherVO updated = new VoucherVO();
         updated.setId(1L);

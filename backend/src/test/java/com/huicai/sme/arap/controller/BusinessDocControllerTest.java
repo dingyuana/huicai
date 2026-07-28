@@ -9,13 +9,18 @@ import com.huicai.base.business.dto.BusinessDocVO;
 import com.huicai.base.business.service.BusinessDocService;
 import com.huicai.base.voucher.entity.VoucherTemplateEntity;
 import com.huicai.base.voucher.mapper.VoucherTemplateMapper;
+import com.huicai.config.security.LoginUser;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.BeforeEach;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.MediaType;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.List;
@@ -40,6 +45,19 @@ class BusinessDocControllerTest {
 
     @MockBean
     private VoucherTemplateMapper templateMapper;
+
+    @BeforeEach
+    void setUpSecurityContext() {
+        com.huicai.base.system.entity.UserEntity user = new com.huicai.base.system.entity.UserEntity();
+        user.setId(1L);
+        user.setUsername("test");
+        user.setPassword("test123");
+        user.setEnterpriseId(1L);
+        user.setUserType("ENTERPRISE");
+        LoginUser loginUser = new LoginUser(user, List.of(new SimpleGrantedAuthority("ROLE_USER")));
+        SecurityContextHolder.getContext().setAuthentication(
+                new UsernamePasswordAuthenticationToken(loginUser, null, loginUser.getAuthorities()));
+    }
 
     @Test
     @DisplayName("分页查询业务单据_RequestBody正确解析")

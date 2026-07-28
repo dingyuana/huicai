@@ -4,12 +4,18 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.huicai.base.business.entity.BankStatementEntity;
 import com.huicai.sme.cash.service.BankStatementService;
+import com.huicai.config.security.LoginUser;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.BeforeEach;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.http.MediaType;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.List;
@@ -31,6 +37,19 @@ class BankStatementControllerTest {
 
     @MockBean
     private BankStatementService service;
+
+    @BeforeEach
+    void setUpSecurityContext() {
+        com.huicai.base.system.entity.UserEntity user = new com.huicai.base.system.entity.UserEntity();
+        user.setId(1L);
+        user.setUsername("test");
+        user.setPassword("test123");
+        user.setEnterpriseId(1L);
+        user.setUserType("ENTERPRISE");
+        LoginUser loginUser = new LoginUser(user, List.of(new SimpleGrantedAuthority("ROLE_USER")));
+        SecurityContextHolder.getContext().setAuthentication(
+                new UsernamePasswordAuthenticationToken(loginUser, null, loginUser.getAuthorities()));
+    }
 
     @Test
     @DisplayName("分页查询对账单_参数正确绑定")
@@ -147,7 +166,8 @@ class BankStatementControllerTest {
         when(service.batchAudit(anyList(), anyLong())).thenReturn(5);
 
         mvc.perform(post("/api/sme/cash/v1/bank-statements/batch-audit")
-                        .param("ids", "1,2,3"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("[1,2,3]"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(200));
     }

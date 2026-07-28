@@ -56,14 +56,16 @@ class AssetInventoryControllerTest {
     @Test
     @DisplayName("新增资产盘点_RequestBody正确解析")
     void create_requestBody_parsedCorrectly() throws Exception {
-        AssetInventoryEntity input = new AssetInventoryEntity();
+        AssetInventoryEntity entity = new AssetInventoryEntity();
         AssetInventoryEntity created = new AssetInventoryEntity();
         created.setId(1L);
         when(service.create(any(AssetInventoryEntity.class), anyList())).thenReturn(created);
 
+        // CreateRequest has public fields; Jackson serializes them directly
         mvc.perform(post("/api/sme/asset/v1/asset-inventories")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(om.writeValueAsString(input)))
+                        .content(om.writeValueAsString(
+                                java.util.Map.of("inventory", entity, "entries", java.util.List.of()))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.id").value(1));
     }
