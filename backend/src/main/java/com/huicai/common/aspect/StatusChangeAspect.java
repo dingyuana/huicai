@@ -82,7 +82,6 @@ public class StatusChangeAspect {
         // 6. 执行原 update
         Object result = pjp.proceed();
 
-        // 7. 写审计日志（同事务，写入失败会让业务事务回滚）
         try {
             Long entityId = idValue instanceof Long ? (Long) idValue : Long.valueOf(idValue.toString());
             auditLogService.recordStatusChange(
@@ -93,9 +92,9 @@ public class StatusChangeAspect {
                     newValue != null ? String.valueOf(newValue) : null
             );
         } catch (Exception e) {
-            log.error("状态变更审计日志写入失败，业务事务将回滚: entity={}, id={}",
-                    annotation.entity(), idValue, e);
-            throw e;
+            log.warn("状态变更审计日志写入失败(不影响业务): entity={}, id={}, {} {}→{}",
+                    annotation.entity(), idValue, annotation.fieldName(),
+                    oldValue, newValue, e);
         }
 
         return result;

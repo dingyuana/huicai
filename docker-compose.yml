@@ -87,7 +87,7 @@ services:
     ports:
       - "8000:8000"
     environment:
-      HUICAI_RABBITMQ_URL: amqp://huicai:huicai123@rabbitmq3:5672/
+      HUICAI_RABBITMQ_URL: amqp://huicai:huicai123@host.docker.internal:5672/
       HUICAI_DB_HOST: postgres16
       HUICAI_DB_PORT: 5432
       HUICAI_DB_USER: huicai
@@ -97,9 +97,9 @@ services:
       HUICAI_MINIO_ACCESS_KEY: huicai
       HUICAI_MINIO_SECRET_KEY: huicai123
       HUICAI_OCR_ENGINE: tesseract
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
-      rabbitmq3:
-        condition: service_healthy
       postgres16:
         condition: service_healthy
     networks:
@@ -117,7 +117,7 @@ services:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres16:5432/huicai
       SPRING_DATASOURCE_USERNAME: huicai
       SPRING_DATASOURCE_PASSWORD: huicai123
-      SPRING_RABBITMQ_HOST: rabbitmq3
+      SPRING_RABBITMQ_HOST: host.docker.internal
       SPRING_RABBITMQ_PORT: 5672
       SPRING_RABBITMQ_USERNAME: huicai
       SPRING_RABBITMQ_PASSWORD: huicai123
@@ -127,12 +127,12 @@ services:
       MINIO_ACCESS_KEY: huicai
       MINIO_SECRET_KEY: huicai123
       JWT_SECRET: huicai-finance-jwt-secret-key-2026-very-long-secret-string
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       postgres16:
         condition: service_healthy
       redis7:
-        condition: service_healthy
-      rabbitmq3:
         condition: service_healthy
       minio:
         condition: service_healthy

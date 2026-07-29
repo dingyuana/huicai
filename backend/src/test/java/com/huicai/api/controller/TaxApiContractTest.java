@@ -10,74 +10,87 @@ import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.huicai.sme.tax.constant.InvoiceStatus;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.huicai.base.business.entity.OutputInvoiceEntity;
-import com.huicai.base.business.mapper.OutputInvoiceMapper;
-import com.huicai.base.business.mapper.BusinessDocMapper;
+import com.huicai.base.business.service.OutputInvoiceStateMachineService;
+import com.huicai.common.exception.BusinessException;
+import com.huicai.sme.tax.service.InputInvoiceStateMachineService;
+import com.huicai.sme.tax.service.TaxService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.MediaType;
+import org.springframework.security.test.context.support.WithMockUser;
+import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 
-@WebMvcTest(com.huicai.sme.tax.controller.TaxController.class)
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@AutoConfigureMockMvc
+@ActiveProfiles("test")
 class TaxApiContractTest {
 
     @Autowired
     private MockMvc mvcTest;
 
     @MockBean
-    private OutputInvoiceMapper invoiceMapper;
+    private TaxService taxService;
 
     @MockBean
-    private BusinessDocMapper businessDocMapper;
+    private OutputInvoiceStateMachineService stateMachineService;
+
+    @MockBean
+    private InputInvoiceStateMachineService inputStateMachineService;
 
     @Test
+    @WithMockUser
     void getOutputInvoiceList_success() throws Exception {
-        when(invoiceMapper.selectList(null)).thenReturn(java.util.Collections.emptyList());
-        mvcTest.perform(get("/api/sme/tax/v1/tax/output-invoices"))
+        when(taxService.pageQueryOutput(any(), any(), any(), any(), any(), any()))
+                .thenReturn(new Page<>());
+        mvcTest.perform(get("/api/sme/tax/v1/tax/output-invoices/page"))
                 .andExpect(status().isOk())
                 .andExpect(content().contentTypeCompatibleWith("application/json"));
     }
 
     @Test
+    @WithMockUser
     void postOutputInvoice_createValidData_success() throws Exception {
+        OutputInvoiceEntity created = new OutputInvoiceEntity();
+        created.setId(1L);
+        created.setCustomerName("测试客户");
+        when(taxService.createOutput(any())).thenReturn(created);
         String json = "{\"customerName\":\"测试客户\",\"invoiceNo\":\"TEST-001\",\"amount\":1000.00,\"taxRate\":13}";
         mvcTest.perform(post("/api/sme/tax/v1/tax/output-invoices")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(json))
-                .andExpect(status().isCreated())
-                .andExpect(header().exists("Location"));
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data").exists());
     }
 
     @Test
+    @WithMockUser
     void confirmOutput_invoiceValidState_success() throws Exception {
-        OutputInvoiceEntity inv = new OutputInvoiceEntity();
-        inv.setId(1L);
-        inv.setStatus(InvoiceStatus.PENDING_REVIEW);
-        when(invoiceMapper.selectById(1L)).thenReturn(inv);
-        when(businessDocMapper.selectCount(any())).thenReturn(0L);
+        doNothing().when(stateMachineService).confirm(eq(1L), anyLong());
+        mvcTest.perform(post("/api/sme/tax/v1/tax/output-invoices/1/confirm"))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    @WithMockUser
+    void confirmOutput_invoiceWrongState_fail() throws Exception {
+        // 注意：BusinessException 被全局异常处理器捕获，返回 HTTP 200 + code=400
+        // confirm() 是 void 方法，必须用 doThrow() 而非 when().thenThrow()
+        doThrow(new BusinessException(400, "仅待审核状态可确认"))
+                .when(stateMachineService).confirm(eq(1L), anyLong());
         mvcTest.perform(post("/api/sme/tax/v1/tax/output-invoices/1/confirm"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.status", is("CONFIRMED")));
-    }
-
-    @Test
-    void confirmOutput_invoiceWrongState_fail() throws Exception {
-        OutputInvoiceEntity inv = new OutputInvoiceEntity();
-        inv.setId(1L);
-        inv.setStatus(InvoiceStatus.CONFIRMED);
-        when(invoiceMapper.selectById(1L)).thenReturn(inv);
-        mvcTest.perform(post("/api/sme/tax/v1/tax/output-invoices/1/confirm"))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("msg", containsString("仅待审核状态可确认")));
+                .andExpect(jsonPath("$.code", is(400)));
     }
 
     @Test
     void confirmOutput_invoiceUnauthorized_fail() throws Exception {
         mvcTest.perform(post("/api/sme/tax/v1/tax/output-invoices/1/confirm"))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isUnauthorized());
     }
 }

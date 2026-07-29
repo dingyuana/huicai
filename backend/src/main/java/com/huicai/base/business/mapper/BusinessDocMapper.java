@@ -103,4 +103,7 @@ public interface BusinessDocMapper extends BaseMapper<BusinessDocEntity> {
 
     @Update("UPDATE t_business_doc SET settled_amount = 0, unsettled_amount = amount WHERE deleted = 0")
     int resetSettlementAmounts();
+
+    @Select("SELECT doc_no FROM t_business_doc WHERE doc_no LIKE #{prefix} || '%' AND deleted = 0 ORDER BY doc_no DESC LIMIT 1")
+    String selectMaxDocNoByPrefix(@Param("prefix") String prefix);
 }

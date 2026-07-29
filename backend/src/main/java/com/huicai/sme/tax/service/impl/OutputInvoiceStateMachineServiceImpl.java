@@ -331,10 +331,22 @@ this.applicationContext = applicationContext;
      */
     private String generateDocNo(String docType, String period) {
         String key = "doc:no:" + period + ":" + docType;
+        initRedisCounterIfMissing(key, "FPS" + period);
         Long serial = redisTemplate.opsForValue().increment(key);
         if (serial == null) serial = 1L;
         String typeCode = "FPS"; // INVOICE_OUT
         return typeCode + period + String.format("%04d", serial);
+    }
+
+    private void initRedisCounterIfMissing(String redisKey, String docNoPrefix) {
+        Boolean existed = redisTemplate.hasKey(redisKey);
+        if (Boolean.FALSE.equals(existed)) {
+            String maxNo = businessDocMapper.selectMaxDocNoByPrefix(docNoPrefix);
+            if (maxNo != null && maxNo.length() > docNoPrefix.length()) {
+                String serialStr = maxNo.substring(docNoPrefix.length());
+                redisTemplate.opsForValue().setIfAbsent(redisKey, serialStr);
+            }
+        }
     }
 
     /**

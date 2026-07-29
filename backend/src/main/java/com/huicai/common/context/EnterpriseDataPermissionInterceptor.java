@@ -107,7 +107,9 @@ public class EnterpriseDataPermissionInterceptor implements InnerInterceptor {
             return null;
         }
 
-        String condition = "enterprise_id = " + enterpriseId;
+        // 使用表限定符避免 JOIN 查询中 enterprise_id 列歧义
+        String qualifier = getMainTableQualifier(plainSelect);
+        String condition = (qualifier != null ? qualifier + "." : "") + "enterprise_id = " + enterpriseId;
         if (plainSelect.getWhere() == null) {
             plainSelect.setWhere(CCJSqlParserUtil.parseCondExpression(condition));
         } else {
@@ -115,6 +117,36 @@ public class EnterpriseDataPermissionInterceptor implements InnerInterceptor {
             plainSelect.setWhere(CCJSqlParserUtil.parseCondExpression(existingWhere + " AND " + condition));
         }
         return plainSelect.toString();
+    }
+
+    /**
+     * 获取主表限定符，优先使用 FROM 表别名，其次表名。
+     * 若 FROM 表是子查询，则回退到 JOIN 中第一个非共享表的别名/表名。
+     */
+    private String getMainTableQualifier(PlainSelect plainSelect) {
+        FromItem fromItem = plainSelect.getFromItem();
+        if (fromItem instanceof Table table) {
+            if (table.getAlias() != null) {
+                return table.getAlias().getName();
+            }
+            String name = unquote(table.getName());
+            if (name != null) {
+                return name;
+            }
+        }
+        // 回退：从 JOIN 中找第一个非共享表
+        List<Join> joins = plainSelect.getJoins();
+        if (joins != null) {
+            for (Join join : joins) {
+                if (join.getRightItem() instanceof Table table) {
+                    String name = unquote(table.getName());
+                    if (name != null && !SHARED_TABLES.contains(name)) {
+                        return table.getAlias() != null ? table.getAlias().getName() : name;
+                    }
+                }
+            }
+        }
+        return null;
     }
 
     private String injectUpdate(Update update, Long enterpriseId) throws JSQLParserException {

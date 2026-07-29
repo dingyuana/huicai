@@ -78,6 +78,53 @@ function parseEntity(filePath) {
   return { tableName, fields, filePath, typeHandlerErrors };
 }
 
+// ── 扫描 JdbcTemplate SQL 中的表名 ──
+
+function findControllerFiles(dir) {
+  const results = [];
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const full = join(dir, entry.name);
+    if (entry.isDirectory() && entry.name !== 'test') {
+      results.push(...findControllerFiles(full));
+    } else if (entry.isFile() && (entry.name.endsWith('Controller.java') || entry.name.endsWith('Service.java') || entry.name.endsWith('ServiceImpl.java'))) {
+      const src = readFileSync(full, 'utf-8');
+      if (src.includes('JdbcTemplate')) results.push(full);
+    }
+  }
+  return results;
+}
+
+function extractTableNamesFromSql(src) {
+  const tables = new Set();
+  // 匹配 DELETE FROM / INSERT INTO / UPDATE / FROM / JOIN 后的表名
+  const patterns = [
+    /DELETE\s+FROM\s+(\w+)/gi,
+    /INSERT\s+INTO\s+(\w+)/gi,
+    /UPDATE\s+(\w+)\s+SET/gi,
+  ];
+  for (const pattern of patterns) {
+    let m;
+    while ((m = pattern.exec(src)) !== null) {
+      const table = m[1];
+      // 排除系统表、非 t_ 前缀的表和 information_schema
+      if (table.startsWith('t_') && table !== 't_') {
+        tables.add(table);
+      }
+    }
+  }
+  return [...tables];
+}
+
+function getAllDbTables() {
+  try {
+    const cmd = `docker exec -i huicai-postgres psql -U ${DB.user} -d ${DB.db} -t -c "SELECT table_name FROM information_schema.tables WHERE table_schema='public' AND table_type='BASE TABLE' ORDER BY table_name" 2>/dev/null`;
+    const output = execSync(cmd, { encoding: 'utf-8', timeout: 10000 });
+    return output.split('\n').map(l => l.trim()).filter(Boolean);
+  } catch {
+    return null;
+  }
+}
+
 // ── 获取 DB 表结构 ──
 
 function getTableColumns(tableName) {
@@ -119,8 +166,34 @@ const dbAvailable = (() => {
 })();
 
 if (!dbAvailable) {
-  console.warn('⚠️  Docker postgres 不可用（huicai-postgres 容器未运行或 pg_isready 超时），跳过 Entity-DB 列一致性检查。');
+  console.warn('⚠️  Docker postgres 不可用（huicai-postgres 容器未运行或 pg_isready 超时），跳过 Entity-DB 列一致性检查和 JdbcTemplate SQL 审计。');
   console.warn('    本地开发可忽略此警告；CI 环境请确保 docker compose up -d 已启动 postgres。');
+}
+
+// ── JdbcTemplate SQL 表名审计 ──
+
+const jdbcErrors = [];
+const allDbTables = dbAvailable ? getAllDbTables() : null;
+
+if (allDbTables) {
+  const dbTableSet = new Set(allDbTables);
+  const jdbcFiles = findControllerFiles(ENTITY_DIR);
+  const seen = new Set();
+
+  for (const filePath of jdbcFiles) {
+    const src = readFileSync(filePath, 'utf-8');
+    const tableNames = extractTableNamesFromSql(src);
+    for (const table of tableNames) {
+      if (!dbTableSet.has(table)) {
+        const relPath = relative(join(import.meta.dirname, '..'), filePath);
+        const key = `${relPath}:${table}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          jdbcErrors.push(`  ${relPath}: SQL 引用了不存在的表 "${table}"`);
+        }
+      }
+    }
+  }
 }
 
 // H-17 增强：typeHandler 检查不依赖 DB，始终执行
@@ -215,6 +288,23 @@ if (missingTableErrors.length > 0) {
     console.log(err);
   }
   console.log('');
+}
+
+// 输出 JdbcTemplate SQL 表名错误
+if (jdbcErrors.length > 0) {
+  console.error('❌ JdbcTemplate SQL 引用了不存在的表（需要立即修复）：\n');
+  for (const err of jdbcErrors) {
+    console.error(err);
+  }
+  console.error(`\n共 ${jdbcErrors.length} 个不存在的表引用。\n`);
+  console.error('修复方法：');
+  console.error('  1. 对照 \\dt 确认实际表名');
+  console.error('  2. 如果表未创建 → 创建 Flyway migration');
+  console.error('  3. 如果表名写错 → 修正 SQL 中的表名');
+  // 合并错误，让后续流程也视为失败
+  for (const err of jdbcErrors) {
+    realErrors.push(err);
+  }
 }
 
 if (realErrors.length > 0) {

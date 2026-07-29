@@ -113,9 +113,13 @@ public class AutoGenerationService {
             log.warn("流水 {} 已过账, 禁止重复制证, reviewStatus={}", statementId, revStatus);
             return false;
         }
-        if (stmt.getGeneratedVoucherId() != null) {
-            log.warn("流水 {} 已生成凭证, 跳过", statementId);
-            return false;
+        long existingDocCount = docMapper.selectCount(
+                new LambdaQueryWrapper<BusinessDocEntity>()
+                        .eq(BusinessDocEntity::getBankStatementId, statementId)
+                        .eq(BusinessDocEntity::getDeleted, 0));
+        if (existingDocCount > 0) {
+            log.warn("流水 {} 已有 {} 个关联业务单据, 跳过自动生成", statementId, existingDocCount);
+            return true;
         }
 
         String classification = stmt.getClassification();

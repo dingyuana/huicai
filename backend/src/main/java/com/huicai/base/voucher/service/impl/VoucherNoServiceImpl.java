@@ -6,6 +6,7 @@ import com.huicai.base.voucher.service.VoucherNoService;
 import com.huicai.base.system.entity.VoucherTypeEntity;
 import com.huicai.base.system.service.VoucherTypeService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
@@ -13,6 +14,7 @@ import org.springframework.stereotype.Service;
  * 凭证号生成服务实现
  * 使用 Redis INCR 生成原子自增序列号
  */
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class VoucherNoServiceImpl implements VoucherNoService {
@@ -31,6 +33,23 @@ public class VoucherNoServiceImpl implements VoucherNoService {
         }
 
         String redisKey = REDIS_KEY_PREFIX + period + ":" + voucherTypeId;
+
+        // 从数据库初始化 Redis 计数器（防止 Redis 重启/清空后重复）
+        Boolean existed = redisTemplate.hasKey(redisKey);
+        if (Boolean.FALSE.equals(existed)) {
+            String maxNo = voucherMapper.selectMaxVoucherNo(period, voucherTypeId);
+            if (maxNo != null && maxNo.startsWith(type.getCode())) {
+                String serialStr = maxNo.substring(type.getCode().length() + period.length());
+                try {
+                    long serial = Long.parseLong(serialStr);
+                    redisTemplate.opsForValue().setIfAbsent(redisKey, String.valueOf(serial));
+                    log.info("Redis 凭证号计数器初始化: key={}, serial={}", redisKey, serial);
+                } catch (NumberFormatException e) {
+                    log.warn("解析最大凭证号失败: maxNo={}", maxNo);
+                }
+            }
+        }
+
         Long serial = redisTemplate.opsForValue().increment(redisKey);
         if (serial == null) {
             throw new BusinessException("生成凭证号失败");

@@ -43,12 +43,10 @@ public class SystemClearController {
     @PostMapping("/clear-invoice-records")
     @Transactional(rollbackFor = Exception.class)
     public R<Map<String, Object>> clearInvoiceRecords() {
-        int d1 = jdbcTemplate.update("DELETE FROM t_input_invoice_detail");
-        int d2 = jdbcTemplate.update("DELETE FROM t_input_invoice");
-        int d3 = jdbcTemplate.update("DELETE FROM t_output_invoice_detail");
-        int d4 = jdbcTemplate.update("DELETE FROM t_output_invoice");
-        int total = d1 + d2 + d3 + d4;
-        log.info("清空发票记录: input_detail={}, input={}, output_detail={}, output={}", d1, d2, d3, d4);
+        int d1 = jdbcTemplate.update("DELETE FROM t_input_invoice");
+        int d2 = jdbcTemplate.update("DELETE FROM t_output_invoice");
+        int total = d1 + d2;
+        log.info("清空发票记录: input={}, output={}", d1, d2);
         return R.ok(result(total, "清空发票记录 " + total + " 条"));
     }
 
@@ -67,46 +65,52 @@ public class SystemClearController {
     @PostMapping("/clear-business-docs")
     @Transactional(rollbackFor = Exception.class)
     public R<Map<String, Object>> clearBusinessDocs() {
-        int d1 = jdbcTemplate.update("DELETE FROM t_business_doc_item");
+        int d1 = jdbcTemplate.update("DELETE FROM t_business_doc_entry");
         int d2 = jdbcTemplate.update("DELETE FROM t_business_doc");
         int total = d1 + d2;
-        log.info("清空业务单据: items={}, docs={}", d1, d2);
+        log.info("清空业务单据: entries={}, docs={}", d1, d2);
         return R.ok(result(total, "清空业务单据 " + total + " 条"));
     }
 
-    @Operation(summary = "清空应收明细")
+    @Operation(summary = "清空应收相关数据（业务单据+票据+核销）")
     @PostMapping("/clear-receivables")
     @Transactional(rollbackFor = Exception.class)
     public R<Map<String, Object>> clearReceivables() {
-        int d1 = jdbcTemplate.update("DELETE FROM t_reconciliation_detail");
-        int d2 = jdbcTemplate.update("DELETE FROM t_reconciliation");
-        int d3 = jdbcTemplate.update("DELETE FROM t_receivable");
-        int total = d1 + d2 + d3;
-        log.info("清空应收明细: reconciliation_detail={}, reconciliation={}, receivable={}", d1, d2, d3);
-        return R.ok(result(total, "清空应收明细 " + total + " 条"));
+        int d1 = jdbcTemplate.update("DELETE FROM t_arap_settlement_entry");
+        int d2 = jdbcTemplate.update("DELETE FROM t_arap_settlement");
+        int d3 = jdbcTemplate.update("DELETE FROM t_reconciliation_log");
+        int d4 = jdbcTemplate.update("DELETE FROM t_note_receivable");
+        int d5 = jdbcTemplate.update("DELETE FROM t_business_doc_entry");
+        int d6 = jdbcTemplate.update("DELETE FROM t_business_doc");
+        int total = d1 + d2 + d3 + d4 + d5 + d6;
+        log.info("清空应收: settlement_entry={}, settlement={}, recon_log={}, note_receivable={}, doc_entry={}, doc={}",
+                d1, d2, d3, d4, d5, d6);
+        return R.ok(result(total, "清空应收相关数据 " + total + " 条"));
     }
 
-    @Operation(summary = "清空应付明细")
+    @Operation(summary = "清空应付相关数据（业务单据+核销）")
     @PostMapping("/clear-payables")
     @Transactional(rollbackFor = Exception.class)
     public R<Map<String, Object>> clearPayables() {
-        int d1 = jdbcTemplate.update("DELETE FROM t_reconciliation_detail");
-        int d2 = jdbcTemplate.update("DELETE FROM t_reconciliation");
-        int d3 = jdbcTemplate.update("DELETE FROM t_payable");
-        int total = d1 + d2 + d3;
-        log.info("清空应付明细: reconciliation_detail={}, reconciliation={}, payable={}", d1, d2, d3);
-        return R.ok(result(total, "清空应付明细 " + total + " 条"));
+        int d1 = jdbcTemplate.update("DELETE FROM t_arap_settlement_entry");
+        int d2 = jdbcTemplate.update("DELETE FROM t_arap_settlement");
+        int d3 = jdbcTemplate.update("DELETE FROM t_reconciliation_log");
+        int d4 = jdbcTemplate.update("DELETE FROM t_business_doc_entry");
+        int d5 = jdbcTemplate.update("DELETE FROM t_business_doc");
+        int total = d1 + d2 + d3 + d4 + d5;
+        log.info("清空应付: settlement_entry={}, settlement={}, recon_log={}, doc_entry={}, doc={}",
+                d1, d2, d3, d4, d5);
+        return R.ok(result(total, "清空应付相关数据 " + total + " 条"));
     }
 
     @Operation(summary = "清空核销数据")
     @PostMapping("/clear-settlements")
     @Transactional(rollbackFor = Exception.class)
     public R<Map<String, Object>> clearSettlements() {
-        int d1 = jdbcTemplate.update("DELETE FROM t_arap_settlement_item");
-        int d2 = jdbcTemplate.update("DELETE FROM t_arap_settlement_log");
-        int d3 = jdbcTemplate.update("DELETE FROM t_arap_settlement");
-        int total = d1 + d2 + d3;
-        log.info("清空核销数据: items={}, logs={}, settlements={}", d1, d2, d3);
+        int d1 = jdbcTemplate.update("DELETE FROM t_arap_settlement_entry");
+        int d2 = jdbcTemplate.update("DELETE FROM t_arap_settlement");
+        int total = d1 + d2;
+        log.info("清空核销数据: entries={}, settlements={}", d1, d2);
         return R.ok(result(total, "清空核销数据 " + total + " 条"));
     }
 
@@ -115,20 +119,15 @@ public class SystemClearController {
     @Transactional(rollbackFor = Exception.class)
     public R<Map<String, Object>> clearAll() {
         int total = 0;
-        total += jdbcTemplate.update("DELETE FROM t_arap_settlement_item");
-        total += jdbcTemplate.update("DELETE FROM t_arap_settlement_log");
+        total += jdbcTemplate.update("DELETE FROM t_arap_settlement_entry");
         total += jdbcTemplate.update("DELETE FROM t_arap_settlement");
-        total += jdbcTemplate.update("DELETE FROM t_reconciliation_detail");
-        total += jdbcTemplate.update("DELETE FROM t_reconciliation");
-        total += jdbcTemplate.update("DELETE FROM t_receivable");
-        total += jdbcTemplate.update("DELETE FROM t_payable");
-        total += jdbcTemplate.update("DELETE FROM t_business_doc_item");
+        total += jdbcTemplate.update("DELETE FROM t_reconciliation_log");
+        total += jdbcTemplate.update("DELETE FROM t_note_receivable");
+        total += jdbcTemplate.update("DELETE FROM t_business_doc_entry");
         total += jdbcTemplate.update("DELETE FROM t_business_doc");
         total += jdbcTemplate.update("DELETE FROM t_voucher_entry");
         total += jdbcTemplate.update("DELETE FROM t_voucher");
-        total += jdbcTemplate.update("DELETE FROM t_input_invoice_detail");
         total += jdbcTemplate.update("DELETE FROM t_input_invoice");
-        total += jdbcTemplate.update("DELETE FROM t_output_invoice_detail");
         total += jdbcTemplate.update("DELETE FROM t_output_invoice");
         total += jdbcTemplate.update("DELETE FROM t_bank_statement");
         log.info("清空全部数据: total={}", total);

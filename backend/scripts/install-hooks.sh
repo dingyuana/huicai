@@ -15,18 +15,27 @@ SOURCE_HOOK="$REPO_ROOT/.git/hooks/pre-commit"
 if [ ! -f "$SOURCE_HOOK" ]; then
   cat > "$SOURCE_HOOK" <<'HOOK_EOF'
 #!/usr/bin/env bash
-# Pre-commit hook: Entity-DB schema 一致性检查 (H-17 修复)
+# Pre-commit hook: Entity-DB schema 一致性检查 + JdbcTemplate SQL 表名审计 (H-17 修复)
 set -e
 SCRIPT="backend/scripts/check-entity-schema.mjs"
 if [ ! -f "$SCRIPT" ]; then exit 0; fi
-CHANGED_ENTITIES=$(git diff --cached --name-only --diff-filter=ACM | grep -E 'backend/src/main/java/.*Entity\.java$' || true)
-if [ -z "$CHANGED_ENTITIES" ]; then exit 0; fi
-echo "🔍 检测到 Entity 文件变更，运行 Entity-DB schema 一致性检查..."
+
+# 检查变更文件：Entity 文件 或 使用 JdbcTemplate 的 Controller/Service 文件
+CHANGED_FILES=$(git diff --cached --name-only --diff-filter=ACM | grep -E 'backend/src/main/java/.*(Entity\.java|Controller\.java|Service\.java|ServiceImpl\.java)$' || true)
+if [ -z "$CHANGED_FILES" ]; then exit 0; fi
+
+# 进一步筛选：只检查实际包含 JdbcTemplate 的文件
+HAVE_JDBC=false
+for f in $CHANGED_FILES; do
+  if grep -q 'JdbcTemplate' "$f" 2>/dev/null; then HAVE_JDBC=true; break; fi
+done
+
+echo "🔍 检测到 Entity/Controller/Service 文件变更，运行 schema 一致性和 SQL 表名审计..."
 if ! command -v node >/dev/null 2>&1; then echo "⚠️  node 不可用，跳过"; exit 0; fi
 node "$SCRIPT"
 RESULT=$?
-if [ $RESULT -eq 0 ]; then echo "✅ Entity-DB 一致性检查通过"; else
-  echo "❌ Entity-DB 一致性检查失败，请修复后再提交（或 git commit --no-verify 跳过）"
+if [ $RESULT -eq 0 ]; then echo "✅ 检查通过"; else
+  echo "❌ 检查失败，请修复后再提交（或 git commit --no-verify 跳过）"
   exit 1
 fi
 HOOK_EOF
@@ -34,5 +43,5 @@ fi
 
 chmod +x "$SOURCE_HOOK"
 echo "✅ pre-commit hook 已安装到 $SOURCE_HOOK"
-echo "   功能：提交涉及 Entity.java 文件变更时自动运行 check-entity-schema.mjs"
-echo "   降级：docker postgres 未运行时自动跳过列检查，仅做 typeHandler 警告"
+echo "   功能：提交涉及 Entity.java / Controller.java / Service.java 文件变更时自动运行 check-entity-schema.mjs"
+echo "   降级：docker postgres 未运行时自动跳过，仅做 typeHandler 警告"

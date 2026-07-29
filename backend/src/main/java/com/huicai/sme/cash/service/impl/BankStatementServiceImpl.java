@@ -2,6 +2,7 @@ package com.huicai.sme.cash.service.impl;
 
 import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.huicai.common.exception.BusinessException;
@@ -495,10 +496,17 @@ public class BankStatementServiceImpl implements BankStatementService {
         if (!ok) {
             throw BusinessException.badRequest("自动制证失败, classification=" + stmt.getClassification());
         }
-        stmt = statementMapper.selectById(stmt.getId());
         String newStatus = "A".equals(type) ? StatementStatus.VOUCHER_GENERATED : StatementStatus.PAYMENT_CREATED;
-        stmt.setReviewStatus(newStatus);
-        statementMapper.updateById(stmt);
+        // P38-F9: autoGenerateInNewTx 在 REQUIRES_NEW 事务中已 commit 并 bump 了 version,
+        // 外层 SqlSession 一级缓存仍持有旧 version, 若用 updateById 则 WHERE version=? 命中 0 行.
+        // 改用 UpdateWrapper 直接 SET review_status + version+1, 绕过乐观锁版本依赖.
+        // 使用 UpdateWrapper（非 Lambda 版本）避免纯 Mockito 测试中 MyBatis-Plus lambda cache 初始化失败.
+        statementMapper.update(null, new UpdateWrapper<BankStatementEntity>()
+                .eq("id", stmt.getId())
+                .eq("deleted", 0)
+                .set("review_status", newStatus)
+                .setSql("version = version + 1"));
+        stmt = statementMapper.selectById(stmt.getId());
         log.info("制证完成: statementId={}, classification={}, status={}",
                 stmt.getId(), stmt.getClassification(), newStatus);
         return stmt;

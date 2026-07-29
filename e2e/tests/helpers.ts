@@ -45,6 +45,7 @@ export async function expectNoServerErrors(page: Page) {
 export function createErrorTracker(page: Page) {
   const apiErrors: { url: string; status: number }[] = [];
   const consoleErrors: { level: string; text: string }[] = [];
+  const pageErrors: { message: string; source?: string }[] = [];
 
   page.on('response', (res) => {
     if (res.status() >= 500 && res.url().includes('/api/')) {
@@ -58,13 +59,19 @@ export function createErrorTracker(page: Page) {
     }
   });
 
+  page.on('pageerror', (err) => {
+    pageErrors.push({ message: err.message });
+  });
+
   return {
     apiErrors: () => apiErrors,
     consoleErrors: () => consoleErrors,
+    pageErrors: () => pageErrors,
     assertNoErrors: () => {
       const allErrors = [
         ...apiErrors.map(e => `API ${e.status}: ${e.url}`),
         ...consoleErrors.map(e => `Console ${e.level}: ${e.text}`),
+        ...pageErrors.map(e => `PageError: ${e.message}`),
       ];
       expect(allErrors, `发现 ${allErrors.length} 个错误:\n${allErrors.join('\n')}`).toHaveLength(0);
     },

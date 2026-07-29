@@ -388,9 +388,21 @@ public class InputInvoiceStateMachineServiceImpl implements InputInvoiceStateMac
 
     private String generateDocNo(String period) {
         String key = "doc:no:" + period + ":INVOICE_IN";
+        initRedisCounterIfMissing(key, "FPR" + period);
         Long serial = redisTemplate.opsForValue().increment(key);
         if (serial == null) serial = 1L;
         return "FPR" + period + String.format("%04d", serial);
+    }
+
+    private void initRedisCounterIfMissing(String redisKey, String docNoPrefix) {
+        Boolean existed = redisTemplate.hasKey(redisKey);
+        if (Boolean.FALSE.equals(existed)) {
+            String maxNo = businessDocMapper.selectMaxDocNoByPrefix(docNoPrefix);
+            if (maxNo != null && maxNo.length() > docNoPrefix.length()) {
+                String serialStr = maxNo.substring(docNoPrefix.length());
+                redisTemplate.opsForValue().setIfAbsent(redisKey, serialStr);
+            }
+        }
     }
 
     private String appendReason(String existing, String reason, Long userId) {

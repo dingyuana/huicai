@@ -646,8 +646,23 @@ public class SalesInvoiceImportService {
 
     private String generateInvoiceDocNo(String period) {
         String key = "doc:no:INVOICE_OUT:" + period;
+        initRedisCounterIfMissing(key, "FPS" + period);
         Long seq = redisTemplate.opsForValue().increment(key);
         return "FPS" + period + String.format("%04d", seq);
+    }
+
+    /**
+     * Redis 计数器缺失时，从 DB 最大单据号初始化，防止 Redis 重启后重复编号。
+     */
+    private void initRedisCounterIfMissing(String redisKey, String docNoPrefix) {
+        Boolean existed = redisTemplate.hasKey(redisKey);
+        if (Boolean.FALSE.equals(existed)) {
+            String maxNo = docMapper.selectMaxDocNoByPrefix(docNoPrefix);
+            if (maxNo != null && maxNo.length() > docNoPrefix.length()) {
+                String serialStr = maxNo.substring(docNoPrefix.length());
+                redisTemplate.opsForValue().setIfAbsent(redisKey, serialStr);
+            }
+        }
     }
 
     private Subject findSubjectByCode(String code) {
