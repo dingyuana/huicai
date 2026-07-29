@@ -665,6 +665,11 @@ public class VoucherServiceImpl extends ServiceImpl<VoucherMapper, VoucherEntity
         vo.setPostedAt(entity.getPostedAt());
         vo.setReversedFrom(entity.getReversedFrom());
 
+        // 源文档信息
+        vo.setSourceDocId(entity.getSourceDocId());
+        vo.setSourceDocNo(entity.getSourceDocNo());
+        vo.setSourceDocType(entity.getSourceDocType());
+
         // 查询类型名称
         if (entity.getVoucherTypeId() != null) {
             VoucherTypeEntity type = voucherTypeService.getById(entity.getVoucherTypeId());
