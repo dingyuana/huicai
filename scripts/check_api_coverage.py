@@ -35,11 +35,11 @@ def extract_backend_endpoints():
     for fpath in controller_files:
         content = fpath.read_text(encoding="utf-8")
         lines = content.split("\n")
-
+        current_ctrl = ""
         for line in lines:
             # 类级 @RequestMapping
             m = re.search(r'@RequestMapping\s*\(\s*["\']([^"\']+)["\']', line)
-            if m and "Controller" in fpath.name:
+            if m:
                 current_ctrl = m.group(1)
 
             # 方法级注解
@@ -74,11 +74,20 @@ def extract_frontend_api_calls():
 
 
 def normalize(path):
-    """标准化路径: 去除 /api/v1 前缀, 替换 ${xxx} 为 {xxx}."""
+    """标准化路径: 去除 /api 前缀, 替换 ${xxx} 为 {xxx}, 去除查询参数, 过滤噪声."""
+    # 去除查询参数 (trace?no=xxx → trace)
+    path = path.split("?")[0]
     p = path.strip("/")
-    if p.startswith("api/v1/"):
-        p = p[7:]
-    p = re.sub(r"\$\{[^}]+\}", lambda m: "{" + m.group(0)[2:-1] + "}", p)
+    # 后端路径有 /api 前缀, 前端路径没有
+    if p.startswith("api/"):
+        p = p[4:]
+    # 统一路径参数: 无论 ${xxx} 还是 {xxx}, 全部替换为 {}
+    # 避免因参数名不同 (e.g. {id} vs {logId}) 导致匹配失败
+    p = re.sub(r"\$\{[^}]+\}", "{}", p)
+    p = re.sub(r"\{[^}]+\}", "{}", p)
+    # 过滤噪声 (空路径, 纯 HTTP 方法等)
+    if not p or p in ("get", "post", "put", "delete"):
+        return None
     return "/" + p
 
 
@@ -87,8 +96,16 @@ def check_coverage():
     backend_endpoints = extract_backend_endpoints()
     frontend_calls = extract_frontend_api_calls()
 
-    backend_norm = {normalize(ep): ep for ep in backend_endpoints}
-    frontend_norm = {normalize(fc): fc for fc in frontend_calls}
+    backend_norm = {}
+    for ep in backend_endpoints:
+        n = normalize(ep)
+        if n is not None:
+            backend_norm[n] = ep
+    frontend_norm = {}
+    for fc in frontend_calls:
+        n = normalize(fc)
+        if n is not None:
+            frontend_norm[n] = fc
 
     matched = []
     backend_not_covered = []
