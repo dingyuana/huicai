@@ -1,5 +1,6 @@
 package com.huicai.sme.cash.service.impl;
 
+import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.huicai.common.exception.BusinessException;
 import com.huicai.common.test.StateMachineTestHelper;
 import com.huicai.sme.arap.service.impl.AutoGenerationService;
@@ -203,14 +204,14 @@ class BankStatementServiceTest {
             BankStatementEntity afterGen = stubWithStatus(1L, "bank_interest_fee", "voucher_generated");
             // 第一次 select 取原数据，autoGenerate 后 re-select 取生成后数据
             when(statementMapper.selectById(1L)).thenReturn(confirmed, afterGen);
-            when(statementMapper.updateById(any(BankStatementEntity.class))).thenReturn(1);
+            when(statementMapper.update(any(), any(UpdateWrapper.class))).thenReturn(1);
             when(autoGenerationService.autoGenerateInNewTx(1L, 1L)).thenReturn(true);
 
             BankStatementEntity result = service.audit(1L, 1L);
 
             assertEquals("voucher_generated", result.getReviewStatus());
             verify(autoGenerationService).autoGenerateInNewTx(1L, 1L);
-            verify(statementMapper).updateById(any(BankStatementEntity.class));
+            verify(statementMapper).update(any(), any(UpdateWrapper.class));
         }
 
         @Test
@@ -223,13 +224,28 @@ class BankStatementServiceTest {
 
         @Test
         void audit_非CONFIRMED状态_throwBadRequest() {
-            for (String badStatus : new String[]{"PENDING", "voucher_generated", "payment_created", "approved", null}) {
+            // voucher_generated / payment_created / approved 已过 audit 幂等门，不会抛异常，不在此测试
+            for (String badStatus : new String[]{"PENDING", null}) {
                 BankStatementEntity stmt = stubWithStatus(1L, "bank_interest_fee", badStatus);
                 when(statementMapper.selectById(1L)).thenReturn(stmt);
                 BusinessException ex = assertThrows(BusinessException.class, () -> service.audit(1L, 1L));
                 assertTrue(ex.getMessage().contains("无法审核"),
                         () -> "期望「无法审核」，实际: " + ex.getMessage() + " for status=" + badStatus);
-                verify(statementMapper, never()).updateById(any(BankStatementEntity.class));
+                verify(statementMapper, never()).update(any(), any(UpdateWrapper.class));
+                reset(statementMapper);
+            }
+        }
+
+        @Test
+        void audit_已制证状态_幂等返回() {
+            // voucher_generated / payment_created / approved 已过 audit 幂等门，直接返回
+            for (String processedStatus : new String[]{"voucher_generated", "payment_created", "approved"}) {
+                BankStatementEntity stmt = stubWithStatus(1L, "bank_interest_fee", processedStatus);
+                when(statementMapper.selectById(1L)).thenReturn(stmt);
+                BankStatementEntity result = service.audit(1L, 1L);
+                assertEquals(processedStatus, result.getReviewStatus());
+                verify(autoGenerationService, never()).autoGenerateInNewTx(anyLong(), anyLong());
+                verify(statementMapper, never()).update(any(), any(UpdateWrapper.class));
                 reset(statementMapper);
             }
         }
@@ -237,16 +253,17 @@ class BankStatementServiceTest {
         @Test
         void batchAudit_混合成功失败_返回成功数() {
             BankStatementEntity confirmed = stubWithStatus(1L, "bank_interest_fee", "CONFIRMED");
-            when(statementMapper.selectById(1L)).thenReturn(confirmed, confirmed);  // audit 内部会 re-select
+            BankStatementEntity afterGen = stubWithStatus(1L, "bank_interest_fee", "voucher_generated");
+            when(statementMapper.selectById(1L)).thenReturn(confirmed, afterGen);  // audit 内部会 re-select
             when(statementMapper.selectById(2L)).thenReturn(stubWithStatus(2L, "bank_interest_fee", "PENDING"));
             when(statementMapper.selectById(3L)).thenReturn(null);
-            when(statementMapper.updateById(any(BankStatementEntity.class))).thenReturn(1);
+            when(statementMapper.update(any(), any(UpdateWrapper.class))).thenReturn(1);
             when(autoGenerationService.autoGenerateInNewTx(1L, 1L)).thenReturn(true);
 
             int audited = service.batchAudit(List.of(1L, 2L, 3L), 1L);
 
             assertEquals(1, audited);
-            verify(statementMapper, times(1)).updateById(any(BankStatementEntity.class));
+            verify(statementMapper, times(1)).update(any(), any(UpdateWrapper.class));
         }
     }
 
@@ -260,8 +277,9 @@ class BankStatementServiceTest {
             // bank_interest_fee → classifyType() → "A" → voucher_generated
             // 作为恢复重试入口，允许从 CONFIRMED 状态触发
             BankStatementEntity stmt = stubWithStatus(1L, "bank_interest_fee", "CONFIRMED");
-            when(statementMapper.selectById(1L)).thenReturn(stmt, stmt);
-            when(statementMapper.updateById(any(BankStatementEntity.class))).thenReturn(1);
+            BankStatementEntity afterGen = stubWithStatus(1L, "bank_interest_fee", "voucher_generated");
+            when(statementMapper.selectById(1L)).thenReturn(stmt, afterGen);
+            when(statementMapper.update(any(), any(UpdateWrapper.class))).thenReturn(1);
             when(autoGenerationService.autoGenerateInNewTx(1L, 1L)).thenReturn(true);
 
             BankStatementEntity result = service.generateVoucher(1L, 1L);
@@ -275,8 +293,9 @@ class BankStatementServiceTest {
             // business_payment → classifyType() → "B" → payment_created
             // 作为恢复重试入口，允许从 CONFIRMED 状态触发
             BankStatementEntity stmt = stubWithStatus(1L, "business_payment", "CONFIRMED");
-            when(statementMapper.selectById(1L)).thenReturn(stmt, stmt);
-            when(statementMapper.updateById(any(BankStatementEntity.class))).thenReturn(1);
+            BankStatementEntity afterGen = stubWithStatus(1L, "business_payment", "payment_created");
+            when(statementMapper.selectById(1L)).thenReturn(stmt, afterGen);
+            when(statementMapper.update(any(), any(UpdateWrapper.class))).thenReturn(1);
             when(autoGenerationService.autoGenerateInNewTx(1L, 1L)).thenReturn(true);
 
             BankStatementEntity result = service.generateVoucher(1L, 1L);
@@ -321,10 +340,11 @@ class BankStatementServiceTest {
         void batchGenerateVouchers_混合成功失败_返回成功数() {
             // 从 CONFIRMED 生成（兼容旧流程的重试入口）
             BankStatementEntity ok = stubWithStatus(1L, "bank_interest_fee", "CONFIRMED");
+            BankStatementEntity afterGen = stubWithStatus(1L, "bank_interest_fee", "voucher_generated");
             BankStatementEntity bad = stubWithStatus(2L, "bank_interest_fee", "PENDING");
-            when(statementMapper.selectById(1L)).thenReturn(ok, ok);
+            when(statementMapper.selectById(1L)).thenReturn(ok, afterGen);
             when(statementMapper.selectById(2L)).thenReturn(bad);
-            when(statementMapper.updateById(any(BankStatementEntity.class))).thenReturn(1);
+            when(statementMapper.update(any(), any(UpdateWrapper.class))).thenReturn(1);
             when(autoGenerationService.autoGenerateInNewTx(1L, 1L)).thenReturn(true);
 
             int generated = service.batchGenerateVouchers(List.of(1L, 2L), 1L);
@@ -481,6 +501,7 @@ class BankStatementServiceTest {
             // 第二次 selectById 返回生成后的数据
             BankStatementEntity afterGen = stubWithStatus(1L, "bank_interest_fee", "voucher_generated");
             when(statementMapper.selectById(1L)).thenReturn(confirmed, afterGen);
+            when(statementMapper.update(any(), any(UpdateWrapper.class))).thenReturn(1);
             when(autoGenerationService.autoGenerateInNewTx(1L, 1L)).thenReturn(true);
 
             BankStatementEntity r2 = service.audit(1L, 1L);
@@ -493,8 +514,9 @@ class BankStatementServiceTest {
             service.approve(1L);
             assertEquals("approved", r2.getReviewStatus());
 
-            // 最终: review(1) + audit(1) + approve(1) = 3 次 update
-            verify(statementMapper, times(3)).updateById(any(BankStatementEntity.class));
+            // 最终: review(1 updateById) + audit(1 update) + approve(1 updateById)
+            verify(statementMapper, times(2)).updateById(any(BankStatementEntity.class));
+            verify(statementMapper, times(1)).update(any(), any(UpdateWrapper.class));
         }
     }
 

@@ -22,19 +22,15 @@ public interface VoucherTemplateMapper extends BaseMapper<VoucherTemplateEntity>
     List<VoucherTemplateEntity> selectAllActive();
 
     /**
-     * 按 source + businessType + direction 查激活模板（无视方向时传 null）.
-     * 用 CAST 显式声明参数类型, 避免 PostgreSQL "could not determine data type of parameter" 错误.
+     * 按 businessType 查激活模板.
+     * DB 列 doc_type 对应 entity 的 businessType, source/direction/match_priority 在 DB 中不存在.
+     * TemplateMatcher 有多级降级策略（source+businessType → classification），此处仅按 doc_type 匹配.
      */
     @Select("""
         SELECT * FROM t_voucher_template
         WHERE is_active = true
-          AND source = #{source}
-          AND business_type = #{businessType}
-          AND (CAST(#{direction} AS VARCHAR) IS NULL
-               OR direction IS NULL
-               OR direction = ''
-               OR direction = #{direction})
-        ORDER BY match_priority ASC, id ASC
+          AND doc_type = #{businessType}
+        ORDER BY id ASC
         LIMIT 1
     """)
     VoucherTemplateEntity matchByDimensions(@Param("source") String source,

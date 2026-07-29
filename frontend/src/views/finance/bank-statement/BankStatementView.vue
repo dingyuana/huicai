@@ -654,9 +654,13 @@ async function onReview(row: BankStatementVO) {
 }
 
 async function onApprove(row: BankStatementVO) {
-  await approveStatement(row.id)
-  ElMessage.success('已核准过账')
-  await refreshAll()
+  try {
+    await approveStatement(row.id)
+    ElMessage.success('已核准过账')
+    await refreshAll()
+  } catch (e: any) {
+    ElMessage.error(e?.message || '核准失败')
+  }
 }
 
 async function onAutoClassify() {

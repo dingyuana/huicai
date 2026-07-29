@@ -126,6 +126,18 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '凭证管理', permission: 'voucher:list', keepAlive: true },
       },
       {
+        path: 'finance/voucher/detail',
+        name: 'VoucherDetail',
+        component: () => import('@/views/finance/voucher/VoucherDetail.vue'),
+        meta: { title: '凭证详情', permission: 'voucher:list' },
+      },
+      {
+        path: 'finance/voucher/edit',
+        name: 'VoucherEdit',
+        component: () => import('@/views/finance/voucher/VoucherEdit.vue'),
+        meta: { title: '编辑凭证', permission: 'voucher:update' },
+      },
+      {
         path: 'finance/ledger',
         name: 'LedgerView',
         component: () => import('@/views/finance/ledger/LedgerView.vue'),

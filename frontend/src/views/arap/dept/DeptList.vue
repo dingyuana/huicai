@@ -28,6 +28,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
+import { getDeptTree } from '@/api/modules/system'
 
 const list = ref<any[]>([])
 const loading = ref(false)
@@ -37,9 +38,7 @@ const showImport = ref(false)
 async function fetchData() {
   loading.value = true
   try {
-    const res = await fetch('/api/v1/departments/list')
-    if (res.ok) list.value = await res.json()
-    else list.value = []
+    list.value = await getDeptTree()
   } catch { list.value = [] }
   finally { loading.value = false }
 }

@@ -134,9 +134,15 @@ class CoreWriteOperationConcurrencyTest {
         when(businessDocMapper.selectById(DOC_ID)).thenAnswer(inv -> approvedBusinessDoc());
 
         // 模拟乐观锁：仅第一次 updateById 返回 1（成功），后续返回 0（冲突）
+        // 使用 synchronized 块确保线程安全计数
+        final Object lock = new Object();
         AtomicInteger updateCallCount = new AtomicInteger(0);
         when(businessDocMapper.updateById(any(BusinessDocEntity.class)))
-                .thenAnswer(inv -> updateCallCount.incrementAndGet() == 1 ? 1 : 0);
+                .thenAnswer(inv -> {
+                    synchronized (lock) {
+                        return updateCallCount.incrementAndGet() == 1 ? 1 : 0;
+                    }
+                });
 
         // when: 5 线程并发 approve
         ExecutorService executor = Executors.newFixedThreadPool(5);

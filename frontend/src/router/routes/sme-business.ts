@@ -80,12 +80,20 @@ const routes: RouteRecordRaw[] = [
     meta: { title: '票据管理', permission: 'ticket:list', keepAlive: true },
   },
 
-  // ─── 核销工作台（作为 Tab 内嵌在业务单据页，但保留独立路由供直链）───
+  // ─── 核销工作台 ───
   {
     path: 'arap/reconciliation-workbench',
     name: 'ReconciliationWorkbench',
     component: () => import('@/views/arap/reconciliation-workbench/ReconciliationWorkbench.vue'),
     meta: { title: '核销工作台', permission: 'arap:reconciliation:workbench', keepAlive: true },
+  },
+
+  // ─── 往来核销（核销单管理）───
+  {
+    path: 'arap/settlement',
+    name: 'SettlementList',
+    component: () => import('@/views/arap/settlement/SettlementList.vue'),
+    meta: { title: '往来核销', permission: 'arap:settlement:list', keepAlive: true },
   },
 
   // ─── 费用报销（作为 Tab 内嵌在业务单据页）───

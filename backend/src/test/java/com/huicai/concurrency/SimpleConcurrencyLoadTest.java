@@ -1,5 +1,6 @@
 package com.huicai.concurrency;
 
+import com.huicai.common.test.SlowTest;
 import org.junit.jupiter.api.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -17,6 +18,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
  * 高并发压力测试 - 简化版
  * <p>专注于核心并发场景测试，避免复杂断言影响测试结果统计
  */
+@SlowTest
 @SpringBootTest
 @AutoConfigureMockMvc(addFilters = false)
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)

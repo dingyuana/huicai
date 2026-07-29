@@ -455,6 +455,10 @@ public class AutoGenerationService {
             }
         }
 
+        // 新单据：已核销金额=0，未核销金额=全额（与 BusinessDocServiceImpl.create() 保持一致）
+        doc.setSettledAmount(BigDecimal.ZERO);
+        doc.setUnsettledAmount(amount);
+
         docMapper.insert(doc);
 
         // 2. 尝试模板制证

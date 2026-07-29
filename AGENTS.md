@@ -4,7 +4,7 @@
 
 ## §0 项目状态（硬数字，每次 commit 后更新）
 
-> **更新基准**：commit `84b8262b` (2026-07-29) — fix: bank-statement audit three-layer bug + wider fixes
+> **更新基准**：commit `c267864` (2026-07-29) — fix: bank-statement audit three-layer bug + wider fixes
 > **当前分支**：`feature/agency-business`
 > **关联文档**：[项目说明](docs/项目说明.md)、[技术方案](docs/技术方案.md)、[需求分析](docs/需求分析.md)、[需求登记册](docs/development/requirements/REQUIREMENTS_REGISTRY.md)、[文档注册表](docs/文档注册表.md)、[Flyway治理规范](docs/development/flyway-governance.md)
 

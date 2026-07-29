@@ -2,8 +2,8 @@
 > **版本**：V1.0 | **最后修改**：2026-07-19 | **作者**：Hermes
 > **状态**：✅ 生效
 
-> **编号**：HUICAI-SPC-016（11 方法全已实现, 0 测试覆盖）
-> 目标：补 5 个单测 + 文档化预算状态机
+> **编号**：HUICAI-SPC-016（11 方法全已实现, 8 测试覆盖 ✅）
+> 目标：补 5 个单测 + 文档化预算状态机（✅ 已完成 2026-07-28）
 > 工期：1 批
 
 ---
@@ -30,7 +30,7 @@
 | `t_budget_entry` (预算科目明细) | ✅ 实体 (P3) |
 | `t_budget_adjustment` (预算调整单) | ✅ 实体 (P3) |
 | `BudgetServiceImpl` | ✅ 11 方法全实现 (P3+补全) |
-| `BudgetServiceImplTest` | ❌ **零测试** — 本批补 5 |
+| `BudgetServiceImplTest` | ✅ **8 测试覆盖 (P16)** |
 
 **已实现方法**:
 - `pageQuery/getById/create/approve/activate` — 预算 CRUD + 状态机
@@ -90,7 +90,20 @@ DRAFT ──→ approve ──→ APPROVED ──→ activate ──→ ACTIVE
 
 ## 5. 测试验收
 
-**目标**: 295 → 300 (+5 测试)
+**目标**: 295 → 300 (+5 测试) ✅ 已完成，实际 8 测试覆盖
+
+**测试文件**: `BudgetServiceImplTest.java` (8 个 @Test 方法)
+
+| 测试方法 | 覆盖场景 | 验收标准 |
+|---------|---------|---------|
+| `create_设置状态DRAFT_插入主表和明细` | 创建预算，自动设置 DRAFT 状态，汇总总金额 | AT-P16-1 |
+| `approve_SUBMITTED_变APPROVED` | 提交后审批，状态变为 APPROVED | AT-P16-3 |
+| `approve_非SUBMITTED_抛异常` | 非提交状态审批抛 BusinessException | 负向断言 |
+| `checkBudget_在预算内_passTrue` | WARN 模式，预算内通过 | AT-P16-4 |
+| `checkBudget_超预算_action_REQUIRE_APPROVE` | APPROVE 模式超预算需审批 | AT-P16-4 |
+| `checkBudget_无预算配置_passTrue` | 无预算配置直接通过 | 边界场景 |
+| `checkBudget_超预算BLOCK_passFalse` | BLOCK 模式超预算拦截 | AT-P16-5 |
+| `executionAnalysis_有预算和明细_返回汇总` | 执行分析汇总计算 | 正向场景 |
 
 ---
 ## 验收标准

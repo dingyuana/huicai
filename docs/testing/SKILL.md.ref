@@ -1,0 +1,363 @@
+---
+name: "huicai-test-patterns"
+title: "慧财测试模式指南"
+description: "慧财财务项目测试编写规范：L1-L5 选择标准、模板、高风险路径识别、核心教训、经验评估"
+---
+
+# 慧财测试模式指南
+
+## 触发条件
+
+编写慧财项目测试时加载此 skill。也用于：评估测试质量、审查新增测试、排查"为什么没测出来"、培训新人。
+
+---
+
+## 一、测试层级选择（L1-L5）
+
+### L1 单元测试 → `@ExtendWith(MockitoExtension.class)`
+- **适用：** 纯业务逻辑，无 DB 交互（规则匹配算法、分录校验、编号生成）
+- **模板：** `@Mock` 依赖 + `@InjectMocks` 被测类
+- **不适用：** 任何涉及 Mapper、Aspect、事务、DB 约束的代码
+
+### L2 Controller 测试（H2） → `@SpringBootTest + @AutoConfigureMockMvc + @MockBean`
+- **适用：** HTTP 参数绑定验证（REST 契约：路径、请求体、响应体、状态码）
+- **执行：** `cd backend && ./mvnw test -Dtest="*ControllerTest" -DexcludedGroups=slow`
+- **局限（必须知道）：** 使用 H2 + `flyway.enabled: false`，**以下问题检测不到：**
+  - CHECK 约束冲突
+  - Entity ↔ DB 列映射不一致
+  - Flyway migration 错误
+  - PostgreSQL 特有行为（SERIAL、部分唯一索引、Sequence 命名）
+  - `@TableField(exist=false)` 字段的真实状态
+
+### L2 真正集成测试（Testcontainers + PostgreSQL） → `extends AbstractMapperTest`
+- **适用：** 高风险路径的核心验证（见下节"高风险路径"）
+- **模板：** 继承 `com.huicai.common.test.AbstractMapperTest`（自动提供 Testcontainers PG + Flyway + `@Transactional` 回滚）
+- **标记：** 类级 `@SlowTest`
+- **执行：** `mvn test -DexcludedGroups=""`（需 Docker daemon）
+- **本地限制：** 当前容器环境 Docker socket 不可达，Testcontainers 本地跑不了，只能在 CI 验证
+
+### L3 Service 单元测试 → `@ExtendWith(MockitoExtension.class)` + `@InjectMocks`
+- **适用：** Service 层纯逻辑（不含 DB）
+- **覆盖目标：** 当前项目已新增 10+ 个 Service 测试文件
+
+### L5 E2E 测试 → Playwright
+- 适用：完整用户操作流验证
+- 参考：`e2e/tests/` 目录
+
+---
+
+## 二、高风险路径识别
+
+**以下 7 类路径必须用 Testcontainers（PostgreSQL），禁止用 H2 替代：**
+
+| # | 路径特征 | 对应 bug |
+|---|----------|---------|
+| 1 | `@StatusChangeable` 注解的 Entity 状态变更 | 发票 500（Aspect 审计日志回滚） |
+| 2 | `audit() / confirm() / approve()` 方法 | 发票 500 |
+| 3 | 任何 `CHECK 约束` 字段更新 | 银行流水审核（review_status CHECK） |
+| 4 | `@TableField(exist=false)` 字段参与业务判断 | 幂等守卫（generatedVoucherId 永远 null） |
+| 5 | `@Transactional(REQUIRES_NEW/MANDATORY)` | 银行流水（MyBatis 一级缓存 version 不一致） |
+| 6 | `@Async` 方法内的 DB 操作 | 发票 500（saveAsync + Aspect 交互） |
+| 7 | Flyway migration 脚本 | 所有 DB 结构变更 |
+
+**经验：** 每写 1 条 Testcontainers 测试 ≈ 挡住 1 条生产 bug。每写 10 条 `@MockBean` 测试 ≈ 提升 1% 覆盖率数字（无实质防错价值）。
+
+---
+
+## 三、核心教训（不可再犯）
+
+### 教训 1：H2 通过 ≠ 通过
+**场景：** 36 个旧 Controller 测试全部 H2 + `flyway.enabled: false` + `@MockBean`。它们测的是 HTTP 绑定，不是数据库行为。P38-F9 那个导致 500 的 bank-statement audit 问题，H2 完全没报错，PostgreSQL 才炸。
+**规则：** 任何带真实 DB 交互的风险路径，必须用 Testcontainers + PostgreSQL 验证。H2 只验证参数绑定。
+
+### 教训 2：删虚假测试 ≥ 写新测试
+**场景：** `AssetIntegrationTest` `BudgetIntegrationTest` `ReportIntegrationTest` `TaxIntegrationTest` 共 4 个文件（377 行）全部纯 H2，实际测不到任何 DB 行为。它们的存在制造了"我们有关键集成测试"的假象。
+**规则：** 发现纯 H2 冒充集成测试的，直接删。虚假安全感比没有测试更危险。
+
+### 教训 3：Controller 安全上下文模式必须统一
+**场景：** `CashJournalController` 用 `Authentication auth` 方法参数注入 + 硬编码 `userId = 0L`，与全项目其他 Controller（`SecurityUtils.getCurrentUserId()`）不一致。`addFilters=false` 时方法参数注入的 auth 永远为 null → NPE 500。
+**规则：** Controller 获取当前用户 **只允许** `SecurityUtils.getCurrentUserId()`，禁止 `Authentication auth` 方法参数注入。`pre-commit` 检查可扩展此规则。
+
+### 教训 4：REQUIRES_NEW 事务 + MyBatis 一级缓存
+**场景：** `autoGenerateInNewTx()` 在 REQUIRES_NEW 事务里 commit 并 bump 了 version，外层 SqlSession 缓存仍持有旧 version，后续 `updateById()` WHERE version=? 命中 0 行。
+**规则：** REQUIRES_NEW 方法内修改乐观锁字段后，外层不要再用 `updateById`，改用 `UpdateWrapper` 显式 SQL SET 绕过缓存。
+
+### 教训 5：`@TableField(exist=false)` 字段不能参与业务判断
+**场景：** `BankStatementEntity.generatedVoucherId` 标记 `exist=false`，查出来永远 null，但被用于幂等守卫（"已生成凭证则跳过"），导致守卫永不触发。
+**规则：** 业务逻辑（去重、状态判断、守卫）只能用 DB 实际存在的字段。`@TableField(exist=false)` 只用于 DTO 传输/展示字段。
+
+### 教训 6：Aspect 异常处理影响业务事务
+**场景：** `StatusChangeAspect` 写审计日志失败时 `throw e`，把外层业务事务回滚，但 REQUIRES_NEW 里已 commit 的凭证变成孤儿。
+**规则：** Aspect 中 `try-catch` 业务关键路径的副作用（审计、日志、通知），异常降级为 `log.warn`，不允许 `throw` 回滚主事务。
+
+### 教训 7：Controller 测试 SecurityContext 初始化
+**场景：** 新写的 Controller 测试中 `@AutoConfigureMockMvc(addFilters=false)`，每个测试方法需独立设置 `SecurityContextHolder`。
+**规则：** `addFilters=false` 时 Spring Security 的 `SecurityContextHolderAwareRequestFilter` 未运行，`Authentication auth` 方法参数注入永远为 null。每个调用 SecurityUtils 的测试方法前必须 `setAuth()`。
+
+### 教训 8：测试中的 try-catch 吞异常是最危险的测试反模式
+**来源：** `AutoGenerationServiceTest` 重构（2026-07-29）
+**场景：** 11 处 `try { service.autoGenerate(...); } catch (Exception e) {}` 吞掉异常，测试看似通过实则完全没测通。被吞的异常种类包括：NPE（`salaryAcct` is null）、BusinessException（未登录）、NullPointerException（`otherAcct` is null）。
+**规则：** 禁止在测试中使用空的 try-catch。如果必须 catch，用 `fail("unexpected: " + e.getMessage(), e)`。否则去掉 try-catch 让异常自然冒泡（JUnit Jupiter 自动标记测试失败）。
+
+### 教训 9：`UsernamePasswordAuthenticationToken` 2-arg 构造器创建未认证的 token
+**来源：** `AutoGenerationServiceTest` 重构（2026-07-29）
+**场景：** `new UsernamePasswordAuthenticationToken(principal, null)` 使用 2-arg 构造器，创建的 token 是 `authenticated=false`。`SecurityUtils.getLoginUser()` 调用 `authentication.isAuthenticated()` 返回 false → 抛 "未登录"。
+**修复：** 必须使用 3-arg 构造器 `new UsernamePasswordAuthenticationToken(principal, null, authorities)`，第三个参数是 `Collection<? extends GrantedAuthority>`，让 token 标记为已认证。
+**规则：** 测试中创建 `UsernamePasswordAuthenticationToken` 时，始终用 3-arg 构造器。
+
+### 教训 10：`LoginUser` 没有默认构造器，必须通过 `UserEntity` 创建
+**来源：** `AutoGenerationServiceTest` 重构（2026-07-29）
+**场景：** `LoginUser` 继承 Spring Security 的 `User`，只有 `LoginUser(UserEntity, List<SimpleGrantedAuthority>)` 构造器，没有默认构造器，也没有 `setUsername()`/`setPassword()`（Lombok 的 `@Getter` 只生成 getter）。
+**模板：**
+```java
+UserEntity user = new UserEntity();
+user.setId(1L); user.setUsername("test"); user.setPassword("test123");
+user.setEnterpriseId(1L);
+LoginUser loginUser = new LoginUser(user, List.of(new SimpleGrantedAuthority("ROLE_USER")));
+SecurityContextHolder.getContext().setAuthentication(
+    new UsernamePasswordAuthenticationToken(loginUser, null, loginUser.getAuthorities()));
+```
+
+### 教训 11：`subjectMapper.selectList()` 用 `argThat` 不可靠，优先用 `any()`
+**来源：** `AutoGenerationServiceTest` 重构（2026-07-29）
+**场景：** `@BeforeEach` 中 `lenient().when(subjectMapper.selectList(argThat(w -> ...getSqlSet().toString().contains("1002"))))` 用来匹配银行存款科目。但 Service 调用 `subjectMapper.selectList()` 两次（一次银行，一次对手科目），第二次调用返回 null 导致 NPE。
+**规则：** Mapper 的 `selectList()` stub 优先用 `any()` 代替 `argThat`。如果需要不同返回值，用 `thenReturn().thenReturn()` 链式指定。`argThat` 的匹配条件过于脆弱，Service 层 SQL 查询条件微调就会静默失效。
+
+### 教训 12：`@BeforeEach` 设置 `SecurityContextHolder` 是安全的
+**来源：** `AutoGenerationServiceTest` 重构（2026-07-29）
+**场景：** 将 `setAuth()` 放在 `@BeforeEach` 中，所有测试方法自动拥有认证上下文。`SecurityContextHolder` 是线程局部变量，设置多次是幂等的。
+**规则：** 如果 Service 测试中多个方法都需要 `SecurityContext`，优先在 `@BeforeEach` 中统一设置。个别需要不同用户的测试再单独覆盖。
+
+---
+
+## 四、测试质量评估框架
+
+写新测试或审查已有测试时，用以下标准打分：
+
+### 4.1 防错价值（最重要）
+
+| 等级 | 特征 | 例子 |
+|------|------|------|
+| 🔴 A — 高 | 曾出过生产问题的路径，或纯方法零 Mock | `VoucherNoServiceImplTest`（Redis 计数器生产事故）、`CoreWriteOperationConcurrencyTest`（H-13 并发）、`parseInvoiceDate`（纯方法） |
+| 🟡 B — 中 | 业务逻辑验证，有用 ArgumentCaptor + verify(never) | `AssetCardServiceImplTest`（折旧计算 + ArgumentCaptor）、`AutoGenerationServiceTest`（P30 铁律验证） |
+| 🟢 C — 低 | 纯 CRUD 模板，Mock 全部依赖，只验证返回值 | `CustomerServiceImplTest`、`BudgetServiceImplTest`（及格线以上，但防错价值有限） |
+
+### 4.2 质量检查清单
+
+**必须检查（通过才能合入）：**
+- [ ] 无 `try-catch {}` 吞异常
+- [ ] 有异常路径测试（`assertThrows` + `verify(never())`）
+- [ ] 命名符合 `methodName_condition_expectedOutcome` 格式
+- [ ] 类级 Javadoc 说明"为什么这个测试存在"
+
+**建议检查（加分项）：**
+- [ ] 纯方法测试（零 Mock）
+- [ ] `ArgumentCaptor` 验证传入 Mapper 的参数内容
+- [ ] `verify(..., never())` 验证副作用未发生
+- [ ] 可复用的 `stubXxx()` 辅助方法
+- [ ] 测试间数据独立（不依赖其他测试的执行结果）
+- [ ] 安全上下文正确设置（`@WithMockUser` 或 `setAuth()`）
+
+### 4.3 命名规范
+
+**推荐格式：** `methodName_条件_期望结果`
+
+```
+getById_存在_返回entity
+getById_不存在_抛BusinessException
+create_编码重复_抛BusinessException
+delete_IN_USE_成功删除
+confirmImport_batchId为空_抛异常
+generateNextNo_redisKeyMissing_initFromDb
+```
+
+**不推荐格式：** 方法名 + 场景 + 期望全部堆在一起（如 `testAutoGenerate_receipt_有客户有未结清应收_不做自动核销` — 太长，中文条件/期望混在一起难以阅读）。
+
+### 4.4 Javadoc 要求
+
+每个测试类必须写类级 Javadoc，说明：
+
+1. 这个测试覆盖什么场景
+2. 为什么重要（如果对应某个 bug 修复，写 bug 编号）
+3. 已知限制（如"仅测试核销操作，其他 6 个写操作因无乐观锁检查点未覆盖"）
+
+**模板：**
+```java
+/**
+ * XxxService 专用测试 — 覆盖 xxx 场景
+ *
+ * <p>H-17 修复：生产事故中 Redis 计数器被清空，导致重复凭证号。
+ * 本测试验证 generateNextNo() 在 Redis key 缺失时从数据库初始化计数器的逻辑。
+ */
+```
+
+---
+
+## 五、setAuth() 标准模板（所有测试通用）
+
+```java
+private void setAuth() {
+    UserEntity user = new UserEntity();
+    user.setId(1L);
+    user.setUsername("test");
+    user.setPassword("test123");
+    user.setEnterpriseId(1L);
+    LoginUser loginUser = new LoginUser(
+        user, List.of(new SimpleGrantedAuthority("ROLE_USER")));
+    SecurityContextHolder.getContext().setAuthentication(
+        new UsernamePasswordAuthenticationToken(loginUser, null, loginUser.getAuthorities()));
+}
+```
+
+**关键注意点：**
+- `UserEntity` 需要 `@Data`（Lombok），有所有 setter
+- `LoginUser` 继承 `User`（Spring Security），没有默认构造器
+- `UsernamePasswordAuthenticationToken` 必须用 3-arg 构造器（带 authorities），否则 token 标记为未认证
+- 该模式在 `@BeforeEach` 中调用是安全的（幂等）
+
+---
+
+## 六、Controller 测试模板
+
+```java
+@SpringBootTest
+@AutoConfigureMockMvc(addFilters = false)
+class XxxControllerTest {
+
+    @Autowired private MockMvc mvc;
+    @Autowired private ObjectMapper om;
+    @MockBean private XxxService service;
+
+    private void setAuth() { /* 见第五节模板 */ }
+
+    @Test
+    @DisplayName("分页查询_参数正确绑定")
+    void pageQuery_params_applied() throws Exception {
+        when(service.pageQuery(any(), any(), any(), eq(1), eq(20)))
+                .thenReturn(new Page<>());
+        mvc.perform(get("/api/.../page"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(200));
+    }
+
+    @Test
+    @DisplayName("新增_RequestBody正确解析")
+    void create_requestBody_parsedCorrectly() throws Exception {
+        setAuth();
+        XxxEntity created = new XxxEntity(); created.setId(1L);
+        when(service.create(any(), anyLong())).thenReturn(created);
+        mvc.perform(post("/api/.../x")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(om.writeValueAsString(new XxxEntity())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.id").value(1));
+    }
+}
+```
+
+**关键约束：**
+- Controller 必须用 `SecurityUtils.getCurrentUserId()`，不能用 `Authentication auth` 参数
+- `MediaType` 需要显式 import `org.springframework.http.MediaType`
+- DTO 字段名必须与 Controller 期望的一致（不要用 Entity 直接当 request body，除非 Controller 接收 Entity）
+
+---
+
+## 七、TaxApiContractTest 重写经验（旧版陷阱）
+
+**旧版（@WebMvcTest）：** 只加载 Controller，mock 的是 Mapper 层，测试不到 Service 逻辑，路径与实际不符，异常断言与实际不符。
+
+**新版（@SpringBootTest + @MockBean Service）：** 见上一节模板。
+
+**改动要点：**
+- 全局异常处理器统一返回 200 + code=400，不是 4xx HTTP 状态码
+- void 方法用 `doNothing()` / `doThrow()`，不用 `when().thenReturn()`
+- 用 `@WithMockUser` 简化认证上下文，不用手动 `setAuth()`
+
+---
+
+## 八、check-entity-schema.mjs 防线
+
+`pre-commit` hook 执行 `backend/scripts/check-entity-schema.mjs`，检查：
+
+1. **Entity 字段 ↔ DB 列名**：`@TableField(value="xxx")` 或默认驼峰映射是否匹配 PostgreSQL 实际列
+2. **`@TableName` 映射**：Entity 的表名是否与 DB 表名一致
+3. **JdbcTemplate SQL 表名**：扫描所有 Controller/Service 中 `JdbcTemplate` 硬编码 SQL 里的表名，与 DB 比对
+4. **Flyway migration 文件目录**：必须在 `src/main/resources/db/migration/` 下
+
+**防的是：** `SystemClearController` 写错表名、Entity 字段名与 DB 列名不一致导致 insert/update 报错。
+
+---
+
+## 九、SchemaValidator 应用启动防线
+
+`SchemaValidator`（`com.huicai.common.config`）在应用启动时自动检查：
+
+1. **Check 1 — id 列 IDENTITY**：所有 `t_` 表的 `id` 列必须是 `GENERATED ALWAYS AS IDENTITY`（与 `@TableId(type = IdType.AUTO)` 对齐）
+2. **Check 2 — deleted 列存在性**：所有有 `enterprise_id` 列的业务表必须也有 `deleted` 列（与 `BaseEntity` 的 `@TableLogic` 对齐）
+
+**白名单：** `SKIP_DELETED_TABLES` 列表（5 张中间表无独立 Entity 继承 BaseEntity）
+
+**规则：** 如果新增 Entity 继承 `BaseEntity`，但忘记在 migration 中加 `deleted` 列，应用启动时会抛 `IllegalStateException` 并提示具体表名和修复 SQL。
+
+---
+
+## 十、Redis 计数器初始化模式
+
+当 Service 用 Redis INCR 生成分布式自增编号时，**必须**在 Redis 空时从 DB 查最大号回填，防止 Redis 重启/清空后重复编号。
+
+**5 个服务已统一实现（2026-07-29 commit c267864）：**
+- `VoucherNoServiceImpl` — 凭证号
+- `BusinessDocServiceImpl` — 业务单据号
+- `OutputInvoiceStateMachineServiceImpl` — 销项发票单号
+- `InputInvoiceStateMachineServiceImpl` — 进项发票单号
+- `SalesInvoiceImportService` — 销售发票导入单号
+
+**模板：**
+```java
+String key = "no:" + period + ":" + docType;
+Boolean existed = redisTemplate.hasKey(key);
+if (Boolean.FALSE.equals(existed)) {
+    String maxNo = mapper.selectMaxDocNoByPrefix(prefix);
+    if (maxNo != null && maxNo.startsWith(prefix)) {
+        long serial = Long.parseLong(maxNo.substring(prefix.length()));
+        redisTemplate.opsForValue().setIfAbsent(key, String.valueOf(serial));
+    }
+}
+Long serial = redisTemplate.opsForValue().increment(key);
+```
+
+**测试提示：** 新 Service 实现这个模式时，用 Testcontainers 测试 Redis 清空后编号不重复的场景。
+
+---
+
+## 十一、测试节奏（2026-07-28 老丁确认）
+
+- **模块首次上线**：加 1 条 Testcontainers 核心 CRUD 集成测试
+- **有复杂 DB 逻辑**（多表事务/约束/状态流转）：按风险路径加 Testcontainers 测试
+- **纯 CRUD + 已有 L1 Mockito + pre-commit hook**：不重复加，用现有防线
+- **Controller 测试**：批量生成，走 `addFilters=false` + `@MockBean` 模板
+- **不无脑堆 Testcontainers**：本地跑不了（Docker 不可达），CI 跑一次耗时 5-10 分钟，调试验证成本高
+
+**优先级排序：**
+1. `@StatusChangeable` 路径 + `@Async` 审计日志写入
+2. CHECK 约束关联字段更新
+3. `@Transactional(REQUIRES_NEW/MANDATORY)`
+4. `@TableField(exist=false)` 字段参与业务判断
+5. 普通 CRUD Controller
+
+---
+
+## 十二、参考文件
+
+| 文件 | 用途 |
+|------|------|
+| `AbstractMapperTest` | Testcontainers 基类 |
+| `BankStatementAuditIntegrationTest` | 集成测试模板（审计+制证） |
+| `InvoiceConfirmAuditPathIntegrationTest` | 发票确认路径测试 |
+| `EntityDbSchemaIntegrationTest` | DB schema 一致性测试 |
+| `VoucherControllerTest` | Controller 测试模板 |
+| `TaxApiContractTest` | 重写后的 Controller 测试（SpringBootTest 模式） |
+| `check-entity-schema.mjs` | pre-commit schema 检查脚本 |
+| `docs/testing/LESSONS-LEARNED.md` | 经验教训文档 |
+| `docs/testing/DEVELOPMENT-PARADIGM.md` | 开发范式（测试嵌入每阶段） |
+| `docs/development/MOCK_BLIND_SPOTS.md` | Mock 盲区清单（哪些服务被 mock 但没有真实测试） |
