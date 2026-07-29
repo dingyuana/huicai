@@ -27,6 +27,8 @@ import com.huicai.base.business.mapper.ClassificationRuleMapper;
 import com.huicai.sme.cash.mapper.*;
 import com.huicai.base.voucher.service.VoucherNoService;
 import com.huicai.base.voucher.service.VoucherTemplateService;
+import com.huicai.base.business.util.TemplateMatcher;
+import com.huicai.base.business.constant.StatementStatus;
 import com.huicai.base.system.entity.Subject;
 import com.huicai.base.system.mapper.SubjectMapper;
 import org.junit.jupiter.api.BeforeEach;
@@ -47,6 +49,8 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.context.SecurityContextHolder;
 import static org.mockito.Mockito.*;
 
 /**
@@ -76,6 +80,7 @@ class AutoGenerationServiceTest {
     @Mock private ClassificationRuleMapper classificationRuleMapper;
     @Mock private EmployeeService employeeService;
     @Mock private ExpenseReimbursementService expenseReimbursementService;
+    @Mock private TemplateMatcher templateMatcher;
 
     @InjectMocks
     private AutoGenerationService service;
@@ -102,9 +107,25 @@ class AutoGenerationServiceTest {
 
     @BeforeEach
     void setUp() {
+        setAuth();
         // 通用 1002 银行存款
         lenient().when(subjectMapper.selectList(argThat(w -> w != null && w.getSqlSet() != null && w.getSqlSet().toString().contains("1002"))))
                 .thenReturn(Collections.singletonList(mockSubject(10L, "1002")));
+    }
+
+    // ─── 辅助方法 ───
+
+    private void setAuth() {
+        com.huicai.base.system.entity.UserEntity user = new com.huicai.base.system.entity.UserEntity();
+        user.setId(1L);
+        user.setUsername("test");
+        user.setPassword("test123");
+        user.setEnterpriseId(1L);
+        com.huicai.config.security.LoginUser loginUser = new com.huicai.config.security.LoginUser(
+                user, java.util.List.of(new org.springframework.security.core.authority.SimpleGrantedAuthority("ROLE_USER")));
+        SecurityContextHolder.setContext(
+            new org.springframework.security.core.context.SecurityContextImpl(
+                new UsernamePasswordAuthenticationToken(loginUser, null, loginUser.getAuthorities())));
     }
 
     // ─── classifyType 静态路由测试 ───
@@ -142,13 +163,13 @@ class AutoGenerationServiceTest {
     void testAutoGenerate_salarySocial_走B类不走A类() {
         BankStatementEntity stmt = newStmt("salary_social", "out");
         when(statementMapper.selectById(1L)).thenReturn(stmt);
+        // 确保 subjectMapper 有足够返回，避免 NPE（salaryAcct 查询）
+        when(subjectMapper.selectList(any()))
+                .thenReturn(Collections.singletonList(mockSubject(10L, "1002")))
+                .thenReturn(Collections.singletonList(new Subject() {{ setId(30L); setCode("2211"); setIsLeaf(true); }}));
 
         // 不抛异常 + docMapper 被调用 (B 类特征) 即为正确
-        try {
-            service.autoGenerate(1L, 1L);
-        } catch (Exception e) {
-            // mock 限制下可能抛, 但关键是 verify docMapper 至少被 insert 一次
-        }
+        assertDoesNotThrow(() -> service.autoGenerate(1L, 1L), "salary_social 应走 B 类分支且不应抛异常");
         // B 类必 insert businessDoc
         verify(docMapper, atLeastOnce()).insert(any(BusinessDocEntity.class));
     }
@@ -159,12 +180,17 @@ class AutoGenerationServiceTest {
     void testMapToDocType_internalTransfer_是TRANSFER() {
         BankStatementEntity stmt = newStmt("internal_transfer", "out");
         when(statementMapper.selectById(1L)).thenReturn(stmt);
+        when(subjectMapper.selectList(any())).thenReturn(
+                java.util.Collections.singletonList(new com.huicai.base.system.entity.Subject() {{
+                    setId(10L); setCode("1002"); setIsLeaf(true);
+                }}))
+                .thenReturn(java.util.Collections.singletonList(new com.huicai.base.system.entity.Subject() {{
+                    setId(30L); setCode("2211"); setIsLeaf(true);
+                }}));
 
         try {
             service.autoGenerate(1L, 1L);
-        } catch (Exception e) {
-            // mock 限制下可能抛, 但关键是 docMapper.insert 用了 docType="TRANSFER"
-        }
+        } catch (Exception e) { fail("unexpected: " + e.getClass().getSimpleName() + ": " + e.getMessage(), e); }
         // 验证 docMapper.insert 被调, 插入的 doc.docType == "TRANSFER"
         org.mockito.ArgumentCaptor<BusinessDocEntity> captor =
                 org.mockito.ArgumentCaptor.forClass(BusinessDocEntity.class);
@@ -180,12 +206,12 @@ class AutoGenerationServiceTest {
     @Test
     void testAutoGenerate_已生过凭证_不重复() {
         BankStatementEntity stmt = newStmt("bank_interest_fee", "out");
-        stmt.setGeneratedVoucherId(999L);  // 已生过
+        stmt.setReviewStatus(StatementStatus.APPROVED);  // 已过账，禁止重复制证
         when(statementMapper.selectById(1L)).thenReturn(stmt);
 
         boolean result = service.autoGenerate(1L, 1L);
 
-        assertFalse(result, "已生过凭证的流水应直接返回 false");
+        assertFalse(result, "已过账的流水应直接返回 false");
         // 不应调任何 mapper insert
         verify(voucherMapper, never()).insert(any(VoucherEntity.class));
         verify(docMapper, never()).insert(any(BusinessDocEntity.class));
@@ -241,7 +267,7 @@ class AutoGenerationServiceTest {
         // 客户有未结清应收
         when(reconciliationService.hasOpenInvoices(eq("INVOICE_OUT"), eq(5L))).thenReturn(true);
         // 模板匹配返回 null → 走硬编码路径
-        when(subjectMapper.selectList(argThat(q -> q != null)))
+        when(subjectMapper.selectList(any()))
                 .thenReturn(java.util.Collections.singletonList(new Subject() {{
                     setId(10L); setCode("1002"); setIsLeaf(true);
                 }}))
@@ -252,9 +278,7 @@ class AutoGenerationServiceTest {
 
         try {
             service.autoGenerate(1L, 1L);
-        } catch (Exception e) {
-            // mock 限制下可能抛
-        }
+        } catch (Exception e) { fail("unexpected: " + e.getClass().getSimpleName() + ": " + e.getMessage(), e); }
         // P30 铁律：不做自动核销
         verify(reconciliationService, never()).autoReconcileFifo(anyLong(), anyString(), any(), anyString(), anyLong(), anyString(), anyString());
     }
@@ -270,7 +294,7 @@ class AutoGenerationServiceTest {
         }}));
         // 供应商有未结清应付
         when(reconciliationService.hasOpenInvoices(eq("INVOICE_IN"), eq(8L))).thenReturn(true);
-        when(subjectMapper.selectList(argThat(q -> q != null)))
+        when(subjectMapper.selectList(any()))
                 .thenReturn(java.util.Collections.singletonList(new Subject() {{
                     setId(10L); setCode("1002"); setIsLeaf(true);
                 }}))
@@ -281,8 +305,7 @@ class AutoGenerationServiceTest {
 
         try {
             service.autoGenerate(1L, 1L);
-        } catch (Exception e) {
-        }
+        } catch (Exception e) { fail("unexpected: " + e.getClass().getSimpleName() + ": " + e.getMessage(), e); }
         // P30 铁律：不做自动核销
         verify(reconciliationService, never()).autoReconcileFifo(anyLong(), anyString(), any(), anyString(), anyLong(), anyString(), anyString());
     }
@@ -297,7 +320,7 @@ class AutoGenerationServiceTest {
         }}));
         // 客户无未结清应收
         when(reconciliationService.hasOpenInvoices(eq("INVOICE_OUT"), eq(50L))).thenReturn(false);
-        when(subjectMapper.selectList(argThat(q -> q != null)))
+        when(subjectMapper.selectList(any()))
                 .thenReturn(java.util.Collections.singletonList(new Subject() {{
                     setId(10L); setCode("1002"); setIsLeaf(true);
                 }}))
@@ -308,8 +331,7 @@ class AutoGenerationServiceTest {
 
         try {
             service.autoGenerate(1L, 1L);
-        } catch (Exception e) {
-        }
+        } catch (Exception e) { fail("unexpected: " + e.getClass().getSimpleName() + ": " + e.getMessage(), e); }
         // P30 铁律：不做自动核销
         verify(reconciliationService, never()).autoReconcileFifo(anyLong(), anyString(), any(), anyString(), anyLong(), anyString(), anyString());
     }
@@ -321,7 +343,7 @@ class AutoGenerationServiceTest {
         when(statementMapper.selectById(1L)).thenReturn(stmt);
         // 客户匹配返回空
         when(customerMapper.selectList(any())).thenReturn(java.util.Collections.emptyList());
-        when(subjectMapper.selectList(argThat(q -> q != null)))
+        when(subjectMapper.selectList(any()))
                 .thenReturn(java.util.Collections.singletonList(new Subject() {{
                     setId(10L); setCode("1002"); setIsLeaf(true);
                 }}))
@@ -332,9 +354,7 @@ class AutoGenerationServiceTest {
 
         try {
             service.autoGenerate(1L, 1L);
-        } catch (Exception e) {
-            // mock 限制下可能抛
-        }
+        } catch (Exception e) { fail("unexpected: " + e.getClass().getSimpleName() + ": " + e.getMessage(), e); }
     }
 
     // ==================== P10-4 已移除: 银行流水不做自动核销 ====================
@@ -349,7 +369,7 @@ class AutoGenerationServiceTest {
         }}));
         // 客户有未结清应收
         when(reconciliationService.hasOpenInvoices(eq("INVOICE_OUT"), eq(5L))).thenReturn(true);
-        when(subjectMapper.selectList(argThat(q -> q != null)))
+        when(subjectMapper.selectList(any()))
                 .thenReturn(java.util.Collections.singletonList(new Subject() {{
                     setId(10L); setCode("1002"); setIsLeaf(true);
                 }}))
@@ -360,9 +380,7 @@ class AutoGenerationServiceTest {
 
         try {
             service.autoGenerate(1L, 1L);
-        } catch (Exception e) {
-            // mock 限制下可能抛
-        }
+        } catch (Exception e) { fail("unexpected: " + e.getClass().getSimpleName() + ": " + e.getMessage(), e); }
         // P30 铁律：不做自动核销
         verify(reconciliationService, never()).autoReconcileFifo(anyLong(), anyString(), any(), anyString(), anyLong(), anyString(), anyString());
     }
@@ -377,7 +395,7 @@ class AutoGenerationServiceTest {
         }}));
         // 供应商有未结清应付
         when(reconciliationService.hasOpenInvoices(eq("INVOICE_IN"), eq(8L))).thenReturn(true);
-        when(subjectMapper.selectList(argThat(q -> q != null)))
+        when(subjectMapper.selectList(any()))
                 .thenReturn(java.util.Collections.singletonList(new Subject() {{
                     setId(10L); setCode("1002"); setIsLeaf(true);
                 }}))
@@ -388,8 +406,7 @@ class AutoGenerationServiceTest {
 
         try {
             service.autoGenerate(1L, 1L);
-        } catch (Exception e) {
-        }
+        } catch (Exception e) { fail("unexpected: " + e.getClass().getSimpleName() + ": " + e.getMessage(), e); }
         // P30 铁律：不做自动核销
         verify(reconciliationService, never()).autoReconcileFifo(anyLong(), anyString(), any(), anyString(), anyLong(), anyString(), anyString());
     }
@@ -400,7 +417,7 @@ class AutoGenerationServiceTest {
         stmt.setCounterAccount("未知");
         when(statementMapper.selectById(1L)).thenReturn(stmt);
         when(customerMapper.selectList(any())).thenReturn(java.util.Collections.emptyList());
-        when(subjectMapper.selectList(argThat(q -> q != null)))
+        when(subjectMapper.selectList(any()))
                 .thenReturn(java.util.Collections.singletonList(new Subject() {{
                     setId(10L); setCode("1002"); setIsLeaf(true);
                 }}))
@@ -411,8 +428,7 @@ class AutoGenerationServiceTest {
 
         try {
             service.autoGenerate(1L, 1L);
-        } catch (Exception e) {
-        }
+        } catch (Exception e) { fail("unexpected: " + e.getClass().getSimpleName() + ": " + e.getMessage(), e); }
         // 无客户匹配 → 不应调用 execute
         verify(reconciliationService, never()).execute(any(ReconciliationService.ExecuteRequest.class));
     }
@@ -430,7 +446,7 @@ class AutoGenerationServiceTest {
         }}));
         // hasOpenInvoices 返回 false → 无未结清应付
         when(reconciliationService.hasOpenInvoices(eq("INVOICE_IN"), eq(20L))).thenReturn(false);
-        when(subjectMapper.selectList(argThat(q -> q != null)))
+        when(subjectMapper.selectList(any()))
                 .thenReturn(java.util.Collections.singletonList(new Subject() {{
                     setId(10L); setCode("1002"); setIsLeaf(true);
                 }}))
@@ -441,8 +457,7 @@ class AutoGenerationServiceTest {
 
         try {
             service.autoGenerate(1L, 1L);
-        } catch (Exception e) {
-        }
+        } catch (Exception e) { fail("unexpected: " + e.getClass().getSimpleName() + ": " + e.getMessage(), e); }
         // 走预付款路径: prepaymentMapper.insert 被调用
         verify(prepaymentMapper, atLeast(0)).insert(any(PrepaymentEntity.class));
     }
@@ -457,7 +472,7 @@ class AutoGenerationServiceTest {
             setName("供应商D");
         }}));
         when(reconciliationService.hasOpenInvoices(eq("INVOICE_IN"), eq(21L))).thenReturn(true);
-        when(subjectMapper.selectList(argThat(q -> q != null)))
+        when(subjectMapper.selectList(any()))
                 .thenReturn(java.util.Collections.singletonList(new Subject() {{
                     setId(10L); setCode("1002"); setIsLeaf(true);
                 }}))
@@ -468,8 +483,7 @@ class AutoGenerationServiceTest {
 
         try {
             service.autoGenerate(1L, 1L);
-        } catch (Exception e) {
-        }
+        } catch (Exception e) { fail("unexpected: " + e.getClass().getSimpleName() + ": " + e.getMessage(), e); }
         // P30 铁律：不做自动核销
         verify(reconciliationService, never()).autoReconcileFifo(anyLong(), anyString(), any(), anyString(), anyLong(), anyString(), anyString());
     }
@@ -504,7 +518,7 @@ class AutoGenerationServiceTest {
         when(statementMapper.selectById(1L)).thenReturn(stmt);
         // 员工匹配未命中
         when(employeeService.findByName("某公司")).thenReturn(null);
-        when(subjectMapper.selectList(argThat(q -> q != null)))
+        when(subjectMapper.selectList(any()))
                 .thenReturn(java.util.Collections.singletonList(new Subject() {{
                     setId(10L); setCode("1002"); setIsLeaf(true);
                 }}))
@@ -515,8 +529,7 @@ class AutoGenerationServiceTest {
 
         try {
             service.autoGenerate(1L, 1L);
-        } catch (Exception e) {
-        }
+        } catch (Exception e) { fail("unexpected: " + e.getClass().getSimpleName() + ": " + e.getMessage(), e); }
         // expenseReimbursementService.autoCreateForBankStmt 不被调用
         verify(expenseReimbursementService, never()).autoCreateForBankStmt(anyLong(), anyLong(), any(), anyString());
     }
