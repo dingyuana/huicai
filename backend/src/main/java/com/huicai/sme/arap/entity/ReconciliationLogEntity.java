@@ -23,9 +23,11 @@ public class ReconciliationLogEntity extends BaseEntity {
     private Long sourceDocId;
 
     /** 目标单据类型: INVOICE_OUT / INVOICE_IN */
+    @TableField
     private String targetDocType;
 
     /** 目标发票 ID */
+    @TableField
     private Long targetDocId;
 
     /** 核销金额 */
