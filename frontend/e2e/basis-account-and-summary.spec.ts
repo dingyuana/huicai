@@ -61,6 +61,12 @@ test.describe('科目摘要 - 基础数据', () => {
         body: JSON.stringify({ code: 200, msg: 'ok', data: mockTree })
       })
     })
+    // Mock 摘要列表（非活动 Tab 也会加载）
+    await page.route(url => url.toString().includes('/v1/summary-lib'), async route => {
+      await route.fulfill({ status: 200, contentType: 'application/json',
+        body: JSON.stringify({ code: 200, msg: 'ok', data: { records: [], total: 0, current: 1, size: 20 } })
+      })
+    })
 
     await page.goto(`${BASE}/basis/account-and-summary`, { waitUntil: 'networkidle', timeout: 15000 })
     await page.waitForTimeout(500)

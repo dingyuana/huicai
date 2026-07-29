@@ -13,6 +13,15 @@ test.describe('凭证管理 - 全流程', () => {
     })
     // Mock auth API 和所有需要认证的 API
     await page.route(url => url.toString().includes('/api/v1/auth/userinfo'), async route => {
+      await route.fulfill({ status: 200, contentType: 'application/json',
+        body: JSON.stringify({ code: 200, msg: 'ok', data: {
+          id: 1, username: 'admin', realName: '管理员', nickname: 'admin',
+          email: '', phone: '', avatar: '', deptId: 1, roles: [1],
+          permissions: ['admin', 'voucher:list', 'voucher:update', 'voucher:audit'],
+          userType: 'SUPER_ADMIN',
+        }})
+      })
+    })
   }
 
   test('凭证列表页面加载显示标题和操作按钮', async ({ page }) => {
@@ -96,6 +105,12 @@ test.describe('凭证管理 - 全流程', () => {
           { id: '1001', code: '1001', name: '库存现金', parentId: null, level: 1, direction: 'debit', isLeaf: true, children: [] },
           { id: '1002', code: '1002', name: '银行存款', parentId: null, level: 1, direction: 'debit', isLeaf: true, children: [] },
         ]})
+      })
+    })
+    // Mock 模板查询（voucherTypeId 变化时自动触发）
+    await page.route(url => url.toString().includes('/base/voucher/v1/vouchers/template-by-type'), async route => {
+      await route.fulfill({ status: 200, contentType: 'application/json',
+        body: JSON.stringify({ code: 200, msg: 'ok', data: null })
       })
     })
 
