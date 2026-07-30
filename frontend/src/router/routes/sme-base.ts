@@ -117,6 +117,12 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/finance/voucher-setup/VoucherSetupView.vue'),
         meta: { title: '凭证设置', permission: 'voucher:type:list', keepAlive: true },
       },
+      {
+        path: 'finance/voucher-template-ref',
+        name: 'VoucherTemplateRef',
+        component: () => import('@/views/finance/voucher-template/VoucherTemplateRefView.vue'),
+        meta: { title: '模板参考库', keepAlive: true },
+      },
 
       // ─── 财务核心 ───
       {

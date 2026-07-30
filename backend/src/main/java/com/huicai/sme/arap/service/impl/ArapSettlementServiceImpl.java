@@ -304,8 +304,11 @@ public class ArapSettlementServiceImpl implements ArapSettlementService {
                     + "), 请先在凭证模板中配置。可在 V40 迁移中添加 settlement_receivable/settlement_payment 模板");
         }
 
+        BigDecimal amount = entity.getTotalAmount();
+        if (amount == null) {
+            throw new BusinessException("核销单金额为空，无法生成凭证: settlementId=" + id);
+        }
         for (VoucherTemplateLineEntity line : lines) {
-            BigDecimal amount = entity.getTotalAmount();
             BigDecimal dr = "debit".equals(line.getDirection()) ? amount : BigDecimal.ZERO;
             BigDecimal cr = "credit".equals(line.getDirection()) ? amount : BigDecimal.ZERO;
             if (dr.compareTo(BigDecimal.ZERO) == 0 && cr.compareTo(BigDecimal.ZERO) == 0) continue;
@@ -434,7 +437,7 @@ public class ArapSettlementServiceImpl implements ArapSettlementService {
             ReconciliationLogEntity logEntity = new ReconciliationLogEntity();
             logEntity.setSourceDocType("SETTLEMENT");
             logEntity.setSourceDocId(settlement.getId());
-            logEntity.setTargetDocType(null);
+            logEntity.setTargetDocType(voucherNo != null ? "VOUCHER" : "");
             logEntity.setTargetDocId(null);
             logEntity.setAllocatedAmount(settlement.getTotalAmount());
             logEntity.setMatchScore(BigDecimal.ONE);

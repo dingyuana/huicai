@@ -728,6 +728,46 @@ if (dbAvailable) {
   }
 }
 
+// ── 检查继承 BaseEntity 但表缺少 created_at/updated_at 列 ──
+// 注意：如果 Entity 明确覆盖了 createdAt/updatedAt 字段并加了
+// @TableField(exist = false)，则跳过检查。
+
+function hasFieldWithExistFalse(src, fieldDecl) {
+  const fieldIdx = src.indexOf(fieldDecl);
+  if (fieldIdx === -1) return false;
+  const beforeText = src.slice(Math.max(0, fieldIdx - 300), fieldIdx);
+  return /@TableField\s*\([^)]*exist\s*=\s*false/.test(beforeText);
+}
+
+const missingCreatedAtErrors = [];
+const missingUpdatedAtErrors = [];
+if (dbAvailable) {
+  const baseEntities = findEntitiesWithDeletedCheck(ENTITY_DIR);
+  for (const { filePath, tableName } of baseEntities) {
+    const src = readFileSync(filePath, 'utf-8');
+    const columns = getTableColumns(tableName);
+    if (columns === null) continue;
+
+    // 检查 created_at
+    const createdAtField = src.match(/private\s+LocalDateTime\s+createdAt\s*;/);
+    if (!createdAtField || !hasFieldWithExistFalse(src, createdAtField[0])) {
+      if (!columns.includes('created_at')) {
+        const relPath = relative(join(import.meta.dirname, '..'), filePath);
+        missingCreatedAtErrors.push(`  ${relPath}: 继承 BaseEntity（含 @TableField(fill = INSERT)），但 ${tableName} 表缺少 created_at 列`);
+      }
+    }
+
+    // 检查 updated_at
+    const updatedAtField = src.match(/private\s+LocalDateTime\s+updatedAt\s*;/);
+    if (!updatedAtField || !hasFieldWithExistFalse(src, updatedAtField[0])) {
+      if (!columns.includes('updated_at')) {
+        const relPath = relative(join(import.meta.dirname, '..'), filePath);
+        missingUpdatedAtErrors.push(`  ${relPath}: 继承 BaseEntity（含 @TableField(fill = INSERT_UPDATE)），但 ${tableName} 表缺少 updated_at 列`);
+      }
+    }
+  }
+}
+
 // 输出 typeHandler 警告（作为 warning，不阻断提交，但提示开发者关注）
 if (typeHandlerErrors.length > 0) {
   console.warn(`\n⚠️  疑似 JSONB 列缺少 typeHandler（${typeHandlerErrors.length} 项，请人工确认）：\n`);
@@ -844,6 +884,34 @@ if (missingDeletedErrors.length > 0) {
   console.error('修复方法：');
   console.error('  1. 创建 Flyway migration: ALTER TABLE t_xxx ADD COLUMN IF NOT EXISTS deleted INT NOT NULL DEFAULT 0;');
   for (const err of missingDeletedErrors) {
+    realErrors.push(err);
+  }
+}
+
+// 输出继承 BaseEntity 但表缺少 updated_at 列的错误
+if (missingUpdatedAtErrors.length > 0) {
+  console.error('❌ 继承 BaseEntity 的表缺少 updated_at 列（需要立即修复）：\n');
+  for (const err of missingUpdatedAtErrors) {
+    console.error(err);
+  }
+  console.error(`\n共 ${missingUpdatedAtErrors.length} 张表缺少 updated_at 列。\n`);
+  console.error('修复方法：');
+  console.error('  1. 创建 Flyway migration: ALTER TABLE t_xxx ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP(6);');
+  for (const err of missingUpdatedAtErrors) {
+    realErrors.push(err);
+  }
+}
+
+// 输出继承 BaseEntity 但表缺少 created_at 列的错误
+if (missingCreatedAtErrors.length > 0) {
+  console.error('❌ 继承 BaseEntity 的表缺少 created_at 列（需要立即修复）：\n');
+  for (const err of missingCreatedAtErrors) {
+    console.error(err);
+  }
+  console.error(`\n共 ${missingCreatedAtErrors.length} 张表缺少 created_at 列。\n`);
+  console.error('修复方法：');
+  console.error('  1. 创建 Flyway migration: ALTER TABLE t_xxx ADD COLUMN IF NOT EXISTS created_at TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP;');
+  for (const err of missingCreatedAtErrors) {
     realErrors.push(err);
   }
 }

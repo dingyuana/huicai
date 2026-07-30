@@ -63,6 +63,7 @@
             <el-table-column label="操作" width="200" fixed="right">
               <template #default="{row}">
                 <el-button v-if="row.status==='DRAFT'" text size="small" type="success" @click="onConfirmSettlement(row as ArapSettlement)">确认</el-button>
+                <el-button v-if="row.status==='CONFIRMED' && !row.voucherId" text size="small" type="primary" @click="onGenerateVoucher(row as ArapSettlement)">生成凭证</el-button>
                 <el-button text size="small" type="primary" @click="onViewSettlement(row as ArapSettlement)">详情</el-button>
                 <el-popconfirm v-if="row.status==='DRAFT'" title="确认删除?" @confirm="onDeleteSettlement(row as ArapSettlement)">
                   <template #reference><el-button text type="danger" size="small">删除</el-button></template>
@@ -296,7 +297,7 @@ import { ArrowUp, ArrowDown } from '@element-plus/icons-vue'
 import { useRouter } from 'vue-router'
 import {
   pageSettlements, getSettlementDetail, getSettlementEntries, createSettlement,
-  confirmSettlement, deleteSettlement,
+  confirmSettlement, deleteSettlement, generateSettlementVoucher,
   getReconRecords, pageReconLogs, reverseRecon,
   type ArapSettlement, type ReconciliationLog,
 } from '@/api/modules/arapSettlement'
@@ -416,6 +417,14 @@ async function onDeleteSettlement(row: ArapSettlement) {
     ElMessage.success('删除成功')
     await fetchSettlements()
   } catch (e: any) { ElMessage.error(e?.message || '删除失败') }
+}
+
+async function onGenerateVoucher(row: ArapSettlement) {
+  try {
+    await generateSettlementVoucher(row.id)
+    ElMessage.success('凭证生成成功')
+    await fetchSettlements()
+  } catch (e: any) { ElMessage.error(e?.message || '生成凭证失败') }
 }
 
 // Detail

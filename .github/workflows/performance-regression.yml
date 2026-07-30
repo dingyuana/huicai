@@ -1,16 +1,26 @@
 name: Performance Regression Check
 
 on:
-  pull_request:
-    branches: [ develop ]
-  push:
-    branches: [ develop ]
+  schedule:
+    - cron: "0 22 * * 6"  # 每周六晚上（北京时间周日凌晨6点）
+  workflow_dispatch:
+    inputs:
+      scenario:
+        description: "测试场景"
+        required: false
+        default: "all"
+        type: choice
+        options:
+          - all
+          - voucher
+          - settlement
+          - tax
 
 jobs:
-  perf-regression:
-    name: 性能回归对比
+  perf-baseline:
+    name: 性能基线采集 (k6)
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
 
@@ -20,38 +30,68 @@ jobs:
           echo "deb https://k6.io/release/deb $(lsb_release -sc) main" | sudo tee /etc/apt/sources.list.d/k6.list
           sudo apt-get update && sudo apt-get install -y k6
 
-      - name: Run Performance Tests
-        working-directory: /data/disk/huicai/scripts/performance
+      - name: Run k6 performance tests against staging
+        working-directory: backend/scripts
         run: |
-          # 模拟测试结果 (实际应连接 Staging 执行 k6)
-          echo '{' > metrics.json
-          echo '  "batch_import_p95_ms": 850,' >> metrics.json
-          echo '  "subject_balance_p95_ms": 420,' >> metrics.json
-          echo '  "balance_sheet_p95_ms": 1200' >> metrics.json
-          echo '}' >> metrics.json
+          set -euo pipefail
 
-      - name: Compare with Baseline
-        id: perf-check
-        run: |
-          python3 scripts/performance/check_regression.py
-          if [ $? -eq 0 ]; then
-            echo "PERF_RESULT=pass" >> $GITHUB_ENV
-            echo "PERF_MSG=Performance regression check passed" >> $GITHUB_ENV
-          else
-            echo "PERF_RESULT=fail" >> $GITHUB_ENV
-            echo "PERF_MSG=Performance regression detected - please review changes" >> $GITHUB_ENV
+          if [ -z "${{ secrets.STAGING_URL }}" ]; then
+            echo "::error::STAGING_URL secret not configured. Set it in repo Settings > Secrets and variables > Actions"
             exit 1
           fi
 
-      - name: Comment on PR
-        if: success() || failure()
-        uses: actions/github-script@v6
+          # Determine scenario
+          SCENARIO="${{ github.event.inputs.scenario || 'all' }}"
+          TEST_FILE="perf-${SCENARIO}.js"
+
+          if [ ! -f "$TEST_FILE" ]; then
+            echo "Test file $TEST_FILE not found, using default voucher scenario"
+            TEST_FILE="perf-voucher.js"
+          fi
+
+          if [ ! -f "$TEST_FILE" ]; then
+            echo "::error::No k6 test file found in backend/scripts/"
+            exit 1
+          fi
+
+          echo "Running k6 scenario: $SCENARIO"
+          k6 run --summary-export metrics.json "$TEST_FILE"
+        env:
+          BASE_URL: ${{ secrets.STAGING_URL }}
+          API_TOKEN: ${{ secrets.STAGING_API_TOKEN }}
+
+      - name: Validate performance thresholds
+        working-directory: backend/scripts
+        run: |
+          set -euo pipefail
+          if [ ! -f metrics.json ]; then
+            echo "::error::metrics.json not generated"
+            exit 1
+          fi
+
+          # Check thresholds: any endpoint p95 > 3000ms is a failure
+          THRESHOLD_MS=3000
+          FAILED=0
+          while IFS=: read -r key value; do
+            if echo "$key" | grep -q "p95"; then
+              int_val=$(echo "$value" | grep -oE '[0-9]+' | head -1)
+              if [ -n "$int_val" ] && [ "$int_val" -gt "$THRESHOLD_MS" ]; then
+                echo "::warning file=metrics.json::$key = ${int_val}ms exceeds threshold ${THRESHOLD_MS}ms"
+                FAILED=1
+              fi
+            fi
+          done < <(cat metrics.json | python3 -c "import sys,json; [print(f'{k}: {v}') for k,v in json.load(sys.stdin).get('metrics',{}).items() if 'p95' in k.lower()] 2>/dev/null || cat metrics.json")
+
+          if [ "$FAILED" -eq 1 ]; then
+            echo "::error::One or more endpoints exceed performance threshold"
+            exit 1
+          fi
+          echo "All performance checks passed"
+
+      - name: Upload k6 metrics
+        if: always()
+        uses: actions/upload-artifact@v4
         with:
-          script: |
-            const status = process.env.PERF_RESULT === 'pass' ? '✅' : '❌';
-            await github.rest.pulls.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.payload.pull_request.number,
-              body: '📊 **性能回归检查**: ' + status + ' ' + process.env.PERF_MSG
-            })
+          name: k6-metrics
+          path: backend/scripts/metrics.json
+          retention-days: 90

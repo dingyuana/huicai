@@ -131,8 +131,8 @@ test.describe('费用报销→凭证全链路 (真实数据)', () => {
     const result = await approveExpense(request, token, id)
 
     expect(['APPROVED', 'VOUCHERED']).toContain(result.status)
-    // 字段可能是 total_amount 或 totalAmount
-    const amount = Number(result.totalAmount ?? result.total_amount ?? 0)
+    // VO 返回字段为 amount（对应 DB 列 total_amount，通过 MyBatis-Plus 映射）
+    const amount = Number(result.amount ?? 0)
     expect(amount).toBe(5000)
   })
 

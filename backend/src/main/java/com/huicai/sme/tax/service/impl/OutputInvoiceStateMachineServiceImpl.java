@@ -344,7 +344,10 @@ this.applicationContext = applicationContext;
             String maxNo = businessDocMapper.selectMaxDocNoByPrefix(docNoPrefix);
             if (maxNo != null && maxNo.length() > docNoPrefix.length()) {
                 String serialStr = maxNo.substring(docNoPrefix.length());
-                redisTemplate.opsForValue().setIfAbsent(redisKey, serialStr);
+                // 去除前导零，INCR 要求纯数字
+                String numeric = serialStr.replaceFirst("^0+", "");
+                if (numeric.isEmpty()) numeric = "0";
+                redisTemplate.opsForValue().setIfAbsent(redisKey, numeric);
             }
         }
     }

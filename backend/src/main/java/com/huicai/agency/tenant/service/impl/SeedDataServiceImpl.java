@@ -22,7 +22,7 @@ public class SeedDataServiceImpl implements SeedDataService {
 
     private static final String[] SEED_TABLES = {
         "t_subject", "t_voucher_type", "t_summary_lib", "t_period",
-        "t_bank_account", "t_customer"
+        "t_bank_account", "t_customer", "t_voucher_template"
     };
 
     @Override
@@ -43,6 +43,9 @@ public class SeedDataServiceImpl implements SeedDataService {
             totalRows += cloneTable(table, enterpriseId);
         }
 
+        // 克隆凭证模板分录行：需要将 template_id 从旧 ID 映射到新 ID
+        totalRows += cloneTemplateLines(enterpriseId);
+
         if (totalRows == 0) {
             log.warn("SeedData: no template data cloned for enterprise {} — template may be empty", enterpriseId);
         }
@@ -53,6 +56,42 @@ public class SeedDataServiceImpl implements SeedDataService {
 
         log.info("SeedData: cloned {} rows across {} tables for enterprise {}", totalRows, SEED_TABLES.length, enterpriseId);
         return true;
+    }
+
+    /**
+     * 克隆凭证模板分录行：通过 template_code 关联新旧模板 ID，实现 template_id 重映射。
+     * t_voucher_template_line 的 template_id 指向 t_voucher_template.id，
+     * 而模板克隆后 id 会重新生成，因此需要按 template_code 匹配。
+     */
+    private int cloneTemplateLines(Long enterpriseId) {
+        try {
+            String sql = "INSERT INTO t_voucher_template_line (template_id, subject_id, dr_amount_template, " +
+                "cr_amount_template, summary_template, direction, assist_type, assist_required, line_order, " +
+                "enterprise_id, created_at, updated_at, deleted) " +
+                "SELECT " +
+                "  (SELECT id FROM t_voucher_template WHERE template_code = ref.template_code AND enterprise_id = ?), " +
+                "  COALESCE(" +
+                "    (SELECT id FROM t_subject WHERE code = sc.code AND enterprise_id = ?), " +
+                "    ref.subject_id" +
+                "  ), " +
+                "  ref.dr_amount_template, ref.cr_amount_template, ref.summary_template, " +
+                "  ref.direction, ref.assist_type, ref.assist_required, ref.line_order, " +
+                "  ?, NOW(), NOW(), 0 " +
+                "FROM t_voucher_template_line ref " +
+                "JOIN t_voucher_template tpl ON tpl.id = ref.template_id " +
+                "LEFT JOIN t_subject sc ON sc.id = ref.subject_id " +
+                "WHERE tpl.enterprise_id = 0 AND ref.deleted = 0 " +
+                "AND tpl.deleted = 0 " +
+                "AND EXISTS (SELECT 1 FROM t_voucher_template WHERE template_code = tpl.template_code AND enterprise_id = ?) " +
+                "ON CONFLICT DO NOTHING";
+
+            int rows = jdbcTemplate.update(sql, enterpriseId, enterpriseId, enterpriseId, enterpriseId);
+            log.info("SeedData: cloned {} template lines for enterprise {}", rows, enterpriseId);
+            return rows;
+        } catch (Exception e) {
+            log.error("SeedData: clone template lines failed for enterprise {}: {}", enterpriseId, e.getMessage(), e);
+            return 0;
+        }
     }
 
     /**

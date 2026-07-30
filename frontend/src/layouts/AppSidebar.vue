@@ -37,6 +37,7 @@
           <el-menu-item index="/system/clear-data">数据维护</el-menu-item>
         </el-sub-menu>
         <el-menu-item index="/finance/voucher-setup?tab=type">凭证类型</el-menu-item>
+        <el-menu-item index="/finance/voucher-template-ref">模板参考库</el-menu-item>
         <el-menu-item index="/finance/bank-account">银行账户</el-menu-item>
       </el-sub-menu>
 

@@ -30,6 +30,13 @@ jobs:
         env:
           MAVEN_OPTS: "-XX:+UseCompressedOops -X2g"
 
+      - name: JaCoCo Coverage Gate
+        run: |
+          cd backend
+          mvn jacoco:check -DexcludedGroups=""
+        env:
+          MAVEN_OPTS: "-XX:+UseCompressedOops -X2g"
+
       - name: Upload Integration Test Results
         uses: actions/upload-artifact@v4
         with:

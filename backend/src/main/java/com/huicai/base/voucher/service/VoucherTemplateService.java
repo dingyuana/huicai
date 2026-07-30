@@ -44,4 +44,12 @@ public interface VoucherTemplateService {
 
     /** 删除模板 (逻辑删除) */
     void delete(Long id);
+
+    // ─── 模板参考库 ───
+
+    /** 从参考库 (enterprise_id=0) 导入所有模板到当前企业，返回导入的模板数量 */
+    int importFromReference(Long enterpriseId);
+
+    /** 查询参考库模板列表 (enterprise_id=0)，绕过企业数据权限拦截器 */
+    List<VoucherTemplateEntity> listReferenceTemplates();
 }

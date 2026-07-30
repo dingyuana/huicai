@@ -26,10 +26,10 @@ public class ExpenseReimbursementEntity extends BaseEntity {
     private Long deptId;
 
     /** TRAVEL/OFFICE/ENTERTAIN/TRANSPORT/COMMUNICATION/OTHER */
-    @TableField(exist = false)
+    @TableField("reimb_type")
     private String expenseType;
 
-    @TableField(exist = false)
+    @TableField("total_amount")
     private BigDecimal amount;
     private String summary;
 

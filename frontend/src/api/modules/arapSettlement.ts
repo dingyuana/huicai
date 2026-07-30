@@ -81,6 +81,10 @@ export function deleteSettlement(id: number): Promise<void> {
   return request.delete(`/sme/arap/v1/arap-settlements/${id}`)
 }
 
+export function generateSettlementVoucher(id: number): Promise<ArapSettlement> {
+  return request.post(`/sme/arap/v1/arap-settlements/${id}/generate-voucher`)
+}
+
 // Reconciliation Log APIs
 export function getReconRecords(sourceDocType: string, sourceDocId: number): Promise<ReconciliationLog[]> {
   return request.get('/sme/arap/v1/reconciliation/records', { params: { sourceDocType, sourceDocId } })

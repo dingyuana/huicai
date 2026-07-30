@@ -14,12 +14,14 @@ import java.time.LocalDateTime;
 public class AuditLogEntity {
     @TableId(type = IdType.AUTO)
     private Long id;
+    @TableField(exist = false)
     private Long userId;
     @TableField(exist = false)
     private String username;
     private String operation;
+    @TableField(exist = false)
     private String method;
-    @TableField(typeHandler = JsonbTypeHandler.class)
+    @TableField(typeHandler = JsonbTypeHandler.class, exist = false)
     private String requestParams;
     @TableField(typeHandler = JsonbTypeHandler.class, exist = false)
     private String responseResult;

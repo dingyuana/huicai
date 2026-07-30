@@ -10,6 +10,7 @@ import com.huicai.base.voucher.mapper.VoucherTemplateMapper;
 import com.huicai.base.voucher.service.VoucherTemplateService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -22,6 +23,7 @@ public class VoucherTemplateServiceImpl implements VoucherTemplateService {
 
     private final VoucherTemplateMapper templateMapper;
     private final VoucherTemplateLineMapper lineMapper;
+    private final JdbcTemplate jdbcTemplate;
 
     @Override
     public VoucherTemplateEntity getById(Long id) {
@@ -147,6 +149,93 @@ public class VoucherTemplateServiceImpl implements VoucherTemplateService {
         templateMapper.deleteById(id);
         lineMapper.deleteByTemplateId(id);
         log.info("凭证模板删除: id={}", id);
+    }
+
+    // ─── 模板参考库 ───
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public int importFromReference(Long enterpriseId) {
+        // 查询参考库模板数量
+        Long refCount = jdbcTemplate.queryForObject(
+            "SELECT COUNT(*) FROM t_voucher_template WHERE enterprise_id = 0 AND deleted = 0",
+            Long.class);
+        if (refCount == null || refCount == 0) {
+            log.info("模板参考库为空 (enterprise_id=0)，无需导入");
+            return 0;
+        }
+
+        // 使用 SQL 批量导入：通过 template_code 关联，避免重复导入
+        // 1. 导入模板（跳过已存在的）
+        String insertTplSql = """
+            INSERT INTO t_voucher_template (template_code, template_name, doc_type, voucher_type_code, summary, entries, is_active, remark, enterprise_id, created_at, updated_at, deleted)
+            SELECT ref.template_code, ref.template_name, ref.doc_type, ref.voucher_type_code, ref.summary, ref.entries, ref.is_active, ref.remark, ?, NOW(), NOW(), 0
+            FROM t_voucher_template ref
+            WHERE ref.enterprise_id = 0 AND ref.deleted = 0
+              AND NOT EXISTS (
+                SELECT 1 FROM t_voucher_template tgt
+                WHERE tgt.template_code = ref.template_code AND tgt.enterprise_id = ?
+              )
+            ON CONFLICT (template_code, enterprise_id) DO NOTHING
+            """;
+
+        int tplRows = jdbcTemplate.update(insertTplSql, enterpriseId, enterpriseId);
+
+        // 2. 导入模板分录行，重映射 template_id 和 subject_id
+        if (tplRows > 0) {
+            String insertLineSql = """
+                INSERT INTO t_voucher_template_line (template_id, subject_id, dr_amount_template, cr_amount_template, summary_template, direction, assist_type, assist_required, line_order, enterprise_id, created_at, updated_at, deleted)
+                SELECT
+                  (SELECT id FROM t_voucher_template WHERE template_code = ref_tpl.template_code AND enterprise_id = ?),
+                  COALESCE(
+                    (SELECT id FROM t_subject WHERE code = sc.code AND enterprise_id = ?),
+                    ref_line.subject_id
+                  ),
+                  ref_line.dr_amount_template, ref_line.cr_amount_template, ref_line.summary_template,
+                  ref_line.direction, ref_line.assist_type, ref_line.assist_required, ref_line.line_order,
+                  ?, NOW(), NOW(), 0
+                FROM t_voucher_template_line ref_line
+                JOIN t_voucher_template ref_tpl ON ref_tpl.id = ref_line.template_id
+                LEFT JOIN t_subject sc ON sc.id = ref_line.subject_id
+                WHERE ref_tpl.enterprise_id = 0 AND ref_line.deleted = 0
+                  AND NOT EXISTS (
+                    SELECT 1 FROM t_voucher_template_line tgt_line
+                    JOIN t_voucher_template tgt_tpl ON tgt_tpl.id = tgt_line.template_id
+                    WHERE tgt_tpl.template_code = ref_tpl.template_code
+                      AND tgt_tpl.enterprise_id = ?
+                      AND tgt_line.line_order = ref_line.line_order
+                  )
+                ON CONFLICT DO NOTHING
+                """;
+
+            int lineRows = jdbcTemplate.update(insertLineSql, enterpriseId, enterpriseId, enterpriseId, enterpriseId);
+            log.info("模板参考库导入完成: enterprise={}, templates={}, lines={}", enterpriseId, tplRows, lineRows);
+        } else {
+            log.info("模板参考库导入: enterprise={}, 无新模板需要导入", enterpriseId);
+        }
+
+        return tplRows;
+    }
+
+    @Override
+    public List<VoucherTemplateEntity> listReferenceTemplates() {
+        // 使用 JdbcTemplate 绕过 MyBatis-Plus 企业数据权限拦截器
+        String sql = "SELECT id, template_code, template_name, doc_type, voucher_type_code, summary, " +
+            "is_active, remark, enterprise_id, created_at, updated_at " +
+            "FROM t_voucher_template WHERE enterprise_id = 0 AND deleted = 0 ORDER BY id";
+        return jdbcTemplate.query(sql, (rs, rowNum) -> {
+            VoucherTemplateEntity t = new VoucherTemplateEntity();
+            t.setId(rs.getLong("id"));
+            t.setName(rs.getString("template_name"));
+            t.setBusinessType(rs.getString("doc_type"));
+            t.setIsActive(rs.getBoolean("is_active"));
+            t.setEnterpriseId(rs.getLong("enterprise_id"));
+            t.setCreatedAt(rs.getTimestamp("created_at") != null
+                ? rs.getTimestamp("created_at").toLocalDateTime() : null);
+            t.setUpdatedAt(rs.getTimestamp("updated_at") != null
+                ? rs.getTimestamp("updated_at").toLocalDateTime() : null);
+            return t;
+        });
     }
 
     // ─── 内部方法 ───

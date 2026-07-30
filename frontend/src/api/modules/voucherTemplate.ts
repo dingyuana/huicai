@@ -86,3 +86,15 @@ export function toggleTemplateActive(id: number, active: boolean) {
 export function deleteTemplate(id: number) {
   return request.delete(`/base/voucher/v1/voucher-templates/${id}`)
 }
+
+// ─── 模板参考库 ───
+
+/** 获取参考库模板列表 (enterprise_id=0) */
+export function listReferenceTemplates() {
+  return request.get<VoucherTemplateVO[]>('/base/voucher/v1/voucher-templates/reference-list')
+}
+
+/** 从参考库导入模板到当前企业 */
+export function importFromReference() {
+  return request.post<number>('/base/voucher/v1/voucher-templates/import-from-reference')
+}

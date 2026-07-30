@@ -1,5 +1,6 @@
 package com.huicai.base.voucher.controller;
 
+import com.huicai.common.context.EnterpriseContextHolder;
 import com.huicai.common.response.R;
 import com.huicai.base.voucher.dto.VoucherTemplateVO;
 import com.huicai.base.voucher.entity.VoucherTemplateEntity;
@@ -101,6 +102,29 @@ public class VoucherTemplateController {
     public R<Void> delete(@PathVariable Long id) {
         templateService.delete(id);
         return R.ok();
+    }
+
+    // ─── 模板参考库 ───
+
+    @Operation(summary = "从参考库导入模板到当前企业 (enterprise_id=0 → 当前企业)")
+    @PostMapping("/import-from-reference")
+    public R<Integer> importFromReference() {
+        Long enterpriseId = EnterpriseContextHolder.get();
+        if (enterpriseId == null) {
+            return R.badRequest("无法获取当前企业ID");
+        }
+        int count = templateService.importFromReference(enterpriseId);
+        return R.ok(count);
+    }
+
+    @Operation(summary = "查看参考库模板列表 (enterprise_id=0)")
+    @GetMapping("/reference-list")
+    public R<List<VoucherTemplateVO>> listReferenceTemplates() {
+        List<VoucherTemplateEntity> templates = templateService.listReferenceTemplates();
+        List<VoucherTemplateVO> vos = templates.stream()
+                .map(t -> enrichLines(VoucherTemplateVO.fromEntity(t, templateService.getLines(t.getId()))))
+                .collect(Collectors.toList());
+        return R.ok(vos);
     }
 
     // ─── 辅助方法 ───
