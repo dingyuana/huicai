@@ -19,11 +19,12 @@ const PAGES = [
   { path: '/system/classification-rule', name: '分类规则', expectedElement: '.el-table, .el-card, main' },
   { path: '/system/clear-data', name: '数据维护', expectedElement: '.el-card, main, .app-main' },
 
-  // ─── 基础数据 ───
-  { path: '/basis/subject', name: '科目管理', expectedElement: '.el-table, .el-card, main' },
+  // ─── 基础数据 (未在其他 spec 中单独覆盖的路径) ───
+  { path: '/basis/account-and-summary', name: '科目摘要', expectedElement: '.el-table, .el-card, main' },
   { path: '/basis/period', name: '会计期间', expectedElement: '.el-table, .el-card, main' },
-  { path: '/basis/summary-lib', name: '常用摘要', expectedElement: '.el-table, .el-card, main' },
+  { path: '/basis/party', name: '客商档案', expectedElement: '.el-table, .el-card, main' },
   { path: '/basis/config', name: '系统参数', expectedElement: '.el-table, .el-card, main' },
+  { path: '/finance/voucher-template-ref', name: '模板参考库', expectedElement: '.el-table, .el-card, main' },
 ];
 
 test.describe('系统管理 + 基础数据页面加载', () => {

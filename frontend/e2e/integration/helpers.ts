@@ -6,8 +6,17 @@
  */
 
 import { test as base, type Page, type APIRequestContext } from '@playwright/test'
+import { execSync } from 'child_process'
 
 const BASE = 'http://localhost:3001'
+
+// ========== DB 连接配置 ==========
+const DB = {
+  host: 'localhost',
+  user: 'huicai',
+  pw: 'huicai123',
+  db: 'huicai',
+}
 
 // ========== 测试标识 ==========
 // 所有测试数据使用统一前缀，方便清理
@@ -213,16 +222,12 @@ export async function queryBusinessDocs(request: APIRequestContext, token: strin
  * 清理测试数据 — 删除所有 TEST_PREFIX 相关的数据
  */
 export async function cleanupTestData(request: APIRequestContext, token: string): Promise<void> {
-  // 清理进项发票
-  const inputRes = await queryInputInvoices(request, token, { size: 9999 })
-  if (inputRes?.records) {
-    for (const rec of inputRes.records) {
-      if (rec.invoiceNo?.startsWith(TEST_PREFIX) || rec.invoiceNo?.startsWith('IN-')) {
-        await request.delete(`${BASE}/api/sme/tax/v1/tax/input-invoices/${rec.id}`, {
-          headers: AUTH_HEADERS(token),
-        }).catch(() => {})
-      }
-    }
+  // 直接 DB 清理（DELETE API 路由不存在，避免 timeout）
+  try {
+    execSync(`PGPASSWORD=${DB.pw} psql -h ${DB.host} -U ${DB.user} -d ${DB.db} -c "DELETE FROM t_input_invoice WHERE invoice_no LIKE 'IN-E2E-INT-%' OR invoice_no LIKE 'E2E-INT-%'"`, { encoding: 'utf8', timeout: 10000 })
+    execSync(`PGPASSWORD=${DB.pw} psql -h ${DB.host} -U ${DB.user} -d ${DB.db} -c "DELETE FROM t_output_invoice WHERE invoice_no LIKE 'OUT-E2E-INT-%' OR invoice_no LIKE 'E2E-INT-%'"`, { encoding: 'utf8', timeout: 10000 })
+  } catch (e) {
+    // 忽略清理错误
   }
 }
 

@@ -77,12 +77,15 @@
         WHERE v.id = #{id} AND v.deleted = 0
     </select>
 
+    <!-- V132: 增加前缀过滤，防止 REIMB- 等不同前缀的凭证号干扰 MAX 计算 -->
     <select id="selectMaxVoucherNo" resultType="java.lang.String">
         SELECT MAX(v.voucher_no)
         FROM t_voucher v
+        JOIN t_voucher_type vt ON vt.id = v.voucher_type_id
         WHERE v.period = #{period}
         AND v.voucher_type_id = #{voucherTypeId}
         AND v.deleted = 0
+        AND v.voucher_no LIKE vt.code || '%'
     </select>
 
     <update id="batchUpdateStatus">
