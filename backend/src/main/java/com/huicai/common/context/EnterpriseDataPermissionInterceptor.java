@@ -41,6 +41,7 @@ public class EnterpriseDataPermissionInterceptor implements InnerInterceptor {
     private static final Set<String> SHARED_TABLES = Set.of(
         "t_user", "t_role", "t_user_role", "t_menu", "t_role_menu",
         "t_agency", "t_enterprise", "t_agency_enterprise",
+        "t_agency_user", "t_agency_user_enterprise",
         "t_sys_config", "t_audit_log", "t_dept"
     );
 
