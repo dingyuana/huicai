@@ -7,22 +7,22 @@
 -- 预置基础科目（供凭证模板分录行引用）
 INSERT INTO t_subject (id, enterprise_id, code, name, parent_id, level, direction, is_leaf, aux_calc_type, is_active, remark, created_by, created_at, updated_by, updated_at, deleted)
 OVERRIDING SYSTEM VALUE VALUES
-(1, 1, '1001', '库存现金', NULL, 1, 'DEBIT', true, NULL, true, NULL, 1, NOW(), 1, NOW(), 0),
-(2, 1, '1002', '银行存款', NULL, 1, 'DEBIT', true, NULL, true, NULL, 1, NOW(), 1, NOW(), 0),
-(3, 1, '1012', '其他货币资金', NULL, 1, 'DEBIT', true, NULL, true, NULL, 1, NOW(), 1, NOW(), 0),
-(4, 1, '1101', '交易性金融资产', NULL, 1, 'DEBIT', true, NULL, true, NULL, 1, NOW(), 1, NOW(), 0),
-(5, 1, '1121', '应收票据', NULL, 1, 'DEBIT', true, NULL, true, NULL, 1, NOW(), 1, NOW(), 0),
-(6, 1, '1122', '应收账款', NULL, 1, 'DEBIT', true, NULL, true, NULL, 1, NOW(), 1, NOW(), 0),
-(7, 1, '1123', '预付账款', NULL, 1, 'DEBIT', true, NULL, true, NULL, 1, NOW(), 1, NOW(), 0),
-(28, 1, '1601', '固定资产', NULL, 1, 'DEBIT', true, NULL, true, NULL, 1, NOW(), 1, NOW(), 0),
-(44, 1, '2202', '应付账款', NULL, 1, 'CREDIT', true, NULL, true, NULL, 1, NOW(), 1, NOW(), 0),
-(47, 1, '2221', '应交税费', NULL, 1, 'CREDIT', true, NULL, true, NULL, 1, NOW(), 1, NOW(), 0),
-(64, 1, '4103', '本年利润', NULL, 1, 'CREDIT', true, NULL, true, NULL, 1, NOW(), 1, NOW(), 0),
-(67, 1, '5001', '生产成本', NULL, 1, 'DEBIT', true, NULL, true, NULL, 1, NOW(), 1, NOW(), 0),
-(74, 1, '6001', '主营业务收入', NULL, 1, 'CREDIT', true, NULL, true, NULL, 1, NOW(), 1, NOW(), 0),
-(81, 1, '6401', '主营业务成本', NULL, 1, 'DEBIT', true, NULL, true, NULL, 1, NOW(), 1, NOW(), 0),
-(82, 1, '6402', '其他业务成本', NULL, 1, 'DEBIT', true, NULL, true, NULL, 1, NOW(), 1, NOW(), 0),
-(85, 1, '6602', '管理费用', NULL, 1, 'DEBIT', true, NULL, true, NULL, 1, NOW(), 1, NOW(), 0)
+(1, 1, '1001', '库存现金', NULL, 1, 'debit', true, NULL, true, NULL, 1, NOW(), 1, NOW(), 0),
+(2, 1, '1002', '银行存款', NULL, 1, 'debit', true, NULL, true, NULL, 1, NOW(), 1, NOW(), 0),
+(3, 1, '1012', '其他货币资金', NULL, 1, 'debit', true, NULL, true, NULL, 1, NOW(), 1, NOW(), 0),
+(4, 1, '1101', '交易性金融资产', NULL, 1, 'debit', true, NULL, true, NULL, 1, NOW(), 1, NOW(), 0),
+(5, 1, '1121', '应收票据', NULL, 1, 'debit', true, NULL, true, NULL, 1, NOW(), 1, NOW(), 0),
+(6, 1, '1122', '应收账款', NULL, 1, 'debit', true, NULL, true, NULL, 1, NOW(), 1, NOW(), 0),
+(7, 1, '1123', '预付账款', NULL, 1, 'debit', true, NULL, true, NULL, 1, NOW(), 1, NOW(), 0),
+(28, 1, '1601', '固定资产', NULL, 1, 'debit', true, NULL, true, NULL, 1, NOW(), 1, NOW(), 0),
+(44, 1, '2202', '应付账款', NULL, 1, 'credit', true, NULL, true, NULL, 1, NOW(), 1, NOW(), 0),
+(47, 1, '2221', '应交税费', NULL, 1, 'credit', true, NULL, true, NULL, 1, NOW(), 1, NOW(), 0),
+(64, 1, '4103', '本年利润', NULL, 1, 'credit', true, NULL, true, NULL, 1, NOW(), 1, NOW(), 0),
+(67, 1, '5001', '生产成本', NULL, 1, 'debit', true, NULL, true, NULL, 1, NOW(), 1, NOW(), 0),
+(74, 1, '6001', '主营业务收入', NULL, 1, 'credit', true, NULL, true, NULL, 1, NOW(), 1, NOW(), 0),
+(81, 1, '6401', '主营业务成本', NULL, 1, 'debit', true, NULL, true, NULL, 1, NOW(), 1, NOW(), 0),
+(82, 1, '6402', '其他业务成本', NULL, 1, 'debit', true, NULL, true, NULL, 1, NOW(), 1, NOW(), 0),
+(85, 1, '6602', '管理费用', NULL, 1, 'debit', true, NULL, true, NULL, 1, NOW(), 1, NOW(), 0)
 ON CONFLICT (id) DO NOTHING;
 
 -- 模板分录行（从 V95 迁移至此）

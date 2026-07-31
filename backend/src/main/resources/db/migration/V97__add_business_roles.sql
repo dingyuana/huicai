@@ -12,14 +12,15 @@ ALTER TABLE t_role ADD CONSTRAINT chk_role_type CHECK (
 );
 
 -- 1. 新增业务角色
-INSERT INTO t_role (role_code, role_name, role_type, is_system, status, sort_order, description)
+INSERT INTO t_role (id, role_code, role_name, role_type, is_system, status, sort_order, description)
+OVERRIDING SYSTEM VALUE
 SELECT * FROM (VALUES
-    ('FINANCE_MGR', '财务主管', 'FINANCE_MGR', true, 'ACTIVE', 2, '财务主管：审核、结账、报表全权限'),
-    ('ACCOUNTANT',  '会计',     'ACCOUNTANT',  true, 'ACTIVE', 3, '会计：凭证录入、账簿查询、资产管理'),
-    ('CASHIER',     '出纳',     'CASHIER',     true, 'ACTIVE', 4, '出纳：银行日记账、现金日记账、票据管理'),
-    ('OPERATOR',    '业务员',   'OPERATOR',    true, 'ACTIVE', 5, '业务员：业务单据录入、发票导入')
+    (2, 'FINANCE_MGR', '财务主管', 'FINANCE_MGR', true, 'ACTIVE', 2, '财务主管：审核、结账、报表全权限'),
+    (3, 'ACCOUNTANT',  '会计',     'ACCOUNTANT',  true, 'ACTIVE', 3, '会计：凭证录入、账簿查询、资产管理'),
+    (4, 'CASHIER',     '出纳',     'CASHIER',     true, 'ACTIVE', 4, '出纳：银行日记账、现金日记账、票据管理'),
+    (5, 'OPERATOR',    '业务员',   'OPERATOR',    true, 'ACTIVE', 5, '业务员：业务单据录入、发票导入')
 ) AS v
-WHERE NOT EXISTS (SELECT 1 FROM t_role WHERE role_code = v.column1);
+WHERE NOT EXISTS (SELECT 1 FROM t_role WHERE role_code = v.column2);
 
 -- 2. 为每个角色分配菜单权限
 -- 菜单 ID 参考 V96 结构:
