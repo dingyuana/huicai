@@ -91,7 +91,7 @@ router.beforeEach(async (to, _from, next) => {
 
   // 实验室路由保护：Flag 关闭时访问实验室路由 -> 404
   const labStore = useLabStore()
-  const isLabRoute = labRoutes.some(r => to.matched.some(m => m.path === r.path))
+  const isLabRoute = labRoutes.some(r => to.matched.some(m => m.name === r.name))
   if (isLabRoute && !labStore.enabled) {
     return next({ path: '/404' })
   }
