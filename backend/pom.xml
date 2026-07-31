@@ -184,8 +184,14 @@
         <!-- Testcontainers for real DB testing -->
         <dependency>
             <groupId>org.testcontainers</groupId>
+            <artifactId>testcontainers</artifactId>
+            <version>1.20.4</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
             <artifactId>junit-jupiter</artifactId>
-            <version>1.19.7</version>
+            <version>1.20.4</version>
             <scope>test</scope>
         </dependency>
         <!-- JUnit 5 Suite 支持 -->
@@ -198,7 +204,7 @@
         <dependency>
             <groupId>org.testcontainers</groupId>
             <artifactId>postgresql</artifactId>
-            <version>1.19.7</version>
+            <version>1.20.4</version>
             <scope>test</scope>
         </dependency>
     </dependencies>
@@ -251,6 +257,11 @@
                     <!-- 禁用并行执行 - Testcontainers 容器共享需要顺序执行 -->
                     <forkCount>1</forkCount>
                     <reuseForks>true</reuseForks>
+                    <!-- 传递 Docker API 版本环境变量（与 Docker Server 对齐） -->
+                    <environmentVariables>
+                        <DOCKER_API_VERSION>1.44</DOCKER_API_VERSION>
+                    </environmentVariables>
+                    <argLine>-Dapi.version=1.44 -Ddocker.api.version=1.44 -DDOCKER_API_VERSION=1.44</argLine>
                 </configuration>
             </plugin>
             <!-- JaCoCo 代码覆盖率插件：设置最低覆盖率门禁 -->
