@@ -29,8 +29,9 @@ BEGIN
             SELECT 1 FROM t_voucher_template
             WHERE template_code = v_ref.template_code AND enterprise_id = 0
         ) THEN
-            INSERT INTO t_voucher_template (template_code, template_name, doc_type, voucher_type_code, summary, entries, is_active, remark, enterprise_id)
-            VALUES (v_ref.template_code, v_ref.template_name, v_ref.doc_type, v_ref.voucher_type_code, v_ref.summary, v_ref.entries, v_ref.is_active, v_ref.remark, 0)
+            INSERT INTO t_voucher_template (id, template_code, template_name, doc_type, voucher_type_code, summary, entries, is_active, remark, enterprise_id)
+            OVERRIDING SYSTEM VALUE
+            SELECT (SELECT COALESCE(MAX(id), 100) + 1 FROM t_voucher_template), v_ref.template_code, v_ref.template_name, v_ref.doc_type, v_ref.voucher_type_code, v_ref.summary, v_ref.entries, v_ref.is_active, v_ref.remark, 0
             RETURNING id INTO v_new_id;
 
             -- 复制分录行，通过科目编码重新映射 subject_id

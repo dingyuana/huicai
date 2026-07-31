@@ -19,10 +19,12 @@ ALTER TABLE t_period DROP CONSTRAINT IF EXISTS uq_period_code;
 ALTER TABLE t_period ADD CONSTRAINT uq_period_code_ent UNIQUE (period_code, enterprise_id);
 
 -- 5. 重新插入模板数据 (enterprise_id=0)，从 enterprise_id=1 复制
-INSERT INTO t_subject (enterprise_id, code, name, parent_id, level, direction, is_leaf, aux_calc_type, is_active, remark, created_by, created_at, updated_by, updated_at, deleted)
-SELECT 0, code, name, parent_id, level, direction, is_leaf, aux_calc_type, is_active, remark, 1, NOW(), 1, NOW(), 0
+-- 注：OVERRIDING SYSTEM VALUE 避免 IDENTITY 序列与 V102.5 显式 ID 冲突
+INSERT INTO t_subject (id, enterprise_id, code, name, parent_id, level, direction, is_leaf, aux_calc_type, is_active, remark, created_by, created_at, updated_by, updated_at, deleted)
+OVERRIDING SYSTEM VALUE
+SELECT (SELECT COALESCE(MAX(id), 100) FROM t_subject) + ROW_NUMBER() OVER (ORDER BY code), 0, code, name, parent_id, level, direction, is_leaf, aux_calc_type, is_active, remark, 1, NOW(), 1, NOW(), 0
 FROM t_subject WHERE enterprise_id = 1 AND deleted = 0
-ON CONFLICT (code, enterprise_id) DO NOTHING;
+ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO t_voucher_type (enterprise_id, code, name, sort_order, numbering_rule, is_active, remark, created_by, created_at, updated_by, updated_at, deleted)
 SELECT 0, code, name, sort_order, numbering_rule, is_active, remark, 1, NOW(), 1, NOW(), 0

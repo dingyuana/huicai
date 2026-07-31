@@ -13,8 +13,9 @@ DECLARE
 BEGIN
     -- ─── 1. settlement_receivable（应收核销）──────────────
     -- 借：银行存款(1002) / 贷：应收账款(1122)
-    INSERT INTO t_voucher_template (template_code, template_name, doc_type, voucher_type_code, summary, entries, is_active, enterprise_id)
-    VALUES ('TPL_SETTLEMENT_RECEIVABLE', '核销收款模板', 'settlement_receivable', 'SK', '应收核销',
+    INSERT INTO t_voucher_template (id, template_code, template_name, doc_type, voucher_type_code, summary, entries, is_active, enterprise_id)
+    OVERRIDING SYSTEM VALUE
+    VALUES (8, 'TPL_SETTLEMENT_RECEIVABLE', '核销收款模板', 'settlement_receivable', 'SK', '应收核销',
             '[{"amount": "{{amount}}", "summary": "应收核销", "lineOrder": 1, "description": "借：银行存款 / 贷：应收账款", "debitSubjectCode": "1002", "creditSubjectCode": "1122"}]'::jsonb,
             TRUE, 1)
     RETURNING id INTO v_tpl_id;
@@ -26,8 +27,9 @@ BEGIN
 
     -- ─── 2. settlement_payment（应付核销）────────────────
     -- 借：应付账款(2202) / 贷：银行存款(1002)
-    INSERT INTO t_voucher_template (template_code, template_name, doc_type, voucher_type_code, summary, entries, is_active, enterprise_id)
-    VALUES ('TPL_SETTLEMENT_PAYMENT', '核销付款模板', 'settlement_payment', 'FK', '应付核销',
+    INSERT INTO t_voucher_template (id, template_code, template_name, doc_type, voucher_type_code, summary, entries, is_active, enterprise_id)
+    OVERRIDING SYSTEM VALUE
+    VALUES (9, 'TPL_SETTLEMENT_PAYMENT', '核销付款模板', 'settlement_payment', 'FK', '应付核销',
             '[{"amount": "{{amount}}", "summary": "应付核销", "lineOrder": 1, "description": "借：应付账款 / 贷：银行存款", "debitSubjectCode": "2202", "creditSubjectCode": "1002"}]'::jsonb,
             TRUE, 1)
     RETURNING id INTO v_tpl_id;
