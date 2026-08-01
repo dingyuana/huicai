@@ -65,10 +65,19 @@ public class SystemClearController {
     @PostMapping("/clear-business-docs")
     @Transactional(rollbackFor = Exception.class)
     public R<Map<String, Object>> clearBusinessDocs() {
-        int d1 = jdbcTemplate.update("DELETE FROM t_business_doc_entry");
-        int d2 = jdbcTemplate.update("DELETE FROM t_business_doc");
-        int total = d1 + d2;
-        log.info("清空业务单据: entries={}, docs={}", d1, d2);
+        // 先清理引用业务单据的外键行（fk_settle_entry_doc / fk_aging_alert_doc 无级联删除）
+        int d1 = jdbcTemplate.update("DELETE FROM t_arap_settlement_entry");
+        int d2 = jdbcTemplate.update("DELETE FROM t_arap_settlement");
+        int d3 = jdbcTemplate.update("DELETE FROM t_reconciliation_log");
+        int d4 = jdbcTemplate.update("DELETE FROM t_aging_alert");
+        // 保留银行流水/凭证：解绑 business_doc_id 引用而非删除记录
+        int d5 = jdbcTemplate.update("UPDATE t_bank_journal SET business_doc_id = NULL WHERE business_doc_id IS NOT NULL");
+        int d6 = jdbcTemplate.update("UPDATE t_voucher SET business_doc_id = NULL WHERE business_doc_id IS NOT NULL");
+        int d7 = jdbcTemplate.update("DELETE FROM t_business_doc_entry");
+        int d8 = jdbcTemplate.update("DELETE FROM t_business_doc");
+        int total = d1 + d2 + d3 + d4 + d5 + d6 + d7 + d8;
+        log.info("清空业务单据: settlement_entry={}, settlement={}, recon_log={}, aging_alert={}, bank_journal_unlink={}, voucher_unlink={}, doc_entry={}, doc={}",
+                d1, d2, d3, d4, d5, d6, d7, d8);
         return R.ok(result(total, "清空业务单据 " + total + " 条"));
     }
 
