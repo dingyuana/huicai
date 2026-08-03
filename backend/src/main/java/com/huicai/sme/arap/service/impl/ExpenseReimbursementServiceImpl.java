@@ -57,7 +57,7 @@ public class ExpenseReimbursementServiceImpl implements ExpenseReimbursementServ
                 size == null ? 20 : size
         );
         LambdaQueryWrapper<ExpenseReimbursementEntity> wrapper = new LambdaQueryWrapper<>();
-        if (employeeId != null) wrapper.eq(ExpenseReimbursementEntity::getEmployeeId, employeeId);
+        if (employeeId != null) wrapper.eq(ExpenseReimbursementEntity::getApplicantId, employeeId);
         if (StrUtil.isNotBlank(status)) wrapper.eq(ExpenseReimbursementEntity::getStatus, status);
         wrapper.orderByDesc(ExpenseReimbursementEntity::getCreatedAt);
         IPage<ExpenseReimbursementEntity> entityPage = mapper.selectPage(page, wrapper);
@@ -105,6 +105,7 @@ public class ExpenseReimbursementServiceImpl implements ExpenseReimbursementServ
         }
         entity.setStatus("DRAFT");
         entity.setReimbNo(generateNo());
+        entity.setApplicantId(entity.getEmployeeId());
         mapper.insert(entity);
         return getById(entity.getId());
     }
@@ -258,6 +259,7 @@ public class ExpenseReimbursementServiceImpl implements ExpenseReimbursementServ
         ExpenseReimbursementEntity e = new ExpenseReimbursementEntity();
         e.setBankStmtId(bankStmtId);
         e.setEmployeeId(employeeId);
+        e.setApplicantId(employeeId);
         e.setAmount(amount);
         e.setExpenseType("OTHER");
         e.setSummary(summary);

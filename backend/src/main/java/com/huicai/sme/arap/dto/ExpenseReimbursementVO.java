@@ -36,7 +36,7 @@ public class ExpenseReimbursementVO {
         ExpenseReimbursementVO vo = new ExpenseReimbursementVO();
         vo.setId(e.getId());
         vo.setReimbNo(e.getReimbNo());
-        vo.setEmployeeId(e.getEmployeeId());
+        vo.setEmployeeId(e.getApplicantId());
         vo.setDeptId(e.getDeptId());
         vo.setExpenseType(e.getExpenseType());
         vo.setAmount(e.getAmount());

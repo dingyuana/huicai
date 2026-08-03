@@ -20,7 +20,11 @@ public class ExpenseReimbursementEntity extends BaseEntity {
     /** 报销单号 REIMB-YYYYMM-XXXX */
     private String reimbNo;
 
-    /** 员工ID — 使用 applicant_id 替代，DB 无 employee_id 列 */
+    /** 申请人ID — 映射 DB applicant_id 列 */
+    @TableField("applicant_id")
+    private Long applicantId;
+
+    /** 员工ID — 仅为 VO/前端契约字段，DB 无 employee_id 列 */
     @TableField(exist = false)
     private Long employeeId;
     private Long deptId;
