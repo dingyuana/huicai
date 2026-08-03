@@ -65,10 +65,11 @@
         <el-menu-item index="/finance/bank-statement">银行对账单</el-menu-item>
         <el-menu-item index="/finance/bank-reconciliation">银行对账</el-menu-item>
         <el-menu-item index="/finance/cash-journal">现金日记账</el-menu-item>
-        <el-menu-item index="/finance/ticket">票据管理</el-menu-item>
+        <!-- 票据管理暂时隐藏（路由仍保留，恢复时取消注释） -->
+        <!-- <el-menu-item index="/finance/ticket">票据管理</el-menu-item> -->
         <el-menu-item index="/arap/reconciliation-workbench">核销工作台</el-menu-item>
         <el-menu-item index="/arap/settlement">往来核销</el-menu-item>
-        <el-menu-item index="/finance/business-doc?tab=expense">费用报销</el-menu-item>
+        <el-menu-item index="/arap/expense">费用报销</el-menu-item>
       </el-sub-menu>
 
       <!-- 税务发票 -->

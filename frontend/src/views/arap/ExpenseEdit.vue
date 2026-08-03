@@ -13,8 +13,6 @@
             <el-option label="差旅费" value="TRAVEL" />
             <el-option label="办公费" value="OFFICE" />
             <el-option label="招待费" value="ENTERTAINMENT" />
-            <el-option label="交通费" value="TRANSPORT" />
-            <el-option label="餐饮费" value="MEAL" />
             <el-option label="其他" value="OTHER" />
           </el-select>
         </el-form-item>
