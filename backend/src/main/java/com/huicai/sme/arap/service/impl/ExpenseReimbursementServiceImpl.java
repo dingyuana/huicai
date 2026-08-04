@@ -270,14 +270,9 @@ public class ExpenseReimbursementServiceImpl implements ExpenseReimbursementServ
     }
 
     private String mapExpenseTypeToCode(String expenseType) {
-        return switch (expenseType) {
-            case "TRAVEL" -> "5602.03";
-            case "OFFICE" -> "5602.04";
-            case "ENTERTAIN" -> "5602.05";
-            case "TRANSPORT" -> "5602.06";
-            case "COMMUNICATION" -> "5602.07";
-            default -> "5602.99";
-        };
+        // 统一映射到“管理费用(6602)”。5602.xx 科目从未在种子数据创建，
+        // 且与现有 6601/6602/6603 科目体系冗余，故不再使用。
+        return "6602";
     }
 
     private String[] lookupSubject(String code) {

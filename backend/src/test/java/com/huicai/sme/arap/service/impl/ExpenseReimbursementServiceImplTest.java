@@ -238,10 +238,10 @@ class ExpenseReimbursementServiceImplTest {
     void generateVoucherForApproved_差旅费_生成凭证和2条分录() {
         when(mapper.selectById(1L)).thenReturn(stub(1L, "APPROVED"));
         stubPartyMappers();
-        // 借: 5602.03 差旅费, 贷: 1002 银行存款
+        // 借: 6602 管理费用, 贷: 1002 银行存款
         lenient().when(subjectMapper.selectList(any()))
                 .thenReturn(List.of(new Subject() {{
-                    setId(20L); setCode("5602.03"); setName("差旅费");
+                    setId(85L); setCode("6602"); setName("管理费用");
                 }}))
                 .thenReturn(List.of(new Subject() {{
                     setId(10L); setCode("1002"); setName("银行存款");
