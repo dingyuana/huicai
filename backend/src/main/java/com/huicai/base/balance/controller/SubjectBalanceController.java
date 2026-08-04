@@ -38,4 +38,25 @@ public class SubjectBalanceController {
     public R<Map<String, Object>> trialBalance(@RequestParam String period) {
         return R.ok(subjectBalanceService.checkTrialBalance(period));
     }
+
+    @Operation(summary = "锁定期初（写入 t_period.opening_status=locked）")
+    @PostMapping("/lock")
+    public R<Void> lockOpening(@RequestParam String period) {
+        subjectBalanceService.lockOpeningBalances(period);
+        return R.ok();
+    }
+
+    @Operation(summary = "解锁期初（仅无已过账凭证时允许）")
+    @PostMapping("/unlock")
+    public R<Void> unlockOpening(@RequestParam String period) {
+        subjectBalanceService.unlockOpeningBalances(period);
+        return R.ok();
+    }
+
+    @Operation(summary = "清空期初余额（仅未锁定且无已过账凭证时允许）")
+    @PostMapping("/clear")
+    public R<Void> clearOpening(@RequestParam String period) {
+        subjectBalanceService.clearOpeningBalances(period);
+        return R.ok();
+    }
 }

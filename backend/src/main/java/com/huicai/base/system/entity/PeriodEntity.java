@@ -34,4 +34,15 @@ public class PeriodEntity extends BaseEntity {
     /** 状态: open-开启, closed-已结账, locked-已锁定 */
     @StatusChangeable(entity = "PERIOD", fieldName = "status")
     private String status;
+
+    /**
+     * 期初建账状态:
+     * <ul>
+     *   <li>none - 未建账（期间存在但尚未录入期初余额）</li>
+     *   <li>entered - 已录入未锁定（允许清空重录）</li>
+     *   <li>locked - 已锁定（不可修改、不可清空）</li>
+     * </ul>
+     * 独立于 {@link #status}，避免锁定同时锁住凭证过账。
+     */
+    private String openingStatus;
 }

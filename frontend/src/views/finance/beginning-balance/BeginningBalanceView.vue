@@ -11,8 +11,12 @@
       <el-tabs v-model="activeTab">
         <el-tab-pane label="期初录入" name="entry">
           <div class="toolbar">
-            <el-button type="primary" @click="openEntryDialog">录入期初</el-button>
+            <el-button type="primary" :disabled="isOpeningLocked" @click="openEntryDialog">录入期初</el-button>
+            <el-button :disabled="isOpeningLocked || isOpeningNone" @click="onClearOpening">清空重录</el-button>
             <el-button @click="fetchBalances">刷新</el-button>
+            <el-tag v-if="openingStatus" :type="openingStatusTagType" size="large" style="margin-left:8px">
+              {{ openingStatusLabel }}
+            </el-tag>
           </div>
           <el-table :data="balanceList" v-loading="loading" border stripe style="width:100%">
             <el-table-column prop="subjectCode" label="科目编码" width="120" />
@@ -50,10 +54,17 @@
         </el-tab-pane>
 
         <el-tab-pane label="启用/锁定" name="lock">
-          <el-alert title='期初数据录入并试算平衡后，需点击"启用"按钮锁定期初数据。锁定后不可修改。' type="warning" show-icon />
+          <el-alert
+            :title="lockingHint"
+            :type="isOpeningLocked ? 'success' : 'warning'"
+            show-icon />
           <div style="margin-top:16px">
-            <el-button v-if="!isLocked" type="primary" @click="confirmLock">启用并锁定期初</el-button>
-            <el-tag v-else type="success" size="large">期初已锁定 ✅</el-tag>
+            <el-button v-if="!isOpeningEntered" type="primary" disabled>请先完成期初建账</el-button>
+            <template v-else>
+              <el-button v-if="!isOpeningLocked" type="primary" :loading="locking" @click="onLockOpening">启用并锁定期初</el-button>
+              <el-button v-else type="warning" :loading="locking" @click="onUnlockOpening">解锁期初</el-button>
+              <el-tag v-if="isOpeningLocked" type="success" size="large" style="margin-left:8px">期初已锁定 ✅</el-tag>
+            </template>
           </div>
         </el-tab-pane>
       </el-tabs>
@@ -96,23 +107,58 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { getSubjectTree } from '@/api/modules/subject'
-import { initOpeningBalances, getSubjectBalances, checkTrialBalance } from '@/api/modules/subject'
+import {
+  initOpeningBalances,
+  getSubjectBalances,
+  checkTrialBalance,
+  lockOpeningBalances,
+  unlockOpeningBalances,
+  clearOpeningBalances,
+} from '@/api/modules/subject'
 
 const activeTab = ref('entry')
 const loading = ref(false)
 const checking = ref(false)
 const saving = ref(false)
+const locking = ref(false)
 const dialogVisible = ref(false)
 const queryPeriod = ref('')
 const balanceList = ref<any[]>([])
 const periods = ref<string[]>([])
+const periodStatusMap = ref<Record<string, string>>({})
 const trialResult = ref<any>(null)
-const isLocked = ref(false)
 const subjectTree = ref<any[]>([])
 
 const entryRows = ref<Array<{ subjectId: number | null; amount: number }>>([])
+
+const openingStatus = computed(() => periodStatusMap.value[queryPeriod.value] || 'none')
+const isOpeningNone = computed(() => openingStatus.value === 'none')
+const isOpeningEntered = computed(() => openingStatus.value === 'entered')
+const isOpeningLocked = computed(() => openingStatus.value === 'locked')
+
+const openingStatusLabel = computed(() => {
+  switch (openingStatus.value) {
+    case 'none': return '未建账'
+    case 'entered': return '已录入（未锁定）'
+    case 'locked': return '已锁定'
+    default: return openingStatus.value
+  }
+})
+const openingStatusTagType = computed(() => {
+  switch (openingStatus.value) {
+    case 'none': return 'info'
+    case 'entered': return 'warning'
+    case 'locked': return 'success'
+    default: return 'info'
+  }
+})
+const lockingHint = computed(() => {
+  if (isOpeningLocked.value) return '期初已锁定, 凭证业务可正常过账; 如需修改期初请先解锁（要求期间无已过账凭证）'
+  if (isOpeningEntered.value) return '期初数据已录入, 试算平衡通过后请点击"启用"按钮锁定期初数据'
+  return '尚未完成期初建账, 请先在"期初录入"页签录入并保存期初余额, 再试算平衡后启用'
+})
 
 /** 科目ID -> 方向 快速查找 */
 const subjectDirectionMap = new Map<number, string>()
@@ -134,6 +180,11 @@ async function fetchPeriods() {
   const { default: request } = await import('@/api/request')
   const d: any[] = await request.get('/v1/periods/all')
   periods.value = d.map((p: any) => p.periodCode).filter(Boolean)
+  const map: Record<string, string> = {}
+  for (const p of d) {
+    if (p.periodCode) map[p.periodCode] = p.openingStatus || 'none'
+  }
+  periodStatusMap.value = map
   if (periods.value.length > 0 && !queryPeriod.value) {
     queryPeriod.value = periods.value[0]
   }
@@ -179,6 +230,7 @@ async function saveBalance() {
     ElMessage.success('保存成功')
     dialogVisible.value = false
     entryRows.value = []
+    periodStatusMap.value = { ...periodStatusMap.value, [queryPeriod.value]: 'entered' }
     fetchBalances()
   } finally { saving.value = false }
 }
@@ -196,9 +248,51 @@ function removeEntryRow(idx: number) {
   entryRows.value.splice(idx, 1)
 }
 
-function confirmLock() {
-  isLocked.value = true
-  ElMessage.success('期初数据已锁定')
+async function onLockOpening() {
+  if (!queryPeriod.value) return
+  try {
+    await ElMessageBox.confirm(
+      `锁定期间 ${queryPeriod.value} 的期初余额, 锁定后需先解锁(无已过账凭证时)才能修改。是否继续？`,
+      '锁定期初', { type: 'warning' })
+  } catch { return }
+  locking.value = true
+  try {
+    await lockOpeningBalances(queryPeriod.value)
+    periodStatusMap.value = { ...periodStatusMap.value, [queryPeriod.value]: 'locked' }
+    ElMessage.success('期初已锁定')
+  } finally { locking.value = false }
+}
+
+async function onUnlockOpening() {
+  if (!queryPeriod.value) return
+  try {
+    await ElMessageBox.confirm(
+      `解锁期间 ${queryPeriod.value} 的期初数据, 仅在期间无已过账凭证时允许。是否继续？`,
+      '解锁期初', { type: 'warning' })
+  } catch { return }
+  locking.value = true
+  try {
+    await unlockOpeningBalances(queryPeriod.value)
+    periodStatusMap.value = { ...periodStatusMap.value, [queryPeriod.value]: 'entered' }
+    ElMessage.success('期初已解锁')
+  } finally { locking.value = false }
+}
+
+async function onClearOpening() {
+  if (!queryPeriod.value) return
+  try {
+    await ElMessageBox.confirm(
+      `确认清空期间 ${queryPeriod.value} 的期初余额？期间不能有已过账凭证, 且清空后需重新录入才能锁定。`,
+      '清空期初', { type: 'warning', confirmButtonText: '确认清空' })
+  } catch { return }
+  try {
+    await clearOpeningBalances(queryPeriod.value)
+    periodStatusMap.value = { ...periodStatusMap.value, [queryPeriod.value]: 'none' }
+    balanceList.value = []
+    ElMessage.success('期初已清空')
+  } catch (e: any) {
+    ElMessage.error(e?.message || '清空失败')
+  }
 }
 
 onMounted(() => {

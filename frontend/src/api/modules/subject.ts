@@ -104,3 +104,15 @@ export function getSubjectBalances(period: string): Promise<any[]> {
 export function checkTrialBalance(period: string): Promise<any> {
   return request.get('/base/balance/v1/subject-balances/trial-balance', { params: { period } })
 }
+
+export function lockOpeningBalances(period: string): Promise<void> {
+  return request.post('/base/balance/v1/subject-balances/lock', null, { params: { period } })
+}
+
+export function unlockOpeningBalances(period: string): Promise<void> {
+  return request.post('/base/balance/v1/subject-balances/unlock', null, { params: { period } })
+}
+
+export function clearOpeningBalances(period: string): Promise<void> {
+  return request.post('/base/balance/v1/subject-balances/clear', null, { params: { period } })
+}

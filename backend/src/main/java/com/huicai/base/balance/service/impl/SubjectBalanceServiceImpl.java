@@ -1,14 +1,18 @@
 package com.huicai.base.balance.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.huicai.common.annotation.Auditable;
 import com.huicai.common.exception.BusinessException;
 import com.huicai.base.balance.entity.SubjectBalanceEntity;
 import com.huicai.base.balance.dto.SubjectBalanceVO;
 import com.huicai.base.voucher.entity.VoucherEntity;
 import com.huicai.base.voucher.entity.VoucherEntryEntity;
+import com.huicai.base.voucher.mapper.VoucherMapper;
 import com.huicai.base.balance.mapper.SubjectBalanceMapper;
 import com.huicai.base.balance.service.SubjectBalanceService;
+import com.huicai.base.system.entity.PeriodEntity;
 import com.huicai.base.system.entity.Subject;
+import com.huicai.base.system.service.PeriodService;
 import com.huicai.base.system.service.SubjectService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -34,6 +38,8 @@ public class SubjectBalanceServiceImpl implements SubjectBalanceService {
 
     private final SubjectBalanceMapper subjectBalanceMapper;
     private final SubjectService subjectService;
+    private final PeriodService periodService;
+    private final VoucherMapper voucherMapper;
 
     @Override
     @Transactional(propagation = Propagation.MANDATORY)
@@ -74,12 +80,24 @@ public class SubjectBalanceServiceImpl implements SubjectBalanceService {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
+    @Auditable(operation = "期初建账", module = "SUBJECT_BALANCE")
     public void initOpeningBalances(String period, Map<Long, BigDecimal> balances) {
         if (period == null || period.length() != 6) {
             throw BusinessException.badRequest("会计期间格式错误, 应为 YYYYMM");
         }
-        if (balances == null || balances.isEmpty()) {
+        if (balances == null) {
             throw BusinessException.badRequest("期初余额数据不能为空");
+        }
+
+        PeriodEntity periodEntity = periodService.getByPeriodCode(period);
+        if (periodEntity == null) {
+            throw BusinessException.badRequest("会计期间不存在: " + period + ", 请先在期间管理中创建");
+        }
+        if (!"open".equals(periodEntity.getStatus())) {
+            throw BusinessException.badRequest("会计期间已" + periodEntity.getStatus() + ", 不可录入期初: " + period);
+        }
+        if ("locked".equals(periodEntity.getOpeningStatus())) {
+            throw BusinessException.conflict("期间 " + period + " 期初已锁定, 不可重新录入");
         }
 
         int year = Integer.parseInt(period.substring(0, 4));
@@ -88,7 +106,14 @@ public class SubjectBalanceServiceImpl implements SubjectBalanceService {
         existsWrapper.eq(SubjectBalanceEntity::getPeriod, period);
         Long existing = subjectBalanceMapper.selectCount(existsWrapper);
         if (existing > 0) {
-            throw BusinessException.conflict("期间 " + period + " 已存在余额数据, 请先清空");
+            throw BusinessException.conflict("期间 " + period + " 已存在余额数据, 请先清空重录");
+        }
+
+        // 空 balances 表示确认期初全为 0（支持零余额企业），仅标记 entered 不插入数据行
+        if (balances.isEmpty()) {
+            periodService.setOpeningStatus(period, "entered");
+            log.info("期初建账（零余额确认）: period={}", period);
+            return;
         }
 
         BigDecimal totalDebitSide = BigDecimal.ZERO;
@@ -132,8 +157,125 @@ public class SubjectBalanceServiceImpl implements SubjectBalanceService {
         for (SubjectBalanceEntity balance : batchList) {
             subjectBalanceMapper.insert(balance);
         }
+        periodService.setOpeningStatus(period, "entered");
         log.info("期初建账完成: period={}, 科目数={}, 借方合计={}, 贷方合计={}",
                 period, batchList.size(), totalDebitSide, totalCreditSide);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    @Auditable(operation = "锁定期初", module = "SUBJECT_BALANCE")
+    public void lockOpeningBalances(String period) {
+        if (period == null || period.length() != 6) {
+            throw BusinessException.badRequest("会计期间格式错误, 应为 YYYYMM");
+        }
+        PeriodEntity periodEntity = periodService.getByPeriodCode(period);
+        if (periodEntity == null) {
+            throw BusinessException.badRequest("会计期间不存在: " + period);
+        }
+        if ("closed".equals(periodEntity.getStatus()) || "locked".equals(periodEntity.getStatus())) {
+            throw BusinessException.badRequest("会计期间已" + periodEntity.getStatus() + ", 不可锁定期初: " + period);
+        }
+        if (!"entered".equals(periodEntity.getOpeningStatus())) {
+            throw BusinessException.badRequest("期间 " + period + " 尚未完成期初建账, 不可锁定");
+        }
+
+        // 锁定前必须试算平衡
+        Map<String, Object> trial = checkTrialBalance(period);
+        if (!Boolean.TRUE.equals(trial.get("beginBalanced"))) {
+            throw BusinessException.badRequest("期初借贷不平衡, 不可锁定: 借方="
+                    + trial.get("totalBeginDebit") + ", 贷方=" + trial.get("totalBeginCredit"));
+        }
+
+        periodService.setOpeningStatus(period, "locked");
+        log.info("锁定期初完成: period={}", period);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    @Auditable(operation = "解锁期初", module = "SUBJECT_BALANCE")
+    public void unlockOpeningBalances(String period) {
+        if (period == null || period.length() != 6) {
+            throw BusinessException.badRequest("会计期间格式错误, 应为 YYYYMM");
+        }
+        PeriodEntity periodEntity = periodService.getByPeriodCode(period);
+        if (periodEntity == null) {
+            throw BusinessException.badRequest("会计期间不存在: " + period);
+        }
+        if (!"locked".equals(periodEntity.getOpeningStatus())) {
+            throw BusinessException.badRequest("期间 " + period + " 期初未处于锁定状态, 无需解锁");
+        }
+
+        // 锁定期间已有 POSTED 凭证时不允许解锁：避免期初改动影响已生成报表
+        Long postedCount = voucherMapper.selectCount(
+                new LambdaQueryWrapper<VoucherEntity>()
+                        .eq(VoucherEntity::getPeriod, period)
+                        .eq(VoucherEntity::getStatus, "POSTED")
+                        .eq(VoucherEntity::getDeleted, 0));
+        if (postedCount != null && postedCount > 0) {
+            throw BusinessException.badRequest("期间 " + period + " 已存在 " + postedCount
+                    + " 张已过账凭证, 不允许解锁期初, 请通过红冲凭证方式修正数据");
+        }
+
+        periodService.setOpeningStatus(period, "entered");
+        log.info("解锁期初完成: period={}", period);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    @Auditable(operation = "清空期初", module = "SUBJECT_BALANCE")
+    public void clearOpeningBalances(String period) {
+        if (period == null || period.length() != 6) {
+            throw BusinessException.badRequest("会计期间格式错误, 应为 YYYYMM");
+        }
+        PeriodEntity periodEntity = periodService.getByPeriodCode(period);
+        if (periodEntity == null) {
+            throw BusinessException.badRequest("会计期间不存在: " + period);
+        }
+        if ("locked".equals(periodEntity.getOpeningStatus())) {
+            throw BusinessException.conflict("期间 " + period + " 期初已锁定, 不可清空");
+        }
+
+        // 期间已有 POSTED 凭证时不允许清空：会破坏与凭证发生额的一致性
+        Long postedCount = voucherMapper.selectCount(
+                new LambdaQueryWrapper<VoucherEntity>()
+                        .eq(VoucherEntity::getPeriod, period)
+                        .eq(VoucherEntity::getStatus, "POSTED")
+                        .eq(VoucherEntity::getDeleted, 0));
+        if (postedCount != null && postedCount > 0) {
+            throw BusinessException.conflict("期间 " + period + " 已存在 " + postedCount
+                    + " 张已过账凭证, 不允许清空期初, 请通过红冲凭证方式修正");
+        }
+
+        LambdaQueryWrapper<SubjectBalanceEntity> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(SubjectBalanceEntity::getPeriod, period);
+        int deleted = subjectBalanceMapper.delete(wrapper);
+        periodService.setOpeningStatus(period, "none");
+        log.info("清空期初完成: period={}, 删除余额行={}", period, deleted);
+    }
+
+    @Override
+    public void validateOpeningBeforePost(String period) {
+        if (period == null || period.length() != 6) return;
+        PeriodEntity target = periodService.getByPeriodCode(period);
+        if (target == null) return; // 期间不存在时放行（避免破坏未初始化场景）
+        String status = target.getOpeningStatus();
+        if (status == null) return; // 未初始化（老数据）放行
+        if (!"none".equals(status)) return; // 已 entered/locked，放行
+
+        // opening_status == 'none' 时：仅当该期间是企业最早期才强制要求先建账
+        LambdaQueryWrapper<PeriodEntity> earliestWrapper = new LambdaQueryWrapper<>();
+        earliestWrapper.orderByAsc(PeriodEntity::getPeriodCode).last("LIMIT 1");
+        PeriodEntity earliest = periodService.getOne(earliestWrapper);
+        if (earliest != null && period.equals(earliest.getPeriodCode())) {
+            throw BusinessException.badRequest("期间 " + period
+                    + " 尚未完成期初建账, 请先在「期初建账」模块录入期初余额再过账凭证");
+        }
+    }
+
+    @Override
+    public PeriodEntity getPeriodEntity(String period) {
+        return periodService.getByPeriodCode(period);
     }
 
     @Override

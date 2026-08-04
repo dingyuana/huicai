@@ -32,6 +32,7 @@ import com.huicai.base.system.mapper.UserMapper;
 import com.huicai.base.system.service.PeriodService;
 import com.huicai.base.system.service.SubjectService;
 import com.huicai.base.system.service.VoucherTypeService;
+import com.huicai.base.system.util.SecurityUtils;
 import com.huicai.base.business.entity.OutputInvoiceEntity;
 import com.huicai.base.business.mapper.OutputInvoiceMapper;
 import lombok.RequiredArgsConstructor;
@@ -80,6 +81,7 @@ public class VoucherServiceImpl extends ServiceImpl<VoucherMapper, VoucherEntity
     @Override
     public IPage<VoucherVO> pageQuery(VoucherQueryDTO queryDTO) {
         Page<VoucherEntity> page = new Page<>(queryDTO.getCurrent(), queryDTO.getSize());
+        Long enterpriseId = SecurityUtils.getCurrentEnterpriseId();
         IPage<VoucherEntity> entityPage = voucherMapper.selectVoucherPage(
                 page,
                 queryDTO.getPeriod(),
@@ -87,7 +89,8 @@ public class VoucherServiceImpl extends ServiceImpl<VoucherMapper, VoucherEntity
                 queryDTO.getVoucherTypeId(),
                 queryDTO.getKeyword(),
                 queryDTO.getVoucherNo(),
-                queryDTO.getSourceDocNo()
+                queryDTO.getSourceDocNo(),
+                enterpriseId
         );
 
         IPage<VoucherVO> voPage = new Page<>(entityPage.getCurrent(), entityPage.getSize(), entityPage.getTotal());
@@ -102,7 +105,7 @@ public class VoucherServiceImpl extends ServiceImpl<VoucherMapper, VoucherEntity
 
     @Override
     public VoucherVO getDetail(Long id) {
-        VoucherEntity entity = voucherMapper.selectVoucherDetail(id);
+        VoucherEntity entity = voucherMapper.selectVoucherDetail(id, SecurityUtils.getCurrentEnterpriseId());
         if (entity == null) {
             throw BusinessException.notFound("凭证不存在");
         }
@@ -323,6 +326,7 @@ public class VoucherServiceImpl extends ServiceImpl<VoucherMapper, VoucherEntity
         VoucherEntity entity = getValidVoucher(id);
         voucherStateMachineService.assertPostable(entity);
         assertPeriodOpen(entity.getPeriod());
+        subjectBalanceService.validateOpeningBeforePost(entity.getPeriod());
 
         // 更新状态
         voucherMapper.batchUpdateStatus(Collections.singletonList(id), "POSTED", userId, entity.getVersion());
@@ -353,6 +357,7 @@ public class VoucherServiceImpl extends ServiceImpl<VoucherMapper, VoucherEntity
             VoucherEntity entity = getValidVoucher(id);
             assertStatus(entity, "AUDITED");
             assertPeriodOpen(entity.getPeriod());
+            subjectBalanceService.validateOpeningBeforePost(entity.getPeriod());
         }
 
         voucherMapper.batchUpdateStatus(ids, "POSTED", userId, null);
@@ -772,7 +777,8 @@ public class VoucherServiceImpl extends ServiceImpl<VoucherMapper, VoucherEntity
                 queryDTO.getVoucherTypeId(),
                 queryDTO.getKeyword(),
                 queryDTO.getVoucherNo(),
-                queryDTO.getSourceDocNo()
+                queryDTO.getSourceDocNo(),
+                SecurityUtils.getCurrentEnterpriseId()
         );
 
         if (vouchers.isEmpty()) {

@@ -85,4 +85,21 @@ public class PeriodServiceImpl extends ServiceImpl<PeriodMapper, PeriodEntity> i
             updateById(entity);
         }
     }
+
+    @Override
+    public PeriodEntity getByPeriodCode(String periodCode) {
+        if (periodCode == null || periodCode.isBlank()) return null;
+        LambdaQueryWrapper<PeriodEntity> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(PeriodEntity::getPeriodCode, periodCode);
+        return getOne(wrapper);
+    }
+
+    @Override
+    public void setOpeningStatus(String periodCode, String openingStatus) {
+        if (periodCode == null || periodCode.isBlank()) return;
+        PeriodEntity entity = getByPeriodCode(periodCode);
+        if (entity == null) return;
+        entity.setOpeningStatus(openingStatus);
+        updateById(entity);
+    }
 }
