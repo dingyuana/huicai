@@ -30,7 +30,7 @@
 3. **无下游衔接**：手动创建的进项发票 `certify()` 只改认证状态，不创建 BusinessDoc、不生成凭证、不关联应付。导入路径虽一步到位创建 BusinessDoc+Voucher，但绕过了审核流程。
 
 ### 1.2 设计文档已有的定义
-`docs/design/06-发票税务管理.md` §4 定义了进项应走6步流程：
+`docs/design/DSN-发票税务管理.md` §4 定义了进项应走6步流程：
 ```
 ① 导入 -> PENDING_CONFIRM（仅创建发票，不自动生单）
 ② 人工提交审核 -> PENDING_REVIEW

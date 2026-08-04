@@ -17,7 +17,7 @@
 ## 4. 异常处理
 → 见本文 2.4 预警去重逻辑、2.6 前端功能（人工忽略、标记已处理）
 
-> **关联文档**：[项目说明](../项目说明.md), [技术方案](../技术方案.md), [需求分析](../需求分析.md), [02-arap-design.md](../design/02-应收应付管理.md), [P43-bad-debt-provision.md](P43-bad-debt-provision.md)
+> **关联文档**：[项目说明](../CORE-项目说明.md), [技术方案](../CORE-技术方案.md), [需求分析](../CORE-需求分析.md), [02-arap-design.md](../design/02-应收应付管理.md), [P43-bad-debt-provision.md](P43-bad-debt-provision.md)
 > **版本历史**：
 > - V1.0 (2026-07-11): 初始版本
 

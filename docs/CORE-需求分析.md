@@ -2,7 +2,7 @@
 
 > **版本**：V4.0 | **最后修改**：2026-07-24 | **作者**：Hermes
 > **状态**：✅ 生效
-> **关联文档**：[项目说明](./项目说明.md)、[技术方案](./技术方案.md)、[需求登记册](./development/requirements/REQUIREMENTS_REGISTRY.md)、[文档注册表](./文档注册表.md)
+> **关联文档**：[项目说明](./CORE-项目说明.md)、[技术方案](./CORE-技术方案.md)、[需求登记册](./development/requirements/REQUIREMENTS_REGISTRY.md)、[文档注册表](./CORE-文档注册表.md)
 > **V4.0 变更**：Agency 分支需求全面重构，新增代理内角色体系 + 客户分配机制 + 权限矩阵，对齐行业标准
 
 ---
@@ -207,4 +207,4 @@
 
 ---
 
-> **文档结束。** 配套文档：[项目说明](./项目说明.md) | [技术方案](./技术方案.md) | [需求登记册](./development/requirements/REQUIREMENTS_REGISTRY.md)
+> **文档结束。** 配套文档：[项目说明](./CORE-项目说明.md) | [技术方案](./CORE-技术方案.md) | [需求登记册](./development/requirements/REQUIREMENTS_REGISTRY.md)

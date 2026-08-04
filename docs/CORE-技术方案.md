@@ -2,7 +2,7 @@
 
 > **版本**：V4.0 | **最后修改**：2026-07-24 | **作者**：Hermes
 > **状态**：✅ 生效
-> **关联文档**：[项目说明](./项目说明.md)、[需求分析](./需求分析.md)、[模块设计](./design/README.md)、[文档注册表](./文档注册表.md)
+> **关联文档**：[项目说明](./CORE-项目说明.md)、[需求分析](./CORE-需求分析.md)、[模块设计](./design/README.md)、[文档注册表](./文档注册表.md)
 > **V4.0 变更**：Agency 分支模块清单全面更新，新增代理内角色体系 + 客户分配 + 数据权限细化，对齐行业标准
 
 ---
@@ -96,28 +96,28 @@
 
 | 模块 | 包名 | 核心服务 | 成熟度 | 设计文档 |
 |------|------|---------|--------|---------|
-| 科目体系 | base/system | SubjectService, ImportExportService | ✅ 完整 | [设计/00-基础数据管理](./design/00-基础数据管理.md) |
+| 科目体系 | base/system | SubjectService, ImportExportService | ✅ 完整 | [设计/DSN-基础数据管理](./design/00-基础数据管理.md) |
 | 会计期间 | base/system | PeriodService | ✅ 完整 | 同上 |
-| 凭证引擎 | base/voucher | VoucherService, VoucherStateMachine | ✅ 完整 | [设计/01-总账管理](./design/01-总账管理.md) |
+| 凭证引擎 | base/voucher | VoucherService, VoucherStateMachine | ✅ 完整 | [设计/DSN-总账管理](./design/01-总账管理.md) |
 | 科目余额 | base/balance | SubjectBalanceService | ✅ 完整 | 同上 |
 | 期末结账 | base/voucher | PeriodCloseService | ✅ 完整 | 同上 |
 | 凭证模板 | base/voucher | VoucherTemplateService | ✅ 完整 | 同上 |
 | 账簿查询 | base/voucher | LedgerService | ✅ 完整 | 同上 |
-| 报表引擎 | base/report | ReportService | ✅ 完整 | [设计/09-报表分析](./design/09-报表分析.md) |
-| RBAC权限 | base/system | UserService, RoleService, MenuService | ✅ 完整 | [设计/00-基础数据管理](./design/00-基础数据管理.md) |
+| 报表引擎 | base/report | ReportService | ✅ 完整 | [设计/DSN-报表分析](./design/09-报表分析.md) |
+| RBAC权限 | base/system | UserService, RoleService, MenuService | ✅ 完整 | [设计/DSN-基础数据管理](./design/00-基础数据管理.md) |
 | 基础档案 | base/masterdata | Customer/Vendor/Dept/Employee | ✅ 完整 | 同上 |
 | 审计日志 | base/system | AuditLogService | ✅ 完整 | 同上 |
 | 系统配置 | base/system | SysConfigService | ✅ 完整 | 同上 |
 | 摘要库 | base/system | SummaryLibService | ✅ 完整 | 同上 |
-| 分类规则 | sme/cash | ClassificationRuleService | ✅ 完整 | [设计/03-资金管理](./design/03-资金管理.md) |
+| 分类规则 | sme/cash | ClassificationRuleService | ✅ 完整 | [设计/DSN-资金管理](./design/03-资金管理.md) |
 | 附件存储 | base/storage | AttachmentService | ✅ 完整 | 同上 |
-| AI辅助 | base/ai | AiTaskService, AiFeedbackLogService | ⚠️ 部分 | [设计/10-AI编排层](./design/10-AI编排层.md) |
+| AI辅助 | base/ai | AiTaskService, AiFeedbackLogService | ⚠️ 部分 | [设计/DSN-AI编排层](./design/10-AI编排层.md) |
 
 ### 3.2 SME 分支模块
 
 | 模块 | 包名 | 核心服务 | 成熟度 | 设计文档 |
 |------|------|---------|--------|---------|
-| 销项发票 | sme/tax | OutputInvoiceStateMachineService, SalesInvoiceImportService | ✅ 完整 | [设计/06-发票税务](./design/06-发票税务管理.md) |
+| 销项发票 | sme/tax | OutputInvoiceStateMachineService, SalesInvoiceImportService | ✅ 完整 | [设计/DSN-发票税务管理](./design/06-发票税务管理.md) |
 | 进项发票 | sme/tax | InputInvoiceStateMachineService | ✅ 完整 | 同上 |
 | 增值税计算 | sme/tax | TaxService | ✅ 完整 | 同上 |
 | 应收应付/核销 | sme/arap | ReconciliationService, ArapSettlementService, BusinessDocService | ✅ 完整 | [设计/02-应收应付](./design/02-应收应付管理.md) |
@@ -126,12 +126,12 @@
 | 预收预付 | sme/arap | PrepaymentService, PaymentPlanService | ✅ 完整 | 同上 |
 | 客户对账单 | sme/arap | CustomerStatementService | ✅ 完整 | 同上 |
 | 采购退货 | sme/arap | PurchaseReturnService | ✅ 完整 | 同上 |
-| 费用报销 | sme/arap | ExpenseReimbursementService | ✅ 完整 | [设计/05-费用报销](./design/05-费用报销管理.md) |
-| 银行流水/资金/对账 | sme/cash | BankStatementService, BankReconciliationService, CashJournalService | ✅ 完整 | [设计/03-资金管理](./design/03-资金管理.md) |
+| 费用报销 | sme/arap | ExpenseReimbursementService | ✅ 完整 | [设计/DSN-费用报销管理](./design/05-费用报销管理.md) |
+| 银行流水/资金/对账 | sme/cash | BankStatementService, BankReconciliationService, CashJournalService | ✅ 完整 | [设计/DSN-资金管理](./design/03-资金管理.md) |
 | 票据管理 | sme/cash | TicketService | ✅ 完整 | 同上 |
-| 固定资产 | sme/asset | AssetCardService, DepreciationService | ✅ 完整 | [设计/04-固定资产](./design/04-固定资产管理.md) |
-| 预算管理 | sme/budget | BudgetService, BudgetStateMachineService | ✅ 完整 | [设计/08-预算管理](./design/08-预算管理.md) |
-| 工资薪酬 | sme/salary | （待建） | ❌ 待建 | [设计/07-工资薪酬](./design/07-工资薪酬管理.md) |
+| 固定资产 | sme/asset | AssetCardService, DepreciationService | ✅ 完整 | [设计/DSN-固定资产管理](./design/04-固定资产管理.md) |
+| 预算管理 | sme/budget | BudgetService, BudgetStateMachineService | ✅ 完整 | [设计/DSN-预算管理](./design/08-预算管理.md) |
+| 工资薪酬 | sme/salary | （待建） | ❌ 待建 | [设计/DSN-工资薪酬管理](./design/07-工资薪酬管理.md) |
 
 ### 3.3 Agency 分支模块
 
@@ -311,4 +311,4 @@ t_receivable/t_payable 已删除，统一使用 t_business_doc 表。
 
 ---
 
-> **文档结束。** 配套文档：[项目说明](./项目说明.md) | [需求分析](./需求分析.md) | [模块设计目录](./design/README.md)
+> **文档结束。** 配套文档：[项目说明](./CORE-项目说明.md) | [需求分析](./CORE-需求分析.md) | [模块设计目录](./design/README.md)
