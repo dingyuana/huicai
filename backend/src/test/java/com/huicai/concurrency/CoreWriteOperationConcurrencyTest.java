@@ -121,14 +121,16 @@ class CoreWriteOperationConcurrencyTest {
     @DisplayName("H-13-2: 多线程并发核销审批时乐观锁拦截冲突")
     void approve_concurrentThreads_optimisticLockIntercepts() throws Exception {
         // given
-        ArapSettlementEntity entity = settlementWithStatus(ArapStatus.SUBMITTED);
-        when(mapper.selectById(SETTLEMENT_ID)).thenReturn(entity);
-
         ArapSettlementEntryEntity entry = new ArapSettlementEntryEntity();
         entry.setSettlementId(SETTLEMENT_ID);
         entry.setBusinessDocId(DOC_ID);
         entry.setSettledAmount(ENTRY_AMOUNT);
         when(entryMapper.selectList(any())).thenReturn(List.of(entry));
+
+        // 并发场景下每次 selectById 返回新实例，避免多线程共享同一对象：
+        // 1) settlement 共享实例会被首个线程改为 CONFIRMED，导致后续线程走 BusinessException 而非乐观锁冲突
+        // 2) 必须保证 5 线程都读到 SUBMITTED，全部进入业务单据 updateById 乐观锁竞争
+        when(mapper.selectById(SETTLEMENT_ID)).thenAnswer(inv -> settlementWithStatus(ArapStatus.SUBMITTED));
 
         // 并发场景下每次 selectById 返回新实例，避免多线程共享同一对象导致字段修改竞争
         when(businessDocMapper.selectById(DOC_ID)).thenAnswer(inv -> approvedBusinessDoc());
@@ -143,6 +145,10 @@ class CoreWriteOperationConcurrencyTest {
                         return updateCallCount.incrementAndGet() == 1 ? 1 : 0;
                     }
                 });
+
+        // 模拟 logReconciliationLog 中的 mapper 调用
+        when(mapper.updateById(any(ArapSettlementEntity.class))).thenReturn(1);
+        when(logMapper.insert(any(com.huicai.sme.arap.entity.ReconciliationLogEntity.class))).thenReturn(1);
 
         // when: 5 线程并发 approve
         ExecutorService executor = Executors.newFixedThreadPool(5);
