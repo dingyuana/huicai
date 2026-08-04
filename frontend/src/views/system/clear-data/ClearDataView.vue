@@ -89,7 +89,6 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
-import dayjs from 'dayjs'
 import {
   Refresh, Document, DataBoard, Tickets, PriceTag,
   List, Coin, WarningFilled, Delete, FolderDelete,
@@ -103,7 +102,7 @@ import { getBankStatementPage } from '@/api/modules/bankStatement'
 import { getBusinessDocPage } from '@/api/modules/businessDoc'
 import { getVoucherPage } from '@/api/modules/voucher'
 import { pageReceivable, pagePayable } from '@/api/modules/arap'
-import { subjectBalance } from '@/api/modules/report'
+import { getReportDataStats } from '@/api/modules/system'
 
 const stats = ref({ statements: 0, invoices: 0, receivables: 0, payables: 0, businessDocs: 0, vouchers: 0, reportData: 0 })
 const loadErrors = ref<string[]>([])
@@ -151,7 +150,7 @@ async function fetchStats() {
     tryFetch('凭证', () => getVoucherPage({ current: 1, size: 1 }), v => stats.value.vouchers = v),
     tryFetch('应收明细', () => pageReceivable({ current: 1, size: 1 }), v => stats.value.receivables = v),
     tryFetch('应付明细', () => pagePayable({ current: 1, size: 1 }), v => stats.value.payables = v),
-    tryFetch('报表数据', () => subjectBalance(dayjs().format('YYYYMM')), v => stats.value.reportData = v),
+    tryFetch('报表数据', () => getReportDataStats(), v => stats.value.reportData = v),
   ])
   if (loadErrors.value.length > 0) {
     ElMessage.warning(`部分统计数据加载失败 (${loadErrors.value.length} 项)`)

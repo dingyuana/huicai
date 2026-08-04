@@ -7,6 +7,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -72,6 +73,18 @@ public class SystemClearController {
         int total = d1 + d2;
         log.info("清空报表数据: subject_balance={}, cash_flow={}", d1, d2);
         return R.ok(result(total, "清空报表数据 " + total + " 条"));
+    }
+
+    @Operation(summary = "报表数据统计")
+    @GetMapping("/report-data-stats")
+    public R<Long> reportDataStats() {
+        Long balance = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM t_subject_balance", Long.class);
+        Long cashFlow = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM t_voucher_cash_flow", Long.class);
+        Long total = (balance == null ? 0L : balance) + (cashFlow == null ? 0L : cashFlow);
+        log.info("报表数据统计: subject_balance={}, cash_flow={}, total={}", balance, cashFlow, total);
+        return R.ok(total);
     }
 
     @Operation(summary = "清空业务单据")

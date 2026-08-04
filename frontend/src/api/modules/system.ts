@@ -73,6 +73,9 @@ export function clearVouchers(): Promise<{ deleted: number; message: string }> {
 export function clearReportData(): Promise<{ deleted: number; message: string }> {
   return request.post('/v1/system/clear-report-data')
 }
+export function getReportDataStats(): Promise<number> {
+  return request.get('/v1/system/report-data-stats')
+}
 export function clearBusinessDocs(): Promise<{ deleted: number; message: string }> {
   return request.post('/v1/system/clear-business-docs')
 }
