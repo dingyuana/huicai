@@ -25,7 +25,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class ClassificationRuleServiceImpl implements ClassificationRuleService {
 
     private final ClassificationRuleMapper mapper;
-
     @Override
     public IPage<ClassificationRuleEntity> page(Long tenantId, Integer current, Integer size) {
         Page<ClassificationRuleEntity> page = new Page<>(
@@ -102,16 +101,16 @@ public class ClassificationRuleServiceImpl implements ClassificationRuleService 
             return 0;
         }
 
-        // 8 条种子规则（与 V20 migration 数据一致）
+        // 8 条种子规则（与 V20 migration 数据一致，V132 新增三级科目）
         ClassificationRuleEntity[] seeds = new ClassificationRuleEntity[]{
-                createSeed(tenantId, 1, "银行利息与手续费", "keyword_regex", "手续费|工本费|年费|账户管理费|利息|结息|存款利息", "description", null, BankClassification.BANK_INTEREST_FEE, null, null),
-                createSeed(tenantId, 2, "业务收款", "keyword_regex", "货款|收款|销售|回款|客户|应收|收入", "description", "in", BankClassification.BUSINESS_RECEIPT, null, null),
-                createSeed(tenantId, 3, "业务付款", "keyword_regex", "货款|付款|采购|支付|供应商|应付|支出", "description", "out", BankClassification.BUSINESS_PAYMENT, null, null),
-                createSeed(tenantId, 4, "内部转账", "keyword_regex", "转账|转存|调拨|上划|下拨", "description", null, BankClassification.INTERNAL_TRANSFER, null, null),
-                createSeed(tenantId, 5, "税费扣缴", "keyword_regex", "税|税务|缴税|税金|税款|增值税|所得税|城建税|教育费附加|国家金库|国库|印花", "description", "out", BankClassification.TAX_WITHHOLDING, null, null),
-                createSeed(tenantId, 6, "薪酬与社保", "keyword_regex", "工资|薪酬|社保|公积金|养老|医疗|失业|工伤|生育|代扣|个税", "description", "out", BankClassification.SALARY_SOCIAL, null, null),
-                createSeed(tenantId, 7, "筹资与投资活动", "keyword_regex", "借款|还款|贷款|理财|投资|融资|分红|股本|债券", "description", null, BankClassification.FINANCING_INVEST, null, null),
-                createSeed(tenantId, 8, "其它/待认领", "keyword_regex", "", "description", null, BankClassification.OTHER_UNKNOWN, null, null),
+                createSeed(tenantId, 1, "银行利息与手续费", "keyword_regex", "手续费|工本费|年费|账户管理费|利息|结息|存款利息", "description", null, BankClassification.BANK_INTEREST_FEE, null, null, "银行", "手续费与利息", "银行手续费"),
+                createSeed(tenantId, 2, "业务收款", "keyword_regex", "货款|收款|销售|回款|客户|应收|收入", "description", "in", BankClassification.BUSINESS_RECEIPT, null, null, "业务收款", "主营业务收入", "货款收入"),
+                createSeed(tenantId, 3, "业务付款", "keyword_regex", "货款|付款|采购|支付|供应商|应付|支出", "description", "out", BankClassification.BUSINESS_PAYMENT, null, null, "业务付款", "主营业务成本", "采购支出"),
+                createSeed(tenantId, 4, "内部转账", "keyword_regex", "转账|转存|调拨|上划|下拨", "description", null, BankClassification.INTERNAL_TRANSFER, null, null, "内部转账", "银行存款", "行内转账"),
+                createSeed(tenantId, 5, "税费扣缴", "keyword_regex", "税|税务|缴税|税金|税款|增值税|所得税|城建税|教育费附加|国家金库|国库|印花", "description", "out", BankClassification.TAX_WITHHOLDING, null, null, "税费扣缴", "应交税费", "增值税"),
+                createSeed(tenantId, 6, "薪酬与社保", "keyword_regex", "工资|薪酬|社保|公积金|养老|医疗|失业|工伤|生育|代扣|个税", "description", "out", BankClassification.SALARY_SOCIAL, null, null, "薪酬社保", "应付职工薪酬", "工资与社保"),
+                createSeed(tenantId, 7, "筹资与投资活动", "keyword_regex", "借款|还款|贷款|理财|投资|融资|分红|股本|债券", "description", null, BankClassification.FINANCING_INVEST, null, null, "筹资投资", "短期借款", "银行贷款"),
+                createSeed(tenantId, 8, "其它/待认领", "keyword_regex", "", "description", null, BankClassification.OTHER_UNKNOWN, null, null, "其他", null, null),
         };
 
         int inserted = 0;
@@ -175,7 +174,8 @@ public class ClassificationRuleServiceImpl implements ClassificationRuleService 
 
     private ClassificationRuleEntity createSeed(Long tenantId, int priority, String name, String ruleType,
                                                 String pattern, String matchField, String direction,
-                                                String classification, Long debitSubjectId, Long creditSubjectId) {
+                                                String classification, Long debitSubjectId, Long creditSubjectId,
+                                                String subjectLevel1, String subjectLevel2, String subjectLevel3) {
         ClassificationRuleEntity entity = new ClassificationRuleEntity();
         entity.setTenantId(tenantId);
         entity.setName(name);
@@ -188,6 +188,9 @@ public class ClassificationRuleServiceImpl implements ClassificationRuleService 
         entity.setIsActive(true);
         entity.setDebitSubjectId(debitSubjectId);
         entity.setCreditSubjectId(creditSubjectId);
+        entity.setSubjectLevel1(subjectLevel1);
+        entity.setSubjectLevel2(subjectLevel2);
+        entity.setSubjectLevel3(subjectLevel3);
         entity.setCreatedBy(1L);
         entity.setUpdatedBy(1L);
         entity.setDeleted(0);

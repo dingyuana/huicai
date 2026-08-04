@@ -20,6 +20,9 @@ export interface BankStatementVO {
   aiConfidence?: number
   aiSuggestedAction?: string
   aiBusinessScene?: string
+  subjectLevel1?: string
+  subjectLevel2?: string
+  subjectLevel3?: string
   reviewStatus?: string
   reviewedBy?: number
   reviewedAt?: string

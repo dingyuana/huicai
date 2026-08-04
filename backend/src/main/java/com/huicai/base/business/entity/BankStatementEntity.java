@@ -43,6 +43,13 @@ public class BankStatementEntity extends BaseEntity {
     private String aiSuggestedAction;     // AI 建议分类
     @TableField(exist = false)
     private String aiBusinessScene;       // AI 业务场景
+    // DB 持久化: 三级科目（规则命中时写入）
+    @TableField(value = "subject_level1")
+    private String subjectLevel1;         // 一级科目
+    @TableField(value = "subject_level2")
+    private String subjectLevel2;         // 二级科目
+    @TableField(value = "subject_level3")
+    private String subjectLevel3;         // 三级科目
     // DB 列 category → Java 字段 classification（兼容旧代码引用）
     @TableField(value = "category")
     private String classification;        // 业务分类（DB 列名 category）

@@ -384,6 +384,12 @@ public class BankStatementServiceImpl implements BankStatementService {
         }
 
         stmt.setRuleId(finalRuleId);
+        // 规则命中时同步写入三级科目（规则未命中/兜底时三字段保持 null）
+        if (rule != null) {
+            stmt.setSubjectLevel1(rule.getSubjectLevel1());
+            stmt.setSubjectLevel2(rule.getSubjectLevel2());
+            stmt.setSubjectLevel3(rule.getSubjectLevel3());
+        }
         stmt.setClassification(finalClassification);
         statementMapper.updateById(stmt);
         return stmt;

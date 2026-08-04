@@ -63,6 +63,11 @@ public class ClassificationRuleEntity extends BaseEntity {
     @TableField(fill = FieldFill.INSERT_UPDATE)
     private LocalDateTime updatedAt;
 
+    /** 三级科目（展示用） */
+    private String subjectLevel1;
+    private String subjectLevel2;
+    private String subjectLevel3;
+
     /** 创建人 */
     private Long createdBy;
 

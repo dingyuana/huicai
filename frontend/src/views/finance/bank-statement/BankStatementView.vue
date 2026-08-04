@@ -64,6 +64,16 @@
             <el-tag v-else type="info" size="small">未分类</el-tag>
           </template>
         </el-table-column>
+        <el-table-column label="科目" width="150" align="center">
+          <template #default="{ row }">
+            <span v-if="hasSubjectLevel(row)" :title="getSubjectPath(row)" style="font-size:12px">
+              <span v-if="row.subjectLevel1">{{ row.subjectLevel1 }}</span>
+              <span v-if="row.subjectLevel2"> / {{ row.subjectLevel2 }}</span>
+              <span v-if="row.subjectLevel3"> / {{ row.subjectLevel3 }}</span>
+            </span>
+            <span v-else style="color:#c0c4cc">-</span>
+          </template>
+        </el-table-column>
         <el-table-column label="流程状态" width="100" align="center">
           <template #default="{ row }">
             <el-tag :type="reviewStatusTagType(row.reviewStatus)" size="small">
@@ -310,6 +320,14 @@
             </el-tag>
             <span v-else>-</span>
           </el-descriptions-item>
+          <el-descriptions-item label="科目" :span="2">
+            <span v-if="hasSubjectLevel(detailData)" :title="getSubjectPath(detailData)">
+              <span v-if="detailData.subjectLevel1">{{ detailData.subjectLevel1 }}</span>
+              <span v-if="detailData.subjectLevel2"> / {{ detailData.subjectLevel2 }}</span>
+              <span v-if="detailData.subjectLevel3"> / {{ detailData.subjectLevel3 }}</span>
+            </span>
+            <span v-else>-</span>
+          </el-descriptions-item>
           <el-descriptions-item label="流程状态">
             <el-tag :type="reviewStatusTagType(detailData.reviewStatus)" size="small">
               {{ REVIEW_STATUS_LABELS[detailData.reviewStatus] || detailData.reviewStatus || '待确认' }}
@@ -433,6 +451,15 @@ function canApprove(row: any): boolean {
 
 function fmtAmount(v: number) {
   return v == null ? '' : Number(v).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+
+function hasSubjectLevel(row: any) {
+  return row.subjectLevel1 || row.subjectLevel2 || row.subjectLevel3
+}
+function getSubjectPath(row: any) {
+  return [row.subjectLevel1, row.subjectLevel2, row.subjectLevel3]
+    .filter(Boolean)
+    .join(' / ')
 }
 
 async function fetchData() {

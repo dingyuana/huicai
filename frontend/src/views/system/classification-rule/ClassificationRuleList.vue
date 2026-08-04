@@ -54,6 +54,16 @@
             <span v-else class="text-muted">默认</span>
           </template>
         </el-table-column>
+        <el-table-column label="科目" width="170" align="center">
+          <template #default="{ row }">
+            <span v-if="row.subjectLevel1" :title="getRuleSubjectPath(row)" style="font-size:12px">
+              <span v-if="row.subjectLevel1">{{ row.subjectLevel1 }}</span>
+              <span v-if="row.subjectLevel2">/{{ row.subjectLevel2 }}</span>
+              <span v-if="row.subjectLevel3">/{{ row.subjectLevel3 }}</span>
+            </span>
+            <span v-else class="text-muted">未设置</span>
+          </template>
+        </el-table-column>
         <el-table-column label="类型" width="80" align="center">
           <template #default="{ row }">
             <el-tag v-if="row.isSystem" size="small" type="info">系统兜底</el-tag>
@@ -154,6 +164,24 @@
             <el-option label="C-待人工" value="C" />
           </el-select>
         </el-form-item>
+        <el-divider>三级科目（规则命中时展示）</el-divider>
+        <el-row :gutter="12">
+          <el-col :span="8">
+            <el-form-item label="一级科目">
+              <el-input v-model="form.subjectLevel1" placeholder="如：销售" clearable />
+            </el-form-item>
+          </el-col>
+          <el-col :span="8">
+            <el-form-item label="二级科目">
+              <el-input v-model="form.subjectLevel2" placeholder="如：主营业务收入" clearable />
+            </el-form-item>
+          </el-col>
+          <el-col :span="8">
+            <el-form-item label="三级科目">
+              <el-input v-model="form.subjectLevel3" placeholder="如：货款收入" clearable />
+            </el-form-item>
+          </el-col>
+        </el-row>
       </el-form>
       <template #footer>
         <el-button @click="dialogVisible = false">取消</el-button>
@@ -176,6 +204,11 @@ type ElTagType = 'success' | 'warning' | 'info' | 'primary' | 'danger'
 
 function routeTagType(routeType: string): ElTagType {
   return routeType === 'A' ? 'success' : routeType === 'B' ? 'warning' : 'info'
+}
+function getRuleSubjectPath(row: ClassificationRule) {
+  return [row.subjectLevel1, row.subjectLevel2, row.subjectLevel3]
+    .filter(Boolean)
+    .join(' / ')
 }
 
 const TYPE_LABELS: Record<string, string> = {
@@ -291,6 +324,9 @@ const form = reactive<ClassificationRule>({
   routeType: undefined,
   debitSubjectId: undefined,
   creditSubjectId: undefined,
+  subjectLevel1: undefined,
+  subjectLevel2: undefined,
+  subjectLevel3: undefined,
 })
 
 const rules = {
@@ -315,6 +351,9 @@ const openEdit = (row?: ClassificationRule) => {
       routeType: row.routeType,
       debitSubjectId: row.debitSubjectId,
       creditSubjectId: row.creditSubjectId,
+      subjectLevel1: row.subjectLevel1,
+      subjectLevel2: row.subjectLevel2,
+      subjectLevel3: row.subjectLevel3,
     })
   } else {
     Object.assign(form, {
@@ -323,6 +362,7 @@ const openEdit = (row?: ClassificationRule) => {
       priority: (list.value.length || 0) + 1, isActive: true,
       routeType: undefined,
       debitSubjectId: undefined, creditSubjectId: undefined,
+      subjectLevel1: undefined, subjectLevel2: undefined, subjectLevel3: undefined,
     })
   }
   dialogVisible.value = true

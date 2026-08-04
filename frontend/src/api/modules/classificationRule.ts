@@ -14,6 +14,9 @@ export interface ClassificationRule {
   routeType?: string     // A / B / C
   debitSubjectId?: number
   creditSubjectId?: number
+  subjectLevel1?: string  // 一级科目（展示用）
+  subjectLevel2?: string  // 二级科目
+  subjectLevel3?: string  // 三级科目
   createdAt?: string
   updatedAt?: string
 }
