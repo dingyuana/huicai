@@ -58,19 +58,36 @@
         </el-tab-pane>
       </el-tabs>
 
-      <el-dialog v-model="dialogVisible" title="录入期初余额" width="500">
-        <el-form :model="entryForm" label-width="100">
-          <el-form-item label="科目">
-            <el-tree-select v-model="entryForm.subjectId" :data="subjectTree" :props="({label:'name',value:'id',children:'children'} as any)"
-              check-strictly style="width:100%" placeholder="选择末级科目" />
-          </el-form-item>
-          <el-form-item label="期初余额">
-            <el-input-number v-model="entryForm.amount" :min="0" :precision="2" style="width:100%" />
-          </el-form-item>
-        </el-form>
+      <el-dialog v-model="dialogVisible" title="录入期初余额" width="760">
+        <el-alert type="info" :closable="false" show-icon style="margin-bottom:16px"
+          title="期初建账需借贷平衡：请一次性录入全部科目的期初余额（借方资产 + 贷方权益/负债），借贷合计相等方可保存。" />
+        <div class="entry-header">
+          <el-button size="small" type="primary" plain @click="addEntryRow">添加科目</el-button>
+          <div class="entry-total" :class="debitTotal !== creditTotal ? 'unbalanced' : 'balanced'">
+            借方合计：<b>{{ debitTotal.toFixed(2) }}</b>
+            ／贷方合计：<b>{{ creditTotal.toFixed(2) }}</b>
+            <el-tag :type="debitTotal === creditTotal ? 'success' : 'danger'" size="small" style="margin-left:8px">
+              {{ debitTotal === creditTotal ? '试算平衡' : '试算不平衡' }}
+            </el-tag>
+          </div>
+        </div>
+        <div v-for="(row, idx) in entryRows" :key="idx" class="entry-row">
+          <el-tree-select
+            v-model="row.subjectId"
+            :data="subjectTree"
+            :props="({label:'name',value:'id',children:'children'} as any)"
+            check-strictly
+            filterable
+            style="width:100%"
+            placeholder="选择末级科目" />
+          <el-input-number v-model="row.amount" :min="0" :precision="2" style="width:160px" />
+          <el-button size="small" text type="danger" @click="removeEntryRow(idx)">删除</el-button>
+        </div>
         <template #footer>
           <el-button @click="dialogVisible=false">取消</el-button>
-          <el-button type="primary" :loading="saving" @click="saveBalance">保存</el-button>
+          <el-button type="primary" :loading="saving" :disabled="debitTotal !== creditTotal || entryRows.length === 0" @click="saveBalance">
+            保存
+          </el-button>
         </template>
       </el-dialog>
     </el-card>
@@ -78,7 +95,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { getSubjectTree } from '@/api/modules/subject'
 import { initOpeningBalances, getSubjectBalances, checkTrialBalance } from '@/api/modules/subject'
@@ -95,7 +112,23 @@ const trialResult = ref<any>(null)
 const isLocked = ref(false)
 const subjectTree = ref<any[]>([])
 
-const entryForm = ref({ subjectId: null as number | null, amount: 0 })
+const entryRows = ref<Array<{ subjectId: number | null; amount: number }>>([])
+
+/** 科目ID -> 方向 快速查找 */
+const subjectDirectionMap = new Map<number, string>()
+function indexSubjectDirections(nodes: any[]) {
+  for (const n of nodes) {
+    if (n.id && n.direction) subjectDirectionMap.set(n.id, n.direction)
+    if (n.children?.length) indexSubjectDirections(n.children)
+  }
+}
+
+/** 借方合计(科目方向为 debit) */
+const debitTotal = computed(() =>
+  entryRows.value.reduce((sum, r) => r.subjectId && subjectDirectionMap.get(r.subjectId) === 'debit' ? sum + (r.amount || 0) : sum, 0))
+/** 贷方合计(科目方向为 credit) */
+const creditTotal = computed(() =>
+  entryRows.value.reduce((sum, r) => r.subjectId && subjectDirectionMap.get(r.subjectId) === 'credit' ? sum + (r.amount || 0) : sum, 0))
 
 async function fetchPeriods() {
   const { default: request } = await import('@/api/request')
@@ -116,6 +149,7 @@ async function fetchBalances() {
 
 async function fetchSubjectTree() {
   subjectTree.value = await getSubjectTree()
+  indexSubjectDirections(subjectTree.value)
 }
 
 async function switchPeriod() {
@@ -131,21 +165,35 @@ async function doTrialBalance() {
 }
 
 async function saveBalance() {
-  if (!entryForm.value.subjectId) { ElMessage.warning('请选择科目'); return }
+  const rows = entryRows.value.filter(r => r.subjectId && (r.amount || 0) > 0)
+  if (rows.length === 0) { ElMessage.warning('请至少录入一个科目'); return }
+  if (debitTotal.value !== creditTotal.value) {
+    ElMessage.warning(`试算不平衡：借方 ${debitTotal.value.toFixed(2)}，贷方 ${creditTotal.value.toFixed(2)}`)
+    return
+  }
   saving.value = true
   try {
     const balances: Record<number, number> = {}
-    balances[entryForm.value.subjectId] = entryForm.value.amount
+    rows.forEach(r => { balances[r.subjectId!] = r.amount || 0 })
     await initOpeningBalances(queryPeriod.value, balances)
     ElMessage.success('保存成功')
     dialogVisible.value = false
+    entryRows.value = []
     fetchBalances()
   } finally { saving.value = false }
 }
 
 function openEntryDialog() {
-  entryForm.value = { subjectId: null, amount: 0 }
+  entryRows.value = [{ subjectId: null, amount: 0 }]
   dialogVisible.value = true
+}
+
+function addEntryRow() {
+  entryRows.value.push({ subjectId: null, amount: 0 })
+}
+
+function removeEntryRow(idx: number) {
+  entryRows.value.splice(idx, 1)
 }
 
 function confirmLock() {
@@ -164,4 +212,16 @@ onMounted(() => {
 .page-title { font-size:16px; font-weight:600; }
 .toolbar { margin-bottom:16px; display:flex; gap:8px; }
 .trial-result { margin-top:16px; }
+
+.entry-header {
+  display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;
+}
+.entry-total {
+  font-size:13px; padding:4px 10px; border-radius:6px; background:#f4f4f5;
+}
+.entry-total.balanced { background:#f0f9eb; color:#67c23a; }
+.entry-total.unbalanced { background:#fef0f0; color:#f56c6c; }
+.entry-row {
+  display:flex; align-items:center; gap:8px; margin-bottom:8px;
+}
 </style>

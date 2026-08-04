@@ -1,7 +1,7 @@
 package com.huicai.base.balance.controller;
 
 import com.huicai.common.response.R;
-import com.huicai.base.balance.entity.SubjectBalanceEntity;
+import com.huicai.base.balance.dto.SubjectBalanceVO;
 import com.huicai.base.balance.service.SubjectBalanceService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -29,8 +29,8 @@ public class SubjectBalanceController {
 
     @Operation(summary = "查询科目余额表")
     @GetMapping
-    public R<List<SubjectBalanceEntity>> listByPeriod(@RequestParam String period) {
-        return R.ok(subjectBalanceService.queryByPeriod(period));
+    public R<List<SubjectBalanceVO>> listByPeriod(@RequestParam String period) {
+        return R.ok(subjectBalanceService.queryByPeriodWithSubject(period));
     }
 
     @Operation(summary = "试算平衡检查")

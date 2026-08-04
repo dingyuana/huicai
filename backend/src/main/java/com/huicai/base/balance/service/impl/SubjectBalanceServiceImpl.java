@@ -3,6 +3,7 @@ package com.huicai.base.balance.service.impl;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.huicai.common.exception.BusinessException;
 import com.huicai.base.balance.entity.SubjectBalanceEntity;
+import com.huicai.base.balance.dto.SubjectBalanceVO;
 import com.huicai.base.voucher.entity.VoucherEntity;
 import com.huicai.base.voucher.entity.VoucherEntryEntity;
 import com.huicai.base.balance.mapper.SubjectBalanceMapper;
@@ -20,6 +21,8 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * 科目余额更新服务实现
@@ -142,6 +145,44 @@ public class SubjectBalanceServiceImpl implements SubjectBalanceService {
         wrapper.eq(SubjectBalanceEntity::getPeriod, period)
                 .orderByAsc(SubjectBalanceEntity::getSubjectId);
         return subjectBalanceMapper.selectList(wrapper);
+    }
+
+    @Override
+    public List<SubjectBalanceVO> queryByPeriodWithSubject(String period) {
+        List<SubjectBalanceEntity> balances = queryByPeriod(period);
+        if (balances.isEmpty()) {
+            return new ArrayList<>();
+        }
+
+        Set<Long> subjectIds = balances.stream()
+                .map(SubjectBalanceEntity::getSubjectId)
+                .collect(Collectors.toSet());
+        Map<Long, Subject> subjectMap = subjectService.listByIds(subjectIds).stream()
+                .collect(Collectors.toMap(Subject::getId, s -> s, (a, b) -> a));
+
+        List<SubjectBalanceVO> result = new ArrayList<>(balances.size());
+        for (SubjectBalanceEntity balance : balances) {
+            SubjectBalanceVO vo = new SubjectBalanceVO();
+            vo.setId(balance.getId());
+            vo.setSubjectId(balance.getSubjectId());
+            vo.setYear(balance.getYear());
+            vo.setPeriod(balance.getPeriod());
+            vo.setBeginBalance(balance.getBeginBalance());
+            vo.setDebitTotal(balance.getDebitTotal());
+            vo.setCreditTotal(balance.getCreditTotal());
+            vo.setEndBalance(balance.getEndBalance());
+            vo.setCreatedAt(balance.getCreatedAt());
+            vo.setUpdatedAt(balance.getUpdatedAt());
+
+            Subject subject = subjectMap.get(balance.getSubjectId());
+            if (subject != null) {
+                vo.setSubjectCode(subject.getCode());
+                vo.setSubjectName(subject.getName());
+                vo.setDirection(subject.getDirection());
+            }
+            result.add(vo);
+        }
+        return result;
     }
 
     @Override

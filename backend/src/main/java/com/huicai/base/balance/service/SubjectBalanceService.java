@@ -1,6 +1,7 @@
 package com.huicai.base.balance.service;
 
 import com.huicai.base.balance.entity.SubjectBalanceEntity;
+import com.huicai.base.balance.dto.SubjectBalanceVO;
 import com.huicai.base.voucher.entity.VoucherEntity;
 import com.huicai.base.voucher.entity.VoucherEntryEntity;
 
@@ -18,6 +19,11 @@ public interface SubjectBalanceService {
     void initOpeningBalances(String period, Map<Long, BigDecimal> balances);
 
     List<SubjectBalanceEntity> queryByPeriod(String period);
+
+    /**
+     * 按期间查询科目余额，并注入科目编码/名称/方向（供列表展示）
+     */
+    List<SubjectBalanceVO> queryByPeriodWithSubject(String period);
 
     Map<String, Object> checkTrialBalance(String period);
 }

@@ -157,6 +157,14 @@ public class SubjectServiceImpl implements SubjectService {
     }
 
     @Override
+    public List<Subject> listByIds(Collection<Long> ids) {
+        if (ids == null || ids.isEmpty()) {
+            return Collections.emptyList();
+        }
+        return subjectMapper.selectBatchIds(ids);
+    }
+
+    @Override
     @Transactional(rollbackFor = Exception.class)
     public int importStandard() {
         // 检查是否已有科目数据（含逻辑删除的记录）

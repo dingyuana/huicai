@@ -8,6 +8,7 @@ import com.huicai.base.system.model.vo.SubjectTreeVO;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.InputStream;
+import java.util.Collection;
 import java.util.List;
 
 /**
@@ -39,6 +40,14 @@ public interface SubjectService {
      * 获取科目详情
      */
     Subject getById(Long id);
+
+    /**
+     * 批量获取科目（按ID集合，忽略逻辑删除过滤不在此方法语义内）
+     *
+     * @param ids 科目ID集合
+     * @return 科目列表（仅返回存在的记录）
+     */
+    List<Subject> listByIds(Collection<Long> ids);
 
     /**
      * 一键导入国家标准会计科目
