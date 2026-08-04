@@ -7,6 +7,7 @@ import com.huicai.base.voucher.entity.VoucherEntryEntity;
 import com.huicai.base.voucher.mapper.VoucherEntryMapper;
 import com.huicai.base.voucher.mapper.VoucherMapper;
 import com.huicai.base.voucher.service.PeriodCloseService;
+import com.huicai.base.voucher.constant.VoucherType;
 import com.huicai.base.balance.service.SubjectBalanceService;
 import com.huicai.base.system.entity.PeriodEntity;
 import com.huicai.base.system.service.PeriodService;
@@ -100,12 +101,16 @@ public class PeriodCloseServiceImpl implements PeriodCloseService {
             arr[1] = arr[1].add(c);
         }
 
+        if (agg.isEmpty()) {
+            throw BusinessException.badRequest("期间 " + period + " 无可结转的损益数据");
+        }
+
         // 构建结转凭证: 将每个损益科目的本期发生反向结转到"本年利润"占位科目
         // 简化: 没有本年利润科目时, 直接生成汇总调整凭证, 借贷方互相冲销, 总计为0, 但提供完整分录
         VoucherEntity voucher = new VoucherEntity();
         voucher.setVoucherNo("CLOSE-" + period + "-" + System.currentTimeMillis() % 10000);
         voucher.setPeriod(period);
-        voucher.setVoucherTypeId(0L);
+        voucher.setVoucherTypeId(VoucherType.ZZ);
         voucher.setStatus("DRAFT");
         voucher.setSource("GENERATED");
         voucher.setSummary("自动结转损益: " + period);

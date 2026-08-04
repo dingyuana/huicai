@@ -54,7 +54,7 @@ const checkResult = ref<any>(null)
 
 async function loadPeriods() {
   const d: any[] = await request.get('/v1/periods/all')
-  periods.value = d.map((p: any) => p.period)
+  periods.value = d.map((p: any) => p.periodCode).filter(Boolean)
   if (periods.value.length) period.value = periods.value[periods.value.length - 1]
 }
 
@@ -65,6 +65,7 @@ async function doCheck() {
 }
 
 async function doProfitCarryover() {
+  if (!period.value) return ElMessage.warning('请先选择会计期间')
   carrying.value = true
   try {
     await request.post('/base/voucher/v1/period-close/profit-carryover', null, { params: { period: period.value } })
@@ -74,6 +75,7 @@ async function doProfitCarryover() {
 }
 
 async function doClose() {
+  if (!period.value) return ElMessage.warning('请先选择会计期间')
   closing.value = true
   try {
     await request.post('/base/voucher/v1/period-close/close', null, { params: { period: period.value } })
