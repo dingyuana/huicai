@@ -70,6 +70,9 @@ export function clearInvoiceRecords(): Promise<{ deleted: number; message: strin
 export function clearVouchers(): Promise<{ deleted: number; message: string }> {
   return request.post('/v1/system/clear-vouchers')
 }
+export function clearReportData(): Promise<{ deleted: number; message: string }> {
+  return request.post('/v1/system/clear-report-data')
+}
 export function clearBusinessDocs(): Promise<{ deleted: number; message: string }> {
   return request.post('/v1/system/clear-business-docs')
 }

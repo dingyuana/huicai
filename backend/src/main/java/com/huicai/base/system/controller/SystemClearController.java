@@ -56,9 +56,22 @@ public class SystemClearController {
     public R<Map<String, Object>> clearVouchers() {
         int d1 = jdbcTemplate.update("DELETE FROM t_voucher_entry");
         int d2 = jdbcTemplate.update("DELETE FROM t_voucher");
-        int total = d1 + d2;
-        log.info("清空凭证: entries={}, vouchers={}", d1, d2);
+        int d3 = jdbcTemplate.update("DELETE FROM t_subject_balance");
+        int d4 = jdbcTemplate.update("DELETE FROM t_voucher_cash_flow");
+        int total = d1 + d2 + d3 + d4;
+        log.info("清空凭证: entries={}, vouchers={}, balance={}, cash_flow={}", d1, d2, d3, d4);
         return R.ok(result(total, "清空凭证 " + total + " 条"));
+    }
+
+    @Operation(summary = "清空报表数据")
+    @PostMapping("/clear-report-data")
+    @Transactional(rollbackFor = Exception.class)
+    public R<Map<String, Object>> clearReportData() {
+        int d1 = jdbcTemplate.update("DELETE FROM t_subject_balance");
+        int d2 = jdbcTemplate.update("DELETE FROM t_voucher_cash_flow");
+        int total = d1 + d2;
+        log.info("清空报表数据: subject_balance={}, cash_flow={}", d1, d2);
+        return R.ok(result(total, "清空报表数据 " + total + " 条"));
     }
 
     @Operation(summary = "清空业务单据")
@@ -136,6 +149,9 @@ public class SystemClearController {
         total += jdbcTemplate.update("DELETE FROM t_business_doc");
         total += jdbcTemplate.update("DELETE FROM t_voucher_entry");
         total += jdbcTemplate.update("DELETE FROM t_voucher");
+        // 同步清运行期报表数据, 避免 clear-all 后报表残留
+        total += jdbcTemplate.update("DELETE FROM t_subject_balance");
+        total += jdbcTemplate.update("DELETE FROM t_voucher_cash_flow");
         total += jdbcTemplate.update("DELETE FROM t_input_invoice");
         total += jdbcTemplate.update("DELETE FROM t_output_invoice");
         total += jdbcTemplate.update("DELETE FROM t_bank_statement");
