@@ -157,6 +157,54 @@ class PeriodCloseServiceImplTest {
     // ==================== generateProfitCarryOver ====================
 
     @Test
+    @DisplayName("结转幂等: 期间已存在结转凭证时再次结转抛异常")
+    void generateProfitCarryOver_throwsWhenAlreadyCarriedOver() {
+        stubFindPeriod(stubPeriod("open"));
+
+        // 该期间已存在 3 张结转凭证(CLOSE-202608 前缀)
+        when(voucherMapper.selectCount(any(LambdaQueryWrapper.class))).thenReturn(3L);
+
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> service.generateProfitCarryOver("202608", 1L));
+        assertTrue(ex.getMessage().contains("已存在"));
+        // 未生成任何凭证
+        verify(voucherMapper, never()).insert(any(VoucherEntity.class));
+        verify(voucherMapper, never()).updateById(any(VoucherEntity.class));
+    }
+
+    @Test
+    @DisplayName("结转幂等: 首次结转(无已存在凭证)正常生成")
+    void generateProfitCarryOver_firstTime_happyPath() {
+        stubFindPeriod(stubPeriod("open"));
+
+        // 无已存在结转凭证
+        when(voucherMapper.selectCount(any(LambdaQueryWrapper.class))).thenReturn(0L);
+
+        Subject profit = new Subject();
+        profit.setId(64L); profit.setCode("4103"); profit.setName("本年利润"); profit.setDirection("credit");
+        Subject expense = new Subject();
+        expense.setId(85L); expense.setCode("6602"); expense.setName("管理费用"); expense.setDirection("debit");
+        when(subjectMapper.selectOne(any(LambdaQueryWrapper.class))).thenReturn(profit);
+        when(subjectService.getById(85L)).thenReturn(expense);
+
+        VoucherEntity v = new VoucherEntity();
+        v.setId(200L); v.setStatus("POSTED"); v.setPeriod("202608"); v.setDeleted(0);
+        VoucherEntryEntity entry = new VoucherEntryEntity();
+        entry.setVoucherId(200L); entry.setSubjectId(85L);
+        entry.setDebit(new BigDecimal("1200.00")); entry.setCredit(BigDecimal.ZERO);
+        when(voucherEntryMapper.selectList(null)).thenReturn(List.of(entry));
+        when(voucherMapper.selectById(200L)).thenReturn(v);
+        when(voucherMapper.insert(any(VoucherEntity.class))).thenAnswer(inv -> {
+            ((VoucherEntity) inv.getArgument(0)).setId(300L);
+            return 1;
+        });
+        when(voucherEntryMapper.insert(any(VoucherEntryEntity.class))).thenReturn(1);
+
+        Long id = service.generateProfitCarryOver("202608", 1L);
+        assertEquals(300L, id);
+    }
+
+    @Test
     @DisplayName("结转: 费用科目余额结转到本年利润(借利润/贷费用)")
     void generateProfitCarryOver_expenseCarriedToProfit() {
         stubFindPeriod(stubPeriod("open"));

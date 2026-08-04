@@ -86,6 +86,16 @@ public class PeriodCloseServiceImpl implements PeriodCloseService {
     public Long generateProfitCarryOver(String period, Long userId) {
         findPeriod(period);
 
+        // 幂等保护: 该期间已存在结转凭证(未删除且非红冲)时禁止重复结转
+        Long existing = voucherMapper.selectCount(
+                new LambdaQueryWrapper<VoucherEntity>()
+                        .likeRight(VoucherEntity::getVoucherNo, "CLOSE-" + period)
+                        .isNull(VoucherEntity::getReversedFrom)
+                        .eq(VoucherEntity::getDeleted, 0));
+        if (existing != null && existing > 0) {
+            throw BusinessException.badRequest("期间 " + period + " 已存在 " + existing + " 张结转凭证, 请勿重复结转");
+        }
+
         // 本年利润科目（4103）
         Subject profitSubject = subjectMapper.selectOne(
                 new LambdaQueryWrapper<Subject>()
