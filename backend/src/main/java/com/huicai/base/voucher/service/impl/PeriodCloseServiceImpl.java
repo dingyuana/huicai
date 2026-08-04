@@ -10,6 +10,8 @@ import com.huicai.base.voucher.service.PeriodCloseService;
 import com.huicai.base.voucher.constant.VoucherType;
 import com.huicai.base.balance.service.SubjectBalanceService;
 import com.huicai.base.system.entity.PeriodEntity;
+import com.huicai.base.system.entity.Subject;
+import com.huicai.base.system.mapper.SubjectMapper;
 import com.huicai.base.system.service.PeriodService;
 import com.huicai.base.system.service.SubjectService;
 import lombok.RequiredArgsConstructor;
@@ -34,6 +36,7 @@ public class PeriodCloseServiceImpl implements PeriodCloseService {
     private final SubjectBalanceService subjectBalanceService;
     private final PeriodService periodService;
     private final SubjectService subjectService;
+    private final SubjectMapper subjectMapper;
 
     @Override
     public Map<String, Object> checkBeforeClose(String period) {
@@ -83,30 +86,35 @@ public class PeriodCloseServiceImpl implements PeriodCloseService {
     public Long generateProfitCarryOver(String period, Long userId) {
         findPeriod(period);
 
-        // 查询本期间所有已记账分录，按科目汇总损益类（type=income/expense）
-        // 简化处理: 本期所有借方发生 > 0 或 贷方发生 > 0 的末级科目都参与
-        List<VoucherEntryEntity> allEntries = voucherEntryMapper.selectList(null);
+        // 本年利润科目（4103）
+        Subject profitSubject = subjectMapper.selectOne(
+                new LambdaQueryWrapper<Subject>()
+                        .eq(Subject::getCode, "4103")
+                        .eq(Subject::getDeleted, 0)
+                        .last("LIMIT 1"));
+        if (profitSubject == null) {
+            throw BusinessException.badRequest("未配置本年利润科目(4103), 无法生成结转凭证");
+        }
 
+        // 汇总本期间已记账凭证的科目借贷发生额
+        List<VoucherEntryEntity> allEntries = voucherEntryMapper.selectList(null);
         Map<Long, BigDecimal[]> agg = new HashMap<>();
         for (VoucherEntryEntity e : allEntries) {
             VoucherEntity v = voucherMapper.selectById(e.getVoucherId());
             if (v == null || !"POSTED".equals(v.getStatus())) continue;
             if (!period.equals(v.getPeriod())) continue;
             if (Boolean.TRUE.equals(v.getDeleted())) continue;
-
             BigDecimal d = e.getDebit() == null ? BigDecimal.ZERO : e.getDebit();
             BigDecimal c = e.getCredit() == null ? BigDecimal.ZERO : e.getCredit();
             BigDecimal[] arr = agg.computeIfAbsent(e.getSubjectId(), k -> new BigDecimal[]{BigDecimal.ZERO, BigDecimal.ZERO});
             arr[0] = arr[0].add(d);
             arr[1] = arr[1].add(c);
         }
-
         if (agg.isEmpty()) {
             throw BusinessException.badRequest("期间 " + period + " 无可结转的损益数据");
         }
 
-        // 构建结转凭证: 将每个损益科目的本期发生反向结转到"本年利润"占位科目
-        // 简化: 没有本年利润科目时, 直接生成汇总调整凭证, 借贷方互相冲销, 总计为0, 但提供完整分录
+        // 构建结转凭证：损益类科目余额结转到本年利润
         VoucherEntity voucher = new VoucherEntity();
         voucher.setVoucherNo("CLOSE-" + period + "-" + System.currentTimeMillis() % 10000);
         voucher.setPeriod(period);
@@ -116,30 +124,74 @@ public class PeriodCloseServiceImpl implements PeriodCloseService {
         voucher.setSummary("自动结转损益: " + period);
         voucher.setCreatedBy(userId);
         voucher.setCreatedAt(LocalDateTime.now());
+        voucherMapper.insert(voucher);
 
         BigDecimal totalD = BigDecimal.ZERO;
         BigDecimal totalC = BigDecimal.ZERO;
+        int sort = 1;
         for (Map.Entry<Long, BigDecimal[]> entry : agg.entrySet()) {
-            totalD = totalD.add(entry.getValue()[0]);
-            totalC = totalC.add(entry.getValue()[1]);
+            Long subjectId = entry.getKey();
+            if (subjectId.equals(profitSubject.getId())) continue;
+            BigDecimal debit = entry.getValue()[0];
+            BigDecimal credit = entry.getValue()[1];
+            BigDecimal net = debit.subtract(credit);
+
+            Subject subject = subjectService.getById(subjectId);
+            if (subject == null) continue;
+            // 仅处理损益类科目(6xx): 收入(credit)与费用(debit)
+            if (subject.getCode() == null || subject.getCode().length() < 3
+                    || !subject.getCode().startsWith("6")) continue;
+
+            VoucherEntryEntity line;
+            if ("credit".equals(subject.getDirection())) {
+                // 收入类: 贷方余额反向结转 -> 借收入科目 / 贷本年利润
+                if (net.signum() >= 0) continue; // 收入科目净额为借(异常)时跳过
+                BigDecimal amount = net.abs();
+                line = entryOf(voucher.getId(), subjectId, amount, BigDecimal.ZERO, sort++,
+                        "结转收入 " + subject.getName() + " 至本年利润");
+                voucherEntryMapper.insert(line);
+                line = entryOf(voucher.getId(), profitSubject.getId(), BigDecimal.ZERO, amount, sort++,
+                        "收入结转 " + subject.getName());
+                voucherEntryMapper.insert(line);
+                totalD = totalD.add(amount);
+                totalC = totalC.add(amount);
+            } else {
+                // 费用类: 借方余额反向结转 -> 借本年利润 / 贷费用科目
+                if (net.signum() <= 0) continue;
+                BigDecimal amount = net;
+                line = entryOf(voucher.getId(), profitSubject.getId(), amount, BigDecimal.ZERO, sort++,
+                        "结转费用 " + subject.getName() + " 至本年利润");
+                voucherEntryMapper.insert(line);
+                line = entryOf(voucher.getId(), subjectId, BigDecimal.ZERO, amount, sort++,
+                        "费用结转 " + subject.getName());
+                voucherEntryMapper.insert(line);
+                totalD = totalD.add(amount);
+                totalC = totalC.add(amount);
+            }
         }
+
+        if (sort == 1) {
+            throw BusinessException.badRequest("期间 " + period + " 无损益类科目余额, 无需结转");
+        }
+
         voucher.setTotalDebit(totalD);
         voucher.setTotalCredit(totalC);
-        voucherMapper.insert(voucher);
-
-        // 写一行代表性分录
-        VoucherEntryEntity rep = new VoucherEntryEntity();
-        rep.setVoucherId(voucher.getId());
-        rep.setSubjectId(agg.isEmpty() ? 0L : agg.keySet().iterator().next());
-        rep.setDebit(totalD);
-        rep.setCredit(totalC);
-        rep.setSummary("损益结转占位, 请手工调整到本年利润科目");
-        rep.setSortOrder(1);
-        voucherEntryMapper.insert(rep);
+        voucherMapper.updateById(voucher);
 
         log.info("生成损益结转凭证: id={}, period={}, debit={}, credit={}",
                 voucher.getId(), period, totalD, totalC);
         return voucher.getId();
+    }
+
+    private VoucherEntryEntity entryOf(Long voucherId, Long subjectId, BigDecimal debit, BigDecimal credit, int sort, String summary) {
+        VoucherEntryEntity line = new VoucherEntryEntity();
+        line.setVoucherId(voucherId);
+        line.setSubjectId(subjectId);
+        line.setDebit(debit);
+        line.setCredit(credit);
+        line.setSummary(summary);
+        line.setSortOrder(sort);
+        return line;
     }
 
     @Override

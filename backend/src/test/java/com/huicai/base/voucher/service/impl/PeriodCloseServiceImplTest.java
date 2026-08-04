@@ -3,10 +3,14 @@ package com.huicai.base.voucher.service.impl;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.conditions.query.LambdaQueryChainWrapper;
 import com.huicai.common.exception.BusinessException;
+import com.huicai.base.voucher.entity.VoucherEntity;
+import com.huicai.base.voucher.entity.VoucherEntryEntity;
 import com.huicai.base.voucher.mapper.VoucherEntryMapper;
 import com.huicai.base.voucher.mapper.VoucherMapper;
 import com.huicai.base.balance.service.SubjectBalanceService;
 import com.huicai.base.system.entity.PeriodEntity;
+import com.huicai.base.system.entity.Subject;
+import com.huicai.base.system.mapper.SubjectMapper;
 import com.huicai.base.system.service.PeriodService;
 import com.huicai.base.system.service.SubjectService;
 import org.junit.jupiter.api.BeforeEach;
@@ -19,6 +23,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -37,13 +42,14 @@ class PeriodCloseServiceImplTest {
     @Mock private SubjectBalanceService subjectBalanceService;
     @Mock private PeriodService periodService;
     @Mock private SubjectService subjectService;
+    @Mock private SubjectMapper subjectMapper;
 
     private PeriodCloseServiceImpl service;
 
     @BeforeEach
     void setUp() {
         service = new PeriodCloseServiceImpl(voucherMapper, voucherEntryMapper,
-                subjectBalanceService, periodService, subjectService);
+                subjectBalanceService, periodService, subjectService, subjectMapper);
     }
 
     private PeriodEntity stubPeriod(String status) {
@@ -63,7 +69,7 @@ class PeriodCloseServiceImplTest {
     private void stubFindPeriod(PeriodEntity p) {
         LambdaQueryChainWrapper<PeriodEntity> chain = mock(LambdaQueryChainWrapper.class);
         when(periodService.lambdaQuery()).thenReturn(chain);
-        when(chain.eq(any(), eq("202607"))).thenReturn(chain);
+        when(chain.eq(any(), anyString())).thenReturn(chain);
         when(chain.one()).thenReturn(p);
     }
 
@@ -146,5 +152,74 @@ class PeriodCloseServiceImplTest {
         BusinessException ex = assertThrows(BusinessException.class,
                 () -> service.reopenPeriod("202607", 1L));
         assertTrue(ex.getMessage().contains("已结账"));
+    }
+
+    // ==================== generateProfitCarryOver ====================
+
+    @Test
+    @DisplayName("结转: 费用科目余额结转到本年利润(借利润/贷费用)")
+    void generateProfitCarryOver_expenseCarriedToProfit() {
+        stubFindPeriod(stubPeriod("open"));
+
+        // 本年利润(4103, credit) 与 管理费用(6602, debit)
+        Subject profit = new Subject();
+        profit.setId(64L); profit.setCode("4103"); profit.setName("本年利润"); profit.setDirection("credit");
+        Subject expense = new Subject();
+        expense.setId(85L); expense.setCode("6602"); expense.setName("管理费用"); expense.setDirection("debit");
+        when(subjectMapper.selectOne(any(LambdaQueryWrapper.class))).thenReturn(profit);
+        when(subjectService.getById(85L)).thenReturn(expense);
+
+        // 期间 202608 一张已记账凭证: 借 管理费用 1200 / 贷 银行存款 1200
+        VoucherEntity v = new VoucherEntity();
+        v.setId(200L); v.setStatus("POSTED"); v.setPeriod("202608"); v.setDeleted(0);
+        VoucherEntryEntity entry = new VoucherEntryEntity();
+        entry.setVoucherId(200L); entry.setSubjectId(85L);
+        entry.setDebit(new BigDecimal("1200.00")); entry.setCredit(BigDecimal.ZERO);
+        when(voucherEntryMapper.selectList(null)).thenReturn(List.of(entry));
+        when(voucherMapper.selectById(200L)).thenReturn(v);
+        when(voucherMapper.insert(any(VoucherEntity.class))).thenAnswer(inv -> {
+            ((VoucherEntity) inv.getArgument(0)).setId(300L);
+            return 1;
+        });
+        when(voucherEntryMapper.insert(any(VoucherEntryEntity.class))).thenReturn(1);
+
+        Long id = service.generateProfitCarryOver("202608", 1L);
+        assertEquals(300L, id);
+
+        // 两条分录: 借本年利润1200 / 贷管理费用1200
+        verify(voucherEntryMapper, times(2)).insert(argThat((VoucherEntryEntity e) -> {
+            if (e.getSubjectId().equals(64L)) {
+                return e.getDebit().compareTo(new BigDecimal("1200.00")) == 0
+                        && e.getCredit().compareTo(BigDecimal.ZERO) == 0;
+            }
+            if (e.getSubjectId().equals(85L)) {
+                return e.getCredit().compareTo(new BigDecimal("1200.00")) == 0
+                        && e.getDebit().compareTo(BigDecimal.ZERO) == 0;
+            }
+            return false;
+        }));
+    }
+
+    @Test
+    @DisplayName("结转: 无损益科目余额时返回业务提示")
+    void generateProfitCarryOver_noProfitData_throws() {
+        stubFindPeriod(stubPeriod("open"));
+
+        Subject profit = new Subject();
+        profit.setId(64L); profit.setCode("4103"); profit.setName("本年利润"); profit.setDirection("credit");
+        when(subjectMapper.selectOne(any(LambdaQueryWrapper.class))).thenReturn(profit);
+
+        // 期间 202608 一张已记账凭证但只有资产负债科目(1002)
+        VoucherEntity v = new VoucherEntity();
+        v.setId(200L); v.setStatus("POSTED"); v.setPeriod("202608"); v.setDeleted(0);
+        VoucherEntryEntity entry = new VoucherEntryEntity();
+        entry.setVoucherId(200L); entry.setSubjectId(2L);
+        entry.setDebit(BigDecimal.ZERO); entry.setCredit(new BigDecimal("1200.00"));
+        when(voucherEntryMapper.selectList(null)).thenReturn(List.of(entry));
+        when(voucherMapper.selectById(200L)).thenReturn(v);
+
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> service.generateProfitCarryOver("202608", 1L));
+        assertTrue(ex.getMessage().contains("无损益类科目余额"));
     }
 }
