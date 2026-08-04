@@ -6,7 +6,10 @@
       </div>
       <el-form :model="form" label-width="100px" style="max-width:600px" ref="formRef" :rules="rules">
         <el-form-item label="员工" prop="employeeId">
-          <el-input-number v-model="form.employeeId" :min="1" style="width:100%" />
+          <el-select v-model="form.employeeId" filterable placeholder="按工号/姓名搜索" style="width:100%">
+            <el-option v-for="e in employees" :key="e.id" :value="e.id as number"
+              :label="`${e.code} ${e.name}`" />
+          </el-select>
         </el-form-item>
         <el-form-item label="费用类型" prop="expenseType">
           <el-select v-model="form.expenseType" style="width:100%">
@@ -39,11 +42,13 @@ import { ref, onMounted } from 'vue'
 import { ElMessage, type FormInstance } from 'element-plus'
 import { useRoute, useRouter } from 'vue-router'
 import { createExpense, updateExpense, getExpense } from '@/api/modules/expense'
+import { listEmployee, type Employee } from '@/api/modules/employee'
 
 const route = useRoute()
 const router = useRouter()
 const isEdit = ref(false)
 const saving = ref(false)
+const employees = ref<Employee[]>([])
 const formRef = ref<FormInstance>()
 const form = ref({ employeeId: undefined as unknown as number, expenseType: 'OTHER', amount: 0, summary: '', remark: '' })
 const rules = {
@@ -74,6 +79,11 @@ const handleSave = async () => {
 }
 
 onMounted(async () => {
+  try {
+    employees.value = await listEmployee()
+  } catch {
+    /* 员工列表加载失败不阻塞编辑 */
+  }
   const id = route.query.id
   if (id) {
     isEdit.value = true

@@ -8,7 +8,9 @@
 
       <el-form :model="query" inline class="filter-form">
         <el-form-item label="员工">
-          <el-input v-model="query.employeeId" placeholder="员工ID" style="width:120px" clearable />
+          <el-select v-model="query.employeeId" filterable clearable placeholder="按工号/姓名搜索" style="width:150px">
+            <el-option v-for="e in employees" :key="e.id" :value="e.id as number" :label="`${e.code} ${e.name}`" />
+          </el-select>
         </el-form-item>
         <el-form-item label="状态">
           <el-select v-model="query.status" clearable placeholder="全部" style="width:130px">
@@ -22,7 +24,9 @@
 
       <el-table :data="list" v-loading="loading" border>
         <el-table-column prop="id" label="编号" width="70" />
-        <el-table-column prop="employeeId" label="员工ID" width="80" align="center" />
+        <el-table-column label="员工" width="140">
+          <template #default="{ row }">{{ row.employeeName || employeeLabel(row.employeeId) }}</template>
+        </el-table-column>
         <el-table-column prop="expenseType" label="费用类型" width="120" align="center">
           <template #default="{ row }">
             <el-tag size="small">{{ EXPENSE_TYPE_MAP[row.expenseType] || row.expenseType }}</el-tag>
@@ -69,6 +73,7 @@
 import { onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { pageExpense, submitExpense, approveExpense, rejectExpense, autoVoucher } from '@/api/modules/expense'
+import { listEmployee, type Employee } from '@/api/modules/employee'
 
 const STATUS_OPTIONS = [
   { value: 'DRAFT', label: '草稿' },
@@ -89,8 +94,22 @@ const query = reactive({ employeeId: '', status: '', current: 1, size: 20 })
 const list = ref<any[]>([])
 const total = ref(0)
 const loading = ref(false)
+const employees = ref<Employee[]>([])
+
+const employeeLabel = (id?: number) => {
+  const e = employees.value.find((x) => x.id === id)
+  return e ? `${e.code} ${e.name}` : id?.toString() || '-'
+}
 
 const fmtAmount = (v: any) => Number(v || 0).toFixed(2)
+
+onMounted(async () => {
+  try {
+    employees.value = await listEmployee()
+  } catch {
+    /* 员工列表加载失败不阻塞列表 */
+  }
+})
 
 const fetchData = async () => {
   loading.value = true
