@@ -1,87 +1,81 @@
 <template>
-  <div class="reconciliation-workbench">
-    <el-card shadow="never">
-      <div class="page-header">
-        <span class="page-title">核销工作台</span>
-        <el-space>
-          <el-button type="primary" @click="onAutoFifo" :disabled="!list.length" :loading="fifoLoading">
-            <el-icon><Refresh /></el-icon> 自动核销
-          </el-button>
-          <el-button @click="onRefresh">刷新</el-button>
-        </el-space>
-      </div>
-
-      <!-- tab 切换 -->
-      <el-radio-group v-model="activeTab" style="margin-bottom:12px" @change="onTabChange">
+  <div class="workbench-panel">
+    <div class="panel-toolbar">
+      <el-radio-group v-model="activeTab" @change="onTabChange">
         <el-radio-button value="RECEIPT">收款单</el-radio-button>
         <el-radio-button value="PAYMENT">付款单</el-radio-button>
       </el-radio-group>
+      <el-space>
+        <el-button type="primary" @click="onAutoFifo" :disabled="!list.length" :loading="fifoLoading">
+          <el-icon><Refresh /></el-icon> 自动核销
+        </el-button>
+      </el-space>
+    </div>
 
-      <el-form :model="query" inline class="filter-form">
-        <el-form-item label="对方名称">
-          <el-input v-model="query.keyword" placeholder="搜索客户/供应商" clearable style="width:200px" />
-        </el-form-item>
-        <el-form-item label="期间">
-          <el-input v-model="query.period" placeholder="YYYYMM" style="width:100px" clearable />
-        </el-form-item>
-        <el-form-item>
-          <el-button type="primary" @click="onSearch">查询</el-button>
-          <el-button @click="onReset">重置</el-button>
-        </el-form-item>
-      </el-form>
+    <el-form :model="query" inline class="filter-form">
+      <el-form-item label="对方名称">
+        <el-input v-model="query.keyword" placeholder="搜索客户/供应商" clearable style="width:200px" />
+      </el-form-item>
+      <el-form-item label="期间">
+        <el-input v-model="query.period" placeholder="YYYYMM" style="width:100px" clearable />
+      </el-form-item>
+      <el-form-item>
+        <el-button type="primary" @click="onSearch">查询</el-button>
+        <el-button @click="onReset">重置</el-button>
+      </el-form-item>
+    </el-form>
 
-      <el-table :data="list" v-loading="loading" border stripe @row-click="onRowClick" style="cursor:pointer">
-        <el-table-column prop="docNo" label="单据号" width="160" />
-        <el-table-column prop="docDate" label="日期" width="110" />
-        <el-table-column :label="activeTab === 'RECEIPT' ? '客户' : '供应商'" min-width="140" show-overflow-tooltip>
-          <template #default="{ row }">
-            {{ activeTab === 'RECEIPT' ? row.customerName : row.supplierName }}
-          </template>
-        </el-table-column>
-        <el-table-column label="金额" width="130" align="right">
-          <template #default="{ row }">{{ fmtAmount(row.amount) }}</template>
-        </el-table-column>
-        <el-table-column label="已核销" width="130" align="right">
-          <template #default="{ row }">{{ fmtAmount(row.settledAmount) }}</template>
-        </el-table-column>
-        <el-table-column label="未核销" width="130" align="right">
-          <template #default="{ row }">
-            <span :style="{ color: (row.unsettledAmount || 0) > 0 ? '#E6A23C' : '#67C23A' }">
-              {{ fmtAmount(row.unsettledAmount) }}
-            </span>
-          </template>
-        </el-table-column>
-        <el-table-column prop="summary" label="摘要" min-width="180" show-overflow-tooltip />
-        <el-table-column label="状态" width="90" align="center">
-          <template #default="{ row }">
-            <el-tag :type="(row.unsettledAmount || 0) > 0 ? 'warning' : 'success'" size="small">
-              {{ (row.unsettledAmount || 0) > 0 ? '未核完' : '已核完' }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column label="操作" width="120" fixed="right">
-          <template #default="{ row }">
-            <el-button v-if="(row.unsettledAmount || 0) > 0"
-              text size="small" type="primary" @click.stop="onShowRecommend(row)">
-              核销推荐
-            </el-button>
-            <span v-else style="color:#909399;font-size:12px">已结清</span>
-          </template>
-        </el-table-column>
-      </el-table>
+    <el-table :data="list" v-loading="loading" border stripe @row-click="onRowClick" style="cursor:pointer">
+      <el-table-column prop="docNo" label="单据号" width="160" />
+      <el-table-column prop="docDate" label="日期" width="110" />
+      <el-table-column :label="activeTab === 'RECEIPT' ? '客户' : '供应商'" min-width="140" show-overflow-tooltip>
+        <template #default="{ row }">
+          {{ activeTab === 'RECEIPT' ? row.customerName : row.supplierName }}
+        </template>
+      </el-table-column>
+      <el-table-column label="金额" width="130" align="right">
+        <template #default="{ row }">{{ fmtAmount(row.amount) }}</template>
+      </el-table-column>
+      <el-table-column label="已核销" width="130" align="right">
+        <template #default="{ row }">{{ fmtAmount(row.settledAmount) }}</template>
+      </el-table-column>
+      <el-table-column label="未核销" width="130" align="right">
+        <template #default="{ row }">
+          <span :style="{ color: (row.unsettledAmount || 0) > 0 ? '#E6A23C' : '#67C23A' }">
+            {{ fmtAmount(row.unsettledAmount) }}
+          </span>
+        </template>
+      </el-table-column>
+      <el-table-column prop="summary" label="摘要" min-width="180" show-overflow-tooltip />
+      <el-table-column label="状态" width="90" align="center">
+        <template #default="{ row }">
+          <el-tag :type="(row.unsettledAmount || 0) > 0 ? 'warning' : 'success'" size="small">
+            {{ (row.unsettledAmount || 0) > 0 ? '未核完' : '已核完' }}
+          </el-tag>
+        </template>
+      </el-table-column>
+      <el-table-column label="操作" width="120" fixed="right">
+        <template #default="{ row }">
+          <el-button v-if="(row.unsettledAmount || 0) > 0"
+            text size="small" type="primary" @click.stop="onShowRecommend(row)">
+            核销推荐
+          </el-button>
+          <span v-else style="color:#909399;font-size:12px">已结清</span>
+        </template>
+      </el-table-column>
+    </el-table>
 
-      <el-pagination
-        v-if="total > 0"
-        v-model:current="query.current"
-        v-model:page-size="query.size"
-        :total="total"
-        :page-sizes="[10, 20, 50]"
-        layout="total, sizes, prev, pager, next"
-        style="margin-top:12px;justify-content:flex-end"
-        @size-change="fetchData"
-        @current-change="fetchData"
-      />
-    </el-card>
+    <el-pagination
+      v-if="total > 0"
+      v-model:current="query.current"
+      v-model:page-size="query.size"
+      :total="total"
+      :page-sizes="[10, 20, 50]"
+      layout="total, sizes, prev, pager, next"
+      style="margin-top:12px;justify-content:flex-end"
+      @size-change="fetchData"
+      @current-change="fetchData"
+    />
 
     <!-- 核销推荐弹窗 -->
     <el-dialog v-model="recommendDialogVisible" :title="drawerTitle" width="800px" destroy-on-close>
@@ -269,11 +263,9 @@ async function fetchData() {
       current: query.value.current,
       size: query.value.size,
     }
-    // 收款单 tab 只查收款单本身，应收单在核销推荐时作为目标匹配
     if (activeTab.value === 'RECEIPT') {
       params.docTypes = ['RECEIPT']
     } else {
-      // 付款单 tab 只查付款单本身，应付单在核销推荐时作为目标匹配
       params.docTypes = ['PAYMENT']
     }
     if (query.value.keyword) params.keyword = query.value.keyword
@@ -289,7 +281,8 @@ async function fetchData() {
 onMounted(() => { fetchData() })
 function onSearch() { query.value.current = 1; fetchData() }
 function onReset() { query.value = { current: 1, size: 20 }; fetchData() }
-function onRefresh() { fetchData() }
+
+defineExpose({ fetchData })
 
 // ====== 核销推荐 ======
 const recommendDialogVisible = ref(false)
@@ -532,12 +525,11 @@ async function onExecuteFromFifo(row: any) {
 </script>
 
 <style scoped>
-.reconciliation-workbench .page-header {
+.workbench-panel .panel-toolbar {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 16px;
+  margin-bottom: 12px;
 }
-.page-title { font-size: 16px; font-weight: 600; }
 .filter-form { margin-bottom: 12px; }
 </style>
