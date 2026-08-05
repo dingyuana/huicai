@@ -104,7 +104,7 @@
               @click="openVoucher(row.generatedVoucherId!)">查看凭证</el-button>
             <el-button v-if="canApprove(row as BankStatementVO)"
               text size="small" type="primary" @click="onApprove(row as BankStatementVO)">核准</el-button>
-            <el-popconfirm title="确定删除该条流水?" @confirm="onDelete(row as any)">
+            <el-popconfirm v-if="canDelete(row as BankStatementVO)" title="确定删除该条流水?" @confirm="onDelete(row as any)">
               <template #reference>
                 <el-button text size="small" type="danger">删除</el-button>
               </template>
@@ -457,6 +457,15 @@ function canAudit(row: any): boolean {
 
 function canApprove(row: any): boolean {
   return row.reviewStatus === 'voucher_generated' || row.reviewStatus === 'payment_created'
+}
+
+// 删除按钮与后端 isLocked 对齐：确认/审核/核准后的状态不允许删除
+function canDelete(row: any): boolean {
+  const s = row.reviewStatus
+  return s !== 'CONFIRMED'
+    && s !== 'voucher_generated'
+    && s !== 'payment_created'
+    && s !== 'approved'
 }
 
 function fmtAmount(v: number) {
