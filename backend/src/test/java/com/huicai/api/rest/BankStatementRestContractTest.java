@@ -81,7 +81,7 @@ class BankStatementRestContractTest {
 
     @Test @DisplayName("POST /batch-review — 批量审核")
     void batchReview() throws Exception {
-        when(service.batchReview(any(), any())).thenReturn(1);
+        when(service.batchReview(any(), any())).thenReturn(new BankStatementService.BatchResult(2, 1, List.of()));
         mvc.perform(post(BASE + "/batch-review").contentType(MediaType.APPLICATION_JSON).content("[1,2]"))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.code").value(200));
     }

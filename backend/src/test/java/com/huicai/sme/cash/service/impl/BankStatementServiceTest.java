@@ -185,9 +185,9 @@ class BankStatementServiceTest {
             when(statementMapper.selectById(3L)).thenReturn(null);
             when(statementMapper.updateById(any(BankStatementEntity.class))).thenReturn(1);
 
-            int confirmed = service.batchReview(List.of(1L, 2L, 3L), 1L);
+            var result = service.batchReview(List.of(1L, 2L, 3L), 1L);
 
-            assertEquals(1, confirmed);
+            assertEquals(1, result.success());
             verify(statementMapper, times(1)).updateById(any(BankStatementEntity.class));
         }
     }
@@ -260,9 +260,9 @@ class BankStatementServiceTest {
             when(statementMapper.update(any(), any(UpdateWrapper.class))).thenReturn(1);
             when(autoGenerationService.autoGenerateInNewTx(1L, 1L)).thenReturn(true);
 
-            int audited = service.batchAudit(List.of(1L, 2L, 3L), 1L);
+            var result = service.batchAudit(List.of(1L, 2L, 3L), 1L);
 
-            assertEquals(1, audited);
+            assertEquals(1, result.success());
             verify(statementMapper, times(1)).update(any(), any(UpdateWrapper.class));
         }
     }
@@ -347,9 +347,9 @@ class BankStatementServiceTest {
             when(statementMapper.update(any(), any(UpdateWrapper.class))).thenReturn(1);
             when(autoGenerationService.autoGenerateInNewTx(1L, 1L)).thenReturn(true);
 
-            int generated = service.batchGenerateVouchers(List.of(1L, 2L), 1L);
+            var result = service.batchGenerateVouchers(List.of(1L, 2L), 1L);
 
-            assertEquals(1, generated);
+            assertEquals(1, result.success());
         }
     }
 

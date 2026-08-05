@@ -214,12 +214,12 @@ public class AutoGenerationService {
 
         switch (stmt.getClassification()) {
             case BankClassification.BANK_INTEREST_FEE: {
-                // 银行利息与手续费：借方根据方向判断
+                // 银行利息与手续费：借方根据方向判断（科目 6603 财务费用）
                 if ("in".equals(direction)) {
                     debitAcct = bankAcct;
-                    creditAcct = findSubjectByCode("6602.02"); // 利息收入
+                    creditAcct = findSubjectByCode("6603"); // 财务费用（利息收入红字/贷方）
                 } else {
-                    debitAcct = findSubjectByCode("6602.01"); // 手续费
+                    debitAcct = findSubjectByCode("6603"); // 财务费用（手续费）
                     creditAcct = bankAcct;
                 }
                 break;

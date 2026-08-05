@@ -285,11 +285,21 @@
       </template>
     </el-dialog>
 
-    <!-- 批量确认结果 -->
-    <el-dialog v-model="resultDialogVisible" title="批量确认结果" width="420">
-          <el-result v-if="batchConfirmed > 0" icon="success"
-            :title="`已确认 ${batchConfirmed} 条`">
-          </el-result>
+    <!-- 批量操作结果 -->
+    <el-dialog v-model="resultDialogVisible" title="批量操作结果" width="520">
+      <template v-if="batchResult">
+        <el-result :icon="batchResult.failed.length ? 'warning' : 'success'"
+          :title="`成功 ${batchResult.success} / ${batchResult.total} 条`"
+          :sub-title="batchResult.failed.length ? `失败 ${batchResult.failed.length} 条，原因见下方列表` : '全部执行成功'">
+        </el-result>
+        <el-table v-if="batchResult.failed.length" :data="batchResult.failed" size="small" max-height="240">
+          <el-table-column prop="id" label="流水ID" width="90" />
+          <el-table-column prop="reason" label="失败原因" />
+        </el-table>
+      </template>
+      <template #footer>
+        <el-button type="primary" @click="resultDialogVisible = false">确定</el-button>
+      </template>
     </el-dialog>
 
     <!-- 流水详情弹窗 -->
@@ -376,7 +386,7 @@ import {
   deleteStatement, updateStatementClassification,
   getBankStatementDetail, getClassificationCounts,
   CLASSIFICATION_LABELS, REVIEW_STATUS_LABELS,
-  type BankStatementVO,
+  type BankStatementVO, type BatchResult,
 } from '@/api/modules/bankStatement'
 import { getActiveBankAccounts, type BankAccountVO } from '@/api/modules/bankAccount'
 
@@ -398,12 +408,12 @@ const previewData = ref<{
 const importResultVisible = ref(false)
 const importResult = ref<{ total: number; success: number; duplicate: number; failed: number; classified: number; message: string } | null>(null)
 const resultDialogVisible = ref(false)
+const batchResult = ref<BatchResult | null>(null)
 const detailVisible = ref(false)
 const detailData = ref<any>(null)
 const detailEditable = ref(false)
 const editClassification = ref('')
 const bankNameMap = ref<Record<string, string>>({})
-const batchConfirmed = ref(0)
 const csvContent = ref('')
 
 // 列映射状态
@@ -715,7 +725,7 @@ async function onBatchConfirm() {
     return
   }
   try {
-    batchConfirmed.value = await batchConfirmStatements(selectedIds.value)
+    batchResult.value = await batchConfirmStatements(selectedIds.value)
     resultDialogVisible.value = true
     // 如果当前有筛选待确认状态，清空筛选后刷新
     if (query.value.reviewStatus === 'PENDING' || query.value.reviewStatus === 'classified') {
@@ -744,8 +754,8 @@ async function onBatchAudit() {
     return
   }
   try {
-    const n = await batchAuditStatements(selectedIds.value)
-    ElMessage.success(`已审核 ${n} 条`)
+    batchResult.value = await batchAuditStatements(selectedIds.value)
+    resultDialogVisible.value = true
     if (query.value.reviewStatus === 'CONFIRMED') {
       query.value.reviewStatus = undefined
     }

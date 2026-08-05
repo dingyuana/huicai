@@ -35,7 +35,7 @@ public interface BankStatementService {
      * @param statementIds 流水 ID 列表
      * @param userId       操作人 ID
      */
-    int batchReview(List<Long> statementIds, Long userId);
+    BatchResult batchReview(List<Long> statementIds, Long userId);
 
     /**
      * 主管审核：CONFIRMED → AUDITED（审核后才能生成凭证）
@@ -45,7 +45,7 @@ public interface BankStatementService {
     /**
      * 批量审核
      */
-    int batchAudit(List<Long> statementIds, Long userId);
+    BatchResult batchAudit(List<Long> statementIds, Long userId);
 
     /**
      * 审核通过后生成凭证/单据（独立于审核，审核→生成两步骤分离）
@@ -56,7 +56,20 @@ public interface BankStatementService {
     /**
      * 批量生成凭证/单据
      */
-    int batchGenerateVouchers(List<Long> statementIds, Long userId);
+    BatchResult batchGenerateVouchers(List<Long> statementIds, Long userId);
+
+    /** P2: 批量操作结果 DTO — 返回成功数与失败明细，保证部分失败可见 */
+    record BatchResult(
+        int total,
+        int success,
+        List<BatchFailure> failed
+    ) {}
+
+    /** P2: 批量操作单条失败明细 */
+    record BatchFailure(
+        Long id,
+        String reason
+    ) {}
 
     /**
      * 核准过账. 仅允许 voucher_generated / payment_created 状态推进到 approved.

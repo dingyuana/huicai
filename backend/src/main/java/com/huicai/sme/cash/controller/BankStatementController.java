@@ -161,10 +161,10 @@ public class BankStatementController {
 
     @Operation(summary = "批量审核确认")
     @PostMapping("/batch-review")
-    public R<Integer> batchReview(@RequestBody List<Long> ids) {
-        int confirmed = service.batchReview(ids, SecurityUtils.getCurrentUserId());
-        logger.info("批量审核确认: confirmed={}", confirmed);
-        return R.ok(confirmed);
+    public R<BankStatementService.BatchResult> batchReview(@RequestBody List<Long> ids) {
+        var result = service.batchReview(ids, SecurityUtils.getCurrentUserId());
+        logger.info("批量审核确认: total={}, success={}, failed={}", result.total(), result.success(), result.failed().size());
+        return R.ok(result);
     }
 
     @Operation(summary = "主管审核（CONFIRMED → AUDITED）")
@@ -175,10 +175,10 @@ public class BankStatementController {
 
     @Operation(summary = "批量主管审核")
     @PostMapping("/batch-audit")
-    public R<Integer> batchAudit(@RequestBody List<Long> ids) {
-        int audited = service.batchAudit(ids, SecurityUtils.getCurrentUserId());
-        logger.info("批量审核: audited={}", audited);
-        return R.ok(audited);
+    public R<BankStatementService.BatchResult> batchAudit(@RequestBody List<Long> ids) {
+        var result = service.batchAudit(ids, SecurityUtils.getCurrentUserId());
+        logger.info("批量审核: total={}, success={}, failed={}", result.total(), result.success(), result.failed().size());
+        return R.ok(result);
     }
 
     @Operation(summary = "审核通过后生成凭证（仅允许 AUDITED 状态执行）")
@@ -189,10 +189,10 @@ public class BankStatementController {
 
     @Operation(summary = "批量生成凭证")
     @PostMapping("/batch-generate")
-    public R<Integer> batchGenerate(@RequestBody List<Long> ids) {
-        int generated = service.batchGenerateVouchers(ids, SecurityUtils.getCurrentUserId());
-        logger.info("批量制证: generated={}", generated);
-        return R.ok(generated);
+    public R<BankStatementService.BatchResult> batchGenerate(@RequestBody List<Long> ids) {
+        var result = service.batchGenerateVouchers(ids, SecurityUtils.getCurrentUserId());
+        logger.info("批量制证: total={}, success={}, failed={}", result.total(), result.success(), result.failed().size());
+        return R.ok(result);
     }
 
     @Operation(summary = "核准过账 (仅 voucher_generated/payment_created → approved)")

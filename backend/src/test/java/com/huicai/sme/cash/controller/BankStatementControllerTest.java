@@ -163,7 +163,7 @@ class BankStatementControllerTest {
     @Test
     @DisplayName("批量审核_批量审核端点")
     void batchAudit_batchAuditEndpoint() throws Exception {
-        when(service.batchAudit(anyList(), anyLong())).thenReturn(5);
+        when(service.batchAudit(anyList(), anyLong())).thenReturn(new BankStatementService.BatchResult(3, 3, List.of()));
 
         mvc.perform(post("/api/sme/cash/v1/bank-statements/batch-audit")
                         .contentType(MediaType.APPLICATION_JSON)

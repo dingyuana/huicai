@@ -1,6 +1,13 @@
 import request from '@/api/request'
 import type { PageResult } from '@/types/api'
 
+/** P55: 批量操作结果（与后端 BankStatementService.BatchResult 对齐） */
+export interface BatchResult {
+  total: number
+  success: number
+  failed: Array<{ id: number; reason: string }>
+}
+
 export interface BankStatementVO {
   id: number
   accountId: string
@@ -123,16 +130,16 @@ export function classifyStatement(id: number): Promise<BankStatementVO> {
 export function reviewStatement(id: number): Promise<BankStatementVO> {
   return request.post(`/sme/cash/v1/bank-statements/${id}/review`)
 }
-export function batchReviewStatements(ids: number[]): Promise<number> {
+export function batchReviewStatements(ids: number[]): Promise<BatchResult> {
   return request.post('/sme/cash/v1/bank-statements/batch-review', ids)
 }
-export function batchConfirmStatements(ids: number[]): Promise<number> {
+export function batchConfirmStatements(ids: number[]): Promise<BatchResult> {
   return request.post('/sme/cash/v1/bank-statements/batch-review', ids)
 }
 export function auditStatement(id: number): Promise<BankStatementVO> {
   return request.post(`/sme/cash/v1/bank-statements/${id}/audit`)
 }
-export function batchAuditStatements(ids: number[]): Promise<number> {
+export function batchAuditStatements(ids: number[]): Promise<BatchResult> {
   return request.post('/sme/cash/v1/bank-statements/batch-audit', ids)
 }
 export function approveStatement(id: number): Promise<void> {

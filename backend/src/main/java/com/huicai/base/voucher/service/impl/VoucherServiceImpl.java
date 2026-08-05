@@ -81,7 +81,6 @@ public class VoucherServiceImpl extends ServiceImpl<VoucherMapper, VoucherEntity
     @Override
     public IPage<VoucherVO> pageQuery(VoucherQueryDTO queryDTO) {
         Page<VoucherEntity> page = new Page<>(queryDTO.getCurrent(), queryDTO.getSize());
-        Long enterpriseId = SecurityUtils.getCurrentEnterpriseId();
         IPage<VoucherEntity> entityPage = voucherMapper.selectVoucherPage(
                 page,
                 queryDTO.getPeriod(),
@@ -89,8 +88,7 @@ public class VoucherServiceImpl extends ServiceImpl<VoucherMapper, VoucherEntity
                 queryDTO.getVoucherTypeId(),
                 queryDTO.getKeyword(),
                 queryDTO.getVoucherNo(),
-                queryDTO.getSourceDocNo(),
-                enterpriseId
+                queryDTO.getSourceDocNo()
         );
 
         IPage<VoucherVO> voPage = new Page<>(entityPage.getCurrent(), entityPage.getSize(), entityPage.getTotal());
@@ -105,7 +103,7 @@ public class VoucherServiceImpl extends ServiceImpl<VoucherMapper, VoucherEntity
 
     @Override
     public VoucherVO getDetail(Long id) {
-        VoucherEntity entity = voucherMapper.selectVoucherDetail(id, SecurityUtils.getCurrentEnterpriseId());
+        VoucherEntity entity = voucherMapper.selectVoucherDetail(id);
         if (entity == null) {
             throw BusinessException.notFound("凭证不存在");
         }
@@ -777,8 +775,7 @@ public class VoucherServiceImpl extends ServiceImpl<VoucherMapper, VoucherEntity
                 queryDTO.getVoucherTypeId(),
                 queryDTO.getKeyword(),
                 queryDTO.getVoucherNo(),
-                queryDTO.getSourceDocNo(),
-                SecurityUtils.getCurrentEnterpriseId()
+                queryDTO.getSourceDocNo()
         );
 
         if (vouchers.isEmpty()) {

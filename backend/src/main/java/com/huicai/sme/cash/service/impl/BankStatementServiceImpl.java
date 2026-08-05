@@ -460,10 +460,11 @@ public class BankStatementServiceImpl implements BankStatementService {
 
     @Override
     @Transactional
-    public int batchAudit(List<Long> statementIds, Long userId) {
+    public BankStatementService.BatchResult batchAudit(List<Long> statementIds, Long userId) {
         if (statementIds == null || statementIds.isEmpty()) {
             throw BusinessException.badRequest("ID 列表为空");
         }
+        List<BankStatementService.BatchFailure> failed = new ArrayList<>();
         int audited = 0;
         for (Long id : statementIds) {
             try {
@@ -471,10 +472,11 @@ public class BankStatementServiceImpl implements BankStatementService {
                 audited++;
             } catch (Exception e) {
                 log.warn("批量审核失败: statementId={}, err={}", id, e.getMessage());
+                failed.add(new BankStatementService.BatchFailure(id, e.getMessage()));
             }
         }
-        log.info("批量审核: 总数={}, 成功={}", statementIds.size(), audited);
-        return audited;
+        log.info("批量审核: 总数={}, 成功={}, 失败={}", statementIds.size(), audited, failed.size());
+        return new BankStatementService.BatchResult(statementIds.size(), audited, failed);
     }
 
     @Override
@@ -520,10 +522,11 @@ public class BankStatementServiceImpl implements BankStatementService {
 
     @Override
     @Transactional
-    public int batchGenerateVouchers(List<Long> statementIds, Long userId) {
+    public BankStatementService.BatchResult batchGenerateVouchers(List<Long> statementIds, Long userId) {
         if (statementIds == null || statementIds.isEmpty()) {
             throw BusinessException.badRequest("ID 列表为空");
         }
+        List<BankStatementService.BatchFailure> failed = new ArrayList<>();
         int generated = 0;
         for (Long id : statementIds) {
             try {
@@ -531,10 +534,11 @@ public class BankStatementServiceImpl implements BankStatementService {
                 generated++;
             } catch (Exception e) {
                 log.warn("批量制证失败: statementId={}, err={}", id, e.getMessage());
+                failed.add(new BankStatementService.BatchFailure(id, e.getMessage()));
             }
         }
-        log.info("批量制证: 总数={}, 成功={}", statementIds.size(), generated);
-        return generated;
+        log.info("批量制证: 总数={}, 成功={}, 失败={}", statementIds.size(), generated, failed.size());
+        return new BankStatementService.BatchResult(statementIds.size(), generated, failed);
     }
 
     @Override
@@ -617,9 +621,9 @@ public class BankStatementServiceImpl implements BankStatementService {
             case BankClassification.BANK_INTEREST_FEE:
                 if ("in".equals(direction)) {
                     entries.add(new BankStatementService.PreviewEntry("debit", "1002", "银行存款", amount, stmt.getSummary()));
-                    entries.add(new BankStatementService.PreviewEntry("credit", "6602.02", "利息收入", amount, stmt.getSummary()));
+                    entries.add(new BankStatementService.PreviewEntry("credit", "6603", "财务费用", amount, stmt.getSummary()));
                 } else {
-                    entries.add(new BankStatementService.PreviewEntry("debit", "6602.01", "手续费", amount, stmt.getSummary()));
+                    entries.add(new BankStatementService.PreviewEntry("debit", "6603", "财务费用", amount, stmt.getSummary()));
                     entries.add(new BankStatementService.PreviewEntry("credit", "1002", "银行存款", amount, stmt.getSummary()));
                 }
                 break;
@@ -652,10 +656,11 @@ public class BankStatementServiceImpl implements BankStatementService {
 
     @Override
     @Transactional
-    public int batchReview(List<Long> statementIds, Long userId) {
+    public BankStatementService.BatchResult batchReview(List<Long> statementIds, Long userId) {
         if (statementIds == null || statementIds.isEmpty()) {
             throw BusinessException.badRequest("确认 ID 列表为空");
         }
+        List<BankStatementService.BatchFailure> failed = new ArrayList<>();
         int confirmed = 0;
         for (Long id : statementIds) {
             try {
@@ -663,10 +668,11 @@ public class BankStatementServiceImpl implements BankStatementService {
                 confirmed++;
             } catch (Exception e) {
                 log.warn("批量确认失败: statementId={}", id, e);
+                failed.add(new BankStatementService.BatchFailure(id, e.getMessage()));
             }
         }
-        log.info("批量确认分类: 总数={}, 成功={}", statementIds.size(), confirmed);
-        return confirmed;
+        log.info("批量确认分类: 总数={}, 成功={}, 失败={}", statementIds.size(), confirmed, failed.size());
+        return new BankStatementService.BatchResult(statementIds.size(), confirmed, failed);
     }
 
     @Override
