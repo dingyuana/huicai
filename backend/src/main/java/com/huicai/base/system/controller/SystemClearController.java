@@ -144,8 +144,12 @@ public class SystemClearController {
     public R<Map<String, Object>> clearSettlements() {
         int d1 = jdbcTemplate.update("DELETE FROM t_arap_settlement_entry");
         int d2 = jdbcTemplate.update("DELETE FROM t_arap_settlement");
-        int total = d1 + d2;
-        log.info("清空核销数据: entries={}, settlements={}", d1, d2);
+        int d3 = jdbcTemplate.update("DELETE FROM t_reconciliation_log");
+        // 重置业务单据核销金额：未核销金额恢复为单据金额
+        int d4 = jdbcTemplate.update(
+                "UPDATE t_business_doc SET settled_amount = 0, unsettled_amount = amount WHERE settled_amount != 0 OR unsettled_amount != amount");
+        int total = d1 + d2 + d3 + d4;
+        log.info("清空核销数据: entries={}, settlements={}, recon_logs={}, docs_reset={}", d1, d2, d3, d4);
         return R.ok(result(total, "清空核销数据 " + total + " 条"));
     }
 
