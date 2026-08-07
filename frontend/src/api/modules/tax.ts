@@ -134,6 +134,37 @@ export function outputInvoiceSummary(period?: string): Promise<any> {
 export function calculateVat(period: string): Promise<any> {
   return request.get('/sme/tax/v1/tax/vat/calculate', { params: { period } })
 }
+// ====== P56 销项发票批量操作 ======
+export interface BatchFailure {
+  id: number
+  reason: string
+}
+export interface BatchResult {
+  success: number[]
+  failure: BatchFailure[]
+}
+
+export function batchSubmitForReview(ids: number[]): Promise<BatchResult> {
+  return request.post('/sme/tax/v1/tax/output-invoices/batch/submit-review', { ids })
+}
+export function batchConfirmOutputInvoice(ids: number[]): Promise<BatchResult> {
+  return request.post('/sme/tax/v1/tax/output-invoices/batch/confirm', { ids })
+}
+export function batchRejectOutputInvoice(ids: number[], reason: string): Promise<BatchResult> {
+  return request.post('/sme/tax/v1/tax/output-invoices/batch/reject', { ids, reason })
+}
+export function batchRevertOutputInvoice(ids: number[]): Promise<BatchResult> {
+  return request.post('/sme/tax/v1/tax/output-invoices/batch/revert', { ids })
+}
+export function batchMarkVouchered(ids: number[]): Promise<BatchResult> {
+  return request.post('/sme/tax/v1/tax/output-invoices/batch/mark-vouchered', { ids })
+}
+export function batchVoidOutputInvoice(ids: number[], reason: string): Promise<BatchResult> {
+  return request.post('/sme/tax/v1/tax/output-invoices/batch/void', { ids, reason })
+}
+export function batchReverseOutputInvoice(ids: number[], reason: string): Promise<BatchResult> {
+  return request.post('/sme/tax/v1/tax/output-invoices/batch/reverse', { ids, reason })
+}
 // ====== P2-7 AI 辅助 ======
 export function aiSubjectMapping(itemName: string, amount?: number, counterparty?: string): Promise<any> {
   return request.post('/agent/route', {

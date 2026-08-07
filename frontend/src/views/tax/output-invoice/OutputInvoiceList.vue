@@ -6,6 +6,16 @@
         <el-space>
           <el-button @click="openImportDialog">导入发票</el-button>
           <el-button type="primary" @click="openEdit()">新增发票</el-button>
+          <template v-if="selectedRows.length > 0">
+            <el-tag type="info" effect="plain">已选 {{ selectedRows.length }} 条</el-tag>
+            <el-button v-if="canBatch('submitReview')" @click="onBatchAction('submitReview')" type="primary" plain size="small">批量提交审核</el-button>
+            <el-button v-if="canBatch('confirm')" @click="onBatchAction('confirm')" type="primary" plain size="small">批量审核通过</el-button>
+            <el-button v-if="canBatch('reject')" @click="onBatchAction('reject')" type="warning" plain size="small">批量驳回</el-button>
+            <el-button v-if="canBatch('revert')" @click="onBatchAction('revert')" type="warning" plain size="small">批量回退</el-button>
+            <el-button v-if="canBatch('markVouchered')" @click="onBatchAction('markVouchered')" type="primary" plain size="small">批量生成凭证</el-button>
+            <el-button v-if="canBatch('void')" @click="onBatchAction('void')" type="danger" plain size="small">批量作废</el-button>
+            <el-button v-if="canBatch('reverse')" @click="onBatchAction('reverse')" type="danger" plain size="small">批量红冲</el-button>
+          </template>
         </el-space>
       </div>
 
@@ -111,7 +121,8 @@
         </el-form-item>
       </el-form>
 
-      <el-table :data="list" v-loading="loading" border>
+      <el-table :data="list" v-loading="loading" border @selection-change="onSelectionChange">
+        <el-table-column type="selection" width="50" :selectable="rowSelectable" />
         <el-table-column prop="invoiceNo" label="发票号" width="180" />
         <el-table-column prop="invoiceDate" label="开票日期" width="120" />
         <el-table-column prop="customerName" label="客户" min-width="160" show-overflow-tooltip />
@@ -366,6 +377,24 @@
         </el-space>
       </template>
     </el-dialog>
+
+    <el-dialog v-model="batchResultVisible" title="批量操作结果" width="640px">
+      <el-alert
+        v-if="batchResult"
+        :type="(batchResult.failure?.length || 0) > 0 ? 'warning' : 'success'"
+        :closable="false"
+        style="margin-bottom:12px"
+      >
+        成功 {{ batchResult.success?.length || 0 }} 条，失败 {{ batchResult.failure?.length || 0 }} 条
+      </el-alert>
+      <el-table v-if="(batchResult?.failure?.length || 0) > 0" :data="batchResult?.failure || []" border size="small">
+        <el-table-column prop="id" label="发票ID" width="120" />
+        <el-table-column prop="reason" label="失败原因" />
+      </el-table>
+      <template #footer>
+        <el-button @click="batchResultVisible = false">关闭</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -373,10 +402,12 @@
 import { onMounted, reactive, ref } from 'vue'
 import { ElMessage, type FormInstance } from 'element-plus'
 import { UploadFilled, Document, Money, Minus, Warning, Refresh, Delete, ArrowRight } from '@element-plus/icons-vue'
-import type { OutputInvoice } from '@/api/modules/tax'
+import type { OutputInvoice, BatchResult } from '@/api/modules/tax'
 import { pageOutputInvoice, createOutputInvoice, getOutputInvoice, deleteOutputInvoice,
   outputInvoiceSummary,
-  submitForReview, confirmOutputInvoice, rejectOutputInvoice, revertOutputInvoice, voidOutputInvoice, markVouchered } from '@/api/modules/tax'
+  submitForReview, confirmOutputInvoice, rejectOutputInvoice, revertOutputInvoice, voidOutputInvoice, markVouchered,
+  batchSubmitForReview, batchConfirmOutputInvoice, batchRejectOutputInvoice, batchRevertOutputInvoice,
+  batchMarkVouchered, batchVoidOutputInvoice, batchReverseOutputInvoice } from '@/api/modules/tax'
 import { previewSalesInvoices, confirmSalesInvoicesImport } from '@/api/modules/salesInvoice'
 
 const detailVisible = ref(false)
@@ -558,6 +589,89 @@ const onSubmit = async () => {
 }
 
 onMounted(() => { fetchData(); fetchStats() })
+
+// P56 销项发票批量操作
+const selectedRows = ref<any[]>([])
+const batchResultVisible = ref(false)
+const batchResult = ref<BatchResult | null>(null)
+
+const TERMINAL_STATUSES = ['VOIDED', 'REVERSED', 'FULLY_RECONCILED']
+const rowSelectable = (row: any) => !TERMINAL_STATUSES.includes(row.status)
+
+const BATCH_AVAILABLE_BY_STATUS: Record<string, string[]> = {
+  PENDING_CONFIRM: ['submitReview', 'void'],
+  PENDING_REVIEW: ['confirm', 'reject', 'void'],
+  CONFIRMED: ['markVouchered', 'revert', 'void'],
+  VOUCHERED: ['reverse'],
+  PARTIALLY_RECONCILED: ['reverse'],
+  FULLY_RECONCILED: [],
+  VOIDED: [],
+  REVERSED: [],
+}
+
+const canBatch = (action: string) => {
+  if (selectedRows.value.length === 0) return false
+  return selectedRows.value.every(r => BATCH_AVAILABLE_BY_STATUS[r.status]?.includes(action))
+}
+
+const onSelectionChange = (rows: any[]) => {
+  selectedRows.value = rows
+}
+
+const onBatchAction = async (action: string) => {
+  const ids = selectedRows.value.map(r => r.id).filter(Boolean)
+  if (ids.length === 0) { ElMessage.warning('请先选择发票'); return }
+  if (ids.length > 100) { ElMessage.warning('单次最多批量操作 100 张'); return }
+
+  let reason = ''
+  if (['reject', 'void', 'reverse'].includes(action)) {
+    const labelMap: any = { reject: '批量驳回', void: '批量作废', reverse: '批量红冲' }
+    const { value } = await (await import('element-plus')).ElMessageBox.prompt(
+      `请输入${labelMap[action]}原因（将应用于所有选中发票）`,
+      labelMap[action],
+      { inputType: 'textarea', inputValidator: (v: string) => !!v?.trim(), inputErrorMessage: '原因不能为空' }
+    ).catch(() => ({ value: null }))
+    if (!value) return
+    reason = value
+  }
+
+  if (action === 'reverse' || action === 'void') {
+    const label = action === 'reverse' ? '批量红冲' : '批量作废'
+    try {
+      await (await import('element-plus')).ElMessageBox.confirm(
+        `确认对 ${ids.length} 张发票执行【${label}】？此操作不可撤销。`,
+        label,
+        { type: 'warning' }
+      )
+    } catch { return }
+  }
+
+  const fnMap: Record<string, () => Promise<BatchResult>> = {
+    submitReview: () => batchSubmitForReview(ids),
+    confirm: () => batchConfirmOutputInvoice(ids),
+    reject: () => batchRejectOutputInvoice(ids, reason),
+    revert: () => batchRevertOutputInvoice(ids),
+    markVouchered: () => batchMarkVouchered(ids),
+    void: () => batchVoidOutputInvoice(ids, reason),
+    reverse: () => batchReverseOutputInvoice(ids, reason),
+  }
+
+  try {
+    batchResult.value = await fnMap[action]()
+    batchResultVisible.value = true
+    const succ = batchResult.value.success.length
+    const fail = batchResult.value.failure.length
+    if (fail === 0) {
+      ElMessage.success(`批量操作完成：成功 ${succ} 条`)
+    } else {
+      ElMessage.warning(`批量操作完成：成功 ${succ} 条，失败 ${fail} 条（详见弹窗）`)
+    }
+    selectedRows.value = []
+    fetchData(); fetchStats()
+  } catch {
+    // backend error handled
+  }
+}
 
 // ====== 发票导入 ======
 const importVisible = ref(false)
