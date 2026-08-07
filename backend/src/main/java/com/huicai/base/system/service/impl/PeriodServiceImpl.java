@@ -34,10 +34,13 @@ public class PeriodServiceImpl extends ServiceImpl<PeriodMapper, PeriodEntity> i
             entity.setEndDate(LocalDate.of(year, month, 1).plusMonths(1).minusDays(1));
         }
 
-        // 查重：同一企业下期间编码不能重复
+        // 物理清理软删残留：释放唯一索引占位（逻辑删除记录会挡住同编码重建）
+        Long enterpriseId = EnterpriseContextHolder.get();
+        baseMapper.purgeSoftDeleted(entity.getPeriodCode(), enterpriseId);
+
+        // 查重：同一企业下期间编码不能重复（selectCount 自动过滤已删除记录）
         LambdaQueryWrapper<PeriodEntity> checkWrapper = new LambdaQueryWrapper<>();
         checkWrapper.eq(PeriodEntity::getPeriodCode, entity.getPeriodCode());
-        Long enterpriseId = EnterpriseContextHolder.get();
         if (enterpriseId != null) {
             checkWrapper.eq(PeriodEntity::getEnterpriseId, enterpriseId);
         }
