@@ -4,14 +4,14 @@
 
 ## §0 项目状态（硬数字，每次 commit 后更新）
 
-> **更新基准**：commit `b5d4439` (2026-08-05) — fix: 银行利息手续费科目配置 + 批量操作失败明细
+> **更新基准**：commit `bf69907` (2026-08-07) — fix: 期间创建软删残留物理清理 + 查重修复
 > **当前分支**：`develop`
 > **关联文档**：[项目说明](docs/项目说明.md)、[技术方案](docs/技术方案.md)、[需求分析](docs/需求分析.md)、[需求登记册](docs/development/requirements/REQUIREMENTS_REGISTRY.md)、[文档注册表](docs/文档注册表.md)、[Flyway治理规范](docs/development/flyway-governance.md)
 
 | 维度 | 数据 |
 |------|------|
-| 后端代码 | 442 Java 文件 |
-| 测试用例 | 1554 个 `@Test` 方法 / 182 个测试类（0 Failures, 0 Errors）|
+| 后端代码 | 444 Java 文件 |
+| 测试用例 | 1572 个 `@Test` 方法 / 182 个测试类（0 Failures, 0 Errors）|
 | 数据库 | PostgreSQL 16 / V1 baseline (merged V1-V91) |
 | API 端点 | 496 个后端端点 |
 | 核心模块 | 基础数据、总账、应收应付、现金管理、固定资产、费用报销、发票税务、预算、财务报表、存储管理 |
