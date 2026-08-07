@@ -237,6 +237,7 @@ class TaxServiceImplTest {
         BusinessException ex = assertThrows(BusinessException.class,
                 () -> service.batchReject(List.of(1L), 100L, ""));
         assertTrue(ex.getMessage().contains("驳回必须填写原因"));
+        assertEquals(400, ex.getCode());
     }
 
     @Test
@@ -244,6 +245,7 @@ class TaxServiceImplTest {
         BusinessException ex = assertThrows(BusinessException.class,
                 () -> service.batchVoid(List.of(1L), 100L, null));
         assertTrue(ex.getMessage().contains("作废必须填写原因"));
+        assertEquals(400, ex.getCode());
     }
 
     @Test
@@ -251,6 +253,7 @@ class TaxServiceImplTest {
         BusinessException ex = assertThrows(BusinessException.class,
                 () -> service.batchReverse(List.of(1L), 100L, "   "));
         assertTrue(ex.getMessage().contains("红冲必须填写原因"));
+        assertEquals(400, ex.getCode());
     }
 
     @Test

@@ -918,7 +918,7 @@ public class TaxServiceImpl implements TaxService {
     @Transactional(propagation = Propagation.NEVER)
     public BatchOperationResult batchReject(List<Long> ids, Long userId, String reason) {
         if (reason == null || reason.isBlank()) {
-            throw new BusinessException("驳回必须填写原因");
+            throw BusinessException.badRequest("驳回必须填写原因");
         }
         return runBatch(ids, userId, (id, uid) -> {
             outputInvoiceStateMachineService.reject(id, uid, reason);
@@ -948,7 +948,7 @@ public class TaxServiceImpl implements TaxService {
     @Transactional(propagation = Propagation.NEVER)
     public BatchOperationResult batchVoid(List<Long> ids, Long userId, String reason) {
         if (reason == null || reason.isBlank()) {
-            throw new BusinessException("作废必须填写原因");
+            throw BusinessException.badRequest("作废必须填写原因");
         }
         return runBatch(ids, userId, (id, uid) -> {
             outputInvoiceStateMachineService.voidInvoice(id, uid, reason);
@@ -960,7 +960,7 @@ public class TaxServiceImpl implements TaxService {
     @Transactional(propagation = Propagation.NEVER)
     public BatchOperationResult batchReverse(List<Long> ids, Long userId, String reason) {
         if (reason == null || reason.isBlank()) {
-            throw new BusinessException("红冲必须填写原因");
+            throw BusinessException.badRequest("红冲必须填写原因");
         }
         return runBatch(ids, userId, (id, uid) -> {
             outputInvoiceStateMachineService.reverseInvoice(id, uid, reason);
