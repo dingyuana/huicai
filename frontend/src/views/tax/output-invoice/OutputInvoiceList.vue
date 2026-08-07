@@ -6,16 +6,24 @@
         <el-space>
           <el-button @click="openImportDialog">导入发票</el-button>
           <el-button type="primary" @click="openEdit()">新增发票</el-button>
-          <template v-if="selectedRows.length > 0">
-            <el-tag type="info" effect="plain">已选 {{ selectedRows.length }} 条</el-tag>
-            <el-button v-if="canBatch('submitReview')" @click="onBatchAction('submitReview')" type="primary" plain size="small">批量提交审核</el-button>
-            <el-button v-if="canBatch('confirm')" @click="onBatchAction('confirm')" type="primary" plain size="small">批量审核通过</el-button>
-            <el-button v-if="canBatch('reject')" @click="onBatchAction('reject')" type="warning" plain size="small">批量驳回</el-button>
-            <el-button v-if="canBatch('revert')" @click="onBatchAction('revert')" type="warning" plain size="small">批量回退</el-button>
-            <el-button v-if="canBatch('markVouchered')" @click="onBatchAction('markVouchered')" type="primary" plain size="small">批量生成凭证</el-button>
-            <el-button v-if="canBatch('void')" @click="onBatchAction('void')" type="danger" plain size="small">批量作废</el-button>
-            <el-button v-if="canBatch('reverse')" @click="onBatchAction('reverse')" type="danger" plain size="small">批量红冲</el-button>
-          </template>
+          <el-tag v-if="selectedRows.length > 0" type="info" effect="plain">已选 {{ selectedRows.length }} 条</el-tag>
+          <el-tooltip
+            v-for="ba in BATCH_ACTIONS"
+            :key="ba.action"
+            :disabled="canBatch(ba.action)"
+            :content="batchTooltip(ba.action)"
+            placement="top"
+          >
+            <span>
+              <el-button
+                :type="ba.type"
+                plain
+                size="small"
+                :disabled="!canBatch(ba.action)"
+                @click="onBatchAction(ba.action)"
+              >{{ ba.label }}</el-button>
+            </span>
+          </el-tooltip>
         </el-space>
       </div>
 
@@ -595,6 +603,16 @@ const selectedRows = ref<any[]>([])
 const batchResultVisible = ref(false)
 const batchResult = ref<BatchResult | null>(null)
 
+const BATCH_ACTIONS: { action: string; label: string; type: 'primary' | 'warning' | 'danger' }[] = [
+  { action: 'submitReview', label: '批量提交审核', type: 'primary' },
+  { action: 'confirm', label: '批量审核通过', type: 'primary' },
+  { action: 'reject', label: '批量驳回', type: 'warning' },
+  { action: 'revert', label: '批量回退', type: 'warning' },
+  { action: 'markVouchered', label: '批量生成凭证', type: 'primary' },
+  { action: 'void', label: '批量作废', type: 'danger' },
+  { action: 'reverse', label: '批量红冲', type: 'danger' },
+]
+
 const TERMINAL_STATUSES = ['VOIDED', 'REVERSED', 'FULLY_RECONCILED']
 const rowSelectable = (row: any) => !TERMINAL_STATUSES.includes(row.status)
 
@@ -612,6 +630,12 @@ const BATCH_AVAILABLE_BY_STATUS: Record<string, string[]> = {
 const canBatch = (action: string) => {
   if (selectedRows.value.length === 0) return false
   return selectedRows.value.every(r => BATCH_AVAILABLE_BY_STATUS[r.status]?.includes(action))
+}
+
+const batchTooltip = (action: string) => {
+  if (selectedRows.value.length === 0) return '请先勾选发票'
+  const cfg = BATCH_ACTIONS.find(b => b.action === action)
+  return `当前选中发票不支持「${cfg?.label || action}」`
 }
 
 const onSelectionChange = (rows: any[]) => {
