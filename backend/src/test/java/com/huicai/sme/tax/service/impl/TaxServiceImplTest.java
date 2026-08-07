@@ -2,11 +2,20 @@ package com.huicai.sme.tax.service.impl;
 
 import com.huicai.common.exception.BusinessException;
 import com.huicai.base.business.entity.InputInvoiceEntity;
+import com.huicai.base.business.entity.OutputInvoiceEntity;
+import com.huicai.base.system.entity.Subject;
+import com.huicai.base.system.mapper.SubjectMapper;
+import com.huicai.base.voucher.entity.VoucherEntity;
+import com.huicai.base.voucher.entity.VoucherEntryEntity;
+import com.huicai.base.voucher.mapper.VoucherEntryMapper;
+import com.huicai.base.voucher.mapper.VoucherMapper;
+import com.huicai.base.voucher.service.VoucherNoService;
 import com.huicai.sme.tax.dto.BatchOperationResult;
 import com.huicai.sme.tax.entity.TaxDeclarationEntity;
 import com.huicai.base.business.mapper.InputInvoiceMapper;
 import com.huicai.base.business.mapper.OutputInvoiceMapper;
 import com.huicai.base.business.service.OutputInvoiceStateMachineService;
+import com.huicai.base.business.util.TemplateMatcher;
 import com.huicai.sme.tax.mapper.TaxDeclarationMapper;
 import com.huicai.sme.tax.mapper.TaxTypeMapper;
 import org.junit.jupiter.api.Test;
@@ -33,6 +42,11 @@ class TaxServiceImplTest {
     @Mock private OutputInvoiceMapper outputMapper;
     @Mock private TaxDeclarationMapper declarationMapper;
     @Mock private OutputInvoiceStateMachineService stateMachine;
+    @Mock private VoucherMapper voucherMapper;
+    @Mock private VoucherEntryMapper voucherEntryMapper;
+    @Mock private VoucherNoService voucherNoService;
+    @Mock private SubjectMapper subjectMapper;
+    @Mock private TemplateMatcher templateMatcher;
     @InjectMocks private TaxServiceImpl service;
 
     private InputInvoiceEntity stubInput(Long id, String status) {
@@ -299,5 +313,84 @@ class TaxServiceImplTest {
         assertEquals(0, r.getSuccess().size());
         assertEquals(0, r.getFailure().size());
         verify(stateMachine, never()).submitForReview(anyLong(), anyLong());
+    }
+
+    // ==================== P33 红字发票凭证生成（chk_entry_amount 约束） ====================
+
+    private OutputInvoiceEntity stubOutputInvoice(Long id, String status, String amount, String tax, String total) {
+        OutputInvoiceEntity e = new OutputInvoiceEntity();
+        e.setId(id);
+        e.setInvoiceNo("OUT-2026-" + id);
+        e.setCustomerName("测试客户");
+        e.setAmount(new BigDecimal(amount));
+        e.setTaxAmount(new BigDecimal(tax));
+        e.setTotalAmount(new BigDecimal(total));
+        e.setPeriod("202608");
+        e.setStatus(status);
+        return e;
+    }
+
+    private Subject subject(Long id, String code) {
+        Subject s = new Subject();
+        s.setId(id);
+        s.setCode(code);
+        return s;
+    }
+
+    @Test
+    void generateVoucherFromInvoice_blueInvoice_entries_positive() {
+        OutputInvoiceEntity inv = stubOutputInvoice(1L, "CONFIRMED", "1000.00", "130.00", "1130.00");
+        when(outputMapper.selectById(1L)).thenReturn(inv);
+        when(templateMatcher.match(any())).thenReturn(null);
+        when(voucherNoService.generateNextNo(anyString(), anyLong())).thenReturn("记-202608-0001");
+        when(subjectMapper.selectList(any())).thenReturn(List.of(subject(101L, "1122"), subject(102L, "5001"), subject(103L, "2221.01")));
+
+        service.generateVoucherFromInvoice(1L, 100L);
+
+        verify(voucherEntryMapper, times(3)).insert(any(VoucherEntryEntity.class));
+        assertEquals(new BigDecimal("1130.00"), inv.getTotalAmount());
+        assertEquals("VOUCHERED", inv.getStatus());
+    }
+
+    @Test
+    void generateVoucherFromInvoice_redInvoice_entries_all_positive_and_reversed() {
+        OutputInvoiceEntity inv = stubOutputInvoice(5L, "CONFIRMED", "-1000.00", "-130.00", "-1130.00");
+        when(outputMapper.selectById(5L)).thenReturn(inv);
+        when(templateMatcher.match(any())).thenReturn(null);
+        when(voucherNoService.generateNextNo(anyString(), anyLong())).thenReturn("记-202608-0002");
+        when(subjectMapper.selectList(any())).thenReturn(List.of(subject(101L, "1122"), subject(102L, "5001"), subject(103L, "2221.01")));
+
+        List<VoucherEntryEntity> inserted = new ArrayList<>();
+        doAnswer(a -> { inserted.add(a.getArgument(0)); return 1; })
+                .when(voucherEntryMapper).insert(any(VoucherEntryEntity.class));
+
+        service.generateVoucherFromInvoice(5L, 100L);
+
+        // 红字发票：应收在贷方(1130)、收入在借方(1000)、销项税在借方(130)，金额全部为正
+        assertEquals(3, inserted.size(), "红字发票应生成 3 条分录");
+        Map<Long, VoucherEntryEntity> bySubject = new HashMap<>();
+        for (VoucherEntryEntity ve : inserted) bySubject.put(ve.getSubjectId(), ve);
+
+        VoucherEntryEntity ar = bySubject.get(101L);   // 1122 应收账款
+        assertNotNull(ar, "应收分录缺失");
+        assertEquals(new BigDecimal("1130.00"), ar.getCredit());
+        assertEquals(0, ar.getDebit().compareTo(BigDecimal.ZERO));
+
+        VoucherEntryEntity rev = bySubject.get(102L);  // 5001 主营业务收入
+        assertNotNull(rev, "收入分录缺失");
+        assertEquals(new BigDecimal("1000.00"), rev.getDebit());
+        assertEquals(0, rev.getCredit().compareTo(BigDecimal.ZERO));
+
+        VoucherEntryEntity tax = bySubject.get(103L);  // 2221.01 销项税
+        assertNotNull(tax, "销项税分录缺失");
+        assertEquals(new BigDecimal("130.00"), tax.getDebit());
+        assertEquals(0, tax.getCredit().compareTo(BigDecimal.ZERO));
+
+        // 所有分录必须满足 chk_entry_amount 约束：debit >= 0 && credit >= 0
+        for (VoucherEntryEntity ve : inserted) {
+            assertTrue(ve.getDebit().compareTo(BigDecimal.ZERO) >= 0, "借方不能为负: " + ve.getSubjectId());
+            assertTrue(ve.getCredit().compareTo(BigDecimal.ZERO) >= 0, "贷方不能为负: " + ve.getSubjectId());
+        }
+        assertEquals("VOUCHERED", inv.getStatus());
     }
 }

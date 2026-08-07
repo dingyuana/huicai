@@ -378,6 +378,7 @@ public class TaxServiceImpl implements TaxService {
         BigDecimal exclTax = inv.getAmount() != null ? inv.getAmount() : BigDecimal.ZERO;
         BigDecimal taxAmt = inv.getTaxAmount() != null ? inv.getTaxAmount() : BigDecimal.ZERO;
         BigDecimal totalAmt = inv.getTotalAmount() != null ? inv.getTotalAmount() : exclTax.add(taxAmt);
+        boolean isRed = exclTax.compareTo(BigDecimal.ZERO) < 0;
 
         VoucherEntity voucher = new VoucherEntity();
         voucher.setVoucherNo(voucherNo);
@@ -387,8 +388,8 @@ public class TaxServiceImpl implements TaxService {
         voucher.setSource("GENERATED");
         String summaryBase = "发票转凭证: " + (inv.getInvoiceNo() != null ? inv.getInvoiceNo() : "") + " - " + (inv.getCustomerName() != null ? inv.getCustomerName() : "");
         voucher.setSummary(summaryBase);
-        voucher.setTotalDebit(totalAmt);
-        voucher.setTotalCredit(totalAmt);
+        voucher.setTotalDebit(totalAmt.abs());
+        voucher.setTotalCredit(totalAmt.abs());
         voucher.setCreatedBy(userId);
         // 新增：溯源字段（销售发票 → 凭证）
         voucher.setSourceDocId(inv.getId());           // P33 补充
@@ -398,36 +399,71 @@ public class TaxServiceImpl implements TaxService {
 
         String entrySummary = (inv.getInvoiceNo() != null ? inv.getInvoiceNo() : "") + " " + (inv.getCustomerName() != null ? inv.getCustomerName() : "");
         int sort = 1;
-        // 借：应收账款 1122
-        VoucherEntryEntity dr = new VoucherEntryEntity();
-        dr.setVoucherId(voucher.getId());
-        dr.setSubjectId(subjectAr.getId());
-        dr.setDebit(totalAmt);
-        dr.setCredit(BigDecimal.ZERO);
-        dr.setSummary(entrySummary);
-        dr.setSortOrder(sort++);
-        voucherEntryMapper.insert(dr);
+        if (isRed) {
+            // 红字发票：借收入/借销项税/贷应收，全部取绝对值以满足 chk_entry_amount (debit>=0, credit>=0)
+            // 贷：应收账款 1122
+            VoucherEntryEntity crAr = new VoucherEntryEntity();
+            crAr.setVoucherId(voucher.getId());
+            crAr.setSubjectId(subjectAr.getId());
+            crAr.setDebit(BigDecimal.ZERO);
+            crAr.setCredit(totalAmt.abs());
+            crAr.setSummary(entrySummary);
+            crAr.setSortOrder(sort++);
+            voucherEntryMapper.insert(crAr);
 
-        // 贷：主营业务收入 5001
-        VoucherEntryEntity cr1 = new VoucherEntryEntity();
-        cr1.setVoucherId(voucher.getId());
-        cr1.setSubjectId(subjectRevenue.getId());
-        cr1.setDebit(BigDecimal.ZERO);
-        cr1.setCredit(exclTax);
-        cr1.setSummary(entrySummary);
-        cr1.setSortOrder(sort++);
-        voucherEntryMapper.insert(cr1);
+            // 借：主营业务收入 5001
+            VoucherEntryEntity drRev = new VoucherEntryEntity();
+            drRev.setVoucherId(voucher.getId());
+            drRev.setSubjectId(subjectRevenue.getId());
+            drRev.setDebit(exclTax.abs());
+            drRev.setCredit(BigDecimal.ZERO);
+            drRev.setSummary(entrySummary);
+            drRev.setSortOrder(sort++);
+            voucherEntryMapper.insert(drRev);
 
-        // 贷：销项税 2221.01
-        if (subjectOutputTax != null && taxAmt.compareTo(BigDecimal.ZERO) != 0) {
-            VoucherEntryEntity cr2 = new VoucherEntryEntity();
-            cr2.setVoucherId(voucher.getId());
-            cr2.setSubjectId(subjectOutputTax.getId());
-            cr2.setDebit(BigDecimal.ZERO);
-            cr2.setCredit(taxAmt);
-            cr2.setSummary(entrySummary);
-            cr2.setSortOrder(sort++);
-            voucherEntryMapper.insert(cr2);
+            // 借：销项税 2221.01
+            if (subjectOutputTax != null && taxAmt.compareTo(BigDecimal.ZERO) != 0) {
+                VoucherEntryEntity drTax = new VoucherEntryEntity();
+                drTax.setVoucherId(voucher.getId());
+                drTax.setSubjectId(subjectOutputTax.getId());
+                drTax.setDebit(taxAmt.abs());
+                drTax.setCredit(BigDecimal.ZERO);
+                drTax.setSummary(entrySummary);
+                drTax.setSortOrder(sort++);
+                voucherEntryMapper.insert(drTax);
+            }
+        } else {
+            // 借：应收账款 1122
+            VoucherEntryEntity dr = new VoucherEntryEntity();
+            dr.setVoucherId(voucher.getId());
+            dr.setSubjectId(subjectAr.getId());
+            dr.setDebit(totalAmt);
+            dr.setCredit(BigDecimal.ZERO);
+            dr.setSummary(entrySummary);
+            dr.setSortOrder(sort++);
+            voucherEntryMapper.insert(dr);
+
+            // 贷：主营业务收入 5001
+            VoucherEntryEntity cr1 = new VoucherEntryEntity();
+            cr1.setVoucherId(voucher.getId());
+            cr1.setSubjectId(subjectRevenue.getId());
+            cr1.setDebit(BigDecimal.ZERO);
+            cr1.setCredit(exclTax);
+            cr1.setSummary(entrySummary);
+            cr1.setSortOrder(sort++);
+            voucherEntryMapper.insert(cr1);
+
+            // 贷：销项税 2221.01
+            if (subjectOutputTax != null && taxAmt.compareTo(BigDecimal.ZERO) != 0) {
+                VoucherEntryEntity cr2 = new VoucherEntryEntity();
+                cr2.setVoucherId(voucher.getId());
+                cr2.setSubjectId(subjectOutputTax.getId());
+                cr2.setDebit(BigDecimal.ZERO);
+                cr2.setCredit(taxAmt);
+                cr2.setSummary(entrySummary);
+                cr2.setSortOrder(sort++);
+                voucherEntryMapper.insert(cr2);
+            }
         }
 
         // Inline markVouchered to break circular dependency
