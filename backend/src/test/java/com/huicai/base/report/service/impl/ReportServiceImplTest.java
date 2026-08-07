@@ -7,6 +7,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -72,6 +73,46 @@ class ReportServiceImplTest {
         assertEquals(2, equity.size(), "3xxx/4xxx 应归为权益");
         assertEquals("3001", equity.get(0).get("code"));
         assertEquals("4001", equity.get(1).get("code"));
+    }
+
+    @Test
+    void balanceSheet_totals_respect_subject_direction() {
+        // 资产(1xxx, debit) + 权益(4xxx, credit): 期初建账典型场景
+        List<Map<String, Object>> balances = new ArrayList<>();
+        Map<String, Object> a1 = new HashMap<>(); a1.put("code", "1002"); a1.put("name", "银行存款"); a1.put("end_balance", 200000.0); a1.put("direction", "debit"); balances.add(a1);
+        Map<String, Object> a2 = new HashMap<>(); a2.put("code", "1601"); a2.put("name", "固定资产"); a2.put("end_balance", 100000.0); a2.put("direction", "debit"); balances.add(a2);
+        Map<String, Object> e1 = new HashMap<>(); e1.put("code", "4001"); e1.put("name", "实收资本"); e1.put("end_balance", 300000.0); e1.put("direction", "credit"); balances.add(e1);
+        when(reportDataMapper.balanceSheetAggregate("202610")).thenReturn(new HashMap<>());
+        when(reportDataMapper.subjectBalance("202610")).thenReturn(balances);
+
+        Map<String, Object> r = service.balanceSheet("202610");
+
+        // 资产: 200000 + 100000 = 300000
+        assertEquals(new BigDecimal("300000.00"), r.get("totalAssets"));
+        // 负债: 无
+        assertEquals(new BigDecimal("0.00"), r.get("totalLiabilities"));
+        // 权益: credit 方向科目应为正数
+        assertEquals(new BigDecimal("300000.00"), r.get("totalEquity"));
+        assertEquals(new BigDecimal("300000.00"), r.get("totalLiabEquity"));
+        // 资产 = 负债 + 权益, 应平衡
+        assertEquals(Boolean.TRUE, r.get("balanced"));
+    }
+
+    @Test
+    void balanceSheet_liability_credit_is_positive() {
+        // 负债(2xxx, credit) 应为正数, 资产 = 负债 平衡场景
+        List<Map<String, Object>> balances = new ArrayList<>();
+        Map<String, Object> a1 = new HashMap<>(); a1.put("code", "1002"); a1.put("name", "银行存款"); a1.put("end_balance", 3000.0); a1.put("direction", "debit"); balances.add(a1);
+        Map<String, Object> l1 = new HashMap<>(); l1.put("code", "2001"); l1.put("name", "短期借款"); l1.put("end_balance", 3000.0); l1.put("direction", "credit"); balances.add(l1);
+        when(reportDataMapper.balanceSheetAggregate("202606")).thenReturn(new HashMap<>());
+        when(reportDataMapper.subjectBalance("202606")).thenReturn(balances);
+
+        Map<String, Object> r = service.balanceSheet("202606");
+
+        assertEquals(new BigDecimal("3000.00"), r.get("totalAssets"));
+        assertEquals(new BigDecimal("3000.00"), r.get("totalLiabilities"));
+        assertEquals(new BigDecimal("3000.00"), r.get("totalLiabEquity"));
+        assertEquals(Boolean.TRUE, r.get("balanced"));
     }
 
     @Test

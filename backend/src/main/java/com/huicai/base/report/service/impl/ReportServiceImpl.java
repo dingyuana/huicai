@@ -49,7 +49,17 @@ public class ReportServiceImpl implements ReportService {
             if (code == null) continue;
             BigDecimal balance = toBigDecimal(row.get("end_balance"));
             String direction = (String) row.get("direction");
-            BigDecimal signedBalance = "debit".equals(direction) ? balance : balance.negate();
+            boolean isDebit = "debit".equals(direction);
+            BigDecimal signedBalance;
+            if (code.startsWith("1")) {
+                signedBalance = isDebit ? balance : balance.negate();
+            } else if (code.startsWith("2")) {
+                signedBalance = isDebit ? balance.negate() : balance;
+            } else if (code.startsWith("3") || code.startsWith("4")) {
+                signedBalance = isDebit ? balance.negate() : balance;
+            } else {
+                continue;
+            }
             if (code.startsWith("1")) {
                 assets.add(row);
                 totalAssets = totalAssets.add(signedBalance);
@@ -65,10 +75,10 @@ public class ReportServiceImpl implements ReportService {
         result.put("assets", assets);
         result.put("liabilities", liab);
         result.put("equity", equity);
-        result.put("totalAssets", totalAssets);
-        result.put("totalLiabilities", totalLiab);
-        result.put("totalEquity", totalEquity);
-        result.put("totalLiabEquity", totalLiab.add(totalEquity));
+        result.put("totalAssets", toBigDecimal(totalAssets));
+        result.put("totalLiabilities", toBigDecimal(totalLiab));
+        result.put("totalEquity", toBigDecimal(totalEquity));
+        result.put("totalLiabEquity", toBigDecimal(totalLiab.add(totalEquity)));
         result.put("balanced", totalAssets.subtract(totalLiab).subtract(totalEquity).abs()
                 .compareTo(new BigDecimal("0.01")) < 0);
         return result;
