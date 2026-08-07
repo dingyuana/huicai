@@ -16,6 +16,7 @@ import com.huicai.base.system.mapper.SubjectMapper;
 import com.huicai.sme.tax.constant.InvoiceStatus;
 import com.huicai.base.business.entity.InputInvoiceEntity;
 import com.huicai.base.business.entity.OutputInvoiceEntity;
+import com.huicai.sme.tax.dto.BatchOperationResult;
 import com.huicai.sme.tax.entity.TaxDeclarationEntity;
 import com.huicai.sme.tax.entity.TaxTypeEntity;
 import com.huicai.base.business.mapper.InputInvoiceMapper;
@@ -23,6 +24,7 @@ import com.huicai.base.business.mapper.OutputInvoiceMapper;
 import com.huicai.sme.tax.mapper.TaxDeclarationMapper;
 import com.huicai.sme.tax.mapper.TaxTypeMapper;
 import com.huicai.sme.tax.service.TaxService;
+import com.huicai.base.business.service.OutputInvoiceStateMachineService;
 import com.huicai.base.business.util.TemplateMatcher;
 import com.huicai.common.util.TemplateEngine;
 import com.huicai.common.util.TemplateContext;
@@ -32,6 +34,7 @@ import com.huicai.base.voucher.service.VoucherTemplateService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import org.springframework.beans.factory.annotation.Autowired;
@@ -40,10 +43,9 @@ import org.springframework.context.annotation.Lazy;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
 import java.util.List;
 import java.util.Map;
 
@@ -63,6 +65,7 @@ public class TaxServiceImpl implements TaxService {
     private final TemplateMatcher templateMatcher;
     private final VoucherTemplateService voucherTemplateService;
     private final BusinessDocMapper businessDocMapper;
+    private final OutputInvoiceStateMachineService outputInvoiceStateMachineService;
 
     // ========== 税种 ==========
     @Override
@@ -889,5 +892,110 @@ public class TaxServiceImpl implements TaxService {
         }
         log.info("批量生成凭证成功: {} 张发票 -> 凭证 {}", invoiceIds.size(), voucherNo);
         return voucherNo;
+    }
+
+    // ==================== 销项发票批量操作（P56 best-effort）====================
+
+    @Override
+    @Transactional(propagation = Propagation.NEVER)
+    public BatchOperationResult batchSubmitForReview(List<Long> ids, Long userId) {
+        return runBatch(ids, userId, (id, uid) -> {
+            outputInvoiceStateMachineService.submitForReview(id, uid);
+            return null;
+        }, "批量提交审核");
+    }
+
+    @Override
+    @Transactional(propagation = Propagation.NEVER)
+    public BatchOperationResult batchConfirm(List<Long> ids, Long userId) {
+        return runBatch(ids, userId, (id, uid) -> {
+            outputInvoiceStateMachineService.confirm(id, uid);
+            return null;
+        }, "批量审核通过");
+    }
+
+    @Override
+    @Transactional(propagation = Propagation.NEVER)
+    public BatchOperationResult batchReject(List<Long> ids, Long userId, String reason) {
+        if (reason == null || reason.isBlank()) {
+            throw new BusinessException("驳回必须填写原因");
+        }
+        return runBatch(ids, userId, (id, uid) -> {
+            outputInvoiceStateMachineService.reject(id, uid, reason);
+            return null;
+        }, "批量驳回");
+    }
+
+    @Override
+    @Transactional(propagation = Propagation.NEVER)
+    public BatchOperationResult batchRevert(List<Long> ids, Long userId) {
+        return runBatch(ids, userId, (id, uid) -> {
+            outputInvoiceStateMachineService.revertToReview(id, uid);
+            return null;
+        }, "批量回退");
+    }
+
+    @Override
+    @Transactional(propagation = Propagation.NEVER)
+    public BatchOperationResult batchMarkVouchered(List<Long> ids, Long userId) {
+        return runBatch(ids, userId, (id, uid) -> {
+            generateVoucherFromInvoice(id, uid);
+            return null;
+        }, "批量生成凭证");
+    }
+
+    @Override
+    @Transactional(propagation = Propagation.NEVER)
+    public BatchOperationResult batchVoid(List<Long> ids, Long userId, String reason) {
+        if (reason == null || reason.isBlank()) {
+            throw new BusinessException("作废必须填写原因");
+        }
+        return runBatch(ids, userId, (id, uid) -> {
+            outputInvoiceStateMachineService.voidInvoice(id, uid, reason);
+            return null;
+        }, "批量作废");
+    }
+
+    @Override
+    @Transactional(propagation = Propagation.NEVER)
+    public BatchOperationResult batchReverse(List<Long> ids, Long userId, String reason) {
+        if (reason == null || reason.isBlank()) {
+            throw new BusinessException("红冲必须填写原因");
+        }
+        return runBatch(ids, userId, (id, uid) -> {
+            outputInvoiceStateMachineService.reverseInvoice(id, uid, reason);
+            return null;
+        }, "批量红冲");
+    }
+
+    @FunctionalInterface
+    private interface BatchInvoker {
+        Long invoke(Long id, Long userId);
+    }
+
+    /**
+     * best-effort 批量执行器：单条失败计入 failure，继续后续；最外层不开事务
+     * 让每条状态机调用自身事务独立提交。
+     */
+    private BatchOperationResult runBatch(List<Long> ids, Long userId, BatchInvoker invoker, String actionLabel) {
+        List<Long> success = new ArrayList<>();
+        List<BatchOperationResult.FailureDetail> failure = new ArrayList<>();
+        if (ids == null || ids.isEmpty()) {
+            return new BatchOperationResult(success, failure);
+        }
+        for (Long id : ids) {
+            try {
+                invoker.invoke(id, userId);
+                success.add(id);
+            } catch (BusinessException e) {
+                failure.add(new BatchOperationResult.FailureDetail(id, e.getMessage()));
+                log.warn("{} 失败: id={}, reason={}", actionLabel, id, e.getMessage());
+            } catch (Exception e) {
+                failure.add(new BatchOperationResult.FailureDetail(id, "系统异常: " + e.getMessage()));
+                log.error("{} 系统异常: id={}", actionLabel, id, e);
+            }
+        }
+        log.info("{} 完成: 成功={}, 失败={}", actionLabel, success.size(), failure.size());
+        return new BatchOperationResult(success, failure);
     }
 }

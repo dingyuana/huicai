@@ -2,9 +2,11 @@ package com.huicai.sme.tax.service.impl;
 
 import com.huicai.common.exception.BusinessException;
 import com.huicai.base.business.entity.InputInvoiceEntity;
+import com.huicai.sme.tax.dto.BatchOperationResult;
 import com.huicai.sme.tax.entity.TaxDeclarationEntity;
 import com.huicai.base.business.mapper.InputInvoiceMapper;
 import com.huicai.base.business.mapper.OutputInvoiceMapper;
+import com.huicai.base.business.service.OutputInvoiceStateMachineService;
 import com.huicai.sme.tax.mapper.TaxDeclarationMapper;
 import com.huicai.sme.tax.mapper.TaxTypeMapper;
 import org.junit.jupiter.api.Test;
@@ -30,6 +32,7 @@ class TaxServiceImplTest {
     @Mock private InputInvoiceMapper inputMapper;
     @Mock private OutputInvoiceMapper outputMapper;
     @Mock private TaxDeclarationMapper declarationMapper;
+    @Mock private OutputInvoiceStateMachineService stateMachine;
     @InjectMocks private TaxServiceImpl service;
 
     private InputInvoiceEntity stubInput(Long id, String status) {
@@ -186,5 +189,112 @@ class TaxServiceImplTest {
         BusinessException ex = assertThrows(BusinessException.class,
                 () -> service.rejectDeclaration(1L, "x", ""));
         assertTrue(ex.getMessage().contains("驳回必须填理由"));
+    }
+
+    // ==================== P56 销项发票批量操作 ====================
+
+    @Test
+    void batchSubmitForReview_allSuccess() {
+        List<Long> ids = List.of(1L, 2L, 3L);
+        BatchOperationResult r = service.batchSubmitForReview(ids, 100L);
+        assertEquals(3, r.getSuccess().size());
+        assertEquals(0, r.getFailure().size());
+        verify(stateMachine, times(3)).submitForReview(anyLong(), anyLong());
+    }
+
+    @Test
+    void batchSubmitForReview_partialFailure_businessException() {
+        doNothing().when(stateMachine).submitForReview(eq(1L), anyLong());
+        doThrow(BusinessException.badRequest("仅待确认状态可提交审核，当前: VOUCHERED"))
+                .when(stateMachine).submitForReview(eq(2L), anyLong());
+        doNothing().when(stateMachine).submitForReview(eq(3L), anyLong());
+
+        BatchOperationResult r = service.batchSubmitForReview(List.of(1L, 2L, 3L), 100L);
+
+        assertEquals(2, r.getSuccess().size());
+        assertTrue(r.getSuccess().contains(1L) && r.getSuccess().contains(3L));
+        assertEquals(1, r.getFailure().size());
+        assertEquals(2L, r.getFailure().get(0).getId());
+        assertTrue(r.getFailure().get(0).getReason().contains("仅待确认状态"));
+    }
+
+    @Test
+    void batchSubmitForReview_partialFailure_systemException() {
+        doNothing().when(stateMachine).submitForReview(eq(1L), anyLong());
+        doThrow(new RuntimeException("DB connection lost"))
+                .when(stateMachine).submitForReview(eq(2L), anyLong());
+
+        BatchOperationResult r = service.batchSubmitForReview(List.of(1L, 2L), 100L);
+
+        assertEquals(1, r.getSuccess().size());
+        assertEquals(1, r.getFailure().size());
+        assertEquals(2L, r.getFailure().get(0).getId());
+        assertTrue(r.getFailure().get(0).getReason().contains("系统异常"));
+    }
+
+    @Test
+    void batchReject_emptyReason_throws() {
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> service.batchReject(List.of(1L), 100L, ""));
+        assertTrue(ex.getMessage().contains("驳回必须填写原因"));
+    }
+
+    @Test
+    void batchVoid_emptyReason_throws() {
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> service.batchVoid(List.of(1L), 100L, null));
+        assertTrue(ex.getMessage().contains("作废必须填写原因"));
+    }
+
+    @Test
+    void batchReverse_emptyReason_throws() {
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> service.batchReverse(List.of(1L), 100L, "   "));
+        assertTrue(ex.getMessage().contains("红冲必须填写原因"));
+    }
+
+    @Test
+    void batchConfirm_allSuccess() {
+        BatchOperationResult r = service.batchConfirm(List.of(1L, 2L), 100L);
+        assertEquals(2, r.getSuccess().size());
+        verify(stateMachine, times(2)).confirm(anyLong(), anyLong());
+    }
+
+    @Test
+    void batchRevert_allSuccess() {
+        BatchOperationResult r = service.batchRevert(List.of(1L), 100L);
+        assertEquals(1, r.getSuccess().size());
+        verify(stateMachine).revertToReview(eq(1L), anyLong());
+    }
+
+    @Test
+    void batchReject_allSuccess_withReason() {
+        BatchOperationResult r = service.batchReject(List.of(1L, 2L), 100L, "材料不齐");
+        assertEquals(2, r.getSuccess().size());
+        verify(stateMachine).reject(eq(1L), eq(100L), eq("材料不齐"));
+        verify(stateMachine).reject(eq(2L), eq(100L), eq("材料不齐"));
+    }
+
+    @Test
+    void batchVoid_allSuccess_withReason() {
+        BatchOperationResult r = service.batchVoid(List.of(1L), 100L, "重复开票");
+        assertEquals(1, r.getSuccess().size());
+        verify(stateMachine).voidInvoice(eq(1L), eq(100L), eq("重复开票"));
+    }
+
+    @Test
+    void batchReverse_allSuccess_withReason_returnsNullFromStateMachine() {
+        when(stateMachine.reverseInvoice(eq(1L), anyLong(), anyString())).thenReturn(99L);
+        BatchOperationResult r = service.batchReverse(List.of(1L), 100L, "客户退货");
+        assertEquals(1, r.getSuccess().size());
+        verify(stateMachine).reverseInvoice(eq(1L), eq(100L), eq("客户退货"));
+    }
+
+    @Test
+    void batchSubmitForReview_emptyList_returnsEmptyResult() {
+        BatchOperationResult r = service.batchSubmitForReview(List.of(), 100L);
+        assertEquals(0, r.getSuccess().size());
+        assertEquals(0, r.getFailure().size());
+        verify(stateMachine, never()).submitForReview(anyLong(), anyLong());
     }
 }

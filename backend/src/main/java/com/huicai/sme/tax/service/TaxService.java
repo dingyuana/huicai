@@ -3,6 +3,7 @@ package com.huicai.sme.tax.service;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.huicai.base.business.entity.InputInvoiceEntity;
 import com.huicai.base.business.entity.OutputInvoiceEntity;
+import com.huicai.sme.tax.dto.BatchOperationResult;
 import com.huicai.sme.tax.entity.TaxDeclarationEntity;
 import com.huicai.sme.tax.entity.TaxTypeEntity;
 
@@ -54,4 +55,13 @@ public interface TaxService {
      * 批量生成凭证（多张发票合并生成一张凭证）
      */
     String batchGenerateVoucherFromInvoices(List<Long> invoiceIds, Long userId, Boolean sameCustomer);
+
+    // 销项发票批量操作（P56：best-effort 模式，单条失败不影响其他）
+    BatchOperationResult batchSubmitForReview(List<Long> ids, Long userId);
+    BatchOperationResult batchConfirm(List<Long> ids, Long userId);
+    BatchOperationResult batchReject(List<Long> ids, Long userId, String reason);
+    BatchOperationResult batchRevert(List<Long> ids, Long userId);
+    BatchOperationResult batchMarkVouchered(List<Long> ids, Long userId);
+    BatchOperationResult batchVoid(List<Long> ids, Long userId, String reason);
+    BatchOperationResult batchReverse(List<Long> ids, Long userId, String reason);
 }

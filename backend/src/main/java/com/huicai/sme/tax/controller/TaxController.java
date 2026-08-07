@@ -4,6 +4,8 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.huicai.common.response.R;
 import com.huicai.base.business.entity.InputInvoiceEntity;
 import com.huicai.base.business.entity.OutputInvoiceEntity;
+import com.huicai.sme.tax.dto.BatchOperationResult;
+import com.huicai.sme.tax.dto.OutputInvoiceBatchDTO;
 import com.huicai.sme.tax.entity.TaxDeclarationEntity;
 import com.huicai.sme.tax.entity.TaxTypeEntity;
 import com.huicai.sme.tax.service.InputInvoiceStateMachineService;
@@ -12,6 +14,7 @@ import com.huicai.sme.tax.service.TaxService;
 import com.huicai.base.system.util.SecurityUtils;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
@@ -320,5 +323,48 @@ public class TaxController {
         Boolean sameCustomer = (Boolean) body.getOrDefault("same_customer", true);
         String voucherNo = service.batchGenerateVoucherFromInvoices(invoiceIds, SecurityUtils.getCurrentUserId(), sameCustomer);
         return R.ok(java.util.Map.of("voucher_no", voucherNo));
+    }
+
+    // ========== 销项发票批量操作 (P56) ==========
+    @Operation(summary = "批量提交审核 (PENDING_CONFIRM → PENDING_REVIEW)")
+    @PostMapping("/output-invoices/batch/submit-review")
+    public R<BatchOperationResult> batchSubmitReview(@Valid @RequestBody OutputInvoiceBatchDTO dto) {
+        return R.ok(service.batchSubmitForReview(dto.getIds(), SecurityUtils.getCurrentUserId()));
+    }
+
+    @Operation(summary = "批量审核通过 (PENDING_REVIEW → CONFIRMED + 业务单+凭证)")
+    @PostMapping("/output-invoices/batch/confirm")
+    public R<BatchOperationResult> batchConfirm(@Valid @RequestBody OutputInvoiceBatchDTO dto) {
+        return R.ok(service.batchConfirm(dto.getIds(), SecurityUtils.getCurrentUserId()));
+    }
+
+    @Operation(summary = "批量驳回 (PENDING_REVIEW → PENDING_CONFIRM)")
+    @PostMapping("/output-invoices/batch/reject")
+    public R<BatchOperationResult> batchReject(@Valid @RequestBody OutputInvoiceBatchDTO dto) {
+        return R.ok(service.batchReject(dto.getIds(), SecurityUtils.getCurrentUserId(), dto.getReason()));
+    }
+
+    @Operation(summary = "批量回退 (CONFIRMED → PENDING_REVIEW)")
+    @PostMapping("/output-invoices/batch/revert")
+    public R<BatchOperationResult> batchRevert(@Valid @RequestBody OutputInvoiceBatchDTO dto) {
+        return R.ok(service.batchRevert(dto.getIds(), SecurityUtils.getCurrentUserId()));
+    }
+
+    @Operation(summary = "批量生成凭证 (CONFIRMED → VOUCHERED)")
+    @PostMapping("/output-invoices/batch/mark-vouchered")
+    public R<BatchOperationResult> batchMarkVouchered(@Valid @RequestBody OutputInvoiceBatchDTO dto) {
+        return R.ok(service.batchMarkVouchered(dto.getIds(), SecurityUtils.getCurrentUserId()));
+    }
+
+    @Operation(summary = "批量作废 (任意非终态 → VOIDED)")
+    @PostMapping("/output-invoices/batch/void")
+    public R<BatchOperationResult> batchVoid(@Valid @RequestBody OutputInvoiceBatchDTO dto) {
+        return R.ok(service.batchVoid(dto.getIds(), SecurityUtils.getCurrentUserId(), dto.getReason()));
+    }
+
+    @Operation(summary = "批量红冲 (CONFIRMED/VOUCHERED/PARTIALLY_RECONCILED → REVERSED + 红字发票)")
+    @PostMapping("/output-invoices/batch/reverse")
+    public R<BatchOperationResult> batchReverse(@Valid @RequestBody OutputInvoiceBatchDTO dto) {
+        return R.ok(service.batchReverse(dto.getIds(), SecurityUtils.getCurrentUserId(), dto.getReason()));
     }
 }
