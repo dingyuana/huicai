@@ -1,5 +1,6 @@
 package com.huicai.base.system.controller;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.huicai.common.response.R;
@@ -32,13 +33,15 @@ public class PeriodController {
     @Operation(summary = "获取期间列表(全量)")
     @GetMapping("/all")
     public R<List<PeriodEntity>> listAll() {
-        return R.ok(periodService.list());
+        return R.ok(periodService.list(new LambdaQueryWrapper<PeriodEntity>()
+                .orderByDesc(PeriodEntity::getPeriodCode)));
     }
 
     @Operation(summary = "获取期间列表(全量, /list 路径兼容前端)")
     @GetMapping("/list")
     public R<List<PeriodEntity>> listAllNamed() {
-        return R.ok(periodService.list());
+        return R.ok(periodService.list(new LambdaQueryWrapper<PeriodEntity>()
+                .orderByDesc(PeriodEntity::getPeriodCode)));
     }
 
     @Operation(summary = "新增期间")

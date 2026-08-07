@@ -179,7 +179,9 @@ const creditTotal = computed(() =>
 async function fetchPeriods() {
   const { default: request } = await import('@/api/request')
   const d: any[] = await request.get('/v1/periods/all')
-  periods.value = d.map((p: any) => p.periodCode).filter(Boolean)
+  const codes: string[] = d.map((p: any) => p.periodCode).filter(Boolean)
+  codes.sort((a, b) => b.localeCompare(a))
+  periods.value = codes
   const map: Record<string, string> = {}
   for (const p of d) {
     if (p.periodCode) map[p.periodCode] = p.openingStatus || 'none'
@@ -204,6 +206,8 @@ async function fetchSubjectTree() {
 }
 
 async function switchPeriod() {
+  trialResult.value = null
+  entryRows.value = []
   fetchBalances()
 }
 
