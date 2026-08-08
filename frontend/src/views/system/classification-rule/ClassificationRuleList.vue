@@ -205,7 +205,7 @@ type ElTagType = 'success' | 'warning' | 'info' | 'primary' | 'danger'
 function routeTagType(routeType: string): ElTagType {
   return routeType === 'A' ? 'success' : routeType === 'B' ? 'warning' : 'info'
 }
-function getRuleSubjectPath(row: ClassificationRule) {
+function getRuleSubjectPath(row: { subjectLevel1?: string; subjectLevel2?: string; subjectLevel3?: string }) {
   return [row.subjectLevel1, row.subjectLevel2, row.subjectLevel3]
     .filter(Boolean)
     .join(' / ')
