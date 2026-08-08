@@ -64,10 +64,10 @@
 
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue'
-import dayjs from 'dayjs'
+import { resolveDefaultPeriod } from '@/utils/period'
 import { keyMetrics } from '@/api/modules/report'
 
-const query = reactive({ period: dayjs().format('YYYYMM') })
+const query = reactive({ period: '' })
 const data = ref<any>(null)
 
 const fmtAmount = (v: any) => Number(v || 0).toFixed(2)
@@ -77,7 +77,10 @@ const fetchData = async () => {
   data.value = await keyMetrics(query.period)
 }
 
-onMounted(fetchData)
+onMounted(async () => {
+  query.period = await resolveDefaultPeriod()
+  fetchData()
+})
 </script>
 
 <style scoped>

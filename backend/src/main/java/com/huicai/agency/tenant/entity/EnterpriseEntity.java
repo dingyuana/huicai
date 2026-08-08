@@ -18,6 +18,7 @@ public class EnterpriseEntity {
     private Long agencyId;
     private String status;
     private Boolean seedDataDone;
+    private String startPeriod;
 
     @TableField(fill = FieldFill.INSERT)
     private LocalDateTime createdAt;

@@ -7,9 +7,8 @@ import lombok.NoArgsConstructor;
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
-public class EnterpriseSwitchVO {
-    private Long enterpriseId;
-    private String enterpriseName;
-    private Boolean seedDataDone;
+public class CurrentPeriodVO {
+    private String currentPeriod;
     private String startPeriod;
+    private String hasDataPeriod;
 }

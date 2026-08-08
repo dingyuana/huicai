@@ -144,3 +144,15 @@ export function getDashboard(): Promise<{ data: any }> {
 export function getAccountantDetail(userId: number): Promise<{ data: any }> {
   return request.get(`/v1/agency/dashboard/accountant/${userId}`)
 }
+
+// ========== P57: 企业默认期间 ==========
+
+export interface CurrentPeriodVO {
+  currentPeriod: string | null
+  startPeriod: string | null
+  hasDataPeriod: string | null
+}
+
+export function getCurrentPeriod(): Promise<CurrentPeriodVO> {
+  return request.get('/v1/enterprise/current-period')
+}

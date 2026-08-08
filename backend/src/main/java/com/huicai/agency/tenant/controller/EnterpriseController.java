@@ -8,11 +8,14 @@ import com.huicai.agency.tenant.mapper.AgencyEnterpriseMapper;
 import com.huicai.agency.tenant.mapper.EnterpriseMapper;
 import com.huicai.agency.tenant.service.EnterpriseService;
 import com.huicai.agency.tenant.service.EnterpriseStateMachineService;
+import com.huicai.agency.tenant.vo.CurrentPeriodVO;
 import com.huicai.agency.tenant.vo.EnterpriseSwitchVO;
 import com.huicai.agency.user.mapper.AgencyUserEnterpriseMapper;
 import com.huicai.agency.user.mapper.AgencyUserMapper;
 import com.huicai.agency.user.entity.AgencyUserEntity;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.huicai.base.system.entity.PeriodEntity;
+import com.huicai.base.system.mapper.PeriodMapper;
 import com.huicai.base.system.util.SecurityUtils;
 import com.huicai.common.context.EnterpriseContextHolder;
 import com.huicai.common.exception.BusinessException;
@@ -31,6 +34,7 @@ public class EnterpriseController {
     private final EnterpriseStateMachineService stateMachineService;
     private final AgencyUserMapper agencyUserMapper;
     private final AgencyUserEnterpriseMapper agencyUserEnterpriseMapper;
+    private final PeriodMapper periodMapper;
 
     // ========== 切换接口 (Sprint 2) ==========
 
@@ -46,7 +50,7 @@ public class EnterpriseController {
             }
             EnterpriseContextHolder.set(enterpriseId);
             return R.ok(new EnterpriseSwitchVO(
-                    enterprise.getId(), enterprise.getEnterpriseName(), enterprise.getSeedDataDone()));
+                    enterprise.getId(), enterprise.getEnterpriseName(), enterprise.getSeedDataDone(), enterprise.getStartPeriod()));
         }
 
         if (!"AGENCY".equals(userType)) {
@@ -93,11 +97,47 @@ public class EnterpriseController {
         return R.ok(new EnterpriseSwitchVO(
                 enterprise.getId(),
                 enterprise.getEnterpriseName(),
-                enterprise.getSeedDataDone()
+                enterprise.getSeedDataDone(),
+                enterprise.getStartPeriod()
         ));
     }
 
     // ========== 客户企业 CRUD (Sprint 3) ==========
+
+    @GetMapping("/api/v1/enterprise/current-period")
+    public R<CurrentPeriodVO> currentPeriod() {
+        Long enterpriseId = EnterpriseContextHolder.get();
+        if (enterpriseId == null) {
+            throw BusinessException.badRequest("尚未切换企业, 无法获取默认期间");
+        }
+        EnterpriseEntity enterprise = enterpriseMapper.selectById(enterpriseId);
+        if (enterprise == null || enterprise.getDeleted() == 1) {
+            throw BusinessException.notFound("企业不存在");
+        }
+
+        String startPeriod = enterprise.getStartPeriod();
+        CurrentPeriodVO vo = new CurrentPeriodVO();
+        vo.setStartPeriod(startPeriod);
+
+        if (startPeriod != null) {
+            String hasDataPeriod = enterpriseMapper.selectLatestPeriodWithData(enterpriseId);
+            if (hasDataPeriod != null && hasDataPeriod.compareTo(startPeriod) >= 0) {
+                vo.setHasDataPeriod(hasDataPeriod);
+                vo.setCurrentPeriod(hasDataPeriod);
+            } else {
+                vo.setCurrentPeriod(startPeriod);
+            }
+            return R.ok(vo);
+        }
+
+        // 存量企业（start_period 为空）：返回企业期间列表中最新的一个，与改造前行为一致
+        PeriodEntity latest = periodMapper.selectOne(
+                new LambdaQueryWrapper<PeriodEntity>()
+                        .orderByDesc(PeriodEntity::getPeriodCode)
+                        .last("LIMIT 1"));
+        vo.setCurrentPeriod(latest == null ? null : latest.getPeriodCode());
+        return R.ok(vo);
+    }
 
     @PostMapping("/api/v1/agency/enterprises")
     public R<EnterpriseVO> create(@Valid @RequestBody EnterpriseCreateDTO dto) {

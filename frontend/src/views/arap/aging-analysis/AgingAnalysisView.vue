@@ -102,12 +102,13 @@
 import { onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import dayjs from 'dayjs'
+import { resolveDefaultPeriod } from '@/utils/period'
 import request from '@/api/request'
 
 const activeTab = ref('distribution')
 
 const query = reactive({
-  period: dayjs().format('YYYYMM'),
+  period: '',
 })
 
 const loading = reactive({
@@ -207,7 +208,10 @@ const fetchAll = () => {
   fetchAlerts()
 }
 
-onMounted(fetchAll)
+onMounted(async () => {
+  query.period = await resolveDefaultPeriod()
+  fetchAll()
+})
 </script>
 
 <style scoped lang="scss">

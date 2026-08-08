@@ -1,6 +1,8 @@
 package com.huicai.base.balance.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.huicai.agency.tenant.entity.EnterpriseEntity;
+import com.huicai.agency.tenant.mapper.EnterpriseMapper;
 import com.huicai.base.balance.entity.SubjectBalanceEntity;
 import com.huicai.base.balance.mapper.SubjectBalanceMapper;
 import com.huicai.base.balance.service.SubjectBalanceService;
@@ -10,6 +12,7 @@ import com.huicai.base.system.entity.PeriodEntity;
 import com.huicai.base.system.entity.Subject;
 import com.huicai.base.system.service.PeriodService;
 import com.huicai.base.system.service.SubjectService;
+import com.huicai.common.context.EnterpriseContextHolder;
 import com.huicai.common.exception.BusinessException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -37,6 +40,7 @@ class SubjectBalanceServiceImplTest {
     @Mock private SubjectService subjectService;
     @Mock private PeriodService periodService;
     @Mock private VoucherMapper voucherMapper;
+    @Mock private EnterpriseMapper enterpriseMapper;
 
     @InjectMocks
     private SubjectBalanceServiceImpl service;
@@ -331,5 +335,218 @@ class SubjectBalanceServiceImplTest {
         when(periodService.getByPeriodCode(PERIOD)).thenReturn(newPeriod("open", "entered"));
         // 不抛
         service.validateOpeningBeforePost(PERIOD);
+    }
+
+    // ============================================================
+    // start_period 建账期间（P57）
+    // ============================================================
+
+    private void withEnterpriseContext(Long enterpriseId) {
+        EnterpriseContextHolder.set(enterpriseId);
+    }
+
+    @Test
+    @DisplayName("期初建账成功_回填企业start_period")
+    void init_success_backfillsStartPeriod() {
+        withEnterpriseContext(1L);
+        try {
+            when(periodService.getByPeriodCode(PERIOD)).thenReturn(newPeriod("open", "none"));
+            when(subjectBalanceMapper.selectCount(any(LambdaQueryWrapper.class))).thenReturn(0L);
+            when(subjectService.getById(1L)).thenReturn(newDebitSubject(1L, true));
+            when(subjectService.getById(2L)).thenReturn(newCreditSubject(2L));
+
+            EnterpriseEntity enterprise = new EnterpriseEntity();
+            enterprise.setId(1L);
+            when(enterpriseMapper.selectById(1L)).thenReturn(enterprise);
+
+            Map<Long, BigDecimal> balances = new HashMap<>();
+            balances.put(1L, new BigDecimal("400000"));
+            balances.put(2L, new BigDecimal("400000"));
+
+            service.initOpeningBalances(PERIOD, balances);
+
+            verify(enterpriseMapper).updateById(argThat((EnterpriseEntity e) ->
+                    e.getId().equals(1L) && PERIOD.equals(e.getStartPeriod())));
+        } finally {
+            EnterpriseContextHolder.clear();
+        }
+    }
+
+    @Test
+    @DisplayName("期初建账成功_已有start_period_不覆盖")
+    void init_success_startPeriodExists_noOverwrite() {
+        withEnterpriseContext(1L);
+        try {
+            when(periodService.getByPeriodCode(PERIOD)).thenReturn(newPeriod("open", "none"));
+            when(subjectBalanceMapper.selectCount(any(LambdaQueryWrapper.class))).thenReturn(0L);
+            when(subjectService.getById(1L)).thenReturn(newDebitSubject(1L, true));
+            when(subjectService.getById(2L)).thenReturn(newCreditSubject(2L));
+
+            EnterpriseEntity enterprise = new EnterpriseEntity();
+            enterprise.setId(1L);
+            enterprise.setStartPeriod("202401");
+            when(enterpriseMapper.selectById(1L)).thenReturn(enterprise);
+
+            Map<Long, BigDecimal> balances = new HashMap<>();
+            balances.put(1L, new BigDecimal("400000"));
+            balances.put(2L, new BigDecimal("400000"));
+
+            service.initOpeningBalances(PERIOD, balances);
+
+            verify(enterpriseMapper, never()).updateById(any(EnterpriseEntity.class));
+        } finally {
+            EnterpriseContextHolder.clear();
+        }
+    }
+
+    @Test
+    @DisplayName("过账前置_早于start_period_throw badRequest")
+    void validate_beforeStartPeriod_throws() {
+        withEnterpriseContext(1L);
+        try {
+            PeriodEntity target = newPeriod("open", "none");
+            target.setPeriodCode("202101");
+            when(periodService.getByPeriodCode("202101")).thenReturn(target);
+
+            EnterpriseEntity enterprise = new EnterpriseEntity();
+            enterprise.setId(1L);
+            enterprise.setStartPeriod("202401");
+            when(enterpriseMapper.selectById(1L)).thenReturn(enterprise);
+
+            BusinessException ex = assertThrows(BusinessException.class,
+                    () -> service.validateOpeningBeforePost("202101"));
+            assertTrue(ex.getMessage().contains("早于企业建账期间"));
+        } finally {
+            EnterpriseContextHolder.clear();
+        }
+    }
+
+    @Test
+    @DisplayName("过账前置_等于start_period且未建账_throw badRequest")
+    void validate_equalsStartPeriodUnentered_throws() {
+        withEnterpriseContext(1L);
+        try {
+            PeriodEntity target = newPeriod("open", "none");
+            target.setPeriodCode("202401");
+            when(periodService.getByPeriodCode("202401")).thenReturn(target);
+
+            EnterpriseEntity enterprise = new EnterpriseEntity();
+            enterprise.setId(1L);
+            enterprise.setStartPeriod("202401");
+            when(enterpriseMapper.selectById(1L)).thenReturn(enterprise);
+
+            BusinessException ex = assertThrows(BusinessException.class,
+                    () -> service.validateOpeningBeforePost("202401"));
+            assertTrue(ex.getMessage().contains("尚未完成期初建账"));
+        } finally {
+            EnterpriseContextHolder.clear();
+        }
+    }
+
+    @Test
+    @DisplayName("过账前置_等于start_period且已建账_放行")
+    void validate_equalsStartPeriodEntered_pass() {
+        withEnterpriseContext(1L);
+        try {
+            PeriodEntity target = newPeriod("open", "entered");
+            target.setPeriodCode("202401");
+            when(periodService.getByPeriodCode("202401")).thenReturn(target);
+
+            EnterpriseEntity enterprise = new EnterpriseEntity();
+            enterprise.setId(1L);
+            enterprise.setStartPeriod("202401");
+            when(enterpriseMapper.selectById(1L)).thenReturn(enterprise);
+
+            service.validateOpeningBeforePost("202401");
+        } finally {
+            EnterpriseContextHolder.clear();
+        }
+    }
+
+    @Test
+    @DisplayName("过账前置_晚于start_period_即使未建账也放行")
+    void validate_afterStartPeriod_pass() {
+        withEnterpriseContext(1L);
+        try {
+            PeriodEntity target = newPeriod("open", "none");
+            target.setPeriodCode("202402");
+            when(periodService.getByPeriodCode("202402")).thenReturn(target);
+
+            EnterpriseEntity enterprise = new EnterpriseEntity();
+            enterprise.setId(1L);
+            enterprise.setStartPeriod("202401");
+            when(enterpriseMapper.selectById(1L)).thenReturn(enterprise);
+
+            service.validateOpeningBeforePost("202402");
+        } finally {
+            EnterpriseContextHolder.clear();
+        }
+    }
+
+    @Test
+    @DisplayName("过账前置_存量企业无start_period_走旧逻辑")
+    void validate_legacyNoStartPeriod_usesEarliest() {
+        withEnterpriseContext(1L);
+        try {
+            PeriodEntity target = newPeriod("open", "none");
+            target.setPeriodCode(PERIOD);
+            when(periodService.getByPeriodCode(PERIOD)).thenReturn(target);
+
+            EnterpriseEntity enterprise = new EnterpriseEntity();
+            enterprise.setId(1L);
+            when(enterpriseMapper.selectById(1L)).thenReturn(enterprise);
+            when(periodService.getOne(any(LambdaQueryWrapper.class))).thenReturn(target);
+
+            BusinessException ex = assertThrows(BusinessException.class,
+                    () -> service.validateOpeningBeforePost(PERIOD));
+            assertTrue(ex.getMessage().contains("尚未完成期初建账"));
+        } finally {
+            EnterpriseContextHolder.clear();
+        }
+    }
+
+    @Test
+    @DisplayName("清空期初_清空建账期间且无其他余额_重置start_period为null")
+    void clear_resetsStartPeriodWhenAlone() {
+        withEnterpriseContext(1L);
+        try {
+            when(periodService.getByPeriodCode(PERIOD)).thenReturn(newPeriod("open", "entered"));
+            when(voucherMapper.selectCount(any(LambdaQueryWrapper.class))).thenReturn(0L);
+            when(subjectBalanceMapper.delete(any(LambdaQueryWrapper.class))).thenReturn(3);
+
+            EnterpriseEntity enterprise = new EnterpriseEntity();
+            enterprise.setId(1L);
+            enterprise.setStartPeriod(PERIOD);
+            when(enterpriseMapper.selectById(1L)).thenReturn(enterprise);
+            when(subjectBalanceMapper.selectCount(any(LambdaQueryWrapper.class))).thenReturn(0L);
+
+            service.clearOpeningBalances(PERIOD);
+
+            verify(enterpriseMapper).updateById(argThat((EnterpriseEntity e) -> e.getStartPeriod() == null));
+        } finally {
+            EnterpriseContextHolder.clear();
+        }
+    }
+
+    @Test
+    @DisplayName("清空期初_非建账期间_不重置start_period")
+    void clear_notStartPeriod_keepsStartPeriod() {
+        withEnterpriseContext(1L);
+        try {
+            when(periodService.getByPeriodCode(PERIOD)).thenReturn(newPeriod("open", "entered"));
+            when(voucherMapper.selectCount(any(LambdaQueryWrapper.class))).thenReturn(0L);
+            when(subjectBalanceMapper.delete(any(LambdaQueryWrapper.class))).thenReturn(3);
+
+            EnterpriseEntity enterprise = new EnterpriseEntity();
+            enterprise.setId(1L);
+            enterprise.setStartPeriod("202401");
+            when(enterpriseMapper.selectById(1L)).thenReturn(enterprise);
+
+            service.clearOpeningBalances(PERIOD);
+
+            verify(enterpriseMapper, never()).updateById(any(EnterpriseEntity.class));
+        } finally {
+            EnterpriseContextHolder.clear();
+        }
     }
 }

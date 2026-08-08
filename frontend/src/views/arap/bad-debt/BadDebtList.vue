@@ -166,7 +166,7 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import dayjs from 'dayjs'
+import { resolveDefaultPeriod } from '@/utils/period'
 import request from '@/api/request'
 import { getBadDebtScheme, writeOffBadDebt, recoveryBadDebt, pageBadDebt, provisionBadDebtAging, provisionBadDebtPercentage, confirmBadDebt } from '@/api/modules/arap'
 
@@ -188,7 +188,7 @@ const total = ref(0)
 const loading = ref(false)
 const dialogVisible = ref(false)
 const form = reactive<any>({
-  period: dayjs().format('YYYYMM'),
+  period: '',
   method: 'AGING_RATIO',
   ratios: { current: 0, days_1_30: 0.05, days_31_60: 0.1, days_61_90: 0.2, days_91_180: 0.3, days_181_365: 0.5, days_over_365: 1 },
   ratio: 0.01,
@@ -281,5 +281,8 @@ const onRecovery = async () => {
   fetchData()
 }
 
-onMounted(fetchData)
+onMounted(async () => {
+  form.period = await resolveDefaultPeriod()
+  fetchData()
+})
 </script>

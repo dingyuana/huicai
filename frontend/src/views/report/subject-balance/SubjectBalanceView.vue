@@ -38,11 +38,11 @@
 
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue'
-import dayjs from 'dayjs'
+import { resolveDefaultPeriod } from '@/utils/period'
 import { ElMessage } from 'element-plus'
 import { subjectBalance } from '@/api/modules/report'
 
-const query = reactive({ period: dayjs().format('YYYYMM') })
+const query = reactive({ period: '' })
 const list = ref<any[]>([])
 const loading = ref(false)
 
@@ -74,5 +74,8 @@ const onExport = () => {
   ElMessage.info('导出功能: 复制表格内容到 Excel')
 }
 
-onMounted(fetchData)
+onMounted(async () => {
+  query.period = await resolveDefaultPeriod()
+  fetchData()
+})
 </script>

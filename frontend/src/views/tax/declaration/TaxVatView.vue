@@ -85,10 +85,10 @@
 
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue'
-import dayjs from 'dayjs'
+import { resolveDefaultPeriod } from '@/utils/period'
 import { calculateVat, inputInvoiceSummary, outputInvoiceSummary } from '@/api/modules/tax'
 
-const query = reactive({ period: dayjs().format('YYYYMM') })
+const query = reactive({ period: '' })
 const result = ref<any>(null)
 const byRate = reactive({ input: [] as any[], output: [] as any[] })
 
@@ -105,7 +105,10 @@ const fetchAll = async () => {
   byRate.output = await request.get('/sme/tax/v1/tax/output-invoices/by-tax-rate', { params: { period: query.period } })
 }
 
-onMounted(fetchAll)
+onMounted(async () => {
+  query.period = await resolveDefaultPeriod()
+  fetchAll()
+})
 </script>
 
 <style scoped>

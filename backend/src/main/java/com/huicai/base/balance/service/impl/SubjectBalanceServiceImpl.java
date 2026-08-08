@@ -2,7 +2,10 @@ package com.huicai.base.balance.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.huicai.common.annotation.Auditable;
+import com.huicai.common.context.EnterpriseContextHolder;
 import com.huicai.common.exception.BusinessException;
+import com.huicai.agency.tenant.entity.EnterpriseEntity;
+import com.huicai.agency.tenant.mapper.EnterpriseMapper;
 import com.huicai.base.balance.entity.SubjectBalanceEntity;
 import com.huicai.base.balance.dto.SubjectBalanceVO;
 import com.huicai.base.voucher.entity.VoucherEntity;
@@ -40,6 +43,7 @@ public class SubjectBalanceServiceImpl implements SubjectBalanceService {
     private final SubjectService subjectService;
     private final PeriodService periodService;
     private final VoucherMapper voucherMapper;
+    private final EnterpriseMapper enterpriseMapper;
 
     @Override
     @Transactional(propagation = Propagation.MANDATORY)
@@ -112,6 +116,7 @@ public class SubjectBalanceServiceImpl implements SubjectBalanceService {
         // 空 balances 表示确认期初全为 0（支持零余额企业），仅标记 entered 不插入数据行
         if (balances.isEmpty()) {
             periodService.setOpeningStatus(period, "entered");
+            backfillEnterpriseStartPeriod(period);
             log.info("期初建账（零余额确认）: period={}", period);
             return;
         }
@@ -158,8 +163,25 @@ public class SubjectBalanceServiceImpl implements SubjectBalanceService {
             subjectBalanceMapper.insert(balance);
         }
         periodService.setOpeningStatus(period, "entered");
+        backfillEnterpriseStartPeriod(period);
         log.info("期初建账完成: period={}, 科目数={}, 借方合计={}, 贷方合计={}",
                 period, batchList.size(), totalDebitSide, totalCreditSide);
+    }
+
+    private void backfillEnterpriseStartPeriod(String period) {
+        Long enterpriseId = EnterpriseContextHolder.get();
+        if (enterpriseId == null) {
+            return;
+        }
+        EnterpriseEntity enterprise = enterpriseMapper.selectById(enterpriseId);
+        if (enterprise == null || enterprise.getStartPeriod() != null) {
+            return;
+        }
+        EnterpriseEntity update = new EnterpriseEntity();
+        update.setId(enterpriseId);
+        update.setStartPeriod(period);
+        enterpriseMapper.updateById(update);
+        log.info("回填企业建账期间: enterpriseId={}, startPeriod={}", enterpriseId, period);
     }
 
     @Override
@@ -251,7 +273,29 @@ public class SubjectBalanceServiceImpl implements SubjectBalanceService {
         wrapper.eq(SubjectBalanceEntity::getPeriod, period);
         int deleted = subjectBalanceMapper.delete(wrapper);
         periodService.setOpeningStatus(period, "none");
+        resetStartPeriodIfAlone(period);
         log.info("清空期初完成: period={}, 删除余额行={}", period, deleted);
+    }
+
+    private void resetStartPeriodIfAlone(String period) {
+        Long enterpriseId = EnterpriseContextHolder.get();
+        if (enterpriseId == null) {
+            return;
+        }
+        EnterpriseEntity enterprise = enterpriseMapper.selectById(enterpriseId);
+        if (enterprise == null || !period.equals(enterprise.getStartPeriod())) {
+            return;
+        }
+        LambdaQueryWrapper<SubjectBalanceEntity> otherWrapper = new LambdaQueryWrapper<>();
+        otherWrapper.ne(SubjectBalanceEntity::getPeriod, period);
+        Long remaining = subjectBalanceMapper.selectCount(otherWrapper);
+        if (remaining == null || remaining == 0) {
+            EnterpriseEntity update = new EnterpriseEntity();
+            update.setId(enterpriseId);
+            update.setStartPeriod(null);
+            enterpriseMapper.updateById(update);
+            log.info("清空建账期间后重置企业 start_period: enterpriseId={}", enterpriseId);
+        }
     }
 
     @Override
@@ -260,17 +304,39 @@ public class SubjectBalanceServiceImpl implements SubjectBalanceService {
         PeriodEntity target = periodService.getByPeriodCode(period);
         if (target == null) return; // 期间不存在时放行（避免破坏未初始化场景）
         String status = target.getOpeningStatus();
-        if (status == null) return; // 未初始化（老数据）放行
-        if (!"none".equals(status)) return; // 已 entered/locked，放行
 
-        // opening_status == 'none' 时：仅当该期间是企业最早期才强制要求先建账
-        LambdaQueryWrapper<PeriodEntity> earliestWrapper = new LambdaQueryWrapper<>();
-        earliestWrapper.orderByAsc(PeriodEntity::getPeriodCode).last("LIMIT 1");
-        PeriodEntity earliest = periodService.getOne(earliestWrapper);
-        if (earliest != null && period.equals(earliest.getPeriodCode())) {
+        String startPeriod = resolveStartPeriod();
+        if (startPeriod == null) {
+            // 存量企业（无 start_period）：仅最早期期间强制先建账，保持向后兼容
+            if (status == null || !"none".equals(status)) return;
+            LambdaQueryWrapper<PeriodEntity> earliestWrapper = new LambdaQueryWrapper<>();
+            earliestWrapper.orderByAsc(PeriodEntity::getPeriodCode).last("LIMIT 1");
+            PeriodEntity earliest = periodService.getOne(earliestWrapper);
+            if (earliest != null && period.equals(earliest.getPeriodCode())) {
+                throw BusinessException.badRequest("期间 " + period
+                        + " 尚未完成期初建账, 请先在「期初建账」模块录入期初余额再过账凭证");
+            }
+            return;
+        }
+
+        int cmp = period.compareTo(startPeriod);
+        if (cmp < 0) {
+            throw BusinessException.badRequest("期间 " + period + " 早于企业建账期间 " + startPeriod + ", 未启用, 无法过账");
+        }
+        if (cmp == 0 && "none".equals(status)) {
             throw BusinessException.badRequest("期间 " + period
                     + " 尚未完成期初建账, 请先在「期初建账」模块录入期初余额再过账凭证");
         }
+        // period > start_period 或 start_period 期间已建账 → 放行
+    }
+
+    private String resolveStartPeriod() {
+        Long enterpriseId = EnterpriseContextHolder.get();
+        if (enterpriseId == null) {
+            return null;
+        }
+        EnterpriseEntity enterprise = enterpriseMapper.selectById(enterpriseId);
+        return enterprise == null ? null : enterprise.getStartPeriod();
     }
 
     @Override

@@ -112,6 +112,7 @@
 import { onMounted, reactive, ref } from 'vue'
 import { ElMessage, type FormInstance } from 'element-plus'
 import dayjs from 'dayjs'
+import { resolveDefaultPeriod } from '@/utils/period'
 import {
   pageAssetCard,
   createAssetCard,
@@ -141,7 +142,7 @@ const dialogVisible = ref(false)
 const formRef = ref<FormInstance>()
 const form = reactive<any>({})
 const categories = ref<any[]>([])
-const depreciationPeriod = ref(dayjs().format('YYYYMM'))
+const depreciationPeriod = ref('')
 
 const rules = {
   assetCode: [{ required: true, message: '请输入资产编码', trigger: 'blur' }],
@@ -221,7 +222,8 @@ const onDepreciateOne = async (row: any) => {
   fetchData()
 }
 
-onMounted(() => {
+onMounted(async () => {
+  depreciationPeriod.value = await resolveDefaultPeriod()
   loadCategories()
   fetchData()
 })

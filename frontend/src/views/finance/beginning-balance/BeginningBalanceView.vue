@@ -188,7 +188,10 @@ async function fetchPeriods() {
   }
   periodStatusMap.value = map
   if (periods.value.length > 0 && !queryPeriod.value) {
-    queryPeriod.value = periods.value[0]
+    // P57 场景6: 默认选中最早未建账(none)期间；全部已建账则回退最新期间
+    const earliestNone = [...codes].sort((a, b) => a.localeCompare(b))
+      .find((p) => (periodStatusMap.value[p] || 'none') === 'none')
+    queryPeriod.value = earliestNone || periods.value[0]
   }
 }
 

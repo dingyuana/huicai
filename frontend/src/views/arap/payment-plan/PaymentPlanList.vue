@@ -56,13 +56,17 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, ref } from 'vue'
-import dayjs from 'dayjs'
+import { onMounted, reactive, ref } from 'vue'
+import { resolveDefaultPeriod } from '@/utils/period'
 import { generatePaymentPlan } from '@/api/modules/arap'
 
 const query = reactive({
-  period: dayjs().format('YYYYMM'),
+  period: '',
   vendorId: '',
+})
+
+onMounted(async () => {
+  query.period = await resolveDefaultPeriod()
 })
 
 const loading = ref(false)
