@@ -45,6 +45,7 @@ public interface ReportDataMapper {
         INNER JOIN t_subject s ON s.id = e.subject_id
         WHERE v.deleted = 0 AND v.status = 'POSTED'
           AND v.period = #{period}
+          AND v.voucher_no NOT LIKE 'CLOSE-%' AND v.voucher_no NOT LIKE 'DISTRIB-%'
     """)
     Map<String, Object> incomeStatementData(@Param("period") String period);
 
@@ -61,20 +62,48 @@ public interface ReportDataMapper {
         INNER JOIN t_subject s ON s.id = e.subject_id
         WHERE v.deleted = 0 AND v.status = 'POSTED'
           AND v.period >= #{yearStart} AND v.period <= #{period}
+          AND v.voucher_no NOT LIKE 'CLOSE-%' AND v.voucher_no NOT LIKE 'DISTRIB-%'
     """)
     Map<String, Object> cumulativeData(@Param("yearStart") String yearStart,
                                        @Param("period") String period);
 
     /**
      * 现金流量表(基于现金流分配)
+     * 从凭证分录中银行存款(1002)的借贷发生额计算，按对方科目判断业务活动类型。
+     * 对方科目为固定资产(1601)等投资类 → 投资活动；其余 → 经营活动。
      */
     @Select("""
-        SELECT cf.flow_type, SUM(cf.amount) AS amount
-        FROM t_voucher_cash_flow cf
-        INNER JOIN t_voucher v ON v.id = cf.voucher_id
-        WHERE v.deleted = 0 AND v.status = 'POSTED'
-          AND v.period = #{period}
-        GROUP BY cf.flow_type
+        SELECT flow_type, SUM(amount) AS amount
+        FROM (
+            SELECT
+              CASE
+                WHEN e.debit > 0 THEN
+                  CASE WHEN EXISTS (
+                    SELECT 1 FROM t_voucher_entry e2
+                    INNER JOIN t_subject s2 ON s2.id = e2.subject_id
+                    WHERE e2.voucher_id = e.voucher_id AND e2.id != e.id
+                      AND e2.credit > 0
+                      AND (s2.code LIKE '15%' OR s2.code LIKE '16%' OR s2.code LIKE '17%' OR s2.code LIKE '18%' OR s2.code LIKE '19%')
+                  ) THEN 'INVESTING_IN' ELSE 'OPERATING_IN' END
+                ELSE
+                  CASE WHEN EXISTS (
+                    SELECT 1 FROM t_voucher_entry e2
+                    INNER JOIN t_subject s2 ON s2.id = e2.subject_id
+                    WHERE e2.voucher_id = e.voucher_id AND e2.id != e.id
+                      AND e2.debit > 0
+                      AND (s2.code LIKE '15%' OR s2.code LIKE '16%' OR s2.code LIKE '17%' OR s2.code LIKE '18%' OR s2.code LIKE '19%')
+                  ) THEN 'INVESTING_OUT' ELSE 'OPERATING_OUT' END
+              END AS flow_type,
+              CASE WHEN e.debit > 0 THEN e.debit ELSE e.credit END AS amount
+            FROM t_voucher_entry e
+            INNER JOIN t_voucher v ON v.id = e.voucher_id
+            INNER JOIN t_subject s ON s.id = e.subject_id
+            WHERE v.deleted = 0 AND v.status = 'POSTED'
+              AND v.period = #{period}
+              AND s.code LIKE '1002%'
+        ) t
+        WHERE flow_type IS NOT NULL
+        GROUP BY flow_type
     """)
     List<Map<String, Object>> cashFlowData(@Param("period") String period);
 
