@@ -7,6 +7,7 @@ import com.huicai.base.voucher.entity.VoucherEntity;
 import com.huicai.base.voucher.entity.VoucherEntryEntity;
 import com.huicai.base.voucher.mapper.VoucherEntryMapper;
 import com.huicai.base.voucher.mapper.VoucherMapper;
+import com.huicai.base.balance.entity.SubjectBalanceEntity;
 import com.huicai.base.balance.service.SubjectBalanceService;
 import com.huicai.base.system.entity.PeriodEntity;
 import com.huicai.base.system.entity.Subject;
@@ -269,5 +270,122 @@ class PeriodCloseServiceImplTest {
         BusinessException ex = assertThrows(BusinessException.class,
                 () -> service.generateProfitCarryOver("202608", 1L));
         assertTrue(ex.getMessage().contains("无损益类科目余额"));
+    }
+
+    // ==================== generateProfitDistribution ====================
+
+    private Subject stubProfit() {
+        Subject s = new Subject();
+        s.setId(64L); s.setCode("4103"); s.setName("本年利润"); s.setDirection("credit");
+        return s;
+    }
+
+    private Subject stubSurplus() {
+        Subject s = new Subject();
+        s.setId(63L); s.setCode("4101"); s.setName("盈余公积"); s.setDirection("credit");
+        return s;
+    }
+
+    private Subject stubDistribution() {
+        Subject s = new Subject();
+        s.setId(65L); s.setCode("4104"); s.setName("利润分配"); s.setDirection("credit");
+        return s;
+    }
+
+    /** 模拟按科目代码查询: 顺序返回 4103→本年利润, 4101→盈余公积, 4104→利润分配 */
+    @SuppressWarnings("unchecked")
+    private void stubSubjects(Subject profit, Subject surplus, Subject distribution) {
+        when(subjectMapper.selectOne(any(LambdaQueryWrapper.class)))
+                .thenReturn(profit, surplus, distribution);
+    }
+
+    private SubjectBalanceEntity balance(Long subjectId, BigDecimal endBalance) {
+        SubjectBalanceEntity b = new SubjectBalanceEntity();
+        b.setSubjectId(subjectId);
+        b.setPeriod("202607");
+        b.setEndBalance(endBalance);
+        return b;
+    }
+
+    @Test
+    @DisplayName("利润分配成功: 盈利84,050 → 提取8,405 (借利润分配/贷盈余公积)")
+    void generateProfitDistribution_success() {
+        stubFindPeriod(stubPeriod("open"));
+        // 幂等: 无已存在利润分配凭证
+        when(voucherMapper.selectCount(any(LambdaQueryWrapper.class))).thenReturn(0L);
+
+        Subject profit = stubProfit();
+        stubSubjects(profit, stubSurplus(), stubDistribution());
+        // 本年利润期末余额 84,050 (盈利)
+        when(subjectBalanceService.queryByPeriod("202607"))
+                .thenReturn(List.of(balance(64L, new BigDecimal("84050.00"))));
+
+        when(voucherMapper.insert(any(VoucherEntity.class))).thenAnswer(inv -> {
+            ((VoucherEntity) inv.getArgument(0)).setId(400L);
+            return 1;
+        });
+        when(voucherEntryMapper.insert(any(VoucherEntryEntity.class))).thenReturn(1);
+
+        Long id = service.generateProfitDistribution("202607", 1L);
+        assertEquals(400L, id);
+
+        // 两条分录: 借利润分配(65) 8405 / 贷盈余公积(63) 8405
+        verify(voucherEntryMapper, times(2)).insert(argThat((VoucherEntryEntity e) -> {
+            if (e.getSubjectId().equals(65L)) {
+                return e.getDebit().compareTo(new BigDecimal("8405.00")) == 0
+                        && e.getCredit().compareTo(BigDecimal.ZERO) == 0;
+            }
+            if (e.getSubjectId().equals(63L)) {
+                return e.getCredit().compareTo(new BigDecimal("8405.00")) == 0
+                        && e.getDebit().compareTo(BigDecimal.ZERO) == 0;
+            }
+            return false;
+        }));
+    }
+
+    @Test
+    @DisplayName("利润分配幂等: 期间已存在利润分配凭证时抛异常")
+    void generateProfitDistribution_throwsWhenAlreadyDistributed() {
+        stubFindPeriod(stubPeriod("open"));
+        // 该期间已存在 2 张利润分配凭证(DISTRIB-202607 前缀)
+        when(voucherMapper.selectCount(any(LambdaQueryWrapper.class))).thenReturn(2L);
+
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> service.generateProfitDistribution("202607", 1L));
+        assertTrue(ex.getMessage().contains("利润分配"));
+        verify(voucherMapper, never()).insert(any(VoucherEntity.class));
+        verify(voucherEntryMapper, never()).insert(any(VoucherEntryEntity.class));
+    }
+
+    @Test
+    @DisplayName("利润分配: 亏损(负余额)时不分配")
+    void generateProfitDistribution_throwsWhenLoss() {
+        stubFindPeriod(stubPeriod("open"));
+        when(voucherMapper.selectCount(any(LambdaQueryWrapper.class))).thenReturn(0L);
+        Subject profit = stubProfit();
+        stubSubjects(profit, stubSurplus(), stubDistribution());
+        when(subjectBalanceService.queryByPeriod("202607"))
+                .thenReturn(List.of(balance(64L, new BigDecimal("-15950.00"))));
+
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> service.generateProfitDistribution("202607", 1L));
+        assertTrue(ex.getMessage().contains("亏损"));
+        verify(voucherMapper, never()).insert(any(VoucherEntity.class));
+    }
+
+    @Test
+    @DisplayName("利润分配: 本年利润无余额数据时抛异常(需先过账损益结转)")
+    void generateProfitDistribution_throwsWhenNoBalance() {
+        stubFindPeriod(stubPeriod("open"));
+        when(voucherMapper.selectCount(any(LambdaQueryWrapper.class))).thenReturn(0L);
+        stubSubjects(stubProfit(), stubSurplus(), stubDistribution());
+        // 本年利润无余额记录
+        when(subjectBalanceService.queryByPeriod("202607"))
+                .thenReturn(List.of(balance(85L, new BigDecimal("1000.00"))));
+
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> service.generateProfitDistribution("202607", 1L));
+        assertTrue(ex.getMessage().contains("无余额"));
+        verify(voucherMapper, never()).insert(any(VoucherEntity.class));
     }
 }

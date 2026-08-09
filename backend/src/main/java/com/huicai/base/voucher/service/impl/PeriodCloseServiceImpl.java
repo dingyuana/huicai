@@ -8,6 +8,7 @@ import com.huicai.base.voucher.mapper.VoucherEntryMapper;
 import com.huicai.base.voucher.mapper.VoucherMapper;
 import com.huicai.base.voucher.service.PeriodCloseService;
 import com.huicai.base.voucher.constant.VoucherType;
+import com.huicai.base.balance.entity.SubjectBalanceEntity;
 import com.huicai.base.balance.service.SubjectBalanceService;
 import com.huicai.base.system.entity.PeriodEntity;
 import com.huicai.base.system.entity.Subject;
@@ -20,6 +21,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -190,6 +192,96 @@ public class PeriodCloseServiceImpl implements PeriodCloseService {
 
         log.info("生成损益结转凭证: id={}, period={}, debit={}, credit={}",
                 voucher.getId(), period, totalD, totalC);
+        return voucher.getId();
+    }
+
+    /** 利润分配提取比例 */
+    private static final BigDecimal PROFIT_DISTRIBUTION_RATIO = new BigDecimal("0.10");
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public Long generateProfitDistribution(String period, Long userId) {
+        findPeriod(period);
+
+        // 幂等保护: 该期间已存在利润分配凭证(未删除且非红冲)时禁止重复
+        Long existing = voucherMapper.selectCount(
+                new LambdaQueryWrapper<VoucherEntity>()
+                        .likeRight(VoucherEntity::getVoucherNo, "DISTRIB-" + period)
+                        .isNull(VoucherEntity::getReversedFrom)
+                        .eq(VoucherEntity::getDeleted, 0));
+        if (existing != null && existing > 0) {
+            throw BusinessException.badRequest("期间 " + period + " 已存在 " + existing + " 张利润分配凭证, 请勿重复结转");
+        }
+
+        // 本年利润科目（4103）
+        Subject profit = subjectMapper.selectOne(
+                new LambdaQueryWrapper<Subject>()
+                        .eq(Subject::getCode, "4103")
+                        .eq(Subject::getDeleted, 0)
+                        .last("LIMIT 1"));
+        if (profit == null) {
+            throw BusinessException.badRequest("未配置本年利润科目(4103), 无法生成利润分配凭证");
+        }
+
+        // 盈余公积科目（4101）与利润分配科目（4104）
+        Subject surplus = subjectMapper.selectOne(
+                new LambdaQueryWrapper<Subject>()
+                        .eq(Subject::getCode, "4101")
+                        .eq(Subject::getDeleted, 0)
+                        .last("LIMIT 1"));
+        Subject distrib = subjectMapper.selectOne(
+                new LambdaQueryWrapper<Subject>()
+                        .eq(Subject::getCode, "4104")
+                        .eq(Subject::getDeleted, 0)
+                        .last("LIMIT 1"));
+        if (surplus == null || distrib == null) {
+            throw BusinessException.badRequest("未配置盈余公积(4101)或利润分配(4104)科目, 无法生成利润分配凭证");
+        }
+
+        // 从科目余额表读取本年利润期末余额
+        List<SubjectBalanceEntity> balances = subjectBalanceService.queryByPeriod(period);
+        BigDecimal netProfit = null;
+        for (SubjectBalanceEntity b : balances) {
+            if (profit.getId().equals(b.getSubjectId())) {
+                netProfit = b.getEndBalance();
+                break;
+            }
+        }
+        if (netProfit == null) {
+            throw BusinessException.badRequest("期间 " + period + " 本年利润无余额数据, 请先完成损益结转过账");
+        }
+        if (netProfit.compareTo(BigDecimal.ZERO) <= 0) {
+            throw BusinessException.badRequest("期间 " + period + " 净利润为 " + netProfit + ", 亏损无需分配");
+        }
+
+        // 按比例提取盈余公积
+        BigDecimal amount = netProfit.multiply(PROFIT_DISTRIBUTION_RATIO)
+                .setScale(2, RoundingMode.HALF_UP);
+
+        // 生成 DRAFT 凭证
+        VoucherEntity voucher = new VoucherEntity();
+        voucher.setVoucherNo("DISTRIB-" + period + "-" + System.currentTimeMillis() % 10000);
+        voucher.setPeriod(period);
+        voucher.setVoucherTypeId(VoucherType.ZZ);
+        voucher.setStatus("DRAFT");
+        voucher.setSource("GENERATED");
+        voucher.setSummary("自动利润分配: " + period);
+        voucher.setCreatedBy(userId);
+        voucher.setCreatedAt(LocalDateTime.now());
+        voucher.setTotalDebit(amount);
+        voucher.setTotalCredit(amount);
+        voucherMapper.insert(voucher);
+
+        // 借：利润分配(4104)  贷：盈余公积(4101)
+        VoucherEntryEntity debitLine = entryOf(voucher.getId(), distrib.getId(),
+                amount, BigDecimal.ZERO, 1, "提取盈余公积");
+        voucherEntryMapper.insert(debitLine);
+        VoucherEntryEntity creditLine = entryOf(voucher.getId(), surplus.getId(),
+                BigDecimal.ZERO, amount, 2, "提取盈余公积");
+        voucherEntryMapper.insert(creditLine);
+
+        log.info("生成利润分配凭证: id={}, period={}, netProfit={}, amount={}",
+                voucher.getId(), period, netProfit, amount);
         return voucher.getId();
     }
 

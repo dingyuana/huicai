@@ -19,6 +19,11 @@ public interface PeriodCloseService {
     Long generateProfitCarryOver(String period, Long userId);
 
     /**
+     * 生成利润分配凭证（按本年利润期末余额提取盈余公积）
+     */
+    Long generateProfitDistribution(String period, Long userId);
+
+    /**
      * 执行结账：检查 + 自动损益结转 + 锁定期间
      */
     void closePeriod(String period, Long userId);

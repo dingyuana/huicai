@@ -31,6 +31,12 @@ public class PeriodCloseController {
         return R.ok(periodCloseService.generateProfitCarryOver(period, SecurityUtils.getCurrentUserId()));
     }
 
+    @Operation(summary = "生成利润分配凭证")
+    @PostMapping("/profit-distribution")
+    public R<Long> profitDistribution(@RequestParam String period) {
+        return R.ok(periodCloseService.generateProfitDistribution(period, SecurityUtils.getCurrentUserId()));
+    }
+
     @Operation(summary = "执行结账")
     @PostMapping("/close")
     public R<Void> close(@RequestParam String period) {
