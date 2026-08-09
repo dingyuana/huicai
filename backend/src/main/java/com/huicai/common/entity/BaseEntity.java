@@ -20,6 +20,7 @@ public abstract class BaseEntity {
     private Long id;
 
     /** 多租户企业 ID（S-26 Agency 分支新增） */
+    @TableField(fill = FieldFill.INSERT)
     private Long enterpriseId;
 
     /** 创建人 — 由 Service 层手动 set，不参与 MyBatis-Plus 自动 SQL */
