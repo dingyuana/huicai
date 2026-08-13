@@ -117,17 +117,17 @@ const statItems = [
 ]
 
 const normalOps: Array<{ type: string; title: string; desc: string; icon: any; color: string; btnType: 'success' | 'warning' | 'info' | 'primary' | 'danger'; btnText: string }> = [
-  { type: 'statements', title: '清空银行流水', desc: '删除所有银行流水、自动生成的业务单据(来源: FROM_BANK_TXN)及凭证', icon: Delete, color: 'orange', btnType: 'warning', btnText: '清空' },
-  { type: 'invoices', title: '清空发票记录', desc: '删除所有发票导入记录、生成的业务单据(来源: INVOICE_IMPORT)及凭证', icon: FolderDelete, color: 'orange', btnType: 'warning', btnText: '清空' },
-  { type: 'vouchers', title: '清空所有凭证', desc: '删除所有凭证及分录(保留业务单据、流水、发票；单据状态回退草稿)', icon: Remove, color: 'orange', btnType: 'warning', btnText: '清空' },
-  { type: 'businessDocs', title: '清空业务单据', desc: '删除所有业务单据及明细行(保留银行流水、发票、凭证)', icon: DataBoard, color: 'orange', btnType: 'warning', btnText: '清空' },
-  { type: 'receivables', title: '清空应收明细', desc: '删除所有应收明细及关联核销记录(保留业务单据、凭证)', icon: Coin, color: 'orange', btnType: 'warning', btnText: '清空' },
-  { type: 'payables', title: '清空应付明细', desc: '删除所有应付明细及关联核销记录(保留业务单据、凭证)', icon: Coin, color: 'orange', btnType: 'warning', btnText: '清空' },
+  { type: 'statements', title: '清空银行流水', desc: '删除全部银行流水记录', icon: Delete, color: 'orange', btnType: 'warning', btnText: '清空' },
+  { type: 'invoices', title: '清空发票记录', desc: '删除全部进项/销项发票记录（不影响业务单据与凭证）', icon: FolderDelete, color: 'orange', btnType: 'warning', btnText: '清空' },
+  { type: 'vouchers', title: '清空所有凭证', desc: '删除所有凭证及分录、科目余额、凭证现金流量（保留业务单据、流水、发票）', icon: Remove, color: 'orange', btnType: 'warning', btnText: '清空' },
+  { type: 'businessDocs', title: '清空业务单据', desc: '删除所有业务单据及明细行、核销单、核销日志、账龄预警，解除单据引用（保留银行流水、发票、凭证）', icon: DataBoard, color: 'orange', btnType: 'warning', btnText: '清空' },
+  { type: 'receivables', title: '清空应收明细', desc: '删除所有应收核销记录、应收票据及业务单据（含明细行）', icon: Coin, color: 'orange', btnType: 'warning', btnText: '清空' },
+  { type: 'payables', title: '清空应付明细', desc: '删除所有应付核销记录及业务单据（含明细行）', icon: Coin, color: 'orange', btnType: 'warning', btnText: '清空' },
 ]
 
 const dangerOps = [
   { type: 'settlements', title: '清空核销数据', desc: '清空所有核销单、核销明细、核销日志，重置业务单据核销金额', icon: CircleCheck, btnText: '清空核销' },
-  { type: 'all', title: '清空全部数据', desc: '清空银行流水 + 发票记录 + 相关业务单据 + 相关凭证(草稿)', icon: WarningFilled, btnText: '全部清空' },
+  { type: 'all', title: '清空全部数据', desc: '清空全部业务数据：银行流水、发票、业务单据、凭证、科目余额、应收应付核销等所有记录', icon: WarningFilled, btnText: '全部清空' },
 ]
 
 async function fetchStats() {
