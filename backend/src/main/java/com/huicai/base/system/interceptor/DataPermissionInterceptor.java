@@ -228,7 +228,7 @@ public class DataPermissionInterceptor implements InnerInterceptor {
 
     private UserPermission getPermission(Long userId) {
         UserPermission cached = PERMISSION_CACHE.get();
-        if (cached != null) {
+        if (cached != null && cached.userId.equals(userId)) {
             return cached;
         }
         // 预占 ThreadLocal 防止递归调用: 用户查询本身也走 MyBatis 拦截器链,
