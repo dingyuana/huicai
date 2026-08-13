@@ -102,6 +102,7 @@ import { getBankStatementPage } from '@/api/modules/bankStatement'
 import { getBusinessDocPage } from '@/api/modules/businessDoc'
 import { getVoucherPage } from '@/api/modules/voucher'
 import { pageReceivable, pagePayable } from '@/api/modules/arap'
+import { pageInputInvoice, pageOutputInvoice } from '@/api/modules/tax'
 
 const stats = ref({ statements: 0, invoices: 0, receivables: 0, payables: 0, businessDocs: 0, vouchers: 0 })
 const loadErrors = ref<string[]>([])
@@ -142,7 +143,13 @@ async function fetchStats() {
   }
   await Promise.all([
     tryFetch('银行流水', () => getBankStatementPage({ current: 1, size: 1 }), v => stats.value.statements = v),
-    tryFetch('发票记录', () => getBusinessDocPage({ docType: 'INVOICE_OUT', current: 1, size: 1 }), v => stats.value.invoices = v),
+    tryFetch('发票记录', async () => {
+      const [input, output] = await Promise.all([
+        pageInputInvoice({ current: 1, size: 1 }),
+        pageOutputInvoice({ current: 1, size: 1 }),
+      ])
+      return { total: (input?.total || 0) + (output?.total || 0) }
+    }, v => stats.value.invoices = v),
     tryFetch('业务单据', () => getBusinessDocPage({ current: 1, size: 1 }), v => stats.value.businessDocs = v),
     tryFetch('凭证', () => getVoucherPage({ current: 1, size: 1 }), v => stats.value.vouchers = v),
     tryFetch('应收明细', () => pageReceivable({ current: 1, size: 1 }), v => stats.value.receivables = v),
