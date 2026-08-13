@@ -12,9 +12,15 @@ async function mockAuth(page: any) {
       body: JSON.stringify({ code: 200, msg: 'ok', data: {
         id: 1, username: 'admin', realName: '管理员', nickname: 'admin',
         email: '', phone: '', avatar: '', deptId: 1, roles: [1],
-        permissions: ['admin'],
+        permissions: ['admin', 'arap:expense:list', 'arap:settlement:list'],
         userType: 'SUPER_ADMIN',
       }})
+    })
+  })
+  // Mock 当前期间接口（组件 onMounted 调用 resolveDefaultPeriod）
+  await page.route(url => url.toString().includes('/api/v1/enterprise/current-period'), async route => {
+    await route.fulfill({ status: 200, contentType: 'application/json',
+      body: JSON.stringify({ code: 200, msg: 'ok', data: { currentPeriod: '202607', startPeriod: '202601', hasDataPeriod: '202607' } })
     })
   })
 }
@@ -36,7 +42,7 @@ test.describe('往来管理 - 往来核销', () => {
     await page.goto(`${BASE}/arap/settlement`, { waitUntil: 'networkidle', timeout: 15000 })
     await page.waitForTimeout(500)
 
-    await expect(page.locator('.page-title').filter({ hasText: '往来核销' })).toBeVisible()
+    await expect(page.locator('.page-title').filter({ hasText: '核销管理' })).toBeVisible()
     await expect(page.getByRole('tab', { name: /核销单/i })).toBeVisible()
     await expect(page.getByRole('tab', { name: /核销日志/i })).toBeVisible()
   })

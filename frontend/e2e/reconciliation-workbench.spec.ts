@@ -14,8 +14,14 @@ test.describe('核销工作台', () => {
         body: JSON.stringify({ code: 200, msg: 'ok', data: {
           id: 1, username: 'admin', realName: '管理员', nickname: 'admin',
           email: '', phone: '', avatar: '', deptId: 1, roles: [1],
-          permissions: ['admin', 'arap:reconciliation:workbench'],
+          permissions: ['admin', 'arap:reconciliation:workbench', 'arap:settlement:list', 'arap:expense:list'],
         }})
+      })
+    })
+    // Mock 当前期间接口（组件 onMounted 调用 resolveDefaultPeriod）
+    await page.route('**/api/v1/enterprise/current-period', async route => {
+      await route.fulfill({ status: 200, contentType: 'application/json',
+        body: JSON.stringify({ code: 200, msg: 'ok', data: { currentPeriod: '202607', startPeriod: '202601', hasDataPeriod: '202607' } })
       })
     })
   }
@@ -41,7 +47,7 @@ test.describe('核销工作台', () => {
     await page.waitForTimeout(500)
 
     // 验证页面标题
-    await expect(page.locator('.page-title')).toHaveText('核销工作台')
+    await expect(page.locator('.page-title')).toHaveText('核销管理')
     // 验证 tab 切换
     await expect(page.locator('.el-radio-button').first()).toHaveText('收款单')
     await expect(page.locator('.el-radio-button').last()).toHaveText('付款单')

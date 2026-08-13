@@ -18,6 +18,12 @@ test.describe('税务 - 增值税计算', () => {
         }})
       })
     })
+    // Mock 当前期间接口（组件 onMounted 调用 resolveDefaultPeriod）
+    await page.route(url => url.toString().includes('/api/v1/enterprise/current-period'), async route => {
+      await route.fulfill({ status: 200, contentType: 'application/json',
+        body: JSON.stringify({ code: 200, msg: 'ok', data: { currentPeriod: '202607', startPeriod: '202601', hasDataPeriod: '202607' } })
+      })
+    })
   }
 
   test('页面加载显示标题和期间输入', async ({ page }) => {

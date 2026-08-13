@@ -114,6 +114,7 @@ export function makeOutputInvoice(suffix: string): TestInvoice {
 const AUTH_HEADERS = (token: string) => ({
   'Authorization': `Bearer ${token}`,
   'Content-Type': 'application/json',
+  'X-Enterprise-Id': '1',
 })
 
 /**

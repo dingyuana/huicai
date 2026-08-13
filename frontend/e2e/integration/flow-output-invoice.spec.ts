@@ -18,6 +18,7 @@ const BASE = 'http://localhost:3001'
 const AUTH = (token: string) => ({
   'Authorization': `Bearer ${token}`,
   'Content-Type': 'application/json',
+  'X-Enterprise-Id': '1',
 })
 
 async function createOutputInvoice(request: any, token: string, data: TestInvoice) {

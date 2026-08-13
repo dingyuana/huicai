@@ -24,7 +24,7 @@ const DB = {
 
 async function createExpenseViaDB(prefix: string, amount = 3000, type = 'TRAVEL') {
   const reimbNo = `E2E-INT-${prefix}-${Date.now()}`
-  const sql = `INSERT INTO t_expense_reimbursement (reimb_no, reimb_type, total_amount, summary, status, applicant_id, created_by) VALUES ('${reimbNo}', '${type}', ${amount}, 'E2E-INT-${prefix}', 'DRAFT', 1, 1) RETURNING id`
+  const sql = `INSERT INTO t_expense_reimbursement (reimb_no, reimb_type, total_amount, summary, status, applicant_id, created_by, enterprise_id) VALUES ('${reimbNo}', '${type}', ${amount}, 'E2E-INT-${prefix}', 'DRAFT', 1, 1, 1) RETURNING id`
   const result = execSync(`PGPASSWORD=${DB.pw} psql -h ${DB.host} -U ${DB.user} -d ${DB.db} -t -c "${sql}"`, { encoding: 'utf8' })
   const id = parseInt(result.trim())
   return { id, reimbNo }
@@ -33,6 +33,7 @@ async function createExpenseViaDB(prefix: string, amount = 3000, type = 'TRAVEL'
 const AUTH = (token: string) => ({
   'Authorization': `Bearer ${token}`,
   'Content-Type': 'application/json',
+  'X-Enterprise-Id': '1',
 })
 
 async function submitExpense(request: any, token: string, id: number) {
