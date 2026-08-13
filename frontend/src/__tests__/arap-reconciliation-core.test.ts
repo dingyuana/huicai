@@ -3,7 +3,7 @@ import { shallowMount } from '@vue/test-utils'
 import { createRouter, createWebHistory } from 'vue-router'
 import { nextTick } from 'vue'
 
-import ReconciliationWorkbench from '@/views/arap/reconciliation-workbench/ReconciliationWorkbench.vue'
+import WorkbenchPanel from '@/views/arap/reconciliation/WorkbenchPanel.vue'
 
 // ===== Mock API =====
 vi.mock('@/api/modules/businessDoc', () => ({
@@ -36,7 +36,7 @@ const router = createRouter({
 })
 
 /**
- * ReconciliationWorkbench 真实挂载测试
+ * WorkbenchPanel 真实挂载测试
  *
  * 覆盖场景：
  * - 组件渲染（标题、Tab、表格）
@@ -46,7 +46,7 @@ const router = createRouter({
  * - 执行核销参数（lowercase sourceDocType）
  * - countExactMatches 精确匹配计数
  */
-describe('ReconciliationWorkbench.vue — 核销工作台', () => {
+describe('WorkbenchPanel.vue — 核销工作台面板', () => {
   beforeEach(() => {
     vi.clearAllMocks()
   })
@@ -93,7 +93,7 @@ describe('ReconciliationWorkbench.vue — 核销工作台', () => {
       template: '<label><slot /></label>',
     }
 
-    const wrapper = shallowMount(ReconciliationWorkbench, {
+    const wrapper = shallowMount(WorkbenchPanel, {
       global: {
         plugins: [router],
         stubs: {
@@ -125,16 +125,14 @@ describe('ReconciliationWorkbench.vue — 核销工作台', () => {
   }
 
   // === 维度 1：组件渲染 ===
-  it('应正确渲染核销工作台主界面（标题与 Tab 按钮）', async () => {
+  it('应正确渲染核销工作台主界面（Tab 按钮与工具栏）', async () => {
     const wrapper = await mountWorkbench()
 
-    expect(wrapper.find('.reconciliation-workbench').exists()).toBe(true)
-    expect(wrapper.find('.page-title').text()).toBe('核销工作台')
+    expect(wrapper.find('.workbench-panel').exists()).toBe(true)
     const texts = wrapper.text()
     expect(texts).toContain('收款单')
     expect(texts).toContain('付款单')
     expect(texts).toContain('自动核销')
-    expect(texts).toContain('刷新')
   })
 
   // === 维度 2：fetchData 应传 docTypes=['RECEIPT'] ===
@@ -294,7 +292,7 @@ describe('ReconciliationWorkbench.vue — 核销工作台', () => {
     const { getBusinessDocPage } = await import('@/api/modules/businessDoc')
     vi.mocked(getBusinessDocPage).mockResolvedValue({ records: [], total: 0 } as any)
 
-    const wrapper = shallowMount(ReconciliationWorkbench, {
+    const wrapper = shallowMount(WorkbenchPanel, {
       global: {
         plugins: [router],
         stubs: {
