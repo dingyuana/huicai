@@ -237,4 +237,88 @@ class SalesInvoiceImportServiceTest {
         d.setVoucherId(200L);
         return d;
     }
+
+    // ==================== extractOriginalInvoiceNo (红冲发票号提取) ====================
+
+    @Test
+    void extractOriginalInvoiceNo_实际模板格式_提取正确() throws Exception {
+        Method m = SalesInvoiceImportService.class.getDeclaredMethod("extractOriginalInvoiceNo", String.class);
+        m.setAccessible(true);
+        String remark = "被红冲蓝字数电票号码：25922000000020770476 红字发票信息确认单编号：37028325041001204158";
+        String result = (String) m.invoke(service, remark);
+        assertEquals("25922000000020770476", result);
+    }
+
+    @Test
+    void extractOriginalInvoiceNo_发票号码格式_提取正确() throws Exception {
+        Method m = SalesInvoiceImportService.class.getDeclaredMethod("extractOriginalInvoiceNo", String.class);
+        m.setAccessible(true);
+        String result = (String) m.invoke(service, "被红冲蓝字发票号码：12345678");
+        assertEquals("12345678", result);
+    }
+
+    @Test
+    void extractOriginalInvoiceNo_原发票号格式_提取正确() throws Exception {
+        Method m = SalesInvoiceImportService.class.getDeclaredMethod("extractOriginalInvoiceNo", String.class);
+        m.setAccessible(true);
+        String result = (String) m.invoke(service, "原发票号: 87654321");
+        assertEquals("87654321", result);
+    }
+
+    @Test
+    void extractOriginalInvoiceNo_红冲自格式_提取正确() throws Exception {
+        Method m = SalesInvoiceImportService.class.getDeclaredMethod("extractOriginalInvoiceNo", String.class);
+        m.setAccessible(true);
+        String result = (String) m.invoke(service, "红冲自 INV-2026-001");
+        assertEquals("INV-2026-001", result);
+    }
+
+    @Test
+    void extractOriginalInvoiceNo_空字符串_返回null() throws Exception {
+        Method m = SalesInvoiceImportService.class.getDeclaredMethod("extractOriginalInvoiceNo", String.class);
+        m.setAccessible(true);
+        assertNull((String) m.invoke(service, ""));
+    }
+
+    // ==================== extractRedConfirmNo (确认单编号提取) ====================
+
+    @Test
+    void extractRedConfirmNo_实际模板格式_提取正确() throws Exception {
+        Method m = SalesInvoiceImportService.class.getDeclaredMethod("extractRedConfirmNo", String.class);
+        m.setAccessible(true);
+        String remark = "被红冲蓝字数电票号码：25922000000020770476 红字发票信息确认单编号：37028325041001204158";
+        String result = (String) m.invoke(service, remark);
+        assertEquals("37028325041001204158", result);
+    }
+
+    @Test
+    void extractRedConfirmNo_确认单编号简写_提取正确() throws Exception {
+        Method m = SalesInvoiceImportService.class.getDeclaredMethod("extractRedConfirmNo", String.class);
+        m.setAccessible(true);
+        String result = (String) m.invoke(service, "确认单编号：99999999999999999999");
+        assertEquals("99999999999999999999", result);
+    }
+
+    @Test
+    void extractRedConfirmNo_红字确认单编号简写_提取正确() throws Exception {
+        Method m = SalesInvoiceImportService.class.getDeclaredMethod("extractRedConfirmNo", String.class);
+        m.setAccessible(true);
+        String result = (String) m.invoke(service, "红字确认单编号：88888888888888888888");
+        assertEquals("88888888888888888888", result);
+    }
+
+    @Test
+    void extractRedConfirmNo_空字符串_返回null() throws Exception {
+        Method m = SalesInvoiceImportService.class.getDeclaredMethod("extractRedConfirmNo", String.class);
+        m.setAccessible(true);
+        assertNull((String) m.invoke(service, ""));
+    }
+
+    @Test
+    void extractRedConfirmNo_无确认单信息_返回null() throws Exception {
+        Method m = SalesInvoiceImportService.class.getDeclaredMethod("extractRedConfirmNo", String.class);
+        m.setAccessible(true);
+        String result = (String) m.invoke(service, "这是一条普通备注");
+        assertNull(result);
+    }
 }

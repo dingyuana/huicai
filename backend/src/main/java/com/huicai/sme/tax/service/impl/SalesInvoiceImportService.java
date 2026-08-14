@@ -160,6 +160,8 @@ public class SalesInvoiceImportService {
             p.put("taxAmount", r.taxAmount);
             p.put("totalAmount", r.totalAmount);
             p.put("isPositive", r.isPositive);
+            p.put("originalInvoiceNo", r.originalInvoiceNo);
+            p.put("redConfirmNo", r.redConfirmNo);
             previews.add(p);
         }
 
@@ -292,6 +294,16 @@ public class SalesInvoiceImportService {
         } else {
             row.isPositive = true;
         }
+        // 负数兜底：税额或价税合计为负 → 红字发票
+        if (row.isPositive) {
+            boolean negativeAmount = (row.taxAmount != null && row.taxAmount.compareTo(BigDecimal.ZERO) < 0)
+                    || (row.totalAmount != null && row.totalAmount.compareTo(BigDecimal.ZERO) < 0);
+            if (negativeAmount) {
+                row.isPositive = false;
+                log.info("红字发票判定(负数兜底): invoiceNo={}, taxAmount={}, totalAmount={}",
+                        row.invoiceNo, row.taxAmount, row.totalAmount);
+            }
+        }
 
         // 解析备注/摘要字段（用于红冲关联）
         Integer summaryIdx = mapping.getFieldToColumnIndex().get(ColumnMappingResolver.Field.SUMMARY);
@@ -305,9 +317,10 @@ public class SalesInvoiceImportService {
             }
         }
 
-        // 红冲发票提取原始发票号
+        // 红冲发票提取原始发票号和确认单编号
         if (!row.isPositive && StrUtil.isNotBlank(row.remark)) {
             row.originalInvoiceNo = extractOriginalInvoiceNo(row.remark);
+            row.redConfirmNo = extractRedConfirmNo(row.remark);
         }
 
         return row;
@@ -315,14 +328,17 @@ public class SalesInvoiceImportService {
 
     /**
      * 从备注文本中提取被红冲的原始发票号.
-     * 支持格式: "被红冲蓝字发票号码：12345678" / "红冲自 INV-2026-001" /
-     *           "原发票号: 12345678" / 直接包含发票号模式
+     * 支持格式:
+     *   "被红冲蓝字数电票号码：25922000000020770476" (实际模板格式)
+     *   "被红冲蓝字发票号码：12345678"
+     *   "原发票号: 12345678"
+     *   "红冲自 INV-2026-001"
      */
     private String extractOriginalInvoiceNo(String remark) {
         if (StrUtil.isBlank(remark)) return null;
-        // 匹配各种格式: "被红冲蓝字数电发票号码：xxx" / "原发票号：xxx" / "红冲自 xxx" / "发票号码：xxx"
+        // 匹配 "被红冲蓝字数电票号码：xxx" / "被红冲蓝字发票号码：xxx" / "原发票号：xxx" / "数电发票号码：xxx"
         java.util.regex.Pattern p = java.util.regex.Pattern.compile(
-                "(?:被红冲|原|蓝字)?(?:发票号码|发票号|数电发票号码|号码)[：:]\\s*(\\S+)");
+                "(?:被红冲|原|蓝字)?(?:数电票号码|数电发票号码|发票号码|发票号|号码)[：:]\\s*(\\S+)");
         java.util.regex.Matcher m = p.matcher(remark);
         if (m.find()) {
             return m.group(1).trim();
@@ -330,6 +346,21 @@ public class SalesInvoiceImportService {
         // 匹配 "红冲自\s*(\S+)"
         p = java.util.regex.Pattern.compile("红冲自\\s*(\\S+)");
         m = p.matcher(remark);
+        if (m.find()) {
+            return m.group(1).trim();
+        }
+        return null;
+    }
+
+    /**
+     * 从备注文本中提取红字发票信息确认单编号.
+     * 支持格式: "红字发票信息确认单编号：37028325041001204158"
+     */
+    private String extractRedConfirmNo(String remark) {
+        if (StrUtil.isBlank(remark)) return null;
+        java.util.regex.Pattern p = java.util.regex.Pattern.compile(
+                "(?:红字发票信息确认单编号|确认单编号|红字确认单编号)[：:]\\s*(\\S+)");
+        java.util.regex.Matcher m = p.matcher(remark);
         if (m.find()) {
             return m.group(1).trim();
         }
@@ -401,13 +432,15 @@ public class SalesInvoiceImportService {
             }
         }
 
-        // 后处理：所有发票导入完成后，统一执行红冲关联（复用已验证的 batchLinkRedFlushInvoices 逻辑）
-        // 在全库中扫描金额为负的红字发票，按金额+客户名匹配蓝字发票标记 REVERSED
-        // 避免红字在前、蓝字在后导致匹配失败
+        // 后处理：所有发票导入完成后，执行红冲关联
+        // 1) 优先用备注中解析出的被红冲蓝字发票号精确匹配
+        // 2) 兜底用金额+客户名模糊匹配（处理备注缺失的情况）
+        int redMatchedByNo = linkRedFlushByOriginalNo(rows);
         Map<String, Object> redResult = batchLinkRedFlushInvoices();
-        int redMatched = ((Number) redResult.getOrDefault("matched", 0)).intValue();
+        int redMatched = redMatchedByNo + ((Number) redResult.getOrDefault("matched", 0)).intValue();
         if (redMatched > 0) {
-            log.info("导入后红冲关联完成: matched={}, batchId={}", redMatched, batchId);
+            log.info("导入后红冲关联完成: matchedByNo={}, matchedByAmount={}, total={}, batchId={}",
+                    redMatchedByNo, redResult.getOrDefault("matched", 0), redMatched, batchId);
         }
 
         return Map.of(
@@ -750,6 +783,68 @@ public class SalesInvoiceImportService {
     }
 
     /**
+     * 按备注中解析出的被红冲蓝字发票号，精确匹配红字与蓝字发票。
+     * 优先使用此方法（精确匹配），兜底再用 batchLinkRedFlushInvoices（金额+客户名匹配）。
+     *
+     * @return 成功匹配的数
+     */
+    private int linkRedFlushByOriginalNo(List<ParsedInvoiceRow> rows) {
+        int matched = 0;
+        for (ParsedInvoiceRow row : rows) {
+            if (!row.isPositive && StrUtil.isNotBlank(row.originalInvoiceNo)) {
+                List<OutputInvoiceEntity> redInvoices = outputInvoiceMapper.selectList(
+                        new LambdaQueryWrapper<OutputInvoiceEntity>()
+                                .eq(OutputInvoiceEntity::getInvoiceNo, row.invoiceNo)
+                                .lt(OutputInvoiceEntity::getAmount, BigDecimal.ZERO)
+                                .ne(OutputInvoiceEntity::getStatus, InvoiceStatus.VOIDED)
+                                .ne(OutputInvoiceEntity::getStatus, InvoiceStatus.REVERSED)
+                                .eq(OutputInvoiceEntity::getDeleted, 0));
+                if (redInvoices.isEmpty()) continue;
+
+                // 按备注中的被红冲发票号精确查找蓝字发票
+                List<OutputInvoiceEntity> originals = outputInvoiceMapper.selectList(
+                        new LambdaQueryWrapper<OutputInvoiceEntity>()
+                                .eq(OutputInvoiceEntity::getInvoiceNo, row.originalInvoiceNo)
+                                .last("LIMIT 1"));
+                if (originals.isEmpty()) {
+                    log.warn("红冲关联(精确): redInvoiceNo={}, originalInvoiceNo={} 在数据库未找到蓝字发票",
+                            row.invoiceNo, row.originalInvoiceNo);
+                    continue;
+                }
+                OutputInvoiceEntity original = originals.get(0);
+                if (InvoiceStatus.isTerminal(original.getStatus())) {
+                    log.info("红冲关联(精确): originalInvoiceNo={} 已为终态(status={}), 跳过",
+                            original.getInvoiceNo(), original.getStatus());
+                    continue;
+                }
+
+                // 标记蓝字发票为 REVERSED（仅标记一次，reversedByInvoiceId 指向第一条红字）
+                boolean marked = false;
+                for (OutputInvoiceEntity red : redInvoices) {
+                    if (!marked) {
+                        original.setStatus(InvoiceStatus.REVERSED);
+                        original.setReversedByInvoiceId(red.getId());
+                        String note = "被" + red.getInvoiceNo() + "红冲(" + red.getPeriod() + ")"
+                                + (StrUtil.isNotBlank(row.redConfirmNo) ? " 确认单:" + row.redConfirmNo : "");
+                        original.setRemark(
+                                original.getRemark() != null && !original.getRemark().isBlank()
+                                        ? original.getRemark() + " | " + note
+                                        : note
+                        );
+                        outputInvoiceMapper.updateById(original);
+                        log.info("红冲关联(精确): blue={}, red={}, originalInvoiceNo={}, confirmNo={}",
+                                original.getInvoiceNo(), red.getInvoiceNo(),
+                                row.originalInvoiceNo, row.redConfirmNo);
+                        marked = true;
+                    }
+                    matched++;
+                }
+            }
+        }
+        return matched;
+    }
+
+    /**
      * 批量扫描已存在的红字发票，按金额+客户名匹配蓝字发票并建立红冲关联。
      * 用于处理已导入数据的历史红冲关联。
      * 使用直接SQL更新绕过 AOP 审计切面（批量操作不需要逐条审计日志）。
@@ -806,5 +901,6 @@ public class SalesInvoiceImportService {
         boolean isPositive = true;
         String remark;
         String originalInvoiceNo; // 红冲关联的原蓝字发票号
+        String redConfirmNo;      // 红字发票信息确认单编号
     }
 }
