@@ -20,10 +20,12 @@ public class SubjectBalanceController {
 
     private final SubjectBalanceService subjectBalanceService;
 
-    @Operation(summary = "期初建账")
+    @Operation(summary = "期初建账（支持指定建账日期）")
     @PostMapping("/init")
-    public R<Void> initOpening(@RequestParam String period, @RequestBody Map<Long, BigDecimal> balances) {
-        subjectBalanceService.initOpeningBalances(period, balances);
+    public R<Void> initOpening(@RequestParam String period,
+                               @RequestParam(required = false) @org.springframework.format.annotation.DateTimeFormat(pattern = "yyyy-MM-dd HH:mm:ss") java.time.LocalDateTime openedAt,
+                               @RequestBody Map<Long, BigDecimal> balances) {
+        subjectBalanceService.initOpeningBalances(period, openedAt, balances);
         return R.ok();
     }
 

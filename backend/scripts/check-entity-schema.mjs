@@ -183,12 +183,15 @@ function extractColumnRefs(sql) {
 
   const refs = new Set();
 
+  // 整条 SQL 的别名集合（含子查询中定义的 AS 别名），用于排除别名引用误报
+  const selectAliases = extractSelectAliases(cleaned);
+
   // 1. 提取 WHERE 条件中的列引用: column = / IS / IN / LIKE / BETWEEN / < > != <>
   const whereRefRe = /(\w+)\s*(?=\s*[=!<>]=?\s*|\s+IS\s+|\s+IN\s*\(|\s+LIKE\s+|\s+BETWEEN\s+)/gi;
   let m;
   while ((m = whereRefRe.exec(cleaned)) !== null) {
     const candidate = m[1];
-    if (!isSqlKeyword(candidate) && !/^\d/.test(candidate)) {
+    if (!isSqlKeyword(candidate) && !/^\d/.test(candidate) && !selectAliases.has(candidate.toLowerCase())) {
       refs.add(candidate.toLowerCase());
     }
   }
@@ -223,7 +226,6 @@ function extractColumnRefs(sql) {
 
   // 4. 提取 GROUP BY 中的列
   // 注意：GROUP BY 可以使用 SELECT 中的别名，需要排除别名
-  const selectAliases = extractSelectAliases(cleaned);
   const groupByMatch = cleaned.match(/\bGROUP\s+BY\s+(.+?)(?:\bORDER\s+BY\b|\bHAVING\b|\bLIMIT\b|$)/is);
   if (groupByMatch) {
     const items = groupByMatch[1].split(',');
@@ -240,19 +242,15 @@ function extractColumnRefs(sql) {
 }
 
 /**
- * 从 SQL 中提取 SELECT 子句中的别名（column AS alias）。
+ * 从 SQL 中提取所有 AS 别名（含子查询/派生表内定义的别名）。
+ * 传入的 sql 必须是已剥离注释、字符串字面量、参数占位符的 cleaned 文本，
+ * 因此剩余的 AS 均为真实别名。避免子查询别名（如 `END AS flow_type`）被误报为不存在的列。
  */
 function extractSelectAliases(sql) {
   const aliases = new Set();
-  // 定位 SELECT 和 FROM 之间的内容
-  const selectMatch = sql.match(/\bSELECT\s+(.+?)\bFROM\b/is);
-  if (!selectMatch) return aliases;
-
-  const selectClause = selectMatch[1];
-  // 匹配 "expression AS alias" 或 "expression alias" 模式
   const aliasRe = /\bAS\s+(\w+)\b/gi;
   let m;
-  while ((m = aliasRe.exec(selectClause)) !== null) {
+  while ((m = aliasRe.exec(sql)) !== null) {
     aliases.add(m[1].toLowerCase());
   }
   return aliases;

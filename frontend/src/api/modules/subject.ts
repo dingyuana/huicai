@@ -93,8 +93,10 @@ export function downloadSubjectTemplate(): Promise<void> {
   })
 }
 
-export function initOpeningBalances(period: string, balances: Record<number, number>): Promise<void> {
-  return request.post('/base/balance/v1/subject-balances/init', balances, { params: { period } })
+export function initOpeningBalances(period: string, balances: Record<number, number>, openedAt?: string): Promise<void> {
+  const params: Record<string, string> = { period }
+  if (openedAt) params.openedAt = openedAt
+  return request.post('/base/balance/v1/subject-balances/init', balances, { params })
 }
 
 export function getSubjectBalances(period: string): Promise<any[]> {

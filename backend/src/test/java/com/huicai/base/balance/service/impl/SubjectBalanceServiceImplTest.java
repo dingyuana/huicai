@@ -1,6 +1,7 @@
 package com.huicai.base.balance.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.huicai.agency.tenant.entity.EnterpriseEntity;
 import com.huicai.agency.tenant.mapper.EnterpriseMapper;
 import com.huicai.base.balance.entity.SubjectBalanceEntity;
@@ -126,7 +127,7 @@ class SubjectBalanceServiceImplTest {
         service.initOpeningBalances(PERIOD, new HashMap<>());
 
         verify(subjectBalanceMapper, never()).insert(any(SubjectBalanceEntity.class));
-        verify(periodService).setOpeningStatus(PERIOD, "entered");
+        verify(periodService).markOpeningEntered(eq(PERIOD), any(), any(), any());
     }
 
     @Test
@@ -173,7 +174,42 @@ class SubjectBalanceServiceImplTest {
         service.initOpeningBalances(PERIOD, balances);
 
         verify(subjectBalanceMapper, times(2)).insert(any(SubjectBalanceEntity.class));
-        verify(periodService).setOpeningStatus(PERIOD, "entered");
+        verify(periodService).markOpeningEntered(eq(PERIOD), any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("期初建账_指定建账日期_透传markOpeningEntered(P58)")
+    void init_withOpenedAt_passesThrough() {
+        when(periodService.getByPeriodCode(PERIOD)).thenReturn(newPeriod("open", "none"));
+        when(subjectBalanceMapper.selectCount(any(LambdaQueryWrapper.class))).thenReturn(0L);
+        when(subjectService.getById(1L)).thenReturn(newDebitSubject(1L, true));
+        when(subjectService.getById(2L)).thenReturn(newCreditSubject(2L));
+
+        java.time.LocalDateTime openedAt = java.time.LocalDateTime.of(2026, 8, 1, 10, 30);
+        Map<Long, BigDecimal> balances = new HashMap<>();
+        balances.put(1L, new BigDecimal("400000"));
+        balances.put(2L, new BigDecimal("400000"));
+
+        service.initOpeningBalances(PERIOD, openedAt, balances);
+
+        verify(periodService).markOpeningEntered(eq(PERIOD), eq(openedAt), any(), any());
+    }
+
+    @Test
+    @DisplayName("期初建账_不传建账日期_默认当前时间(P58)")
+    void init_withoutOpenedAt_defaultsNow() {
+        when(periodService.getByPeriodCode(PERIOD)).thenReturn(newPeriod("open", "none"));
+        when(subjectBalanceMapper.selectCount(any(LambdaQueryWrapper.class))).thenReturn(0L);
+        when(subjectService.getById(1L)).thenReturn(newDebitSubject(1L, true));
+        when(subjectService.getById(2L)).thenReturn(newCreditSubject(2L));
+
+        Map<Long, BigDecimal> balances = new HashMap<>();
+        balances.put(1L, new BigDecimal("400000"));
+        balances.put(2L, new BigDecimal("400000"));
+
+        service.initOpeningBalances(PERIOD, balances);
+
+        verify(periodService).markOpeningEntered(eq(PERIOD), argThat(t -> t != null), any(), any());
     }
 
     // ============================================================
@@ -230,25 +266,14 @@ class SubjectBalanceServiceImplTest {
     }
 
     @Test
-    @DisplayName("解锁期初_有已过账凭证_throw badRequest")
-    void unlock_withPostedVoucher_throws() {
+    @DisplayName("解锁期初_已锁定期间_一律拒绝(终态不可回退)")
+    void unlock_lockedPeriod_throws() {
         when(periodService.getByPeriodCode(PERIOD)).thenReturn(newPeriod("open", "locked"));
-        when(voucherMapper.selectCount(any(LambdaQueryWrapper.class))).thenReturn(3L);
         BusinessException ex = assertThrows(BusinessException.class,
                 () -> service.unlockOpeningBalances(PERIOD));
-        assertTrue(ex.getMessage().contains("已过账凭证"));
+        assertTrue(ex.getMessage().contains("期初已锁定"), () -> "实际: " + ex.getMessage());
+        assertTrue(ex.getMessage().contains("红冲"), () -> "应提示红冲修正, 实际: " + ex.getMessage());
         verify(periodService, never()).setOpeningStatus(anyString(), anyString());
-    }
-
-    @Test
-    @DisplayName("解锁期初_无已过账凭证_success")
-    void unlock_clean_success() {
-        when(periodService.getByPeriodCode(PERIOD)).thenReturn(newPeriod("open", "locked"));
-        when(voucherMapper.selectCount(any(LambdaQueryWrapper.class))).thenReturn(0L);
-
-        service.unlockOpeningBalances(PERIOD);
-
-        verify(periodService).setOpeningStatus(PERIOD, "entered");
     }
 
     // ============================================================
@@ -506,7 +531,7 @@ class SubjectBalanceServiceImplTest {
     }
 
     @Test
-    @DisplayName("清空期初_清空建账期间且无其他余额_重置start_period为null")
+    @DisplayName("清空期初_清空建账期间且无其他余额_用UpdateWrapper置空start_period")
     void clear_resetsStartPeriodWhenAlone() {
         withEnterpriseContext(1L);
         try {
@@ -522,7 +547,31 @@ class SubjectBalanceServiceImplTest {
 
             service.clearOpeningBalances(PERIOD);
 
-            verify(enterpriseMapper).updateById(argThat((EnterpriseEntity e) -> e.getStartPeriod() == null));
+            verify(enterpriseMapper).update(isNull(), argThat((UpdateWrapper<EnterpriseEntity> w) ->
+                    w.getSqlSet() != null && w.getSqlSet().contains("start_period")));
+        } finally {
+            EnterpriseContextHolder.clear();
+        }
+    }
+
+    @Test
+    @DisplayName("清空期初_建账期间但其他期间仍有余额_不重置start_period")
+    void clear_keepsStartPeriodWhenOthersExist() {
+        withEnterpriseContext(1L);
+        try {
+            when(periodService.getByPeriodCode(PERIOD)).thenReturn(newPeriod("open", "entered"));
+            when(voucherMapper.selectCount(any(LambdaQueryWrapper.class))).thenReturn(0L);
+            when(subjectBalanceMapper.delete(any(LambdaQueryWrapper.class))).thenReturn(3);
+
+            EnterpriseEntity enterprise = new EnterpriseEntity();
+            enterprise.setId(1L);
+            enterprise.setStartPeriod(PERIOD);
+            when(enterpriseMapper.selectById(1L)).thenReturn(enterprise);
+            when(subjectBalanceMapper.selectCount(any(LambdaQueryWrapper.class))).thenReturn(2L);
+
+            service.clearOpeningBalances(PERIOD);
+
+            verify(enterpriseMapper, never()).update(isNull(), any(UpdateWrapper.class));
         } finally {
             EnterpriseContextHolder.clear();
         }

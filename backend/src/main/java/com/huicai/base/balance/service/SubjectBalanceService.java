@@ -24,6 +24,13 @@ public interface SubjectBalanceService {
      */
     void initOpeningBalances(String period, Map<Long, BigDecimal> balances);
 
+    /**
+     * 期初建账（P58）：支持任意指定录入时间（建账日期）。
+     * 建账成功后写入 t_period.opened_at/opened_by/opened_by_name，opening_status='entered'。
+     * openedAt 为 null 时取当前时间（向前兼容）。
+     */
+    void initOpeningBalances(String period, java.time.LocalDateTime openedAt, Map<Long, BigDecimal> balances);
+
     List<SubjectBalanceEntity> queryByPeriod(String period);
 
     /**

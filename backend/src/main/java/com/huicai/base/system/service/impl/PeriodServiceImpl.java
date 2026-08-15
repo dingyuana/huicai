@@ -10,6 +10,7 @@ import com.huicai.common.exception.BusinessException;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 
 @Service
 public class PeriodServiceImpl extends ServiceImpl<PeriodMapper, PeriodEntity> implements PeriodService {
@@ -103,6 +104,18 @@ public class PeriodServiceImpl extends ServiceImpl<PeriodMapper, PeriodEntity> i
         PeriodEntity entity = getByPeriodCode(periodCode);
         if (entity == null) return;
         entity.setOpeningStatus(openingStatus);
+        updateById(entity);
+    }
+
+    @Override
+    public void markOpeningEntered(String periodCode, LocalDateTime openedAt, Long openedBy, String openedByName) {
+        if (periodCode == null || periodCode.isBlank()) return;
+        PeriodEntity entity = getByPeriodCode(periodCode);
+        if (entity == null) return;
+        entity.setOpeningStatus("entered");
+        entity.setOpenedAt(openedAt);
+        entity.setOpenedBy(openedBy);
+        entity.setOpenedByName(openedByName);
         updateById(entity);
     }
 }

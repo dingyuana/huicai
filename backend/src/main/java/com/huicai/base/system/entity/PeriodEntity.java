@@ -7,6 +7,7 @@ import lombok.Data;
 import lombok.EqualsAndHashCode;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 
 /**
  * 会计期间实体
@@ -45,4 +46,13 @@ public class PeriodEntity extends BaseEntity {
      * 独立于 {@link #status}，避免锁定同时锁住凭证过账。
      */
     private String openingStatus;
+
+    /** 期初建账日期（用户指定录入时间，P58） */
+    private LocalDateTime openedAt;
+
+    /** 期初建账录入人员ID（P58） */
+    private Long openedBy;
+
+    /** 期初建账录入人员名（冗余，P58） */
+    private String openedByName;
 }

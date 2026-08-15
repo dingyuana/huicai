@@ -17,6 +17,9 @@
             <el-tag v-if="openingStatus" :type="openingStatusTagType" size="large" style="margin-left:8px">
               {{ openingStatusLabel }}
             </el-tag>
+            <span v-if="currentPeriodMeta?.openedAt" class="opening-meta">
+              建账日期：{{ currentPeriodMeta.openedAt }}　录入人：{{ currentPeriodMeta.openedByName || '-' }}
+            </span>
           </div>
           <el-table :data="balanceList" v-loading="loading" border stripe style="width:100%">
             <el-table-column prop="subjectCode" label="科目编码" width="120" />
@@ -62,8 +65,7 @@
             <el-button v-if="!isOpeningEntered" type="primary" disabled>请先完成期初建账</el-button>
             <template v-else>
               <el-button v-if="!isOpeningLocked" type="primary" :loading="locking" @click="onLockOpening">启用并锁定期初</el-button>
-              <el-button v-else type="warning" :loading="locking" @click="onUnlockOpening">解锁期初</el-button>
-              <el-tag v-if="isOpeningLocked" type="success" size="large" style="margin-left:8px">期初已锁定 ✅</el-tag>
+              <el-tag v-if="isOpeningLocked" type="success" size="large" style="margin-left:8px">期初已锁定（终态）✅</el-tag>
             </template>
           </div>
         </el-tab-pane>
@@ -73,7 +75,16 @@
         <el-alert type="info" :closable="false" show-icon style="margin-bottom:16px"
           title="期初建账需借贷平衡：请一次性录入全部科目的期初余额（借方资产 + 贷方权益/负债），借贷合计相等方可保存。" />
         <div class="entry-header">
-          <el-button size="small" type="primary" plain @click="addEntryRow">添加科目</el-button>
+          <div class="entry-left">
+            <el-button size="small" type="primary" plain @click="addEntryRow">添加科目</el-button>
+            <span style="margin-left:16px">建账日期：</span>
+            <el-date-picker
+              v-model="openedAt"
+              type="datetime"
+              placeholder="选择建账日期"
+              value-format="YYYY-MM-DD HH:mm:ss"
+              style="width:200px" />
+          </div>
           <div class="entry-total" :class="debitTotal !== creditTotal ? 'unbalanced' : 'balanced'">
             借方合计：<b>{{ debitTotal.toFixed(2) }}</b>
             ／贷方合计：<b>{{ creditTotal.toFixed(2) }}</b>
@@ -114,7 +125,6 @@ import {
   getSubjectBalances,
   checkTrialBalance,
   lockOpeningBalances,
-  unlockOpeningBalances,
   clearOpeningBalances,
 } from '@/api/modules/subject'
 
@@ -132,8 +142,11 @@ const trialResult = ref<any>(null)
 const subjectTree = ref<any[]>([])
 
 const entryRows = ref<Array<{ subjectId: number | null; amount: number }>>([])
+const openedAt = ref<string>('')
+const periodMetaMap = ref<Record<string, { openedAt?: string; openedByName?: string }>>({})
 
 const openingStatus = computed(() => periodStatusMap.value[queryPeriod.value] || 'none')
+const currentPeriodMeta = computed(() => periodMetaMap.value[queryPeriod.value])
 const isOpeningNone = computed(() => openingStatus.value === 'none')
 const isOpeningEntered = computed(() => openingStatus.value === 'entered')
 const isOpeningLocked = computed(() => openingStatus.value === 'locked')
@@ -155,7 +168,7 @@ const openingStatusTagType = computed(() => {
   }
 })
 const lockingHint = computed(() => {
-  if (isOpeningLocked.value) return '期初已锁定, 凭证业务可正常过账; 如需修改期初请先解锁（要求期间无已过账凭证）'
+  if (isOpeningLocked.value) return '期初已锁定（终态）, 不可解锁/清空/重录; 如需修正期初数据请通过红冲凭证方式处理'
   if (isOpeningEntered.value) return '期初数据已录入, 试算平衡通过后请点击"启用"按钮锁定期初数据'
   return '尚未完成期初建账, 请先在"期初录入"页签录入并保存期初余额, 再试算平衡后启用'
 })
@@ -183,10 +196,15 @@ async function fetchPeriods() {
   codes.sort((a, b) => b.localeCompare(a))
   periods.value = codes
   const map: Record<string, string> = {}
+  const meta: Record<string, { openedAt?: string; openedByName?: string }> = {}
   for (const p of d) {
-    if (p.periodCode) map[p.periodCode] = p.openingStatus || 'none'
+    if (p.periodCode) {
+      map[p.periodCode] = p.openingStatus || 'none'
+      meta[p.periodCode] = { openedAt: p.openedAt || undefined, openedByName: p.openedByName || undefined }
+    }
   }
   periodStatusMap.value = map
+  periodMetaMap.value = meta
   if (periods.value.length > 0 && !queryPeriod.value) {
     // P57 场景6: 默认选中最早未建账(none)期间；全部已建账则回退最新期间
     const earliestNone = [...codes].sort((a, b) => a.localeCompare(b))
@@ -233,17 +251,20 @@ async function saveBalance() {
   try {
     const balances: Record<number, number> = {}
     rows.forEach(r => { balances[r.subjectId!] = r.amount || 0 })
-    await initOpeningBalances(queryPeriod.value, balances)
+    await initOpeningBalances(queryPeriod.value, balances, openedAt.value || undefined)
     ElMessage.success('保存成功')
     dialogVisible.value = false
     entryRows.value = []
+    openedAt.value = ''
     periodStatusMap.value = { ...periodStatusMap.value, [queryPeriod.value]: 'entered' }
+    fetchPeriods()
     fetchBalances()
   } finally { saving.value = false }
 }
 
 function openEntryDialog() {
   entryRows.value = [{ subjectId: null, amount: 0 }]
+  openedAt.value = ''
   dialogVisible.value = true
 }
 
@@ -267,21 +288,6 @@ async function onLockOpening() {
     await lockOpeningBalances(queryPeriod.value)
     periodStatusMap.value = { ...periodStatusMap.value, [queryPeriod.value]: 'locked' }
     ElMessage.success('期初已锁定')
-  } finally { locking.value = false }
-}
-
-async function onUnlockOpening() {
-  if (!queryPeriod.value) return
-  try {
-    await ElMessageBox.confirm(
-      `解锁期间 ${queryPeriod.value} 的期初数据, 仅在期间无已过账凭证时允许。是否继续？`,
-      '解锁期初', { type: 'warning' })
-  } catch { return }
-  locking.value = true
-  try {
-    await unlockOpeningBalances(queryPeriod.value)
-    periodStatusMap.value = { ...periodStatusMap.value, [queryPeriod.value]: 'entered' }
-    ElMessage.success('期初已解锁')
   } finally { locking.value = false }
 }
 
@@ -312,6 +318,8 @@ onMounted(() => {
 .page-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; }
 .page-title { font-size:16px; font-weight:600; }
 .toolbar { margin-bottom:16px; display:flex; gap:8px; }
+.opening-meta { margin-left:16px; font-size:13px; color:#909399; }
+.entry-left { display:flex; align-items:center; }
 .trial-result { margin-top:16px; }
 
 .entry-header {

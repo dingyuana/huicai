@@ -91,10 +91,11 @@ class SubjectBalanceControllerTest {
     @Test
     @DisplayName("期初建账_参数正确绑定_返回200")
     void initOpening_paramsBoundCorrectly() throws Exception {
-        doNothing().when(subjectBalanceService).initOpeningBalances(anyString(), anyMap());
+        doNothing().when(subjectBalanceService).initOpeningBalances(anyString(), any(), anyMap());
 
         mvc.perform(post("/api/base/balance/v1/subject-balances/init")
                         .param("period", "202607")
+                        .param("openedAt", "2026-07-01 00:00:00")
                         .contentType("application/json")
                         .content("""
                                 {"1001": 1000, "1002": 2000}
@@ -102,6 +103,6 @@ class SubjectBalanceControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(200));
 
-        verify(subjectBalanceService).initOpeningBalances(eq("202607"), anyMap());
+        verify(subjectBalanceService).initOpeningBalances(eq("202607"), any(), anyMap());
     }
 }

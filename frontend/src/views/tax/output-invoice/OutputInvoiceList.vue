@@ -129,7 +129,7 @@
         </el-form-item>
       </el-form>
 
-      <el-table :data="list" v-loading="loading" border @selection-change="onSelectionChange">
+      <el-table :data="list" v-loading="loading" border @selection-change="onSelectionChange" @row-click="showDetail" style="cursor:pointer">
         <el-table-column type="selection" width="50" :selectable="rowSelectable" />
         <el-table-column prop="invoiceNo" label="发票号" width="180" />
         <el-table-column prop="invoiceDate" label="开票日期" width="120" />
@@ -161,25 +161,6 @@
             <el-tag v-if="row.aiRiskTag" :type="row.aiRiskTag.includes('CRITICAL') ? 'danger' : row.aiRiskTag.includes('MEDIUM') ? 'warning' : 'info'" size="small">
               {{ row.aiRiskTag }}
             </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column label="操作" width="220" fixed="right">
-          <template #default="{ row }">
-            <el-button link type="primary" size="small" @click="showDetail(row)">详情</el-button>
-            <template v-if="row.status === 'PENDING_CONFIRM'">
-              <el-button link type="primary" size="small" @click="doAction(row, 'submitReview')">提交审核</el-button>
-              <el-button link type="danger" size="small" @click="doAction(row, 'void')">作废</el-button>
-            </template>
-            <template v-else-if="row.status === 'PENDING_REVIEW'">
-              <el-button link type="primary" size="small" @click="doAction(row, 'confirm')">通过</el-button>
-              <el-button link type="warning" size="small" @click="doAction(row, 'reject')">驳回</el-button>
-              <el-button link type="danger" size="small" @click="doAction(row, 'void')">作废</el-button>
-            </template>
-            <template v-else-if="row.status === 'CONFIRMED'">
-              <el-button link type="primary" size="small" @click="doAction(row, 'markVouchered')">生成凭证</el-button>
-              <el-button link type="warning" size="small" @click="doAction(row, 'revert')">回退</el-button>
-              <el-button link type="danger" size="small" @click="doAction(row, 'void')">作废</el-button>
-            </template>
           </template>
         </el-table-column>
       </el-table>

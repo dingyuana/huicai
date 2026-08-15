@@ -1,6 +1,7 @@
 package com.huicai.base.balance.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.huicai.common.annotation.Auditable;
 import com.huicai.common.context.EnterpriseContextHolder;
 import com.huicai.common.exception.BusinessException;
@@ -17,6 +18,7 @@ import com.huicai.base.system.entity.PeriodEntity;
 import com.huicai.base.system.entity.Subject;
 import com.huicai.base.system.service.PeriodService;
 import com.huicai.base.system.service.SubjectService;
+import com.huicai.base.system.util.SecurityUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -24,6 +26,7 @@ import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -86,6 +89,13 @@ public class SubjectBalanceServiceImpl implements SubjectBalanceService {
     @Transactional(rollbackFor = Exception.class)
     @Auditable(operation = "期初建账", module = "SUBJECT_BALANCE")
     public void initOpeningBalances(String period, Map<Long, BigDecimal> balances) {
+        initOpeningBalances(period, null, balances);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    @Auditable(operation = "期初建账", module = "SUBJECT_BALANCE")
+    public void initOpeningBalances(String period, LocalDateTime openedAt, Map<Long, BigDecimal> balances) {
         if (period == null || period.length() != 6) {
             throw BusinessException.badRequest("会计期间格式错误, 应为 YYYYMM");
         }
@@ -113,11 +123,15 @@ public class SubjectBalanceServiceImpl implements SubjectBalanceService {
             throw BusinessException.conflict("期间 " + period + " 已存在余额数据, 请先清空重录");
         }
 
+        LocalDateTime openAt = openedAt != null ? openedAt : LocalDateTime.now();
+        Long operatorId = resolveCurrentUserId();
+        String operatorName = resolveCurrentUsername();
+
         // 空 balances 表示确认期初全为 0（支持零余额企业），仅标记 entered 不插入数据行
         if (balances.isEmpty()) {
-            periodService.setOpeningStatus(period, "entered");
+            periodService.markOpeningEntered(period, openAt, operatorId, operatorName);
             backfillEnterpriseStartPeriod(period);
-            log.info("期初建账（零余额确认）: period={}", period);
+            log.info("期初建账（零余额确认）: period={}, openedAt={}, operator={}", period, openAt, operatorName);
             return;
         }
 
@@ -162,10 +176,26 @@ public class SubjectBalanceServiceImpl implements SubjectBalanceService {
         for (SubjectBalanceEntity balance : batchList) {
             subjectBalanceMapper.insert(balance);
         }
-        periodService.setOpeningStatus(period, "entered");
+        periodService.markOpeningEntered(period, openAt, operatorId, operatorName);
         backfillEnterpriseStartPeriod(period);
-        log.info("期初建账完成: period={}, 科目数={}, 借方合计={}, 贷方合计={}",
-                period, batchList.size(), totalDebitSide, totalCreditSide);
+        log.info("期初建账完成: period={}, 科目数={}, 借方合计={}, 贷方合计={}, openedAt={}, operator={}",
+                period, batchList.size(), totalDebitSide, totalCreditSide, openAt, operatorName);
+    }
+
+    private Long resolveCurrentUserId() {
+        try {
+            return SecurityUtils.getCurrentUserId();
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private String resolveCurrentUsername() {
+        try {
+            return SecurityUtils.getCurrentUsername();
+        } catch (Exception e) {
+            return "anonymous";
+        }
     }
 
     private void backfillEnterpriseStartPeriod(String period) {
@@ -224,23 +254,11 @@ public class SubjectBalanceServiceImpl implements SubjectBalanceService {
         if (periodEntity == null) {
             throw BusinessException.badRequest("会计期间不存在: " + period);
         }
-        if (!"locked".equals(periodEntity.getOpeningStatus())) {
-            throw BusinessException.badRequest("期间 " + period + " 期初未处于锁定状态, 无需解锁");
+        // 锁定 = 终态：禁止解锁（P59）。修正期初只能通过红冲凭证方式
+        if ("locked".equals(periodEntity.getOpeningStatus())) {
+            throw BusinessException.badRequest("期间 " + period + " 期初已锁定, 锁定后不可解锁/清空/重录, 如需修正请通过红冲凭证方式处理");
         }
-
-        // 锁定期间已有 POSTED 凭证时不允许解锁：避免期初改动影响已生成报表
-        Long postedCount = voucherMapper.selectCount(
-                new LambdaQueryWrapper<VoucherEntity>()
-                        .eq(VoucherEntity::getPeriod, period)
-                        .eq(VoucherEntity::getStatus, "POSTED")
-                        .eq(VoucherEntity::getDeleted, 0));
-        if (postedCount != null && postedCount > 0) {
-            throw BusinessException.badRequest("期间 " + period + " 已存在 " + postedCount
-                    + " 张已过账凭证, 不允许解锁期初, 请通过红冲凭证方式修正数据");
-        }
-
-        periodService.setOpeningStatus(period, "entered");
-        log.info("解锁期初完成: period={}", period);
+        throw BusinessException.badRequest("期间 " + period + " 期初未处于锁定状态, 无需解锁");
     }
 
     @Override
@@ -290,10 +308,11 @@ public class SubjectBalanceServiceImpl implements SubjectBalanceService {
         otherWrapper.ne(SubjectBalanceEntity::getPeriod, period);
         Long remaining = subjectBalanceMapper.selectCount(otherWrapper);
         if (remaining == null || remaining == 0) {
-            EnterpriseEntity update = new EnterpriseEntity();
-            update.setId(enterpriseId);
-            update.setStartPeriod(null);
-            enterpriseMapper.updateById(update);
+            // updateById 的 NOT_NULL 策略会跳过 null 字段，必须用 UpdateWrapper.set 显式置空
+            // 使用 UpdateWrapper（非 Lambda 版本）避免纯 Mockito 测试中 MyBatis-Plus lambda cache 初始化失败
+            enterpriseMapper.update(null, new UpdateWrapper<EnterpriseEntity>()
+                    .eq("id", enterpriseId)
+                    .set("start_period", null));
             log.info("清空建账期间后重置企业 start_period: enterpriseId={}", enterpriseId);
         }
     }

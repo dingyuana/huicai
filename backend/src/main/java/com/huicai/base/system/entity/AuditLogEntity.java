@@ -14,9 +14,11 @@ import java.time.LocalDateTime;
 public class AuditLogEntity {
     @TableId(type = IdType.AUTO)
     private Long id;
-    @TableField(exist = false)
+    /** 操作人ID — 映射 t_audit_log.operator_id（P58 修复审计操作人落库） */
+    @TableField(value = "operator_id")
     private Long userId;
-    @TableField(exist = false)
+    /** 操作人名称 — 映射 t_audit_log.operator_name（P58 修复审计操作人落库） */
+    @TableField(value = "operator_name")
     private String username;
     private String operation;
     @TableField(exist = false)

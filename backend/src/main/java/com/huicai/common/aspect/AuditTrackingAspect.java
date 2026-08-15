@@ -45,6 +45,7 @@ public class AuditTrackingAspect {
             String module = auditable.module();
 
             String username = getCurrentUsername();
+            Long userId = getCurrentUserId();
 
             String requestParams = serializeArgs(pjp.getArgs());
 
@@ -93,6 +94,7 @@ public class AuditTrackingAspect {
                 throw throwable;
             } finally {
                 AuditLogEntity auditLog = new AuditLogEntity();
+                auditLog.setUserId(userId);
                 auditLog.setUsername(username);
                 auditLog.setOperation(operation);
                 auditLog.setMethod(signature.getName());
@@ -204,6 +206,14 @@ public class AuditTrackingAspect {
             return auth.getName();
         }
         return "anonymous";
+    }
+
+    private Long getCurrentUserId() {
+        try {
+            return com.huicai.base.system.util.SecurityUtils.getCurrentUserId();
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     private String serializeArgs(Object[] args) {

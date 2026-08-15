@@ -39,4 +39,9 @@ public interface PeriodService extends IService<PeriodEntity> {
      * 用于期初建账/锁定/解锁/清空。
      */
     void setOpeningStatus(String periodCode, String openingStatus);
+
+    /**
+     * 期初建账完成：设置 opening_status=entered 并记录建账日期/录入人员（P58）。
+     */
+    void markOpeningEntered(String periodCode, java.time.LocalDateTime openedAt, Long openedBy, String openedByName);
 }
