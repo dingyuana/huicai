@@ -501,14 +501,10 @@ public class SalesInvoiceImportService {
             throw new BusinessException(500, "缺少基础科目配置(1122/5001)");
         }
 
-        BigDecimal exclTaxAmount = row.amount;
-        BigDecimal taxAmount = row.taxAmount;
-        BigDecimal totalAmount = row.totalAmount;
-        if (!row.isPositive) {
-            exclTaxAmount = exclTaxAmount.negate();
-            taxAmount = taxAmount.negate();
-            totalAmount = totalAmount.negate();
-        }
+        BigDecimal exclTaxAmount = row.amount != null ? row.amount : BigDecimal.ZERO;
+        BigDecimal taxAmount = row.taxAmount != null ? row.taxAmount : BigDecimal.ZERO;
+        BigDecimal totalAmount = row.totalAmount != null ? row.totalAmount : exclTaxAmount.add(taxAmount);
+        boolean isRed = exclTaxAmount.compareTo(BigDecimal.ZERO) < 0;
 
         VoucherEntity voucher = new VoucherEntity();
         voucher.setVoucherNo(voucherNo);
@@ -517,8 +513,8 @@ public class SalesInvoiceImportService {
         voucher.setStatus("DRAFT");
         voucher.setSource("GENERATED");
         voucher.setSummary("发票导入: " + row.invoiceNo + " " + row.goodsName);
-        voucher.setTotalDebit(totalAmount);
-        voucher.setTotalCredit(totalAmount);
+        voucher.setTotalDebit(totalAmount.abs());
+        voucher.setTotalCredit(totalAmount.abs());
         voucher.setCreatedBy(DEFAULT_USER_ID);
         // 新增：溯源字段（销售发票 → 凭证）
         voucher.setSourceDocType("OUTPUT_INVOICE");
@@ -526,33 +522,73 @@ public class SalesInvoiceImportService {
         voucherMapper.insert(voucher);
 
         int sort = 1;
-        VoucherEntryEntity entryDr = new VoucherEntryEntity();
-        entryDr.setVoucherId(voucher.getId());
-        entryDr.setSubjectId(subjectBank.getId());
-        entryDr.setDebit(totalAmount);
-        entryDr.setCredit(BigDecimal.ZERO);
-        entryDr.setSummary(row.goodsName);
-        entryDr.setSortOrder(sort++);
-        voucherEntryMapper.insert(entryDr);
+        String entrySummary = row.goodsName;
+        if (isRed) {
+            // 红字发票：方向与蓝字相反——贷应收/借收入/借销项税，全部取绝对值以满足 chk_entry_amount (debit>=0, credit>=0)
+            // 贷：应收账款 1122
+            VoucherEntryEntity crAr = new VoucherEntryEntity();
+            crAr.setVoucherId(voucher.getId());
+            crAr.setSubjectId(subjectBank.getId());
+            crAr.setDebit(BigDecimal.ZERO);
+            crAr.setCredit(totalAmount.abs());
+            crAr.setSummary(entrySummary);
+            crAr.setSortOrder(sort++);
+            voucherEntryMapper.insert(crAr);
 
-        VoucherEntryEntity entryCr1 = new VoucherEntryEntity();
-        entryCr1.setVoucherId(voucher.getId());
-        entryCr1.setSubjectId(subjectRevenue.getId());
-        entryCr1.setDebit(BigDecimal.ZERO);
-        entryCr1.setCredit(exclTaxAmount);
-        entryCr1.setSummary(row.goodsName);
-        entryCr1.setSortOrder(sort++);
-        voucherEntryMapper.insert(entryCr1);
+            // 借：主营业务收入 5001
+            VoucherEntryEntity drRev = new VoucherEntryEntity();
+            drRev.setVoucherId(voucher.getId());
+            drRev.setSubjectId(subjectRevenue.getId());
+            drRev.setDebit(exclTaxAmount.abs());
+            drRev.setCredit(BigDecimal.ZERO);
+            drRev.setSummary(entrySummary);
+            drRev.setSortOrder(sort++);
+            voucherEntryMapper.insert(drRev);
 
-        if (subjectOutputTax != null && taxAmount.compareTo(BigDecimal.ZERO) != 0) {
-            VoucherEntryEntity entryCr2 = new VoucherEntryEntity();
-            entryCr2.setVoucherId(voucher.getId());
-            entryCr2.setSubjectId(subjectOutputTax.getId());
-            entryCr2.setDebit(BigDecimal.ZERO);
-            entryCr2.setCredit(taxAmount);
-            entryCr2.setSummary(row.goodsName);
-            entryCr2.setSortOrder(sort++);
-            voucherEntryMapper.insert(entryCr2);
+            // 借：销项税 2221.01
+            if (subjectOutputTax != null && taxAmount.compareTo(BigDecimal.ZERO) != 0) {
+                VoucherEntryEntity drTax = new VoucherEntryEntity();
+                drTax.setVoucherId(voucher.getId());
+                drTax.setSubjectId(subjectOutputTax.getId());
+                drTax.setDebit(taxAmount.abs());
+                drTax.setCredit(BigDecimal.ZERO);
+                drTax.setSummary(entrySummary);
+                drTax.setSortOrder(sort++);
+                voucherEntryMapper.insert(drTax);
+            }
+        } else {
+            // 蓝字发票：借应收/贷收入/贷销项税
+            // 借：应收账款 1122
+            VoucherEntryEntity entryDr = new VoucherEntryEntity();
+            entryDr.setVoucherId(voucher.getId());
+            entryDr.setSubjectId(subjectBank.getId());
+            entryDr.setDebit(totalAmount);
+            entryDr.setCredit(BigDecimal.ZERO);
+            entryDr.setSummary(entrySummary);
+            entryDr.setSortOrder(sort++);
+            voucherEntryMapper.insert(entryDr);
+
+            // 贷：主营业务收入 5001
+            VoucherEntryEntity entryCr1 = new VoucherEntryEntity();
+            entryCr1.setVoucherId(voucher.getId());
+            entryCr1.setSubjectId(subjectRevenue.getId());
+            entryCr1.setDebit(BigDecimal.ZERO);
+            entryCr1.setCredit(exclTaxAmount);
+            entryCr1.setSummary(entrySummary);
+            entryCr1.setSortOrder(sort++);
+            voucherEntryMapper.insert(entryCr1);
+
+            // 贷：销项税 2221.01
+            if (subjectOutputTax != null && taxAmount.compareTo(BigDecimal.ZERO) != 0) {
+                VoucherEntryEntity entryCr2 = new VoucherEntryEntity();
+                entryCr2.setVoucherId(voucher.getId());
+                entryCr2.setSubjectId(subjectOutputTax.getId());
+                entryCr2.setDebit(BigDecimal.ZERO);
+                entryCr2.setCredit(taxAmount);
+                entryCr2.setSummary(entrySummary);
+                entryCr2.setSortOrder(sort++);
+                voucherEntryMapper.insert(entryCr2);
+            }
         }
 
         doc.setVoucherId(voucher.getId());
@@ -560,7 +596,7 @@ public class SalesInvoiceImportService {
         doc.setUpdatedAt(LocalDateTime.now());
         docMapper.updateById(doc);
 
-        log.info("发票导入生成凭证: invoiceNo={}, voucherId={}", row.invoiceNo, voucher.getId());
+        log.info("发票导入生成凭证: invoiceNo={}, voucherId={}, isRed={}", row.invoiceNo, voucher.getId(), isRed);
     }
 
     void ensureStandardSubjects() {
