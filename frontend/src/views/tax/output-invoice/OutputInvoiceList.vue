@@ -415,7 +415,10 @@ const showDetail = async (row: any) => {
   try {
     detail.value = await getOutputInvoice(row.id)
     detailVisible.value = true
-  } catch { detail.value = row; detailVisible.value = true }
+  } catch {
+    detail.value = row
+    detailVisible.value = true
+  }
 }
 
 const onDelete = async (row: any) => {
