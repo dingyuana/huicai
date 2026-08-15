@@ -491,13 +491,21 @@ public class AutoGenerationService {
 
         switch (stmt.getClassification()) {
             case BankClassification.BUSINESS_RECEIPT: {
-                Subject arAcct = findSubjectByCode("1122");
+                // P12-3 科目联动: 无未结清应收 → 预收账款 2203; 有未结清应收 → 应收账款 1122
+                Long customerId = doc.getCustomerId();
+                boolean hasOpenReceivables = customerId != null
+                        && reconciliationService.hasOpenInvoices("INVOICE_OUT", customerId);
+                Subject arAcct = findSubjectByCode(hasOpenReceivables ? "1122" : "2203");
                 addVoucherEntry(voucher.getId(), bankAcct.getId(), amount, BigDecimal.ZERO, entrySummary, sort++);
                 addVoucherEntry(voucher.getId(), arAcct.getId(), BigDecimal.ZERO, amount, entrySummary, sort++);
                 break;
             }
             case BankClassification.BUSINESS_PAYMENT: {
-                Subject apAcct = findSubjectByCode("2202");
+                // P12-3 科目联动: 无未结清应付 → 预付账款 1123; 有未结清应付 → 应付账款 2202
+                Long supplierId = doc.getSupplierId();
+                boolean hasOpenPayables = supplierId != null
+                        && reconciliationService.hasOpenInvoices("INVOICE_IN", supplierId);
+                Subject apAcct = findSubjectByCode(hasOpenPayables ? "2202" : "1123");
                 addVoucherEntry(voucher.getId(), apAcct.getId(), amount, BigDecimal.ZERO, entrySummary, sort++);
                 addVoucherEntry(voucher.getId(), bankAcct.getId(), BigDecimal.ZERO, amount, entrySummary, sort++);
                 break;

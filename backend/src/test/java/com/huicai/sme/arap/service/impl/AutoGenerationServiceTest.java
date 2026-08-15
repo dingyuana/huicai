@@ -16,6 +16,7 @@ import com.huicai.sme.arap.service.ReconciliationService;
 import com.huicai.base.business.entity.BankStatementEntity;
 import com.huicai.base.business.entity.BusinessDocEntity;
 import com.huicai.base.voucher.entity.VoucherEntity;
+import com.huicai.base.voucher.entity.VoucherEntryEntity;
 import com.huicai.base.business.mapper.BusinessDocMapper;
 import com.huicai.base.business.mapper.BusinessDocEntryMapper;
 import com.huicai.base.voucher.mapper.VoucherMapper;
@@ -31,6 +32,9 @@ import com.huicai.base.business.util.TemplateMatcher;
 import com.huicai.base.business.constant.StatementStatus;
 import com.huicai.base.system.entity.Subject;
 import com.huicai.base.system.mapper.SubjectMapper;
+import com.baomidou.mybatisplus.core.MybatisConfiguration;
+import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
+import org.apache.ibatis.builder.MapperBuilderAssistant;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -105,9 +109,27 @@ class AutoGenerationServiceTest {
         return sub;
     }
 
+    /** 匹配按指定科目代码查询的 selectList 调用 (findSubjectByCode 用 LambdaQueryWrapper.eq(code)) */
+    private org.mockito.ArgumentMatcher<com.baomidou.mybatisplus.core.conditions.Wrapper<Subject>> queryingCode(String code) {
+        return w -> {
+            if (w instanceof com.baomidou.mybatisplus.core.conditions.AbstractWrapper<?, ?, ?> aw) {
+                aw.getSqlSegment();
+                return aw.getParamNameValuePairs() != null
+                        && aw.getParamNameValuePairs().containsValue(code);
+            }
+            return false;
+        };
+    }
+
+    private void stubSubject(String code, Long id) {
+        lenient().when(subjectMapper.selectList(argThat(queryingCode(code))))
+                .thenReturn(Collections.singletonList(mockSubject(id, code)));
+    }
+
     @BeforeEach
     void setUp() {
         setAuth();
+        TableInfoHelper.initTableInfo(new MapperBuilderAssistant(new MybatisConfiguration(), ""), Subject.class);
         // 通用 1002 银行存款
         lenient().when(subjectMapper.selectList(argThat(w -> w != null && w.getSqlSet() != null && w.getSqlSet().toString().contains("1002"))))
                 .thenReturn(Collections.singletonList(mockSubject(10L, "1002")));
@@ -486,6 +508,118 @@ class AutoGenerationServiceTest {
         } catch (Exception e) { fail("unexpected: " + e.getClass().getSimpleName() + ": " + e.getMessage(), e); }
         // P30 铁律：不做自动核销
         verify(reconciliationService, never()).autoReconcileFifo(anyLong(), anyString(), any(), anyString(), anyLong(), anyString(), anyString());
+    }
+
+    // ==================== P12-3 凭证科目联动: 无未结应付/应收时应使用预付/预收科目 ====================
+
+    @Test
+    void testAutoGenerate_payment_供应商无未结清应付_凭证借1123预付账款() {
+        // P12-3: 无未结清应付的付款 → 凭证应借 1123 预付账款, 而非 2202 应付账款 (否则产生负应付余额)
+        BankStatementEntity stmt = newStmt("business_payment", "out");
+        stmt.setCounterAccount("供应商X");
+        when(statementMapper.selectById(1L)).thenReturn(stmt);
+        when(vendorMapper.selectList(any())).thenReturn(List.of(new VendorEntity() {{
+            setId(90L); setName("供应商X");
+        }}));
+        when(reconciliationService.hasOpenInvoices(eq("INVOICE_IN"), eq(90L))).thenReturn(false);
+        stubSubject("1002", 10L);
+        stubSubject("2202", 30L);
+        stubSubject("1123", 1123L);
+        when(voucherNoService.generateNextNo(anyString(), anyLong())).thenReturn("PAY-202606-009");
+
+        try {
+            service.autoGenerate(1L, 1L);
+        } catch (Exception e) { fail("unexpected: " + e.getClass().getSimpleName() + ": " + e.getMessage(), e); }
+        ArgumentCaptor<VoucherEntryEntity> entryCaptor = ArgumentCaptor.forClass(VoucherEntryEntity.class);
+        verify(voucherEntryMapper, atLeastOnce()).insert(entryCaptor.capture());
+        List<VoucherEntryEntity> entries = entryCaptor.getAllValues();
+        assertFalse(entries.isEmpty(), "应生成凭证分录");
+        VoucherEntryEntity debitEntry = entries.stream()
+                .filter(e -> e.getDebit() != null && e.getDebit().compareTo(BigDecimal.ZERO) > 0)
+                .findFirst().orElseThrow(() -> new AssertionError("应存在借方分录"));
+        assertEquals(1123L, debitEntry.getSubjectId(), "无未结清应付时借方应为预付账款 1123");
+        verify(prepaymentMapper, atLeastOnce()).insert(any(PrepaymentEntity.class));
+    }
+
+    @Test
+    void testAutoGenerate_payment_供应商有未结清应付_凭证借2202应付账款() {
+        // P12-3 对照组: 有未结清应付 → 凭证仍借 2202 应付账款
+        BankStatementEntity stmt = newStmt("business_payment", "out");
+        stmt.setCounterAccount("供应商Y");
+        when(statementMapper.selectById(1L)).thenReturn(stmt);
+        when(vendorMapper.selectList(any())).thenReturn(List.of(new VendorEntity() {{
+            setId(91L); setName("供应商Y");
+        }}));
+        when(reconciliationService.hasOpenInvoices(eq("INVOICE_IN"), eq(91L))).thenReturn(true);
+        stubSubject("1002", 10L);
+        stubSubject("2202", 30L);
+        stubSubject("1123", 1123L);
+        when(voucherNoService.generateNextNo(anyString(), anyLong())).thenReturn("PAY-202606-010");
+
+        try {
+            service.autoGenerate(1L, 1L);
+        } catch (Exception e) { fail("unexpected: " + e.getClass().getSimpleName() + ": " + e.getMessage(), e); }
+        ArgumentCaptor<VoucherEntryEntity> entryCaptor = ArgumentCaptor.forClass(VoucherEntryEntity.class);
+        verify(voucherEntryMapper, atLeastOnce()).insert(entryCaptor.capture());
+        VoucherEntryEntity debitEntry = entryCaptor.getAllValues().stream()
+                .filter(e -> e.getDebit() != null && e.getDebit().compareTo(BigDecimal.ZERO) > 0)
+                .findFirst().orElseThrow(() -> new AssertionError("应存在借方分录"));
+        assertEquals(30L, debitEntry.getSubjectId(), "有未结清应付时借方应为应付账款 2202");
+        verify(prepaymentMapper, never()).insert(any(PrepaymentEntity.class));
+    }
+
+    @Test
+    void testAutoGenerate_receipt_客户无未结清应收_凭证贷2203预收账款() {
+        // P12-3: 无未结清应收的收款 → 凭证应贷 2203 预收账款, 而非 1122 应收账款
+        BankStatementEntity stmt = newStmt("business_receipt", "in");
+        stmt.setCounterAccount("客户X");
+        when(statementMapper.selectById(1L)).thenReturn(stmt);
+        when(customerMapper.selectList(any())).thenReturn(List.of(new CustomerEntity() {{
+            setId(90L); setName("客户X");
+        }}));
+        when(reconciliationService.hasOpenInvoices(eq("INVOICE_OUT"), eq(90L))).thenReturn(false);
+        stubSubject("1002", 10L);
+        stubSubject("1122", 20L);
+        stubSubject("2203", 2203L);
+        when(voucherNoService.generateNextNo(anyString(), anyLong())).thenReturn("REC-202606-009");
+
+        try {
+            service.autoGenerate(1L, 1L);
+        } catch (Exception e) { fail("unexpected: " + e.getClass().getSimpleName() + ": " + e.getMessage(), e); }
+        ArgumentCaptor<VoucherEntryEntity> entryCaptor = ArgumentCaptor.forClass(VoucherEntryEntity.class);
+        verify(voucherEntryMapper, atLeastOnce()).insert(entryCaptor.capture());
+        VoucherEntryEntity creditEntry = entryCaptor.getAllValues().stream()
+                .filter(e -> e.getCredit() != null && e.getCredit().compareTo(BigDecimal.ZERO) > 0)
+                .findFirst().orElseThrow(() -> new AssertionError("应存在贷方分录"));
+        assertEquals(2203L, creditEntry.getSubjectId(), "无未结清应收时贷方应为预收账款 2203");
+        verify(prepaymentMapper, atLeastOnce()).insert(any(PrepaymentEntity.class));
+    }
+
+    @Test
+    void testAutoGenerate_receipt_客户有未结清应收_凭证贷1122应收账款() {
+        // P12-3 对照组: 有未结清应收 → 凭证仍贷 1122 应收账款
+        BankStatementEntity stmt = newStmt("business_receipt", "in");
+        stmt.setCounterAccount("客户Y");
+        when(statementMapper.selectById(1L)).thenReturn(stmt);
+        when(customerMapper.selectList(any())).thenReturn(List.of(new CustomerEntity() {{
+            setId(91L); setName("客户Y");
+        }}));
+        when(reconciliationService.hasOpenInvoices(eq("INVOICE_OUT"), eq(91L))).thenReturn(true);
+        stubSubject("1002", 10L);
+        stubSubject("1122", 20L);
+        stubSubject("2203", 2203L);
+        when(voucherNoService.generateNextNo(anyString(), anyLong())).thenReturn("REC-202606-010");
+
+        try {
+            service.autoGenerate(1L, 1L);
+        } catch (Exception e) { fail("unexpected: " + e.getClass().getSimpleName() + ": " + e.getMessage(), e); }
+        ArgumentCaptor<VoucherEntryEntity> entryCaptor = ArgumentCaptor.forClass(VoucherEntryEntity.class);
+        verify(voucherEntryMapper, atLeastOnce()).insert(entryCaptor.capture());
+        VoucherEntryEntity creditEntry = entryCaptor.getAllValues().stream()
+                .filter(e -> e.getCredit() != null && e.getCredit().compareTo(BigDecimal.ZERO) > 0)
+                .findFirst().orElseThrow(() -> new AssertionError("应存在贷方分录"));
+        assertEquals(20L, creditEntry.getSubjectId(), "有未结清应收时贷方应为应收账款 1122");
+        verify(prepaymentMapper, never()).insert(any(PrepaymentEntity.class));
     }
 
     // ==================== P11-3: 银行流水 → 员工匹配 ====================
