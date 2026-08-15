@@ -103,7 +103,8 @@
             <el-button v-if="row.generatedVoucherId" text size="small" type="primary"
               @click="openVoucher(row.generatedVoucherId!)">查看凭证</el-button>
             <el-button v-if="canApprove(row as BankStatementVO)"
-              text size="small" type="primary" @click="onApprove(row as BankStatementVO)">核准</el-button>
+              text size="small" type="primary" :loading="approvingId === row.id" :disabled="approvingId !== null"
+              @click="onApprove(row as BankStatementVO)">核准</el-button>
             <el-popconfirm v-if="canDelete(row as BankStatementVO)" title="确定删除该条流水?" @confirm="onDelete(row as any)">
               <template #reference>
                 <el-button text size="small" type="danger">删除</el-button>
@@ -365,7 +366,8 @@
         <el-button v-if="!detailEditable && canAudit(detailData)"
           type="warning" @click="onAudit(detailData); detailVisible = false">审核</el-button>
           <el-button v-if="!detailEditable && canApprove(detailData)"
-          type="primary" @click="onApprove(detailData); detailVisible = false">核准</el-button>
+          type="primary" :loading="approvingId === detailData.id" :disabled="approvingId !== null"
+          @click="onApprove(detailData); detailVisible = false">核准</el-button>
         <el-button v-if="!detailEditable && detailData && detailData.generatedVoucherId" type="primary"
           @click="openVoucher(detailData.generatedVoucherId!); detailVisible = false">查看凭证</el-button>
       </template>
@@ -394,6 +396,7 @@ const loading = ref(false)
 const importing = ref(false)
 const previewing = ref(false)
 const confirming = ref(false)
+const approvingId = ref<number | null>(null)
 const list = ref<BankStatementVO[]>([])
 const total = ref(0)
 const accounts = ref<BankAccountVO[]>([])
@@ -700,12 +703,17 @@ async function onReview(row: BankStatementVO) {
 }
 
 async function onApprove(row: BankStatementVO) {
+  if (approvingId.value !== null) return
+  approvingId.value = row.id
   try {
     await approveStatement(row.id)
+    row.reviewStatus = 'approved'
     ElMessage.success('已核准过账')
     await refreshAll()
   } catch (e: any) {
     ElMessage.error(e?.message || '核准失败')
+  } finally {
+    approvingId.value = null
   }
 }
 

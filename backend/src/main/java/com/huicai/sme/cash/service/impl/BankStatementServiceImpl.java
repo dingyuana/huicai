@@ -549,6 +549,11 @@ public class BankStatementServiceImpl implements BankStatementService {
             throw BusinessException.notFound("对账单记录不存在");
         }
         String curStatus = stmt.getReviewStatus();
+        // 幂等：已核准的直接返回，避免前端重复点击/重复请求触发二次核准报错（对齐 audit() 幂等模式）
+        if (StatementStatus.APPROVED.equals(curStatus)) {
+            log.info("核准幂等跳过: statementId={}", statementId);
+            return;
+        }
         if (!StatementStatus.VOUCHER_GENERATED.equals(curStatus) && !StatementStatus.PAYMENT_CREATED.equals(curStatus)) {
             throw BusinessException.badRequest("当前状态 " + curStatus + " 无法核准, 仅支持 voucher_generated/payment_created");
         }

@@ -395,7 +395,7 @@ class BankStatementServiceTest {
 
         @Test
         void approve_非终态前置_throwBadRequest() {
-            for (String badStatus : new String[]{"CONFIRMED", "AUDITED", "PENDING", "approved", null}) {
+            for (String badStatus : new String[]{"CONFIRMED", "AUDITED", "PENDING", null}) {
                 BankStatementEntity stmt = stubWithStatus(1L, "bank_interest_fee", badStatus);
                 when(statementMapper.selectById(1L)).thenReturn(stmt);
                 BusinessException ex = assertThrows(BusinessException.class, () -> service.approve(1L));
@@ -404,6 +404,16 @@ class BankStatementServiceTest {
                 verify(statementMapper, never()).updateById(any(BankStatementEntity.class));
                 reset(statementMapper);
             }
+        }
+
+        @Test
+        void approve_已核准_幂等跳过() {
+            BankStatementEntity stmt = stubWithStatus(1L, "bank_interest_fee", "approved");
+            when(statementMapper.selectById(1L)).thenReturn(stmt);
+
+            service.approve(1L);
+
+            verify(statementMapper, never()).updateById(any(BankStatementEntity.class));
         }
     }
 
