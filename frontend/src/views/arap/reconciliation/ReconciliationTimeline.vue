@@ -76,7 +76,7 @@ function buildNodes() {
       label: '银行流水', tagType: 'success', statusClass: 'completed',
       docNo: bt.transactionNo, amount: bt.amount,
       time: '', operator: '', statusText: '已完成',
-      jumpPath: null,
+      jumpPath: '/finance/bank-statement',
     })
   }
 
@@ -87,7 +87,7 @@ function buildNodes() {
       label: '收款单', tagType: 'success', statusClass: 'completed',
       docNo: r.docNo, amount: r.amount,
       time: '', operator: '', statusText: r.status,
-      jumpPath: null,
+      jumpPath: `/finance/business-doc/detail?id=${r.id}`,
     })
   }
 
@@ -98,7 +98,7 @@ function buildNodes() {
       label: '核销单', tagType: 'primary', statusClass: 'active',
       docNo: s.settlementNo, amount: s.amount,
       time: s.createdAt || '', operator: '', statusText: s.status,
-      jumpPath: null,
+      jumpPath: '/arap/reconciliation?tab=settlement',
     })
   }
 
@@ -110,7 +110,7 @@ function buildNodes() {
         tagType: 'warning', statusClass: 'completed',
         docNo: doc.docNo, amount: doc.amount,
         time: '', operator: '', statusText: doc.settledAmount === doc.amount ? '已核销' : '部分核销',
-        jumpPath: null,
+        jumpPath: `/finance/business-doc/detail?id=${doc.id}`,
       })
     }
   }
@@ -122,7 +122,7 @@ function buildNodes() {
         label: '关联发票', tagType: 'warning', statusClass: 'completed',
         docNo: inv.invoiceNo, amount: inv.amount,
         time: '', operator: '', statusText: inv.status,
-        jumpPath: null,
+        jumpPath: inv.invoiceType === 'INVOICE_OUT' ? '/tax/output-invoice' : '/tax/input-invoice',
       })
     }
   }
@@ -134,7 +134,7 @@ function buildNodes() {
       label: '会计凭证', tagType: 'success', statusClass: 'completed',
       docNo: v.voucherNo, amount: null,
       time: '', operator: '', statusText: v.status,
-      jumpPath: null,
+      jumpPath: `/finance/voucher/detail?id=${v.id}`,
     })
   }
 

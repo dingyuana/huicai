@@ -1157,6 +1157,7 @@ public class ReconciliationServiceImpl implements ReconciliationService {
                             invInfo.setInvoiceNo(inv.getInvoiceNo());
                             invInfo.setAmount(inv.getTotalAmount() != null ? inv.getTotalAmount() : inv.getAmount());
                             invInfo.setStatus(inv.getStatus());
+                            invInfo.setInvoiceType("INVOICE_OUT");
                         }
                     } else if ("INVOICE_IN".equals(doc.getDocType())) {
                         InputInvoiceEntity inv = inputInvoiceMapper.selectById(doc.getInvoiceId());
@@ -1166,6 +1167,7 @@ public class ReconciliationServiceImpl implements ReconciliationService {
                             invInfo.setInvoiceNo(inv.getInvoiceNo());
                             invInfo.setAmount(inv.getTotalAmount() != null ? inv.getTotalAmount() : inv.getAmount());
                             invInfo.setStatus(inv.getStatus());
+                            invInfo.setInvoiceType("INVOICE_IN");
                         }
                     }
                     if (invInfo != null) {

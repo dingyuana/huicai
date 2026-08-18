@@ -75,7 +75,7 @@ export interface ReconciliationTraceVO {
   } | null
   downstream: {
     businessDocs: Array<{ id: number; docNo: string; docType: string; amount: number; settledAmount: number; unsettledAmount: number }>
-    invoices: Array<{ id: number; invoiceNo: string; amount: number; status: string }>
+    invoices: Array<{ id: number; invoiceNo: string; amount: number; status: string; invoiceType: string }>
   } | null
   operationTrail: Array<{ operationType: string; operator: string; time: string; remark: string }>
   voucher: { id: number; voucherNo: string; status: string } | null

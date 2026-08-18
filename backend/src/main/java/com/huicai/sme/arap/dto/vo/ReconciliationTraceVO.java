@@ -74,6 +74,7 @@ public class ReconciliationTraceVO {
         private String invoiceNo;
         private BigDecimal amount;
         private String status;
+        private String invoiceType;
     }
 
     @Data

@@ -145,7 +145,7 @@ describe('Reconciliation API Module', () => {
         },
         downstream: {
           businessDocs: [{ id: 1, docNo: 'BD001', docType: 'INVOICE', amount: 1000, settledAmount: 1000, unsettledAmount: 0 }],
-          invoices: [{ id: 1, invoiceNo: 'INV001', amount: 1000, status: 'ISSUED' }],
+          invoices: [{ id: 1, invoiceNo: 'INV001', amount: 1000, status: 'ISSUED', invoiceType: 'INVOICE_OUT' }],
         },
         operationTrail: [{ operationType: 'MATCH', operator: 'admin', time: '2026-07-15T10:00:00', remark: 'Auto matched' }],
         voucher: { id: 1, voucherNo: 'V2026070001', status: 'POSTED' },
