@@ -202,6 +202,51 @@ class ReconciliationServiceImplTest {
         verifyNoInteractions(settlementService);
     }
 
+    // ==================== P42-V2-G2: execute 防重复核销守卫（场景 5）====================
+
+    @Test
+    void execute_核销金额超过未核销余额_throw() {
+        // doc: amount=1000, settled=800, unsettled=200；请求 300 > 200 → 拒绝
+        BusinessDocEntity doc = stubBusinessDoc(1L, 1L, null, "INVOICE_OUT", new BigDecimal("1000"), new BigDecimal("200"));
+        doc.setDocNo("YS2026070001");
+        when(businessDocMapper.selectById(1L)).thenReturn(doc);
+
+        ExecuteRequest req = new ExecuteRequest("receipt", 1L, "INVOICE_OUT", 1L, new BigDecimal("300"), BigDecimal.ZERO, "MANUAL", 1L, null, null, "");
+        BusinessException ex = assertThrows(BusinessException.class, () -> service.execute(req));
+        assertTrue(ex.getMessage().contains("核销金额超过未核销余额"));
+        // 负向断言：未发生任何落库，settledAmount 不重复累加
+        verify(businessDocMapper, never()).updateById(any(BusinessDocEntity.class));
+        verify(logMapper, never()).insert(any(ReconciliationLogEntity.class));
+    }
+
+    @Test
+    void execute_核销金额等于未核销余额_成功() {
+        // doc: amount=1000, settled=800, unsettled=200；请求 200 == 200 → 允许
+        BusinessDocEntity doc = stubBusinessDoc(1L, 1L, null, "INVOICE_OUT", new BigDecimal("1000"), new BigDecimal("200"));
+        doc.setDocNo("YS2026070001");
+        when(businessDocMapper.selectById(1L)).thenReturn(doc);
+        when(businessDocMapper.updateById(any(BusinessDocEntity.class))).thenReturn(1);
+
+        ExecuteRequest req = new ExecuteRequest("receipt", 1L, "INVOICE_OUT", 1L, new BigDecimal("200"), BigDecimal.ZERO, "MANUAL", 1L, null, null, "");
+        ReconciliationLogEntity log = service.execute(req);
+        assertNotNull(log);
+        verify(businessDocMapper, atLeastOnce()).updateById(any(BusinessDocEntity.class));
+    }
+
+    @Test
+    void execute_未核销余额为null_回退金额减已核销() {
+        // doc: amount=1000, settled=800, unsettled=null → 回退 1000-800=200；请求 300 > 200 → 拒绝
+        BusinessDocEntity doc = stubBusinessDoc(1L, 1L, null, "INVOICE_OUT", new BigDecimal("1000"), new BigDecimal("200"));
+        doc.setUnsettledAmount(null);
+        doc.setDocNo("YS2026070001");
+        when(businessDocMapper.selectById(1L)).thenReturn(doc);
+
+        ExecuteRequest req = new ExecuteRequest("receipt", 1L, "INVOICE_OUT", 1L, new BigDecimal("300"), BigDecimal.ZERO, "MANUAL", 1L, null, null, "");
+        BusinessException ex = assertThrows(BusinessException.class, () -> service.execute(req));
+        assertTrue(ex.getMessage().contains("核销金额超过未核销余额"));
+        verify(businessDocMapper, never()).updateById(any(BusinessDocEntity.class));
+    }
+
     // ==================== preCheck ====================
 
     @Test
