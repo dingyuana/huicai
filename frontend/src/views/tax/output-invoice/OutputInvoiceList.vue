@@ -115,6 +115,7 @@
         <el-radio-button value="SPECIAL">专用发票</el-radio-button>
         <el-radio-button value="PLAIN">普通发票</el-radio-button>
         <el-radio-button value="RED">红字发票</el-radio-button>
+        <el-radio-button value="REVERSED">已红冲</el-radio-button>
       </el-radio-group>
 
       <el-form :model="query" inline class="filter-form">
@@ -548,7 +549,11 @@ const fetchData = async () => {
     const params: any = { current: query.current, size: query.size }
     if (query.customerName) params.customerName = query.customerName
     if (query.period) params.period = query.period
-    if (tabType.value) params.invoiceType = tabType.value
+    if (tabType.value === 'REVERSED') {
+      params.status = 'REVERSED'
+    } else if (tabType.value) {
+      params.invoiceType = tabType.value
+    }
     const res: any = await pageOutputInvoice(params)
     list.value = res.records || []
     total.value = res.total || 0
