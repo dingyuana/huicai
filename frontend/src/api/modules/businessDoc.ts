@@ -85,6 +85,7 @@ export const DOC_TYPE_LABELS: Record<string, string> = {
   OTHER_RECEIVABLE: '其他应收单',
   OTHER_PAYABLE: '其他应付单',
   TRANSFER: '转账单',
+  SALARY: '工资单',
 }
 
 export const DOC_STATUS_LABELS: Record<string, string> = {

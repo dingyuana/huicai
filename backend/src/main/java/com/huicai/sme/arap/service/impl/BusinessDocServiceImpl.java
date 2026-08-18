@@ -60,12 +60,12 @@ public class BusinessDocServiceImpl implements BusinessDocService {
     private static final Map<String, String> DOC_TYPE_CODE = Map.of(
             "RECEIPT", "SK", "PAYMENT", "FK", "EXPENSE", "BX",
             "INVOICE_IN", "FPR", "INVOICE_OUT", "FPS", "OTHER_RECEIVABLE", "QTY",
-            "OTHER_PAYABLE", "QTF", "TRANSFER", "ZC"
+            "OTHER_PAYABLE", "QTF", "TRANSFER", "ZC", "SALARY", "GR"
         );
 
     /** 付/收 标识: 需要"付"前缀的单据类型 */
     private static final java.util.Set<String> SUPPLIER_DOC_TYPES = java.util.Set.of(
-            "PAYMENT", "EXPENSE", "INVOICE_IN", "OTHER_PAYABLE"
+            "PAYMENT", "EXPENSE", "INVOICE_IN", "OTHER_PAYABLE", "SALARY"
     );
 
     /**
@@ -83,7 +83,8 @@ public class BusinessDocServiceImpl implements BusinessDocService {
             Map.entry("INVOICE_IN",         pair("1403", "2202")),
             Map.entry("INVOICE_OUT",        pair("1122", "6001")),
             Map.entry("OTHER_RECEIVABLE",   pair("1221", "1002")),
-            Map.entry("OTHER_PAYABLE",      pair("1002", "2241"))
+            Map.entry("OTHER_PAYABLE",      pair("1002", "2241")),
+            Map.entry("SALARY",             pair("2211", "1002"))
     );
 
     private final BusinessDocMapper docMapper;

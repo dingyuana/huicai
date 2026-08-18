@@ -461,6 +461,16 @@ public class AutoGenerationService {
 
         docMapper.insert(doc);
 
+        // SALARY: 工资单不自动制证，停在 DRAFT 等人确认
+        if ("SALARY".equals(doc.getDocType())) {
+            stmt.setGeneratedDocId(doc.getId());
+            stmt.setGeneratedAt(LocalDateTime.now());
+            statementMapper.updateById(stmt);
+            log.info("工资单自动生成（跳过制证）: statementId={}, docId={}, amount={}",
+                    stmt.getId(), doc.getId(), amount);
+            return;
+        }
+
         // 2. 尝试模板制证
         VoucherTemplateEntity template = voucherTemplateService.matchByClassification(stmt.getClassification());
         if (template != null) {
@@ -666,8 +676,9 @@ public class AutoGenerationService {
     private String mapToDocType(String classification) {
         return switch (classification) {
             case BankClassification.BUSINESS_RECEIPT -> "RECEIPT";
-            case BankClassification.BUSINESS_PAYMENT, BankClassification.SALARY_SOCIAL -> "PAYMENT";
+            case BankClassification.BUSINESS_PAYMENT -> "PAYMENT";
             case BankClassification.INTERNAL_TRANSFER -> "TRANSFER";
+            case BankClassification.SALARY_SOCIAL -> "SALARY";
             default -> "EXPENSE";
         };
     }
