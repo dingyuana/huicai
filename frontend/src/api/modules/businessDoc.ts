@@ -37,6 +37,7 @@ export interface BusinessDocVO {
   settledAmount?: number
   unsettledAmount?: number
   dueDate?: string
+  sourceDocNo?: string
   createdByName?: string
   createdAt?: string
   submittedByName?: string
@@ -72,6 +73,10 @@ export interface BusinessDocQuery {
   status?: string
   period?: string
   keyword?: string
+  startDate?: string
+  endDate?: string
+  amountMin?: number
+  amountMax?: number
   current?: number
   size?: number
 }

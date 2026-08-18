@@ -110,7 +110,11 @@ public class BusinessDocServiceImpl implements BusinessDocService {
         wrapper.eq(StrUtil.isNotBlank(q.getDocType()), BusinessDocEntity::getDocType, q.getDocType())
                 .in(q.getDocTypes() != null && !q.getDocTypes().isEmpty(), BusinessDocEntity::getDocType, q.getDocTypes())
                 .eq(StrUtil.isNotBlank(q.getStatus()), BusinessDocEntity::getStatus, q.getStatus())
-                .eq(StrUtil.isNotBlank(q.getPeriod()), BusinessDocEntity::getPeriod, q.getPeriod())
+                .eq(q.getStartDate() == null && q.getEndDate() == null && StrUtil.isNotBlank(q.getPeriod()), BusinessDocEntity::getPeriod, q.getPeriod())
+                .ge(q.getStartDate() != null, BusinessDocEntity::getDocDate, q.getStartDate())
+                .le(q.getEndDate() != null, BusinessDocEntity::getDocDate, q.getEndDate())
+                .ge(q.getAmountMin() != null, BusinessDocEntity::getAmount, q.getAmountMin())
+                .le(q.getAmountMax() != null, BusinessDocEntity::getAmount, q.getAmountMax())
                 .and(StrUtil.isNotBlank(q.getKeyword()), w -> w
                         .like(BusinessDocEntity::getDocNo, q.getKeyword())
                         .or().like(BusinessDocEntity::getVoucherNo, q.getKeyword())
@@ -132,7 +136,30 @@ public class BusinessDocServiceImpl implements BusinessDocService {
             vos.get(i).setEnrichedSummary(enrichSummary(entities.get(i)));
         }
         voPage.setRecords(vos);
+        populateSourceDocNos(entities, vos);
         return voPage;
+    }
+
+    private void populateSourceDocNos(List<BusinessDocEntity> entities, List<BusinessDocVO> vos) {
+        if (vos.isEmpty()) return;
+        Map<Long, String> reversedMap = new java.util.HashMap<>();
+        for (int i = 0; i < entities.size(); i++) {
+            BusinessDocEntity e = entities.get(i);
+            Long reversedFrom = e.getReversedFrom();
+            if (reversedFrom != null && !reversedMap.containsKey(reversedFrom)) {
+                BusinessDocEntity src = docMapper.selectById(reversedFrom);
+                if (src != null) {
+                    reversedMap.put(reversedFrom, src.getDocNo());
+                }
+            }
+        }
+        for (int i = 0; i < entities.size(); i++) {
+            Long rf = entities.get(i).getReversedFrom();
+            if (rf != null) {
+                String docNo = reversedMap.get(rf);
+                vos.get(i).setSourceDocNo(docNo);
+            }
+        }
     }
 
     @Override

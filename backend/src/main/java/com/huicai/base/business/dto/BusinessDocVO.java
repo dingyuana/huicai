@@ -51,6 +51,9 @@ public class BusinessDocVO {
     /** 关联凭证状态（P2 跨单据查询） */
     private String voucherStatus = "";
 
+    /** 源单号（红冲来源单据编号） */
+    private String sourceDocNo;
+
     private List<EntryVO> entries;
 
     @Data

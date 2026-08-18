@@ -15,8 +15,23 @@
             <el-option v-for="(label, value) in DOC_STATUS_LABELS" :key="value" :label="label" :value="value" />
           </el-select>
         </el-form-item>
-        <el-form-item label="期间">
-          <el-input v-model="query.period" placeholder="YYYYMM" clearable style="width:120px" />
+        <el-form-item label="日期范围">
+          <el-date-picker
+            v-model="dateRange"
+            type="daterange"
+            start-placeholder="起"
+            end-placeholder="止"
+            format="YYYY-MM-DD"
+            value-format="YYYY-MM-DD"
+            style="width:240px"
+          />
+        </el-form-item>
+        <el-form-item label="金额">
+          <div style="display:flex;align-items:center;gap:6px">
+            <el-input-number v-model="query.amountMin" :min="0" :precision="2" controls-position="right" style="width:130px" placeholder="最小" />
+            <span>~</span>
+            <el-input-number v-model="query.amountMax" :min="0" :precision="2" controls-position="right" style="width:130px" placeholder="最大" />
+          </div>
         </el-form-item>
         <el-form-item label="关键字">
           <el-input v-model="query.keyword" placeholder="单据号/摘要" clearable style="width:180px" />
@@ -55,9 +70,12 @@
         <el-table-column label="金额" width="140" align="right">
           <template #default="{ row }">{{ fmtAmount(row.amount) }}</template>
         </el-table-column>
-        <el-table-column label="已核销" width="120" align="right">
+        <el-table-column label="已核销" width="120" align="center">
           <template #default="{ row }">
-            <span style="color:#67c23a">{{ fmtAmount(row.settledAmount) }}</span>
+            <el-tag v-if="reconcileTagType(row) === 'success'" type="success" size="small">{{ fmtAmount(row.settledAmount) }}</el-tag>
+            <el-tag v-else-if="reconcileTagType(row) === 'warning'" type="warning" size="small">{{ fmtAmount(row.settledAmount) }}</el-tag>
+            <el-tag v-else-if="reconcileTagType(row) === 'danger'" type="danger" size="small">未核销</el-tag>
+            <span v-else>-</span>
           </template>
         </el-table-column>
         <el-table-column label="未核销" width="120" align="right">
@@ -65,6 +83,14 @@
             <span :style="{ color: Number(row.unsettledAmount) > 0 ? '#f56c6c' : '#67c23a', fontWeight: Number(row.unsettledAmount) > 0 ? '600' : 'normal' }">
               {{ fmtAmount(row.unsettledAmount) }}
             </span>
+          </template>
+        </el-table-column>
+        <el-table-column label="源单号" width="150" align="center" show-overflow-tooltip>
+          <template #default="{ row }">
+            <el-link v-if="row.sourceDocNo" type="primary" :underline="false" @click="goDetailByNo(row.sourceDocNo)">
+              {{ row.sourceDocNo }}
+            </el-link>
+            <span v-else>-</span>
           </template>
         </el-table-column>
         <el-table-column label="到期日" width="120" align="center" prop="dueDate" />
@@ -136,6 +162,7 @@ const total = ref(0)
 const totalCount = ref(0)
 const docTypeCounts = ref<Record<string, number>>({})
 const query = ref<BusinessDocQuery>({ current: 1, size: 20 })
+const dateRange = ref<[string, string] | null>(null)
 const detailDialogVisible = ref(false)
 const selectedDocId = ref<number | null>(null)
 
@@ -156,6 +183,15 @@ function statusType(s: string) {
 
 function fmtAmount(v: number) {
   return v == null ? '' : Number(v).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+
+function reconcileTagType(row: BusinessDocVO) {
+  const amt = Number(row.amount) || 0
+  const settled = Number(row.settledAmount) || 0
+  if (amt === 0) return 'none'
+  if (settled === 0) return 'danger'
+  if (Math.abs(settled - amt) < 0.001) return 'success'
+  return 'warning'
 }
 
 async function fetchCounts() {
@@ -186,10 +222,13 @@ async function fetchData() {
 
 function onSearch() {
   query.value.current = 1
+  query.value.startDate = dateRange.value?.[0] || undefined
+  query.value.endDate = dateRange.value?.[1] || undefined
   fetchData()
 }
 function onReset() {
   query.value = { current: 1, size: 20 }
+  dateRange.value = null
   fetchData()
 }
 
@@ -202,6 +241,18 @@ function goEdit(row: BusinessDocVO) {
 function goDetail(row: BusinessDocVO) {
   selectedDocId.value = row.id
   detailDialogVisible.value = true
+}
+
+async function goDetailByNo(docNo: string) {
+  try {
+    const res = await getBusinessDocPage({ keyword: docNo, current: 1, size: 1 })
+    if (res.records && res.records.length > 0) {
+      selectedDocId.value = res.records[0].id
+      detailDialogVisible.value = true
+    } else {
+      ElMessage.warning('未找到关联单据')
+    }
+  } catch { /* ignore */ }
 }
 
 function onDetailClose() {
