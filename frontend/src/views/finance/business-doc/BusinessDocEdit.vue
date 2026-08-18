@@ -19,21 +19,31 @@
         <el-form-item label="单据日期" prop="docDate">
           <el-date-picker v-model="form.docDate" type="date" value-format="YYYY-MM-DD" style="width:160px" />
         </el-form-item>
-        <el-form-item label="会计期间" prop="period">
-          <el-input v-model="form.period" placeholder="YYYYMM" style="width:140px" />
+        <el-form-item label="会计期间">
+          <el-input :value="autoPeriod" placeholder="YYYYMM" style="width:140px" disabled />
         </el-form-item>
         <el-form-item label="金额" prop="amount">
           <el-input-number v-model="form.amount" :min="0" :precision="2" :step="0.01" style="width:160px" />
         </el-form-item>
         <el-form-item v-if="showCustomer" label="客户">
-          <el-select v-model="form.customerId" filterable clearable placeholder="选择客户" style="width:240px">
-            <el-option v-for="c in customers" :key="c.id" :label="c.name" :value="c.id" />
-          </el-select>
+          <el-autocomplete
+            v-model="customerQuery"
+            :fetch-suggestions="(val, cb) => searchCustomer(val, cb)"
+            placeholder="选择或输入客户"
+            clearable
+            style="width:240px"
+            @select="(item: any) => selectCustomer(item)"
+          />
         </el-form-item>
         <el-form-item v-if="showSupplier" label="供应商">
-          <el-select v-model="form.supplierId" filterable clearable placeholder="选择供应商" style="width:240px">
-            <el-option v-for="v in suppliers" :key="v.id" :label="v.name" :value="v.id" />
-          </el-select>
+          <el-autocomplete
+            v-model="supplierQuery"
+            :fetch-suggestions="(val, cb) => searchVendor(val, cb)"
+            placeholder="选择或输入供应商"
+            clearable
+            style="width:240px"
+            @select="(item: any) => selectSupplier(item)"
+          />
         </el-form-item>
         <el-form-item label="摘要" prop="summary">
           <el-input v-model="form.summary" placeholder="单据摘要" style="width:340px" maxlength="500" show-word-limit />
@@ -105,7 +115,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import type { FormInstance } from 'element-plus'
 import {
   getBusinessDoc, createBusinessDoc, updateBusinessDoc, submitBusinessDoc,
@@ -113,7 +123,7 @@ import {
   type BusinessDocDTO, type BusinessDocEntry,
 } from '@/api/modules/businessDoc'
 import { getSubjectTree, type SubjectVO } from '@/api/modules/subject'
-import { listCustomer, listVendor } from '@/api/modules/arap'
+import { listCustomer, listVendor, createCustomer, createVendor } from '@/api/modules/arap'
 
 const route = useRoute()
 const router = useRouter()
@@ -127,6 +137,8 @@ const formRef = ref<FormInstance>()
 const subjectTree = ref<SubjectVO[]>([])
 const customers = ref<Array<{id: number; name: string}>>([])
 const suppliers = ref<Array<{id: number; name: string}>>([])
+const customerQuery = ref('')
+const supplierQuery = ref('')
 
 // 费用类别: TRANSFER 时显示"方向"（借方/贷方）选择器
 const isTransfer = computed(() => form.value.docType === 'TRANSFER')
@@ -151,7 +163,6 @@ const form = ref<BusinessDocDTO>({
 const formRules = {
   docType: [{ required: true, message: '请选择单据类型', trigger: 'change' }],
   docDate: [{ required: true, message: '请选择单据日期', trigger: 'change' }],
-  period: [{ required: true, message: '请输入会计期间', trigger: 'blur' }],
   amount: [{ required: true, message: '请输入金额', trigger: 'blur' }],
 }
 
@@ -165,6 +176,13 @@ const leafSubjectOptions = computed(() => {
   }
   walk(subjectTree.value)
   return list
+})
+
+// 会计期间: 从 docDate 自动计算，防止用户输错
+const autoPeriod = computed(() => {
+  if (!form.value.docDate) return ''
+  const d = form.value.docDate
+  return d.slice(0, 4) + d.slice(5, 7)
 })
 
 const totalAmount = computed(() =>
@@ -186,6 +204,67 @@ function goBack() {
   router.push({ name: 'BusinessDocList' })
 }
 
+// ─── 客户/供应商即输即建 ───
+
+async function searchCustomer(val: string, cb: any) {
+  if (!val) { cb([]); return }
+  try {
+    const list = customers.value
+    const results = list.filter(c => c.name.includes(val))
+    // 无匹配则显示"+ 新增"提示
+    cb(results.length === 0 && val.trim() ? [{ value: `+ 新增客户：${val}`, name: val, isNew: true }] : results)
+  } catch { cb([]) }
+}
+
+async function searchVendor(val: string, cb: any) {
+  if (!val) { cb([]); return }
+  try {
+    const list = suppliers.value
+    const results = list.filter(v => v.name.includes(val))
+    cb(results.length === 0 && val.trim() ? [{ value: `+ 新增供应商：${val}`, name: val, isNew: true }] : results)
+  } catch { cb([]) }
+}
+
+async function selectCustomer(item: any) {
+  if (item.isNew) {
+    try {
+      await ElMessageBox.confirm(`是否创建新客户「${item.name}」？`, '即输即建')
+      const created = await createCustomer({
+        code: 'AUTO-' + Date.now(),
+        name: item.name,
+        isActive: true,
+      } as any)
+      customers.value.push({ id: created.id, name: created.name })
+      form.value.customerId = created.id
+      customerQuery.value = created.name
+      ElMessage.success(`客户「${created.name}」已创建`)
+    } catch { /* cancelled */ }
+  } else {
+    form.value.customerId = item.id
+    customerQuery.value = item.name
+  }
+}
+
+async function selectSupplier(item: any) {
+  if (item.isNew) {
+    try {
+      await ElMessageBox.confirm(`是否创建新供应商「${item.name}」？`, '即输即建')
+      const created = await createVendor({
+        code: 'AUTO-' + Date.now(),
+        name: item.name,
+        isActive: true,
+      } as any)
+      suppliers.value.push({ id: created.id, name: created.name })
+      form.value.supplierId = created.id
+      supplierQuery.value = created.name
+      ElMessage.success(`供应商「${created.name}」已创建`)
+    } catch { /* cancelled */ }
+  } else {
+    form.value.supplierId = item.id
+    supplierQuery.value = item.name
+  }
+}
+
 async function loadDoc() {
   if (!editId) return
   const d = await getBusinessDoc(editId)
@@ -203,6 +282,19 @@ async function loadDoc() {
     attachmentIds: d.attachmentIds,
     entries: d.entries || [],
   }
+  // 回填客户/供应商名称
+  if (d.customerId && d.customerName) {
+    customerQuery.value = d.customerName
+    if (!customers.value.find(c => c.id === d.customerId)) {
+      customers.value.push({ id: d.customerId!, name: d.customerName! })
+    }
+  }
+  if (d.supplierId && d.supplierName) {
+    supplierQuery.value = d.supplierName
+    if (!suppliers.value.find(v => v.id === d.supplierId)) {
+      suppliers.value.push({ id: d.supplierId!, name: d.supplierName! })
+    }
+  }
 }
 
 async function onSave(submitAfter: boolean) {
@@ -216,6 +308,7 @@ async function onSave(submitAfter: boolean) {
   try {
     const dto: BusinessDocDTO = {
       ...form.value,
+      period: autoPeriod.value,
       entries: form.value.entries.map((e, i) => ({
         subjectId: e.subjectId,
         amount: e.amount,
