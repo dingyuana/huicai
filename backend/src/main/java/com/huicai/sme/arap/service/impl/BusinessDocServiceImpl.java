@@ -59,8 +59,9 @@ public class BusinessDocServiceImpl implements BusinessDocService {
     private static final String DOC_NO_REDIS_PREFIX = "doc:no:";
     private static final Map<String, String> DOC_TYPE_CODE = Map.of(
             "RECEIPT", "SK", "PAYMENT", "FK", "EXPENSE", "BX",
-            "INVOICE_IN", "FPR", "INVOICE_OUT", "FPS", "OTHER_RECEIVABLE", "QTY", "OTHER_PAYABLE", "QTF"
-    );
+            "INVOICE_IN", "FPR", "INVOICE_OUT", "FPS", "OTHER_RECEIVABLE", "QTY",
+            "OTHER_PAYABLE", "QTF", "TRANSFER", "ZC"
+        );
 
     /** 付/收 标识: 需要"付"前缀的单据类型 */
     private static final java.util.Set<String> SUPPLIER_DOC_TYPES = java.util.Set.of(
@@ -333,6 +334,11 @@ public class BusinessDocServiceImpl implements BusinessDocService {
             }
         }
 
+        // 2.5 转账单特殊处理: 直接读取分录中的 subjectId 作为转出/转入账户, 无需科目映射
+        if ("TRANSFER".equals(entity.getDocType())) {
+            return generateTransferVoucher(entity, id, userId);
+        }
+
         // 2. 降级: 硬编码科目映射
         List<String[]> subjectPairs = DOC_VOUCHER_SUBJECTS.get(entity.getDocType());
         if (subjectPairs == null || subjectPairs.isEmpty()) {
@@ -537,6 +543,84 @@ public class BusinessDocServiceImpl implements BusinessDocService {
 
         log.info("单据模板制证: docId={}, voucherId={}, templateId={}", entity.getId(), voucher.getId(), template.getId());
         return getDetail(entity.getId());
+    }
+
+    /**
+     * 转账单凭证生成: 直接从分录读取科目ID，按分录的 expenseType 区分借方/贷方.
+     *
+     * 分录规则:
+     *   expenseType="debit"  → 借方（转入账户，资金增加）
+     *   expenseType="credit" → 贷方（转出账户，资金减少）
+     *
+     * 借贷恒等：借方合计 == 贷方合计 == 转账金额
+     */
+    private BusinessDocVO generateTransferVoucher(BusinessDocEntity entity, Long id, Long userId) {
+        List<BusinessDocEntryEntity> docEntries = docEntryMapper.selectByDocId(id);
+        if (docEntries == null || docEntries.size() < 2) {
+            throw BusinessException.badRequest("转账单至少需要2条分录（转入/转出账户）");
+        }
+
+        String enrichedSummary = enrichSummary(entity);
+
+        VoucherEntity voucher = new VoucherEntity();
+        voucher.setVoucherNo(voucherNoService.generateNextNo(entity.getPeriod(), 1L));
+        voucher.setPeriod(entity.getPeriod());
+        voucher.setVoucherTypeId(1L);
+        voucher.setStatus("DRAFT");
+        voucher.setSource("GENERATED");
+        voucher.setSummary(enrichedSummary);
+        voucher.setCreatedBy(userId);
+        voucher.setSourceDocType("BUSINESS_DOC");
+        voucher.setSourceDocNo(entity.getDocNo());
+        voucherMapper.insert(voucher);
+
+        BigDecimal totalD = BigDecimal.ZERO, totalC = BigDecimal.ZERO;
+        int sort = 1;
+        for (BusinessDocEntryEntity entry : docEntries) {
+            if (entry.getSubjectId() == null) {
+                throw BusinessException.badRequest("转账单分录必须选择科目（转入/转出账户）");
+            }
+
+            VoucherEntryEntity ve = new VoucherEntryEntity();
+            ve.setVoucherId(voucher.getId());
+            ve.setSubjectId(entry.getSubjectId());
+            ve.setSummary(entry.getSummary() != null ? entry.getSummary() : enrichedSummary);
+            ve.setAssistJson(entry.getAssistJson());
+            ve.setSortOrder(sort++);
+
+            // 根据 expenseType 决定借方/贷方
+            if ("debit".equals(entry.getExpenseType())) {
+                ve.setDebit(entry.getAmount());
+                ve.setCredit(BigDecimal.ZERO);
+                totalD = totalD.add(entry.getAmount());
+            } else if ("credit".equals(entry.getExpenseType())) {
+                ve.setCredit(entry.getAmount());
+                ve.setDebit(BigDecimal.ZERO);
+                totalC = totalC.add(entry.getAmount());
+            } else {
+                // 未标记方向时默认贷方（转出），兼容自动生成场景
+                ve.setCredit(entry.getAmount());
+                ve.setDebit(BigDecimal.ZERO);
+                totalC = totalC.add(entry.getAmount());
+            }
+            voucherEntryMapper.insert(ve);
+        }
+
+        BigDecimal maxAmt = totalD.max(totalC);
+        voucher.setTotalDebit(maxAmt);
+        voucher.setTotalCredit(maxAmt);
+        voucherMapper.updateById(voucher);
+
+        entity.setVoucherId(voucher.getId());
+        entity.setVoucherNo(voucher.getVoucherNo());
+        entity.setStatus(BusinessDocStatus.VOUCHERED);
+        entity.setUpdatedBy(userId);
+        entity.setUpdatedAt(LocalDateTime.now());
+        docMapper.updateById(entity);
+
+        log.info("转账单生成凭证: docId={}, voucherId={}, dr={}, cr={}",
+                id, voucher.getId(), totalD, totalC);
+        return getDetail(id);
     }
 
     @Override

@@ -43,9 +43,17 @@
       <el-divider>分录明细</el-divider>
       <el-table :data="form.entries" border style="width:100%">
         <el-table-column label="序号" type="index" width="55" align="center" />
-        <el-table-column label="费用类别" width="160">
+        <el-table-column label="方向/费用类别" width="160">
           <template #default="{ row }">
-            <el-input v-model="row.expenseType" placeholder="可选" />
+            <template v-if="isTransfer">
+              <el-select v-model="row.expenseType" placeholder="选择方向" style="width:100%">
+                <el-option value="debit" label="借方（转入）" />
+                <el-option value="credit" label="贷方（转出）" />
+              </el-select>
+            </template>
+            <template v-else>
+              <el-input v-model="row.expenseType" placeholder="可选" />
+            </template>
           </template>
         </el-table-column>
         <el-table-column label="科目" min-width="240">
@@ -119,6 +127,9 @@ const formRef = ref<FormInstance>()
 const subjectTree = ref<SubjectVO[]>([])
 const customers = ref<Array<{id: number; name: string}>>([])
 const suppliers = ref<Array<{id: number; name: string}>>([])
+
+// 费用类别: TRANSFER 时显示"方向"（借方/贷方）选择器
+const isTransfer = computed(() => form.value.docType === 'TRANSFER')
 
 const showCustomer = computed(() => CUSTOMER_DOC_TYPES.includes(form.value.docType))
 const showSupplier = computed(() => SUPPLIER_DOC_TYPES.includes(form.value.docType))

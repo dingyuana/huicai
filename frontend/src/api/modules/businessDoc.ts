@@ -48,6 +48,7 @@ export interface BusinessDocVO {
 
 export const CUSTOMER_DOC_TYPES = ['RECEIPT', 'INVOICE_OUT', 'OTHER_RECEIVABLE']
 export const SUPPLIER_DOC_TYPES = ['PAYMENT', 'EXPENSE', 'INVOICE_IN', 'OTHER_PAYABLE']
+export const NO_COUNTERPARTY_DOC_TYPES = ['TRANSFER', 'EXPENSE']
 
 export interface BusinessDocDTO {
   id?: number
@@ -83,6 +84,7 @@ export const DOC_TYPE_LABELS: Record<string, string> = {
   INVOICE_OUT: '应收单（销售）',
   OTHER_RECEIVABLE: '其他应收单',
   OTHER_PAYABLE: '其他应付单',
+  TRANSFER: '转账单',
 }
 
 export const DOC_STATUS_LABELS: Record<string, string> = {
