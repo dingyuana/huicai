@@ -98,6 +98,14 @@ const routes: RouteRecordRaw[] = [
     redirect: '/arap/reconciliation?tab=settlement',
   },
 
+  // ─── 预收/预付 ───
+  {
+    path: 'finance/prepayment',
+    name: 'PrepaymentView',
+    component: () => import('@/views/finance/prepayment/PrepaymentView.vue'),
+    meta: { title: '预收/预付', permission: 'arap:expense:list', keepAlive: true },
+  },
+
   // ─── 费用报销（作为 Tab 内嵌在业务单据页）───
   {
     path: 'arap/expense',
