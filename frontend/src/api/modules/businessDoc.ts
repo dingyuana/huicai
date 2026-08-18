@@ -64,6 +64,7 @@ export interface BusinessDocDTO {
   deptId?: number
   summary?: string
   attachmentIds?: string
+  settlementAccountId?: number
   entries: BusinessDocEntry[]
 }
 

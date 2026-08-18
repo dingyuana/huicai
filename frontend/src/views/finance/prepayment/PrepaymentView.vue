@@ -34,7 +34,7 @@
         </el-table-column>
         <el-table-column label="往来单位" width="150" show-overflow-tooltip>
           <template #default="{ row }">
-            {{ row.customerName || row.vendorName || '-' }}
+            {{ partyName(row) }}
           </template>
         </el-table-column>
         <el-table-column label="金额" width="120" align="right">
@@ -156,6 +156,18 @@ const createForm = reactive({
 
 function fmtAmount(v: any) {
   return v == null ? '' : Number(v).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+
+function partyName(row: any) {
+  if (row.customerId) {
+    const c = customers.value.find(x => x.id === row.customerId)
+    return c?.name || `客户${row.customerId}`
+  }
+  if (row.vendorId) {
+    const v = vendors.value.find(x => x.id === row.vendorId)
+    return v?.name || `供应商${row.vendorId}`
+  }
+  return '-'
 }
 
 function showCreate() {

@@ -45,6 +45,11 @@
             @select="(item: any) => selectSupplier(item)"
           />
         </el-form-item>
+        <el-form-item v-if="showSettlementAccount" label="结算账户">
+          <el-select v-model="form.settlementAccountId" filterable clearable placeholder="选择结算账户" style="width:240px">
+            <el-option v-for="ba in bankAccounts" :key="ba.id" :label="`${ba.accountName} ${ba.accountNo}`" :value="ba.id" />
+          </el-select>
+        </el-form-item>
         <el-form-item label="摘要" prop="summary">
           <el-input v-model="form.summary" placeholder="单据摘要" style="width:340px" maxlength="500" show-word-limit />
         </el-form-item>
@@ -124,6 +129,7 @@ import {
 } from '@/api/modules/businessDoc'
 import { getSubjectTree, type SubjectVO } from '@/api/modules/subject'
 import { listCustomer, listVendor, createCustomer, createVendor } from '@/api/modules/arap'
+import { getActiveBankAccounts, type BankAccountVO } from '@/api/modules/bankAccount'
 
 const route = useRoute()
 const router = useRouter()
@@ -139,12 +145,15 @@ const customers = ref<Array<{id: number; name: string}>>([])
 const suppliers = ref<Array<{id: number; name: string}>>([])
 const customerQuery = ref('')
 const supplierQuery = ref('')
+const bankAccounts = ref<BankAccountVO[]>([])
 
-// 费用类别: TRANSFER 时显示"方向"（借方/贷方）选择器
+// 单据类型显示控制
 const isTransfer = computed(() => form.value.docType === 'TRANSFER')
-
 const showCustomer = computed(() => CUSTOMER_DOC_TYPES.includes(form.value.docType))
 const showSupplier = computed(() => SUPPLIER_DOC_TYPES.includes(form.value.docType))
+// 结算账户: 涉及资金流水的单据需要选账户
+const SHOW_SETTLEMENT = ['RECEIPT', 'PAYMENT', 'EXPENSE', 'INVOICE_IN', 'INVOICE_OUT', 'SALARY']
+const showSettlementAccount = computed(() => SHOW_SETTLEMENT.includes(form.value.docType))
 
 const today = new Date().toISOString().slice(0, 10)
 const currentPeriod = new Date().toISOString().slice(0, 7).replace('-', '')
@@ -280,6 +289,7 @@ async function loadDoc() {
     deptId: d.deptId,
     summary: d.summary || '',
     attachmentIds: d.attachmentIds,
+    settlementAccountId: d.settlementAccountId,
     entries: d.entries || [],
   }
   // 回填客户/供应商名称
@@ -342,15 +352,18 @@ async function onSave(submitAfter: boolean) {
 
 async function loadPartyOptions() {
   try {
-    const [cust, vend] = await Promise.all([listCustomer(), listVendor()])
+    const [cust, vend, bks] = await Promise.all([listCustomer(), listVendor(), getActiveBankAccounts()])
     customers.value = (cust as any[]).map((c: any) => ({ id: c.id, name: c.name }))
     suppliers.value = (vend as any[]).map((v: any) => ({ id: v.id, name: v.name }))
+    bankAccounts.value = (bks as BankAccountVO[]) || []
   } catch { /* ignore */ }
 }
 
 watch(() => form.value.docType, () => {
   if (showCustomer.value) form.value.supplierId = undefined
   if (showSupplier.value) form.value.customerId = undefined
+  // 切换到不需要结算账户的类型时清空
+  if (!showSettlementAccount.value) form.value.settlementAccountId = undefined
 })
 
 onMounted(async () => {
