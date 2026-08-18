@@ -59,6 +59,15 @@ public interface ReconciliationService {
         String remark
     ) {}
 
+    /** FIFO 自动核销预览项（dry-run 结果，不落库） */
+    record ReconciliationFifoPreview(
+        Long sourceDocId,
+        String sourceDocNo,
+        Long targetDocId,
+        String targetDocNo,
+        BigDecimal amount
+    ) {}
+
     /** 收款核销推荐 — sourceDocType = RECEIPT/INVOICE_OUT/OTHER_RECEIVABLE */
     RecommendResult recommendReceipt(Long receiptId, String sourceDocType, Long customerId, BigDecimal amount, String summary, String counterpartyName);
 
@@ -99,6 +108,8 @@ public interface ReconciliationService {
 
     /**
      * 按 FIFO 先进先出策略自动核销 — 按到期日(dueDate)升序，优先核销最早的未结清单据.
+     * <p>P42-V2-G2: dry-run 预览模式 — 仅计算分配结果，不执行核销、不落库；
+     * 人工确认后由前端调用 batch-execute 一次性落库。</p>
      *
      * @param partyId      客户ID(应收) 或 供应商ID(应付)
      * @param targetDocType INVOICE_OUT 或 INVOICE_IN
@@ -107,9 +118,9 @@ public interface ReconciliationService {
      * @param sourceDocId   来源单据 ID
      * @param period        会计期间 YYYYMM
      * @param summary       摘要
-     * @return 核销日志列表
+     * @return 预览分配列表（不落库）
      */
-    List<ReconciliationLogEntity> autoReconcileFifo(Long partyId, String targetDocType, BigDecimal totalAmount,
+    List<ReconciliationFifoPreview> autoReconcileFifo(Long partyId, String targetDocType, BigDecimal totalAmount,
                                                      String sourceDocType, Long sourceDocId,
                                                      String period, String summary);
 

@@ -443,27 +443,28 @@ class ReconciliationServiceImplTest {
 
     @Test
     void autoReconcileFifo_金额0_返回空列表() {
-        List<ReconciliationLogEntity> r = service.autoReconcileFifo(1L, "INVOICE_OUT", BigDecimal.ZERO, "receipt", 1L, "202606", "FIFO测试");
+        List<ReconciliationService.ReconciliationFifoPreview> r = service.autoReconcileFifo(1L, "INVOICE_OUT", BigDecimal.ZERO, "receipt", 1L, "202606", "FIFO测试");
         assertTrue(r.isEmpty());
         verifyNoInteractions(businessDocMapper);
     }
 
     @Test
-    void autoReconcileFifo_应收按到期日核销() {
+    void autoReconcileFifo_应收按到期日核销_返回预览不落库() {
         BusinessDocEntity r1 = stubBusinessDoc(1L, 5L, null, "INVOICE_OUT", new BigDecimal("1000"), new BigDecimal("500"));
         BusinessDocEntity r2 = stubBusinessDoc(2L, 5L, null, "INVOICE_OUT", new BigDecimal("500"), new BigDecimal("300"));
         r1.setDueDate(LocalDate.of(2026, 5, 1));
         r2.setDueDate(LocalDate.of(2026, 6, 1));
         when(businessDocMapper.selectList(any())).thenReturn(List.of(r1, r2));
-        when(businessDocMapper.selectById(1L)).thenReturn(r1);
-        when(businessDocMapper.selectById(2L)).thenReturn(r2);
-        when(businessDocMapper.updateById(any(BusinessDocEntity.class))).thenReturn(1);
 
-        List<ReconciliationLogEntity> logs = service.autoReconcileFifo(5L, "INVOICE_OUT", new BigDecimal("700"), "receipt", 1L, "202606", "FIFO测试");
-        assertEquals(2, logs.size());
-        // 2次(目标单据) + 2次(来源单据, 同一笔收款每次核销都更新结算金额)
-        verify(businessDocMapper, times(4)).updateById(any(BusinessDocEntity.class));
-        verify(logMapper, times(2)).insert(any(ReconciliationLogEntity.class));
+        List<ReconciliationService.ReconciliationFifoPreview> previews = service.autoReconcileFifo(5L, "INVOICE_OUT", new BigDecimal("700"), "receipt", 1L, "202606", "FIFO测试");
+        assertEquals(2, previews.size());
+        assertEquals(1L, previews.get(0).targetDocId());
+        assertEquals(new BigDecimal("500"), previews.get(0).amount());
+        assertEquals(2L, previews.get(1).targetDocId());
+        assertEquals(new BigDecimal("200"), previews.get(1).amount());
+        // dry-run: 不落库、不更新单据
+        verify(businessDocMapper, never()).updateById(any(BusinessDocEntity.class));
+        verify(logMapper, never()).insert(any(ReconciliationLogEntity.class));
     }
 
     // ==================== 异常池 ====================

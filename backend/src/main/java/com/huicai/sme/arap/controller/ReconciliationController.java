@@ -155,9 +155,9 @@ public class ReconciliationController {
 
     // ==================== 多对多核销拓扑 ====================
 
-    @Operation(summary = "FIFO 自动核销 — 按到期日优先核销最早未结清单据")
+    @Operation(summary = "FIFO 自动核销 — 按到期日优先核销最早未结清单据 (dry-run 预览, 不落库)")
     @PostMapping("/auto-fifo")
-    public R<List<ReconciliationLogEntity>> autoReconcileFifo(
+    public R<List<ReconciliationService.ReconciliationFifoPreview>> autoReconcileFifo(
             @RequestParam Long partyId,
             @RequestParam String targetDocType,
             @RequestParam BigDecimal amount,

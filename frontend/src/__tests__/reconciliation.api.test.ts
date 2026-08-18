@@ -161,14 +161,9 @@ describe('Reconciliation API Module', () => {
 
   describe('autoFifoReconciliation', () => {
     it('calls POST /sme/arap/v1/reconciliation/auto-fifo with params', async () => {
-      const mockFifoResult: reconciliationApi.AutoFifoResult = {
-        totalAmount: 5000,
-        allocatedAmount: 3000,
-        remainingAmount: 2000,
-        allocations: [
-          { sourceDocId: 1, sourceDocNo: 'SRC001', targetDocId: 2, targetDocNo: 'TGT002', amount: 3000 },
-        ],
-      }
+      const mockFifoResult: reconciliationApi.ReconciliationFifoPreview[] = [
+        { sourceDocId: 1, sourceDocNo: 'SRC001', targetDocId: 2, targetDocNo: 'TGT002', amount: 3000 },
+      ]
       mockRequest.post.mockResolvedValue(mockFifoResult)
 
       const params = {
@@ -190,7 +185,7 @@ describe('Reconciliation API Module', () => {
     })
 
     it('works without optional period and summary', async () => {
-      mockRequest.post.mockResolvedValue({ totalAmount: 1000, allocatedAmount: 0, remainingAmount: 1000, allocations: [] })
+      mockRequest.post.mockResolvedValue([])
 
       const params = {
         partyId: 5,
@@ -206,6 +201,32 @@ describe('Reconciliation API Module', () => {
         null,
         { params },
       )
+    })
+  })
+
+  describe('batchExecuteReconciliation', () => {
+    it('calls POST /sme/arap/v1/reconciliation/batch-execute with requests body', async () => {
+      const mockLogs = [{ id: 1, status: 'CONFIRMED' }, { id: 2, status: 'CONFIRMED' }]
+      mockRequest.post.mockResolvedValue(mockLogs)
+
+      const requests = [
+        {
+          sourceDocType: 'receipt',
+          sourceDocId: 1,
+          targetDocType: 'INVOICE_OUT',
+          targetDocId: 2,
+          amount: 3000,
+          matchScore: 100,
+          matchMethod: 'AUTO',
+        },
+      ]
+      const result = await reconciliationApi.batchExecuteReconciliation(requests)
+
+      expect(mockRequest.post).toHaveBeenCalledWith(
+        '/sme/arap/v1/reconciliation/batch-execute',
+        requests,
+      )
+      expect(result).toEqual(mockLogs)
     })
   })
 

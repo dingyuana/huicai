@@ -309,6 +309,13 @@ public class ReconciliationServiceImpl implements ReconciliationService {
         // P34: Update target business doc unsettled amount
         BusinessDocEntity targetDoc = businessDocMapper.selectById(request.targetDocId());
         if (targetDoc == null) throw new BusinessException("业务单据不存在: " + request.targetDocId());
+        // P42-V2-G2: 防重复核销守卫 — 核销金额不得超过目标单据未核销余额
+        BigDecimal targetUnsettled = targetDoc.getUnsettledAmount() != null
+                ? targetDoc.getUnsettledAmount()
+                : targetDoc.getAmount().subtract(targetDoc.getSettledAmount() != null ? targetDoc.getSettledAmount() : BigDecimal.ZERO);
+        if (request.amount().compareTo(targetUnsettled) > 0) {
+            throw new BusinessException("核销金额超过未核销余额: 单据 " + targetDoc.getDocNo() + " 未核销余额 " + targetUnsettled + ", 核销金额 " + request.amount());
+        }
         if ("INVOICE_OUT".equals(request.targetDocType()) && resolvedCustomerId == null) {
             resolvedCustomerId = targetDoc.getCustomerId();
         }
@@ -753,12 +760,11 @@ public class ReconciliationServiceImpl implements ReconciliationService {
     // ==================== FIFO 自动核销策略 ====================
 
     @Override
-    @Transactional(rollbackFor = Exception.class)
-    public List<ReconciliationLogEntity> autoReconcileFifo(Long partyId, String targetDocType, BigDecimal totalAmount,
+    public List<ReconciliationFifoPreview> autoReconcileFifo(Long partyId, String targetDocType, BigDecimal totalAmount,
                                                             String sourceDocType, Long sourceDocId,
                                                             String period, String summary) {
-        List<ReconciliationLogEntity> logs = new ArrayList<>();
-        if (totalAmount == null || totalAmount.compareTo(BigDecimal.ZERO) <= 0) return logs;
+        List<ReconciliationFifoPreview> previews = new ArrayList<>();
+        if (totalAmount == null || totalAmount.compareTo(BigDecimal.ZERO) <= 0) return previews;
 
         BigDecimal remaining = totalAmount;
 
@@ -775,30 +781,21 @@ public class ReconciliationServiceImpl implements ReconciliationService {
         for (BusinessDocEntity inv : invoices) {
             if (remaining.compareTo(BigDecimal.ZERO) <= 0) break;
             BigDecimal alloc = remaining.min(inv.getUnsettledAmount());
-            ExecuteRequest req = new ExecuteRequest(
-                    sourceDocType, sourceDocId,
-                    targetDocType, inv.getId(),
-                    alloc, new BigDecimal("100"),
-                    "AUTO",
-                    "INVOICE_OUT".equals(targetDocType) ? partyId : null,
-                    "INVOICE_IN".equals(targetDocType) ? partyId : null,
-                    period, summary != null ? summary : "FIFO自动核销"
-            );
-            ReconciliationLogEntity log = execute(req);
-            logs.add(log);
+            previews.add(new ReconciliationFifoPreview(
+                    sourceDocId, null, inv.getId(), inv.getDocNo(), alloc));
             remaining = remaining.subtract(alloc);
         }
 
-        // 若还有剩余金额未核销完, 自动转为预收/预付
+        // P42-V2-G2: dry-run 预览不落库；剩余金额提示转预收/预付（由人工后续处理）
         if (remaining.compareTo(BigDecimal.ZERO) > 0) {
-            log.info("FIFO核销后有剩余金额 {} 未分配 (sourceType={}, sourceId={}, partyId={}), 需转预收/预付",
+            log.info("FIFO预览后仍有剩余金额 {} 未分配 (sourceType={}, sourceId={}, partyId={}), 需转预收/预付",
                     remaining, sourceDocType, sourceDocId, partyId);
         }
 
-        log.info("FIFO自动核销完成: partyId={}, targetDocType={}, totalAmount={}, actualAllocated={}, remaining={}",
+        log.info("FIFO自动核销预览完成(dry-run): partyId={}, targetDocType={}, totalAmount={}, actualAllocated={}, remaining={}, previews={}",
                 partyId, targetDocType, totalAmount,
-                totalAmount.subtract(remaining), remaining);
-        return logs;
+                totalAmount.subtract(remaining), remaining, previews.size());
+        return previews;
     }
 
     @Override

@@ -180,19 +180,14 @@
       </template>
     </el-dialog>
 
-    <!-- FIFO 自动核销结果弹窗 -->
-    <el-dialog v-model="fifoDialogVisible" title="自动核销匹配结果" width="600px" destroy-on-close>
+    <!-- FIFO 自动核销预览弹窗（dry-run 结果，人工确认后批量执行） -->
+    <el-dialog v-model="fifoDialogVisible" title="自动核销匹配结果（预览）" width="600px" destroy-on-close>
       <template v-if="fifoResult && fifoResult.length">
         <el-alert title="共 {{ fifoResult.length }} 项匹配，请人工确认后执行" type="success" :closable="false" style="margin-bottom:16px" />
         <el-table :data="fifoResult" border stripe size="small">
           <el-table-column label="目标单据" prop="targetDocNo" width="160" />
           <el-table-column label="核销金额" width="120" align="right">
-            <template #default="{ row }">{{ fmtAmount(row.allocatedAmount || row.amount) }}</template>
-          </el-table-column>
-          <el-table-column label="操作" width="160" align="center">
-            <template #default="{ row }">
-              <el-button text size="small" type="primary" @click="onExecuteFromFifo(row)">执行核销</el-button>
-            </template>
+            <template #default="{ row }">{{ fmtAmount(row.amount) }}</template>
           </el-table-column>
         </el-table>
       </template>
@@ -201,6 +196,7 @@
       </template>
       <template #footer>
         <el-button @click="fifoDialogVisible = false">关闭</el-button>
+        <el-button type="primary" :loading="fifoExecuting" :disabled="!fifoResult || !fifoResult.length" @click="onConfirmFifoAll">确认执行</el-button>
       </template>
     </el-dialog>
   </div>
@@ -213,8 +209,8 @@ import { Loading } from '@element-plus/icons-vue'
 import { getBusinessDocPage, type BusinessDocVO, type BusinessDocQuery } from '@/api/modules/businessDoc'
 import {
   getReceiptRecommend, getPaymentRecommend, executeReconciliation, preCheckReconciliation,
-  autoFifoReconciliation,
-  type PreCheckResult,
+  autoFifoReconciliation, batchExecuteReconciliation,
+  type PreCheckResult, type ReconciliationFifoPreview,
 } from '@/api/modules/reconciliation'
 
 const activeTab = ref('RECEIPT')
@@ -478,7 +474,8 @@ async function onPreCheck(item: any) {
 // ====== FIFO 自动核销 ======
 const fifoDialogVisible = ref(false)
 const fifoLoading = ref(false)
-const fifoResult = ref<any>(null)
+const fifoExecuting = ref(false)
+const fifoResult = ref<ReconciliationFifoPreview[] | null>(null)
 
 async function onAutoFifo() {
   if (!list.value.length) return
@@ -506,20 +503,29 @@ async function onAutoFifo() {
   }
 }
 
-async function onExecuteFromFifo(row: any) {
+async function onConfirmFifoAll() {
+  const previews = fifoResult.value
+  if (!previews || !previews.length) return
+  const isReceipt = activeTab.value === 'RECEIPT'
+  fifoExecuting.value = true
   try {
-    await executeReconciliation({
-      sourceDocType: activeTab.value === 'RECEIPT' ? 'receipt' : 'payment',
-      sourceDocId: row.sourceDocId || row.id,
-      targetDocType: row.targetDocType || (activeTab.value === 'RECEIPT' ? 'INVOICE_OUT' : 'INVOICE_IN'),
-      targetDocId: row.targetDocId || row.targetBusinessDocId,
-      amount: row.allocatedAmount || row.amount,
-    } as any)
-    ElMessage.success('核销执行成功')
+    const requests = previews.map((p) => ({
+      sourceDocType: isReceipt ? 'receipt' : 'payment',
+      sourceDocId: p.sourceDocId,
+      targetDocType: isReceipt ? 'INVOICE_OUT' : 'INVOICE_IN',
+      targetDocId: p.targetDocId,
+      amount: p.amount,
+      matchScore: 100,
+      matchMethod: 'AUTO',
+    }))
+    await batchExecuteReconciliation(requests)
+    ElMessage.success(`已执行 ${requests.length} 笔核销`)
     fifoDialogVisible.value = false
     fetchData()
   } catch (e: any) {
-    ElMessage.error(e?.message || '核销执行失败')
+    ElMessage.error(e?.message || '批量核销执行失败')
+  } finally {
+    fifoExecuting.value = false
   }
 }
 </script>

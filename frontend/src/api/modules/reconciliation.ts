@@ -81,18 +81,13 @@ export interface ReconciliationTraceVO {
   voucher: { id: number; voucherNo: string; status: string } | null
 }
 
-/** FIFO 自动核销结果 */
-export interface AutoFifoResult {
-  totalAmount: number
-  allocatedAmount: number
-  remainingAmount: number
-  allocations: Array<{
-    sourceDocId: number
-    sourceDocNo: string
-    targetDocId: number
-    targetDocNo: string
-    amount: number
-  }>
+/** FIFO 自动核销预览项（dry-run，不落库） */
+export interface ReconciliationFifoPreview {
+  sourceDocId: number
+  sourceDocNo: string
+  targetDocId: number
+  targetDocNo: string
+  amount: number
 }
 
 export function preCheckReconciliation(data: {
@@ -113,7 +108,7 @@ export function getReconciliationTrace(id: number): Promise<ReconciliationTraceV
   return request.get(`/sme/arap/v1/reconciliation/${id}/trace`)
 }
 
-/** FIFO 自动核销匹配（仅匹配，不执行） */
+/** FIFO 自动核销匹配（dry-run 预览，不落库） */
 export function autoFifoReconciliation(params: {
   partyId: number
   targetDocType: string
@@ -122,8 +117,25 @@ export function autoFifoReconciliation(params: {
   sourceDocId: number
   period?: string
   summary?: string
-}): Promise<any> {
+}): Promise<ReconciliationFifoPreview[]> {
   return request.post('/sme/arap/v1/reconciliation/auto-fifo', null, { params })
+}
+
+/** 批量执行核销（人工确认预览后调用，一次性落库） */
+export function batchExecuteReconciliation(requests: Array<{
+  sourceDocType: string
+  sourceDocId: number
+  targetDocType: string
+  targetDocId: number
+  amount: number
+  matchScore: number
+  matchMethod: string
+  customerId?: number
+  vendorId?: number
+  period?: string
+  remark?: string
+}>): Promise<any[]> {
+  return request.post('/sme/arap/v1/reconciliation/batch-execute', requests)
 }
 
 /** 编号全链路追溯（按单据号/凭证号） */
