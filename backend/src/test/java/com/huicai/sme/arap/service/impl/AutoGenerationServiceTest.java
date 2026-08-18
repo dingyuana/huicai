@@ -185,10 +185,7 @@ class AutoGenerationServiceTest {
     void testAutoGenerate_salarySocial_走B类不走A类() {
         BankStatementEntity stmt = newStmt("salary_social", "out");
         when(statementMapper.selectById(1L)).thenReturn(stmt);
-        // 确保 subjectMapper 有足够返回，避免 NPE（salaryAcct 查询）
-        when(subjectMapper.selectList(any()))
-                .thenReturn(Collections.singletonList(mockSubject(10L, "1002")))
-                .thenReturn(Collections.singletonList(new Subject() {{ setId(30L); setCode("2211"); setIsLeaf(true); }}));
+        // SALARY_SOCIAL 直接 return（不自动制证），不调用 subjectMapper
 
         // 不抛异常 + docMapper 被调用 (B 类特征) 即为正确
         assertDoesNotThrow(() -> service.autoGenerate(1L, 1L), "salary_social 应走 B 类分支且不应抛异常");
