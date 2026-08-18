@@ -5,6 +5,10 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.huicai.common.exception.BusinessException;
 import com.huicai.sme.arap.constant.ArapStatus;
 import com.huicai.base.business.entity.BusinessDocEntity;
+import com.huicai.base.business.entity.InputInvoiceEntity;
+import com.huicai.base.business.entity.OutputInvoiceEntity;
+import com.huicai.base.business.mapper.InputInvoiceMapper;
+import com.huicai.base.business.mapper.OutputInvoiceMapper;
 import com.huicai.sme.arap.entity.PrepaymentEntity;
 import com.huicai.sme.arap.entity.ReconciliationExceptionEntity;
 import com.huicai.sme.arap.entity.ReconciliationLogEntity;
@@ -61,6 +65,8 @@ public class ReconciliationServiceImpl implements ReconciliationService {
 
     private final BankStatementMapper bankStatementMapper;
     private final BusinessDocMapper businessDocMapper;
+    private final InputInvoiceMapper inputInvoiceMapper;
+    private final OutputInvoiceMapper outputInvoiceMapper;
     private final CustomerMapper customerMapper;
     private final VendorMapper vendorMapper;
     private final ReconciliationLogMapper logMapper;
@@ -1142,6 +1148,33 @@ public class ReconciliationServiceImpl implements ReconciliationService {
                 docInfo.setSettledAmount(doc.getSettledAmount());
                 docInfo.setUnsettledAmount(doc.getUnsettledAmount());
                 downstream.setBusinessDocs(List.of(docInfo));
+
+                // G3: 填充下游发票（业务单据关联发票时）
+                if (doc.getInvoiceId() != null) {
+                    com.huicai.sme.arap.dto.vo.ReconciliationTraceVO.InvoiceInfo invInfo = null;
+                    if ("INVOICE_OUT".equals(doc.getDocType())) {
+                        OutputInvoiceEntity inv = outputInvoiceMapper.selectById(doc.getInvoiceId());
+                        if (inv != null) {
+                            invInfo = new com.huicai.sme.arap.dto.vo.ReconciliationTraceVO.InvoiceInfo();
+                            invInfo.setId(inv.getId());
+                            invInfo.setInvoiceNo(inv.getInvoiceNo());
+                            invInfo.setAmount(inv.getTotalAmount() != null ? inv.getTotalAmount() : inv.getAmount());
+                            invInfo.setStatus(inv.getStatus());
+                        }
+                    } else if ("INVOICE_IN".equals(doc.getDocType())) {
+                        InputInvoiceEntity inv = inputInvoiceMapper.selectById(doc.getInvoiceId());
+                        if (inv != null) {
+                            invInfo = new com.huicai.sme.arap.dto.vo.ReconciliationTraceVO.InvoiceInfo();
+                            invInfo.setId(inv.getId());
+                            invInfo.setInvoiceNo(inv.getInvoiceNo());
+                            invInfo.setAmount(inv.getTotalAmount() != null ? inv.getTotalAmount() : inv.getAmount());
+                            invInfo.setStatus(inv.getStatus());
+                        }
+                    }
+                    if (invInfo != null) {
+                        downstream.setInvoices(List.of(invInfo));
+                    }
+                }
             }
         }
         trace.setDownstream(downstream);

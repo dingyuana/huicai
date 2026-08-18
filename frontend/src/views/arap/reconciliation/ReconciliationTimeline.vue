@@ -115,6 +115,18 @@ function buildNodes() {
     }
   }
 
+  // 4.1 下游发票节点（G3: trace 填充 downstream.invoices）
+  if (data.downstream?.invoices?.length) {
+    for (const inv of data.downstream.invoices) {
+      nodes.push({
+        label: '关联发票', tagType: 'warning', statusClass: 'completed',
+        docNo: inv.invoiceNo, amount: inv.amount,
+        time: '', operator: '', statusText: inv.status,
+        jumpPath: null,
+      })
+    }
+  }
+
   // 5. 凭证节点
   if (data.voucher) {
     const v = data.voucher
