@@ -69,6 +69,10 @@ public class BusinessDocEntity extends BaseEntity {
     /** 附件ID列表 */
     private String attachmentIds;
 
+    /** 结算账户ID（银行/现金账户） */
+    @TableField("settlement_account_id")
+    private Long settlementAccountId;
+
     /** 生成的凭证ID */
     private Long voucherId;
 

@@ -22,6 +22,7 @@ public class BusinessDocDTO {
     private Long deptId;
     private String summary;
     private String attachmentIds;
+    private Long settlementAccountId;
     private List<EntryDTO> entries;
 
     @Data
@@ -50,6 +51,7 @@ public class BusinessDocDTO {
         e.setDeptId(dto.getDeptId());
         e.setSummary(dto.getSummary());
         e.setAttachmentIds(dto.getAttachmentIds());
+        e.setSettlementAccountId(dto.getSettlementAccountId());
         return e;
     }
 

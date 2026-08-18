@@ -65,7 +65,7 @@ public class BusinessDocServiceImpl implements BusinessDocService {
 
     /** 付/收 标识: 需要"付"前缀的单据类型 */
     private static final java.util.Set<String> SUPPLIER_DOC_TYPES = java.util.Set.of(
-            "PAYMENT", "EXPENSE", "INVOICE_IN", "OTHER_PAYABLE", "SALARY"
+            "PAYMENT", "EXPENSE", "INVOICE_IN", "OTHER_PAYABLE"
     );
 
     /**
@@ -255,6 +255,7 @@ public class BusinessDocServiceImpl implements BusinessDocService {
         if (dto.getDeptId() != null) entity.setDeptId(dto.getDeptId());
         if (dto.getSummary() != null) entity.setSummary(dto.getSummary());
         if (StrUtil.isNotBlank(dto.getAttachmentIds())) entity.setAttachmentIds(dto.getAttachmentIds());
+        if (dto.getSettlementAccountId() != null) entity.setSettlementAccountId(dto.getSettlementAccountId());
         entity.setUpdatedBy(userId);
         docMapper.updateById(entity);
 

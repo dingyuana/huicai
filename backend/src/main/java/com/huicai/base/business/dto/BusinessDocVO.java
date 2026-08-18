@@ -28,6 +28,7 @@ public class BusinessDocVO {
     private String enrichedSummary;
     private String source;
     private String attachmentIds;
+    private Long settlementAccountId;
     private Long voucherId;
     private String voucherNo;
     private String invoiceNo;
@@ -85,6 +86,7 @@ public class BusinessDocVO {
         vo.setSummary(e.getSummary());
         vo.setSource(e.getSource());
         vo.setAttachmentIds(e.getAttachmentIds());
+        vo.setSettlementAccountId(e.getSettlementAccountId());
         vo.setVoucherId(e.getVoucherId());
         vo.setVoucherNo(e.getVoucherNo());
         vo.setInvoiceNo(e.getInvoiceNo());

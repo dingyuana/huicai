@@ -49,7 +49,7 @@ export interface BusinessDocVO {
 
 export const CUSTOMER_DOC_TYPES = ['RECEIPT', 'INVOICE_OUT', 'OTHER_RECEIVABLE']
 export const SUPPLIER_DOC_TYPES = ['PAYMENT', 'EXPENSE', 'INVOICE_IN', 'OTHER_PAYABLE']
-export const NO_COUNTERPARTY_DOC_TYPES = ['TRANSFER', 'EXPENSE']
+export const NO_COUNTERPARTY_DOC_TYPES = ['TRANSFER', 'EXPENSE', 'SALARY']
 
 export interface BusinessDocDTO {
   id?: number
