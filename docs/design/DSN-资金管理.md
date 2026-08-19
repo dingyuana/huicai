@@ -1,6 +1,7 @@
 # 03-现金与资金管理设计
 
 > **关联PRD**：../prd/资金管理-PRD-V1.0.md
+> **关联SPEC**：P1-bank-import-classification.md, P14-bank-reconciliation-closure.md, P23-bank-statement-state-machine.md
 > **编号**：HUICAI-DES-004
 > **版本**：V1.0 | **修改日期**：2026-07-07 | **修改人**：Hermes | **修改内容**：初始创建
 > 代码包：`com.huicai.module.finance`

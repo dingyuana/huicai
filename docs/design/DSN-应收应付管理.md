@@ -1,6 +1,7 @@
 # 02-应收应付管理设计
 
 > **关联PRD**：../prd/业务单据管理-PRD-V1.0.md, ../prd/应收应付核销-PRD-V1.0.md
+> **关联SPEC**：P30-reconciliation-workbench-enhance.md, P36-invoice-reverse-chain.md, P42-reconciliation-frontend.md, P43-bad-debt-provision.md, P51-aging-analysis.md, P52-customer-reconciliation.md, P53-procurement-payment-finance.md
 > **编号**：HUICAI-DES-003
 > **版本**：V1.3 | **修改日期**：2026-07-09 | **修改人**：Hermes | **修改内容**：核销单列表字段补全 + 详情客户名称 + 核销依据表格
 > 代码包：`com.huicai.module.arap`

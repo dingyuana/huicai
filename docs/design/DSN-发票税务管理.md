@@ -1,6 +1,7 @@
 # 06-发票与税务管理设计
 
 > **关联PRD**：../prd/发票税务管理-PRD-V1.0.md
+> **关联SPEC**：P40-input-invoice-state-machine.md, P41-invoice-driven-finance.md, P13-tax-declaration.md
 > **编号**：HUICAI-DES-007
 > **版本**：V1.1 | **修改日期**：2026-07-17 | **修改人**：Hermes | **修改内容**：新增进项发票状态机（P40），科目方向差异化
 > 代码包：`com.huicai.module.tax`

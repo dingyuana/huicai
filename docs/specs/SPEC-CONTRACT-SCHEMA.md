@@ -26,9 +26,19 @@
 ## 3. 状态流转
 - 状态机图（合法转换 + 非法转换）
 - 负向断言（禁止的跳转路径，如：DRAFT 不能直接跳到 AUDITED）
-- 副作用说明（转换时创建/修改的其他实体）
+- **副作用声明（Side Effects）**：该操作对数据库/缓存/消息队列产生的所有写操作
+  - 格式：`操作类型（INSERT/UPDATE/DELETE）→ 目标表/队列 → 说明`
+  - 示例：`DB_INSERT → t_user_login_log → 记录每次登录`
+  - 示例：`CACHE_SET → Redis:USER_TOKEN:{userId} → 缓存登录令牌`
+  - 副作用声明用于变更影响评估：改一处代码，能精确知道影响了哪些表
 
 ## 4. 异常处理
+- **异常码穷举（Exhaustive Error Codes）**：列出该接口可能抛出的所有业务异常码
+  - 每个异常码标注：`错误码`、`HTTP状态码`、`日志级别`、`对客提示文案`
+  - 格式：`ERROR_CODE → HTTP 状态 → 日志级别 → 提示文案`
+  - 示例：`AUTH_001 → 401 → WARN → "用户账号或密码错误"`
+  - 示例：`AUTH_002 → 403 → ERROR → "账户已被冻结或锁定"`
+  - 代码实现必须穷举所有异常码，不得遗漏
 - 异常场景列表（每个场景对应一个错误码）
 - 每个场景的降级策略
 - 事务回滚条件
@@ -370,3 +380,23 @@ for spec in $(git diff --cached --name-only | grep 'docs/specs/.*\.md'); do
     python scripts/validate_spec_contract.py --path "$spec" --strict
 done
 ```
+
+## 6. 物理路径编码约定（Contract-First 追溯）
+
+为实现 PRD→DSN→SPEC→代码→@Test 全链路可追溯，强制以下路径编码约定：
+
+| 要素 | 约定 | 示例 |
+|------|------|------|
+| SPEC 文件名 | `PXX-功能名称.md` 或 `S-XX-模块名称.md` | `P22-voucher-state-machine.md` |
+| 包路径 | `com.huicai.{base\|sme\|agency}.{模块名}` | `com.huicai.base.voucher` |
+| 测试类名 | `{ServiceName}ImplTest.java` | `VoucherStateMachineServiceImplTest.java` |
+| API 路径 | `/api/{version}/{模块}/{功能}` | `/api/v1/vouchers/{id}/submit` |
+| test_ref 绑定 | SPEC 头部 `test_ref` 字段指向具体测试类 | `test_ref: VoucherStateMachineServiceImplTest` |
+| PRD 关联 | PRD 头部 `关联SPEC` 字段列出所有关联 SPEC 文件名 | `关联SPEC: P22, P37, S-17` |
+
+**追溯验证方法：**
+1. 输入一个 PRD 编号 → 查 PRD 文件头部 `关联SPEC` → 找到所有 SPEC 文件
+2. 输入一个 SPEC 编号 → 查 SPEC 文件头部 `test_ref` → 找到对应 @Test 类
+3. 输入一个 @Test 类名 → 反查 SPEC 文件头部 `test_ref` → 找到来源 SPEC → 查关联 PRD
+
+零数据漂移，纯文件头部字段，不依赖外部图谱数据库。

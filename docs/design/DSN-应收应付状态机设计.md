@@ -184,6 +184,7 @@ DRAFT ──submit──→ SUBMITTED ──approve──→ APPROVED ──gene
 
 ## 5. 关联文档
 > **关联PRD**：../prd/业务单据管理-PRD-V1.0.md
+> **关联SPEC**：P30-reconciliation-workbench-enhance.md
 
 | 文档 | 说明 |
 |------|------|

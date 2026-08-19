@@ -1,6 +1,7 @@
 # 银行流水智能分类 — 竞品参考
 
 > **关联PRD**：../prd/资金管理-PRD-V1.0.md
+> **关联SPEC**：P1-bank-import-classification.md
 > **日期：** 2026-08-04
 > **检索关键词：** 银行流水智能分类, 自动分类, 流水匹配科目, bank transaction categorization
 > **调研人：** Hermes Agent

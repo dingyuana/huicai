@@ -406,6 +406,40 @@ agency/*   → Agency 功能（待建）
 
 详见 [SPEC-CONTRACT-SCHEMA.md](../specs/SPEC-CONTRACT-SCHEMA.md) v2.0。
 
+### 5.3 异常码穷举
+
+每个 SPEC 必须穷举该接口可能抛出的所有业务异常码，格式：
+
+```
+AUTH_001 → 401 → WARN → "用户账号或密码错误"
+AUTH_002 → 403 → ERROR → "账户已被冻结或锁定"
+```
+
+代码实现必须逐一实现每个异常码，不得遗漏。详见 SPEC-CONTRACT-SCHEMA.md §4。
+
+### 5.4 副作用声明
+
+每个 SPEC 的状态流转章节必须声明该操作对数据库/缓存/消息队列的写操作：
+
+```
+DB_INSERT → t_user_login_log → 记录每次登录尝试
+CACHE_SET → Redis:USER_TOKEN:{userId} → 缓存登录令牌
+MQ_PUBLISH → Topic:USER_LOGIN_EVENT → 异步通知登录事件
+```
+
+用于变更影响评估：改一处代码，能精确知道影响了哪些表。详见 SPEC-CONTRACT-SCHEMA.md §3。
+
+### 5.5 物理路径编码约定
+
+| 要素 | 约定 | 示例 |
+|------|------|------|
+| SPEC 文件名 | `PXX-功能名称.md` 或 `S-XX-模块名称.md` | `P22-voucher-state-machine.md` |
+| 包路径 | `com.huicai.{base\|sme\|agency}.{模块名}` | `com.huicai.base.voucher` |
+| 测试类名 | `{ServiceName}ImplTest.java` | `VoucherStateMachineServiceImplTest.java` |
+| API 路径 | `/api/{version}/{模块}/{功能}` | `/api/v1/vouchers/{id}/submit` |
+
+详见 SPEC-CONTRACT-SCHEMA.md §5（物理路径约定）。
+
 ---
 
 ## 六、规范进化记录

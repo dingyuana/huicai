@@ -1,6 +1,7 @@
 # 09-财务报表与分析设计
 
 > **关联PRD**：../prd/报表中心-PRD-V1.0.md
+> **关联SPEC**：P10-ar-receivable-payable-integration.md, P15-balance-sheet.md
 > **编号**：HUICAI-DES-010
 > **版本**：V1.0 | **修改日期**：2026-07-07 | **修改人**：Hermes | **修改内容**：初始创建
 > 代码包：`com.huicai.module.report`
