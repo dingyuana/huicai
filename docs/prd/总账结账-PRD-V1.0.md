@@ -4,6 +4,7 @@
 > **版本**：V1.0 | **日期**：2026-08-19
 > **关联总 PRD：`(../CORE-需求分析.md)` 
 > **关联设计**：DSN-总账管理.md
+> **关联SPEC**：S-17-期末自动化结转.md、S-18-结账控制与反结账.md
 > **对应包**：com.huicai.base.voucher（SubjectBalanceService / PeriodCloseService / LedgerService）
 
 ---

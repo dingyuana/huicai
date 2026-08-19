@@ -4,6 +4,7 @@
 > **版本**：V1.0 | **日期**：2026-08-19
 > **关联总 PRD：`(../CORE-需求分析.md)` 
 > **关联设计**：DSN-资金管理.md
+> **关联SPEC**：P1-bank-import-classification.md、P14-银行对账、S-03-资金管理.md
 > **对应包**：com.huicai.sme.cash
 
 ---

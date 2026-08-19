@@ -4,6 +4,7 @@
 > **版本**：V1.0 | **日期**：2026-08-19
 > **关联总 PRD：`(../CORE-需求分析.md)` 
 > **关联设计**：DSN-费用报销管理.md
+> **关联SPEC**：P11-员工费用报销.md、ExpenseReimbursementServiceImpl
 > **对应包**：com.huicai.sme.arap（ExpenseReimbursementServiceImpl）
 
 ---

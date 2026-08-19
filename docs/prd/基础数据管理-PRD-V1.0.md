@@ -4,6 +4,7 @@
 > **版本**：V1.0 | **日期**：2026-08-19
 > **关联总 PRD：`(../CORE-需求分析.md)` 
 > **关联设计**：DSN-基础数据管理.md
+> **关联SPEC**：DSN-基础数据管理.md、S-04-会计科目体系与辅助核算.md、S-05-会计期间与日历管理.md
 > **对应包**：com.huicai.base.system / com.huicai.base.masterdata
 
 ---

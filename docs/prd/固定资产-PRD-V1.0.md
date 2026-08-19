@@ -4,6 +4,7 @@
 > **版本**：V1.0 | **日期**：2026-08-19
 > **关联总 PRD：`(../CORE-需求分析.md)` 
 > **关联设计**：DSN-固定资产管理.md
+> **关联SPEC**：S-23-固定资产全生命周期管理.md、AssetCardStateMachineService
 > **对应包**：com.huicai.sme.asset
 
 ---
