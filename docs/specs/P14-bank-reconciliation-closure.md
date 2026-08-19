@@ -6,6 +6,7 @@
 > 目标：自动匹配 → 人工确认 → 锁定 → 完成对账
 > 工期：1 批（补 1 方法 + 1 端点 + 2 单测）
 
+> **test_ref**：BankReconciliationServiceImplTest
 ---
 
 > **关联需求**: REQ-2026-020

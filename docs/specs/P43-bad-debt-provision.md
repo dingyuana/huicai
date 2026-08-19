@@ -1,6 +1,7 @@
 # P43 SPEC — 坏账准备计提模块
 
 > **编号**：HUICAI-SPC-043
+> **test_ref**：BadDebtProvisionStateMachineServiceImplTest
 > **版本**：V1.0 | **日期**：2026-07-11
 > **状态**：📝 草案（待审核）
 > **关联需求**：REQ-2026-015（坏账计提）

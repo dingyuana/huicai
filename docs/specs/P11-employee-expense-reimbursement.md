@@ -7,6 +7,7 @@
 > 目标：银行流水→识别"员工"→关联报销单→生成付款单→生成凭证
 > 工期：4 批工单（每批独立 commit、可回滚）
 
+> **test_ref**：ExpenseReimbursementServiceImplTest, ExpenseFlowE2ETest
 ---
 
 > **关联需求**: REQ-2026-016

@@ -5,6 +5,7 @@
 > **关联需求**：REQ-2026-058, REQ-2026-059, REQ-2026-060
 > **版本**：V1.0 | **日期**：2026-07-09
 
+> **test_ref**：ArapSettlementServiceImplTest, ArapSettlementRestContractTest
 ---
 
 ## 1. 输入契约

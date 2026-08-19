@@ -5,6 +5,7 @@ version: 1.0
 created: 2026-07-22
 status: draft
 req: REQ-027
+> **test_ref**：待补（无对应测试类，AI Agent/架构/迁移类 SPEC 待建测试）
 ---
 
 # SPEC：核心数据导入导出能力

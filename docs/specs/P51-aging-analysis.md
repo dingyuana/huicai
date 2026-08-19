@@ -1,6 +1,7 @@
 # P51 SPEC — 账龄分析与逾期预警
 
 > **编号**：HUICAI-SPC-051
+> **test_ref**：AgingAnalysisControllerTest
 > **版本**：V1.0 | **日期**：2026-07-11
 > **状态**：📝 草案（待审核）
 > **关联需求**：REQ-2026-015（坏账计提）

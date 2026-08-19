@@ -4,6 +4,7 @@
 > **编号**：HUICAI-SPC-040B
 > **状态**：**✅ 已实现**
 
+> **test_ref**：InputInvoiceStateMachineServiceImplTest, InputInvoiceImportServiceTest
 ---
 
 ## 0. SDD 四段结构索引

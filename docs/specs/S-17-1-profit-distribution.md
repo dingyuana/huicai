@@ -8,6 +8,7 @@
 > **关联需求**：REQ-期末结转
 > **关联 SPEC**：S-17 期末自动化结转
 
+> **test_ref**：PeriodCloseServiceImplTest
 ---
 
 ## 概述

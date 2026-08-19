@@ -1,6 +1,7 @@
 # P46 SPEC — 流水分类 Agent
 
 > **编号**：HUICAI-SPC-046
+> **test_ref**：ClassificationRuleServiceImplTest, FallbackHeuristicServiceTest
 > **版本**：V1.0 | **修改日期**：2026-07-09
 > **修改人**：Hermes
 > **依据**：AI 辅助能力开发计划 V2.0 §阶段二 + 10-ai-orchestration-design.md §5

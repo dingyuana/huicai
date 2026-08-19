@@ -1,6 +1,7 @@
 # S-26 - Agency 分支开发：多租户架构 + 代账业务引擎
 
 > **版本**：2.0 | **编号**：HUICAI-SPC-126 | **日期**：2026-07-24 | **作者**：Hermes
+> **test_ref**：AgencyUserServiceTest, AgencyUserEnterpriseServiceTest, AgencyUserControllerTest
 > **状态**：✅ 已审核（2026-07-24 老丁确认通过）
 > **关联需求**：REQ-2026-066\~075（Agency 分支需求，详见需求登记册 §十三 Agency 分支）
 > **关联文档**：[多租户架构设计](../architecture/多租户架构设计.md)、[S-01 多租户](S-01-多租户架构与数据隔离.md)、[S-02 RBAC](S-02-统一身份认证与RBAC权限.md)、[P54 代码重构](P54-code-restructure-base-sme-agency.md)、[技术方案](../CORE-技术方案.md)

@@ -1,6 +1,7 @@
 # P53 SPEC — 采购付款财务流程
 
 > **编号**：HUICAI-SPC-053
+> **test_ref**：ArapSettlementServiceImplTest, ArapSettlementRestContractTest
 > **版本**：V1.0 | **日期**：2026-07-11
 > **关联PRD**：../prd/应收应付核销-PRD-V1.0.md
 > **状态**：✅ 已实现（V1.0）

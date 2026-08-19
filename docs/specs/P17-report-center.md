@@ -6,6 +6,7 @@
 > 目标：补 5 个单测 + 文档化 4 大报表
 > 工期：1 批
 
+> **test_ref**：ReportServiceImplTest, ReportServiceTest
 ---
 
 > **关联需求**: REQ-2026-034, REQ-2026-035

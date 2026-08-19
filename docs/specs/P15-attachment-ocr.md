@@ -7,6 +7,7 @@
 > 目标：附件上传 → 模拟 OCR → 结构化 JSON → 关联到单据
 > 工期：1 批
 
+> **test_ref**：AttachmentServiceTest
 ---
 
 > **关联需求**: REQ-2026-046

@@ -7,6 +7,7 @@
 > 关联分支：`fix/business-doc-detail-incomplete`
 > 工期：3 批
 
+> **test_ref**：待补（无对应测试类，AI Agent/架构/迁移类 SPEC 待建测试）
 ---
 
 > **关联需求**: REQ-2026-039

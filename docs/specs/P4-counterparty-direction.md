@@ -5,6 +5,7 @@
 > 关联：FR-BANK-01.3（列名映射）、FR-BANK-03（智能分类）
 > 上游：`docs/需求分析/01-银行流水智能处理.md`
 
+> **test_ref**：CounterpartyExtractorTest
 ---
 
 > **关联需求**: REQ-2026-005

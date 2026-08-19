@@ -1,6 +1,7 @@
 # 时间戳精度规范
 
 > **编号**：HUICAI-SPC-100
+> **test_ref**：待补（无对应测试类，AI Agent/架构/迁移类 SPEC 待建测试）
 > **版本**：V1.0 | **修改日期**：2026-07-07 | **修改人**：Hermes | **修改内容**：添加编号头部
 
 项目中所有时间戳字段（`createdAt`、`updatedAt`、`submittedAt`、`approvedAt`、`postedAt`、`auditedAt` 等）使用 `LocalDateTime`（Java 8 Date/Time API），数据库列类型为 `timestamp`（PostgreSQL）。

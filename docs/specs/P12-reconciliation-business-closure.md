@@ -7,6 +7,7 @@
 > 工期：3 批工单 (P12-1 审批/驳回 / P12-2 差额调整 / P12-3 预收/预付)
 > mvn test: 250/0/0
 
+> **test_ref**：ReconciliationIntegrationTest, ReconciliationWorkbenchE2ETest
 ---
 
 > **关联需求**: REQ-2026-020

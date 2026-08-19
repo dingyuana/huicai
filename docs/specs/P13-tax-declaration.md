@@ -7,6 +7,7 @@
 > 目标：进项/销项按 period 自动归集 → 增值税应纳税额计算 → 申报表生成 → 申报状态机
 > 工期：1 批（骨架已有, 主要补单测 + 申报表详情表）
 
+> **test_ref**：TaxServiceImplTest, TaxApiContractTest
 ---
 
 > **关联需求**: REQ-2026-030

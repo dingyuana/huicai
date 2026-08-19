@@ -5,6 +5,7 @@
 > **最后更新**：2026-08-01
 > **关联设计**：S-01 多租户架构与数据隔离、S-26 Agency 分支、P23 银行流水状态机
 
+> **test_ref**：BankStatementDataIsolationTest
 ---
 
 ## 1. Why — 业务背景

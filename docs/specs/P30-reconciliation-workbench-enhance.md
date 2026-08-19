@@ -8,6 +8,7 @@
 > **V2.0 更新**：新增 P30-4 批次 — 全链路追溯API、余额快照、容差配置化
 > 工期：4 批工单（P30-1 / P30-2 / P30-3 / P30-4）
 
+> **test_ref**：ReconciliationServiceImplTest, ReconciliationWorkbenchE2ETest
 ---
 
 > **关联需求**: REQ-2026-012

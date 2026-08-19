@@ -1,6 +1,7 @@
 # SPEC: 业务单据列表筛选与展示增强
 
 ## 背景
+> **test_ref**：BusinessDocServiceImplTest, BusinessDocRestContractTest, BusinessDocControllerTest
 
 `BusinessDocList.vue` 当前筛选和展示体验不足，影响代账会计日常查账效率。
 

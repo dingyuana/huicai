@@ -8,6 +8,7 @@
 > 工期：单批交付，3 个 commit
 > 核心决策：**复用现有 `AuditLogEntity`**，不新建表；新建 `StatusChangeAspect` 切面 + `StatusChangeRecord` 注解
 
+> **test_ref**：AuditLogServiceImplTest
 ---
 
 > **关联需求**: REQ-2026-051

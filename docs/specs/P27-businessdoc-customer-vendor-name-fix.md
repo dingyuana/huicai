@@ -6,6 +6,7 @@
 > 修复目标：`BusinessDocServiceImpl.generateVoucher()` 第 317 行调用 `entity.getCustomerName()/getSupplierName()` 时 `BusinessDocEntity` 上不存在这 2 个字段，导致 4 个测试 fail、整体 BUILD FAILURE。
 > 依据：P26 凭证模板引擎 SPEC §1.1（变量定义：{客户名称} / {供应商名称}）、影响分析 §第 15 章（实施回归）
 
+> **test_ref**：BusinessDocServiceImplTest, BusinessDocRestContractTest
 ---
 
 > **关联需求**: REQ-2026-005

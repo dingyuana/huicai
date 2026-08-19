@@ -4,6 +4,7 @@
 > **关联需求**：REQ-2026-059
 > **版本**：V1.0 | **日期**：2026-07-09
 
+> **test_ref**：ReconciliationServiceImplTest
 ---
 
 ## 1. 输入契约

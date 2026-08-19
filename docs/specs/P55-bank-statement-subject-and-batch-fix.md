@@ -8,6 +8,7 @@
 > 目标：修复 A 类银行流水硬编码科目引用错误，并让批量操作失败对用户可见
 > 工期：单批交付，1 个 commit
 
+> **test_ref**：BankStatementServiceTest, BankStatementAuditIntegrationTest
 ---
 
 > **关联需求**: REQ-2026-007（自动制证）、REQ-2026-072（批量凭证审核）

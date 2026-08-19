@@ -7,6 +7,7 @@
 > **当前架构**：核销唯一入口为核销工作台（ReconciliationController），银行流水不直接参与核销。autoReconcileFifo 已全部删除。
 > 版本：v1.0 | 日期：2026-06-14
 
+> **test_ref**：ReconciliationServiceImplTest, ReconciliationWorkbenchE2ETest
 ---
 
 > **关联需求**: REQ-2026-020

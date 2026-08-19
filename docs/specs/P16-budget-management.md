@@ -6,6 +6,7 @@
 > 目标：补 5 个单测 + 文档化预算状态机（✅ 已完成 2026-07-28）
 > 工期：1 批
 
+> **test_ref**：BudgetServiceImplTest, BudgetStateMachineServiceImplTest, BudgetFlowE2ETest
 ---
 
 > **关联需求**: REQ-2026-031, REQ-2026-032, REQ-2026-033

@@ -5,6 +5,7 @@
 > 范围：3 个 service 的 Mockito 纯单测
 > 不修 IntegrationTest（16 errors = H2 缺表，独立工单）
 
+> **test_ref**：待补（无对应测试类，AI Agent/架构/迁移类 SPEC 待建测试）
 ---
 
 > **关联需求**: REQ-2026-007, REQ-2026-008

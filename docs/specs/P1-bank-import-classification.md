@@ -1,6 +1,7 @@
 # SPEC: Phase 1 — 银行流水导入与智能分类引擎
 
 > **编号**：HUICAI-SPC-001
+> **test_ref**：BankStatementServiceTest, BankStatementRealDataImportTest
 > **版本**：V1.0 | **修改日期**：2026-07-07 | **修改人**：Hermes | **修改内容**：添加编号头部
 
 - **任务 ID**: P1-BANK-IMPORT

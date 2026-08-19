@@ -1,6 +1,7 @@
 # P48 SPEC — 核销匹配 Agent
 
 > **编号**：HUICAI-SPC-048
+> **test_ref**：待补（无对应测试类，AI Agent/架构/迁移类 SPEC 待建测试）
 > **版本**：V1.0 | **修改日期**：2026-07-09
 > **修改人**：Hermes
 > **依据**：AI 辅助能力开发计划 V2.0 §阶段二 + 10-ai-orchestration-design.md §5

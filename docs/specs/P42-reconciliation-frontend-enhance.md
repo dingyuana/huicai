@@ -7,6 +7,7 @@
 > **关联PRD**：../prd/应收应付核销-PRD-V1.0.md
 > **版本历史**：V1.0 (2026-07-08) 初始方案；V2.0 (2026-08-15) 现状盘点 + 缺口识别 + 契约修正方案；V2.1 (2026-08-18) G1/G2/G3 全部实施完成（commit 69e6fbc/6da15ea/9fd94a4）
 
+> **test_ref**：ReconciliationServiceImplTest, ReconciliationRestContractTest
 ---
 
 ## 0. V2.0 现状盘点（2026-08-15 代码核对）

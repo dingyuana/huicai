@@ -6,6 +6,7 @@
 > 依据: `docs/specs/P33-streamline-sales-invoice-flow.md` + `docs/tasks/P33-streamline-sales-invoice-flow_开发计划.md`
 > 对比范围: 实际代码 vs SPEC 设计
 
+> **test_ref**：待补（无对应测试类，AI Agent/架构/迁移类 SPEC 待建测试）
 ---
 
 > **关联需求**: REQ-2026-007, REQ-2026-008

@@ -7,6 +7,7 @@
 > 所属模块: sme-arap（业务单据体系扩展）
 > 协议分支: sme
 
+> **test_ref**：BusinessDocServiceImplTest, BusinessDocRestContractTest
 ---
 
 ## 业务背景

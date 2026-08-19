@@ -1,6 +1,7 @@
 # P50 SPEC — AI 服务测试补齐
 
 > **编号**：HUICAI-SPC-050
+> **test_ref**：AiTaskMapperTest, AiTaskStateMachineServiceImplTest
 > **版本**：V1.0 | **修改日期**：2026-07-09
 > **修改人**：Hermes
 > **依据**：P0-P3 路线图 V4.0 §P3-12

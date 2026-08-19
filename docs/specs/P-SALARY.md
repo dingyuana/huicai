@@ -1,6 +1,7 @@
 # SPEC: 工资单（SALARY）手动录入
 
 ## 背景
+> **test_ref**：BusinessDocServiceImplTest
 
 目前 `SALARY_SOCIAL` 银行流水分类在自动生成流程中被映射为 `PAYMENT`（付款单），且模板匹配后直接制证（DRAFT→VOUCHERED），缺少人工确认环节，也没有手工录入入口。本 SPEC 将其拆分为独立的 `SALARY`（工资单）doc type。
 

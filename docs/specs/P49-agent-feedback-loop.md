@@ -1,6 +1,7 @@
 # P49 SPEC — Agent 反馈闭环
 
 > **编号**：HUICAI-SPC-049
+> **test_ref**：AiFeedbackLogServiceImplTest
 > **版本**：V1.0 | **修改日期**：2026-07-09
 > **修改人**：Hermes
 > **依据**：AI 辅助能力开发计划 V2.0 §阶段二

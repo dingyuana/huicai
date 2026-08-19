@@ -7,6 +7,7 @@
 > **范围**：打通"外部发票数据"与"内部业财系统"的壁垒，以票定账
 > **总工期**：剩余 2 人日（原 5 人日，3 人日已实现）
 
+> **test_ref**：SalesInvoiceImportServiceTest, InputInvoiceImportServiceTest, InvoiceConfirmAuditPathIntegrationTest
 ---
 
 > **关联需求**: REQ-2026-029

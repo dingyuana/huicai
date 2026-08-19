@@ -6,6 +6,7 @@
 > **前置**：P55（期间软删修复）、P17（报表中心）
 > **状态**：草案待审核
 
+> **test_ref**：EnterpriseControllerTest
 ---
 
 ## 1. 输入契约
