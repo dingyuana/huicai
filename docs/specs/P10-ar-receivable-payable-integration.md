@@ -1,6 +1,7 @@
 # P10 SPEC — 发票+银行流水 端到端应收/应付/核销自动接入
 > **版本**：V1.0 | **最后修改**：2026-07-19 | **作者**：Hermes
 > **状态**：✅ 生效
+> **关联PRD**：../prd/应收应付核销-PRD-V1.0.md
 
 > **编号**：HUICAI-SPC-010 — V74 已删除 t_receivable/t_payable，本 SPEC 描述的独立应收/应付表架构已不适用
 > **当前架构**：统一使用 t_business_doc（INVOICE_OUT/INVOICE_IN），详见 P34 SPEC
