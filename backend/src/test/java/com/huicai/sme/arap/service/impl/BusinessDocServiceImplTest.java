@@ -707,6 +707,78 @@ class BusinessDocServiceImplTest {
         verify(docMapper, never()).updateById(any(BusinessDocEntity.class));
     }
 
+    @Test
+    @DisplayName("testAudit_自审拦截_制单人不能审核自己提交的单据")
+    void testAudit_自审拦截_制单人审核自己() {
+        // given — createdBy == userId，禁止自审
+        BusinessDocEntity entity = draftDoc();
+        entity.setStatus(BusinessDocStatus.SUBMITTED);
+        entity.setCreatedBy(USER_ID);
+        when(docMapper.selectById(DOC_ID)).thenReturn(entity);
+
+        // when/then
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> service.approve(DOC_ID, USER_ID));
+        assertTrue(ex.getMessage().contains("制单人不能审核自己提交的单据"));
+        // then — 负向：状态不变，未更新
+        assertEquals(BusinessDocStatus.SUBMITTED, entity.getStatus());
+        verify(docMapper, never()).updateById(any(BusinessDocEntity.class));
+    }
+
+    @Test
+    @DisplayName("testAudit_自审拦截_不同用户审核成功")
+    void testAudit_自审拦截_不同用户审核成功() {
+        // given — createdBy=1, userId=2，允许审核
+        BusinessDocEntity entity = draftDoc();
+        entity.setStatus(BusinessDocStatus.SUBMITTED);
+        entity.setCreatedBy(1L);
+        when(docMapper.selectById(DOC_ID)).thenReturn(entity);
+
+        // when
+        service.approve(DOC_ID, 2L);
+
+        // then — 正向
+        assertEquals(BusinessDocStatus.APPROVED, entity.getStatus());
+        verify(docMapper).updateById(entity);
+    }
+
+    @Test
+    @DisplayName("testReverse_生成红冲单时原单isReversed标记为true")
+    void testReverse_父端标记() {
+        // given — VOUCHERED 状态单据可红冲
+        BusinessDocEntity entity = approvedDoc();
+        entity.setStatus(BusinessDocStatus.VOUCHERED);
+        entity.setVoucherId(100L);
+        entity.setIsReversed(false);
+        when(docMapper.selectById(DOC_ID)).thenReturn(entity);
+        lenient().when(valueOps.increment(anyString())).thenReturn(1L);
+        // insert 回调设置红冲单 id
+        doAnswer(inv -> {
+            BusinessDocEntity e = inv.getArgument(0);
+            e.setId(999L);
+            return 1;
+        }).when(docMapper).insert(any(BusinessDocEntity.class));
+        // 记录红冲单实体供 getDetail() 使用
+        BusinessDocEntity redDoc = new BusinessDocEntity();
+        redDoc.setId(999L);
+        redDoc.setDocNo("RDK2026060001");
+        redDoc.setDocType("RECEIPT");
+        redDoc.setStatus(BusinessDocStatus.DRAFT);
+        redDoc.setReversedFrom(DOC_ID);
+        lenient().when(docMapper.selectById(999L)).thenReturn(redDoc);
+        when(docEntryMapper.selectByDocId(anyLong())).thenReturn(List.of(entryEntity()));
+        lenient().when(subjectMapper.selectById(anyLong())).thenReturn(null);
+        lenient().when(customerMapper.selectBatchIds(anyList())).thenReturn(Collections.emptyList());
+        lenient().when(userMapper.selectBatchIds(anyList())).thenReturn(Collections.emptyList());
+        lenient().when(outputInvoiceMapper.selectOne(any())).thenReturn(null);
+
+        // when
+        service.reverse(DOC_ID, USER_ID);
+
+        // then — 正向：原单 isReversed=true
+        assertTrue(entity.getIsReversed());
+    }
+
     // ====================================================================
     // 10. batchImport 批量导入（通过 create 批量场景覆盖）
     // ====================================================================

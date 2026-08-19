@@ -1,9 +1,9 @@
 # 技术方案
 
-> **版本**：V4.0 | **最后修改**：2026-07-24 | **作者**：Hermes
+> **版本**：V5.0 | **最后修改**：2026-08-19 | **作者**：Hermes
 > **状态**：✅ 生效
-> **关联文档**：[项目说明](./CORE-项目说明.md)、[需求分析](./CORE-需求分析.md)、[模块设计](./design/README.md)、[文档注册表](./文档注册表.md)
-> **V4.0 变更**：Agency 分支模块清单全面更新，新增代理内角色体系 + 客户分配 + 数据权限细化，对齐行业标准
+> **关联文档**：[项目说明](./CORE-项目说明.md)、[需求分析](./CORE-需求分析.md)、[模块设计](./design/README.md)、[测试策略](./testing/TEST-STRATEGY.md)、[文档注册表](./CORE-文档注册表.md)
+> **V5.0 变更**：Agency 分支模块状态更新（角色体系+客户分配已完成）；工资薪酬状态更新（SALARY 单据已上线）
 
 ---
 
@@ -131,15 +131,15 @@
 | 票据管理 | sme/cash | TicketService | ✅ 完整 | 同上 |
 | 固定资产 | sme/asset | AssetCardService, DepreciationService | ✅ 完整 | [设计/DSN-固定资产管理](./design/04-固定资产管理.md) |
 | 预算管理 | sme/budget | BudgetService, BudgetStateMachineService | ✅ 完整 | [设计/DSN-预算管理](./design/08-预算管理.md) |
-| 工资薪酬 | sme/salary | （待建） | ❌ 待建 | [设计/DSN-工资薪酬管理](./design/07-工资薪酬管理.md) |
+| 工资薪酬 | sme/salary | SALARY 单据类型已上线，独立工资模块待建 | ⚠️ 部分 | [设计/DSN-工资薪酬管理](./design/07-工资薪酬管理.md) |
 
 ### 3.3 Agency 分支模块
 
 | 模块 | 包名 | 成熟度 | 说明 |
 |------|------|--------|------|
 | 多客户账套管理 | agency/tenant | ✅ 已完成 | 代理公司+企业 CRUD + 状态机 + 种子数据克隆 |
-| 代理内角色体系 | agency/user | ❌ 待建（V2.0） | AGENCY_ADMIN/ACCOUNTANT/REVIEWER/ASSISTANT 四角色 + 状态机 |
-| 客户分配/派工 | agency/user | ❌ 待建（V2.0） | 经理分配客户给会计，分配记录追溯 |
+| 代理内角色体系 | agency/user | AGENCY_ADMIN/ACCOUNTANT/REVIEWER/ASSISTANT 四角色 + 状态机 | ✅ 已完成 |
+| 客户分配/派工 | agency/user | 经理分配客户给会计，分配记录追溯 | ✅ 已完成 |
 | 批量操作工作台 | agency/batch | ⚠️ 骨架已完成 | 批量导入/审核/结账，核心逻辑待实现 |
 | 客户CRM | agency/client | ✅ 已完成 | 合同CRUD + 续费提醒 + 续约 |
 | 数据权限拦截 | agency/interceptor | ✅ 已完成 | EnterpriseDataPermissionInterceptor + RLS |
@@ -307,7 +307,8 @@ t_receivable/t_payable 已删除，统一使用 t_business_doc 表。
 |------|------|------|---------|
 | V2.0 | 2026-07-19 | Hermes | 更新模块清单对齐 base/sme 包结构，费用报销归入 sme/arap |
 | V3.0 | 2026-07-22 | Hermes | 同步实际开发进度：P0导入导出完成、角色权限迁移完成、发票税务以票定账完成、前端7菜单精简完成、Entity-DB一致性保障机制建立 |
-| V4.0 | 2026-07-24 | Hermes | Agency 分支模块清单全面更新：新增代理内角色体系（4.8节）+ 客户分配机制 + 数据权限三层防线 + 数据库表扩展 + 前端菜单扩展 |
+|| V4.0 | 2026-07-24 | Hermes | Agency 分支模块清单全面更新：新增代理内角色体系（4.8节）+ 客户分配机制 + 数据权限三层防线 + 数据库表扩展 + 前端菜单扩展 |
+|| V5.0 | 2026-08-19 | Hermes | Agency 模块状态更新（角色体系+客户分配已完成）；工资薪酬状态更新（SALARY 单据已上线） |
 
 ---
 

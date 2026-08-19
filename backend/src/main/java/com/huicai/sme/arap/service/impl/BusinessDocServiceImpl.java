@@ -301,6 +301,10 @@ public class BusinessDocServiceImpl implements BusinessDocService {
         if (!"SUBMITTED".equals(entity.getStatus())) {
             throw BusinessException.badRequest("仅已提交状态可审批");
         }
+        // 自审拦截: 制单人不能审核自己提交的单据
+        if (userId != null && entity.getCreatedBy() != null && userId.equals(entity.getCreatedBy())) {
+            throw BusinessException.badRequest("制单人不能审核自己提交的单据");
+        }
         entity.setStatus(BusinessDocStatus.APPROVED);
         entity.setApprovedBy(userId);
         entity.setApprovedAt(LocalDateTime.now());
@@ -473,6 +477,9 @@ public class BusinessDocServiceImpl implements BusinessDocService {
         reverse.setSource("MANUAL");
         reverse.setCreatedBy(userId);
         docMapper.insert(reverse);
+        // 标记原单已被红冲（父端标记）
+        entity.setIsReversed(true);
+        docMapper.updateById(entity);
         List<BusinessDocEntryEntity> srcEntries = docEntryMapper.selectByDocId(entity.getId());
         for (int i = 0; i < srcEntries.size(); i++) {
             BusinessDocEntryEntity src = srcEntries.get(i);

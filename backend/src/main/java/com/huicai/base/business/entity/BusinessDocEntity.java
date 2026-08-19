@@ -83,6 +83,10 @@ public class BusinessDocEntity extends BaseEntity {
     @TableField("reversed_from")
     private Long reversedFrom;
 
+    /** 是否已被红冲（父端标记） */
+    @TableField("is_reversed")
+    private Boolean isReversed;
+
     private Long submittedBy;
     private LocalDateTime submittedAt;
 
