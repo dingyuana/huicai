@@ -4,7 +4,7 @@
 > **版本**：V1.0 | **日期**：2026-08-19
 > **关联总 PRD：`(../CORE-需求分析.md)` 
 > **关联设计**：DSN-总账管理.md / SPEC P22-voucher-state-machine.md
-> **关联SPEC**：P22-voucher-state-machine.md、P26-凭证模板规范、S-17-期末自动化结转.md
+> **关联SPEC**：P22-voucher-state-machine.md、P37-voucher-type-rules.md、S-17-期末自动化结转.md
 > **对应包**：com.huicai.base.voucher
 
 ---

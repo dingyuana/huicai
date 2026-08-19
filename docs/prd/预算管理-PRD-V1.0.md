@@ -4,7 +4,7 @@
 > **版本**：V1.0 | **日期**：2026-08-19
 > **关联总 PRD：`(../CORE-需求分析.md)` 
 > **关联设计**：DSN-预算管理.md
-> **关联SPEC**：P16-预算管理.md、BudgetStateMachineService
+> **关联SPEC**：P16-budget-management.md
 > **对应包**：com.huicai.sme.budget
 
 ---

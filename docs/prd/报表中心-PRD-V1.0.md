@@ -4,7 +4,7 @@
 > **版本**：V1.0 | **日期**：2026-08-19
 > **关联总 PRD：`(../CORE-需求分析.md)` 
 > **关联设计**：DSN-报表分析.md
-> **关联SPEC**：S-19-报表分析.md、ReportServiceTest.java、ReportServiceImplTest.java
+> **关联SPEC**：P17-report-center.md
 > **对应包**：com.huicai.base.report
 
 ---

@@ -4,7 +4,7 @@
 > **版本**：V1.0 | **日期**：2026-08-19
 > **关联总 PRD：`(../CORE-需求分析.md)` 
 > **关联设计**：S-26-agency-branch-development.md
-> **关联SPEC**：S-26-agency-branch-development.md、AgencyUserEnterpriseServiceImpl
+> **关联SPEC**：S-26-agency-branch-development.md
 > **对应包**：com.huicai.agency
 
 ---
