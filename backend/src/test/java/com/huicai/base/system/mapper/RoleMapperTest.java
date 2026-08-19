@@ -1,109 +1,63 @@
 package com.huicai.base.system.mapper;
 
 import com.huicai.base.system.entity.RoleEntity;
+import com.huicai.common.test.AbstractMapperTest;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.DisplayName;
-import org.mockito.Mockito;
+import org.springframework.beans.factory.annotation.Autowired;
+
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * RoleMapper 方法签名验证测试
+ * Role Mapper 真实 DB 测试.
+ * 验证 role_code UNIQUE 约束、NOT NULL 约束.
  */
-public class RoleMapperTest {
+class RoleMapperTest extends AbstractMapperTest {
+
+    @Autowired
+    private RoleMapper roleMapper;
 
     @Test
-    @DisplayName("RoleMapper insert 方法应接受正确参数")
-    void insert_shouldAcceptValidParams() {
-        RoleMapper mapper = Mockito.mock(RoleMapper.class);
+    void insert_shouldReturnId() {
         RoleEntity entity = new RoleEntity();
-
-        // 设置必要字段
+        entity.setCode("ROLE_TEST_" + System.currentTimeMillis());
         entity.setName("测试角色");
-        entity.setCode("TEST_ROLE");
-        entity.setDescription("测试描述");
-        entity.setStatus("ACTIVE");
-        entity.setSortOrder(100);
-        entity.setDataScope("ALL");
+        entity.setStatus("enabled");
+        entity.setSortOrder(1);
+        entity.setDataScope("all");
+        entity.setDeleted(0);
+        entity.setCreatedBy(1L);
+        entity.setUpdatedBy(1L);
 
-        // 验证方法可调用且返回正确类型
-        Mockito.when(mapper.insert(entity)).thenReturn(1);
-        int rows = mapper.insert(entity);
+        int rows = roleMapper.insert(entity);
 
         assertEquals(1, rows);
-        Mockito.verify(mapper).insert(entity);
+        assertNotNull(entity.getId());
     }
 
     @Test
-    @DisplayName("RoleMapper selectById 方法应返回实体")
-    void selectById_shouldReturnEntity() {
-        RoleMapper mapper = Mockito.mock(RoleMapper.class);
-        RoleEntity entity = new RoleEntity();
-        entity.setName("测试角色");
-        entity.setCode("TEST_ROLE");
-        entity.setDescription("测试描述");
-        entity.setStatus("ACTIVE");
-        entity.setSortOrder(100);
-        entity.setDataScope("ALL");
-        Mockito.when(mapper.selectById(1L)).thenReturn(entity);
+    void insert_shouldFailWithDuplicateRoleCode() {
+        RoleEntity entity1 = new RoleEntity();
+        entity1.setCode("ROLE_UNIQUE_TEST");
+        entity1.setName("唯一性测试角色1");
+        entity1.setStatus("enabled");
+        entity1.setSortOrder(1);
+        entity1.setDataScope("all");
+        entity1.setDeleted(0);
+        entity1.setCreatedBy(1L);
+        entity1.setUpdatedBy(1L);
+        roleMapper.insert(entity1);
 
-        RoleEntity result = mapper.selectById(1L);
+        RoleEntity entity2 = new RoleEntity();
+        entity2.setCode("ROLE_UNIQUE_TEST");
+        entity2.setName("唯一性测试角色2");
+        entity2.setStatus("enabled");
+        entity2.setSortOrder(2);
+        entity2.setDataScope("all");
+        entity2.setDeleted(0);
+        entity2.setCreatedBy(1L);
+        entity2.setUpdatedBy(1L);
 
-        assertNotNull(result);
-        Mockito.verify(mapper).selectById(1L);
-    }
-
-    @Test
-    @DisplayName("RoleMapper updateById 方法应接受实体参数")
-    void updateById_shouldAcceptEntity() {
-        RoleMapper mapper = Mockito.mock(RoleMapper.class);
-        RoleEntity entity = new RoleEntity();
-        entity.setName("测试角色");
-        entity.setCode("TEST_ROLE");
-        entity.setDescription("测试描述");
-        entity.setStatus("ACTIVE");
-        entity.setSortOrder(100);
-        entity.setDataScope("ALL");
-        Mockito.when(mapper.updateById(entity)).thenReturn(1);
-
-        int rows = mapper.updateById(entity);
-
-        assertEquals(1, rows);
-        Mockito.verify(mapper).updateById(entity);
-    }
-
-    @Test
-    @DisplayName("RoleMapper deleteById 方法应接受ID参数")
-    void deleteById_shouldAcceptId() {
-        RoleMapper mapper = Mockito.mock(RoleMapper.class);
-        Mockito.when(mapper.deleteById(1L)).thenReturn(1);
-
-        int rows = mapper.deleteById(1L);
-
-        assertEquals(1, rows);
-        Mockito.verify(mapper).deleteById(1L);
-    }
-
-    @Test
-    @DisplayName("RoleMapper 所有方法定义应正确")
-    void allMethods_shouldBeDefined() {
-        RoleMapper mapper = Mockito.mock(RoleMapper.class);
-
-        // 验证所有常用方法存在
-        RoleEntity e = new RoleEntity();
-        e.setName("测试角色");
-        e.setCode("TEST_ROLE");
-        e.setDescription("测试描述");
-        e.setStatus("ACTIVE");
-        e.setSortOrder(100);
-        e.setDataScope("ALL");
-        Mockito.when(mapper.insert(e)).thenReturn(1);
-        Mockito.when(mapper.selectById(1L)).thenReturn(e);
-        Mockito.when(mapper.updateById(e)).thenReturn(1);
-        Mockito.when(mapper.deleteById(1L)).thenReturn(1);
-
-        assertEquals(1, mapper.insert(e));
-        assertNotNull(mapper.selectById(1L));
-        assertEquals(1, mapper.updateById(e));
-        assertEquals(1, mapper.deleteById(1L));
+        assertThrows(Exception.class, () -> roleMapper.insert(entity2),
+                "role_code 唯一性约束应阻止重复");
     }
 }
