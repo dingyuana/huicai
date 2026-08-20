@@ -1,6 +1,6 @@
 # 01-总账管理设计
 
-> **关联PRD**：../prd/总账结账-PRD-V1.0.md, ../prd/凭证管理-PRD-V1.0.md
+> **关联PRD**：../prd/总账结账-PRD-V1.0.md, ../prd/凭证管理-PRD-V1.0.md, ../prd/凭证模板引擎-PRD-V1.0.md
 > **关联SPEC**：P22-voucher-state-machine.md, P37-voucher-type-rules.md, S-17-期末自动化结转.md, S-18-结账控制与反结账.md
 > **编号**：HUICAI-DES-002
 > **版本**：V1.0 | **修改日期**：2026-07-07 | **修改人**：Hermes | **修改内容**：初始创建
@@ -86,7 +86,7 @@ PRD（14份子文档）→ DSN（本文档）→ SPEC（P22/P37/S-17等）→ �
 
 | 要素 | 本模块对应内容 |
 |------|------------|
-| 关联 PRD | `../prd/凭证管理-PRD-V1.0.md`, `../prd/总账结账-PRD-V1.0.md` |
+| 关联 PRD | `../prd/总账结账-PRD-V1.0.md`, `../prd/凭证管理-PRD-V1.0.md`, `../prd/凭证模板引擎-PRD-V1.0.md` |
 | 关联 SPEC | `P22-voucher-state-machine.md`, `P37-voucher-type-rules.md`, `S-17-期末自动化结转.md`, `S-18-结账控制与反结账.md` |
 | 代码包 | `com.huicai.base.voucher`, `com.huicai.base.subject`, `com.huicai.base.period` |
 | 测试类 | `VoucherStateMachineServiceImplTest`, `VoucherMapperTest`, `PeriodCloseServiceImplTest` |
