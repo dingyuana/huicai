@@ -105,3 +105,11 @@ MATCHED ──→ lockReconciliation ──→ LOCKED
 | AT-P14-1 | 自动匹配生成匹配记录 | `match(period) → reconciliation_log count > 0` |
 | AT-P14-2 | 人工确认后匹配锁定 | `confirmMatch(id) → log.status == 'CONFIRMED'` |
 | AT-P14-3 | 余额调节表生成 | `execute(period) → reconciliation_report exists` |
+## BDD 验收标准
+
+| ID | Given-When-Then |
+|----|----------------|
+| RCL-01 | Given 有银行流水+银行对账单 When 执行自动匹配 Then 相同日期金额配对，状态=待确认 |
+| RCL-02 | Given 有匹配记录 When 人工 confirmMatch Then 状态=已确认，双方锁定 |
+| RCL-03 | Given 已确认匹配 When 再次匹配 Then 排除已确认记录，避免重复 |
+| RCL-04 | Given 无匹配银行对账单 When 执行匹配 Then 返回空列表，不抛异常 |

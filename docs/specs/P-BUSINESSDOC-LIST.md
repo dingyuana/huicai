@@ -36,6 +36,56 @@ private BigDecimal amountMax;
 
 `period`（YYYYMM）查询条件保留，与日期范围并存，前端同时传两个时后端 OR 关系——两个条件都有效时后端只保留第一个有效条件（优先日期范围）。
 
+---
+
+## 1. 输入契约
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| startDate | String(yyyy-MM-dd) | 否 | 起始日期 |
+| endDate | String(yyyy-MM-dd) | 否 | 结束日期 |
+| amountMin | BigDecimal | 否 | 最小金额 |
+| amountMax | BigDecimal | 否 | 最大金额 |
+| docDateStart | String | 否 | 单据起始日期 |
+| docDateEnd | String | 否 | 单据结束日期 |
+
+## 2. 输出契约
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| docNo | String | 单据编号 |
+| docType | String | 单据类型 |
+| amount | BigDecimal | 金额 |
+| docDate | LocalDate | 单据日期 |
+| status | String | 状态 |
+| settledAmount | BigDecimal | 已核销金额 |
+| unsettledAmount | BigDecimal | 未核销金额 |
+
+## 3. 状态流转
+
+| 转换 | 前置条件 | 副作用 |
+|------|---------|--------|
+| DRAFT→SUBMITTED | 提交 | 记录提交人/时间 |
+| SUBMITTED→AUDITED | 审核 | 记录审核人/时间 |
+| AUDITED→VOUCHERED | 制证 | 写入 voucherNo |
+| AUDITED→REVERSED | 红冲 | 设置 isReversed，生成红冲单 |
+
+## 4. 异常处理
+
+| 场景 | 异常 |
+|------|------|
+| 日期范围非法 | BusinessException: 起始日期不得晚于结束日期 |
+| 金额范围非法 | BusinessException: 最小金额不得大于最大金额 |
+
+## BDD 验收标准
+
+| ID | Given-When-Then |
+|----|----------------|
+| LIST-01 | Given 日期范围筛选 When 查询 Then 仅返回期间内单据 |
+| LIST-02 | Given 金额区间筛选 When 查询 Then 仅返回区间内单据 |
+| LIST-03 | Given 核销列展示 When 未核销 Then 显示红色徽章 |
+| LIST-04 | Given 源单号列 When 点击编号 Then 跳转关联单据详情 |
+
 ## 前端交互
 
 - 日期范围：`el-date-picker` type="daterange"，格式 `yyyy-MM-dd`

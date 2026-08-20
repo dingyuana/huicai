@@ -116,3 +116,10 @@ DRAFT ──→ approve ──→ APPROVED ──→ activate ──→ ACTIVE
 | AT-P16-3 | 审批后状态为APPROVED | `approve() → status == 'APPROVED'` |
 | AT-P16-4 | 预算检查返回余额 | `check(subjectId, amount) → remaining >= 0` |
 | AT-P16-5 | 超预算BLOCK类型阻止提交 | `BLOCK type + over budget → BusinessException` |
+## BDD 验收标准
+
+| ID | Given-When-Then |
+|----|----------------|
+| BUD-01 | Given 有预算编制 When 执行预算控制校验 Then 超预算拦截，返回超额金额 |
+| BUD-02 | Given 预算超支 When 触发强制审批 Then 超支金额写入审批记录 |
+| BUD-03 | Given 有预算执行数据 When 查询预算分析 Then 展示预算vs实际vs差异 |

@@ -120,3 +120,10 @@ String runOcr(Long id, Map<String, String> hint) {
 | AT-P15-1 | 附件上传成功 | `upload(file) → attachment.id != null` |
 | AT-P15-2 | OCR识别返回结构化JSON | `ocrRecognize(file) → result contains 'invoice_no'` |
 | AT-P15-3 | 附件关联到业务实体 | `attach(bizType, bizId, fileId) → link exists` |
+## BDD 验收标准
+
+| ID | Given-When-Then |
+|----|----------------|
+| OCR-01 | Given 上传图片/PDF When 上传附件 Then 返回附件URL和文件名 |
+| OCR-02 | Given 上传图片 When 触发OCR Then 返回结构化JSON（金额/日期/供应商等字段） |
+| OCR-03 | Given 附件已关联单据 When 删除附件 Then 单据不受影响 |

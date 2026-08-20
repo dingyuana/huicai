@@ -95,3 +95,10 @@
 | AT-P17-2 | 利润表数据完整 | `profitStatement(period) → revenue - expense == profit` |
 | AT-P17-3 | 科目余额表按层级展示 | `subjectBalance(period) → tree structure` |
 | AT-P17-4 | 杜邦分析返回指标树 | `dupont(period) → ROE decomposed` |
+## BDD 验收标准
+
+| ID | Given-When-Then |
+|----|----------------|
+| RPT-01 | Given 有期末余额 When 查询资产负债表 Then 资产=负债+所有者权益 |
+| RPT-02 | Given 有发生额 When 查询利润表 Then 收入-费用=净利润 |
+| RPT-03 | Given 有多期数据 When 查询趋势分析 Then 返回多期折线图数据 |

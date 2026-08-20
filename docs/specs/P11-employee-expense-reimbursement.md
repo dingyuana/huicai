@@ -285,3 +285,15 @@ autoCreateForBankStmt → t_expense_reimbursement (DRAFT, expenseType=OTHER)
 | AT-P11-3 | 审核通过后状态为APPROVED | `approve() → status == 'APPROVED'` |
 | AT-P11-4 | 驳回后状态为REJECTED | `reject() → status == 'REJECTED'` |
 | AT-P11-5 | 生成凭证后状态为VOUCHERED | `autoVoucher() → status == 'VOUCHERED' AND voucher_id != null` |
+
+---
+
+## BDD 验收标准
+
+| ID | Given-When-Then |
+|----|----------------|
+| EXP-01 | Given 银行流水对方名称匹配员工 When 自动建单 Then 生成报销单 DRAFT+付款单+凭证 |
+| EXP-02 | Given 报销单 DRAFT When 提交 Then 状态=SUBMITTED |
+| EXP-03 | Given 报销单 SUBMITTED When 审核通过 Then 状态=APPROVED，生成付款单 |
+| EXP-04 | Given 报销单 SUBMITTED When 驳回 Then 状态=REJECTED |
+| EXP-05 | Given 报销单 APPROVED When 生成凭证 Then 状态=VOUCHERED，凭证分录正确 |
