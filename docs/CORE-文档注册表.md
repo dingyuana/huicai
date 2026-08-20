@@ -16,7 +16,7 @@ docs/
 ├── CORE-需求分析.md                    ← 核心③：需求全景/功能矩阵/版本规划（V5.0）
 ├── CORE-文档注册表.md                  ← 本文档，权威索引（V4.0）
 │
-├── prd/                        ← 产品需求文档（17份，含1份拆解计划）
+├── prd/                        ← 产品需求文档（18份，含1份拆解计划）
 ├── design/                     ← 模块设计文档（13份 DSN + 2份分析）
 ├── specs/                      ← SPEC 规格契约（66份）
 ├── architecture/               ← 架构设计文档（7份）
@@ -86,6 +86,7 @@ docs/
 | HUICAI-PRD-012 | [Agency分支-PRD-V1.0.md](./prd/Agency分支-PRD-V1.0.md) | DSN-应收应付管理 | S-26 | ✅ |
 | HUICAI-PRD-013 | [公共参数-PRD-V1.0.md](./prd/公共参数-PRD-V1.0.md) | DSN-基础数据管理 | 待建 | ⚠️ 部分实现 |
 | HUICAI-PRD-014 | [权限安全审计-PRD-V1.0.md](./prd/权限安全审计-PRD-V1.0.md) | DSN-基础数据管理 | S-01、S-02 | ✅ |
+| HUICAI-PRD-007 | [凭证模板引擎-PRD-V1.0.md](./prd/凭证模板引擎-PRD-V1.0.md) | DSN-总账管理 | P22、P37、S-17 | ✅ |
 | HUICAI-PRD-PLAN | [PRD-拆解计划.md](./prd/PRD-拆解计划.md) | — | — | ✅ |
 
 ### 2.2 DSN 模块设计文档（design/ — 13份）
