@@ -16,7 +16,7 @@ docs/
 ├── CORE-需求分析.md                    ← 核心③：需求全景/功能矩阵/版本规划（V5.0）
 ├── CORE-文档注册表.md                  ← 本文档，权威索引（V4.0）
 │
-├── prd/                        ← 产品需求文档（15份，含1份拆解计划）
+├── prd/                        ← 产品需求文档（17份，含1份拆解计划）
 ├── design/                     ← 模块设计文档（13份 DSN + 2份分析）
 ├── specs/                      ← SPEC 规格契约（66份）
 ├── architecture/               ← 架构设计文档（7份）
@@ -62,7 +62,7 @@ docs/
 ## 二、PRD ↔ DSN ↔ SPEC 三层体系
 
 > **顺序**：PRD（需求层）→ DSN（设计层）→ SPEC（契约层）→ 代码 + @Test
-> **PRD**：回答 What，对应 14 个模块需求
+> **PRD**：回答 What，对应 16 个模块需求
 > **DSN**：回答 Architecture，13 份模块级设计
 > **SPEC**：回答 How，66 份功能点级契约
 
@@ -84,6 +84,8 @@ docs/
 | HUICAI-PRD-010 | [预算管理-PRD-V1.0.md](./prd/预算管理-PRD-V1.0.md) | DSN-预算管理 | P16 | ✅ |
 | HUICAI-PRD-011 | [工资薪酬-PRD-V1.0.md](./prd/工资薪酬-PRD-V1.0.md) | DSN-工资薪酬管理 | S-14（待建） | ✅（模块待建） |
 | HUICAI-PRD-012 | [Agency分支-PRD-V1.0.md](./prd/Agency分支-PRD-V1.0.md) | DSN-应收应付管理 | S-26 | ✅ |
+| HUICAI-PRD-013 | [公共参数-PRD-V1.0.md](./prd/公共参数-PRD-V1.0.md) | DSN-基础数据管理 | 待建 | ⚠️ 部分实现 |
+| HUICAI-PRD-014 | [权限安全审计-PRD-V1.0.md](./prd/权限安全审计-PRD-V1.0.md) | DSN-基础数据管理 | S-01、S-02 | ✅ |
 | HUICAI-PRD-PLAN | [PRD-拆解计划.md](./prd/PRD-拆解计划.md) | — | — | ✅ |
 
 ### 2.2 DSN 模块设计文档（design/ — 13份）
