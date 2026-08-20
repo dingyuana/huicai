@@ -7,7 +7,7 @@
 > 目标：为所有自动生成凭证的路径定义明确的凭证类型映射规则，消除硬编码 `DEFAULT_VOUCHER_TYPE_ID = 1L`
 > 工期：单批交付，1 个 commit
 
-> **test_ref**：VoucherTypeServiceImplTest
+> **test_ref**：VoucherTemplateServiceImplTest（14个@Test：模板匹配/创建/更新/激活/删除）
 ---
 
 > **关联需求**: REQ-2026-007

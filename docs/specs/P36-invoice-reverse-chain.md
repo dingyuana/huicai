@@ -1,7 +1,7 @@
 # P36: 发票-业务单-应收-凭证 红冲链路补齐
 > **版本**：V1.0 | **最后修改**：2026-07-19 | **作者**：Hermes
 > **状态**：✅ 生效
-> **test_ref**：OutputInvoiceStateMachineServiceImplTest, InputInvoiceStateMachineServiceImplTest
+> **test_ref**：OutputInvoiceStateMachineServiceImplTest（48个@Test，含reverse）, VoucherStateMachineServiceImplTest（20个@Test，含reverse）, **InputInvoice红冲测试待补**
 
 > **编号**：HUICAI-SPC-036
 > **实施范围**：前向级联（发票 confirm → 业务单据 + 凭证）+ 反向级联（凭证 reverse → 发票 + 业务单据）
