@@ -71,19 +71,6 @@
             </template>
           </template>
         </el-table-column>
-        <el-table-column label="科目" min-width="240">
-          <template #default="{ row }">
-            <el-tree-select
-              v-model="row.subjectId"
-              :data="leafSubjectOptions"
-              :props="({ value: 'id', label: 'name' } as any)"
-              check-strictly
-              :render-after-expand="false"
-              placeholder="选择末级科目"
-              style="width:100%"
-            />
-          </template>
-        </el-table-column>
         <el-table-column label="金额" width="180">
           <template #default="{ row }">
             <el-input-number v-model="row.amount" :min="0" :precision="2" :step="0.01" style="width:100%" />
@@ -127,7 +114,6 @@ import {
   DOC_TYPE_LABELS, CUSTOMER_DOC_TYPES, SUPPLIER_DOC_TYPES,
   type BusinessDocDTO, type BusinessDocEntry,
 } from '@/api/modules/businessDoc'
-import { getSubjectTree, type SubjectVO } from '@/api/modules/subject'
 import { listCustomer, listVendor, createCustomer, createVendor } from '@/api/modules/arap'
 import { getActiveBankAccounts, type BankAccountVO } from '@/api/modules/bankAccount'
 
@@ -140,7 +126,6 @@ const isEdit = mode === 'edit' && editId != null
 
 const saving = ref(false)
 const formRef = ref<FormInstance>()
-const subjectTree = ref<SubjectVO[]>([])
 const customers = ref<Array<{id: number; name: string}>>([])
 const suppliers = ref<Array<{id: number; name: string}>>([])
 const customerQuery = ref('')
@@ -165,7 +150,7 @@ const form = ref<BusinessDocDTO>({
   amount: 0,
   summary: '',
   entries: [
-    { expenseType: '', subjectId: undefined as unknown as number, amount: 0, invoiceNo: '', summary: '' },
+    { expenseType: '', amount: 0, invoiceNo: '', summary: '' },
   ],
 })
 
@@ -174,18 +159,6 @@ const formRules = {
   docDate: [{ required: true, message: '请选择单据日期', trigger: 'change' }],
   amount: [{ required: true, message: '请输入金额', trigger: 'blur' }],
 }
-
-const leafSubjectOptions = computed(() => {
-  const list: SubjectVO[] = []
-  const walk = (nodes: SubjectVO[]) => {
-    for (const n of nodes) {
-      if (n.isLeaf) list.push(n)
-      if (n.children?.length) walk(n.children)
-    }
-  }
-  walk(subjectTree.value)
-  return list
-})
 
 // 会计期间: 从 docDate 自动计算，防止用户输错
 const autoPeriod = computed(() => {
@@ -202,7 +175,7 @@ function fmtAmount(v: number) {
 }
 
 function addEntry() {
-  form.value.entries.push({ expenseType: '', subjectId: undefined as unknown as number, amount: 0, invoiceNo: '', summary: '' })
+  form.value.entries.push({ expenseType: '', amount: 0, invoiceNo: '', summary: '' })
 }
 
 function removeEntry(i: number) {
@@ -320,7 +293,6 @@ async function onSave(submitAfter: boolean) {
       ...form.value,
       period: autoPeriod.value,
       entries: form.value.entries.map((e, i) => ({
-        subjectId: e.subjectId,
         amount: e.amount,
         expenseType: e.expenseType,
         invoiceNo: e.invoiceNo,
@@ -368,7 +340,6 @@ watch(() => form.value.docType, () => {
 
 onMounted(async () => {
   try {
-    subjectTree.value = await getSubjectTree()
     await loadPartyOptions()
   } catch {
     // ignore

@@ -71,16 +71,31 @@ public class OutputInvoiceEntity extends BaseEntity {
     private Long reversedByInvoiceId;
 
     /**
-     * 被哪张蓝字发票红冲（指向蓝字发票 ID，P36 新增）— DB 无此列
+     * 被哪张蓝字发票红冲（指向蓝字发票 ID，P36 新增，V138 落库列）
      */
-    @TableField(exist = false)
+    @TableField("reversed_from")
     private Long reversedFrom;
 
     /**
-     * 原蓝字发票号码（红字发票专用）— DB 无此列
+     * 原蓝字发票号码（红字发票专用，V138 落库列）
      */
-    @TableField(exist = false)
+    @TableField("original_invoice_no")
     private String originalInvoiceNo;
+
+    /**
+     * 红冲原因: INVOICE_ERROR-开票有误, RETURN-退货, DISCOUNT-折让, OTHER-其他 (V138)
+     */
+    private String reverseReason;
+
+    /**
+     * 原蓝字发票对应凭证ID（V138，红冲时快照）
+     */
+    private Long originalVoucherId;
+
+    /**
+     * 原发票状态快照: CERTIFIED/UNCERTIFIED (V138)
+     */
+    private String originalCertificationStatus;
 
     /**
      * 原蓝字发票ID（红字发票专用，非数据库字段）

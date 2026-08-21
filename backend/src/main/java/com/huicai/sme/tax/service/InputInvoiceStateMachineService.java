@@ -32,4 +32,14 @@ public interface InputInvoiceStateMachineService {
 
     /** 红冲 (CONFIRMED/VOUCHERED/PARTIALLY_RECONCILED -> REVERSED, 生成红字进项发票) */
     Long reverseInvoice(Long invoiceId, Long userId, String reason);
+
+    /**
+     * 红冲（带红冲原因，P36.1）
+     * reverseReason: INVOICE_ERROR-开票有误, RETURN-退货, DISCOUNT-折让, OTHER-其他
+     * 红字发票 getOriginalVoucherId/getOriginalCertificationStatus 快照原发票凭证与抵扣状态，
+     * 供红字凭证生成时判断情况一(已抵扣→进项转出)/情况二(未抵扣)/情况三(未入账)。
+     */
+    default Long reverseInvoice(Long invoiceId, Long userId, String reason, String reverseReason) {
+        return reverseInvoice(invoiceId, userId, reason);
+    }
 }

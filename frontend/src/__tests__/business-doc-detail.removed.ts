@@ -1,0 +1,1 @@
+// 已删除 — 被 BusinessDocDetail.test.ts 替代

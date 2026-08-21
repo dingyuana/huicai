@@ -58,6 +58,22 @@ public class InputInvoiceEntity extends BaseEntity {
     private BigDecimal deductionAmount;
     private Long voucherId;
 
+    /** 红冲原因: INVOICE_ERROR-开票有误, RETURN-退货, DISCOUNT-折让, OTHER-其他 (V138) */
+    private String reverseReason;
+
+    /** 原蓝字发票对应凭证ID（V138，红冲时快照） */
+    private Long originalVoucherId;
+
+    /** 原发票抵扣状态快照: CERTIFIED/UNCERTIFIED (V138) */
+    private String originalCertificationStatus;
+
+    /** 被红冲的发票ID（红字发票→原蓝字）(V138) */
+    private Long reversedFrom;
+
+    /** 原蓝字发票号（V138） */
+    @TableField("original_invoice_no")
+    private String originalInvoiceNo;
+
     /**
      * 关联业务单据ID
      */

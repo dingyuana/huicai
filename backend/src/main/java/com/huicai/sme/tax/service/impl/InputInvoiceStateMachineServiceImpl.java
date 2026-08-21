@@ -1,5 +1,6 @@
 package com.huicai.sme.tax.service.impl;
 
+import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.huicai.common.exception.BusinessException;
 import com.huicai.base.business.entity.BusinessDocEntity;
@@ -12,6 +13,7 @@ import com.huicai.base.voucher.service.VoucherNoService;
 import com.huicai.base.system.entity.Subject;
 import com.huicai.base.system.mapper.SubjectMapper;
 import com.huicai.sme.tax.constant.InvoiceStatus;
+import com.huicai.sme.tax.constant.RedFlushReason;
 import com.huicai.base.business.entity.InputInvoiceEntity;
 import com.huicai.base.business.mapper.InputInvoiceMapper;
 import com.huicai.sme.tax.service.InputInvoiceStateMachineService;
@@ -79,6 +81,12 @@ public class InputInvoiceStateMachineServiceImpl implements InputInvoiceStateMac
             throw new OptimisticLockingFailureException("发票版本冲突, id=" + invoiceId);
         }
         log.info("进项发票审核通过: id={}, userId={}", invoiceId, userId);
+
+        // P36.1: 红字发票确认 → 红冲账务处理（反向红字凭证 + 进项转出判断）
+        if (StrUtil.isNotBlank(entity.getReverseReason()) || entity.getReversedFrom() != null) {
+            generateRedFlushVoucher(invoiceId, userId);
+            return;
+        }
 
         // 创建 INVOICE_IN 业务单据 + 凭证
         createBusinessDocFromInvoice(invoiceId, userId);
@@ -167,8 +175,22 @@ public class InputInvoiceStateMachineServiceImpl implements InputInvoiceStateMac
     @Override
     @Transactional(rollbackFor = Exception.class)
     public Long reverseInvoice(Long invoiceId, Long userId, String reason) {
+        // 兼容旧调用：默认红冲原因 OTHER
+        return reverseInvoice(invoiceId, userId, reason, RedFlushReason.OTHER);
+    }
+
+    /**
+     * P36.1: 红冲（带红冲原因）。
+     * 在创建红字发票时快照原发票的凭证ID与抵扣状态，供红字凭证生成判断账务处理方式。
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public Long reverseInvoice(Long invoiceId, Long userId, String reason, String reverseReason) {
         if (reason == null || reason.trim().isEmpty()) {
             throw BusinessException.badRequest("红冲必须填写原因");
+        }
+        if (!RedFlushReason.isValid(reverseReason)) {
+            throw BusinessException.badRequest("未知红冲原因: " + reverseReason
+                    + "，应为 INVOICE_ERROR/RETURN/DISCOUNT/OTHER");
         }
         InputInvoiceEntity original = getEntity(invoiceId);
         if (!InvoiceStatus.isReversible(original.getStatus())) {
@@ -190,6 +212,12 @@ public class InputInvoiceStateMachineServiceImpl implements InputInvoiceStateMac
         redInvoice.setInvoiceType(original.getInvoiceType());
         redInvoice.setStatus(InvoiceStatus.PENDING_CONFIRM);
         redInvoice.setCertificationStatus("UNCERTIFIED");
+        redInvoice.setReverseReason(reverseReason);
+        redInvoice.setReversedFrom(original.getId());
+        redInvoice.setOriginalInvoiceNo(original.getInvoiceNo());
+        // 快照原发票凭证与抵扣状态（P36.1 账务判断依据）
+        redInvoice.setOriginalVoucherId(original.getVoucherId());
+        redInvoice.setOriginalCertificationStatus(original.getCertificationStatus());
         redInvoice.setRemark(appendReason(original.getRemark(), reason, userId));
         redInvoice.setCreatedBy(userId);
         invoiceMapper.insert(redInvoice);
@@ -199,8 +227,8 @@ public class InputInvoiceStateMachineServiceImpl implements InputInvoiceStateMac
         original.setUpdatedBy(userId);
         invoiceMapper.updateById(original);
 
-        log.info("进项发票红冲: originalId={}, redInvoiceId={}, originalInvoiceNo={}, reason={}",
-                invoiceId, redInvoice.getId(), original.getInvoiceNo(), reason);
+        log.info("进项发票红冲: originalId={}, redInvoiceId={}, originalInvoiceNo={}, reason={}, reverseReason={}",
+                invoiceId, redInvoice.getId(), original.getInvoiceNo(), reason, reverseReason);
         return redInvoice.getId();
     }
 
@@ -366,6 +394,133 @@ public class InputInvoiceStateMachineServiceImpl implements InputInvoiceStateMac
             log.error("P40 进项发票凭证生成失败: invoiceId={}, error={}", invoiceId, e.getMessage(), e);
             throw new BusinessException(500, "进项发票凭证生成失败: " + e.getMessage());
         }
+    }
+
+    /**
+     * P36.1: 红字进项发票确认后生成红冲凭证（source=REVERSAL, DRAFT）。
+     * <p>
+     * 三种情况：
+     * - 情况一（原发票已入账且已抵扣）：冲销原分录 + 进项税额转出（2221.04 贷方）
+     * - 情况二（原发票已入账未抵扣）：仅冲销原分录（三行红字），无进项转出
+     * - 情况三（原发票未入账，originalVoucherId 为空）：不额外生成凭证
+     */
+    private void generateRedFlushVoucher(Long invoiceId, Long userId) {
+        InputInvoiceEntity redInvoice = getEntity(invoiceId);
+
+        // 情况三：原发票未入账 → 不额外制证（蓝字+红字合并净额入账）
+        if (redInvoice.getOriginalVoucherId() == null
+                && StrUtil.isBlank(redInvoice.getOriginalCertificationStatus())) {
+            log.info("P36.1 红字发票原发票未入账，无需额外制证: invoiceId={}", invoiceId);
+            return;
+        }
+
+        BigDecimal exclTax = redInvoice.getAmount() != null ? redInvoice.getAmount() : BigDecimal.ZERO;
+        BigDecimal taxAmt = redInvoice.getTaxAmount() != null ? redInvoice.getTaxAmount() : BigDecimal.ZERO;
+        BigDecimal totalAmt = redInvoice.getTotalAmount() != null ? redInvoice.getTotalAmount() : exclTax.add(taxAmt);
+
+        Map<String, Subject> subjects = findSubjectsByCodes(List.of("1601", "2221.01", "2202", "2221.04"));
+        Subject subjectInventory = subjects.get("1601");
+        Subject subjectInputTax = subjects.get("2221.01");
+        Subject subjectPayable = subjects.get("2202");
+        Subject subjectTaxOut = subjects.get("2221.04");
+        if (subjectPayable == null) {
+            throw new BusinessException(500, "缺少基础科目配置(2202 应付账款)");
+        }
+
+        String voucherNo = voucherNoService.generateNextNo(redInvoice.getPeriod(), VOUCHER_TYPE_ID);
+
+        VoucherEntity voucher = new VoucherEntity();
+        voucher.setVoucherNo(voucherNo);
+        voucher.setPeriod(redInvoice.getPeriod());
+        voucher.setVoucherTypeId(VOUCHER_TYPE_ID);
+        voucher.setStatus("DRAFT");
+        voucher.setSource("REVERSAL");
+        voucher.setReversedFrom(redInvoice.getOriginalVoucherId());
+        String summary = "红冲进项发票: " + (redInvoice.getInvoiceNo() != null ? redInvoice.getInvoiceNo() : "")
+                + " - " + (redInvoice.getVendorName() != null ? redInvoice.getVendorName() : "");
+        voucher.setSummary(summary);
+        voucher.setTotalDebit(totalAmt.abs());
+        voucher.setTotalCredit(totalAmt.abs());
+        voucher.setCreatedBy(userId);
+        voucher.setSourceDocId(redInvoice.getId());
+        voucher.setSourceDocType("INPUT_INVOICE");
+        voucher.setSourceDocNo(redInvoice.getInvoiceNo());
+        voucherMapper.insert(voucher);
+
+        int sort = 1;
+        String entrySummary = (redInvoice.getInvoiceNo() != null ? redInvoice.getInvoiceNo() : "")
+                + " " + (redInvoice.getVendorName() != null ? redInvoice.getVendorName() : "");
+
+        // 借: 1601 原材料/存货（红字）
+        if (subjectInventory != null && exclTax.compareTo(BigDecimal.ZERO) != 0) {
+            VoucherEntryEntity dr1 = new VoucherEntryEntity();
+            dr1.setVoucherId(voucher.getId());
+            dr1.setSubjectId(subjectInventory.getId());
+            dr1.setDebit(exclTax);
+            dr1.setCredit(BigDecimal.ZERO);
+            dr1.setSummary(entrySummary);
+            dr1.setSortOrder(sort++);
+            voucherEntryMapper.insert(dr1);
+        }
+
+        // 借: 2221.01 进项税额（红字，冲销原抵扣）
+        if (subjectInputTax != null && taxAmt.compareTo(BigDecimal.ZERO) != 0) {
+            VoucherEntryEntity dr2 = new VoucherEntryEntity();
+            dr2.setVoucherId(voucher.getId());
+            dr2.setSubjectId(subjectInputTax.getId());
+            dr2.setDebit(taxAmt);
+            dr2.setCredit(BigDecimal.ZERO);
+            dr2.setSummary(entrySummary);
+            dr2.setSortOrder(sort++);
+            voucherEntryMapper.insert(dr2);
+        }
+
+        // 贷: 2202 应付账款（红字）
+        VoucherEntryEntity cr = new VoucherEntryEntity();
+        cr.setVoucherId(voucher.getId());
+        cr.setSubjectId(subjectPayable.getId());
+        cr.setDebit(BigDecimal.ZERO);
+        cr.setCredit(totalAmt);
+        cr.setSummary(entrySummary);
+        cr.setSortOrder(sort++);
+        voucherEntryMapper.insert(cr);
+
+        // 情况一：已抵扣 → 进项税额转出（借: 1601/成本科目补正 + 贷: 2221.04 进项税额转出）
+        boolean originallyCertified = "CERTIFIED".equals(redInvoice.getOriginalCertificationStatus());
+        if (originallyCertified && taxAmt.compareTo(BigDecimal.ZERO) != 0) {
+            BigDecimal taxAbs = taxAmt.abs();
+            if (subjectInventory != null) {
+                VoucherEntryEntity taxDr = new VoucherEntryEntity();
+                taxDr.setVoucherId(voucher.getId());
+                taxDr.setSubjectId(subjectInventory.getId());
+                taxDr.setDebit(taxAbs);
+                taxDr.setCredit(BigDecimal.ZERO);
+                taxDr.setSummary(entrySummary + " 进项税额转出");
+                taxDr.setSortOrder(sort++);
+                voucherEntryMapper.insert(taxDr);
+            }
+            if (subjectTaxOut == null) {
+                throw new BusinessException(500, "缺少基础科目配置(2221.04 进项税额转出)");
+            }
+            VoucherEntryEntity taxCr = new VoucherEntryEntity();
+            taxCr.setVoucherId(voucher.getId());
+            taxCr.setSubjectId(subjectTaxOut.getId());
+            taxCr.setDebit(BigDecimal.ZERO);
+            taxCr.setCredit(taxAbs);
+            taxCr.setSummary(entrySummary + " 进项税额转出");
+            taxCr.setSortOrder(sort);
+            voucherEntryMapper.insert(taxCr);
+        }
+
+        // 回写红字发票 -> VOUCHERED
+        redInvoice.setStatus(InvoiceStatus.VOUCHERED);
+        redInvoice.setVoucherId(voucher.getId());
+        redInvoice.setVoucherNo(voucherNo);
+        redInvoice.setUpdatedBy(userId);
+        invoiceMapper.updateById(redInvoice);
+
+        log.info("P36.1 红字进项发票凭证生成: invoiceId={}, voucherId={}, voucherNo={}, certified={}, reverseReason={}",
+                invoiceId, voucher.getId(), voucherNo, originallyCertified, redInvoice.getReverseReason());
     }
 
     // ==================== 工具方法 ====================
