@@ -117,9 +117,12 @@
         v-loading="loading"
         border
         stripe
+        highlight-current-row
         @selection-change="onSelectionChange"
+        @row-click="goDetail"
+        style="cursor:pointer"
       >
-        <el-table-column type="selection" width="48" :selectable="(row: VoucherVO) => row.status === 'DRAFT' || row.status === 'SUBMITTED' || row.status === 'AUDITED'" />
+        <el-table-column type="selection" width="48" :selectable="isBatchable" />
         <el-table-column prop="voucherNo" label="凭证号" width="160" />
         <el-table-column prop="period" label="期间" width="80" align="center" />
         <el-table-column prop="voucherTypeName" label="凭证类型" width="100" align="center" />
@@ -139,23 +142,6 @@
         </el-table-column>
         <el-table-column prop="createdByName" label="制单人" width="80" align="center" />
         <el-table-column prop="createdAt" label="制单时间" width="160" />
-        <el-table-column label="操作" width="380" fixed="right">
-          <template #default="{ row }">
-            <el-button text size="small" @click="goDetail(row as VoucherVO)">查看</el-button>
-            <el-button text size="small" v-if="row.status === 'DRAFT'" @click="goEdit(row as VoucherVO)">编辑</el-button>
-            <el-button text size="small" v-if="row.status === 'DRAFT'" type="success" @click="onSubmit(row as VoucherVO)">提交</el-button>
-            <el-button text size="small" v-if="row.status === 'SUBMITTED'" type="primary" @click="onAudit(row as VoucherVO)">审核</el-button>
-            <el-button text size="small" v-if="row.status === 'SUBMITTED'" type="warning" @click="onReject(row as VoucherVO)">驳回</el-button>
-            <el-button text size="small" v-if="row.status === 'AUDITED'" type="warning" @click="onPost(row as VoucherVO)">记账</el-button>
-            <el-button text size="small" v-if="row.status === 'POSTED'" type="warning" @click="onUnpost(row as VoucherVO)">反过账</el-button>
-            <el-button text size="small" v-if="row.status === 'POSTED' || row.status === 'AUDITED'" type="danger" @click="onReverse(row as VoucherVO)">红冲</el-button>
-            <el-popconfirm v-if="row.status === 'DRAFT'" title="确认删除此凭证？" @confirm="onDelete(row as VoucherVO)">
-              <template #reference>
-                <el-button text type="danger" size="small">删除</el-button>
-              </template>
-            </el-popconfirm>
-          </template>
-        </el-table-column>
       </el-table>
 
       <div class="page-pagination">
@@ -225,6 +211,11 @@ const query = ref<VoucherQueryDTO>({
 const canBatchSubmit = computed(() => selectedRows.value.some((r) => r.status === 'DRAFT'))
 const canBatchAudit = computed(() => selectedRows.value.some((r) => r.status === 'SUBMITTED'))
 const canBatchPost = computed(() => selectedRows.value.some((r) => r.status === 'AUDITED'))
+
+/** 批量操作是否可选 */
+function isBatchable(row: VoucherVO) {
+  return row.status === 'DRAFT' || row.status === 'SUBMITTED' || row.status === 'AUDITED'
+}
 
 function statusType(s: string): '' | 'success' | 'warning' | 'info' | 'primary' {
   switch (s) {
