@@ -200,6 +200,30 @@ public class TaxServiceImpl implements TaxService {
         entity.setDeductionPeriod(deductionPeriod != null ? deductionPeriod :
                 String.format("%04d%02d", LocalDate.now().getYear(), LocalDate.now().getMonthValue()));
         entity.setDeductionAmount(entity.getTaxAmount());
+        // P57: 认证后默认"已认证未申报"
+        entity.setDeclaredStatus("UNDECLARED");
+        inputMapper.updateById(entity);
+        return entity;
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public InputInvoiceEntity declareDeduction(Long id, String declaredPeriod, Long userId) {
+        InputInvoiceEntity entity = inputMapper.selectById(id);
+        if (entity == null) {
+            throw new BusinessException("发票不存在");
+        }
+        if (!"CERTIFIED".equals(entity.getCertificationStatus())) {
+            throw new BusinessException("仅已认证(CERTIFIED)发票可申报抵扣");
+        }
+        if ("DECLARED".equals(entity.getDeclaredStatus())) {
+            throw new BusinessException("该发票已申报抵扣(DECLARED)，不可重复申报");
+        }
+        entity.setDeclaredStatus("DECLARED");
+        entity.setDeclaredPeriod(declaredPeriod != null ? declaredPeriod :
+                String.format("%04d%02d", LocalDate.now().getYear(), LocalDate.now().getMonthValue()));
+        entity.setDeclaredDate(LocalDate.now());
+        entity.setUpdatedBy(userId);
         inputMapper.updateById(entity);
         return entity;
     }

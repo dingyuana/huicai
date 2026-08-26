@@ -22,6 +22,12 @@ public interface TaxService {
     IPage<InputInvoiceEntity> pageQueryInput(String vendorName, String period, String certStatus, Integer current, Integer size);
     InputInvoiceEntity createInput(InputInvoiceEntity entity);
     InputInvoiceEntity certify(Long id, String deductionPeriod);
+
+    /**
+     * P57: 进项发票勾选申报抵扣（认证后→已申报）。
+     * 仅 certificationStatus=CERTIFIED 且 declaredStatus=UNDECLARED 可申报。
+     */
+    InputInvoiceEntity declareDeduction(Long id, String declaredPeriod, Long userId);
     Map<String, Object> inputSummary(String period);
     List<Map<String, Object>> inputByTaxRate(String period);
 

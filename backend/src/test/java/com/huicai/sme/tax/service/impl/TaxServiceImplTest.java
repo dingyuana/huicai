@@ -72,13 +72,58 @@ class TaxServiceImplTest {
 
     @Test
     void certify_uncertified_becomes_certified_with_deduction_amount() {
-        when(inputMapper.selectById(1L)).thenReturn(stubInput(1L, "UNCERTIFIED"));
+        InputInvoiceEntity stub = stubInput(1L, "UNCERTIFIED");
+        when(inputMapper.selectById(1L)).thenReturn(stub);
         InputInvoiceEntity r = service.certify(1L, "202606");
         assertEquals("CERTIFIED", r.getCertificationStatus());
+        assertEquals("UNDECLARED", r.getDeclaredStatus());
         assertEquals(new BigDecimal("130.00"), r.getDeductionAmount());
         assertNotNull(r.getCertifiedDate());
         assertEquals("202606", r.getDeductionPeriod());
         verify(inputMapper).updateById(any(InputInvoiceEntity.class));
+    }
+
+    // ==================== declareDeduction (P57) ====================
+
+    @Test
+    void declareDeduction_certified_undeclared_becomes_declared() {
+        InputInvoiceEntity stub = stubInput(1L, "CERTIFIED");
+        stub.setDeclaredStatus("UNDECLARED");
+        stub.setTaxAmount(new BigDecimal("130.00"));
+        when(inputMapper.selectById(1L)).thenReturn(stub);
+        InputInvoiceEntity r = service.declareDeduction(1L, "202607", 100L);
+        assertEquals("DECLARED", r.getDeclaredStatus());
+        assertEquals("202607", r.getDeclaredPeriod());
+        assertNotNull(r.getDeclaredDate());
+        verify(inputMapper).updateById(any(InputInvoiceEntity.class));
+    }
+
+    @Test
+    void declareDeduction_uncertified_throws() {
+        InputInvoiceEntity stub = stubInput(1L, "UNCERTIFIED");
+        stub.setDeclaredStatus("UNDECLARED");
+        when(inputMapper.selectById(1L)).thenReturn(stub);
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> service.declareDeduction(1L, "202607", 100L));
+        assertTrue(ex.getMessage().contains("仅已认证"));
+    }
+
+    @Test
+    void declareDeduction_already_declared_throws() {
+        InputInvoiceEntity stub = stubInput(1L, "CERTIFIED");
+        stub.setDeclaredStatus("DECLARED");
+        when(inputMapper.selectById(1L)).thenReturn(stub);
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> service.declareDeduction(1L, "202607", 100L));
+        assertTrue(ex.getMessage().contains("已申报抵扣"));
+    }
+
+    @Test
+    void declareDeduction_invoice_not_found_throws() {
+        when(inputMapper.selectById(99L)).thenReturn(null);
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> service.declareDeduction(99L, "202607", 100L));
+        assertTrue(ex.getMessage().contains("发票不存在"));
     }
 
     @Test
@@ -114,6 +159,35 @@ class TaxServiceImplTest {
         // 附加税 = 400 * 0.12 = 48
         assertEquals(new BigDecimal("48.00"), r.get("surcharge"));
         assertEquals(new BigDecimal("448.00"), r.get("totalPayable"));
+    }
+
+    @Test
+    void calculateVat_declared_only_counts_declared() {
+        // 认证未申报不计入抵扣：已认证未申报 1000 + 已申报 500 + 销项 2000
+        Map<String, Object> out = new HashMap<>();
+        out.put("tax", new BigDecimal("2000.00"));
+        when(outputMapper.summaryByPeriod("202608")).thenReturn(out);
+        Map<String, Object> in = new HashMap<>();
+        in.put("deductible", new BigDecimal("500.00"));   // 仅已申报
+        when(inputMapper.summaryByPeriod("202608")).thenReturn(in);
+
+        Map<String, Object> r = service.calculateVat("202608");
+        assertEquals(new BigDecimal("500.00"), r.get("inputTax"));
+        assertEquals(new BigDecimal("1500.00"), r.get("payableTax"));
+    }
+
+    @Test
+    void calculateVat_all_certified_undeclared_input_is_zero() {
+        Map<String, Object> out = new HashMap<>();
+        out.put("tax", new BigDecimal("800.00"));
+        when(outputMapper.summaryByPeriod("202608")).thenReturn(out);
+        Map<String, Object> in = new HashMap<>();
+        in.put("deductible", new BigDecimal("0"));   // 全部认证未申报
+        when(inputMapper.summaryByPeriod("202608")).thenReturn(in);
+
+        Map<String, Object> r = service.calculateVat("202608");
+        assertEquals(new BigDecimal("0"), r.get("inputTax"));
+        assertEquals(new BigDecimal("800.00"), r.get("payableTax"));
     }
 
     @Test

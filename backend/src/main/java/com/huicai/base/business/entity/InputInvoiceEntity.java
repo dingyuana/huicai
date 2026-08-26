@@ -64,8 +64,17 @@ public class InputInvoiceEntity extends BaseEntity {
     /** 原蓝字发票对应凭证ID（V138，红冲时快照） */
     private Long originalVoucherId;
 
-    /** 原发票抵扣状态快照: CERTIFIED/UNCERTIFIED (V138) */
+    /** 原发票状态快照: CERTIFIED/UNCERTIFIED (V138) */
     private String originalCertificationStatus;
+
+    /** 申报抵扣状态: UNDECLARED(已认证未申报)/DECLARED(已申报抵扣) (V139) */
+    private String declaredStatus;
+
+    /** 申报所属期 yyyyMM (V139) */
+    private String declaredPeriod;
+
+    /** 申报日期 (V139) */
+    private LocalDate declaredDate;
 
     /** 被红冲的发票ID（红字发票→原蓝字）(V138) */
     private Long reversedFrom;

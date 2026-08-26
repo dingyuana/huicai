@@ -17,7 +17,8 @@ public interface InputInvoiceMapper extends BaseMapper<InputInvoiceEntity> {
 
     @Select("""
         SELECT
-          SUM(CASE WHEN certification_status = 'CERTIFIED' THEN deduction_amount ELSE 0 END) AS deductible,
+          SUM(CASE WHEN declared_status = 'DECLARED' THEN deduction_amount ELSE 0 END) AS deductible,
+          SUM(CASE WHEN certification_status = 'CERTIFIED' AND declared_status = 'UNDECLARED' THEN tax_amount ELSE 0 END) AS cert_undeclared,
           SUM(CASE WHEN certification_status = 'UNCERTIFIED' THEN tax_amount ELSE 0 END) AS uncertified,
           SUM(tax_amount) AS total
         FROM t_input_invoice
