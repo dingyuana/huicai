@@ -130,16 +130,16 @@
       <template #footer>
         <div style="display:flex;justify-content:space-between;align-items:center;width:100%">
           <span v-if="recommendResult" style="color:#909399;font-size:12px">
-            共 {{ (recommendResult.items && recommendResult.items.length) || 0 }} 项，精确匹配 {{ countExactMatches() }} 项 (L1/L2/L3)
+            共 {{ (recommendResult.items && recommendResult.items.length) || 0 }} 项，可自动匹配 {{ countAutoMatches() }} 项 (L1-L4)
           </span>
           <div>
             <el-button @click="recommendDialogVisible = false">关闭</el-button>
             <el-button
               type="success"
-              :disabled="countExactMatches() === 0 || batchReconciling"
+              :disabled="countAutoMatches() === 0 || batchReconciling"
               :loading="batchReconciling"
               @click="onBatchReconcile">
-              自动核销精确匹配 ({{ countExactMatches() }})
+              自动核销可匹配 ({{ countAutoMatches() }})
             </el-button>
             <el-button
               type="primary"
@@ -240,9 +240,10 @@ function matchLevelType(level: string): 'success' | 'warning' | 'info' | 'danger
   }
 }
 
-function countExactMatches(): number {
-  if (!recommendResult.value?.items) return 0
-  return recommendResult.value.items.filter((it: any) => it.matchLevel === 'L1' || it.matchLevel === 'L2' || it.matchLevel === 'L3').length
+function countAutoMatches(): number {
+  if (!recommendResult.value || !recommendResult.value.items) return 0
+  return recommendResult.value.items.filter((it: any) =>
+    it.matchLevel === 'L1' || it.matchLevel === 'L2' || it.matchLevel === 'L3' || it.matchLevel === 'L4').length
 }
 
 function fmtAmount(v: number | null | undefined) {
@@ -390,15 +391,15 @@ async function onExecuteRecon(item: any) {
   }
 }
 
-// 批量核销 - 精确匹配 (L1/L2/L3)
+// 批量核销 - 可自动匹配 (L1-L4)
 async function onBatchReconcile() {
-  if (!currentDoc.value || !recommendResult.value?.items) return
-  const exacts = recommendResult.value.items.filter((it: any) =>
-    it.matchLevel === 'L1' || it.matchLevel === 'L2' || it.matchLevel === 'L3')
-  if (exacts.length === 0) { ElMessage.warning('没有可自动核销的精确匹配项'); return }
+  if (!currentDoc.value || !recommendResult.value?.items?.length) return
+  const autoMatches = recommendResult.value.items.filter((it: any) =>
+    it.matchLevel === 'L1' || it.matchLevel === 'L2' || it.matchLevel === 'L3' || it.matchLevel === 'L4')
+  if (autoMatches.length === 0) { ElMessage.warning('没有可自动核销的匹配项'); return }
   batchReconciling.value = true
   let okCount = 0, failCount = 0
-  for (const item of exacts) {
+  for (const item of autoMatches) {
     try {
       await executeReconciliation({
         sourceDocType: activeTab.value === 'RECEIPT' ? 'receipt' : 'payment',
@@ -415,7 +416,7 @@ async function onBatchReconcile() {
   }
   batchReconciling.value = false
   ElMessage[failCount === 0 ? 'success' : 'warning'](
-    failCount === 0 ? `已提报 ${okCount} 项精确匹配，待审批` : `提报完成: 成功 ${okCount} 项, 失败 ${failCount} 项`)
+    failCount === 0 ? `已提报 ${okCount} 项可匹配，待审批` : `提报完成: 成功 ${okCount} 项, 失败 ${failCount} 项`)
   recommendDialogVisible.value = false
   await fetchData()
 }
