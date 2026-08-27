@@ -28,6 +28,14 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/tax/declaration/TaxVatView.vue'),
     meta: { title: '增值税计算', permission: 'tax:vat:view', keepAlive: true },
   },
+
+  // ─── P58 发票-收付款勾稽（三流合一） ───
+  {
+    path: 'tax/invoice-reconcile',
+    name: 'InvoiceReconcileView',
+    component: () => import('@/views/tax/InvoiceReconcileView.vue'),
+    meta: { title: '发票勾稽', permission: 'tax:input:list', keepAlive: true },
+  },
 ]
 
 export default routes

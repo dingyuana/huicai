@@ -165,6 +165,29 @@ export function batchVoidOutputInvoice(ids: number[], reason: string): Promise<B
 export function batchReverseOutputInvoice(ids: number[], reason: string): Promise<BatchResult> {
   return request.post('/sme/tax/v1/tax/output-invoices/batch/reverse', { ids, reason })
 }
+// ====== P58 发票-收付款勾稽（三流合一只读视图） ======
+export interface InvoiceReconcileVO {
+  invoiceId: number
+  invoiceNo: string
+  invoiceDate?: string
+  vendorName?: string
+  customerName?: string
+  amount?: number
+  taxAmount?: number
+  certificationStatus?: string
+  declaredStatus?: string
+  paidAmount?: number
+  unpaidAmount?: number
+  reconcileStatus?: 'UNPAID' | 'PARTIAL' | 'PAID'
+  hasRedFlushed?: boolean
+}
+
+export function queryInputReconcile(params: { period?: string; vendorId?: number }): Promise<InvoiceReconcileVO[]> {
+  return request.get('/sme/tax/v1/invoice-reconcile/input', { params })
+}
+export function queryOutputReconcile(params: { period?: string; customerId?: number }): Promise<InvoiceReconcileVO[]> {
+  return request.get('/sme/tax/v1/invoice-reconcile/output', { params })
+}
 // ====== P2-7 AI 辅助 ======
 export function aiSubjectMapping(itemName: string, amount?: number, counterparty?: string): Promise<any> {
   return request.post('/agent/route', {
