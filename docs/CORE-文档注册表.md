@@ -111,11 +111,11 @@ docs/
 > - [DSN-PRD合理性评估.md](./design/analysis/DSN-PRD合理性评估.md)
 > - [DSN-PRD差距分析.md](./design/analysis/DSN-PRD差距分析.md)
 
-### 2.3 SPEC 规格契约文档（specs/ — 66份）
+### 2.3 SPEC 规格契约文档（specs/ — 68份）
 
 | 编号范围 | 说明 | 数量 |
 |----------|------|------|
-| P0~P59 | 功能规格文档（P 系列），按开发顺序增量编号 | 50份 |
+| P0~P61 | 功能规格文档（P 系列），按开发顺序增量编号 | 52份 |
 | S-00~S-27 | 系统级规范文档（S 系列），按业务域分层编号 | 13份 |
 | 其他 | SPEC-CONTRACT-SCHEMA.md（契约规范）、T1-*（测试方案）、timestamp-precision.md | 3份 |
 
@@ -124,8 +124,8 @@ docs/
 | 对应模块 | SPEC 文件 |
 |---------|---------|
 | 凭证管理 | P22-voucher-state-machine、P37-voucher-type-rules、S-17-期末自动化结转、S-18-结账控制 |
-| 应收应付核销 | P30、P36、P42、P43-bad-debt、P51、P52、P53、P10（已归档） |
-| 发票税务 | P40-input-invoice、P41-invoice-driven-finance、P13-tax-declaration |
+| 应收应付核销 | P30、P30-P1-unified-settlement-path、P36、P42、P43-bad-debt、P51、P52、P53、P10（已归档） |
+| 发票税务 | P40-input-invoice、P41-invoice-driven-finance、P13-tax-declaration、P36-1-red-flush-voucher、P57-declare-status-split、P58-invoice-payment-reconcile、P61-vat-appendix-and-burden |
 | 资金管理 | P1-bank-import、P14-bank-reconciliation、P23-bank-statement |
 | 固定资产 | S-23 |
 | 工资薪酬 | S-14（待建） |
