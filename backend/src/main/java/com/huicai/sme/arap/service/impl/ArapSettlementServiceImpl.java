@@ -59,6 +59,7 @@ public class ArapSettlementServiceImpl implements ArapSettlementService {
     private final ReconciliationLogMapper logMapper;
     private final com.huicai.base.business.service.OutputInvoiceStateMachineService outputInvoiceStateMachineService;
     private final com.huicai.sme.tax.service.InputInvoiceStateMachineService inputInvoiceStateMachineService;
+    private final com.huicai.base.business.mapper.BankStatementMapper bankStatementMapper;
 
     @Override
     public IPage<ArapSettlementEntity> pageQuery(String status, String voucherNo, Integer current, Integer size) {
@@ -169,6 +170,13 @@ public class ArapSettlementServiceImpl implements ArapSettlementService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public ArapSettlementEntity approve(Long id) {
+        // P1-fix: 操作人从登录上下文获取
+        Long operatorId;
+        try {
+            operatorId = com.huicai.base.system.util.SecurityUtils.getCurrentUserId();
+        } catch (Exception e) {
+            operatorId = DEFAULT_USER_ID;
+        }
         ArapSettlementEntity entity = getById(id);
         if (!ArapStatus.isApprovable(entity.getStatus())) {
             throw new BusinessException("核销单状态不允许审批: " + entity.getStatus());
@@ -182,9 +190,19 @@ public class ArapSettlementServiceImpl implements ArapSettlementService {
             if (entry.getBusinessDocId() != null) {
                 BusinessDocEntity doc = businessDocMapper.selectById(entry.getBusinessDocId());
                 if (doc != null) {
-                    // P30-C5: 仅已审批状态的业务单据可核销
-                    if (!"APPROVED".equals(doc.getStatus())) {
-                        throw BusinessException.badRequest("仅已审批状态的业务单据可核销，当前状态: " + doc.getStatus());
+                    // P30-C5/P0-fix: 仅已审批/已制证/部分核销状态的业务单据可核销
+                    String docStatus = doc.getStatus();
+                    if (!"APPROVED".equals(docStatus) && !"VOUCHERED".equals(docStatus)
+                            && !"PARTIALLY_RECONCILED".equals(docStatus)) {
+                        throw BusinessException.badRequest("仅已审批状态的业务单据可核销，当前状态: " + docStatus);
+                    }
+                    // P0-fix 防重复核销守卫：核销金额不得超过目标单据未核销余额
+                    BigDecimal docUnsettled = doc.getUnsettledAmount() != null
+                            ? doc.getUnsettledAmount()
+                            : doc.getAmount().subtract(doc.getSettledAmount() != null ? doc.getSettledAmount() : BigDecimal.ZERO);
+                    if (entry.getSettledAmount().compareTo(docUnsettled) > 0) {
+                        throw BusinessException.badRequest("核销金额超过未核销余额: 单据 " + doc.getDocNo()
+                                + " 未核销余额 " + docUnsettled + ", 核销金额 " + entry.getSettledAmount());
                     }
                     BigDecimal newSettled = doc.getSettledAmount() != null
                             ? doc.getSettledAmount().add(entry.getSettledAmount())
@@ -196,6 +214,21 @@ public class ArapSettlementServiceImpl implements ArapSettlementService {
                     if (businessDocMapper.updateById(doc) == 0) {
                         throw new OptimisticLockingFailureException("BusinessDoc确认版本冲突, id=" + doc.getId());
                     }
+                    // P1-fix: 核销生效后同步发票状态（与原 execute 路径对齐，销项/进项双向）
+                    if (doc.getInvoiceId() != null
+                            && ("INVOICE_OUT".equals(doc.getDocType()) || "INVOICE_IN".equals(doc.getDocType()))) {
+                        try {
+                            if ("INVOICE_OUT".equals(doc.getDocType())) {
+                                outputInvoiceStateMachineService.onReconciliationUpdate(
+                                        doc.getInvoiceId(), doc.getUnsettledAmount(), operatorId);
+                            } else {
+                                inputInvoiceStateMachineService.onReconciliationUpdate(
+                                        doc.getInvoiceId(), doc.getUnsettledAmount(), operatorId);
+                            }
+                        } catch (Exception e) {
+                            log.warn("核销审批同步发票状态失败(不影响审批): {}", e.getMessage());
+                        }
+                    }
                 }
             } else if (entry.getReceivableId() != null) {
                 throw new BusinessException("核销明细仍使用旧格式(receivableId)，请迁移至 businessDocId: id=" + entry.getReceivableId());
@@ -203,9 +236,39 @@ public class ArapSettlementServiceImpl implements ArapSettlementService {
                 throw new BusinessException("核销明细仍使用旧格式(payableId)，请迁移至 businessDocId: id=" + entry.getPayableId());
             }
         }
+        // P1-fix: 同步来源单据（RECEIPT/PAYMENT）已核销金额 — 从 execute() 迁移至此
+        if (entity.getSourceDocId() != null && entity.getSourceDocType() != null) {
+            String srcNorm = entity.getSourceDocType().toLowerCase();
+            if ("receipt".equals(srcNorm) || "payment".equals(srcNorm)) {
+                BusinessDocEntity sourceDoc = businessDocMapper.selectById(entity.getSourceDocId());
+                if (sourceDoc != null) {
+                    BigDecimal srcNewSettled = (sourceDoc.getSettledAmount() != null ? sourceDoc.getSettledAmount() : BigDecimal.ZERO)
+                            .add(entity.getTotalAmount());
+                    sourceDoc.setSettledAmount(srcNewSettled);
+                    sourceDoc.setUnsettledAmount(sourceDoc.getAmount().subtract(srcNewSettled));
+                    sourceDoc.setStatus(sourceDoc.getUnsettledAmount().compareTo(BigDecimal.ZERO) == 0
+                            ? "FULLY_RECONCILED" : "PARTIALLY_RECONCILED");
+                    if (businessDocMapper.updateById(sourceDoc) == 0) {
+                        throw new OptimisticLockingFailureException("来源单据版本冲突, id=" + sourceDoc.getId());
+                    }
+                }
+            } else if ("bank_txn".equals(srcNorm)) {
+                // G12: 银行流水标记已核销
+                try {
+                    com.huicai.base.business.entity.BankStatementEntity stmt =
+                            bankStatementMapper.selectById(entity.getSourceDocId());
+                    if (stmt != null && "UNMATCHED".equals(stmt.getMatchStatus())) {
+                        stmt.setMatchStatus("MATCHED");
+                        bankStatementMapper.updateById(stmt);
+                    }
+                } catch (Exception e) {
+                    log.warn("银行流水标记已核销失败: {}", e.getMessage());
+                }
+            }
+        }
         entity.setStatus(ArapStatus.CONFIRMED);
         mapper.updateById(entity);
-        logReconciliationLog(entity, "APPROVE", null, null, DEFAULT_USER_ID);
+        logReconciliationLog(entity, "APPROVE", null, null, operatorId);
         return entity;
     }
 

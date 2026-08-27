@@ -12,6 +12,8 @@
       </el-space>
     </div>
 
+    <el-alert title="P1: 核销需提报后由人工审批，审批通过方可生效" type="info" show-icon :closable="false" style="margin-bottom:12px" />
+
     <el-form :model="query" inline class="filter-form">
       <el-form-item label="对方名称">
         <el-input v-model="query.keyword" placeholder="搜索客户/供应商" clearable style="width:200px" />
@@ -380,7 +382,7 @@ async function onExecuteRecon(item: any) {
       matchMethod: 'AUTO',
       period: buildPeriod(currentDoc.value),
     })
-    ElMessage.success('核销执行成功')
+    ElMessage.success('核销已提报，待审批')
     recommendDialogVisible.value = false
     await fetchData()
   } catch (e: any) {
@@ -413,7 +415,7 @@ async function onBatchReconcile() {
   }
   batchReconciling.value = false
   ElMessage[failCount === 0 ? 'success' : 'warning'](
-    failCount === 0 ? `已自动核销 ${okCount} 项精确匹配` : `核销完成: 成功 ${okCount} 项, 失败 ${failCount} 项`)
+    failCount === 0 ? `已提报 ${okCount} 项精确匹配，待审批` : `提报完成: 成功 ${okCount} 项, 失败 ${failCount} 项`)
   recommendDialogVisible.value = false
   await fetchData()
 }

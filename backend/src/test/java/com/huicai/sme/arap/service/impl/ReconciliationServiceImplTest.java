@@ -162,15 +162,16 @@ class ReconciliationServiceImplTest {
     void execute_INVOICE_OUT_更新应收并插入日志() {
         BusinessDocEntity doc = stubBusinessDoc(1L, 1L, null, "INVOICE_OUT", new BigDecimal("1000"), new BigDecimal("500"));
         when(businessDocMapper.selectById(1L)).thenReturn(doc);
-        when(businessDocMapper.updateById(any(BusinessDocEntity.class))).thenReturn(1);
 
         ExecuteRequest req = new ExecuteRequest("receipt", 1L, "INVOICE_OUT", 1L, new BigDecimal("200"), new BigDecimal("0.95"), "AUTO", 1L, null, null, "");
         ReconciliationLogEntity log = service.execute(req);
 
+        // P1: execute 只提报 SUBMITTED，不再直接改单据金额
         assertNotNull(log);
-        assertEquals("CONFIRMED", log.getStatus());
-        verify(businessDocMapper, times(2)).updateById(any(BusinessDocEntity.class));
+        assertEquals("SUBMITTED", log.getStatus());
+        verify(businessDocMapper, never()).updateById(any(BusinessDocEntity.class));
         verify(logMapper).insert(any(ReconciliationLogEntity.class));
+        verify(settlementService).create(any(), any());
     }
 
     @Test
@@ -211,12 +212,13 @@ class ReconciliationServiceImplTest {
         BusinessDocEntity doc = stubBusinessDoc(1L, 1L, null, "INVOICE_OUT", new BigDecimal("1000"), new BigDecimal("500"));
         doc.setStatus("VOUCHERED");
         when(businessDocMapper.selectById(1L)).thenReturn(doc);
-        when(businessDocMapper.updateById(any(BusinessDocEntity.class))).thenReturn(1);
 
         ExecuteRequest req = new ExecuteRequest("receipt", 1L, "INVOICE_OUT", 1L, new BigDecimal("200"), BigDecimal.ZERO, "MANUAL", 1L, null, "202606", "");
         ReconciliationLogEntity log = service.execute(req);
         assertNotNull(log);
-        verify(businessDocMapper, atLeastOnce()).updateById(any(BusinessDocEntity.class));
+        assertEquals("SUBMITTED", log.getStatus());
+        // P1: 提报阶段不改单据
+        verify(businessDocMapper, never()).updateById(any(BusinessDocEntity.class));
     }
 
     // ==================== P0-fix: 来源单据大小写兼容 ====================
@@ -226,22 +228,20 @@ class ReconciliationServiceImplTest {
         BusinessDocEntity target = stubBusinessDoc(1L, 1L, null, "INVOICE_OUT", new BigDecimal("1000"), new BigDecimal("500"));
         BusinessDocEntity source = stubBusinessDoc(2L, 1L, null, "RECEIPT", new BigDecimal("300"), new BigDecimal("300"));
         when(businessDocMapper.selectById(1L)).thenReturn(target);
-        when(businessDocMapper.selectById(2L)).thenReturn(source);
-        when(businessDocMapper.updateById(any(BusinessDocEntity.class))).thenReturn(1);
 
         ExecuteRequest req = new ExecuteRequest("RECEIPT", 2L, "INVOICE_OUT", 1L, new BigDecimal("200"), BigDecimal.ZERO, "MANUAL", 1L, null, "202606", "");
         service.execute(req);
 
-        // 来源单据被同步：300-200=100 未核销
-        assertEquals(new BigDecimal("100"), source.getUnsettledAmount());
-        assertEquals("PARTIALLY_RECONCILED", source.getStatus());
+        // P1: 来源单据扣减延后到 approve；execute 阶段验证 settlement 携带来源单据信息
+        verify(settlementService).create(argThat(s -> "RECEIPT".equals(s.getSourceDocType()) && Long.valueOf(2L).equals(s.getSourceDocId())), any());
+        // 来源单据未被改动
+        assertEquals(new BigDecimal("300"), source.getUnsettledAmount());
     }
 
     @Test
     void execute_有period_调用settlementService() {
         BusinessDocEntity doc = stubBusinessDoc(1L, 1L, null, "INVOICE_OUT", new BigDecimal("1000"), new BigDecimal("500"));
         when(businessDocMapper.selectById(1L)).thenReturn(doc);
-        when(businessDocMapper.updateById(any(BusinessDocEntity.class))).thenReturn(1);
 
         ExecuteRequest req = new ExecuteRequest("receipt", 1L, "INVOICE_OUT", 1L, new BigDecimal("200"), BigDecimal.ZERO, "MANUAL", 1L, null, "202606", "");
         service.execute(req);
@@ -249,14 +249,15 @@ class ReconciliationServiceImplTest {
     }
 
     @Test
-    void execute_无period_跳过settlement() {
+    void execute_无period_兜底期间仍创建settlement() {
         BusinessDocEntity doc = stubBusinessDoc(1L, 1L, null, "INVOICE_OUT", new BigDecimal("1000"), new BigDecimal("500"));
+        doc.setPeriod("202607");
         when(businessDocMapper.selectById(1L)).thenReturn(doc);
-        when(businessDocMapper.updateById(any(BusinessDocEntity.class))).thenReturn(1);
 
         ExecuteRequest req = new ExecuteRequest("receipt", 1L, "INVOICE_OUT", 1L, new BigDecimal("200"), BigDecimal.ZERO, "MANUAL", 1L, null, null, "");
         service.execute(req);
-        verifyNoInteractions(settlementService);
+        // P1: 无 period 时兜底取目标单据期间，核销单必建（否则核销永远无法生效）
+        verify(settlementService).create(argThat(s -> "202607".equals(s.getPeriod()) && "SUBMITTED".equals(s.getStatus())), any());
     }
 
     // ==================== P42-V2-G2: execute 防重复核销守卫（场景 5）====================
@@ -282,12 +283,12 @@ class ReconciliationServiceImplTest {
         BusinessDocEntity doc = stubBusinessDoc(1L, 1L, null, "INVOICE_OUT", new BigDecimal("1000"), new BigDecimal("200"));
         doc.setDocNo("YS2026070001");
         when(businessDocMapper.selectById(1L)).thenReturn(doc);
-        when(businessDocMapper.updateById(any(BusinessDocEntity.class))).thenReturn(1);
 
         ExecuteRequest req = new ExecuteRequest("receipt", 1L, "INVOICE_OUT", 1L, new BigDecimal("200"), BigDecimal.ZERO, "MANUAL", 1L, null, null, "");
         ReconciliationLogEntity log = service.execute(req);
         assertNotNull(log);
-        verify(businessDocMapper, atLeastOnce()).updateById(any(BusinessDocEntity.class));
+        assertEquals("SUBMITTED", log.getStatus());
+        verify(settlementService).create(any(), any());
     }
 
     @Test
@@ -400,7 +401,6 @@ class ReconciliationServiceImplTest {
     void batchExecute_2个请求_调2次execute() {
         BusinessDocEntity doc = stubBusinessDoc(1L, 1L, null, "INVOICE_OUT", new BigDecimal("1000"), new BigDecimal("500"));
         when(businessDocMapper.selectById(1L)).thenReturn(doc);
-        when(businessDocMapper.updateById(any(BusinessDocEntity.class))).thenReturn(1);
 
         ExecuteRequest req1 = new ExecuteRequest("receipt", 1L, "INVOICE_OUT", 1L, new BigDecimal("100"), BigDecimal.ZERO, "MANUAL", 1L, null, null, "");
         ExecuteRequest req2 = new ExecuteRequest("receipt", 2L, "INVOICE_OUT", 1L, new BigDecimal("200"), BigDecimal.ZERO, "MANUAL", 1L, null, null, "");
@@ -474,7 +474,6 @@ class ReconciliationServiceImplTest {
     void executeWithAdjustment_差额0_走普通核销() {
         BusinessDocEntity doc = stubBusinessDoc(1L, 1L, null, "INVOICE_OUT", new BigDecimal("1000"), new BigDecimal("500"));
         when(businessDocMapper.selectById(1L)).thenReturn(doc);
-        when(businessDocMapper.updateById(any(BusinessDocEntity.class))).thenReturn(1);
 
         ExecuteRequest req = new ExecuteRequest("receipt", 1L, "INVOICE_OUT", 1L, new BigDecimal("500"), BigDecimal.ZERO, "MANUAL", 1L, null, null, "");
         ReconciliationLogEntity result = service.executeWithAdjustment(req, BigDecimal.ZERO, "FEE", 100L);
@@ -487,7 +486,6 @@ class ReconciliationServiceImplTest {
     void executeWithAdjustment_有差额_主核销加调整日志() {
         BusinessDocEntity doc = stubBusinessDoc(1L, 1L, null, "INVOICE_OUT", new BigDecimal("1000"), new BigDecimal("500"));
         when(businessDocMapper.selectById(1L)).thenReturn(doc);
-        when(businessDocMapper.updateById(any(BusinessDocEntity.class))).thenReturn(1);
 
         // 请求核销 500, 差额 20, 主核销 480
         ExecuteRequest req = new ExecuteRequest("receipt", 1L, "INVOICE_OUT", 1L, new BigDecimal("500"), BigDecimal.ZERO, "MANUAL", 1L, null, "202606", "");
@@ -651,15 +649,17 @@ class ReconciliationServiceImplTest {
 
     @Test
     void execute_syncsInvoiceStatus_whenDocHasInvoiceId() {
-        // P38-F4: 核销后同步发票状态
+        // P1: 发票状态同步迁至 approve()；execute 阶段不再触发
         BusinessDocEntity doc = stubBusinessDoc(1L, 1L, null, "INVOICE_OUT", new BigDecimal("1000"), new BigDecimal("500"));
         doc.setInvoiceId(999L);
         when(businessDocMapper.selectById(1L)).thenReturn(doc);
-        when(businessDocMapper.updateById(any(BusinessDocEntity.class))).thenReturn(1);
 
         ExecuteRequest req = new ExecuteRequest("receipt", 1L, "INVOICE_OUT", 1L, new BigDecimal("200"), BigDecimal.ZERO, "MANUAL", 1L, null, "202606", "");
         service.execute(req);
 
-        verify(outputInvoiceStateMachineService).onReconciliationUpdate(eq(999L), any(), anyLong());
+        // 提报阶段不触发发票同步
+        verify(outputInvoiceStateMachineService, never()).onReconciliationUpdate(anyLong(), any(), anyLong());
+        // 核销单创建时携带发票关联的目标单据
+        verify(settlementService).create(any(), any());
     }
 }

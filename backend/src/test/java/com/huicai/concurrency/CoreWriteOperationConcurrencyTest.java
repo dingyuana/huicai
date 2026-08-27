@@ -33,7 +33,11 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.never;
 
 /**
  * 核心写操作并发测试 (H-13 修复).
@@ -71,6 +75,7 @@ class CoreWriteOperationConcurrencyTest {
     @Mock private ReconciliationLogMapper logMapper;
     @Mock private com.huicai.base.business.service.OutputInvoiceStateMachineService outputInvoiceStateMachineService;
     @Mock private com.huicai.sme.tax.service.InputInvoiceStateMachineService inputInvoiceStateMachineService;
+    @Mock private com.huicai.base.business.mapper.BankStatementMapper bankStatementMapper;
 
     private ArapSettlementServiceImpl service;
 
@@ -84,7 +89,7 @@ class CoreWriteOperationConcurrencyTest {
         service = new ArapSettlementServiceImpl(
                 mapper, entryMapper, businessDocMapper, customerMapper, vendorMapper,
                 voucherTemplateService, voucherMapper, voucherEntryMapper,
-                voucherNoService, logMapper, outputInvoiceStateMachineService, inputInvoiceStateMachineService);
+                voucherNoService, logMapper, outputInvoiceStateMachineService, inputInvoiceStateMachineService, bankStatementMapper);
     }
 
     /**
@@ -256,5 +261,105 @@ class CoreWriteOperationConcurrencyTest {
         doc.setSettledAmount(BigDecimal.ZERO);
         doc.setUnsettledAmount(DOC_AMOUNT);
         return doc;
+    }
+
+    // ====== P1-fix: approve() 统一写路径新行为 ======
+
+    @Test
+    @DisplayName("P1: 审批通过扣减目标单据并置 CONFIRMED")
+    void approve_updatesTargetDocAndConfirms() {
+        ArapSettlementEntity entity = settlementWithStatus(ArapStatus.SUBMITTED);
+        entity.setTotalAmount(ENTRY_AMOUNT);
+        when(mapper.selectById(SETTLEMENT_ID)).thenReturn(entity);
+
+        ArapSettlementEntryEntity entry = new ArapSettlementEntryEntity();
+        entry.setSettlementId(SETTLEMENT_ID);
+        entry.setBusinessDocId(DOC_ID);
+        entry.setSettledAmount(ENTRY_AMOUNT);
+        when(entryMapper.selectList(any())).thenReturn(List.of(entry));
+
+        BusinessDocEntity doc = approvedBusinessDoc();
+        when(businessDocMapper.selectById(DOC_ID)).thenReturn(doc);
+        when(businessDocMapper.updateById(any(BusinessDocEntity.class))).thenReturn(1);
+        when(mapper.updateById(any(ArapSettlementEntity.class))).thenReturn(1);
+
+        service.approve(SETTLEMENT_ID);
+
+        assertEquals(ArapStatus.CONFIRMED, entity.getStatus());
+        assertEquals(ENTRY_AMOUNT, doc.getSettledAmount());
+        assertEquals(DOC_AMOUNT.subtract(ENTRY_AMOUNT), doc.getUnsettledAmount());
+    }
+
+    @Test
+    @DisplayName("P1: 审批时核销金额超过未核销余额被拦截")
+    void approve_overAmount_throws() {
+        ArapSettlementEntity entity = settlementWithStatus(ArapStatus.SUBMITTED);
+        entity.setTotalAmount(new BigDecimal("9999.00"));
+        when(mapper.selectById(SETTLEMENT_ID)).thenReturn(entity);
+
+        ArapSettlementEntryEntity entry = new ArapSettlementEntryEntity();
+        entry.setSettlementId(SETTLEMENT_ID);
+        entry.setBusinessDocId(DOC_ID);
+        entry.setSettledAmount(new BigDecimal("9999.00"));
+        when(entryMapper.selectList(any())).thenReturn(List.of(entry));
+
+        when(businessDocMapper.selectById(DOC_ID)).thenReturn(approvedBusinessDoc());
+
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> service.approve(SETTLEMENT_ID));
+        assertTrue(ex.getMessage().contains("核销金额超过未核销余额"));
+        verify(businessDocMapper, never()).updateById(any(BusinessDocEntity.class));
+    }
+
+    @Test
+    @DisplayName("P1: 审批时同步来源RECEIPT单据余额")
+    void approve_syncsSourceReceiptDoc() {
+        ArapSettlementEntity entity = settlementWithStatus(ArapStatus.SUBMITTED);
+        entity.setTotalAmount(ENTRY_AMOUNT);
+        entity.setSourceDocType("RECEIPT");
+        entity.setSourceDocId(300L);
+        when(mapper.selectById(SETTLEMENT_ID)).thenReturn(entity);
+        when(entryMapper.selectList(any())).thenReturn(List.of()); // 无目标明细，仅测来源同步
+
+        BusinessDocEntity source = new BusinessDocEntity();
+        source.setId(300L);
+        source.setStatus("APPROVED");
+        source.setAmount(new BigDecimal("500.00"));
+        source.setSettledAmount(BigDecimal.ZERO);
+        source.setUnsettledAmount(new BigDecimal("500.00"));
+        when(businessDocMapper.selectById(300L)).thenReturn(source);
+        when(businessDocMapper.updateById(any(BusinessDocEntity.class))).thenReturn(1);
+        when(mapper.updateById(any(ArapSettlementEntity.class))).thenReturn(1);
+
+        service.approve(SETTLEMENT_ID);
+
+        assertEquals(new BigDecimal("300.00"), source.getSettledAmount());
+        assertEquals(new BigDecimal("200.00"), source.getUnsettledAmount());
+        assertEquals("PARTIALLY_RECONCILED", source.getStatus());
+    }
+
+    @Test
+    @DisplayName("P1: 审批时同步发票状态(销项)")
+    void approve_syncsOutputInvoiceStatus() {
+        ArapSettlementEntity entity = settlementWithStatus(ArapStatus.SUBMITTED);
+        entity.setTotalAmount(ENTRY_AMOUNT);
+        when(mapper.selectById(SETTLEMENT_ID)).thenReturn(entity);
+
+        ArapSettlementEntryEntity entry = new ArapSettlementEntryEntity();
+        entry.setSettlementId(SETTLEMENT_ID);
+        entry.setBusinessDocId(DOC_ID);
+        entry.setSettledAmount(ENTRY_AMOUNT);
+        when(entryMapper.selectList(any())).thenReturn(List.of(entry));
+
+        BusinessDocEntity doc = approvedBusinessDoc();
+        doc.setDocType("INVOICE_OUT");
+        doc.setInvoiceId(888L);
+        when(businessDocMapper.selectById(DOC_ID)).thenReturn(doc);
+        when(businessDocMapper.updateById(any(BusinessDocEntity.class))).thenReturn(1);
+        when(mapper.updateById(any(ArapSettlementEntity.class))).thenReturn(1);
+
+        service.approve(SETTLEMENT_ID);
+
+        verify(outputInvoiceStateMachineService).onReconciliationUpdate(eq(888L), any(), anyLong());
     }
 }

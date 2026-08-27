@@ -338,46 +338,12 @@ public class ReconciliationServiceImpl implements ReconciliationService {
         if ("INVOICE_IN".equals(request.targetDocType()) && resolvedVendorId == null) {
             resolvedVendorId = targetDoc.getSupplierId();
         }
-        BigDecimal targetNewSettled = (targetDoc.getSettledAmount() != null ? targetDoc.getSettledAmount() : BigDecimal.ZERO)
-                .add(request.amount());
-        targetDoc.setSettledAmount(targetNewSettled);
-        targetDoc.setUnsettledAmount(targetDoc.getAmount().subtract(targetNewSettled));
-        targetDoc.setStatus(targetDoc.getUnsettledAmount().compareTo(BigDecimal.ZERO) == 0
-                ? "FULLY_RECONCILED" : "PARTIALLY_RECONCILED");
-        if (businessDocMapper.updateById(targetDoc) == 0) {
-            throw new OptimisticLockingFailureException("目标单据版本冲突, id=" + targetDoc.getId());
-        }
 
-        // 同步更新来源单据的已核销/未核销金额 (RECEIPT/PAYMENT 类型，大小写兼容)
-        String srcTypeNorm = request.sourceDocType() == null ? "" : request.sourceDocType().toLowerCase();
-        if ("receipt".equals(srcTypeNorm) || "payment".equals(srcTypeNorm)) {
-            BusinessDocEntity sourceDoc = businessDocMapper.selectById(request.sourceDocId());
-            if (sourceDoc != null) {
-                BigDecimal srcNewSettled = (sourceDoc.getSettledAmount() != null ? sourceDoc.getSettledAmount() : BigDecimal.ZERO)
-                        .add(request.amount());
-                sourceDoc.setSettledAmount(srcNewSettled);
-                sourceDoc.setUnsettledAmount(sourceDoc.getAmount().subtract(srcNewSettled));
-                sourceDoc.setStatus(sourceDoc.getUnsettledAmount().compareTo(BigDecimal.ZERO) == 0
-                        ? "FULLY_RECONCILED" : "PARTIALLY_RECONCILED");
-                if (businessDocMapper.updateById(sourceDoc) == 0) {
-                    throw new OptimisticLockingFailureException("来源单据版本冲突, id=" + sourceDoc.getId());
-                }
-            }
-        }
+        // P1-fix: 统一核销写路径 — execute() 只创建 SUBMITTED 待审批核销单，
+        // 金额扣减/来源单据同步/发票状态同步/凭证生成全部延后到 ArapSettlementService.approve()。
+        // （人审铁律：核销需人工审批才生效）
 
-        // P38-F4: 核销后同步发票状态
-        if (targetDoc.getInvoiceId() != null && "INVOICE_OUT".equals(request.targetDocType())) {
-            try {
-                outputInvoiceStateMachineService.onReconciliationUpdate(
-                        targetDoc.getInvoiceId(), targetDoc.getUnsettledAmount(), DEFAULT_USER_ID);
-                log.info("P38 核销同步发票状态: invoiceId={}, unsettled={}",
-                        targetDoc.getInvoiceId(), targetDoc.getUnsettledAmount());
-            } catch (Exception e) {
-                log.warn("P38 核销同步发票状态失败(不影响核销): {}", e.getMessage());
-            }
-        }
-
-        // Create reconciliation log
+        // Create reconciliation log（状态 SUBMITTED，待审批）
         ReconciliationLogEntity reconLog = new ReconciliationLogEntity();
         reconLog.setTenantId(DEFAULT_TENANT_ID);
         reconLog.setSourceDocType(request.sourceDocType());
@@ -389,64 +355,42 @@ public class ReconciliationServiceImpl implements ReconciliationService {
         reconLog.setDiscountAmount(BigDecimal.ZERO);
         reconLog.setMatchScore(request.matchScore());
         reconLog.setMatchMethod(request.matchMethod() != null ? request.matchMethod() : "MANUAL");
-        reconLog.setStatus(ArapStatus.CONFIRMED);
+        reconLog.setStatus(ArapStatus.SUBMITTED);
         reconLog.setRemark(request.remark());
         reconLog.setCreatedBy(operatorId != null ? operatorId : DEFAULT_USER_ID);
         reconLog.setOperationType("CREATE");
         logMapper.insert(reconLog);
 
-        // Also create settlement record via existing ArapSettlementService
-        if (StrUtil.isNotBlank(request.period())) {
-            try {
-                boolean isReceivableSettle = "INVOICE_OUT".equals(request.targetDocType());
-                ArapSettlementEntity settlement = new ArapSettlementEntity();
-                settlement.setSettlementType(isReceivableSettle ? "RECEIVE" : "PAY");
-                settlement.setPeriod(request.period());
-                settlement.setSettlementDate(java.time.LocalDate.now());
-                settlement.setTotalAmount(request.amount());
-                Long partyId = isReceivableSettle ? resolvedCustomerId : resolvedVendorId;
-                if (partyId == null) {
-                    log.warn("未找到客商ID, 跳过创建核销单记录: sourceType={}, sourceId={}", request.sourceDocType(), request.sourceDocId());
-                } else {
-                    settlement.setPartyId(partyId);
-                    settlement.setPartyType(isReceivableSettle ? "CUSTOMER" : "VENDOR");
-                    settlement.setStatus(ArapStatus.CONFIRMED);
-                    String prefix = isReceivableSettle ? "JS" : "FS";
-                    settlement.setSettlementNo(prefix + "-" + request.period() + "-" + cn.hutool.core.util.IdUtil.fastSimpleUUID().substring(0, 6).toUpperCase());
+        // 创建 SUBMITTED 核销单（P1: 原实现置 CONFIRMED 且仅在有 period 时创建 — 现在必建，period 缺省取目标单据期间）
+        boolean isReceivableSettle = "INVOICE_OUT".equals(request.targetDocType());
+        String effectivePeriod = StrUtil.isNotBlank(request.period())
+                ? request.period()
+                : (targetDoc.getPeriod() != null ? targetDoc.getPeriod()
+                   : String.format("%04d%02d", java.time.LocalDate.now().getYear(), java.time.LocalDate.now().getMonthValue()));
+        ArapSettlementEntity settlement = new ArapSettlementEntity();
+        settlement.setSettlementType(isReceivableSettle ? "RECEIVE" : "PAY");
+        settlement.setPeriod(effectivePeriod);
+        settlement.setSettlementDate(java.time.LocalDate.now());
+        settlement.setTotalAmount(request.amount());
+        Long partyId = isReceivableSettle ? resolvedCustomerId : resolvedVendorId;
+        settlement.setPartyId(partyId != null ? partyId : 0L);
+        settlement.setPartyType(isReceivableSettle ? "CUSTOMER" : "VENDOR");
+        settlement.setStatus(ArapStatus.SUBMITTED);
+        settlement.setSourceDocType(request.sourceDocType());
+        settlement.setSourceDocId(request.sourceDocId());
+        String prefix = isReceivableSettle ? "JS" : "FS";
+        settlement.setSettlementNo(prefix + "-" + effectivePeriod + "-" + cn.hutool.core.util.IdUtil.fastSimpleUUID().substring(0, 6).toUpperCase());
 
-                    BigDecimal beforeBalance = targetDoc.getUnsettledAmount();
-                    BigDecimal afterBalance = beforeBalance.subtract(request.amount());
+        ArapSettlementEntryEntity entry = new ArapSettlementEntryEntity();
+        entry.setBusinessDocId(request.targetDocId());
+        entry.setSettledAmount(request.amount());
+        entry.setBeforeBalance(targetUnsettled);
+        entry.setAfterBalance(targetUnsettled.subtract(request.amount()));
 
-                    ArapSettlementEntryEntity entry = new ArapSettlementEntryEntity();
-                    entry.setBusinessDocId(request.targetDocId());
-                    entry.setSettledAmount(request.amount());
-                    entry.setBeforeBalance(beforeBalance);
-                    entry.setAfterBalance(afterBalance);
+        settlementService.create(settlement, List.of(entry));
 
-                    settlementService.create(settlement, List.of(entry));
-                }
-            } catch (Exception e) {
-                log.warn("创建核销单记录失败(不影响核销): {}", e.getMessage());
-            }
-        }
-
-        // G12: 核销完成后自动生成草稿凭证 (仅当来源单据尚无凭证时)
-        if ("bank_txn".equals(request.sourceDocType())) {
-            try {
-                // 将银行流水标记为已核销, 不再出现在核销工作台
-                com.huicai.base.business.entity.BankStatementEntity stmt =
-                        bankStatementMapper.selectById(request.sourceDocId());
-                if (stmt != null && "UNMATCHED".equals(stmt.getMatchStatus())) {
-                    stmt.setMatchStatus("MATCHED");
-                    bankStatementMapper.updateById(stmt);
-                }
-                createReconciliationVoucher(request, reconLog);
-            } catch (Exception e) {
-                log.warn("核销自动制证失败(不影响核销): {}", e.getMessage());
-            }
-        }
-
-        log.info("核销执行完成: sourceType={}, sourceId={}, targetId={}, amount={}", request.sourceDocType(), request.sourceDocId(), request.targetDocId(), request.amount());
+        log.info("核销提报完成(待审批): sourceType={}, sourceId={}, targetId={}, amount={}, settlementNo={}",
+                request.sourceDocType(), request.sourceDocId(), request.targetDocId(), request.amount(), settlement.getSettlementNo());
         return reconLog;
     }
 

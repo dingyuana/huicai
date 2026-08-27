@@ -24,6 +24,12 @@ public class ArapSettlementEntity extends BaseEntity {
     private BigDecimal totalAmount;
     private BigDecimal discountAmount;
     private Long voucherId;
+
+    /** 来源单据类型: RECEIPT/PAYMENT/bank_txn 等 (V140) */
+    private String sourceDocType;
+
+    /** 来源单据ID（收付款业务单/银行流水）(V140) */
+    private Long sourceDocId;
     /**
      * 凭证编号（冗余存储，用于快速查询）— DB 无此列
      */
