@@ -481,3 +481,35 @@ out_of_scope:
 **Given** 一条已执行核销的记录
 **When** 调用 `GET /api/v1/reconciliation/{id}/trace`
 **Then** 响应中包含 `upstream`（银行流水/收款单）、`downstream`（业务单据/发票）、`operationTrail`（操作日志）和 `voucher`（凭证）四段完整链路
+
+---
+
+## P0-fix（2026-08-27）：核销执行层三项安全修复
+
+> commit `f52b0ae` | test_ref: ReconciliationServiceImplTest（新增5个@Test）
+
+### 修复内容
+
+| # | 问题 | 修复 |
+|:-:|------|------|
+| 1 | execute() 不校验目标单据状态，DRAFT 单据可直接核销 | 增加守卫：仅 APPROVED/VOUCHERED/PARTIALLY_RECONCILED 可核销 |
+| 2 | 操作人硬编码 DEFAULT_USER_ID=1，审计断层 | SecurityUtils.getCurrentUserId() 取真实登录人写 reconLog.createdBy |
+| 3a | 来源单据 docType 大小写不匹配（"RECEIPT"≠"receipt"），来源单据余额永不同步 | sourceDocType 统一 toLowerCase 后匹配 |
+| 3b | reverse() 反核销漏调 restoreUnsettledAmount，业务单据 settled_amount 永久虚增 | 循环内补调 restoreUnsettledAmount + 同步回滚发票状态（onReconciliationUpdate，销项/进项双向） |
+| 3c | restoreUnsettledAmount 盲目回退 APPROVED | 按剩余金额定状态：清零时保持 VOUCHERED（若原为 VOUCHERED）或 APPROVED，未清零置 PARTIALLY_RECONCILED |
+
+### 新增 BDD
+
+| ID | Given-When-Then |
+|----|----------------|
+| P0F-1 | Given 目标单据 status=DRAFT When execute Then 抛"状态不允许核销"，不更新任何单据 |
+| P0F-2 | Given 目标单据 status=VOUCHERED When execute Then 核销成功 |
+| P0F-3 | Given sourceDocType="RECEIPT"(大写) When execute Then 来源单据 unsettled 同步扣减 |
+| P0F-4 | Given 已核销单据 When reverse Then 业务单据 settled_amount 回滚 + 发票状态回滚 |
+
+### 状态约束（execute 目标单据）
+
+```
+允许核销: APPROVED / VOUCHERED / PARTIALLY_RECONCILED
+拒绝核销: DRAFT / PENDING / SUBMITTED / REJECTED / CANCELLED / FULLY_RECONCILED(余额为0由金额守卫拦截) / REVERSED
+```
