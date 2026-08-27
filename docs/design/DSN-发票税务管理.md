@@ -207,9 +207,9 @@ VOUCHERED                     CERTIFIED_EXPIRED
 | 后端(核销联动) | ✅ P1 统一 | execute→SUBMITTED→approve→CONFIRMED，发票/来源单据/银行流水同步 |
 | 后端(红冲) | ✅ P36/P36.1 | 三情况凭证生成 + 进项转出 + RedFlushReason 枚举 |
 | 后端(勾稽/申报) | ✅ P58/P13 | 只读勾稽视图 + 申报表全生命周期 |
-| 后端(附表/税负) | ❌ P61 | 仅有 calculateVat 5 数字，附表一/二/税负分析未实现 |
+| 后端(附表/税负) | ✅ P61 完成 | 附表一/二/税负率三端点 + 4-8 行聚合 SQL + CURR/YOY 同比 + 前端三 Tab |
 | 前端(进销项/勾稽/增值税) | ✅ 基本完整 | OutputInvoiceList/InputInvoiceList/InvoiceReconcileView/TaxVatView |
-| 前端(附表/税负可视化) | ❌ | TaxVatView 无附表 Tab，无税负率图表 |
-| 测试 | ✅ 良好 | 全量 1504 tests, 0 fail；进项 29 测 + 销项 48 测 + P57 32 测 + P58 7 测 + P1 7 测 |
-| 缺失能力 | 🟡 | 海关进口增值税专用缴款书/完税凭证/增值税申报表附表一/二/三（P61 覆盖二/三） |
+| 前端(附表/税负可视化) | ✅ 完成 | TaxVatView 加附表一/附表二/税负率三 Tab |
+| 测试 | ✅ 良好 | 全量 1512 tests, 0 fail；P61 新增 8 测(TaxService 40) + P57 32 + P58 7 + P1 7 |
+| 缺失能力 | 🟡 | 海关进口增值税专用缴款书/完税凭证/附表三（跨期进项转出明细） |
 | DSN 与实现一致性 | ✅ 本次对齐 | 数据模型/API/组件与实现一致 |

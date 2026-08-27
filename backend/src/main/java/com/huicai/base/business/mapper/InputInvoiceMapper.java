@@ -39,4 +39,22 @@ public interface InputInvoiceMapper extends BaseMapper<InputInvoiceEntity> {
 
     @Update("UPDATE t_input_invoice SET doc_id = NULL WHERE doc_id IS NOT NULL")
     int nullOutDocId();
+
+    @Select("""
+        SELECT
+          vendor_id AS vendorId,
+          vendor_name AS vendorName,
+          SUM(amount_ex_tax) AS amountExTax,
+          SUM(tax_amount) AS taxAmount,
+          SUM(total_amount) AS totalAmount,
+          tax_rate AS rate,
+          certification_status AS certificationStatus,
+          declared_status AS declareStatus
+        FROM t_input_invoice
+        WHERE deleted = 0 AND period = #{period}
+          AND (#{vendorId} IS NULL OR vendor_id = #{vendorId})
+        GROUP BY vendor_id, vendor_name, tax_rate, certification_status, declared_status
+        ORDER BY amount_ex_tax DESC
+    """)
+    List<Map<String, Object>> appendixIIByVendorAndRate(@Param("period") String period, @Param("vendorId") Long vendorId);
 }

@@ -467,4 +467,91 @@ class TaxServiceImplTest {
         }
         assertEquals("VOUCHERED", inv.getStatus());
     }
+
+    // ========== P61: 附表 + 税负分析 ==========
+
+    @Test
+    void appendixI_汇总两行客户() {
+        List<Map<String, Object>> raw = List.of(
+            Map.of("customerId", 10L, "customerName", "客户A", "salesAmount", new BigDecimal("1000"), "taxAmount", new BigDecimal("130"), "totalAmount", new BigDecimal("1130"), "rate", new BigDecimal("0.13")),
+            Map.of("customerId", 20L, "customerName", "客户B", "salesAmount", new BigDecimal("500"), "taxAmount", new BigDecimal("30"), "totalAmount", new BigDecimal("530"), "rate", new BigDecimal("0.06"))
+        );
+        when(outputMapper.appendixIByCustomerAndRate(eq("202607"), any())).thenReturn(raw);
+        var resp = service.appendixI("202607", null);
+        assertEquals(2, resp.getRows().size());
+        assertEquals(new BigDecimal("1500"), resp.getTotalSalesAmount());
+        assertEquals(new BigDecimal("160"), resp.getTotalTaxAmount());
+        assertEquals(new BigDecimal("1660"), resp.getTotalAmount());
+    }
+
+    @Test
+    void appendixII_可抵扣仅DECLARED() {
+        List<Map<String, Object>> raw = List.of(
+            Map.of("vendorId", 30L, "vendorName", "供应商A", "amountExTax", new BigDecimal("1000"), "taxAmount", new BigDecimal("130"), "totalAmount", new BigDecimal("1130"), "rate", new BigDecimal("0.13"), "certificationStatus", "CERTIFIED", "declareStatus", "DECLARED"),
+            Map.of("vendorId", 40L, "vendorName", "供应商B", "amountExTax", new BigDecimal("500"), "taxAmount", new BigDecimal("65"), "totalAmount", new BigDecimal("565"), "rate", new BigDecimal("0.13"), "certificationStatus", "CERTIFIED", "declareStatus", "UNDECLARED"),
+            Map.of("vendorId", 50L, "vendorName", "供应商C", "amountExTax", new BigDecimal("200"), "taxAmount", new BigDecimal("26"), "totalAmount", new BigDecimal("226"), "rate", new BigDecimal("0.13"), "certificationStatus", "UNCERTIFIED", "declareStatus", "UNDECLARED")
+        );
+        when(inputMapper.appendixIIByVendorAndRate(eq("202607"), any())).thenReturn(raw);
+        var resp = service.appendixII("202607", null);
+        assertEquals(new BigDecimal("130"), resp.getDeductibleTax());
+        assertEquals(new BigDecimal("221"), resp.getTotalTaxAmount());
+    }
+
+    @Test
+    void appendixII_rowIsDeductible() {
+        var ded = new com.huicai.sme.tax.dto.vo.AppendixIIRow(1L, "A", new BigDecimal("100"), new BigDecimal("13"), new BigDecimal("113"), new BigDecimal("0.13"), "CERTIFIED", "DECLARED");
+        var und = new com.huicai.sme.tax.dto.vo.AppendixIIRow(2L, "B", new BigDecimal("100"), new BigDecimal("13"), new BigDecimal("113"), new BigDecimal("0.13"), "CERTIFIED", "UNDECLARED");
+        assertTrue(ded.isDeductible());
+        assertFalse(und.isDeductible());
+    }
+
+    @Test
+    void taxBurden_CURR计算() {
+        when(outputMapper.appendixIByCustomerAndRate(eq("202607"), isNull())).thenReturn(
+            List.of(Map.of("customerId", 10L, "customerName", "A", "salesAmount", new BigDecimal("1000"), "taxAmount", new BigDecimal("130"), "totalAmount", new BigDecimal("1130"), "rate", new BigDecimal("0.13"))));
+        when(inputMapper.appendixIIByVendorAndRate(eq("202607"), isNull())).thenReturn(
+            List.of(Map.of("vendorId", 20L, "vendorName", "B", "amountExTax", new BigDecimal("500"), "taxAmount", new BigDecimal("65"), "totalAmount", new BigDecimal("565"), "rate", new BigDecimal("0.13"), "certificationStatus", "CERTIFIED", "declareStatus", "DECLARED")));
+        var vo = service.taxBurden("202607", "CURR");
+        assertEquals(new BigDecimal("1130"), vo.getRevenue());
+        assertEquals(new BigDecimal("65"), vo.getInputDeduction());
+        assertEquals(new BigDecimal("65"), vo.getPayableTax());
+        assertNotNull(vo.getTaxBurdenRate());
+        assertTrue(vo.getTaxBurdenRate().compareTo(new BigDecimal("0.0575")) > 0);
+        assertTrue(vo.getTaxBurdenRate().compareTo(new BigDecimal("0.0580")) < 0);
+    }
+
+    @Test
+    void taxBurden_零收入_税负率null() {
+        when(outputMapper.appendixIByCustomerAndRate(anyString(), isNull())).thenReturn(List.of());
+        when(inputMapper.appendixIIByVendorAndRate(anyString(), isNull())).thenReturn(List.of());
+        var vo = service.taxBurden("202607", "CURR");
+        assertNull(vo.getTaxBurdenRate());
+        assertEquals(new BigDecimal("0"), vo.getRevenue());
+    }
+
+    @Test
+    void taxBurden_YOY() {
+        when(outputMapper.appendixIByCustomerAndRate(eq("202607"), isNull())).thenReturn(
+            List.of(Map.of("customerId", 10L, "customerName", "A", "salesAmount", new BigDecimal("1000"), "taxAmount", new BigDecimal("130"), "totalAmount", new BigDecimal("1130"), "rate", new BigDecimal("0.13"))));
+        when(inputMapper.appendixIIByVendorAndRate(eq("202607"), isNull())).thenReturn(List.of());
+        when(outputMapper.appendixIByCustomerAndRate(eq("202507"), isNull())).thenReturn(
+            List.of(Map.of("customerId", 10L, "customerName", "A", "salesAmount", new BigDecimal("1000"), "taxAmount", new BigDecimal("100"), "totalAmount", new BigDecimal("1100"), "rate", new BigDecimal("0.10"))));
+        when(inputMapper.appendixIIByVendorAndRate(eq("202507"), isNull())).thenReturn(List.of());
+        var vo = service.taxBurden("202607", "YOY");
+        assertNotNull(vo.getYoyRate());
+        assertNotNull(vo.getYoyChange());
+        assertTrue(vo.getYoyChange().compareTo(BigDecimal.ZERO) > 0, "当前税负应高于去年");
+    }
+
+    @Test
+    void appendixI_period非法_抛异常() {
+        assertThrows(BusinessException.class, () -> service.appendixI("invalid", null));
+        assertThrows(BusinessException.class, () -> service.appendixI(null, null));
+        assertThrows(BusinessException.class, () -> service.taxBurden("abc", "CURR"));
+    }
+
+    @Test
+    void taxBurden_type非法_抛异常() {
+        assertThrows(BusinessException.class, () -> service.taxBurden("202607", "INVALID"));
+    }
 }

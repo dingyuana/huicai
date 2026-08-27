@@ -5,6 +5,9 @@ import com.huicai.common.response.R;
 import com.huicai.base.business.entity.InputInvoiceEntity;
 import com.huicai.base.business.entity.OutputInvoiceEntity;
 import com.huicai.sme.tax.dto.BatchOperationResult;
+import com.huicai.sme.tax.dto.vo.AppendixIResponse;
+import com.huicai.sme.tax.dto.vo.AppendixIIResponse;
+import com.huicai.sme.tax.dto.vo.TaxBurdenVO;
 import com.huicai.sme.tax.dto.OutputInvoiceBatchDTO;
 import com.huicai.sme.tax.entity.TaxDeclarationEntity;
 import com.huicai.sme.tax.entity.TaxTypeEntity;
@@ -267,11 +270,35 @@ public class TaxController {
         try { return SecurityUtils.getCurrentUserId(); } catch (Exception e) { return 1L; }
     }
 
-    // ========== 增值税计算 ==========
+    // ========== 增值税计算 + P61 附表 =========
     @Operation(summary = "计算增值税")
     @GetMapping("/vat/calculate")
     public R<Map<String, Object>> calculateVat(@RequestParam String period) {
         return R.ok(service.calculateVat(period));
+    }
+
+    @Operation(summary = "P61 附表一（销项，按客户+税率聚合）")
+    @GetMapping("/vat/appendix-i")
+    public R<AppendixIResponse> appendixI(
+            @RequestParam String period,
+            @RequestParam(required = false) Long customerId) {
+        return R.ok(service.appendixI(period, customerId));
+    }
+
+    @Operation(summary = "P61 附表二（进项，按供应商+税率+认证申报态聚合）")
+    @GetMapping("/vat/appendix-ii")
+    public R<AppendixIIResponse> appendixII(
+            @RequestParam String period,
+            @RequestParam(required = false) Long vendorId) {
+        return R.ok(service.appendixII(period, vendorId));
+    }
+
+    @Operation(summary = "P61 税负率分析（type=CURR/YOY）")
+    @GetMapping("/vat/tax-burden")
+    public R<TaxBurdenVO> taxBurden(
+            @RequestParam String period,
+            @RequestParam(defaultValue = "CURR") String type) {
+        return R.ok(service.taxBurden(period, type));
     }
 
     // ========== 申报 ==========

@@ -10,6 +10,10 @@ import com.huicai.sme.tax.entity.TaxTypeEntity;
 import java.util.List;
 import java.util.Map;
 
+import com.huicai.sme.tax.dto.vo.AppendixIIResponse;
+import com.huicai.sme.tax.dto.vo.AppendixIResponse;
+import com.huicai.sme.tax.dto.vo.TaxBurdenVO;
+
 public interface TaxService {
     // 税种
     IPage<TaxTypeEntity> pageQueryTaxType(String keyword, Integer current, Integer size);
@@ -44,6 +48,15 @@ public interface TaxService {
 
     // 增值税计算
     Map<String, Object> calculateVat(String period);
+
+    // P61 增值税附表一（销项，按客户+税率聚合）
+    AppendixIResponse appendixI(String period, Long customerId);
+
+    // P61 增值税附表二（进项，按供应商+税率+认证/申报态聚合）
+    AppendixIIResponse appendixII(String period, Long vendorId);
+
+    // P61 税负率分析（type=CURR/YOY）
+    TaxBurdenVO taxBurden(String period, String type);
 
     // 申报
     IPage<TaxDeclarationEntity> pageQueryDeclaration(String status, Integer current, Integer size);

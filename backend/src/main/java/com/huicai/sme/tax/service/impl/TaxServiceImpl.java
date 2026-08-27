@@ -16,6 +16,11 @@ import com.huicai.base.system.mapper.SubjectMapper;
 import com.huicai.sme.tax.constant.InvoiceStatus;
 import com.huicai.base.business.entity.InputInvoiceEntity;
 import com.huicai.base.business.entity.OutputInvoiceEntity;
+import com.huicai.sme.tax.dto.vo.AppendixIResponse;
+import com.huicai.sme.tax.dto.vo.AppendixIIResponse;
+import com.huicai.sme.tax.dto.vo.AppendixIRow;
+import com.huicai.sme.tax.dto.vo.AppendixIIRow;
+import com.huicai.sme.tax.dto.vo.TaxBurdenVO;
 import com.huicai.sme.tax.dto.BatchOperationResult;
 import com.huicai.sme.tax.entity.TaxDeclarationEntity;
 import com.huicai.sme.tax.entity.TaxTypeEntity;
@@ -621,6 +626,143 @@ public class TaxServiceImpl implements TaxService {
             result.put("note", "留抵税额(下期继续抵扣)");
         }
         return result;
+    }
+
+    // ========== 申报 =========
+
+    // ========== P61: 增值税附表 + 税负分析 ==========
+
+    @Override
+    public AppendixIResponse appendixI(String period, Long customerId) {
+        validatePeriod(period);
+        List<Map<String, Object>> raw = outputMapper.appendixIByCustomerAndRate(period, customerId);
+        List<AppendixIRow> rows = new ArrayList<>();
+        BigDecimal totalSales = BigDecimal.ZERO, totalTax = BigDecimal.ZERO, total = BigDecimal.ZERO;
+        for (Map<String, Object> m : raw) {
+            AppendixIRow row = mapToAppendixIRow(m);
+            rows.add(row);
+            totalSales = totalSales.add(row.salesAmount());
+            totalTax = totalTax.add(row.taxAmount());
+            total = total.add(row.totalAmount());
+        }
+        return new AppendixIResponse(period, totalSales, totalTax, total, rows);
+    }
+
+    @Override
+    public AppendixIIResponse appendixII(String period, Long vendorId) {
+        validatePeriod(period);
+        List<Map<String, Object>> raw = inputMapper.appendixIIByVendorAndRate(period, vendorId);
+        List<AppendixIIRow> rows = new ArrayList<>();
+        BigDecimal totalEx = BigDecimal.ZERO, totalTax = BigDecimal.ZERO, deductible = BigDecimal.ZERO;
+        for (Map<String, Object> m : raw) {
+            AppendixIIRow row = mapToAppendixIIRow(m);
+            rows.add(row);
+            totalEx = totalEx.add(row.amountExTax());
+            totalTax = totalTax.add(row.taxAmount());
+            if (row.isDeductible()) {
+                deductible = deductible.add(row.taxAmount());
+            }
+        }
+        return new AppendixIIResponse(period, totalEx, totalTax, deductible, rows);
+    }
+
+    @Override
+    public TaxBurdenVO taxBurden(String period, String type) {
+        validatePeriod(period);
+        if (type != null && !"CURR".equals(type) && !"YOY".equals(type)) {
+            throw new BusinessException("分析类型非法，仅支持 CURR/YOY");
+        }
+        AppendixIResponse appendixI = appendixI(period, null);
+        AppendixIIResponse appendixII = appendixII(period, null);
+        BigDecimal revenue = appendixI.getTotalAmount();
+        BigDecimal outputTax = appendixI.getTotalTaxAmount();
+        BigDecimal inputDeduction = appendixII.getDeductibleTax();
+        BigDecimal payable = outputTax.subtract(inputDeduction);
+        BigDecimal burdenRate = revenue.compareTo(BigDecimal.ZERO) == 0
+                ? null
+                : payable.divide(revenue, 6, RoundingMode.HALF_UP);
+
+        TaxBurdenVO vo = new TaxBurdenVO();
+        vo.setPeriod(period);
+        vo.setRevenue(revenue);
+        vo.setOutputTax(outputTax);
+        vo.setInputDeduction(inputDeduction);
+        vo.setPayableTax(payable);
+        vo.setTaxBurdenRate(burdenRate);
+
+        if ("YOY".equals(type)) {
+            String yoyPeriod = computeYoYPeriod(period);
+            if (yoyPeriod != null) {
+                AppendixIResponse iPrev = appendixI(yoyPeriod, null);
+                AppendixIIResponse iiPrev = appendixII(yoyPeriod, null);
+                BigDecimal revPrev = iPrev.getTotalAmount();
+                BigDecimal payPrev = iPrev.getTotalTaxAmount().subtract(iiPrev.getDeductibleTax());
+                if (revPrev.compareTo(BigDecimal.ZERO) != 0) {
+                    BigDecimal yoyRate = payPrev.divide(revPrev, 6, RoundingMode.HALF_UP);
+                    vo.setYoyRate(yoyRate);
+                    vo.setYoyChange(burdenRate != null ? burdenRate.subtract(yoyRate) : null);
+                }
+            }
+        }
+        return vo;
+    }
+
+    private AppendixIRow mapToAppendixIRow(Map<String, Object> m) {
+        return new AppendixIRow(
+                toLong(m.get("customerId")),
+                (String) m.get("customerName"),
+                toBigDecimalSafe(m.get("salesAmount")),
+                toBigDecimalSafe(m.get("taxAmount")),
+                toBigDecimalSafe(m.get("totalAmount")),
+                toBigDecimalSafe(m.get("rate"))
+        );
+    }
+
+    private AppendixIIRow mapToAppendixIIRow(Map<String, Object> m) {
+        return new AppendixIIRow(
+                toLong(m.get("vendorId")),
+                (String) m.get("vendorName"),
+                toBigDecimalSafe(m.get("amountExTax")),
+                toBigDecimalSafe(m.get("taxAmount")),
+                toBigDecimalSafe(m.get("totalAmount")),
+                toBigDecimalSafe(m.get("rate")),
+                (String) m.get("certificationStatus"),
+                (String) m.get("declareStatus")
+        );
+    }
+
+    private void validatePeriod(String period) {
+        if (period == null || !period.matches("\\d{6}")) {
+            throw new BusinessException("期间格式非法，应为 YYYYMM");
+        }
+    }
+
+    private String computeYoYPeriod(String period) {
+        try {
+            int y = Integer.parseInt(period.substring(0, 4));
+            int m = Integer.parseInt(period.substring(4, 6));
+            int yoyY = y - 1;
+            return String.format("%04d%02d", yoyY, m);
+        } catch (NumberFormatException e) {
+            return null;
+        }
+    }
+
+    private Long toLong(Object v) {
+        if (v == null) return null;
+        if (v instanceof Number) return ((Number) v).longValue();
+        return Long.parseLong(v.toString());
+    }
+
+    private BigDecimal toBigDecimalSafe(Object v) {
+        if (v == null) return BigDecimal.ZERO;
+        if (v instanceof BigDecimal) return (BigDecimal) v;
+        if (v instanceof Number) return new BigDecimal(((Number) v).doubleValue());
+        try {
+            return new BigDecimal(v.toString());
+        } catch (NumberFormatException e) {
+            return BigDecimal.ZERO;
+        }
     }
 
     // ========== 申报 ==========

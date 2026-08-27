@@ -60,6 +60,22 @@ public interface OutputInvoiceMapper extends BaseMapper<OutputInvoiceEntity> {
     int nullOutVoucherIds();
 
     @Select("""
+        SELECT
+          customer_id AS customerId,
+          customer_name AS customerName,
+          SUM(amount_ex_tax) AS salesAmount,
+          SUM(tax_amount) AS taxAmount,
+          SUM(total_amount) AS totalAmount,
+          tax_rate AS rate
+        FROM t_output_invoice
+        WHERE deleted = 0 AND period = #{period}
+          AND (#{customerId} IS NULL OR customer_id = #{customerId})
+        GROUP BY customer_id, customer_name, tax_rate
+        ORDER BY total_amount DESC
+    """)
+    List<Map<String, Object>> appendixIByCustomerAndRate(@Param("period") String period, @Param("customerId") Long customerId);
+
+    @Select("""
         SELECT id, invoice_no, status, customer_name
         FROM t_output_invoice
         WHERE deleted = 0
