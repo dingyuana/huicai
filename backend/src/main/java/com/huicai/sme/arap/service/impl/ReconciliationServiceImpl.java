@@ -3,6 +3,7 @@ package com.huicai.sme.arap.service.impl;
 import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.huicai.common.exception.BusinessException;
+import com.huicai.base.system.util.SecurityUtils;
 import com.huicai.sme.arap.constant.ArapStatus;
 import com.huicai.base.business.entity.BusinessDocEntity;
 import com.huicai.base.business.entity.InputInvoiceEntity;
@@ -303,12 +304,27 @@ public class ReconciliationServiceImpl implements ReconciliationService {
             throw new BusinessException("核销金额必须大于0");
         }
 
+        // P0-fix: 操作人从登录上下文获取（去除硬编码，审计可追溯）
+        Long operatorId;
+        try {
+            operatorId = SecurityUtils.getCurrentUserId();
+        } catch (Exception e) {
+            operatorId = null;
+        }
+
         Long resolvedCustomerId = request.customerId();
         Long resolvedVendorId = request.vendorId();
 
         // P34: Update target business doc unsettled amount
         BusinessDocEntity targetDoc = businessDocMapper.selectById(request.targetDocId());
         if (targetDoc == null) throw new BusinessException("业务单据不存在: " + request.targetDocId());
+        // P0-fix: 目标单据状态校验 — 仅已审批(APPROVED)/已制证(VOUCHERED)/部分核销(PARTIALLY_RECONCILED)可核销
+        String targetStatus = targetDoc.getStatus();
+        if (!"APPROVED".equals(targetStatus) && !"VOUCHERED".equals(targetStatus)
+                && !"PARTIALLY_RECONCILED".equals(targetStatus)) {
+            throw new BusinessException("目标单据状态不允许核销: " + targetDoc.getDocNo()
+                    + " 当前状态 " + targetStatus + "，仅 APPROVED/VOUCHERED/PARTIALLY_RECONCILED 可核销");
+        }
         // P42-V2-G2: 防重复核销守卫 — 核销金额不得超过目标单据未核销余额
         BigDecimal targetUnsettled = targetDoc.getUnsettledAmount() != null
                 ? targetDoc.getUnsettledAmount()
@@ -332,8 +348,9 @@ public class ReconciliationServiceImpl implements ReconciliationService {
             throw new OptimisticLockingFailureException("目标单据版本冲突, id=" + targetDoc.getId());
         }
 
-        // 同步更新来源单据的已核销/未核销金额 (receipt/payment 类型)
-        if ("receipt".equals(request.sourceDocType()) || "payment".equals(request.sourceDocType())) {
+        // 同步更新来源单据的已核销/未核销金额 (RECEIPT/PAYMENT 类型，大小写兼容)
+        String srcTypeNorm = request.sourceDocType() == null ? "" : request.sourceDocType().toLowerCase();
+        if ("receipt".equals(srcTypeNorm) || "payment".equals(srcTypeNorm)) {
             BusinessDocEntity sourceDoc = businessDocMapper.selectById(request.sourceDocId());
             if (sourceDoc != null) {
                 BigDecimal srcNewSettled = (sourceDoc.getSettledAmount() != null ? sourceDoc.getSettledAmount() : BigDecimal.ZERO)
@@ -374,7 +391,7 @@ public class ReconciliationServiceImpl implements ReconciliationService {
         reconLog.setMatchMethod(request.matchMethod() != null ? request.matchMethod() : "MANUAL");
         reconLog.setStatus(ArapStatus.CONFIRMED);
         reconLog.setRemark(request.remark());
-        reconLog.setCreatedBy(DEFAULT_USER_ID);
+        reconLog.setCreatedBy(operatorId != null ? operatorId : DEFAULT_USER_ID);
         reconLog.setOperationType("CREATE");
         logMapper.insert(reconLog);
 

@@ -57,6 +57,8 @@ public class ArapSettlementServiceImpl implements ArapSettlementService {
     private final VoucherEntryMapper voucherEntryMapper;
     private final VoucherNoService voucherNoService;
     private final ReconciliationLogMapper logMapper;
+    private final com.huicai.base.business.service.OutputInvoiceStateMachineService outputInvoiceStateMachineService;
+    private final com.huicai.sme.tax.service.InputInvoiceStateMachineService inputInvoiceStateMachineService;
 
     @Override
     public IPage<ArapSettlementEntity> pageQuery(String status, String voucherNo, Integer current, Integer size) {
@@ -401,6 +403,29 @@ public class ArapSettlementServiceImpl implements ArapSettlementService {
             reverseEntry.setBeforeBalance(entry.getBeforeBalance());
             reverseEntry.setAfterBalance(entry.getAfterBalance());
             entryMapper.insert(reverseEntry);
+            // P0-fix: 反核销回滚业务单据 settled/unsettled 金额（原实现漏调）
+            restoreUnsettledAmount(entry);
+            // P0-fix: 反核销同步回滚发票状态（与正向 onReconciliationUpdate 对称）
+            if (entry.getBusinessDocId() != null) {
+                BusinessDocEntity doc = businessDocMapper.selectById(entry.getBusinessDocId());
+                if (doc != null && doc.getInvoiceId() != null
+                        && ("INVOICE_OUT".equals(doc.getDocType()) || "INVOICE_IN".equals(doc.getDocType()))) {
+                    try {
+                        boolean isOutput = "INVOICE_OUT".equals(doc.getDocType());
+                        if (isOutput) {
+                            outputInvoiceStateMachineService.onReconciliationUpdate(
+                                    doc.getInvoiceId(), doc.getUnsettledAmount(), DEFAULT_USER_ID);
+                        } else {
+                            inputInvoiceStateMachineService.onReconciliationUpdate(
+                                    doc.getInvoiceId(), doc.getUnsettledAmount(), DEFAULT_USER_ID);
+                        }
+                        log.info("反核销同步发票状态回滚: invoiceId={}, unsettled={}",
+                                doc.getInvoiceId(), doc.getUnsettledAmount());
+                    } catch (Exception e) {
+                        log.warn("反核销同步发票状态失败(不影响反核销): {}", e.getMessage());
+                    }
+                }
+            }
         }
 
         // 原核销单状态改为 REVERSED
@@ -416,7 +441,10 @@ public class ArapSettlementServiceImpl implements ArapSettlementService {
                 BigDecimal newSettled = doc.getSettledAmount().subtract(entry.getSettledAmount());
                 doc.setSettledAmount(newSettled);
                 doc.setUnsettledAmount(doc.getAmount().subtract(newSettled));
-                doc.setStatus("APPROVED");
+                // P0-fix: 按剩余金额定状态，不盲目回退 APPROVED（已制证单据保持 VOUCHERED）
+                doc.setStatus(newSettled.compareTo(BigDecimal.ZERO) == 0
+                        ? ("VOUCHERED".equals(doc.getStatus()) ? "VOUCHERED" : "APPROVED")
+                        : "PARTIALLY_RECONCILED");
                 if (businessDocMapper.updateById(doc) == 0) {
                     throw new OptimisticLockingFailureException("BusinessDoc反核销版本冲突, id=" + doc.getId());
                 }

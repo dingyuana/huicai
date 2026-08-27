@@ -70,6 +70,7 @@ class ReconciliationServiceImplTest {
         b.setDocDate(LocalDate.of(2026, 6, 10));
         b.setSummary(docType.equals("INVOICE_OUT") ? "应收测试" : "应付测试");
         b.setDueDate(LocalDate.of(2026, 7, 10));
+        b.setStatus("APPROVED"); // P0-fix: 核销要求目标单据已审批
         return b;
     }
 
@@ -178,6 +179,62 @@ class ReconciliationServiceImplTest {
         ExecuteRequest req = new ExecuteRequest("receipt", 1L, "INVOICE_OUT", 99L, new BigDecimal("100"), BigDecimal.ZERO, "MANUAL", 1L, null, "202606", "");
         BusinessException ex = assertThrows(BusinessException.class, () -> service.execute(req));
         assertTrue(ex.getMessage().contains("业务单据不存在"));
+    }
+
+    // ==================== P0-fix: 状态校验 ====================
+
+    @Test
+    void execute_目标单据DRAFT状态_拒绝核销() {
+        BusinessDocEntity doc = stubBusinessDoc(1L, 1L, null, "INVOICE_OUT", new BigDecimal("1000"), new BigDecimal("500"));
+        doc.setStatus("DRAFT");
+        when(businessDocMapper.selectById(1L)).thenReturn(doc);
+
+        ExecuteRequest req = new ExecuteRequest("receipt", 1L, "INVOICE_OUT", 1L, new BigDecimal("200"), BigDecimal.ZERO, "MANUAL", 1L, null, "202606", "");
+        BusinessException ex = assertThrows(BusinessException.class, () -> service.execute(req));
+        assertTrue(ex.getMessage().contains("状态不允许核销"));
+        verify(businessDocMapper, never()).updateById(any(BusinessDocEntity.class));
+    }
+
+    @Test
+    void execute_目标单据PENDING状态_拒绝核销() {
+        BusinessDocEntity doc = stubBusinessDoc(1L, 1L, null, "INVOICE_OUT", new BigDecimal("1000"), new BigDecimal("500"));
+        doc.setStatus("PENDING");
+        when(businessDocMapper.selectById(1L)).thenReturn(doc);
+
+        ExecuteRequest req = new ExecuteRequest("receipt", 1L, "INVOICE_OUT", 1L, new BigDecimal("200"), BigDecimal.ZERO, "MANUAL", 1L, null, "202606", "");
+        BusinessException ex = assertThrows(BusinessException.class, () -> service.execute(req));
+        assertTrue(ex.getMessage().contains("状态不允许核销"));
+    }
+
+    @Test
+    void execute_目标单据VOUCHERED状态_允许核销() {
+        BusinessDocEntity doc = stubBusinessDoc(1L, 1L, null, "INVOICE_OUT", new BigDecimal("1000"), new BigDecimal("500"));
+        doc.setStatus("VOUCHERED");
+        when(businessDocMapper.selectById(1L)).thenReturn(doc);
+        when(businessDocMapper.updateById(any(BusinessDocEntity.class))).thenReturn(1);
+
+        ExecuteRequest req = new ExecuteRequest("receipt", 1L, "INVOICE_OUT", 1L, new BigDecimal("200"), BigDecimal.ZERO, "MANUAL", 1L, null, "202606", "");
+        ReconciliationLogEntity log = service.execute(req);
+        assertNotNull(log);
+        verify(businessDocMapper, atLeastOnce()).updateById(any(BusinessDocEntity.class));
+    }
+
+    // ==================== P0-fix: 来源单据大小写兼容 ====================
+
+    @Test
+    void execute_来源docType大写RECEIPT_同步来源单据() {
+        BusinessDocEntity target = stubBusinessDoc(1L, 1L, null, "INVOICE_OUT", new BigDecimal("1000"), new BigDecimal("500"));
+        BusinessDocEntity source = stubBusinessDoc(2L, 1L, null, "RECEIPT", new BigDecimal("300"), new BigDecimal("300"));
+        when(businessDocMapper.selectById(1L)).thenReturn(target);
+        when(businessDocMapper.selectById(2L)).thenReturn(source);
+        when(businessDocMapper.updateById(any(BusinessDocEntity.class))).thenReturn(1);
+
+        ExecuteRequest req = new ExecuteRequest("RECEIPT", 2L, "INVOICE_OUT", 1L, new BigDecimal("200"), BigDecimal.ZERO, "MANUAL", 1L, null, "202606", "");
+        service.execute(req);
+
+        // 来源单据被同步：300-200=100 未核销
+        assertEquals(new BigDecimal("100"), source.getUnsettledAmount());
+        assertEquals("PARTIALLY_RECONCILED", source.getStatus());
     }
 
     @Test

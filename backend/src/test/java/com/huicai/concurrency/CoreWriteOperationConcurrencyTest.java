@@ -69,6 +69,8 @@ class CoreWriteOperationConcurrencyTest {
     @Mock private VoucherEntryMapper voucherEntryMapper;
     @Mock private VoucherNoService voucherNoService;
     @Mock private ReconciliationLogMapper logMapper;
+    @Mock private com.huicai.base.business.service.OutputInvoiceStateMachineService outputInvoiceStateMachineService;
+    @Mock private com.huicai.sme.tax.service.InputInvoiceStateMachineService inputInvoiceStateMachineService;
 
     private ArapSettlementServiceImpl service;
 
@@ -82,7 +84,7 @@ class CoreWriteOperationConcurrencyTest {
         service = new ArapSettlementServiceImpl(
                 mapper, entryMapper, businessDocMapper, customerMapper, vendorMapper,
                 voucherTemplateService, voucherMapper, voucherEntryMapper,
-                voucherNoService, logMapper);
+                voucherNoService, logMapper, outputInvoiceStateMachineService, inputInvoiceStateMachineService);
     }
 
     /**
