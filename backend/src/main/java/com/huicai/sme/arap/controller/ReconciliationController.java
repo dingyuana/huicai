@@ -158,16 +158,22 @@ public class ReconciliationController {
     @Operation(summary = "FIFO 自动核销 — 按到期日优先核销最早未结清单据 (dry-run 预览, 不落库)")
     @PostMapping("/auto-fifo")
     public R<List<ReconciliationService.ReconciliationFifoPreview>> autoReconcileFifo(
-            @RequestParam Long partyId,
-            @RequestParam String targetDocType,
-            @RequestParam BigDecimal amount,
-            @RequestParam String sourceDocType,
-            @RequestParam Long sourceDocId,
-            @RequestParam(required = false) String period,
-            @RequestParam(required = false) String summary) {
+            @RequestBody ReconciliationController.AutoFifoRequest req) {
         return R.ok(reconciliationService.autoReconcileFifo(
-                partyId, targetDocType, amount, sourceDocType, sourceDocId, period, summary));
+                req.partyId(), req.targetDocType(), req.amount(),
+                req.sourceDocType(), req.sourceDocId(),
+                req.period(), req.summary()));
     }
+
+    public record AutoFifoRequest(
+            Long partyId,
+            String targetDocType,
+            java.math.BigDecimal amount,
+            String sourceDocType,
+            Long sourceDocId,
+            String period,
+            String summary
+    ) {}
 
     @Operation(summary = "拆分核销 — 一笔来源拆分核销多张目标单据")
     @PostMapping("/split-allocate")

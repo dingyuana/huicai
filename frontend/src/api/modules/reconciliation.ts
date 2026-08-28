@@ -118,7 +118,7 @@ export function autoFifoReconciliation(params: {
   period?: string
   summary?: string
 }): Promise<ReconciliationFifoPreview[]> {
-  return request.post('/sme/arap/v1/reconciliation/auto-fifo', null, { params })
+  return request.post('/sme/arap/v1/reconciliation/auto-fifo', params)
 }
 
 /** 批量执行核销（人工确认预览后调用，一次性落库） */
