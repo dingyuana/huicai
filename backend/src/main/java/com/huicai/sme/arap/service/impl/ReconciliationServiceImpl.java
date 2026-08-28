@@ -736,7 +736,7 @@ public class ReconciliationServiceImpl implements ReconciliationService {
                         .eq("INVOICE_IN".equals(targetDocType), BusinessDocEntity::getSupplierId, partyId)
                         .eq(BusinessDocEntity::getDocType, targetDocType)
                         .gt(BusinessDocEntity::getUnsettledAmount, BigDecimal.ZERO)
-                        .in(BusinessDocEntity::getStatus, List.of("APPROVED", "VOUCHERED", "PARTIALLY_RECONCILED"))
+                        .in(BusinessDocEntity::getStatus, List.of("APPROVED", "SUBMITTED", "VOUCHERED", "PARTIALLY_RECONCILED"))
                         .orderByAsc(BusinessDocEntity::getDueDate)
         );
         for (BusinessDocEntity inv : invoices) {
@@ -967,7 +967,7 @@ public class ReconciliationServiceImpl implements ReconciliationService {
                         .eq("INVOICE_IN".equals(targetDocType), BusinessDocEntity::getSupplierId, partyId)
                         .eq(BusinessDocEntity::getDocType, targetDocType)
                         .gt(BusinessDocEntity::getUnsettledAmount, BigDecimal.ZERO)
-                        .in(BusinessDocEntity::getStatus, List.of("APPROVED", "VOUCHERED", "PARTIALLY_RECONCILED"))
+                        .in(BusinessDocEntity::getStatus, List.of("APPROVED", "SUBMITTED", "VOUCHERED", "PARTIALLY_RECONCILED"))
                         .orderByAsc(BusinessDocEntity::getDueDate)
         );
         for (BusinessDocEntity inv : invoices) {

@@ -7,31 +7,35 @@ import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
 
 import java.math.BigDecimal;
-import java.time.LocalDate;
 
 @Mapper
 public interface ReconciliationToleranceMapper extends BaseMapper<ReconciliationToleranceEntity> {
 
-    @Select("SELECT COALESCE(t.tolerance_amount, 5.00) AS tolerance_amount, " +
-            "COALESCE(t.tolerance_rate, 10.00) AS tolerance_rate " +
-            "FROM t_reconciliation_tolerance t " +
-            "WHERE t.deleted = 0 " +
-            "AND t.tenant_id = #{tenantId} " +
+    /**
+     * 按 party 查找生效容差（先查 party-specific，再查全局默认）。
+     * 容差类型 ABSOLUTE 走 tolerance_value 作金额上限，PERCENT 走 tolerance_value 作百分比。
+     */
+    @Select("SELECT t.* FROM t_reconciliation_tolerance t " +
+            "WHERE t.deleted = 0 AND t.is_active = true " +
+            "AND t.enterprise_id = #{enterpriseId} " +
             "AND ((t.party_id = #{partyId} AND t.party_type = #{partyType}) OR t.party_id IS NULL) " +
-            "AND (t.effective_from IS NULL OR t.effective_from <= #{today}) " +
-            "AND (t.effective_to IS NULL OR t.effective_to >= #{today}) " +
             "ORDER BY t.party_id NULLS LAST " +
             "LIMIT 1")
-    ReconciliationToleranceEntity findTolerance(@Param("tenantId") Long tenantId,
+    ReconciliationToleranceEntity findTolerance(@Param("enterpriseId") Long enterpriseId,
                                                  @Param("partyId") Long partyId,
-                                                 @Param("partyType") String partyType,
-                                                 @Param("today") LocalDate today);
+                                                 @Param("partyType") String partyType);
 
-    @Select("SELECT t.tolerance_amount FROM t_reconciliation_tolerance t " +
-            "WHERE t.deleted = 0 AND t.tenant_id = #{tenantId} AND t.party_id IS NULL")
-    BigDecimal getDefaultToleranceAmount(@Param("tenantId") Long tenantId);
+    @Select("SELECT COALESCE(MAX(t.tolerance_value), 5.00) " +
+            "FROM t_reconciliation_tolerance t " +
+            "WHERE t.deleted = 0 AND t.is_active = true " +
+            "AND t.enterprise_id = #{enterpriseId} AND t.party_id IS NULL " +
+            "AND t.tolerance_type = 'ABSOLUTE'")
+    BigDecimal getDefaultToleranceAmount(@Param("enterpriseId") Long enterpriseId);
 
-    @Select("SELECT t.tolerance_rate FROM t_reconciliation_tolerance t " +
-            "WHERE t.deleted = 0 AND t.tenant_id = #{tenantId} AND t.party_id IS NULL")
-    BigDecimal getDefaultToleranceRate(@Param("tenantId") Long tenantId);
+    @Select("SELECT COALESCE(MAX(t.tolerance_value), 10.00) " +
+            "FROM t_reconciliation_tolerance t " +
+            "WHERE t.deleted = 0 AND t.is_active = true " +
+            "AND t.enterprise_id = #{enterpriseId} AND t.party_id IS NULL " +
+            "AND t.tolerance_type = 'PERCENT'")
+    BigDecimal getDefaultToleranceRate(@Param("enterpriseId") Long enterpriseId);
 }

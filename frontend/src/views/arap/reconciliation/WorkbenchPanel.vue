@@ -481,8 +481,11 @@ const fifoExecuting = ref(false)
 const fifoResult = ref<ReconciliationFifoPreview[] | null>(null)
 
 async function onAutoFifo() {
-  if (!list.value.length) return
-  const row = list.value[0]
+  const row = currentDoc.value || list.value[0]
+  if (!row) {
+    ElMessage.warning('请选择要核销的单据')
+    return
+  }
   const isReceipt = activeTab.value === 'RECEIPT'
   const partyId = isReceipt ? row.customerId : row.supplierId
   if (!partyId) {
@@ -494,7 +497,7 @@ async function onAutoFifo() {
     fifoResult.value = await autoFifoReconciliation({
       partyId,
       targetDocType: isReceipt ? 'INVOICE_OUT' : 'INVOICE_IN',
-      amount: row.amount || 0,
+      amount: row.unsettledAmount ?? row.amount ?? 0,
       sourceDocType: isReceipt ? 'receipt' : 'payment',
       sourceDocId: row.id,
     })

@@ -24,28 +24,29 @@ public class ReconciliationToleranceEntity extends BaseEntity {
     /** 方类型: CUSTOMER / VENDOR */
     private String partyType;
 
-    /** 容差金额阈值（默认5元） */
+    /** DB tolerance_value: 容差金额阈值或百分比（默认5/10） */
+    private BigDecimal toleranceValue;
+
+    /** 容差类型: ABSOLUTE / PERCENT */
+    private String toleranceType;
+
+    /** 是否生效 */
+    private Boolean isActive;
+
+    /** 容差金额（业务展示字段，映射 toleranceValue 当 ABSOLUTE） */
     @TableField(exist = false)
     private BigDecimal toleranceAmount;
 
-    /** 容差比例阈值（默认10%） */
+    /** 容差比例（业务展示字段，映射 toleranceValue 当 PERCENT） */
     @TableField(exist = false)
     private BigDecimal toleranceRate;
 
-    /** 生效日期 */
-    @TableField(exist = false)
-    private LocalDate effectiveFrom;
-
-    /** 失效日期 */
-    @TableField(exist = false)
-    private LocalDate effectiveTo;
-
-    @TableField(fill = FieldFill.INSERT)
+    @TableField
     private LocalDateTime createdAt;
 
-    @TableField(fill = FieldFill.INSERT_UPDATE)
+    @TableField
     private LocalDateTime updatedAt;
 
-    @TableField(exist = false)
+    /** 逻辑删除: 0=正常 1=删除 */
     private Integer deleted;
 }

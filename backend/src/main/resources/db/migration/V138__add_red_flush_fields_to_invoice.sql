@@ -23,4 +23,3 @@ COMMENT ON COLUMN t_output_invoice.original_voucher_id IS '原蓝字发票对应
 COMMENT ON COLUMN t_output_invoice.original_certification_status IS '原发票状态快照';
 
 CREATE INDEX IF NOT EXISTS idx_input_invoice_reversed_from ON t_input_invoice(reversed_from);
-CREATE INDEX IF NOT EXISTS idx_output_invoice_reversed_from ON t_output_invoice(reversed_from);
