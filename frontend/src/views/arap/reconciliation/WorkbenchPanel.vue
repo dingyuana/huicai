@@ -187,6 +187,8 @@
       <template v-if="fifoResult && fifoResult.length">
         <el-alert title="共 {{ fifoResult.length }} 项匹配，请人工确认后执行" type="success" :closable="false" style="margin-bottom:16px" />
         <el-table :data="fifoResult" border stripe size="small">
+          <el-table-column label="来源单据" prop="sourceDocNo" width="160" />
+          <el-table-column label="客户/供应商" prop="partyName" width="160" />
           <el-table-column label="目标单据" prop="targetDocNo" width="160" />
           <el-table-column label="核销金额" width="120" align="right">
             <template #default="{ row }">{{ fmtAmount(row.amount) }}</template>
@@ -481,29 +483,47 @@ const fifoExecuting = ref(false)
 const fifoResult = ref<ReconciliationFifoPreview[] | null>(null)
 
 async function onAutoFifo() {
-  const row = currentDoc.value || list.value[0]
-  if (!row) {
-    ElMessage.warning('请选择要核销的单据')
+  // 扫描当前 tab 下所有未结清单据, 逐一查推荐, 合并全部匹配项
+  const pendingDocs = list.value.filter((r: any) => (r.unsettledAmount || 0) > 0)
+  if (!pendingDocs.length) {
+    ElMessage.warning('当前列表无未结清单据')
     return
   }
   const isReceipt = activeTab.value === 'RECEIPT'
-  const partyId = isReceipt ? row.customerId : row.supplierId
-  if (!partyId) {
-    ElMessage.warning('单据缺少客户/供应商信息，无法自动核销')
-    return
-  }
   fifoLoading.value = true
   try {
-    fifoResult.value = await autoFifoReconciliation({
-      partyId,
-      targetDocType: isReceipt ? 'INVOICE_OUT' : 'INVOICE_IN',
-      amount: row.unsettledAmount ?? row.amount ?? 0,
-      sourceDocType: isReceipt ? 'receipt' : 'payment',
-      sourceDocId: row.id,
-    })
+    const allPreviews: ReconciliationFifoPreview[] = []
+    const skipped: { docNo: string; reason: string }[] = []
+    for (const row of pendingDocs) {
+      const partyId = isReceipt ? row.customerId : row.supplierId
+      if (!partyId) {
+        skipped.push({ docNo: row.docNo || `#${row.id}`, reason: '缺少客户/供应商' })
+        continue
+      }
+      try {
+        const previews = await autoFifoReconciliation({
+          partyId,
+          targetDocType: isReceipt ? 'INVOICE_OUT' : 'INVOICE_IN',
+          amount: row.unsettledAmount ?? row.amount ?? 0,
+          sourceDocType: isReceipt ? 'receipt' : 'payment',
+          sourceDocId: row.id,
+        })
+        if (previews && previews.length) {
+          for (const p of previews) {
+            allPreviews.push({ ...p, sourceDocNo: row.docNo, partyId, partyName: row.customerName || row.supplierName })
+          }
+        }
+      } catch (e: any) {
+        skipped.push({ docNo: row.docNo || `#${row.id}`, reason: e?.message || '推荐失败' })
+      }
+    }
+    fifoResult.value = allPreviews
     fifoDialogVisible.value = true
-  } catch (e: any) {
-    ElMessage.error(e?.message || '自动核销失败')
+    if (!allPreviews.length) {
+      ElMessage.info(`扫描 ${pendingDocs.length} 条单据,均无匹配项${skipped.length ? ` (${skipped.length} 条查询失败)` : ''}`)
+    } else {
+      ElMessage.success(`扫描 ${pendingDocs.length} 条单据,共找到 ${allPreviews.length} 项可核销匹配`)
+    }
   } finally {
     fifoLoading.value = false
   }
