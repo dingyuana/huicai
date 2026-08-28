@@ -78,7 +78,22 @@ export const REVIEW_STATUS_LABELS: Record<string, string> = {
   approved: '已过账',
 }
 
-export function getBankStatementPage(params: { accountId?: string; status?: string; classification?: string; reviewStatus?: string; current?: number; size?: number }): Promise<PageResult<BankStatementVO>> {
+export function getBankStatementPage(params: {
+  accountId?: string
+  status?: string
+  classification?: string
+  reviewStatus?: string
+  direction?: string
+  counterAccount?: string
+  summary?: string
+  keyword?: string
+  minAmount?: number
+  maxAmount?: number
+  startDate?: string
+  endDate?: string
+  current?: number
+  size?: number
+}): Promise<PageResult<BankStatementVO>> {
   return request.get('/sme/cash/v1/bank-statements/page', { params })
 }
 export function getClassificationCounts(accountId: string, reviewStatus?: string): Promise<Record<string, number>> {

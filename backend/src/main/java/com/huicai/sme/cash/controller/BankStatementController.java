@@ -12,9 +12,11 @@ import com.huicai.base.business.util.ColumnMappingResolver;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -39,9 +41,19 @@ public class BankStatementController {
             @RequestParam(required = false) String status,
             @RequestParam(required = false) String classification,
             @RequestParam(required = false) String reviewStatus,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) java.time.LocalDate startDate,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) java.time.LocalDate endDate,
+            @RequestParam(required = false) String direction,
+            @RequestParam(required = false) String counterAccount,
+            @RequestParam(required = false) String summary,
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) BigDecimal minAmount,
+            @RequestParam(required = false) BigDecimal maxAmount,
             @RequestParam(defaultValue = "1") Integer current,
             @RequestParam(defaultValue = "20") Integer size) {
-        return R.ok(service.pageQuery(accountId, status, classification, reviewStatus, current, size));
+        return R.ok(service.pageQuery(accountId, status, classification, reviewStatus,
+                startDate, endDate, direction, counterAccount, summary, keyword,
+                minAmount, maxAmount, current, size));
     }
 
     @Operation(summary = "获取对账单详情")

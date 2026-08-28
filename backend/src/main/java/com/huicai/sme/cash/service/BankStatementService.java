@@ -3,11 +3,17 @@ package com.huicai.sme.cash.service;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.huicai.base.business.entity.BankStatementEntity;
 
+import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 
 public interface BankStatementService {
-    IPage<BankStatementEntity> pageQuery(Long accountId, String status, String classification, String reviewStatus, Integer current, Integer size);
+    IPage<BankStatementEntity> pageQuery(Long accountId, String status, String classification, String reviewStatus,
+            LocalDate startDate, LocalDate endDate, String direction,
+            String counterAccount, String summary, String keyword,
+            BigDecimal minAmount, BigDecimal maxAmount,
+            Integer current, Integer size);
     int importFromCsv(Long accountId, String csvContent);
     List<Map<String, Object>> autoMatch(Long accountId);
     int confirmMatch(Long statementId, Long journalId);

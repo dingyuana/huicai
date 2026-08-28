@@ -74,14 +74,29 @@ public class BankStatementServiceImpl implements BankStatementService {
      * 之前用 {@code .eq(StrUtil.isNotBlank(...))} 在收到显式空串或哨兵时仍可能下发错误的 WHERE 条件.
      */
     @Override
-    public IPage<BankStatementEntity> pageQuery(Long accountId, String status, String classification, String reviewStatus, Integer current, Integer size) {
+    public IPage<BankStatementEntity> pageQuery(Long accountId, String status, String classification, String reviewStatus,
+            LocalDate startDate, LocalDate endDate, String direction,
+            String counterAccount, String summary, String keyword,
+            BigDecimal minAmount, BigDecimal maxAmount,
+            Integer current, Integer size) {
         Page<BankStatementEntity> page = new Page<>(current == null ? 1 : current, size == null ? 20 : size);
         LambdaQueryWrapper<BankStatementEntity> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(accountId != null, BankStatementEntity::getAccountId, accountId)
                 .eq(shouldFilter(status), BankStatementEntity::getMatchStatus, status)
                 .eq(shouldFilter(classification), BankStatementEntity::getClassification, classification)
+                .ge(startDate != null, BankStatementEntity::getTxDate, startDate)
+                .le(endDate != null, BankStatementEntity::getTxDate, endDate)
+                .eq(shouldFilter(direction), BankStatementEntity::getTxType, direction)
+                .like(shouldFilter(counterAccount), BankStatementEntity::getCounterAccount, counterAccount)
+                .like(shouldFilter(summary), BankStatementEntity::getSummary, summary)
+                .and(shouldFilter(keyword), w -> w
+                        .like(BankStatementEntity::getCounterAccount, keyword)
+                        .or().like(BankStatementEntity::getSummary, keyword)
+                        .or().like(BankStatementEntity::getExternalNo, keyword))
+                .ge(minAmount != null, BankStatementEntity::getAmount, minAmount)
+                .le(maxAmount != null, BankStatementEntity::getAmount, maxAmount)
                 .orderByDesc(BankStatementEntity::getTxDate);
-        
+
         if (shouldFilter(reviewStatus)) {
             String[] statuses = reviewStatus.split(",");
             if (statuses.length > 1) {
@@ -90,7 +105,7 @@ public class BankStatementServiceImpl implements BankStatementService {
                 wrapper.eq(BankStatementEntity::getReviewStatus, reviewStatus);
             }
         }
-        
+
         IPage<BankStatementEntity> result = statementMapper.selectPage(page, wrapper);
         // 填充生成结果的非持久化字段
         populateGeneratedRefs(result.getRecords());

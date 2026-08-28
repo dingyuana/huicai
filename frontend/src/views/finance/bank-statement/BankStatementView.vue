@@ -12,10 +12,42 @@
             <el-option v-for="a in accounts" :key="a.id" :label="`${a.accountName} (${a.accountNo})`" :value="a.id" />
           </el-select>
         </el-form-item>
+        <el-form-item label="日期范围">
+          <el-date-picker
+            v-model="dateRange"
+            type="daterange"
+            range-separator="至"
+            start-placeholder="开始日期"
+            end-placeholder="结束日期"
+            value-format="YYYY-MM-DD"
+            style="width:260px"
+            @change="onDateRangeChange"
+          />
+        </el-form-item>
+        <el-form-item label="方向">
+          <el-select v-model="query.direction" placeholder="全部" clearable style="width:100px" @change="onSearch">
+            <el-option label="收入" value="INCOME" />
+            <el-option label="支出" value="EXPENSE" />
+          </el-select>
+        </el-form-item>
         <el-form-item label="确认状态">
           <el-select v-model="query.reviewStatus" placeholder="全部" clearable style="width:140px" @change="onSearch">
             <el-option v-for="(label, value) in REVIEW_STATUS_LABELS" :key="value" :label="label" :value="value" />
           </el-select>
+        </el-form-item>
+        <el-form-item label="对方户名">
+          <el-input v-model="query.counterAccount" placeholder="模糊匹配" clearable style="width:160px" @keyup.enter="onSearch" />
+        </el-form-item>
+        <el-form-item label="摘要">
+          <el-input v-model="query.summary" placeholder="模糊匹配" clearable style="width:160px" @keyup.enter="onSearch" />
+        </el-form-item>
+        <el-form-item label="金额">
+          <el-input v-model.number="query.minAmount" placeholder="最小" clearable style="width:100px" @keyup.enter="onSearch" />
+          <span style="margin:0 4px">-</span>
+          <el-input v-model.number="query.maxAmount" placeholder="最大" clearable style="width:100px" @keyup.enter="onSearch" />
+        </el-form-item>
+        <el-form-item label="关键字">
+          <el-input v-model="query.keyword" placeholder="对方/摘要/流水号" clearable style="width:180px" @keyup.enter="onSearch" />
         </el-form-item>
         <el-form-item>
           <el-button type="primary" @click="onSearch">查询</el-button>
@@ -430,9 +462,31 @@ const columnMapping = ref<Record<string, string>>({})
 const classificationCounts = ref<Record<string, number>>({})
 const totalCount = computed(() => Object.values(classificationCounts.value).reduce((a, b) => a + b, 0))
 
-const query = ref<{ accountId?: string; reviewStatus?: string; classification?: string; current: number; size: number }>({
+const query = ref<{
+  accountId?: string
+  reviewStatus?: string
+  classification?: string
+  direction?: string
+  counterAccount?: string
+  summary?: string
+  keyword?: string
+  minAmount?: number
+  maxAmount?: number
+  startDate?: string
+  endDate?: string
+  current: number
+  size: number
+}>({
   current: 1, size: 20,
 })
+
+// 日期范围 (Element Plus daterange)
+const dateRange = ref<[string, string] | null>(null)
+function onDateRangeChange(val: [string, string] | null) {
+  query.value.startDate = val?.[0]
+  query.value.endDate = val?.[1]
+  onSearch()
+}
 
 type ElTagType = 'success' | 'warning' | 'info' | 'primary' | 'danger'
 
@@ -521,6 +575,7 @@ async function refreshAll() {
 function onSearch() { query.value.current = 1; fetchData() }
 function onReset() {
   query.value = { current: 1, size: 20 }
+  dateRange.value = null
   fetchData()
 }
 function onSelectionChange(rows: BankStatementVO[]) {
