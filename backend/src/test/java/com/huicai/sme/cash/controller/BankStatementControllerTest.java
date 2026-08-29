@@ -54,7 +54,7 @@ class BankStatementControllerTest {
     @Test
     @DisplayName("分页查询对账单_参数正确绑定")
     void pageQuery_params_applied() throws Exception {
-        when(service.pageQuery(any(), any(), any(), any(), eq(1), eq(20)))
+        when(service.pageQuery(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), eq(1), eq(20)))
                 .thenReturn(new Page<>());
 
         mvc.perform(get("/api/sme/cash/v1/bank-statements/page"))

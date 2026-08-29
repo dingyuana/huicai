@@ -63,9 +63,17 @@ public interface ReconciliationService {
     record ReconciliationFifoPreview(
         Long sourceDocId,
         String sourceDocNo,
+        String sourceDocType,
+        BigDecimal sourceAmount,
+        BigDecimal sourceUnsettledAmount,
         Long targetDocId,
         String targetDocNo,
-        BigDecimal amount
+        String targetDocType,
+        BigDecimal targetAmount,
+        BigDecimal targetUnsettledAmount,
+        BigDecimal amount,
+        BigDecimal matchScore,
+        String matchLevel
     ) {}
 
     /** 收款核销推荐 — sourceDocType = RECEIPT/INVOICE_OUT/OTHER_RECEIVABLE */

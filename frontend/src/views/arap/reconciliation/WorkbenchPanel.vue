@@ -182,16 +182,80 @@
       </template>
     </el-dialog>
 
+    <!-- 单据详情抽屉 -->
+    <el-drawer v-model="docDetailVisible" :title="docDetailTitle" size="520px" destroy-on-close>
+      <template v-if="docDetailLoading">
+        <div style="text-align:center;padding:40px">
+          <el-icon class="is-loading" :size="28"><Loading /></el-icon>
+        </div>
+      </template>
+      <template v-else-if="docDetail">
+        <el-descriptions :column="1" border size="small">
+          <el-descriptions-item label="单据编号">{{ docDetail.docNo }}</el-descriptions-item>
+          <el-descriptions-item label="单据类型">{{ DOC_TYPE_LABELS[docDetail.docType] || docDetail.docType }}</el-descriptions-item>
+          <el-descriptions-item label="业务日期">{{ docDetail.docDate }}</el-descriptions-item>
+          <el-descriptions-item label="期间">{{ docDetail.period }}</el-descriptions-item>
+          <el-descriptions-item label="金额">{{ fmtAmount(docDetail.amount) }}</el-descriptions-item>
+          <el-descriptions-item label="已核销">{{ fmtAmount(docDetail.settledAmount) }}</el-descriptions-item>
+          <el-descriptions-item label="未核销">{{ fmtAmount(docDetail.unsettledAmount) }}</el-descriptions-item>
+          <el-descriptions-item label="状态">{{ docDetail.status }}</el-descriptions-item>
+          <el-descriptions-item label="摘要">{{ docDetail.summary }}</el-descriptions-item>
+          <el-descriptions-item label="发票号">{{ docDetail.invoiceNo || '-' }}</el-descriptions-item>
+        </el-descriptions>
+      </template>
+    </el-drawer>
+
     <!-- FIFO 自动核销预览弹窗（dry-run 结果，人工确认后批量执行） -->
-    <el-dialog v-model="fifoDialogVisible" title="自动核销匹配结果（预览）" width="600px" destroy-on-close>
-      <template v-if="fifoResult && fifoResult.length">
-        <el-alert title="共 {{ fifoResult.length }} 项匹配，请人工确认后执行" type="success" :closable="false" style="margin-bottom:16px" />
-        <el-table :data="fifoResult" border stripe size="small">
-          <el-table-column label="来源单据" prop="sourceDocNo" width="160" />
-          <el-table-column label="客户/供应商" prop="partyName" width="160" />
-          <el-table-column label="目标单据" prop="targetDocNo" width="160" />
-          <el-table-column label="核销金额" width="120" align="right">
-            <template #default="{ row }">{{ fmtAmount(row.amount) }}</template>
+    <el-dialog v-model="fifoDialogVisible" title="自动核销匹配结果（预览）" width="1100px" destroy-on-close :close-on-click-modal="false">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+          <span style="font-weight:600;color:#303133">共 {{ fifoResult.length }} 项匹配</span>
+          <el-space>
+            <el-checkbox :indeterminate="isIndeterminate" v-model="checkAll" @change="onCheckAll">全选</el-checkbox>
+            <el-text type="info" size="small">已选 {{ selectedPreviews.length }} 项</el-text>
+          </el-space>
+        </div>
+        <el-table :data="fifoResult" border stripe size="small" @selection-change="onFifoSelectionChange" max-height="520">
+          <el-table-column type="selection" width="45" />
+          <el-table-column label="来源单据号" width="160">
+            <template #default="{ row }">
+              <el-link type="primary" :underline="false" @click.stop="openDocDetail(row.sourceDocId)">{{ row.sourceDocNo }}</el-link>
+            </template>
+          </el-table-column>
+          <el-table-column label="来源类型" width="80" align="center">
+            <template #default="{ row }">
+              <el-tag size="small" type="success">{{ DOC_TYPE_LABELS[row.sourceDocType] || row.sourceDocType }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="客户/供应商" prop="partyName" width="160" show-overflow-tooltip />
+          <el-table-column label="目标单据号" width="150">
+            <template #default="{ row }">
+              <el-link type="primary" :underline="false" @click.stop="openDocDetail(row.targetDocId)">{{ row.targetDocNo }}</el-link>
+            </template>
+          </el-table-column>
+          <el-table-column label="目标类型" width="90" align="center">
+            <template #default="{ row }">
+              <el-tag size="small" type="warning">{{ DOC_TYPE_LABELS[row.targetDocType] || row.targetDocType }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="匹配等级" width="75" align="center">
+            <template #default="{ row }">
+              <el-tag size="small" :type="matchLevelTag(row.matchLevel)">{{ row.matchLevel || '-' }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="来源金额" width="110" align="right">
+            <template #default="{ row }">{{ fmtAmount(row.sourceAmount || row.amount) }}</template>
+          </el-table-column>
+          <el-table-column label="来源未核销" width="110" align="right">
+            <template #default="{ row }">{{ fmtAmount(row.sourceUnsettledAmount ?? (row.sourceAmount || row.amount)) }}</template>
+          </el-table-column>
+          <el-table-column label="目标金额" width="110" align="right">
+            <template #default="{ row }">{{ fmtAmount(row.targetAmount || row.amount) }}</template>
+          </el-table-column>
+          <el-table-column label="目标未核销" width="110" align="right">
+            <template #default="{ row }">{{ fmtAmount(row.targetUnsettledAmount ?? (row.targetAmount || row.amount)) }}</template>
+          </el-table-column>
+          <el-table-column label="核销金额" width="110" align="right">
+            <template #default="{ row }"><strong>{{ fmtAmount(row.amount) }}</strong></template>
           </el-table-column>
         </el-table>
       </template>
@@ -200,17 +264,17 @@
       </template>
       <template #footer>
         <el-button @click="fifoDialogVisible = false">关闭</el-button>
-        <el-button type="primary" :loading="fifoExecuting" :disabled="!fifoResult || !fifoResult.length" @click="onConfirmFifoAll">确认执行</el-button>
+        <el-button type="primary" :loading="fifoExecuting" :disabled="!selectedPreviews.length" @click="onConfirmFifoSelected">确认执行 {{ selectedPreviews.length }} 项</el-button>
       </template>
     </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, nextTick } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Loading } from '@element-plus/icons-vue'
-import { getBusinessDocPage, type BusinessDocVO, type BusinessDocQuery } from '@/api/modules/businessDoc'
+import { getBusinessDocPage, getBusinessDoc, type BusinessDocVO, type BusinessDocQuery, DOC_TYPE_LABELS } from '@/api/modules/businessDoc'
 import {
   getReceiptRecommend, getPaymentRecommend, executeReconciliation, preCheckReconciliation,
   autoFifoReconciliation, batchExecuteReconciliation,
@@ -481,6 +545,56 @@ const fifoDialogVisible = ref(false)
 const fifoLoading = ref(false)
 const fifoExecuting = ref(false)
 const fifoResult = ref<ReconciliationFifoPreview[] | null>(null)
+const selectedPreviews = ref<ReconciliationFifoPreview[]>([])
+const checkAll = ref(true)
+const isIndeterminate = ref(false)
+
+// 单据详情抽屉
+const docDetailVisible = ref(false)
+const docDetailLoading = ref(false)
+const docDetail = ref<BusinessDocVO | null>(null)
+const docDetailTitle = ref('单据详情')
+
+async function openDocDetail(id: number) {
+  if (!id) return
+  docDetailVisible.value = true
+  docDetailLoading.value = true
+  docDetail.value = null
+  try {
+    docDetail.value = await getBusinessDoc(id)
+    docDetailTitle.value = `单据详情 — ${docDetail.value.docNo}`
+  } catch (e: any) {
+    ElMessage.error(e?.message || '加载单据详情失败')
+  } finally {
+    docDetailLoading.value = false
+  }
+}
+
+// 匹配等级对应 tag 颜色 (L1-L4 越高级越绿)
+function matchLevelTag(level: string): 'success' | 'warning' | 'info' | 'primary' {
+  if (level === 'L1') return 'success'
+  if (level === 'L2') return 'success'
+  if (level === 'L3') return 'warning'
+  if (level === 'L4') return 'primary'
+  return 'info'
+}
+
+function onFifoSelectionChange(rows: ReconciliationFifoPreview[]) {
+  selectedPreviews.value = rows
+  checkAll.value = rows.length === (fifoResult.value?.length || 0)
+  isIndeterminate.value = rows.length > 0 && !checkAll.value
+}
+
+function onCheckAll(val: boolean) {
+  checkAll.value = val
+  isIndeterminate.value = false
+  selectedPreviews.value = val ? (fifoResult.value || []).slice() : []
+  // 让 el-table 同步勾选状态
+  nextTick(() => {
+    const tables = document.querySelectorAll('.el-table__body-wrapper')
+    // 不需要手动 toggle, v-model 已处理
+  })
+}
 
 async function onAutoFifo() {
   // 扫描当前 tab 下所有未结清单据, 逐一查推荐, 合并全部匹配项
@@ -510,7 +624,16 @@ async function onAutoFifo() {
         })
         if (previews && previews.length) {
           for (const p of previews) {
-            allPreviews.push({ ...p, sourceDocNo: row.docNo, partyId, partyName: row.customerName || row.supplierName })
+            allPreviews.push({
+              ...p,
+              sourceDocNo: row.docNo,
+              sourceDocType: isReceipt ? 'RECEIPT' : 'PAYMENT',
+              sourceAmount: row.amount ?? 0,
+              sourceUnsettledAmount: row.unsettledAmount ?? 0,
+              targetDocType: isReceipt ? 'INVOICE_OUT' : 'INVOICE_IN',
+              partyId,
+              partyName: row.customerName || row.supplierName,
+            })
           }
         }
       } catch (e: any) {
@@ -529,9 +652,12 @@ async function onAutoFifo() {
   }
 }
 
-async function onConfirmFifoAll() {
-  const previews = fifoResult.value
-  if (!previews || !previews.length) return
+async function onConfirmFifoSelected() {
+  const previews = selectedPreviews.value
+  if (!previews.length) {
+    ElMessage.warning('请先勾选要执行的匹配项')
+    return
+  }
   const isReceipt = activeTab.value === 'RECEIPT'
   fifoExecuting.value = true
   try {

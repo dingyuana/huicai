@@ -85,9 +85,19 @@ export interface ReconciliationTraceVO {
 export interface ReconciliationFifoPreview {
   sourceDocId: number
   sourceDocNo: string
+  sourceDocType: string
+  sourceAmount: number
+  sourceUnsettledAmount: number
   targetDocId: number
   targetDocNo: string
+  targetDocType: string
+  targetAmount: number
+  targetUnsettledAmount: number
   amount: number
+  matchScore?: number
+  matchLevel?: string
+  partyId?: number
+  partyName?: string
 }
 
 export function preCheckReconciliation(data: {

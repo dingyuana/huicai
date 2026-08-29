@@ -60,7 +60,7 @@ class BankStatementRestContractTest {
 
     @Test @DisplayName("GET /page — 分页查询")
     void page() throws Exception {
-        when(service.pageQuery(any(), any(), any(), any(), anyInt(), anyInt())).thenReturn(null);
+        when(service.pageQuery(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), anyInt(), anyInt())).thenReturn(null);
         mvc.perform(get(BASE + "/page").param("current", "1").param("size", "10").contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.code").value(200));
     }

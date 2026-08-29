@@ -106,7 +106,7 @@ public class BankStatementDataIsolationTest extends AbstractMapperTest {
         // 企业 A 查询
         EnterpriseContextHolder.set(ENTERPRISE_A);
         IPage<BankStatementEntity> page = bankStatementService.pageQuery(
-                null, null, null, null, 1, 100);
+                null, null, null, null, null, null, null, null, null, null, null, null, 1, 100);
 
         assertTrue(page.getRecords().stream()
                         .anyMatch(s -> s.getId().equals(bsA.getId())),

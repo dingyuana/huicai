@@ -743,7 +743,9 @@ public class ReconciliationServiceImpl implements ReconciliationService {
             if (remaining.compareTo(BigDecimal.ZERO) <= 0) break;
             BigDecimal alloc = remaining.min(inv.getUnsettledAmount());
             previews.add(new ReconciliationFifoPreview(
-                    sourceDocId, null, inv.getId(), inv.getDocNo(), alloc));
+                    sourceDocId, null, sourceDocType, totalAmount, totalAmount,
+                    inv.getId(), inv.getDocNo(), targetDocType, inv.getAmount(), inv.getUnsettledAmount(),
+                    alloc, null, null));
             remaining = remaining.subtract(alloc);
         }
 

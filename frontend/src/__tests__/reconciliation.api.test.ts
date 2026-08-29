@@ -162,7 +162,13 @@ describe('Reconciliation API Module', () => {
   describe('autoFifoReconciliation', () => {
     it('calls POST /sme/arap/v1/reconciliation/auto-fifo with params', async () => {
       const mockFifoResult: reconciliationApi.ReconciliationFifoPreview[] = [
-        { sourceDocId: 1, sourceDocNo: 'SRC001', targetDocId: 2, targetDocNo: 'TGT002', amount: 3000 },
+        {
+          sourceDocId: 1, sourceDocNo: 'SRC001', sourceDocType: 'RECEIPT',
+          sourceAmount: 3000, sourceUnsettledAmount: 3000,
+          targetDocId: 2, targetDocNo: 'TGT002', targetDocType: 'INVOICE_OUT',
+          targetAmount: 3000, targetUnsettledAmount: 3000,
+          amount: 3000,
+        },
       ]
       mockRequest.post.mockResolvedValue(mockFifoResult)
 
