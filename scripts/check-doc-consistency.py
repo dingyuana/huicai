@@ -14,52 +14,53 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 # ===== 映射表：代码文件 → 对应设计文档 =====
+# 注意：docs/design/ 下文档统一使用中文 DSN-*.md 命名（2026-08 文档体系改版）
 CODE_TO_DOC = {
     # 应收应付模块
-    'arap/': ['docs/design/02-arap-design.md', 'docs/specs/P30-reconciliation-workbench-enhance.md'],
+    'arap/': ['docs/design/DSN-应收应付管理.md', 'docs/specs/P30-reconciliation-workbench-enhance.md'],
     # 总账/凭证模块
-    'finance/': ['docs/design/01-gl-design.md'],
+    'finance/': ['docs/design/DSN-总账管理.md'],
     # 税务/发票模块
-    'tax/': ['docs/design/06-tax-design.md'],
+    'tax/': ['docs/design/DSN-发票税务管理.md'],
     # 资金模块
-    'cash/': ['docs/design/03-cash-design.md'],
+    'cash/': ['docs/design/DSN-资金管理.md'],
     # 资产模块
-    'asset/': ['docs/design/04-asset-design.md'],
+    'asset/': ['docs/design/DSN-固定资产管理.md'],
     # 费用报销
-    'expense/': ['docs/design/05-expense-design.md'],
+    'expense/': ['docs/design/DSN-费用报销管理.md'],
     # 预算
-    'budget/': ['docs/design/08-budget-design.md'],
+    'budget/': ['docs/design/DSN-预算管理.md'],
     # 报表
-    'report/': ['docs/design/09-report-design.md'],
+    'report/': ['docs/design/DSN-报表分析.md'],
     # 系统基础
-    'system/': ['docs/design/00-system-design.md'],
+    'system/': ['docs/design/DSN-基础数据管理.md'],
     # AI 服务
-    'ai/': ['docs/design/10-ai-orchestration-design.md'],
+    'ai/': ['docs/architecture/ARC-AI编排层.md'],
     # 存储
-    'storage/': ['docs/design/00-system-design.md'],
+    'storage/': ['docs/design/DSN-基础数据管理.md'],
 }
 
 # Entity → 对应设计文档 + DB migration
 ENTITY_DOC_MAP = {
-    'OutputInvoiceEntity': ('docs/design/06-tax-design.md', 'db/migration/V8__init_tax_tables.sql'),
-    'InputInvoiceEntity': ('docs/design/06-tax-design.md', 'db/migration/V8__init_tax_tables.sql'),
-    'BusinessDocEntity': ('docs/design/02-arap-design.md', 'db/migration/V5__init_business_doc_tables.sql'),
-    'VoucherEntity': ('docs/design/01-gl-design.md', 'db/migration/V4__init_finance_tables.sql'),
-    'ArapSettlementEntity': ('docs/design/02-arap-design.md', 'db/migration/V24__p5_reconciliation_log.sql'),
+    'OutputInvoiceEntity': ('docs/design/DSN-发票税务管理.md', 'db/migration/V8__init_tax_tables.sql'),
+    'InputInvoiceEntity': ('docs/design/DSN-发票税务管理.md', 'db/migration/V8__init_tax_tables.sql'),
+    'BusinessDocEntity': ('docs/design/DSN-应收应付管理.md', 'db/migration/V5__init_business_doc_tables.sql'),
+    'VoucherEntity': ('docs/design/DSN-总账管理.md', 'db/migration/V4__init_finance_tables.sql'),
+    'ArapSettlementEntity': ('docs/design/DSN-应收应付管理.md', 'db/migration/V24__p5_reconciliation_log.sql'),
 }
 
 DESIGN_DOCS = {
-    'docs/design/00-system-design.md': '基础数据',
-    'docs/design/01-gl-design.md': '总账管理',
-    'docs/design/02-arap-design.md': '应收应付',
-    'docs/design/03-cash-design.md': '资金管理',
-    'docs/design/04-asset-design.md': '固定资产',
-    'docs/design/05-expense-design.md': '费用报销',
-    'docs/design/06-tax-design.md': '发票税务',
-    'docs/design/07-salary-design.md': '工资薪酬',
-    'docs/design/08-budget-design.md': '预算管理',
-    'docs/design/09-report-design.md': '财务报表',
-    'docs/design/10-ai-orchestration-design.md': 'AI 编排',
+    'docs/design/DSN-基础数据管理.md': '基础数据',
+    'docs/design/DSN-总账管理.md': '总账管理',
+    'docs/design/DSN-应收应付管理.md': '应收应付',
+    'docs/design/DSN-资金管理.md': '资金管理',
+    'docs/design/DSN-固定资产管理.md': '固定资产',
+    'docs/design/DSN-费用报销管理.md': '费用报销',
+    'docs/design/DSN-发票税务管理.md': '发票税务',
+    'docs/design/DSN-工资薪酬管理.md': '工资薪酬',
+    'docs/design/DSN-预算管理.md': '预算管理',
+    'docs/design/DSN-报表分析.md': '财务报表',
+    'docs/architecture/ARC-AI编排层.md': 'AI 编排',
 }
 
 
