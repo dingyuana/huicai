@@ -12,6 +12,7 @@ import com.huicai.sme.arap.service.ReconciliationService;
 import com.huicai.sme.arap.service.ReconciliationService.AllocationItem;
 import com.huicai.sme.arap.service.ReconciliationService.ExecuteRequest;
 import com.huicai.sme.arap.service.ReconciliationService.PreCheckResult;
+import com.huicai.sme.arap.service.ReconciliationService.PreCheckItem;
 import com.huicai.sme.arap.service.ReconciliationService.RecommendResult;
 import com.huicai.base.business.entity.BusinessDocEntity;
 import com.huicai.base.voucher.entity.VoucherEntity;
@@ -311,11 +312,42 @@ class ReconciliationServiceImplTest {
     void preCheck_5项全过_allPassedTrue() {
         BusinessDocEntity doc = stubBusinessDoc(1L, 5L, null, "INVOICE_OUT", new BigDecimal("1000"), new BigDecimal("500"));
         when(businessDocMapper.selectById(1L)).thenReturn(doc);
+        when(customerMapper.selectById(5L)).thenReturn(stubCustomer(5L, "甲公司"));
 
         ExecuteRequest req = new ExecuteRequest("receipt", 1L, "INVOICE_OUT", 1L, new BigDecimal("300"), new BigDecimal("0.95"), "AUTO", 5L, null, "202606", "");
         PreCheckResult result = service.preCheck(req);
         assertTrue(result.allPassed());
         assertEquals(5, result.checks().size());
+    }
+
+    @Test
+    void preCheck_客商名称一致_partyMatch通过() {
+        BusinessDocEntity src = stubBusinessDoc(100L, 5L, null, "RECEIPT", new BigDecimal("1000"), new BigDecimal("500"));
+        BusinessDocEntity tgt = stubBusinessDoc(1L, 5L, null, "INVOICE_OUT", new BigDecimal("1000"), new BigDecimal("500"));
+        when(businessDocMapper.selectById(100L)).thenReturn(src);
+        when(businessDocMapper.selectById(1L)).thenReturn(tgt);
+        when(customerMapper.selectById(5L)).thenReturn(stubCustomer(5L, "青岛樱芙医疗美容有限公司"));
+
+        ExecuteRequest req = new ExecuteRequest("receipt", 100L, "INVOICE_OUT", 1L, new BigDecimal("300"), BigDecimal.ZERO, "MANUAL", 5L, null, "202606", "");
+        PreCheckResult result = service.preCheck(req);
+        PreCheckItem partyItem = result.checks().stream().filter(c -> "partyMatch".equals(c.checkName())).findFirst().orElseThrow();
+        assertTrue(partyItem.passed(), "客商名称一致应通过: " + partyItem.message());
+    }
+
+    @Test
+    void preCheck_客商名称不一致_partyMatch失败() {
+        BusinessDocEntity src = stubBusinessDoc(100L, 6L, null, "RECEIPT", new BigDecimal("1000"), new BigDecimal("500"));
+        BusinessDocEntity tgt = stubBusinessDoc(1L, 5L, null, "INVOICE_OUT", new BigDecimal("1000"), new BigDecimal("500"));
+        when(businessDocMapper.selectById(100L)).thenReturn(src);
+        when(businessDocMapper.selectById(1L)).thenReturn(tgt);
+        when(customerMapper.selectById(5L)).thenReturn(stubCustomer(5L, "青岛樱芙医疗美容有限公司"));
+        when(customerMapper.selectById(6L)).thenReturn(stubCustomer(6L, "烟台爱丽美妇产医院有限公司"));
+
+        ExecuteRequest req = new ExecuteRequest("receipt", 100L, "INVOICE_OUT", 1L, new BigDecimal("300"), BigDecimal.ZERO, "MANUAL", 5L, null, "202606", "");
+        PreCheckResult result = service.preCheck(req);
+        PreCheckItem partyItem = result.checks().stream().filter(c -> "partyMatch".equals(c.checkName())).findFirst().orElseThrow();
+        assertFalse(partyItem.passed(), "客商名称不一致应失败: " + partyItem.message());
+        assertTrue(partyItem.message().contains("不一致"));
     }
 
     @Test

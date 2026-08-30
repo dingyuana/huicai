@@ -35,6 +35,8 @@ import com.huicai.base.voucher.service.VoucherNoService;
 import com.huicai.base.voucher.service.VoucherTemplateService;
 import com.huicai.base.masterdata.mapper.CustomerMapper;
 import com.huicai.base.masterdata.mapper.VendorMapper;
+import com.huicai.base.masterdata.entity.CustomerEntity;
+import com.huicai.base.masterdata.entity.VendorEntity;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.OptimisticLockingFailureException;
@@ -517,18 +519,30 @@ public class ReconciliationServiceImpl implements ReconciliationService {
         }
         checks.add(new PreCheckItem("invoiceValid", invoiceExists, invoiceMsg));
 
-        // 3. 客商一致: 来源与目标客商匹配
+        // 3. 客商名称一致: 来源方名称与目标单据客商名称必须完全相同
         boolean partyMatch = false;
         String partyMsg;
-        if (checkDoc != null && "INVOICE_OUT".equals(request.targetDocType()) && request.customerId() != null) {
-            partyMatch = checkDoc.getCustomerId() != null && checkDoc.getCustomerId().equals(request.customerId());
-            partyMsg = partyMatch ? "客商一致(客户)" : "客户不匹配";
-        } else if (checkDoc != null && "INVOICE_IN".equals(request.targetDocType()) && request.vendorId() != null) {
-            partyMatch = checkDoc.getSupplierId() != null && checkDoc.getSupplierId().equals(request.vendorId());
-            partyMsg = partyMatch ? "客商一致(供应商)" : "供应商不匹配";
+        if (checkDoc != null && "INVOICE_OUT".equals(request.targetDocType())) {
+            // 目标方: 通过目标单据 customerId 查客户名称
+            String targetName = checkDoc.getCustomerId() != null
+                    ? getCustomerName(checkDoc.getCustomerId()) : null;
+            // 来源方: 通过来源单据查客户名称
+            String sourceName = getSourcePartyName(request.sourceDocId(), "CUSTOMER");
+            partyMatch = StrUtil.isNotBlank(sourceName) && StrUtil.equals(sourceName, targetName);
+            partyMsg = partyMatch ? "客户名称一致: " + targetName
+                    : "客户名称不一致 (来源: " + sourceName + ", 目标: " + targetName + ")";
+        } else if (checkDoc != null && "INVOICE_IN".equals(request.targetDocType())) {
+            // 目标方: 通过目标单据 supplierId 查供应商名称
+            String targetName = checkDoc.getSupplierId() != null
+                    ? getVendorName(checkDoc.getSupplierId()) : null;
+            // 来源方: 通过来源单据查供应商名称
+            String sourceName = getSourcePartyName(request.sourceDocId(), "VENDOR");
+            partyMatch = StrUtil.isNotBlank(sourceName) && StrUtil.equals(sourceName, targetName);
+            partyMsg = partyMatch ? "供应商名称一致: " + targetName
+                    : "供应商名称不一致 (来源: " + sourceName + ", 目标: " + targetName + ")";
         } else {
             partyMatch = true;
-            partyMsg = "客商未指定, 跳过检查";
+            partyMsg = "目标单据类型非发票, 跳过客商名称检查";
         }
         checks.add(new PreCheckItem("partyMatch", partyMatch, partyMsg));
 
@@ -552,6 +566,34 @@ public class ReconciliationServiceImpl implements ReconciliationService {
 
         boolean allPassed = checks.stream().allMatch(PreCheckItem::passed);
         return new PreCheckResult(allPassed, checks);
+    }
+
+    /** 通过客户ID查客户名称 */
+    private String getCustomerName(Long customerId) {
+        if (customerId == null) return null;
+        CustomerEntity c = customerMapper.selectById(customerId);
+        return c != null ? c.getName() : null;
+    }
+
+    /** 通过供应商ID查供应商名称 */
+    private String getVendorName(Long vendorId) {
+        if (vendorId == null) return null;
+        VendorEntity v = vendorMapper.selectById(vendorId);
+        return v != null ? v.getName() : null;
+    }
+
+    /** 通过来源单据ID查客商名称 (partyType: CUSTOMER/VENDOR) */
+    private String getSourcePartyName(Long sourceDocId, String partyType) {
+        if (sourceDocId == null) return null;
+        BusinessDocEntity src = businessDocMapper.selectById(sourceDocId);
+        if (src == null) return null;
+        if ("CUSTOMER".equals(partyType) && src.getCustomerId() != null) {
+            return getCustomerName(src.getCustomerId());
+        }
+        if ("VENDOR".equals(partyType) && src.getSupplierId() != null) {
+            return getVendorName(src.getSupplierId());
+        }
+        return null;
     }
 
     @Override

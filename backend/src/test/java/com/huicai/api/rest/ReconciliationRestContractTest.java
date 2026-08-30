@@ -114,10 +114,10 @@ class ReconciliationRestContractTest {
 
     @Test @DisplayName("POST /auto-fifo — 自动 FIFO 核销")
     void autoFifo() throws Exception {
+        String json = "{\"partyId\":1,\"targetDocType\":\"INVOICE_OUT\",\"amount\":5000,\"sourceDocType\":\"INVOICE_OUT\",\"sourceDocId\":1,\"period\":\"202607\",\"summary\":\"测试自动核销\"}";
         mvc.perform(post(BASE + "/auto-fifo")
-                .param("partyId", "1").param("targetDocType", "INVOICE_OUT").param("amount", "5000")
-                .param("sourceDocType", "INVOICE_OUT").param("sourceDocId", "1")
-                .contentType(MediaType.APPLICATION_JSON))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(json))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.code").value(200));
     }
 }
