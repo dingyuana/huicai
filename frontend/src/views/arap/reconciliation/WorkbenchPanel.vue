@@ -207,6 +207,7 @@
 
     <!-- FIFO 自动核销预览弹窗（dry-run 结果，人工确认后批量执行） -->
     <el-dialog v-model="fifoDialogVisible" title="自动核销匹配结果（预览）" width="1100px" destroy-on-close :close-on-click-modal="false">
+      <template v-if="fifoResult && fifoResult.length">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
           <span style="font-weight:600;color:#303133">共 {{ fifoResult.length }} 项匹配</span>
           <el-space>
