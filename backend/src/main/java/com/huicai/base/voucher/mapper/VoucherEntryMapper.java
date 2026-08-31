@@ -20,6 +20,12 @@ public interface VoucherEntryMapper extends BaseMapper<VoucherEntryEntity> {
     List<VoucherEntryEntity> selectByVoucherId(@Param("voucherId") Long voucherId);
 
     /**
+     * 按科目 + 会计期间查询分录（JOIN t_voucher 过滤 period）
+     * 期间过滤必须在 SQL 层完成，保证账簿查询只返回指定期间分录
+     */
+    List<VoucherEntryEntity> selectBySubjectIdAndPeriod(@Param("subjectId") Long subjectId, @Param("period") String period);
+
+    /**
      * 批量插入分录
      */
     int batchInsert(@Param("list") List<VoucherEntryEntity> entries);

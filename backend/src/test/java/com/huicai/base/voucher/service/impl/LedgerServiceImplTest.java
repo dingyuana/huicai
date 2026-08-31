@@ -175,7 +175,7 @@ class LedgerServiceImplTest {
         entry2.setCredit(new BigDecimal("200.00"));
         entry2.setSummary("银行取现");
 
-        when(voucherEntryMapper.selectList(any())).thenReturn(List.of(entry1, entry2));
+        when(voucherEntryMapper.selectBySubjectIdAndPeriod(subjectId, period)).thenReturn(List.of(entry1, entry2));
 
         // Act
         List<Map<String, Object>> result = ledgerService.generalLedger(subjectId, period);
@@ -221,7 +221,7 @@ class LedgerServiceImplTest {
 
         verify(subjectService).getById(subjectId);
         verify(subjectBalanceMapper).selectOne(any());
-        verify(voucherEntryMapper).selectList(any());
+        verify(voucherEntryMapper).selectBySubjectIdAndPeriod(subjectId, period);
     }
 
     @Test
@@ -259,7 +259,7 @@ class LedgerServiceImplTest {
         entry2.setCredit(BigDecimal.ZERO);
         entry2.setSummary("归还借款");
 
-        when(voucherEntryMapper.selectList(any())).thenReturn(List.of(entry1, entry2));
+        when(voucherEntryMapper.selectBySubjectIdAndPeriod(subjectId, period)).thenReturn(List.of(entry1, entry2));
 
         // Act
         List<Map<String, Object>> result = ledgerService.generalLedger(subjectId, period);
@@ -285,7 +285,7 @@ class LedgerServiceImplTest {
 
         verify(subjectService).getById(subjectId);
         verify(subjectBalanceMapper).selectOne(any());
-        verify(voucherEntryMapper).selectList(any());
+        verify(voucherEntryMapper).selectBySubjectIdAndPeriod(subjectId, period);
     }
 
     @Test
@@ -335,7 +335,7 @@ class LedgerServiceImplTest {
         entry2.setSummary("银行取现");
         entry2.setAssistJson("{\"dept\":\"财务部\"}");
 
-        when(voucherEntryMapper.selectList(any())).thenReturn(List.of(entry1, entry2));
+        when(voucherEntryMapper.selectBySubjectIdAndPeriod(subjectId, "202607")).thenReturn(List.of(entry1, entry2));
 
         // Act
         List<Map<String, Object>> result = ledgerService.subsidiaryLedger(subjectId, "202607");
@@ -361,7 +361,7 @@ class LedgerServiceImplTest {
         assertEquals("{\"dept\":\"财务部\"}", row2.get("assistJson"));
 
         verify(subjectService).getById(subjectId);
-        verify(voucherEntryMapper).selectList(any());
+        verify(voucherEntryMapper).selectBySubjectIdAndPeriod(subjectId, "202607");
     }
 
     @Test

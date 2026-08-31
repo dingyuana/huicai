@@ -8,6 +8,15 @@
         ORDER BY sort_order ASC
     </select>
 
+    <select id="selectBySubjectIdAndPeriod" resultType="com.huicai.base.voucher.entity.VoucherEntryEntity">
+        SELECT e.* FROM t_voucher_entry e
+        INNER JOIN t_voucher v ON v.id = e.voucher_id AND v.deleted = 0
+        WHERE e.subject_id = #{subjectId}
+          AND e.deleted = 0
+          AND v.period = #{period}
+        ORDER BY e.id ASC
+    </select>
+
     <insert id="batchInsert">
         INSERT INTO t_voucher_entry (id, voucher_id, subject_id, debit, credit, summary, assist_json, sort_order)
         VALUES

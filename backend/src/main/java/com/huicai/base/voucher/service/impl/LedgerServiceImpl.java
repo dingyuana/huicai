@@ -65,10 +65,7 @@ public class LedgerServiceImpl implements LedgerService {
                         .eq(SubjectBalanceEntity::getSubjectId, subjectId)
                         .eq(SubjectBalanceEntity::getPeriod, period));
 
-        List<VoucherEntryEntity> entries = voucherEntryMapper.selectList(
-                new LambdaQueryWrapper<VoucherEntryEntity>()
-                        .eq(VoucherEntryEntity::getSubjectId, subjectId)
-                        .orderByAsc(VoucherEntryEntity::getId));
+        List<VoucherEntryEntity> entries = voucherEntryMapper.selectBySubjectIdAndPeriod(subjectId, period);
 
         List<Map<String, Object>> rows = new ArrayList<>();
 
@@ -125,10 +122,7 @@ public class LedgerServiceImpl implements LedgerService {
             return new ArrayList<>();
         }
 
-        List<VoucherEntryEntity> entries = voucherEntryMapper.selectList(
-                new LambdaQueryWrapper<VoucherEntryEntity>()
-                        .eq(VoucherEntryEntity::getSubjectId, subjectId)
-                        .orderByAsc(VoucherEntryEntity::getId));
+        List<VoucherEntryEntity> entries = voucherEntryMapper.selectBySubjectIdAndPeriod(subjectId, period);
 
         List<Map<String, Object>> rows = new ArrayList<>();
         for (VoucherEntryEntity e : entries) {
