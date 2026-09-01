@@ -12,6 +12,8 @@ import com.huicai.base.system.service.SubjectService;
 import com.huicai.base.voucher.dto.AuxiliarySummaryRow;
 import com.huicai.base.voucher.dto.LedgerEntryRowDTO;
 import com.huicai.base.voucher.dto.vo.AuxiliaryLedgerRowVO;
+import com.huicai.base.voucher.dto.vo.LedgerRowVO;
+import com.huicai.base.voucher.dto.vo.SubjectBalanceRowVO;
 import com.huicai.base.voucher.mapper.VoucherEntryMapper;
 import com.huicai.common.exception.BusinessException;
 import org.junit.jupiter.api.DisplayName;
@@ -180,9 +182,9 @@ class LedgerServiceImplTest {
         List<SubjectBalanceRowVO> result = ledgerService.subjectBalance(period, true, true, null);
 
         assertEquals(1, result.size());
-        assertEquals(0, BigDecimal.ZERO.0).getYearBeginBalance()));
-        assertEquals(0, BigDecimal.ZERO.0).getYearDebitTotal()));
-        assertEquals(0, BigDecimal.ZERO.0).getYearCreditTotal()));
+        assertEquals(0, BigDecimal.ZERO.compareTo(result.get(0).getYearBeginBalance()));
+        assertEquals(0, BigDecimal.ZERO.compareTo(result.get(0).getYearDebitTotal()));
+        assertEquals(0, BigDecimal.ZERO.compareTo(result.get(0).getYearCreditTotal()));
     }
 
     @Test
@@ -234,11 +236,11 @@ class LedgerServiceImplTest {
 
         assertEquals(1, result.size());
         // 年初余额 = 最早期间(202601)快照期初 = 200
-        assertEquals(0, new BigDecimal("200.00").0).getYearBeginBalance()));
+        assertEquals(0, new BigDecimal("200.00").compareTo(result.get(0).getYearBeginBalance()));
         // 本年发生 = 100 + 300 = 400
-        assertEquals(0, new BigDecimal("400.00").0).getYearDebitTotal()));
+        assertEquals(0, new BigDecimal("400.00").compareTo(result.get(0).getYearDebitTotal()));
         // 本年贷方 = 50 + 0 = 50
-        assertEquals(0, new BigDecimal("50.00").0).getYearCreditTotal()));
+        assertEquals(0, new BigDecimal("50.00").compareTo(result.get(0).getYearCreditTotal()));
     }
 
     @Test
@@ -757,8 +759,8 @@ class LedgerServiceImplTest {
         List<LedgerRowVO> result = ledgerService.subsidiaryLedger(subjectId, "202607", null, null);
 
         assertEquals(2, result.size(), "期初行 + 1 分录行");
-        assertEquals(0, BigDecimal.ZERO.0).getRunning()), "无快照期初=0");
-        assertEquals(0, new BigDecimal("500.00").1).getRunning()), "滚动余额=0+500");
+        assertEquals(0, BigDecimal.ZERO.compareTo(result.get(0).getRunning()), "无快照期初=0");
+        assertEquals(0, new BigDecimal("500.00").compareTo(result.get(1).getRunning()), "滚动余额=0+500");
     }
 
     @Test

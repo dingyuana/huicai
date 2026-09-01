@@ -2,8 +2,8 @@
 
 > **编号**：HUICAI-SPC-064
 > **test_ref**：LedgerServiceImplTest / SubjectBalanceServiceImplTest / LedgerControllerTest
-> **版本**：V1.0 | **日期**：2026-09-01
-> **状态**：📝 草案
+> **版本**：V1.1 | **日期**：2026-09-01
+> **状态**：✅ 已实现（2026-09-01 验证：T9 N+1 消除 + T10 VO 化完成，4 个验收场景全过）
 > **关联需求**：REQ-2026-079（账簿查询增强）
 > **评估依据**：[账簿查询功能评估报告](../development/audit/2026-08-31-账簿查询功能评估报告.md)（缺陷 D5 N+1、D6 弱类型返回）
 > **关联计划**：[账簿查询完善计划](../development/plans/2026-08-31-账簿查询完善计划.md)（T9、T10，P2 工程质量）
@@ -70,6 +70,7 @@
 
 ## 版本历史
 
+- V1.1 (2026-09-01): 实现完成，T9/T10 落地，4 个验收场景全过
 - V1.0 (2026-09-01): 初始版本，覆盖 T9（N+1）+ T10（VO 化）
 
 <!-- === MACHINE-READABLE CONTRACT ===
@@ -90,13 +91,13 @@ constraints:
     rule: "trialBalance aggregate map stays Map (out of scope for row VO)"
 acceptance_tests:
   - id: AT-001 (T9): subjectBalance batch-fetches subjects via listByIds once; results equivalent
-    status: draft
+    status: implemented
   - id: AT-002 (T9): checkTrialBalance batch-fetches subjects; direction totals unchanged
-    status: draft
+    status: implemented
   - id: AT-003 (T10): LedgerService returns SubjectBalanceRowVO/LedgerRowVO; fields match legacy Map
-    status: draft
+    status: implemented
   - id: AT-004 (T10): Controller generics updated to R<List<VO>>; JSON unchanged
-    status: draft
+    status: implemented
 out_of_scope:
   - "前端 TS 类型迁移"
   - "trialBalance Map → VO（过度设计）"
