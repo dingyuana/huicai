@@ -7,11 +7,13 @@ import com.huicai.base.balance.service.SubjectBalanceService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 
@@ -38,8 +40,12 @@ public class LedgerController {
 
     @Operation(summary = "明细账")
     @GetMapping("/subsidiary")
-    public R<List<Map<String, Object>>> subsidiaryLedger(@RequestParam Long subjectId, @RequestParam String period) {
-        return R.ok(ledgerService.subsidiaryLedger(subjectId, period));
+    public R<List<Map<String, Object>>> subsidiaryLedger(
+            @RequestParam Long subjectId,
+            @RequestParam String period,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate) {
+        return R.ok(ledgerService.subsidiaryLedger(subjectId, period, startDate, endDate));
     }
 
     @Operation(summary = "辅助核算账")

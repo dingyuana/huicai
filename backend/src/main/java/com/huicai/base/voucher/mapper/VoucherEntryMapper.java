@@ -27,6 +27,17 @@ public interface VoucherEntryMapper extends BaseMapper<VoucherEntryEntity> {
     List<VoucherEntryEntity> selectBySubjectIdAndPeriod(@Param("subjectId") Long subjectId, @Param("period") String period);
 
     /**
+     * 明细账：按科目 + 会计期间 + 日期范围（可选）查询分录。
+     * startDate/endDate 为 null 时退化为期间过滤（与 selectBySubjectIdAndPeriod 等价）。
+     * 日期基于 t_voucher.created_at（当前无凭证日期列，created_at 为日期代理，见 SPEC P60 §3 决策）。
+     */
+    List<VoucherEntryEntity> selectSubsidiaryByDates(
+            @Param("subjectId") Long subjectId,
+            @Param("period") String period,
+            @Param("startDate") java.time.LocalDate startDate,
+            @Param("endDate") java.time.LocalDate endDate);
+
+    /**
      * 辅助核算账 - 本期按核算维度聚合（assist_json ->> dimensionField 分组 SUM 借贷）
      * dimensionValue 为空时按维度值全量分组；非空时仅统计该维度值
      */

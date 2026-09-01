@@ -17,6 +17,21 @@
         ORDER BY e.id ASC
     </select>
 
+    <select id="selectSubsidiaryByDates" resultType="com.huicai.base.voucher.entity.VoucherEntryEntity">
+        SELECT e.* FROM t_voucher_entry e
+        INNER JOIN t_voucher v ON v.id = e.voucher_id AND v.deleted = 0
+        WHERE e.subject_id = #{subjectId}
+          AND e.deleted = 0
+          AND v.period = #{period}
+        <if test="startDate != null">
+          AND DATE(v.created_at) &gt;= #{startDate}
+        </if>
+        <if test="endDate != null">
+          AND DATE(v.created_at) &lt;= #{endDate}
+        </if>
+        ORDER BY v.created_at ASC, e.id ASC
+    </select>
+
     <select id="selectAuxiliaryMovement" resultType="com.huicai.base.voucher.dto.AuxiliarySummaryRow">
         SELECT t.subject_id AS subjectId,
                t.dim_value AS dimensionValue,

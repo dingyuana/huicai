@@ -212,7 +212,7 @@ public class LedgerChainRealDBTest extends AbstractMapperTest {
     void subsidiaryLedger_shouldReturnPostedEntries() {
         createAndPost("链路凭证4", "800.00", "800.00");
 
-        List<Map<String, Object>> rows = ledgerService.subsidiaryLedger(debitSubjectId, TEST_PERIOD);
+        List<Map<String, Object>> rows = ledgerService.subsidiaryLedger(debitSubjectId, TEST_PERIOD, null, null);
 
         assertEquals(1, rows.size(), "应返回1条过账分录");
         assertEquals(debitSubjectId, rows.get(0).get("subjectId"));

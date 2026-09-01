@@ -605,13 +605,16 @@ class SubjectBalanceServiceImplTest {
     // ============================================================
 
     @Test
-    @DisplayName("试算平衡_期间无余额快照_返回全零且balanced=true(当前行为:无法区分无数据与真平衡)")
-    void checkTrialBalance_emptySnapshot_returnsAllZeroAndBalanced() {
-        // 期间无余额快照行（未过账凭证时正常发生）→ 当前实现返回全零 + balanced=true
+    @DisplayName("试算平衡_期间无余额快照_返回empty=true提示无数据(D4修复)")
+    void checkTrialBalance_emptySnapshot_returnsEmptyFlag() {
+        // 期间无余额快照行（未过账凭证时正常发生）→ D4修复后返回 empty=true，区分「无数据」与「真平衡」
         when(subjectBalanceMapper.selectList(any(LambdaQueryWrapper.class))).thenReturn(List.of());
 
         Map<String, Object> result = service.checkTrialBalance(PERIOD);
 
+        assertEquals(true, result.get("empty"), "无快照数据必须标记 empty=true，避免假阳性");
+        assertNotNull(result.get("emptyMessage"), "应返回空数据提示文案");
+        assertTrue(result.get("emptyMessage").toString().contains("无余额数据"), "提示应包含无余额数据说明");
         assertEquals(true, result.get("beginBalanced"));
         assertEquals(true, result.get("movementBalanced"));
         assertEquals(true, result.get("endBalanced"));
@@ -622,7 +625,6 @@ class SubjectBalanceServiceImplTest {
         assertEquals(BigDecimal.ZERO, result.get("totalCreditTotal"));
         assertEquals(BigDecimal.ZERO, result.get("totalEndDebit"));
         assertEquals(BigDecimal.ZERO, result.get("totalEndCredit"));
-        // 注意：空数据返回"平衡"是假阳性风险（评估报告 D4），本测试锁定当前行为，修复时需同步更新断言
     }
 
     @Test

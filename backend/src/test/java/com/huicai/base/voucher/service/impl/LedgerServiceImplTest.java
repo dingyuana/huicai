@@ -404,10 +404,10 @@ class LedgerServiceImplTest {
         entry2.setSummary("银行取现");
         entry2.setAssistJson("{\"dept\":\"财务部\"}");
 
-        when(voucherEntryMapper.selectBySubjectIdAndPeriod(subjectId, "202607")).thenReturn(List.of(entry1, entry2));
+        when(voucherEntryMapper.selectSubsidiaryByDates(subjectId, "202607", null, null)).thenReturn(List.of(entry1, entry2));
 
         // Act
-        List<Map<String, Object>> result = ledgerService.subsidiaryLedger(subjectId, "202607");
+        List<Map<String, Object>> result = ledgerService.subsidiaryLedger(subjectId, "202607", null, null);
 
         // Assert
         assertEquals(2, result.size());
@@ -430,7 +430,29 @@ class LedgerServiceImplTest {
         assertEquals("{\"dept\":\"财务部\"}", row2.get("assistJson"));
 
         verify(subjectService).getById(subjectId);
-        verify(voucherEntryMapper).selectBySubjectIdAndPeriod(subjectId, "202607");
+        verify(voucherEntryMapper).selectSubsidiaryByDates(subjectId, "202607", null, null);
+    }
+
+    @Test
+    @DisplayName("明细账 - 日期范围参数透传给 Mapper")
+    void subsidiaryLedger_passesDateRangeToMapper() {
+        Long subjectId = 1L;
+        Subject subject = new Subject();
+        subject.setId(subjectId);
+        subject.setCode("1001");
+        subject.setName("库存现金");
+        subject.setDirection("debit");
+        subject.setIsLeaf(true);
+        when(subjectService.getById(subjectId)).thenReturn(subject);
+        when(voucherEntryMapper.selectSubsidiaryByDates(subjectId, "202607", java.time.LocalDate.of(2026, 7, 1), java.time.LocalDate.of(2026, 7, 15)))
+                .thenReturn(List.of());
+
+        List<Map<String, Object>> result = ledgerService.subsidiaryLedger(subjectId, "202607",
+                java.time.LocalDate.of(2026, 7, 1), java.time.LocalDate.of(2026, 7, 15));
+
+        assertTrue(result.isEmpty());
+        verify(voucherEntryMapper).selectSubsidiaryByDates(subjectId, "202607",
+                java.time.LocalDate.of(2026, 7, 1), java.time.LocalDate.of(2026, 7, 15));
     }
 
     @Test
@@ -440,7 +462,7 @@ class LedgerServiceImplTest {
         when(subjectService.getById(999L)).thenReturn(null);
 
         // Act
-        List<Map<String, Object>> result = ledgerService.subsidiaryLedger(999L, "202607");
+        List<Map<String, Object>> result = ledgerService.subsidiaryLedger(999L, "202607", null, null);
 
         // Assert
         assertTrue(result.isEmpty());

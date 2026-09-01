@@ -466,8 +466,15 @@ public class SubjectBalanceServiceImpl implements SubjectBalanceService {
         boolean movementBalanced = totalDebitTotal.compareTo(totalCreditTotal) == 0;
         boolean endBalanced = totalEndDebit.compareTo(totalEndCredit) == 0;
 
+        // D4-修复：无余额快照（期间未过账/未建账）时返回 empty=true，区分「真平衡」与「无数据」假阳性
+        boolean empty = balances.isEmpty();
+
         Map<String, Object> result = new HashMap<>();
         result.put("period", period);
+        result.put("empty", empty);
+        if (empty) {
+            result.put("emptyMessage", "该期间无余额数据，可能是尚未过账或未建账，无法判断借贷平衡");
+        }
         result.put("beginBalanced", beginBalanced);
         result.put("movementBalanced", movementBalanced);
         result.put("endBalanced", endBalanced);

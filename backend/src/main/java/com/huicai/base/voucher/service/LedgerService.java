@@ -21,9 +21,10 @@ public interface LedgerService {
     List<Map<String, Object>> generalLedger(Long subjectId, String period);
 
     /**
-     * 明细账：按科目+期间+辅助项，展示逐笔分录明细
+     * 明细账：按科目+期间+日期范围（可选），展示逐笔分录明细
+     * startDate/endDate 为 null 时退化为按期间过滤
      */
-    List<Map<String, Object>> subsidiaryLedger(Long subjectId, String period);
+    List<Map<String, Object>> subsidiaryLedger(Long subjectId, String period, java.time.LocalDate startDate, java.time.LocalDate endDate);
 
     /**
      * 辅助核算账：按核算维度（customer/vendor/department/project/employee）+ 期间查询各科目余额

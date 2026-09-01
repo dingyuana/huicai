@@ -61,11 +61,26 @@ class LedgerControllerTest {
     @Test
     @DisplayName("明细账_RequestParam正确绑定")
     void subsidiaryLedger_params_boundCorrectly() throws Exception {
-        when(ledgerService.subsidiaryLedger(eq(1001L), eq("202601"))).thenReturn(List.of());
+        when(ledgerService.subsidiaryLedger(eq(1001L), eq("202601"), isNull(), isNull())).thenReturn(List.of());
 
         mvc.perform(get("/api/base/voucher/v1/ledgers/subsidiary")
                         .param("subjectId", "1001")
                         .param("period", "202601"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(200));
+    }
+
+    @Test
+    @DisplayName("明细账_日期范围参数正确绑定")
+    void subsidiaryLedger_dateRange_params_boundCorrectly() throws Exception {
+        when(ledgerService.subsidiaryLedger(eq(1001L), eq("202601"),
+                eq(java.time.LocalDate.of(2026, 1, 1)), eq(java.time.LocalDate.of(2026, 1, 31)))).thenReturn(List.of());
+
+        mvc.perform(get("/api/base/voucher/v1/ledgers/subsidiary")
+                        .param("subjectId", "1001")
+                        .param("period", "202601")
+                        .param("startDate", "2026-01-01")
+                        .param("endDate", "2026-01-31"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(200));
     }

@@ -23,6 +23,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -143,13 +144,14 @@ public class LedgerServiceImpl implements LedgerService {
     }
 
     @Override
-    public List<Map<String, Object>> subsidiaryLedger(Long subjectId, String period) {
+    public List<Map<String, Object>> subsidiaryLedger(Long subjectId, String period,
+                                                      LocalDate startDate, LocalDate endDate) {
         Subject subject = subjectService.getById(subjectId);
         if (subject == null) {
             return new ArrayList<>();
         }
 
-        List<VoucherEntryEntity> entries = voucherEntryMapper.selectBySubjectIdAndPeriod(subjectId, period);
+        List<VoucherEntryEntity> entries = voucherEntryMapper.selectSubsidiaryByDates(subjectId, period, startDate, endDate);
 
         List<Map<String, Object>> rows = new ArrayList<>();
         for (VoucherEntryEntity e : entries) {

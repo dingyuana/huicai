@@ -137,6 +137,35 @@ class VoucherEntryMapperRealDBTest extends AbstractMapperTest {
         assertTrue(result.isEmpty(), "无分录期间应返回空列表");
     }
 
+    @Test
+    void selectSubsidiaryByDates_日期范围过滤生效() {
+        Long subjectId = insertSubject(4);
+        String period = "202608";
+
+        VoucherEntity vEarly = insertVoucherWithDate(period, java.time.LocalDate.of(2026, 8, 1));
+        insertEntry(vEarly.getId(), subjectId, "100", null);
+        VoucherEntity vLate = insertVoucherWithDate(period, java.time.LocalDate.of(2026, 8, 20));
+        insertEntry(vLate.getId(), subjectId, "200", null);
+
+        List<VoucherEntryEntity> ranged = voucherEntryMapper.selectSubsidiaryByDates(
+                subjectId, period, java.time.LocalDate.of(2026, 8, 5), java.time.LocalDate.of(2026, 8, 31));
+
+        assertEquals(1, ranged.size(), "日期范围 8/5-8/31 应只返回 8/20 的分录");
+        assertEquals(0, new BigDecimal("200.00").compareTo(ranged.get(0).getDebit()));
+
+        List<VoucherEntryEntity> all = voucherEntryMapper.selectSubsidiaryByDates(subjectId, period, null, null);
+        assertEquals(2, all.size(), "日期为 null 时退化为期间过滤，应返回全部分录");
+    }
+
+    private VoucherEntity insertVoucherWithDate(String period, java.time.LocalDate date) {
+        VoucherEntity v = insertVoucher(period);
+        VoucherEntity update = new VoucherEntity();
+        update.setId(v.getId());
+        update.setCreatedAt(date.atStartOfDay());
+        voucherMapper.updateById(update);
+        return v;
+    }
+
     // ─── 辅助核算账聚合 ───────────────────────────────────────────────────
 
     @Test
