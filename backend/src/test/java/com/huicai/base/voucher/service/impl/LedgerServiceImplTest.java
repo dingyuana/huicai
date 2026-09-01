@@ -118,6 +118,10 @@ class LedgerServiceImplTest {
         when(subjectService.getById(2L)).thenReturn(creditSubject);
         when(subjectService.getById(3L)).thenReturn(nonLeafSubject);
 
+        // 本年累计聚合（T4）：第二条 selectList 返回本年快照（此处复用同一批余额行，简化断言）
+        List<SubjectBalanceEntity> allBalances = List.of(leafDebit, leafCredit, nonLeaf);
+        when(subjectBalanceMapper.selectList(any())).thenReturn(allBalances);
+
         // Act
         List<Map<String, Object>> result = ledgerService.subjectBalance(period);
 
@@ -133,6 +137,10 @@ class LedgerServiceImplTest {
         assertEquals(new BigDecimal("500.00"), row1.get("debitTotal"));
         assertEquals(new BigDecimal("200.00"), row1.get("creditTotal"));
         assertEquals(new BigDecimal("1300.00"), row1.get("endBalance"));
+        // 本年累计列（T4）
+        assertEquals(new BigDecimal("1000.00"), row1.get("yearBeginBalance"));
+        assertEquals(new BigDecimal("500.00"), row1.get("yearDebitTotal"));
+        assertEquals(new BigDecimal("200.00"), row1.get("yearCreditTotal"));
 
         Map<String, Object> row2 = result.get(1);
         assertEquals(2L, row2.get("subjectId"));
@@ -140,8 +148,98 @@ class LedgerServiceImplTest {
         assertEquals("短期借款", row2.get("subjectName"));
         assertEquals("credit", row2.get("direction"));
 
-        verify(subjectBalanceMapper).selectList(any());
+        verify(subjectBalanceMapper, times(2)).selectList(any());
         verify(subjectService, times(3)).getById(anyLong());
+    }
+
+    @Test
+    @DisplayName("科目余额表 - 本年累计无快照时按0处理")
+    void subjectBalance_yearTotalsZeroWhenNoYearSnapshot() {
+        String period = "202608";
+
+        SubjectBalanceEntity leaf = new SubjectBalanceEntity();
+        leaf.setSubjectId(1L);
+        leaf.setPeriod(period);
+        leaf.setBeginBalance(new BigDecimal("100.00"));
+        leaf.setDebitTotal(BigDecimal.ZERO);
+        leaf.setCreditTotal(BigDecimal.ZERO);
+        leaf.setEndBalance(new BigDecimal("100.00"));
+
+        // 第一条 selectList：当前期间 → 有 1 行；第二条（本年聚合）：空 → 本年累计按 0
+        when(subjectBalanceMapper.selectList(any()))
+                .thenReturn(List.of(leaf))
+                .thenReturn(List.of());
+
+        Subject subject = new Subject();
+        subject.setId(1L);
+        subject.setCode("1001");
+        subject.setName("库存现金");
+        subject.setDirection("debit");
+        subject.setIsLeaf(true);
+        when(subjectService.getById(1L)).thenReturn(subject);
+
+        List<Map<String, Object>> result = ledgerService.subjectBalance(period);
+
+        assertEquals(1, result.size());
+        assertEquals(0, BigDecimal.ZERO.compareTo((BigDecimal) result.get(0).get("yearBeginBalance")));
+        assertEquals(0, BigDecimal.ZERO.compareTo((BigDecimal) result.get(0).get("yearDebitTotal")));
+        assertEquals(0, BigDecimal.ZERO.compareTo((BigDecimal) result.get(0).get("yearCreditTotal")));
+    }
+
+    @Test
+    @DisplayName("科目余额表 - 本年累计按年初最早快照期初+本年发生汇总")
+    void subjectBalance_yearTotalsAggregatedFromYearSnapshots() {
+        String period = "202607";
+
+        SubjectBalanceEntity jan = new SubjectBalanceEntity();
+        jan.setSubjectId(1L);
+        jan.setPeriod("202601");
+        jan.setBeginBalance(new BigDecimal("200.00"));
+        jan.setDebitTotal(new BigDecimal("100.00"));
+        jan.setCreditTotal(new BigDecimal("50.00"));
+
+        SubjectBalanceEntity jun = new SubjectBalanceEntity();
+        jun.setSubjectId(1L);
+        jun.setPeriod("202606");
+        jun.setBeginBalance(new BigDecimal("250.00"));
+        jun.setDebitTotal(new BigDecimal("300.00"));
+        jun.setCreditTotal(new BigDecimal("0.00"));
+
+        // 第一条 selectList：当前期间(202607) → 空；第二条（本年聚合）：jan+jun 快照
+        when(subjectBalanceMapper.selectList(any()))
+                .thenReturn(List.of())
+                .thenReturn(List.of(jan, jun));
+
+        // 当前期间无余额快照时 subjectBalance 无行，故单独验证聚合逻辑经由 generalLedger 更直观；
+        // 此处以「当前期间存在快照」构造聚合口径验证
+        SubjectBalanceEntity cur = new SubjectBalanceEntity();
+        cur.setSubjectId(1L);
+        cur.setPeriod(period);
+        cur.setBeginBalance(new BigDecimal("550.00"));
+        cur.setDebitTotal(BigDecimal.ZERO);
+        cur.setCreditTotal(BigDecimal.ZERO);
+        cur.setEndBalance(new BigDecimal("550.00"));
+        when(subjectBalanceMapper.selectList(any()))
+                .thenReturn(List.of(cur))
+                .thenReturn(List.of(jan, jun));
+
+        Subject subject = new Subject();
+        subject.setId(1L);
+        subject.setCode("1001");
+        subject.setName("库存现金");
+        subject.setDirection("debit");
+        subject.setIsLeaf(true);
+        when(subjectService.getById(1L)).thenReturn(subject);
+
+        List<Map<String, Object>> result = ledgerService.subjectBalance(period);
+
+        assertEquals(1, result.size());
+        // 年初余额 = 最早期间(202601)快照期初 = 200
+        assertEquals(0, new BigDecimal("200.00").compareTo((BigDecimal) result.get(0).get("yearBeginBalance")));
+        // 本年发生 = 100 + 300 = 400
+        assertEquals(0, new BigDecimal("400.00").compareTo((BigDecimal) result.get(0).get("yearDebitTotal")));
+        // 本年贷方 = 50 + 0 = 50
+        assertEquals(0, new BigDecimal("50.00").compareTo((BigDecimal) result.get(0).get("yearCreditTotal")));
     }
 
     @Test
@@ -202,7 +300,7 @@ class LedgerServiceImplTest {
         List<Map<String, Object>> result = ledgerService.generalLedger(subjectId, period);
 
         // Assert
-        assertEquals(4, result.size(), "应为 期初 + 2笔分录 + 本期合计");
+        assertEquals(5, result.size(), "应为 期初 + 2笔分录 + 本期合计 + 本年累计");
 
         // 第1行：期初余额
         Map<String, Object> opening = result.get(0);
@@ -240,8 +338,17 @@ class LedgerServiceImplTest {
         assertEquals(new BigDecimal("200.00"), closing.get("credit"));
         assertEquals(new BigDecimal("1300.00"), closing.get("running"));
 
+        // 第5行：本年累计（T4），无本年快照 → 全 0
+        Map<String, Object> yearTotal = result.get(4);
+        assertEquals("YEAR_TOTAL", yearTotal.get("type"));
+        assertEquals("本年累计", yearTotal.get("summary"));
+        assertEquals(BigDecimal.ZERO, yearTotal.get("debit"));
+        assertEquals(BigDecimal.ZERO, yearTotal.get("credit"));
+        assertEquals(BigDecimal.ZERO, yearTotal.get("running"));
+
         verify(subjectService).getById(subjectId);
         verify(subjectBalanceMapper).selectOne(any());
+        verify(subjectBalanceMapper).selectList(any());
         verify(voucherEntryMapper).selectBySubjectIdAndPeriod(subjectId, period);
     }
 
@@ -286,7 +393,7 @@ class LedgerServiceImplTest {
         List<Map<String, Object>> result = ledgerService.generalLedger(subjectId, period);
 
         // Assert
-        assertEquals(4, result.size());
+        assertEquals(5, result.size(), "应为 期初 + 2笔分录 + 本期合计 + 本年累计");
 
         // 期初：running = 5000
         assertEquals(new BigDecimal("5000.00"), result.get(0).get("running"));
@@ -304,8 +411,13 @@ class LedgerServiceImplTest {
         assertEquals(new BigDecimal("1000.00"), closing.get("credit"));
         assertEquals(new BigDecimal("5500.00"), closing.get("running"));
 
+        // 本年累计行（T4），无本年快照 → 全 0
+        Map<String, Object> yearTotal = result.get(4);
+        assertEquals("YEAR_TOTAL", yearTotal.get("type"));
+
         verify(subjectService).getById(subjectId);
         verify(subjectBalanceMapper).selectOne(any());
+        verify(subjectBalanceMapper).selectList(any());
         verify(voucherEntryMapper).selectBySubjectIdAndPeriod(subjectId, period);
     }
 
@@ -353,8 +465,8 @@ class LedgerServiceImplTest {
         // Act
         List<Map<String, Object>> result = ledgerService.generalLedger(subjectId, period);
 
-        // Assert
-        assertEquals(3, result.size(), "应为 期初 + 1笔分录 + 本期合计");
+// Assert
+        assertEquals(4, result.size(), "应为 期初 + 1笔分录 + 本期合计 + 本年累计");
 
         // 期初行 running = 0（余额快照不存在）
         assertEquals(BigDecimal.ZERO, result.get(0).get("running"));
@@ -369,7 +481,13 @@ class LedgerServiceImplTest {
         assertEquals(BigDecimal.ZERO, closing.get("credit"));
         assertEquals(new BigDecimal("500.00"), closing.get("running"));
 
+        // 本年累计行（T4），无本年快照 → 全 0
+        Map<String, Object> yearTotal = result.get(3);
+        assertEquals("YEAR_TOTAL", yearTotal.get("type"));
+
+        verify(subjectService).getById(subjectId);
         verify(subjectBalanceMapper).selectOne(any());
+        verify(subjectBalanceMapper).selectList(any());
         verify(voucherEntryMapper).selectBySubjectIdAndPeriod(subjectId, period);
     }
 

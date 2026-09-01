@@ -61,12 +61,18 @@ public class LedgerServiceImpl implements LedgerService {
                         .eq(SubjectBalanceEntity::getPeriod, period)
                         .orderByAsc(SubjectBalanceEntity::getSubjectId));
 
+        Set<Long> subjectIds = balances.stream()
+                .map(SubjectBalanceEntity::getSubjectId)
+                .collect(Collectors.toSet());
+        Map<Long, YearTotals> yearTotals = aggregateYearTotals(subjectIds, period);
+
         List<Map<String, Object>> rows = new ArrayList<>();
         for (SubjectBalanceEntity b : balances) {
             Subject subject = subjectService.getById(b.getSubjectId());
             if (subject == null || !Boolean.TRUE.equals(subject.getIsLeaf())) {
                 continue;
             }
+            YearTotals yt = yearTotals.get(b.getSubjectId());
             Map<String, Object> row = new HashMap<>();
             row.put("subjectId", b.getSubjectId());
             row.put("subjectCode", subject.getCode());
@@ -76,6 +82,9 @@ public class LedgerServiceImpl implements LedgerService {
             row.put("debitTotal", b.getDebitTotal());
             row.put("creditTotal", b.getCreditTotal());
             row.put("endBalance", b.getEndBalance());
+            row.put("yearBeginBalance", yt == null ? BigDecimal.ZERO : yt.beginBalance);
+            row.put("yearDebitTotal", yt == null ? BigDecimal.ZERO : yt.debitTotal);
+            row.put("yearCreditTotal", yt == null ? BigDecimal.ZERO : yt.creditTotal);
             rows.add(row);
         }
         return rows;
@@ -141,7 +150,57 @@ public class LedgerServiceImpl implements LedgerService {
         closing.put("running", running);
         rows.add(closing);
 
+        // 本年累计行（T4）：CLOSING 之后追加 YEAR_TOTAL
+        YearTotals yt = aggregateYearTotals(java.util.Set.of(subjectId), period).get(subjectId);
+        BigDecimal ytBegin = yt == null ? BigDecimal.ZERO : yt.beginBalance;
+        BigDecimal ytDebit = yt == null ? BigDecimal.ZERO : yt.debitTotal;
+        BigDecimal ytCredit = yt == null ? BigDecimal.ZERO : yt.creditTotal;
+        Map<String, Object> yearTotal = new HashMap<>();
+        yearTotal.put("type", "YEAR_TOTAL");
+        yearTotal.put("summary", "本年累计");
+        yearTotal.put("debit", ytDebit);
+        yearTotal.put("credit", ytCredit);
+        yearTotal.put("running", isDebit ? ytBegin.add(ytDebit).subtract(ytCredit) : ytBegin.add(ytCredit).subtract(ytDebit));
+        rows.add(yearTotal);
+
         return rows;
+    }
+
+    /** 本年累计聚合行（T4）：年初余额=本年度最早期间快照的 begin_balance；本年发生=period<=当前期 各期 SUM */
+    private static final class YearTotals {
+        BigDecimal beginBalance = BigDecimal.ZERO;
+        BigDecimal debitTotal = BigDecimal.ZERO;
+        BigDecimal creditTotal = BigDecimal.ZERO;
+        boolean beginSet = false;
+    }
+
+    /**
+     * 聚合本年累计：period LIKE '<year>%' AND period &lt;= #{period}（YYYYMM 前缀有序）。
+     * 年初余额取该科目本年度最早期间快照的 begin_balance；无快照时返回空 Map（调用方按 0 处理）。
+     */
+    private Map<Long, YearTotals> aggregateYearTotals(java.util.Set<Long> subjectIds, String period) {
+        if (subjectIds == null || subjectIds.isEmpty() || period == null || period.length() != 6) {
+            return Map.of();
+        }
+        String year = period.substring(0, 4);
+        List<SubjectBalanceEntity> yearBalances = subjectBalanceMapper.selectList(
+                new LambdaQueryWrapper<SubjectBalanceEntity>()
+                        .in(SubjectBalanceEntity::getSubjectId, subjectIds)
+                        .likeRight(SubjectBalanceEntity::getPeriod, year)
+                        .le(SubjectBalanceEntity::getPeriod, period)
+                        .orderByAsc(SubjectBalanceEntity::getPeriod));
+
+        Map<Long, YearTotals> result = new HashMap<>();
+        for (SubjectBalanceEntity b : yearBalances) {
+            YearTotals yt = result.computeIfAbsent(b.getSubjectId(), k -> new YearTotals());
+            yt.debitTotal = yt.debitTotal.add(b.getDebitTotal() == null ? BigDecimal.ZERO : b.getDebitTotal());
+            yt.creditTotal = yt.creditTotal.add(b.getCreditTotal() == null ? BigDecimal.ZERO : b.getCreditTotal());
+            if (!yt.beginSet) {
+                yt.beginBalance = b.getBeginBalance() == null ? BigDecimal.ZERO : b.getBeginBalance();
+                yt.beginSet = true;
+            }
+        }
+        return result;
     }
 
     @Override
