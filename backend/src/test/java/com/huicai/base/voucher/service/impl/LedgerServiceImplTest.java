@@ -121,30 +121,30 @@ class LedgerServiceImplTest {
         when(subjectBalanceMapper.selectList(any())).thenReturn(allBalances);
 
         // Act
-        List<Map<String, Object>> result = ledgerService.subjectBalance(period);
+        List<SubjectBalanceRowVO> result = ledgerService.subjectBalance(period);
 
         // Assert
         assertEquals(2, result.size(), "应只包含末级科目");
 
-        Map<String, Object> row1 = result.get(0);
-        assertEquals(1L, row1.get("subjectId"));
-        assertEquals("1001", row1.get("subjectCode"));
-        assertEquals("库存现金", row1.get("subjectName"));
-        assertEquals("debit", row1.get("direction"));
-        assertEquals(new BigDecimal("1000.00"), row1.get("beginBalance"));
-        assertEquals(new BigDecimal("500.00"), row1.get("debitTotal"));
-        assertEquals(new BigDecimal("200.00"), row1.get("creditTotal"));
-        assertEquals(new BigDecimal("1300.00"), row1.get("endBalance"));
+        SubjectBalanceRowVO row1 = result.get(0);
+        assertEquals(1L, row1.getSubjectId());
+        assertEquals("1001", row1.getSubjectCode());
+        assertEquals("库存现金", row1.getSubjectName());
+        assertEquals("debit", row1.getDirection());
+        assertEquals(new BigDecimal("1000.00"), row1.getBeginBalance());
+        assertEquals(new BigDecimal("500.00"), row1.getDebitTotal());
+        assertEquals(new BigDecimal("200.00"), row1.getCreditTotal());
+        assertEquals(new BigDecimal("1300.00"), row1.getEndBalance());
         // 本年累计列（T4）
-        assertEquals(new BigDecimal("1000.00"), row1.get("yearBeginBalance"));
-        assertEquals(new BigDecimal("500.00"), row1.get("yearDebitTotal"));
-        assertEquals(new BigDecimal("200.00"), row1.get("yearCreditTotal"));
+        assertEquals(new BigDecimal("1000.00"), row1.getYearBeginBalance());
+        assertEquals(new BigDecimal("500.00"), row1.getYearDebitTotal());
+        assertEquals(new BigDecimal("200.00"), row1.getYearCreditTotal());
 
-        Map<String, Object> row2 = result.get(1);
-        assertEquals(2L, row2.get("subjectId"));
-        assertEquals("2001", row2.get("subjectCode"));
-        assertEquals("短期借款", row2.get("subjectName"));
-        assertEquals("credit", row2.get("direction"));
+        SubjectBalanceRowVO row2 = result.get(1);
+        assertEquals(2L, row2.getSubjectId());
+        assertEquals("2001", row2.getSubjectCode());
+        assertEquals("短期借款", row2.getSubjectName());
+        assertEquals("credit", row2.getDirection());
 
         verify(subjectBalanceMapper, times(2)).selectList(any());
         verify(subjectService).listByIds(any());
@@ -177,12 +177,12 @@ class LedgerServiceImplTest {
         when(subjectService.listByIds(any())).thenReturn(List.of(subject));
 
         // fixture 为无发生额科目，需显式 includeNoMovement=true 防止被 T5 默认过滤排除
-        List<Map<String, Object>> result = ledgerService.subjectBalance(period, true, true, null);
+        List<SubjectBalanceRowVO> result = ledgerService.subjectBalance(period, true, true, null);
 
         assertEquals(1, result.size());
-        assertEquals(0, BigDecimal.ZERO.compareTo((BigDecimal) result.get(0).get("yearBeginBalance")));
-        assertEquals(0, BigDecimal.ZERO.compareTo((BigDecimal) result.get(0).get("yearDebitTotal")));
-        assertEquals(0, BigDecimal.ZERO.compareTo((BigDecimal) result.get(0).get("yearCreditTotal")));
+        assertEquals(0, BigDecimal.ZERO.0).getYearBeginBalance()));
+        assertEquals(0, BigDecimal.ZERO.0).getYearDebitTotal()));
+        assertEquals(0, BigDecimal.ZERO.0).getYearCreditTotal()));
     }
 
     @Test
@@ -230,15 +230,15 @@ class LedgerServiceImplTest {
         subject.setIsLeaf(true);
         when(subjectService.listByIds(any())).thenReturn(List.of(subject));
 
-        List<Map<String, Object>> result = ledgerService.subjectBalance(period, true, true, null);
+        List<SubjectBalanceRowVO> result = ledgerService.subjectBalance(period, true, true, null);
 
         assertEquals(1, result.size());
         // 年初余额 = 最早期间(202601)快照期初 = 200
-        assertEquals(0, new BigDecimal("200.00").compareTo((BigDecimal) result.get(0).get("yearBeginBalance")));
+        assertEquals(0, new BigDecimal("200.00").0).getYearBeginBalance()));
         // 本年发生 = 100 + 300 = 400
-        assertEquals(0, new BigDecimal("400.00").compareTo((BigDecimal) result.get(0).get("yearDebitTotal")));
+        assertEquals(0, new BigDecimal("400.00").0).getYearDebitTotal()));
         // 本年贷方 = 50 + 0 = 50
-        assertEquals(0, new BigDecimal("50.00").compareTo((BigDecimal) result.get(0).get("yearCreditTotal")));
+        assertEquals(0, new BigDecimal("50.00").0).getYearCreditTotal()));
     }
 
     @Test
@@ -282,10 +282,10 @@ class LedgerServiceImplTest {
 
         when(subjectService.listByIds(any())).thenReturn(List.of(s1002, s2202));
 
-        List<Map<String, Object>> result = ledgerService.subjectBalance(period, true, true, "1002");
+        List<SubjectBalanceRowVO> result = ledgerService.subjectBalance(period, true, true, "1002");
 
         assertEquals(1, result.size(), "应只返回 1002 前缀科目");
-        assertEquals("100299", result.get(0).get("subjectCode"));
+        assertEquals("100299", result.get(0).getSubjectCode());
     }
 
     @Test
@@ -341,22 +341,22 @@ class LedgerServiceImplTest {
         when(subjectService.listByIds(any())).thenReturn(List.of(s1, s2, s3));
 
         // 默认（false/false）：只含 科目1
-        List<Map<String, Object>> defaultRows = ledgerService.subjectBalance(period, false, false, null);
+        List<SubjectBalanceRowVO> defaultRows = ledgerService.subjectBalance(period, false, false, null);
         assertEquals(1, defaultRows.size(), "默认应排除零余额与无发生额科目");
-        assertEquals(1L, defaultRows.get(0).get("subjectId"));
+        assertEquals(1L, defaultRows.get(0).getSubjectId());
 
         // includeZero=true：加回科目2
-        List<Map<String, Object>> withZero = ledgerService.subjectBalance(period, true, false, null);
+        List<SubjectBalanceRowVO> withZero = ledgerService.subjectBalance(period, true, false, null);
         assertEquals(2, withZero.size(), "includeZero=true 应含零余额科目2");
-        assertTrue(withZero.stream().anyMatch(r -> r.get("subjectId").equals(2L)));
+        assertTrue(withZero.stream().anyMatch(r -> r.getSubjectId().equals(2L)));
 
         // includeNoMovement=true：加回科目3
-        List<Map<String, Object>> withMove = ledgerService.subjectBalance(period, false, true, null);
+        List<SubjectBalanceRowVO> withMove = ledgerService.subjectBalance(period, false, true, null);
         assertEquals(2, withMove.size(), "includeNoMovement=true 应含无发生额科目3");
-        assertTrue(withMove.stream().anyMatch(r -> r.get("subjectId").equals(3L)));
+        assertTrue(withMove.stream().anyMatch(r -> r.getSubjectId().equals(3L)));
 
         // 全开：3 个科目全含
-        List<Map<String, Object>> allRows = ledgerService.subjectBalance(period, true, true, null);
+        List<SubjectBalanceRowVO> allRows = ledgerService.subjectBalance(period, true, true, null);
         assertEquals(3, allRows.size(), "全开应含全部3个科目");
     }
 
@@ -367,7 +367,7 @@ class LedgerServiceImplTest {
         when(subjectBalanceMapper.selectList(any())).thenReturn(List.of());
 
         // Act
-        List<Map<String, Object>> result = ledgerService.subjectBalance("202608");
+        List<SubjectBalanceRowVO> result = ledgerService.subjectBalance("202608");
 
         // Assert
         assertTrue(result.isEmpty());
@@ -420,57 +420,57 @@ class LedgerServiceImplTest {
                 .thenReturn(List.of(entry1, entry2));
 
         // Act
-        List<Map<String, Object>> result = ledgerService.generalLedger(subjectId, period);
+        List<LedgerRowVO> result = ledgerService.generalLedger(subjectId, period);
 
         // Assert
         assertEquals(5, result.size(), "应为 期初 + 2笔分录 + 本期合计 + 本年累计");
 
         // 第1行：期初余额
-        Map<String, Object> opening = result.get(0);
-        assertEquals("OPENING", opening.get("type"));
-        assertEquals("期初余额", opening.get("summary"));
-        assertEquals(BigDecimal.ZERO, opening.get("debit"));
-        assertEquals(BigDecimal.ZERO, opening.get("credit"));
-        assertEquals(new BigDecimal("1000.00"), opening.get("running"));
+        LedgerRowVO opening = result.get(0);
+        assertEquals("OPENING", opening.getType());
+        assertEquals("期初余额", opening.getSummary());
+        assertEquals(BigDecimal.ZERO, opening.getDebit());
+        assertEquals(BigDecimal.ZERO, opening.getCredit());
+        assertEquals(new BigDecimal("1000.00"), opening.getRunning());
 
         // 第2行：分录1
-        Map<String, Object> r1 = result.get(1);
-        assertEquals("ENTRY", r1.get("type"));
-        assertEquals(10L, r1.get("voucherId"));
-        assertEquals("V-202607-0001", r1.get("voucherNo"), "分录1应带凭证号(T6)");
-        assertEquals(java.time.LocalDate.of(2026, 7, 1), r1.get("voucherDate"), "分录1应带凭证日期(T6)");
-        assertEquals("销售收入", r1.get("summary"));
-        assertEquals(new BigDecimal("500.00"), r1.get("debit"));
-        assertEquals(BigDecimal.ZERO, r1.get("credit"));
+        LedgerRowVO r1 = result.get(1);
+        assertEquals("ENTRY", r1.getType());
+        assertEquals(10L, r1.getVoucherId());
+        assertEquals("V-202607-0001", r1.getVoucherNo(), "分录1应带凭证号(T6)");
+        assertEquals(java.time.LocalDate.of(2026, 7, 1), r1.getVoucherDate(), "分录1应带凭证日期(T6)");
+        assertEquals("销售收入", r1.getSummary());
+        assertEquals(new BigDecimal("500.00"), r1.getDebit());
+        assertEquals(BigDecimal.ZERO, r1.getCredit());
         // running = 1000 + 500 - 0 = 1500
-        assertEquals(new BigDecimal("1500.00"), r1.get("running"));
+        assertEquals(new BigDecimal("1500.00"), r1.getRunning());
 
         // 第3行：分录2
-        Map<String, Object> r2 = result.get(2);
-        assertEquals("ENTRY", r2.get("type"));
-        assertEquals(20L, r2.get("voucherId"));
-        assertEquals("V-202607-0002", r2.get("voucherNo"), "分录2应带凭证号(T6)");
-        assertEquals("银行取现", r2.get("summary"));
-        assertEquals(BigDecimal.ZERO, r2.get("debit"));
-        assertEquals(new BigDecimal("200.00"), r2.get("credit"));
+        LedgerRowVO r2 = result.get(2);
+        assertEquals("ENTRY", r2.getType());
+        assertEquals(20L, r2.getVoucherId());
+        assertEquals("V-202607-0002", r2.getVoucherNo(), "分录2应带凭证号(T6)");
+        assertEquals("银行取现", r2.getSummary());
+        assertEquals(BigDecimal.ZERO, r2.getDebit());
+        assertEquals(new BigDecimal("200.00"), r2.getCredit());
         // running = 1500 + 0 - 200 = 1300
-        assertEquals(new BigDecimal("1300.00"), r2.get("running"));
+        assertEquals(new BigDecimal("1300.00"), r2.getRunning());
 
         // 第4行：本期合计
-        Map<String, Object> closing = result.get(3);
-        assertEquals("CLOSING", closing.get("type"));
-        assertEquals("本期合计", closing.get("summary"));
-        assertEquals(new BigDecimal("500.00"), closing.get("debit"));
-        assertEquals(new BigDecimal("200.00"), closing.get("credit"));
-        assertEquals(new BigDecimal("1300.00"), closing.get("running"));
+        LedgerRowVO closing = result.get(3);
+        assertEquals("CLOSING", closing.getType());
+        assertEquals("本期合计", closing.getSummary());
+        assertEquals(new BigDecimal("500.00"), closing.getDebit());
+        assertEquals(new BigDecimal("200.00"), closing.getCredit());
+        assertEquals(new BigDecimal("1300.00"), closing.getRunning());
 
         // 第5行：本年累计（T4），无本年快照 → 全 0
-        Map<String, Object> yearTotal = result.get(4);
-        assertEquals("YEAR_TOTAL", yearTotal.get("type"));
-        assertEquals("本年累计", yearTotal.get("summary"));
-        assertEquals(BigDecimal.ZERO, yearTotal.get("debit"));
-        assertEquals(BigDecimal.ZERO, yearTotal.get("credit"));
-        assertEquals(BigDecimal.ZERO, yearTotal.get("running"));
+        LedgerRowVO yearTotal = result.get(4);
+        assertEquals("YEAR_TOTAL", yearTotal.getType());
+        assertEquals("本年累计", yearTotal.getSummary());
+        assertEquals(BigDecimal.ZERO, yearTotal.getDebit());
+        assertEquals(BigDecimal.ZERO, yearTotal.getCredit());
+        assertEquals(BigDecimal.ZERO, yearTotal.getRunning());
 
         verify(subjectService).getById(subjectId);
         verify(subjectBalanceMapper).selectOne(any());
@@ -521,30 +521,30 @@ class LedgerServiceImplTest {
                 .thenReturn(List.of(entry1, entry2));
 
         // Act
-        List<Map<String, Object>> result = ledgerService.generalLedger(subjectId, period);
+        List<LedgerRowVO> result = ledgerService.generalLedger(subjectId, period);
 
         // Assert
         assertEquals(5, result.size(), "应为 期初 + 2笔分录 + 本期合计 + 本年累计");
 
         // 期初：running = 5000
-        assertEquals(new BigDecimal("5000.00"), result.get(0).get("running"));
+        assertEquals(new BigDecimal("5000.00"), result.get(0).getRunning());
 
         // 分录1：running = 5000 + 1000 - 0 = 6000
-        assertEquals(new BigDecimal("6000.00"), result.get(1).get("running"));
+        assertEquals(new BigDecimal("6000.00"), result.get(1).getRunning());
 
         // 分录2：running = 6000 + 0 - 500 = 5500
-        assertEquals(new BigDecimal("5500.00"), result.get(2).get("running"));
+        assertEquals(new BigDecimal("5500.00"), result.get(2).getRunning());
 
         // 本期合计
-        Map<String, Object> closing = result.get(3);
-        assertEquals("CLOSING", closing.get("type"));
-        assertEquals(new BigDecimal("500.00"), closing.get("debit"));
-        assertEquals(new BigDecimal("1000.00"), closing.get("credit"));
-        assertEquals(new BigDecimal("5500.00"), closing.get("running"));
+        LedgerRowVO closing = result.get(3);
+        assertEquals("CLOSING", closing.getType());
+        assertEquals(new BigDecimal("500.00"), closing.getDebit());
+        assertEquals(new BigDecimal("1000.00"), closing.getCredit());
+        assertEquals(new BigDecimal("5500.00"), closing.getRunning());
 
         // 本年累计行（T4），无本年快照 → 全 0
-        Map<String, Object> yearTotal = result.get(4);
-        assertEquals("YEAR_TOTAL", yearTotal.get("type"));
+        LedgerRowVO yearTotal = result.get(4);
+        assertEquals("YEAR_TOTAL", yearTotal.getType());
 
         verify(subjectService).getById(subjectId);
         verify(subjectBalanceMapper).selectOne(any());
@@ -559,7 +559,7 @@ class LedgerServiceImplTest {
         when(subjectService.getById(999L)).thenReturn(null);
 
         // Act
-        List<Map<String, Object>> result = ledgerService.generalLedger(999L, "202607");
+        List<LedgerRowVO> result = ledgerService.generalLedger(999L, "202607");
 
         // Assert
         assertTrue(result.isEmpty());
@@ -596,27 +596,27 @@ class LedgerServiceImplTest {
         when(voucherEntryMapper.selectSubsidiaryRows(subjectId, period, null, null, false)).thenReturn(List.of(entry));
 
         // Act
-        List<Map<String, Object>> result = ledgerService.generalLedger(subjectId, period);
+        List<LedgerRowVO> result = ledgerService.generalLedger(subjectId, period);
 
 // Assert
         assertEquals(4, result.size(), "应为 期初 + 1笔分录 + 本期合计 + 本年累计");
 
         // 期初行 running = 0（余额快照不存在）
-        assertEquals(BigDecimal.ZERO, result.get(0).get("running"));
+        assertEquals(BigDecimal.ZERO, result.get(0).getRunning());
 
         // 分录行 running = 0 + 500 - 0 = 500
-        assertEquals(new BigDecimal("500.00"), result.get(1).get("running"));
+        assertEquals(new BigDecimal("500.00"), result.get(1).getRunning());
 
         // 本期合计
-        Map<String, Object> closing = result.get(2);
-        assertEquals("CLOSING", closing.get("type"));
-        assertEquals(new BigDecimal("500.00"), closing.get("debit"));
-        assertEquals(BigDecimal.ZERO, closing.get("credit"));
-        assertEquals(new BigDecimal("500.00"), closing.get("running"));
+        LedgerRowVO closing = result.get(2);
+        assertEquals("CLOSING", closing.getType());
+        assertEquals(new BigDecimal("500.00"), closing.getDebit());
+        assertEquals(BigDecimal.ZERO, closing.getCredit());
+        assertEquals(new BigDecimal("500.00"), closing.getRunning());
 
         // 本年累计行（T4），无本年快照 → 全 0
-        Map<String, Object> yearTotal = result.get(3);
-        assertEquals("YEAR_TOTAL", yearTotal.get("type"));
+        LedgerRowVO yearTotal = result.get(3);
+        assertEquals("YEAR_TOTAL", yearTotal.getType());
 
         verify(subjectService).getById(subjectId);
         verify(subjectBalanceMapper).selectOne(any());
@@ -689,42 +689,42 @@ class LedgerServiceImplTest {
                 .thenReturn(List.of(entry1, entry2));
 
         // Act
-        List<Map<String, Object>> result = ledgerService.subsidiaryLedger(subjectId, "202607", null, null);
+        List<LedgerRowVO> result = ledgerService.subsidiaryLedger(subjectId, "202607", null, null);
 
         // Assert: 期初行 + 2 分录行
         assertEquals(3, result.size());
 
         // 期初行
-        Map<String, Object> opening = result.get(0);
-        assertEquals("OPENING", opening.get("type"));
-        assertEquals("期初余额", opening.get("summary"));
-        assertEquals(new BigDecimal("1000.00"), opening.get("running"));
-        assertEquals(BigDecimal.ZERO, opening.get("debit"));
-        assertEquals(BigDecimal.ZERO, opening.get("credit"));
+        LedgerRowVO opening = result.get(0);
+        assertEquals("OPENING", opening.getType());
+        assertEquals("期初余额", opening.getSummary());
+        assertEquals(new BigDecimal("1000.00"), opening.getRunning());
+        assertEquals(BigDecimal.ZERO, opening.getDebit());
+        assertEquals(BigDecimal.ZERO, opening.getCredit());
 
         // 分录1: running = 1000 + 500 - 0 = 1500
-        Map<String, Object> row1 = result.get(1);
-        assertEquals("ENTRY", row1.get("type"));
-        assertEquals(10L, row1.get("voucherId"));
-        assertEquals("V-202607-0001", row1.get("voucherNo"));
-        assertEquals(java.time.LocalDate.of(2026, 7, 1), row1.get("voucherDate"));
-        assertEquals(subjectId, row1.get("subjectId"));
-        assertEquals("1001", row1.get("subjectCode"));
-        assertEquals("库存现金", row1.get("subjectName"));
-        assertEquals("销售收入", row1.get("summary"));
-        assertEquals(new BigDecimal("500.00"), row1.get("debit"));
-        assertEquals(BigDecimal.ZERO, row1.get("credit"));
-        assertEquals(new BigDecimal("1500.00"), row1.get("running"));
+        LedgerRowVO row1 = result.get(1);
+        assertEquals("ENTRY", row1.getType());
+        assertEquals(10L, row1.getVoucherId());
+        assertEquals("V-202607-0001", row1.getVoucherNo());
+        assertEquals(java.time.LocalDate.of(2026, 7, 1), row1.getVoucherDate());
+        assertEquals(subjectId, row1.getSubjectId());
+        assertEquals("1001", row1.getSubjectCode());
+        assertEquals("库存现金", row1.getSubjectName());
+        assertEquals("销售收入", row1.getSummary());
+        assertEquals(new BigDecimal("500.00"), row1.getDebit());
+        assertEquals(BigDecimal.ZERO, row1.getCredit());
+        assertEquals(new BigDecimal("1500.00"), row1.getRunning());
 
         // 分录2: running = 1500 + 0 - 200 = 1300
-        Map<String, Object> row2 = result.get(2);
-        assertEquals("ENTRY", row2.get("type"));
-        assertEquals(20L, row2.get("voucherId"));
-        assertEquals("V-202607-0002", row2.get("voucherNo"));
-        assertEquals("银行取现", row2.get("summary"));
-        assertEquals(BigDecimal.ZERO, row2.get("debit"));
-        assertEquals(new BigDecimal("200.00"), row2.get("credit"));
-        assertEquals(new BigDecimal("1300.00"), row2.get("running"));
+        LedgerRowVO row2 = result.get(2);
+        assertEquals("ENTRY", row2.getType());
+        assertEquals(20L, row2.getVoucherId());
+        assertEquals("V-202607-0002", row2.getVoucherNo());
+        assertEquals("银行取现", row2.getSummary());
+        assertEquals(BigDecimal.ZERO, row2.getDebit());
+        assertEquals(new BigDecimal("200.00"), row2.getCredit());
+        assertEquals(new BigDecimal("1300.00"), row2.getRunning());
 
         verify(subjectService).getById(subjectId);
         verify(subjectBalanceMapper).selectOne(any());
@@ -754,11 +754,11 @@ class LedgerServiceImplTest {
         when(voucherEntryMapper.selectSubsidiaryRows(subjectId, "202607", null, null, false))
                 .thenReturn(List.of(entry));
 
-        List<Map<String, Object>> result = ledgerService.subsidiaryLedger(subjectId, "202607", null, null);
+        List<LedgerRowVO> result = ledgerService.subsidiaryLedger(subjectId, "202607", null, null);
 
         assertEquals(2, result.size(), "期初行 + 1 分录行");
-        assertEquals(0, BigDecimal.ZERO.compareTo((BigDecimal) result.get(0).get("running")), "无快照期初=0");
-        assertEquals(0, new BigDecimal("500.00").compareTo((BigDecimal) result.get(1).get("running")), "滚动余额=0+500");
+        assertEquals(0, BigDecimal.ZERO.0).getRunning()), "无快照期初=0");
+        assertEquals(0, new BigDecimal("500.00").1).getRunning()), "滚动余额=0+500");
     }
 
     @Test
@@ -777,11 +777,11 @@ class LedgerServiceImplTest {
                 java.time.LocalDate.of(2026, 7, 1), java.time.LocalDate.of(2026, 7, 15), false))
                 .thenReturn(List.of());
 
-        List<Map<String, Object>> result = ledgerService.subsidiaryLedger(subjectId, "202607",
+        List<LedgerRowVO> result = ledgerService.subsidiaryLedger(subjectId, "202607",
                 java.time.LocalDate.of(2026, 7, 1), java.time.LocalDate.of(2026, 7, 15));
 
         assertEquals(1, result.size(), "无分录时仅期初行");
-        assertEquals("OPENING", result.get(0).get("type"));
+        assertEquals("OPENING", result.get(0).getType());
         verify(voucherEntryMapper).selectSubsidiaryRows(subjectId, "202607",
                 java.time.LocalDate.of(2026, 7, 1), java.time.LocalDate.of(2026, 7, 15), false);
     }
@@ -813,7 +813,7 @@ class LedgerServiceImplTest {
         when(subjectService.getById(999L)).thenReturn(null);
 
         // Act
-        List<Map<String, Object>> result = ledgerService.subsidiaryLedger(999L, "202607", null, null);
+        List<LedgerRowVO> result = ledgerService.subsidiaryLedger(999L, "202607", null, null);
 
         // Assert
         assertTrue(result.isEmpty());

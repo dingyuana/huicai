@@ -168,23 +168,23 @@ public class LedgerChainRealDBTest extends AbstractMapperTest {
     void subjectBalance_shouldReturnPostedData() {
         createAndPost("链路凭证2", "2000.00", "2000.00");
 
-        List<Map<String, Object>> rows = ledgerService.subjectBalance(TEST_PERIOD);
+        List<SubjectBalanceRowVO> rows = ledgerService.subjectBalance(TEST_PERIOD);
 
-        Map<String, Object> debitRow = rows.stream()
-                .filter(r -> r.get("subjectId").equals(debitSubjectId))
+        SubjectBalanceRowVO debitRow = rows.stream()
+                .filter(r -> r.getSubjectId().equals(debitSubjectId))
                 .findFirst()
                 .orElse(null);
         assertNotNull(debitRow, "科目余额表应包含借方科目");
-        assertEquals(0, new BigDecimal("2000.00").compareTo((BigDecimal) debitRow.get("debitTotal")));
-        assertEquals(0, new BigDecimal("2000.00").compareTo((BigDecimal) debitRow.get("endBalance")));
+        assertEquals(0, new BigDecimal("2000.00").compareTo(debitRow.getDebitTotal()));
+        assertEquals(0, new BigDecimal("2000.00").compareTo(debitRow.getEndBalance()));
 
-        Map<String, Object> creditRow = rows.stream()
-                .filter(r -> r.get("subjectId").equals(creditSubjectId))
+        SubjectBalanceRowVO creditRow = rows.stream()
+                .filter(r -> r.getSubjectId().equals(creditSubjectId))
                 .findFirst()
                 .orElse(null);
         assertNotNull(creditRow, "科目余额表应包含贷方科目");
-        assertEquals(0, new BigDecimal("2000.00").compareTo((BigDecimal) creditRow.get("creditTotal")));
-        assertEquals(0, new BigDecimal("2000.00").compareTo((BigDecimal) creditRow.get("endBalance")));
+        assertEquals(0, new BigDecimal("2000.00").compareTo(creditRow.getCreditTotal()));
+        assertEquals(0, new BigDecimal("2000.00").compareTo(creditRow.getEndBalance()));
     }
 
     @Test
@@ -192,23 +192,23 @@ public class LedgerChainRealDBTest extends AbstractMapperTest {
     void generalLedger_shouldReturnPostedChain() {
         createAndPost("链路凭证3", "500.00", "500.00");
 
-        List<Map<String, Object>> rows = ledgerService.generalLedger(debitSubjectId, TEST_PERIOD);
+        List<LedgerRowVO> rows = ledgerService.generalLedger(debitSubjectId, TEST_PERIOD);
 
         assertEquals(4, rows.size(), "应为 期初 + 1笔分录 + 本期合计 + 本年累计(T4)");
-        assertEquals("OPENING", rows.get(0).get("type"));
-        assertEquals(0, BigDecimal.ZERO.compareTo((BigDecimal) rows.get(0).get("running")), "期初为0（期初建账零余额）");
+        assertEquals("OPENING", rows.get(0).getType());
+        assertEquals(0, BigDecimal.ZERO.compareTo(rows.get(0).getRunning()), "期初为0（期初建账零余额）");
 
-        assertEquals("ENTRY", rows.get(1).get("type"));
-        assertEquals(0, new BigDecimal("500.00").compareTo((BigDecimal) rows.get(1).get("debit")));
-        assertEquals(0, new BigDecimal("500.00").compareTo((BigDecimal) rows.get(1).get("running")), "借方科目滚动余额=500");
-        assertNotNull(rows.get(1).get("voucherNo"), "总账分录行应带凭证号(T6)");
-        assertNotNull(rows.get(1).get("voucherDate"), "总账分录行应带凭证日期(T6)");
+        assertEquals("ENTRY", rows.get(1).getType());
+        assertEquals(0, new BigDecimal("500.00").compareTo(rows.get(1).getDebit()));
+        assertEquals(0, new BigDecimal("500.00").compareTo(rows.get(1).getRunning()), "借方科目滚动余额=500");
+        assertNotNull(rows.get(1).getVoucherNo(), "总账分录行应带凭证号(T6)");
+        assertNotNull(rows.get(1).getVoucherDate(), "总账分录行应带凭证日期(T6)");
 
-        assertEquals("CLOSING", rows.get(2).get("type"));
-        assertEquals(0, new BigDecimal("500.00").compareTo((BigDecimal) rows.get(2).get("debit")));
-        assertEquals(0, new BigDecimal("500.00").compareTo((BigDecimal) rows.get(2).get("running")));
+        assertEquals("CLOSING", rows.get(2).getType());
+        assertEquals(0, new BigDecimal("500.00").compareTo(rows.get(2).getDebit()));
+        assertEquals(0, new BigDecimal("500.00").compareTo(rows.get(2).getRunning()));
 
-        assertEquals("YEAR_TOTAL", rows.get(3).get("type"), "CLOSING 后应有本年累计行(T4)");
+        assertEquals("YEAR_TOTAL", rows.get(3).getType(), "CLOSING 后应有本年累计行(T4)");
     }
 
     @Test
@@ -216,20 +216,20 @@ public class LedgerChainRealDBTest extends AbstractMapperTest {
     void subsidiaryLedger_shouldReturnPostedEntries() {
         createAndPost("链路凭证4", "800.00", "800.00");
 
-        List<Map<String, Object>> rows = ledgerService.subsidiaryLedger(debitSubjectId, TEST_PERIOD, null, null);
+        List<LedgerRowVO> rows = ledgerService.subsidiaryLedger(debitSubjectId, TEST_PERIOD, null, null);
 
         assertEquals(2, rows.size(), "应为 期初行 + 1条过账分录");
         // 期初行：该期间零期初建账 → begin_balance=0
-        assertEquals("OPENING", rows.get(0).get("type"));
-        assertEquals(0, BigDecimal.ZERO.compareTo((BigDecimal) rows.get(0).get("running")), "期初余额=0");
+        assertEquals("OPENING", rows.get(0).getType());
+        assertEquals(0, BigDecimal.ZERO.compareTo(rows.get(0).getRunning()), "期初余额=0");
 
         // 分录行：滚动余额 = 0 + 800 = 800（借方科目）
-        assertEquals("ENTRY", rows.get(1).get("type"));
-        assertEquals(debitSubjectId, rows.get(1).get("subjectId"));
-        assertEquals(0, new BigDecimal("800.00").compareTo((BigDecimal) rows.get(1).get("debit")));
-        assertEquals(0, new BigDecimal("800.00").compareTo((BigDecimal) rows.get(1).get("running")), "滚动余额=800");
-        assertEquals("借：链路凭证4", rows.get(1).get("summary"), "分录摘要为创建时的分录摘要");
-        assertNotNull(rows.get(1).get("voucherNo"), "分录行应携带凭证号");
-        assertNotNull(rows.get(1).get("voucherDate"), "分录行应携带凭证日期");
+        assertEquals("ENTRY", rows.get(1).getType());
+        assertEquals(debitSubjectId, rows.get(1).getSubjectId());
+        assertEquals(0, new BigDecimal("800.00").compareTo(rows.get(1).getDebit()));
+        assertEquals(0, new BigDecimal("800.00").compareTo(rows.get(1).getRunning()), "滚动余额=800");
+        assertEquals("借：链路凭证4", rows.get(1).getSummary(), "分录摘要为创建时的分录摘要");
+        assertNotNull(rows.get(1).getVoucherNo(), "分录行应携带凭证号");
+        assertNotNull(rows.get(1).getVoucherDate(), "分录行应携带凭证日期");
     }
 }

@@ -2,6 +2,8 @@ package com.huicai.base.voucher.controller;
 
 import com.huicai.common.response.R;
 import com.huicai.base.voucher.dto.vo.AuxiliaryLedgerRowVO;
+import com.huicai.base.voucher.dto.vo.LedgerRowVO;
+import com.huicai.base.voucher.dto.vo.SubjectBalanceRowVO;
 import com.huicai.base.voucher.service.LedgerService;
 import com.huicai.base.balance.service.SubjectBalanceService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -28,7 +30,7 @@ public class LedgerController {
 
     @Operation(summary = "科目余额表")
     @GetMapping("/subject-balance")
-    public R<List<Map<String, Object>>> subjectBalance(
+    public R<List<SubjectBalanceRowVO>> subjectBalance(
             @RequestParam String period,
             @RequestParam(required = false, defaultValue = "false") boolean includeZero,
             @RequestParam(required = false, defaultValue = "false") boolean includeNoMovement,
@@ -38,7 +40,7 @@ public class LedgerController {
 
     @Operation(summary = "总分类账")
     @GetMapping("/general")
-    public R<List<Map<String, Object>>> generalLedger(
+    public R<List<LedgerRowVO>> generalLedger(
             @RequestParam Long subjectId,
             @RequestParam String period,
             @RequestParam(required = false, defaultValue = "false") boolean includeUnposted) {
@@ -47,7 +49,7 @@ public class LedgerController {
 
     @Operation(summary = "明细账")
     @GetMapping("/subsidiary")
-    public R<List<Map<String, Object>>> subsidiaryLedger(
+    public R<List<LedgerRowVO>> subsidiaryLedger(
             @RequestParam Long subjectId,
             @RequestParam String period,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,

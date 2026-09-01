@@ -5,7 +5,8 @@ import com.huicai.base.balance.entity.SubjectBalanceEntity;
 import com.huicai.base.voucher.dto.AuxiliarySummaryRow;
 import com.huicai.base.voucher.dto.LedgerEntryRowDTO;
 import com.huicai.base.voucher.dto.vo.AuxiliaryLedgerRowVO;
-import com.huicai.base.voucher.entity.VoucherEntryEntity;
+import com.huicai.base.voucher.dto.vo.LedgerRowVO;
+import com.huicai.base.voucher.dto.vo.SubjectBalanceRowVO;
 import com.huicai.base.balance.mapper.SubjectBalanceMapper;
 import com.huicai.base.voucher.mapper.VoucherEntryMapper;
 import com.huicai.base.voucher.service.LedgerService;
@@ -55,12 +56,12 @@ public class LedgerServiceImpl implements LedgerService {
     );
 
     @Override
-    public List<Map<String, Object>> subjectBalance(String period) {
+    public List<SubjectBalanceRowVO> subjectBalance(String period) {
         return subjectBalance(period, false, false, null);
     }
 
     @Override
-    public List<Map<String, Object>> subjectBalance(String period, boolean includeZero, boolean includeNoMovement, String subjectCodePrefix) {
+    public List<SubjectBalanceRowVO> subjectBalance(String period, boolean includeZero, boolean includeNoMovement, String subjectCodePrefix) {
         List<SubjectBalanceEntity> balances = subjectBalanceMapper.selectList(
                 new LambdaQueryWrapper<SubjectBalanceEntity>()
                         .eq(SubjectBalanceEntity::getPeriod, period)
@@ -76,7 +77,7 @@ public class LedgerServiceImpl implements LedgerService {
                 : subjectService.listByIds(subjectIds).stream()
                         .collect(Collectors.toMap(Subject::getId, s -> s, (a, b) -> a));
 
-        List<Map<String, Object>> rows = new ArrayList<>();
+        List<SubjectBalanceRowVO> rows = new ArrayList<>();
         for (SubjectBalanceEntity b : balances) {
             Subject subject = subjectMap.get(b.getSubjectId());
             if (subject == null || !Boolean.TRUE.equals(subject.getIsLeaf())) {
@@ -99,30 +100,30 @@ public class LedgerServiceImpl implements LedgerService {
                 continue;
             }
             YearTotals yt = yearTotals.get(b.getSubjectId());
-            Map<String, Object> row = new HashMap<>();
-            row.put("subjectId", b.getSubjectId());
-            row.put("subjectCode", subject.getCode());
-            row.put("subjectName", subject.getName());
-            row.put("direction", subject.getDirection());
-            row.put("beginBalance", b.getBeginBalance());
-            row.put("debitTotal", d);
-            row.put("creditTotal", c);
-            row.put("endBalance", end);
-            row.put("yearBeginBalance", yt == null ? BigDecimal.ZERO : yt.beginBalance);
-            row.put("yearDebitTotal", yt == null ? BigDecimal.ZERO : yt.debitTotal);
-            row.put("yearCreditTotal", yt == null ? BigDecimal.ZERO : yt.creditTotal);
-            rows.add(row);
+            SubjectBalanceRowVO vo = new SubjectBalanceRowVO();
+            vo.setSubjectId(b.getSubjectId());
+            vo.setSubjectCode(subject.getCode());
+            vo.setSubjectName(subject.getName());
+            vo.setDirection(subject.getDirection());
+            vo.setBeginBalance(b.getBeginBalance());
+            vo.setDebitTotal(d);
+            vo.setCreditTotal(c);
+            vo.setEndBalance(end);
+            vo.setYearBeginBalance(yt == null ? BigDecimal.ZERO : yt.beginBalance);
+            vo.setYearDebitTotal(yt == null ? BigDecimal.ZERO : yt.debitTotal);
+            vo.setYearCreditTotal(yt == null ? BigDecimal.ZERO : yt.creditTotal);
+            rows.add(vo);
         }
         return rows;
     }
 
     @Override
-    public List<Map<String, Object>> generalLedger(Long subjectId, String period) {
+    public List<LedgerRowVO> generalLedger(Long subjectId, String period) {
         return generalLedger(subjectId, period, false);
     }
 
     @Override
-    public List<Map<String, Object>> generalLedger(Long subjectId, String period, boolean includeUnposted) {
+    public List<LedgerRowVO> generalLedger(Long subjectId, String period, boolean includeUnposted) {
         Subject subject = subjectService.getById(subjectId);
         if (subject == null) {
             return new ArrayList<>();
@@ -138,15 +139,15 @@ public class LedgerServiceImpl implements LedgerService {
         List<LedgerEntryRowDTO> entries =
                 voucherEntryMapper.selectSubsidiaryRows(subjectId, period, null, null, includeUnposted);
 
-        List<Map<String, Object>> rows = new ArrayList<>();
+        List<LedgerRowVO> rows = new ArrayList<>();
 
-        Map<String, Object> opening = new HashMap<>();
-        opening.put("type", "OPENING");
-        opening.put("summary", "期初余额");
-        opening.put("debit", BigDecimal.ZERO);
-        opening.put("credit", BigDecimal.ZERO);
+        LedgerRowVO opening = new LedgerRowVO();
+        opening.setType("OPENING");
+        opening.setSummary("期初余额");
+        opening.setDebit(BigDecimal.ZERO);
+        opening.setCredit(BigDecimal.ZERO);
         BigDecimal running = balance == null ? BigDecimal.ZERO : balance.getBeginBalance();
-        opening.put("running", running);
+        opening.setRunning(running);
         rows.add(opening);
 
         for (LedgerEntryRowDTO e : entries) {
@@ -157,32 +158,32 @@ public class LedgerServiceImpl implements LedgerService {
             } else {
                 running = running.add(c).subtract(d);
             }
-            Map<String, Object> row = new HashMap<>();
-            row.put("type", "ENTRY");
-            row.put("voucherId", e.getVoucherId());
-            row.put("voucherNo", e.getVoucherNo());
-            row.put("voucherDate", e.getVoucherDate());
-            row.put("summary", e.getSummary());
-            row.put("debit", d);
-            row.put("credit", c);
-            row.put("running", running);
+            LedgerRowVO row = new LedgerRowVO();
+            row.setType("ENTRY");
+            row.setVoucherId(e.getVoucherId());
+            row.setVoucherNo(e.getVoucherNo());
+            row.setVoucherDate(e.getVoucherDate());
+            row.setSummary(e.getSummary());
+            row.setDebit(d);
+            row.setCredit(c);
+            row.setRunning(running);
             rows.add(row);
         }
 
-        Map<String, Object> closing = new HashMap<>();
-        closing.put("type", "CLOSING");
-        closing.put("summary", "本期合计");
+        LedgerRowVO closing = new LedgerRowVO();
+        closing.setType("CLOSING");
+        closing.setSummary("本期合计");
         BigDecimal totalD = BigDecimal.ZERO;
         BigDecimal totalC = BigDecimal.ZERO;
-        for (Map<String, Object> r : rows) {
-            if ("ENTRY".equals(r.get("type"))) {
-                totalD = totalD.add((BigDecimal) r.get("debit"));
-                totalC = totalC.add((BigDecimal) r.get("credit"));
+        for (LedgerRowVO r : rows) {
+            if ("ENTRY".equals(r.getType())) {
+                totalD = totalD.add(r.getDebit());
+                totalC = totalC.add(r.getCredit());
             }
         }
-        closing.put("debit", totalD);
-        closing.put("credit", totalC);
-        closing.put("running", running);
+        closing.setDebit(totalD);
+        closing.setCredit(totalC);
+        closing.setRunning(running);
         rows.add(closing);
 
         // 本年累计行（T4）：CLOSING 之后追加 YEAR_TOTAL
@@ -190,12 +191,12 @@ public class LedgerServiceImpl implements LedgerService {
         BigDecimal ytBegin = yt == null ? BigDecimal.ZERO : yt.beginBalance;
         BigDecimal ytDebit = yt == null ? BigDecimal.ZERO : yt.debitTotal;
         BigDecimal ytCredit = yt == null ? BigDecimal.ZERO : yt.creditTotal;
-        Map<String, Object> yearTotal = new HashMap<>();
-        yearTotal.put("type", "YEAR_TOTAL");
-        yearTotal.put("summary", "本年累计");
-        yearTotal.put("debit", ytDebit);
-        yearTotal.put("credit", ytCredit);
-        yearTotal.put("running", isDebit ? ytBegin.add(ytDebit).subtract(ytCredit) : ytBegin.add(ytCredit).subtract(ytDebit));
+        LedgerRowVO yearTotal = new LedgerRowVO();
+        yearTotal.setType("YEAR_TOTAL");
+        yearTotal.setSummary("本年累计");
+        yearTotal.setDebit(ytDebit);
+        yearTotal.setCredit(ytCredit);
+        yearTotal.setRunning(isDebit ? ytBegin.add(ytDebit).subtract(ytCredit) : ytBegin.add(ytCredit).subtract(ytDebit));
         rows.add(yearTotal);
 
         return rows;
@@ -239,15 +240,15 @@ public class LedgerServiceImpl implements LedgerService {
     }
 
     @Override
-    public List<Map<String, Object>> subsidiaryLedger(Long subjectId, String period,
-                                                      LocalDate startDate, LocalDate endDate) {
+    public List<LedgerRowVO> subsidiaryLedger(Long subjectId, String period,
+                                              LocalDate startDate, LocalDate endDate) {
         return subsidiaryLedger(subjectId, period, startDate, endDate, false);
     }
 
     @Override
-    public List<Map<String, Object>> subsidiaryLedger(Long subjectId, String period,
-                                                      LocalDate startDate, LocalDate endDate,
-                                                      boolean includeUnposted) {
+    public List<LedgerRowVO> subsidiaryLedger(Long subjectId, String period,
+                                              LocalDate startDate, LocalDate endDate,
+                                              boolean includeUnposted) {
         Subject subject = subjectService.getById(subjectId);
         if (subject == null) {
             return new ArrayList<>();
@@ -264,14 +265,14 @@ public class LedgerServiceImpl implements LedgerService {
         boolean isDebit = "debit".equals(subject.getDirection());
         BigDecimal running = balance == null ? BigDecimal.ZERO : balance.getBeginBalance();
 
-        List<Map<String, Object>> rows = new ArrayList<>();
+        List<LedgerRowVO> rows = new ArrayList<>();
 
-        Map<String, Object> opening = new HashMap<>();
-        opening.put("type", "OPENING");
-        opening.put("summary", "期初余额");
-        opening.put("debit", BigDecimal.ZERO);
-        opening.put("credit", BigDecimal.ZERO);
-        opening.put("running", running);
+        LedgerRowVO opening = new LedgerRowVO();
+        opening.setType("OPENING");
+        opening.setSummary("期初余额");
+        opening.setDebit(BigDecimal.ZERO);
+        opening.setCredit(BigDecimal.ZERO);
+        opening.setRunning(running);
         rows.add(opening);
 
         for (LedgerEntryRowDTO e : entries) {
@@ -282,18 +283,18 @@ public class LedgerServiceImpl implements LedgerService {
             } else {
                 running = running.add(c).subtract(d);
             }
-            Map<String, Object> row = new HashMap<>();
-            row.put("type", "ENTRY");
-            row.put("voucherId", e.getVoucherId());
-            row.put("voucherNo", e.getVoucherNo());
-            row.put("voucherDate", e.getVoucherDate());
-            row.put("subjectId", subjectId);
-            row.put("subjectCode", subject.getCode());
-            row.put("subjectName", subject.getName());
-            row.put("summary", e.getSummary());
-            row.put("debit", d);
-            row.put("credit", c);
-            row.put("running", running);
+            LedgerRowVO row = new LedgerRowVO();
+            row.setType("ENTRY");
+            row.setVoucherId(e.getVoucherId());
+            row.setVoucherNo(e.getVoucherNo());
+            row.setVoucherDate(e.getVoucherDate());
+            row.setSubjectId(subjectId);
+            row.setSubjectCode(subject.getCode());
+            row.setSubjectName(subject.getName());
+            row.setSummary(e.getSummary());
+            row.setDebit(d);
+            row.setCredit(c);
+            row.setRunning(running);
             rows.add(row);
         }
         return rows;
