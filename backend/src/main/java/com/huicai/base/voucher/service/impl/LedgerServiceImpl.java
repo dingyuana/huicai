@@ -3,6 +3,7 @@ package com.huicai.base.voucher.service.impl;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.huicai.base.balance.entity.SubjectBalanceEntity;
 import com.huicai.base.voucher.dto.AuxiliarySummaryRow;
+import com.huicai.base.voucher.dto.LedgerEntryRowDTO;
 import com.huicai.base.voucher.dto.vo.AuxiliaryLedgerRowVO;
 import com.huicai.base.voucher.entity.VoucherEntryEntity;
 import com.huicai.base.balance.mapper.SubjectBalanceMapper;
@@ -146,24 +147,59 @@ public class LedgerServiceImpl implements LedgerService {
     @Override
     public List<Map<String, Object>> subsidiaryLedger(Long subjectId, String period,
                                                       LocalDate startDate, LocalDate endDate) {
+        return subsidiaryLedger(subjectId, period, startDate, endDate, false);
+    }
+
+    @Override
+    public List<Map<String, Object>> subsidiaryLedger(Long subjectId, String period,
+                                                      LocalDate startDate, LocalDate endDate,
+                                                      boolean includeUnposted) {
         Subject subject = subjectService.getById(subjectId);
         if (subject == null) {
             return new ArrayList<>();
         }
 
-        List<VoucherEntryEntity> entries = voucherEntryMapper.selectSubsidiaryByDates(subjectId, period, startDate, endDate);
+        SubjectBalanceEntity balance = subjectBalanceMapper.selectOne(
+                new LambdaQueryWrapper<SubjectBalanceEntity>()
+                        .eq(SubjectBalanceEntity::getSubjectId, subjectId)
+                        .eq(SubjectBalanceEntity::getPeriod, period));
+
+        List<LedgerEntryRowDTO> entries =
+                voucherEntryMapper.selectSubsidiaryRows(subjectId, period, startDate, endDate, includeUnposted);
+
+        boolean isDebit = "debit".equals(subject.getDirection());
+        BigDecimal running = balance == null ? BigDecimal.ZERO : balance.getBeginBalance();
 
         List<Map<String, Object>> rows = new ArrayList<>();
-        for (VoucherEntryEntity e : entries) {
+
+        Map<String, Object> opening = new HashMap<>();
+        opening.put("type", "OPENING");
+        opening.put("summary", "期初余额");
+        opening.put("debit", BigDecimal.ZERO);
+        opening.put("credit", BigDecimal.ZERO);
+        opening.put("running", running);
+        rows.add(opening);
+
+        for (LedgerEntryRowDTO e : entries) {
+            BigDecimal d = e.getDebit() == null ? BigDecimal.ZERO : e.getDebit();
+            BigDecimal c = e.getCredit() == null ? BigDecimal.ZERO : e.getCredit();
+            if (isDebit) {
+                running = running.add(d).subtract(c);
+            } else {
+                running = running.add(c).subtract(d);
+            }
             Map<String, Object> row = new HashMap<>();
+            row.put("type", "ENTRY");
             row.put("voucherId", e.getVoucherId());
-            row.put("subjectId", e.getSubjectId());
+            row.put("voucherNo", e.getVoucherNo());
+            row.put("voucherDate", e.getVoucherDate());
+            row.put("subjectId", subjectId);
             row.put("subjectCode", subject.getCode());
             row.put("subjectName", subject.getName());
             row.put("summary", e.getSummary());
-            row.put("debit", e.getDebit());
-            row.put("credit", e.getCredit());
-            row.put("assistJson", e.getAssistJson());
+            row.put("debit", d);
+            row.put("credit", c);
+            row.put("running", running);
             rows.add(row);
         }
         return rows;

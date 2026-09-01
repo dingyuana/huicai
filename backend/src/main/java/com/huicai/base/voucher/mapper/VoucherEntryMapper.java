@@ -2,6 +2,7 @@ package com.huicai.base.voucher.mapper;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.huicai.base.voucher.dto.AuxiliarySummaryRow;
+import com.huicai.base.voucher.dto.LedgerEntryRowDTO;
 import com.huicai.base.voucher.entity.VoucherEntryEntity;
 import org.apache.ibatis.annotations.Delete;
 import org.apache.ibatis.annotations.Mapper;
@@ -36,6 +37,17 @@ public interface VoucherEntryMapper extends BaseMapper<VoucherEntryEntity> {
             @Param("period") String period,
             @Param("startDate") java.time.LocalDate startDate,
             @Param("endDate") java.time.LocalDate endDate);
+
+    /**
+     * 明细账行投影：JOIN t_voucher 取凭证号/凭证日期，供明细账余额列展示。
+     * includeUnposted=false（默认）只含 POSTED 凭证；true 含全部状态（T8）。
+     */
+    List<LedgerEntryRowDTO> selectSubsidiaryRows(
+            @Param("subjectId") Long subjectId,
+            @Param("period") String period,
+            @Param("startDate") java.time.LocalDate startDate,
+            @Param("endDate") java.time.LocalDate endDate,
+            @Param("includeUnposted") boolean includeUnposted);
 
     /**
      * 辅助核算账 - 本期按核算维度聚合（assist_json ->> dimensionField 分组 SUM 借贷）

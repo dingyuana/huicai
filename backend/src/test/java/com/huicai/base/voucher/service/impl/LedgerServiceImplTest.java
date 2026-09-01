@@ -10,6 +10,7 @@ import com.huicai.base.system.entity.Subject;
 import com.huicai.base.system.mapper.DeptMapper;
 import com.huicai.base.system.service.SubjectService;
 import com.huicai.base.voucher.dto.AuxiliarySummaryRow;
+import com.huicai.base.voucher.dto.LedgerEntryRowDTO;
 import com.huicai.base.voucher.dto.vo.AuxiliaryLedgerRowVO;
 import com.huicai.base.voucher.entity.VoucherEntryEntity;
 import com.huicai.base.voucher.mapper.VoucherEntryMapper;
@@ -375,8 +376,8 @@ class LedgerServiceImplTest {
     // ─── subsidiaryLedger ──────────────────────────────────────────────────
 
     @Test
-    @DisplayName("明细账 - 返回科目明细账")
-    void subsidiaryLedger_shouldReturnEntries() {
+    @DisplayName("明细账 - 返回期初行+分录行(滚动余额)")
+    void subsidiaryLedger_shouldReturnOpeningAndEntries() {
         // Arrange
         Long subjectId = 1L;
 
@@ -388,49 +389,104 @@ class LedgerServiceImplTest {
         subject.setIsLeaf(true);
         when(subjectService.getById(subjectId)).thenReturn(subject);
 
-        VoucherEntryEntity entry1 = new VoucherEntryEntity();
+        SubjectBalanceEntity balance = new SubjectBalanceEntity();
+        balance.setSubjectId(subjectId);
+        balance.setPeriod("202607");
+        balance.setBeginBalance(new BigDecimal("1000.00"));
+        when(subjectBalanceMapper.selectOne(any())).thenReturn(balance);
+
+        LedgerEntryRowDTO entry1 = new LedgerEntryRowDTO();
         entry1.setVoucherId(10L);
+        entry1.setVoucherNo("V-202607-0001");
+        entry1.setVoucherDate(java.time.LocalDate.of(2026, 7, 1));
         entry1.setSubjectId(subjectId);
+        entry1.setSummary("销售收入");
         entry1.setDebit(new BigDecimal("500.00"));
         entry1.setCredit(BigDecimal.ZERO);
-        entry1.setSummary("销售收入");
-        entry1.setAssistJson("{}");
 
-        VoucherEntryEntity entry2 = new VoucherEntryEntity();
+        LedgerEntryRowDTO entry2 = new LedgerEntryRowDTO();
         entry2.setVoucherId(20L);
+        entry2.setVoucherNo("V-202607-0002");
+        entry2.setVoucherDate(java.time.LocalDate.of(2026, 7, 10));
         entry2.setSubjectId(subjectId);
+        entry2.setSummary("银行取现");
         entry2.setDebit(BigDecimal.ZERO);
         entry2.setCredit(new BigDecimal("200.00"));
-        entry2.setSummary("银行取现");
-        entry2.setAssistJson("{\"dept\":\"财务部\"}");
 
-        when(voucherEntryMapper.selectSubsidiaryByDates(subjectId, "202607", null, null)).thenReturn(List.of(entry1, entry2));
+        when(voucherEntryMapper.selectSubsidiaryRows(subjectId, "202607", null, null, false))
+                .thenReturn(List.of(entry1, entry2));
 
         // Act
         List<Map<String, Object>> result = ledgerService.subsidiaryLedger(subjectId, "202607", null, null);
 
-        // Assert
-        assertEquals(2, result.size());
+        // Assert: 期初行 + 2 分录行
+        assertEquals(3, result.size());
 
-        Map<String, Object> row1 = result.get(0);
+        // 期初行
+        Map<String, Object> opening = result.get(0);
+        assertEquals("OPENING", opening.get("type"));
+        assertEquals("期初余额", opening.get("summary"));
+        assertEquals(new BigDecimal("1000.00"), opening.get("running"));
+        assertEquals(BigDecimal.ZERO, opening.get("debit"));
+        assertEquals(BigDecimal.ZERO, opening.get("credit"));
+
+        // 分录1: running = 1000 + 500 - 0 = 1500
+        Map<String, Object> row1 = result.get(1);
+        assertEquals("ENTRY", row1.get("type"));
         assertEquals(10L, row1.get("voucherId"));
+        assertEquals("V-202607-0001", row1.get("voucherNo"));
+        assertEquals(java.time.LocalDate.of(2026, 7, 1), row1.get("voucherDate"));
         assertEquals(subjectId, row1.get("subjectId"));
         assertEquals("1001", row1.get("subjectCode"));
         assertEquals("库存现金", row1.get("subjectName"));
         assertEquals("销售收入", row1.get("summary"));
         assertEquals(new BigDecimal("500.00"), row1.get("debit"));
         assertEquals(BigDecimal.ZERO, row1.get("credit"));
-        assertEquals("{}", row1.get("assistJson"));
+        assertEquals(new BigDecimal("1500.00"), row1.get("running"));
 
-        Map<String, Object> row2 = result.get(1);
+        // 分录2: running = 1500 + 0 - 200 = 1300
+        Map<String, Object> row2 = result.get(2);
+        assertEquals("ENTRY", row2.get("type"));
         assertEquals(20L, row2.get("voucherId"));
+        assertEquals("V-202607-0002", row2.get("voucherNo"));
         assertEquals("银行取现", row2.get("summary"));
         assertEquals(BigDecimal.ZERO, row2.get("debit"));
         assertEquals(new BigDecimal("200.00"), row2.get("credit"));
-        assertEquals("{\"dept\":\"财务部\"}", row2.get("assistJson"));
+        assertEquals(new BigDecimal("1300.00"), row2.get("running"));
 
         verify(subjectService).getById(subjectId);
-        verify(voucherEntryMapper).selectSubsidiaryByDates(subjectId, "202607", null, null);
+        verify(subjectBalanceMapper).selectOne(any());
+        verify(voucherEntryMapper).selectSubsidiaryRows(subjectId, "202607", null, null, false);
+    }
+
+    @Test
+    @DisplayName("明细账 - 无余额快照时期初行按0处理")
+    void subsidiaryLedger_zeroOpeningWhenNoBalanceSnapshot() {
+        Long subjectId = 1L;
+        Subject subject = new Subject();
+        subject.setId(subjectId);
+        subject.setCode("1001");
+        subject.setName("库存现金");
+        subject.setDirection("debit");
+        subject.setIsLeaf(true);
+        when(subjectService.getById(subjectId)).thenReturn(subject);
+        when(subjectBalanceMapper.selectOne(any())).thenReturn(null);
+
+        LedgerEntryRowDTO entry = new LedgerEntryRowDTO();
+        entry.setVoucherId(10L);
+        entry.setVoucherNo("V-202607-0001");
+        entry.setSubjectId(subjectId);
+        entry.setSummary("销售收入");
+        entry.setDebit(new BigDecimal("500.00"));
+        entry.setCredit(BigDecimal.ZERO);
+        when(voucherEntryMapper.selectSubsidiaryRows(subjectId, "202607", null, null, false))
+                .thenReturn(List.of(entry));
+
+        List<Map<String, Object>> result = ledgerService.subsidiaryLedger(subjectId, "202607", null, null);
+
+        assertEquals(2, result.size(), "期初行 + 1 分录行");
+        assertEquals(0, BigDecimal.ZERO.compareTo((BigDecimal) result.get(0).get("running")), "无快照期初=0");
+        assertEquals(0, new BigDecimal("500.00").compareTo((BigDecimal) result.get(1).get("running")), "滚动余额=0+500");
     }
 
     @Test
@@ -444,15 +500,38 @@ class LedgerServiceImplTest {
         subject.setDirection("debit");
         subject.setIsLeaf(true);
         when(subjectService.getById(subjectId)).thenReturn(subject);
-        when(voucherEntryMapper.selectSubsidiaryByDates(subjectId, "202607", java.time.LocalDate.of(2026, 7, 1), java.time.LocalDate.of(2026, 7, 15)))
+        when(subjectBalanceMapper.selectOne(any())).thenReturn(null);
+        when(voucherEntryMapper.selectSubsidiaryRows(subjectId, "202607",
+                java.time.LocalDate.of(2026, 7, 1), java.time.LocalDate.of(2026, 7, 15), false))
                 .thenReturn(List.of());
 
         List<Map<String, Object>> result = ledgerService.subsidiaryLedger(subjectId, "202607",
                 java.time.LocalDate.of(2026, 7, 1), java.time.LocalDate.of(2026, 7, 15));
 
-        assertTrue(result.isEmpty());
-        verify(voucherEntryMapper).selectSubsidiaryByDates(subjectId, "202607",
-                java.time.LocalDate.of(2026, 7, 1), java.time.LocalDate.of(2026, 7, 15));
+        assertEquals(1, result.size(), "无分录时仅期初行");
+        assertEquals("OPENING", result.get(0).get("type"));
+        verify(voucherEntryMapper).selectSubsidiaryRows(subjectId, "202607",
+                java.time.LocalDate.of(2026, 7, 1), java.time.LocalDate.of(2026, 7, 15), false);
+    }
+
+    @Test
+    @DisplayName("明细账 - includeUnposted=true 透传给 Mapper")
+    void subsidiaryLedger_passesIncludeUnpostedToMapper() {
+        Long subjectId = 1L;
+        Subject subject = new Subject();
+        subject.setId(subjectId);
+        subject.setCode("1001");
+        subject.setName("库存现金");
+        subject.setDirection("debit");
+        subject.setIsLeaf(true);
+        when(subjectService.getById(subjectId)).thenReturn(subject);
+        when(subjectBalanceMapper.selectOne(any())).thenReturn(null);
+        when(voucherEntryMapper.selectSubsidiaryRows(subjectId, "202607", null, null, true))
+                .thenReturn(List.of());
+
+        ledgerService.subsidiaryLedger(subjectId, "202607", null, null, true);
+
+        verify(voucherEntryMapper).selectSubsidiaryRows(subjectId, "202607", null, null, true);
     }
 
     @Test

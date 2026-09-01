@@ -3,6 +3,7 @@ package com.huicai.base.voucher.mapper;
 import com.huicai.base.system.entity.Subject;
 import com.huicai.base.system.mapper.SubjectMapper;
 import com.huicai.base.voucher.dto.AuxiliarySummaryRow;
+import com.huicai.base.voucher.dto.LedgerEntryRowDTO;
 import com.huicai.base.voucher.entity.VoucherEntity;
 import com.huicai.base.voucher.entity.VoucherEntryEntity;
 import com.huicai.common.test.AbstractMapperTest;
@@ -164,6 +165,40 @@ class VoucherEntryMapperRealDBTest extends AbstractMapperTest {
         update.setCreatedAt(date.atStartOfDay());
         voucherMapper.updateById(update);
         return v;
+    }
+
+    private VoucherEntity insertVoucherWithStatus(String period, String status) {
+        VoucherEntity v = insertVoucher(period);
+        VoucherEntity update = new VoucherEntity();
+        update.setId(v.getId());
+        update.setStatus(status);
+        voucherMapper.updateById(update);
+        return v;
+    }
+
+    @Test
+    void selectSubsidiaryRows_返回投影含voucherNo默认只含POSTED() {
+        Long subjectId = insertSubject(5);
+        String period = "202608";
+
+        VoucherEntity posted = insertVoucherWithStatus(period, "POSTED");
+        insertEntry(posted.getId(), subjectId, "500", null);
+        VoucherEntity draft = insertVoucherWithStatus(period, "DRAFT");
+        insertEntry(draft.getId(), subjectId, "800", null);
+
+        List<LedgerEntryRowDTO> defaultRows =
+                voucherEntryMapper.selectSubsidiaryRows(subjectId, period, null, null, false);
+
+        assertEquals(1, defaultRows.size(), "默认只返回 POSTED 凭证分录 (T8)");
+        assertEquals(0, new BigDecimal("500.00").compareTo(defaultRows.get(0).getDebit()));
+        assertNotNull(defaultRows.get(0).getVoucherNo(), "投影应含 voucherNo");
+        assertNotNull(defaultRows.get(0).getVoucherDate(), "投影应含 voucherDate");
+        assertEquals(posted.getVoucherNo(), defaultRows.get(0).getVoucherNo(), "voucherNo 应与凭证一致");
+
+        List<LedgerEntryRowDTO> allRows =
+                voucherEntryMapper.selectSubsidiaryRows(subjectId, period, null, null, true);
+
+        assertEquals(2, allRows.size(), "includeUnposted=true 返回全部状态分录");
     }
 
     // ─── 辅助核算账聚合 ───────────────────────────────────────────────────

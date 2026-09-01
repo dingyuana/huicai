@@ -208,15 +208,24 @@ public class LedgerChainRealDBTest extends AbstractMapperTest {
     }
 
     @Test
-    @DisplayName("明细账：过账后返回对应科目分录")
+    @DisplayName("明细账：过账后返回期初行+分录行(滚动余额)")
     void subsidiaryLedger_shouldReturnPostedEntries() {
         createAndPost("链路凭证4", "800.00", "800.00");
 
         List<Map<String, Object>> rows = ledgerService.subsidiaryLedger(debitSubjectId, TEST_PERIOD, null, null);
 
-        assertEquals(1, rows.size(), "应返回1条过账分录");
-        assertEquals(debitSubjectId, rows.get(0).get("subjectId"));
-        assertEquals(0, new BigDecimal("800.00").compareTo((BigDecimal) rows.get(0).get("debit")));
-        assertEquals("借：链路凭证4", rows.get(0).get("summary"), "分录摘要为创建时的分录摘要");
+        assertEquals(2, rows.size(), "应为 期初行 + 1条过账分录");
+        // 期初行：该期间零期初建账 → begin_balance=0
+        assertEquals("OPENING", rows.get(0).get("type"));
+        assertEquals(0, BigDecimal.ZERO.compareTo((BigDecimal) rows.get(0).get("running")), "期初余额=0");
+
+        // 分录行：滚动余额 = 0 + 800 = 800（借方科目）
+        assertEquals("ENTRY", rows.get(1).get("type"));
+        assertEquals(debitSubjectId, rows.get(1).get("subjectId"));
+        assertEquals(0, new BigDecimal("800.00").compareTo((BigDecimal) rows.get(1).get("debit")));
+        assertEquals(0, new BigDecimal("800.00").compareTo((BigDecimal) rows.get(1).get("running")), "滚动余额=800");
+        assertEquals("借：链路凭证4", rows.get(1).get("summary"), "分录摘要为创建时的分录摘要");
+        assertNotNull(rows.get(1).get("voucherNo"), "分录行应携带凭证号");
+        assertNotNull(rows.get(1).get("voucherDate"), "分录行应携带凭证日期");
     }
 }
