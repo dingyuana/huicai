@@ -2,8 +2,8 @@
 
 > **编号**：HUICAI-SPC-063
 > **test_ref**：LedgerServiceImplTest / LedgerControllerTest / VoucherEntryMapperRealDBTest / LedgerChainRealDBTest / SubjectBalanceServiceImplTest
-> **版本**：V1.0 | **日期**：2026-09-01
-> **状态**：📝 草案（2026-09-01 老丁已确认三决策点）
+> **版本**：V1.1 | **日期**：2026-09-01
+> **状态**：✅ 已实现（2026-09-01 验证：T4-T8 全部完成，5 个验收场景全过）
 > **关联需求**：REQ-2026-079（账簿查询增强）
 > **关联 PRD**：[总账结账-PRD-V1.0](../prd/总账结账-PRD-V1.0.md)（B-009/B-010/B-012）
 > **评估依据**：[账簿查询功能评估报告](../development/audit/2026-08-31-账簿查询功能评估报告.md)（缺陷 D3 本年累计、D5 过滤维度、D6 联查穿透、D7 余额列，§5.2 未过账策略）
@@ -178,6 +178,7 @@
 
 ## 版本历史
 
+- V1.1 (2026-09-01): 实现完成，T4-T8 全部落地，5 个验收场景 + RealDB 单测全过
 - V1.0 (2026-09-01): 初始版本，覆盖 T4-T8；三决策点已确认
 
 <!-- === MACHINE-READABLE CONTRACT ===
@@ -204,10 +205,15 @@ constraints:
     rule: "frontend changes out of scope (D-C); backend adds fields only"
 acceptance_tests:
   - id: AT-001 (T7): subsidiary rows include OPENING row + running balance + voucherNo/Date
+    status: implemented
   - id: AT-002 (T4): subject-statement & general rows include yearBeginBalance + year totals
+    status: implemented
   - id: AT-003 (T6): general/subsidiary ENTRY rows include voucherNo + voucherDate
+    status: implemented
   - id: AT-004 (T5): subject-statement filters includeZero/includeNoMovement/subjectCodePrefix
+    status: implemented
   - id: AT-005 (T8): default POSTED-only; includeUnposted=true includes all
+    status: implemented
 out_of_scope:
   - "前端 LedgerView 联动（D-C）"
   - "T9 N+1 / T10 VO 化（P2）"
