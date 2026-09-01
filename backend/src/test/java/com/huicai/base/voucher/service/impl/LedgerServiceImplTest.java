@@ -2,10 +2,18 @@ package com.huicai.base.voucher.service.impl;
 
 import com.huicai.base.balance.entity.SubjectBalanceEntity;
 import com.huicai.base.balance.mapper.SubjectBalanceMapper;
+import com.huicai.base.masterdata.entity.CustomerEntity;
+import com.huicai.base.masterdata.mapper.CustomerMapper;
+import com.huicai.base.masterdata.mapper.EmployeeMapper;
+import com.huicai.base.masterdata.mapper.VendorMapper;
 import com.huicai.base.system.entity.Subject;
+import com.huicai.base.system.mapper.DeptMapper;
 import com.huicai.base.system.service.SubjectService;
+import com.huicai.base.voucher.dto.AuxiliarySummaryRow;
+import com.huicai.base.voucher.dto.vo.AuxiliaryLedgerRowVO;
 import com.huicai.base.voucher.entity.VoucherEntryEntity;
 import com.huicai.base.voucher.mapper.VoucherEntryMapper;
+import com.huicai.common.exception.BusinessException;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -34,6 +42,18 @@ class LedgerServiceImplTest {
 
     @Mock
     private SubjectService subjectService;
+
+    @Mock
+    private CustomerMapper customerMapper;
+
+    @Mock
+    private VendorMapper vendorMapper;
+
+    @Mock
+    private DeptMapper deptMapper;
+
+    @Mock
+    private EmployeeMapper employeeMapper;
 
     @InjectMocks
     private LedgerServiceImpl ledgerService;
@@ -303,6 +323,55 @@ class LedgerServiceImplTest {
         verifyNoInteractions(subjectBalanceMapper, voucherEntryMapper);
     }
 
+    @Test
+    @DisplayName("总分类账 - 无余额快照(期初为null)时期初余额按0处理")
+    void generalLedger_shouldTreatNullBalanceAsZeroOpening() {
+        // Arrange
+        Long subjectId = 1L;
+        String period = "202607";
+
+        Subject subject = new Subject();
+        subject.setId(subjectId);
+        subject.setCode("1001");
+        subject.setName("库存现金");
+        subject.setDirection("debit");
+        subject.setIsLeaf(true);
+        when(subjectService.getById(subjectId)).thenReturn(subject);
+
+        // 该期间无余额快照行 → selectOne 返回 null（正常业务：余额快照只在过账时写入）
+        when(subjectBalanceMapper.selectOne(any())).thenReturn(null);
+
+        VoucherEntryEntity entry = new VoucherEntryEntity();
+        entry.setVoucherId(10L);
+        entry.setSubjectId(subjectId);
+        entry.setDebit(new BigDecimal("500.00"));
+        entry.setCredit(BigDecimal.ZERO);
+        entry.setSummary("销售收入");
+        when(voucherEntryMapper.selectBySubjectIdAndPeriod(subjectId, period)).thenReturn(List.of(entry));
+
+        // Act
+        List<Map<String, Object>> result = ledgerService.generalLedger(subjectId, period);
+
+        // Assert
+        assertEquals(3, result.size(), "应为 期初 + 1笔分录 + 本期合计");
+
+        // 期初行 running = 0（余额快照不存在）
+        assertEquals(BigDecimal.ZERO, result.get(0).get("running"));
+
+        // 分录行 running = 0 + 500 - 0 = 500
+        assertEquals(new BigDecimal("500.00"), result.get(1).get("running"));
+
+        // 本期合计
+        Map<String, Object> closing = result.get(2);
+        assertEquals("CLOSING", closing.get("type"));
+        assertEquals(new BigDecimal("500.00"), closing.get("debit"));
+        assertEquals(BigDecimal.ZERO, closing.get("credit"));
+        assertEquals(new BigDecimal("500.00"), closing.get("running"));
+
+        verify(subjectBalanceMapper).selectOne(any());
+        verify(voucherEntryMapper).selectBySubjectIdAndPeriod(subjectId, period);
+    }
+
     // ─── subsidiaryLedger ──────────────────────────────────────────────────
 
     @Test
@@ -377,5 +446,153 @@ class LedgerServiceImplTest {
         assertTrue(result.isEmpty());
         verify(subjectService).getById(999L);
         verifyNoInteractions(voucherEntryMapper);
+    }
+
+    // ─── auxiliaryLedger（辅助核算账）─────────────────────────────────────
+
+    private Subject newDebitLeafSubject(Long id) {
+        Subject subject = new Subject();
+        subject.setId(id);
+        subject.setCode("1122");
+        subject.setName("应收账款");
+        subject.setDirection("debit");
+        subject.setIsLeaf(true);
+        return subject;
+    }
+
+    @Test
+    @DisplayName("辅助核算账 - 按客户维度+指定客户查询，维度过滤生效")
+    void auxiliaryLedger_byCustomer_dimensionFiltered() {
+        // Given: customer 维度，指定 customerId=1001
+        AuxiliarySummaryRow movement = new AuxiliarySummaryRow();
+        movement.setSubjectId(1L);
+        movement.setDimensionValue("1001");
+        movement.setDebitTotal(new BigDecimal("700.00"));
+        movement.setCreditTotal(BigDecimal.ZERO);
+
+        when(voucherEntryMapper.selectAuxiliaryMovement("customerId", 1001L, "202608"))
+                .thenReturn(List.of(movement));
+        when(voucherEntryMapper.selectAuxiliaryOpening("customerId", 1001L, "202608"))
+                .thenReturn(List.of());
+        when(subjectService.listByIds(any())).thenReturn(List.of(newDebitLeafSubject(1L)));
+        when(customerMapper.selectBatchIds(any())).thenReturn(List.of(customerOf(1001L, "北京华信")));
+
+        // When
+        List<AuxiliaryLedgerRowVO> result = ledgerService.auxiliaryLedger("customer", "202608", 1001L);
+
+        // Then
+        assertEquals(1, result.size());
+        AuxiliaryLedgerRowVO row = result.get(0);
+        assertEquals(1L, row.getSubjectId());
+        assertEquals("customer", row.getDimensionType());
+        assertEquals(1001L, row.getDimensionValue());
+        assertEquals("北京华信", row.getDimensionName());
+        assertEquals(0, new BigDecimal("700.00").compareTo(row.getDebitTotal()));
+        assertEquals("debit", row.getDirection());
+        // And: 该客户无期初 → begin=0, end=700
+        assertEquals(0, BigDecimal.ZERO.compareTo(row.getBeginBalance()));
+        assertEquals(0, new BigDecimal("700.00").compareTo(row.getEndBalance()));
+
+        verify(voucherEntryMapper).selectAuxiliaryMovement("customerId", 1001L, "202608");
+        verify(voucherEntryMapper).selectAuxiliaryOpening("customerId", 1001L, "202608");
+    }
+
+    private CustomerEntity customerOf(Long id, String name) {
+        CustomerEntity c = new CustomerEntity();
+        c.setId(id);
+        c.setName(name);
+        return c;
+    }
+
+    @Test
+    @DisplayName("辅助核算账 - 维度无数据返回空列表")
+    void auxiliaryLedger_noData_returnsEmpty() {
+        when(voucherEntryMapper.selectAuxiliaryMovement("customerId", 9999L, "202608"))
+                .thenReturn(List.of());
+        when(voucherEntryMapper.selectAuxiliaryOpening("customerId", 9999L, "202608"))
+                .thenReturn(List.of());
+
+        List<AuxiliaryLedgerRowVO> result = ledgerService.auxiliaryLedger("customer", "202608", 9999L);
+
+        assertTrue(result.isEmpty());
+        verifyNoInteractions(subjectService, customerMapper);
+    }
+
+    @Test
+    @DisplayName("辅助核算账 - dimensionValue为空按维度值分组")
+    void auxiliaryLedger_groupByDimensionValue() {
+        AuxiliarySummaryRow r1 = new AuxiliarySummaryRow();
+        r1.setSubjectId(1L);
+        r1.setDimensionValue("1001");
+        r1.setDebitTotal(new BigDecimal("500.00"));
+        r1.setCreditTotal(BigDecimal.ZERO);
+
+        AuxiliarySummaryRow r2 = new AuxiliarySummaryRow();
+        r2.setSubjectId(1L);
+        r2.setDimensionValue("2001");
+        r2.setDebitTotal(new BigDecimal("300.00"));
+        r2.setCreditTotal(BigDecimal.ZERO);
+
+        when(voucherEntryMapper.selectAuxiliaryMovement(eq("customerId"), isNull(), eq("202608")))
+                .thenReturn(List.of(r1, r2));
+        when(voucherEntryMapper.selectAuxiliaryOpening(eq("customerId"), isNull(), eq("202608")))
+                .thenReturn(List.of());
+        when(subjectService.listByIds(any())).thenReturn(List.of(newDebitLeafSubject(1L)));
+        when(customerMapper.selectBatchIds(any()))
+                .thenReturn(List.of(customerOf(1001L, "北京华信"), customerOf(2001L, "上海腾达")));
+
+        List<AuxiliaryLedgerRowVO> result = ledgerService.auxiliaryLedger("customer", "202608", null);
+
+        assertEquals(2, result.size());
+        AuxiliaryLedgerRowVO row1 = result.stream().filter(r -> r.getDimensionValue() == 1001L).findFirst().orElse(null);
+        AuxiliaryLedgerRowVO row2 = result.stream().filter(r -> r.getDimensionValue() == 2001L).findFirst().orElse(null);
+        assertNotNull(row1);
+        assertNotNull(row2);
+        assertEquals("北京华信", row1.getDimensionName());
+        assertEquals("上海腾达", row2.getDimensionName());
+        assertEquals(0, new BigDecimal("500.00").compareTo(row1.getDebitTotal()));
+        assertEquals(0, new BigDecimal("300.00").compareTo(row2.getDebitTotal()));
+    }
+
+    @Test
+    @DisplayName("辅助核算账 - 非法维度类型抛业务异常")
+    void auxiliaryLedger_invalidDimensionType_throws() {
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> ledgerService.auxiliaryLedger("unknown", "202608", null));
+        assertTrue(ex.getMessage().contains("不支持的辅助核算维度类型"));
+        verifyNoInteractions(voucherEntryMapper);
+    }
+
+    @Test
+    @DisplayName("辅助核算账 - 期初+发生=期末恒等式（debit科目）")
+    void auxiliaryLedger_balanceIdentity() {
+        // 历史期累计借方 300 → 期初推算 begin=300（debit 科目：opDebit - opCredit = 300）
+        AuxiliarySummaryRow opening = new AuxiliarySummaryRow();
+        opening.setSubjectId(1L);
+        opening.setDimensionValue("1001");
+        opening.setDebitTotal(new BigDecimal("300.00"));
+        opening.setCreditTotal(BigDecimal.ZERO);
+
+        AuxiliarySummaryRow movement = new AuxiliarySummaryRow();
+        movement.setSubjectId(1L);
+        movement.setDimensionValue("1001");
+        movement.setDebitTotal(new BigDecimal("700.00"));
+        movement.setCreditTotal(BigDecimal.ZERO);
+
+        when(voucherEntryMapper.selectAuxiliaryMovement("customerId", 1001L, "202608"))
+                .thenReturn(List.of(movement));
+        when(voucherEntryMapper.selectAuxiliaryOpening("customerId", 1001L, "202608"))
+                .thenReturn(List.of(opening));
+        when(subjectService.listByIds(any())).thenReturn(List.of(newDebitLeafSubject(1L)));
+        when(customerMapper.selectBatchIds(any())).thenReturn(List.of(customerOf(1001L, "北京华信")));
+
+        List<AuxiliaryLedgerRowVO> result = ledgerService.auxiliaryLedger("customer", "202608", 1001L);
+
+        assertEquals(1, result.size());
+        AuxiliaryLedgerRowVO row = result.get(0);
+        assertEquals(0, new BigDecimal("300.00").compareTo(row.getBeginBalance()));
+        assertEquals(0, new BigDecimal("700.00").compareTo(row.getDebitTotal()));
+        // end = 300 + 700 - 0 = 1000
+        assertEquals(0, new BigDecimal("1000.00").compareTo(row.getEndBalance()));
     }
 }

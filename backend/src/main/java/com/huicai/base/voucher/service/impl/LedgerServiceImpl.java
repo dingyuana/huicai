@@ -2,20 +2,34 @@ package com.huicai.base.voucher.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.huicai.base.balance.entity.SubjectBalanceEntity;
+import com.huicai.base.voucher.dto.AuxiliarySummaryRow;
+import com.huicai.base.voucher.dto.vo.AuxiliaryLedgerRowVO;
 import com.huicai.base.voucher.entity.VoucherEntryEntity;
 import com.huicai.base.balance.mapper.SubjectBalanceMapper;
 import com.huicai.base.voucher.mapper.VoucherEntryMapper;
 import com.huicai.base.voucher.service.LedgerService;
+import com.huicai.base.masterdata.entity.CustomerEntity;
+import com.huicai.base.masterdata.entity.VendorEntity;
+import com.huicai.base.masterdata.entity.EmployeeEntity;
+import com.huicai.base.masterdata.mapper.CustomerMapper;
+import com.huicai.base.masterdata.mapper.VendorMapper;
+import com.huicai.base.masterdata.mapper.EmployeeMapper;
+import com.huicai.base.system.entity.DeptEntity;
 import com.huicai.base.system.entity.Subject;
+import com.huicai.base.system.mapper.DeptMapper;
 import com.huicai.base.system.service.SubjectService;
+import com.huicai.common.exception.BusinessException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -24,6 +38,19 @@ public class LedgerServiceImpl implements LedgerService {
     private final SubjectBalanceMapper subjectBalanceMapper;
     private final VoucherEntryMapper voucherEntryMapper;
     private final SubjectService subjectService;
+    private final CustomerMapper customerMapper;
+    private final VendorMapper vendorMapper;
+    private final DeptMapper deptMapper;
+    private final EmployeeMapper employeeMapper;
+
+    /** 核算维度类型 → assist_json 字段键映射（与 VoucherServiceImpl.validateAssistJson 一致） */
+    private static final Map<String, String> DIMENSION_FIELDS = Map.of(
+            "customer", "customerId",
+            "vendor", "vendorId",
+            "department", "deptId",
+            "project", "projectId",
+            "employee", "employeeId"
+    );
 
     @Override
     public List<Map<String, Object>> subjectBalance(String period) {
@@ -138,5 +165,137 @@ public class LedgerServiceImpl implements LedgerService {
             rows.add(row);
         }
         return rows;
+    }
+
+    @Override
+    public List<AuxiliaryLedgerRowVO> auxiliaryLedger(String dimensionType, String period, Long dimensionValue) {
+        String dimensionField = DIMENSION_FIELDS.get(dimensionType);
+        if (dimensionField == null) {
+            throw BusinessException.badRequest("不支持的辅助核算维度类型: " + dimensionType);
+        }
+        if (period == null || period.length() != 6) {
+            throw BusinessException.badRequest("会计期间格式错误, 应为 YYYYMM");
+        }
+
+        List<AuxiliarySummaryRow> movement = voucherEntryMapper.selectAuxiliaryMovement(dimensionField, dimensionValue, period);
+        List<AuxiliarySummaryRow> opening = voucherEntryMapper.selectAuxiliaryOpening(dimensionField, dimensionValue, period);
+
+        // 期初聚合：按 subjectId + dimensionValue 建立索引，用于推算期初余额
+        Map<String, AuxiliarySummaryRow> openingIndex = opening.stream()
+                .collect(Collectors.toMap(
+                        r -> rowKey(r.getSubjectId(), r.getDimensionValue()),
+                        r -> r,
+                        (a, b) -> a));
+
+        Set<Long> subjectIds = movement.stream()
+                .map(AuxiliarySummaryRow::getSubjectId)
+                .collect(Collectors.toSet());
+        Map<Long, Subject> subjectMap = subjectIds.isEmpty() ? Map.of()
+                : subjectService.listByIds(subjectIds).stream()
+                        .collect(Collectors.toMap(Subject::getId, s -> s));
+
+        Map<String, String> dimensionNameMap = resolveDimensionNames(dimensionType, movement, opening);
+
+        List<AuxiliaryLedgerRowVO> rows = new ArrayList<>();
+        for (AuxiliarySummaryRow m : movement) {
+            Subject subject = subjectMap.get(m.getSubjectId());
+            if (subject == null || !Boolean.TRUE.equals(subject.getIsLeaf())) {
+                continue;
+            }
+            AuxiliarySummaryRow op = openingIndex.get(rowKey(m.getSubjectId(), m.getDimensionValue()));
+            boolean isDebit = "debit".equals(subject.getDirection());
+
+            BigDecimal begin = BigDecimal.ZERO;
+            if (op != null) {
+                BigDecimal opDebit = op.getDebitTotal() == null ? BigDecimal.ZERO : op.getDebitTotal();
+                BigDecimal opCredit = op.getCreditTotal() == null ? BigDecimal.ZERO : op.getCreditTotal();
+                begin = isDebit ? opDebit.subtract(opCredit) : opCredit.subtract(opDebit);
+            }
+
+            BigDecimal d = m.getDebitTotal() == null ? BigDecimal.ZERO : m.getDebitTotal();
+            BigDecimal c = m.getCreditTotal() == null ? BigDecimal.ZERO : m.getCreditTotal();
+            BigDecimal end = isDebit ? begin.add(d).subtract(c) : begin.add(c).subtract(d);
+
+            AuxiliaryLedgerRowVO vo = new AuxiliaryLedgerRowVO();
+            vo.setDimensionType(dimensionType);
+            vo.setDimensionValue(parseDimValue(m.getDimensionValue()));
+            vo.setDimensionName(dimensionNameMap.get(m.getDimensionValue()));
+            vo.setSubjectId(subject.getId());
+            vo.setSubjectCode(subject.getCode());
+            vo.setSubjectName(subject.getName());
+            vo.setDirection(subject.getDirection());
+            vo.setBeginBalance(begin);
+            vo.setDebitTotal(d);
+            vo.setCreditTotal(c);
+            vo.setEndBalance(end);
+            rows.add(vo);
+        }
+        return rows;
+    }
+
+    private String rowKey(Long subjectId, String dimensionValue) {
+        return subjectId + "#" + dimensionValue;
+    }
+
+    private Long parseDimValue(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        try {
+            return Long.parseLong(value);
+        } catch (NumberFormatException e) {
+            return null;
+        }
+    }
+
+    private Map<String, String> resolveDimensionNames(String dimensionType, List<AuxiliarySummaryRow> movement, List<AuxiliarySummaryRow> opening) {
+        Set<String> dimValues = new HashSet<>();
+        for (AuxiliarySummaryRow r : movement) {
+            if (r.getDimensionValue() != null) {
+                dimValues.add(r.getDimensionValue());
+            }
+        }
+        for (AuxiliarySummaryRow r : opening) {
+            if (r.getDimensionValue() != null) {
+                dimValues.add(r.getDimensionValue());
+            }
+        }
+        if (dimValues.isEmpty()) {
+            return Map.of();
+        }
+        Set<Long> ids = dimValues.stream()
+                .map(this::parseDimValue)
+                .filter(java.util.Objects::nonNull)
+                .collect(Collectors.toSet());
+        if (ids.isEmpty()) {
+            return Map.of();
+        }
+        Map<String, String> result = new HashMap<>();
+        switch (dimensionType) {
+            case "customer" -> {
+                for (CustomerEntity e : customerMapper.selectBatchIds(ids)) {
+                    result.put(String.valueOf(e.getId()), e.getName());
+                }
+            }
+            case "vendor" -> {
+                for (VendorEntity e : vendorMapper.selectBatchIds(ids)) {
+                    result.put(String.valueOf(e.getId()), e.getName());
+                }
+            }
+            case "department" -> {
+                for (DeptEntity e : deptMapper.selectBatchIds(ids)) {
+                    result.put(String.valueOf(e.getId()), e.getName());
+                }
+            }
+            case "employee" -> {
+                for (EmployeeEntity e : employeeMapper.selectBatchIds(ids)) {
+                    result.put(String.valueOf(e.getId()), e.getName());
+                }
+            }
+            default -> {
+                // project 维度当前无 Project 实体，名称置空
+            }
+        }
+        return result;
     }
 }

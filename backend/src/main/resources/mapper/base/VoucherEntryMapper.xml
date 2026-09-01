@@ -17,6 +17,48 @@
         ORDER BY e.id ASC
     </select>
 
+    <select id="selectAuxiliaryMovement" resultType="com.huicai.base.voucher.dto.AuxiliarySummaryRow">
+        SELECT t.subject_id AS subjectId,
+               t.dim_value AS dimensionValue,
+               COALESCE(SUM(t.debit), 0) AS debitTotal,
+               COALESCE(SUM(t.credit), 0) AS creditTotal
+        FROM (
+            SELECT e.subject_id, e.debit, e.credit,
+                   e.assist_json -&gt;&gt; #{dimensionField} AS dim_value
+            FROM t_voucher_entry e
+            INNER JOIN t_voucher v ON v.id = e.voucher_id AND v.deleted = 0
+            WHERE e.deleted = 0
+              AND v.period = #{period}
+              AND jsonb_exists(e.assist_json, #{dimensionField})
+            <if test="dimensionValue != null">
+              AND e.assist_json -&gt;&gt; #{dimensionField} = CAST(#{dimensionValue} AS TEXT)
+            </if>
+        ) t
+        GROUP BY t.subject_id, t.dim_value
+        ORDER BY t.subject_id ASC
+    </select>
+
+    <select id="selectAuxiliaryOpening" resultType="com.huicai.base.voucher.dto.AuxiliarySummaryRow">
+        SELECT t.subject_id AS subjectId,
+               t.dim_value AS dimensionValue,
+               COALESCE(SUM(t.debit), 0) AS debitTotal,
+               COALESCE(SUM(t.credit), 0) AS creditTotal
+        FROM (
+            SELECT e.subject_id, e.debit, e.credit,
+                   e.assist_json -&gt;&gt; #{dimensionField} AS dim_value
+            FROM t_voucher_entry e
+            INNER JOIN t_voucher v ON v.id = e.voucher_id AND v.deleted = 0
+            WHERE e.deleted = 0
+              AND v.period &lt; #{period}
+              AND jsonb_exists(e.assist_json, #{dimensionField})
+            <if test="dimensionValue != null">
+              AND e.assist_json -&gt;&gt; #{dimensionField} = CAST(#{dimensionValue} AS TEXT)
+            </if>
+        ) t
+        GROUP BY t.subject_id, t.dim_value
+        ORDER BY t.subject_id ASC
+    </select>
+
     <insert id="batchInsert">
         INSERT INTO t_voucher_entry (id, voucher_id, subject_id, debit, credit, summary, assist_json, sort_order)
         VALUES

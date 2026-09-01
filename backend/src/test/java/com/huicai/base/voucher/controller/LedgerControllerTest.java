@@ -80,4 +80,29 @@ class LedgerControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(200));
     }
+
+    @Test
+    @DisplayName("辅助核算账_参数正确绑定")
+    void auxiliaryLedger_params_boundCorrectly() throws Exception {
+        when(ledgerService.auxiliaryLedger(eq("customer"), eq("202601"), eq(1001L))).thenReturn(List.of());
+
+        mvc.perform(get("/api/base/voucher/v1/ledgers/auxiliary")
+                        .param("dimensionType", "customer")
+                        .param("period", "202601")
+                        .param("dimensionValue", "1001"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(200));
+    }
+
+    @Test
+    @DisplayName("辅助核算账_不带dimensionValue参数绑定为null")
+    void auxiliaryLedger_withoutDimensionValue_ok() throws Exception {
+        when(ledgerService.auxiliaryLedger(eq("vendor"), eq("202601"), isNull())).thenReturn(List.of());
+
+        mvc.perform(get("/api/base/voucher/v1/ledgers/auxiliary")
+                        .param("dimensionType", "vendor")
+                        .param("period", "202601"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(200));
+    }
 }

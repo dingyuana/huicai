@@ -25,6 +25,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -597,5 +598,75 @@ class SubjectBalanceServiceImplTest {
         } finally {
             EnterpriseContextHolder.clear();
         }
+    }
+
+    // ============================================================
+    // checkTrialBalance
+    // ============================================================
+
+    @Test
+    @DisplayName("试算平衡_期间无余额快照_返回全零且balanced=true(当前行为:无法区分无数据与真平衡)")
+    void checkTrialBalance_emptySnapshot_returnsAllZeroAndBalanced() {
+        // 期间无余额快照行（未过账凭证时正常发生）→ 当前实现返回全零 + balanced=true
+        when(subjectBalanceMapper.selectList(any(LambdaQueryWrapper.class))).thenReturn(List.of());
+
+        Map<String, Object> result = service.checkTrialBalance(PERIOD);
+
+        assertEquals(true, result.get("beginBalanced"));
+        assertEquals(true, result.get("movementBalanced"));
+        assertEquals(true, result.get("endBalanced"));
+        assertEquals(true, result.get("balanced"));
+        assertEquals(BigDecimal.ZERO, result.get("totalBeginDebit"));
+        assertEquals(BigDecimal.ZERO, result.get("totalBeginCredit"));
+        assertEquals(BigDecimal.ZERO, result.get("totalDebitTotal"));
+        assertEquals(BigDecimal.ZERO, result.get("totalCreditTotal"));
+        assertEquals(BigDecimal.ZERO, result.get("totalEndDebit"));
+        assertEquals(BigDecimal.ZERO, result.get("totalEndCredit"));
+        // 注意：空数据返回"平衡"是假阳性风险（评估报告 D4），本测试锁定当前行为，修复时需同步更新断言
+    }
+
+    @Test
+    @DisplayName("试算平衡_期间格式非法_throw badRequest")
+    void checkTrialBalance_invalidPeriod_throws() {
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> service.checkTrialBalance("2026"));
+        assertTrue(ex.getMessage().contains("会计期间格式错误"));
+        verifyNoInteractions(subjectBalanceMapper);
+    }
+
+    @Test
+    @DisplayName("试算平衡_含末级科目_按方向正确汇总")
+    void checkTrialBalance_aggregatesByDirection() {
+        SubjectBalanceEntity debit = new SubjectBalanceEntity();
+        debit.setSubjectId(1L);
+        debit.setBeginBalance(new BigDecimal("1000.00"));
+        debit.setDebitTotal(new BigDecimal("500.00"));
+        debit.setCreditTotal(new BigDecimal("200.00"));
+        debit.setEndBalance(new BigDecimal("1300.00"));
+
+        SubjectBalanceEntity credit = new SubjectBalanceEntity();
+        credit.setSubjectId(2L);
+        credit.setBeginBalance(new BigDecimal("1000.00"));
+        credit.setDebitTotal(new BigDecimal("200.00"));
+        credit.setCreditTotal(new BigDecimal("500.00"));
+        credit.setEndBalance(new BigDecimal("1300.00"));
+
+        when(subjectBalanceMapper.selectList(any(LambdaQueryWrapper.class))).thenReturn(List.of(debit, credit));
+        when(subjectService.getById(1L)).thenReturn(newDebitSubject(1L, true));
+        when(subjectService.getById(2L)).thenReturn(newCreditSubject(2L));
+
+        Map<String, Object> result = service.checkTrialBalance(PERIOD);
+
+        // 借方科目(1001): 期初1000, 发生借500贷200, 期末1300 → 计入 beginDebit/debitTotal/creditTotal/endDebit
+        // 贷方科目(4001): 期初1000, 发生借200贷500, 期末1300 → 计入 beginCredit/debitTotal/creditTotal/endCredit
+        assertEquals(new BigDecimal("1000.00"), result.get("totalBeginDebit"));
+        assertEquals(new BigDecimal("1000.00"), result.get("totalBeginCredit"));
+        assertEquals(new BigDecimal("700.00"), result.get("totalDebitTotal"));
+        assertEquals(new BigDecimal("700.00"), result.get("totalCreditTotal"));
+        assertEquals(new BigDecimal("1300.00"), result.get("totalEndDebit"));
+        assertEquals(new BigDecimal("1300.00"), result.get("totalEndCredit"));
+        assertEquals(true, result.get("beginBalanced"));
+        assertEquals(true, result.get("movementBalanced"));
+        assertEquals(true, result.get("endBalanced"));
     }
 }

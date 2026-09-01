@@ -1,6 +1,7 @@
 package com.huicai.base.voucher.controller;
 
 import com.huicai.common.response.R;
+import com.huicai.base.voucher.dto.vo.AuxiliaryLedgerRowVO;
 import com.huicai.base.voucher.service.LedgerService;
 import com.huicai.base.balance.service.SubjectBalanceService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -39,6 +40,15 @@ public class LedgerController {
     @GetMapping("/subsidiary")
     public R<List<Map<String, Object>>> subsidiaryLedger(@RequestParam Long subjectId, @RequestParam String period) {
         return R.ok(ledgerService.subsidiaryLedger(subjectId, period));
+    }
+
+    @Operation(summary = "辅助核算账")
+    @GetMapping("/auxiliary")
+    public R<List<AuxiliaryLedgerRowVO>> auxiliaryLedger(
+            @RequestParam String dimensionType,
+            @RequestParam String period,
+            @RequestParam(required = false) Long dimensionValue) {
+        return R.ok(ledgerService.auxiliaryLedger(dimensionType, period, dimensionValue));
     }
 
     @Operation(summary = "试算平衡")
