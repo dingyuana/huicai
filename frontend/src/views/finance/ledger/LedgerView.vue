@@ -25,6 +25,15 @@
           <el-table-column label="期末余额" width="140" align="right">
             <template #default="{ row }">{{ fmt(row.endBalance) }}</template>
           </el-table-column>
+          <el-table-column label="年初余额" width="140" align="right">
+            <template #default="{ row }">{{ fmt(row.yearBeginBalance) }}</template>
+          </el-table-column>
+          <el-table-column label="本年累计借" width="140" align="right">
+            <template #default="{ row }">{{ fmt(row.yearDebitTotal) }}</template>
+          </el-table-column>
+          <el-table-column label="本年累计贷" width="140" align="right">
+            <template #default="{ row }">{{ fmt(row.yearCreditTotal) }}</template>
+          </el-table-column>
         </el-table>
       </el-tab-pane>
 
@@ -47,7 +56,16 @@
             <template #default="{ row }">
               <span v-if="row.type === 'OPENING'" class="row-tag">期初</span>
               <span v-else-if="row.type === 'CLOSING'" class="row-tag">合计</span>
-              <span v-else>#{{ row.voucherId }}</span>
+              <span v-else-if="row.type === 'YEAR_TOTAL'" class="row-tag">本年累计</span>
+              <el-button
+                v-else
+                type="primary"
+                link
+                size="small"
+                @click="goVoucher(row.voucherId)"
+              >
+                {{ row.voucherNo || '#' + row.voucherId }}
+              </el-button>
             </template>
           </el-table-column>
           <el-table-column prop="summary" label="摘要" min-width="240" />
@@ -78,7 +96,22 @@
           <el-button type="primary" @click="loadSubsidiary">查询</el-button>
         </div>
         <el-table :data="slRows" v-loading="slLoading" border stripe>
-          <el-table-column label="凭证ID" prop="voucherId" width="100" />
+          <el-table-column label="凭证" width="140">
+            <template #default="{ row }">
+              <span v-if="row.type === 'OPENING'" class="row-tag">期初余额</span>
+              <span v-else-if="row.type === 'CLOSING'" class="row-tag">合计</span>
+              <span v-else-if="row.type === 'YEAR_TOTAL'" class="row-tag">本年累计</span>
+              <el-button
+                v-else
+                type="primary"
+                link
+                size="small"
+                @click="goVoucher(row.voucherId)"
+              >
+                {{ row.voucherNo || '#' + row.voucherId }}
+              </el-button>
+            </template>
+          </el-table-column>
           <el-table-column label="科目编码" prop="subjectCode" width="140" />
           <el-table-column label="科目名称" prop="subjectName" min-width="180" />
           <el-table-column prop="summary" label="摘要" min-width="220" show-overflow-tooltip />
@@ -88,6 +121,9 @@
           <el-table-column label="贷方" width="140" align="right">
             <template #default="{ row }">{{ fmt(row.credit) }}</template>
           </el-table-column>
+          <el-table-column label="余额" width="160" align="right">
+            <template #default="{ row }">{{ fmt(row.running) }}</template>
+          </el-table-column>
         </el-table>
       </el-tab-pane>
     </el-tabs>
@@ -95,6 +131,14 @@
     <el-dialog v-model="trialDialogVisible" title="试算平衡结果" width="520">
       <div v-if="trialResult">
         <p>期间: <b>{{ trialResult.period }}</b></p>
+        <el-alert
+          v-if="trialResult.empty"
+          :title="trialResult.emptyMessage || '本期无账簿数据'"
+          type="info"
+          :closable="false"
+          show-icon
+          style="margin-bottom: 12px"
+        />
         <p>期初: 借 {{ fmt(trialResult.totalBeginDebit) }} / 贷 {{ fmt(trialResult.totalBeginCredit) }}
           <el-tag :type="trialResult.beginBalanced ? 'success' : 'danger'" size="small" style="margin-left:8px">
             {{ trialResult.beginBalanced ? '平衡' : '不平衡' }}
@@ -110,7 +154,7 @@
             {{ trialResult.endBalanced ? '平衡' : '不平衡' }}
           </el-tag>
         </p>
-        <p>整体: <el-tag :type="trialResult.balanced ? 'success' : 'danger'">{{ trialResult.balanced ? '通过' : '失败' }}</el-tag></p>
+        <p v-if="!trialResult.empty">整体: <el-tag :type="trialResult.balanced ? 'success' : 'danger'">{{ trialResult.balanced ? '通过' : '失败' }}</el-tag></p>
       </div>
       <template #footer>
         <el-button @click="trialDialogVisible = false">关闭</el-button>
@@ -121,10 +165,12 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { getSubjectBalance, getGeneralLedger, getSubsidiaryLedger, getTrialBalance, type SubjectBalanceRow, type LedgerRow, type TrialBalance } from '@/api/modules/ledger'
 import { getSubjectTree, type SubjectVO } from '@/api/modules/subject'
 
+const router = useRouter()
 const activeTab = ref('balance')
 const currentPeriod = new Date().toISOString().slice(0, 7).replace('-', '')
 
@@ -160,6 +206,11 @@ const leafSubjectOptions = computed(() => {
 
 function fmt(v: number) {
   return v == null ? '' : Number(v).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+
+function goVoucher(voucherId?: number) {
+  if (!voucherId) return
+  router.push({ name: 'VoucherDetail', query: { id: String(voucherId) } })
 }
 
 async function loadBalance() {
