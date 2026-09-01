@@ -420,6 +420,14 @@ public class SubjectBalanceServiceImpl implements SubjectBalanceService {
 
         List<SubjectBalanceEntity> balances = queryByPeriod(period);
 
+        // T9-消除N+1：批量查科目一次，逐行取索引（替代原逐行 getById）
+        Set<Long> subjectIds = balances.stream()
+                .map(SubjectBalanceEntity::getSubjectId)
+                .collect(Collectors.toSet());
+        Map<Long, Subject> subjectMap = subjectIds.isEmpty() ? Map.of()
+                : subjectService.listByIds(subjectIds).stream()
+                        .collect(Collectors.toMap(Subject::getId, s -> s, (a, b) -> a));
+
         BigDecimal totalBeginDebit = BigDecimal.ZERO;
         BigDecimal totalBeginCredit = BigDecimal.ZERO;
         BigDecimal totalDebitTotal = BigDecimal.ZERO;
@@ -428,7 +436,7 @@ public class SubjectBalanceServiceImpl implements SubjectBalanceService {
         BigDecimal totalEndCredit = BigDecimal.ZERO;
 
         for (SubjectBalanceEntity balance : balances) {
-            Subject subject = subjectService.getById(balance.getSubjectId());
+            Subject subject = subjectMap.get(balance.getSubjectId());
             if (subject == null) {
                 continue;
             }

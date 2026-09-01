@@ -71,9 +71,14 @@ public class LedgerServiceImpl implements LedgerService {
                 .collect(Collectors.toSet());
         Map<Long, YearTotals> yearTotals = aggregateYearTotals(subjectIds, period);
 
+        // T9-消除N+1：批量查科目一次，逐行取索引（替代原逐行 getById）
+        Map<Long, Subject> subjectMap = subjectIds.isEmpty() ? Map.of()
+                : subjectService.listByIds(subjectIds).stream()
+                        .collect(Collectors.toMap(Subject::getId, s -> s, (a, b) -> a));
+
         List<Map<String, Object>> rows = new ArrayList<>();
         for (SubjectBalanceEntity b : balances) {
-            Subject subject = subjectService.getById(b.getSubjectId());
+            Subject subject = subjectMap.get(b.getSubjectId());
             if (subject == null || !Boolean.TRUE.equals(subject.getIsLeaf())) {
                 continue;
             }

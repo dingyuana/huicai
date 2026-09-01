@@ -245,8 +245,7 @@ class SubjectBalanceServiceImplTest {
         b2.setEndBalance(new BigDecimal("400000"));
         when(subjectBalanceMapper.selectList(any(LambdaQueryWrapper.class)))
                 .thenReturn(java.util.List.of(b1, b2));
-        when(subjectService.getById(1L)).thenReturn(newDebitSubject(1L, true));
-        when(subjectService.getById(2L)).thenReturn(newCreditSubject(2L));
+        when(subjectService.listByIds(any())).thenReturn(java.util.List.of(newDebitSubject(1L, true), newCreditSubject(2L)));
 
         service.lockOpeningBalances(PERIOD);
 
@@ -654,8 +653,7 @@ class SubjectBalanceServiceImplTest {
         credit.setEndBalance(new BigDecimal("1300.00"));
 
         when(subjectBalanceMapper.selectList(any(LambdaQueryWrapper.class))).thenReturn(List.of(debit, credit));
-        when(subjectService.getById(1L)).thenReturn(newDebitSubject(1L, true));
-        when(subjectService.getById(2L)).thenReturn(newCreditSubject(2L));
+        when(subjectService.listByIds(any())).thenReturn(List.of(newDebitSubject(1L, true), newCreditSubject(2L)));
 
         Map<String, Object> result = service.checkTrialBalance(PERIOD);
 

@@ -113,9 +113,8 @@ class LedgerServiceImplTest {
         nonLeafSubject.setDirection("debit");
         nonLeafSubject.setIsLeaf(false);
 
-        when(subjectService.getById(1L)).thenReturn(debitSubject);
-        when(subjectService.getById(2L)).thenReturn(creditSubject);
-        when(subjectService.getById(3L)).thenReturn(nonLeafSubject);
+        // T9-批量查科目（替代逐行 getById）
+        when(subjectService.listByIds(any())).thenReturn(List.of(debitSubject, creditSubject, nonLeafSubject));
 
         // 本年累计聚合（T4）：第二条 selectList 返回本年快照（此处复用同一批余额行，简化断言）
         List<SubjectBalanceEntity> allBalances = List.of(leafDebit, leafCredit, nonLeaf);
@@ -148,7 +147,7 @@ class LedgerServiceImplTest {
         assertEquals("credit", row2.get("direction"));
 
         verify(subjectBalanceMapper, times(2)).selectList(any());
-        verify(subjectService, times(3)).getById(anyLong());
+        verify(subjectService).listByIds(any());
     }
 
     @Test
@@ -175,7 +174,7 @@ class LedgerServiceImplTest {
         subject.setName("库存现金");
         subject.setDirection("debit");
         subject.setIsLeaf(true);
-        when(subjectService.getById(1L)).thenReturn(subject);
+        when(subjectService.listByIds(any())).thenReturn(List.of(subject));
 
         // fixture 为无发生额科目，需显式 includeNoMovement=true 防止被 T5 默认过滤排除
         List<Map<String, Object>> result = ledgerService.subjectBalance(period, true, true, null);
@@ -229,7 +228,7 @@ class LedgerServiceImplTest {
         subject.setName("库存现金");
         subject.setDirection("debit");
         subject.setIsLeaf(true);
-        when(subjectService.getById(1L)).thenReturn(subject);
+        when(subjectService.listByIds(any())).thenReturn(List.of(subject));
 
         List<Map<String, Object>> result = ledgerService.subjectBalance(period, true, true, null);
 
@@ -281,8 +280,7 @@ class LedgerServiceImplTest {
         s2202.setDirection("credit");
         s2202.setIsLeaf(true);
 
-        when(subjectService.getById(1L)).thenReturn(s1002);
-        when(subjectService.getById(2L)).thenReturn(s2202);
+        when(subjectService.listByIds(any())).thenReturn(List.of(s1002, s2202));
 
         List<Map<String, Object>> result = ledgerService.subjectBalance(period, true, true, "1002");
 
@@ -325,15 +323,22 @@ class LedgerServiceImplTest {
         // 每次 selectList 都返回同一批 3 行（本测试不涉及本年累计断言，重复返回无副作用）
         when(subjectBalanceMapper.selectList(any())).thenReturn(List.of(active, zeroEnd, noMove));
 
-        for (Long id : new Long[]{1L, 2L, 3L}) {
-            Subject s = new Subject();
-            s.setId(id);
-            s.setCode("100" + id);
-            s.setName("科目" + id);
-            s.setDirection("debit");
-            s.setIsLeaf(true);
-            when(subjectService.getById(id)).thenReturn(s);
-        }
+        Subject s1 = new Subject();
+        s1.setId(1L);
+        s1.setCode("1001");
+        s1.setDirection("debit");
+        s1.setIsLeaf(true);
+        Subject s2 = new Subject();
+        s2.setId(2L);
+        s2.setCode("1002");
+        s2.setDirection("debit");
+        s2.setIsLeaf(true);
+        Subject s3 = new Subject();
+        s3.setId(3L);
+        s3.setCode("1003");
+        s3.setDirection("debit");
+        s3.setIsLeaf(true);
+        when(subjectService.listByIds(any())).thenReturn(List.of(s1, s2, s3));
 
         // 默认（false/false）：只含 科目1
         List<Map<String, Object>> defaultRows = ledgerService.subjectBalance(period, false, false, null);
