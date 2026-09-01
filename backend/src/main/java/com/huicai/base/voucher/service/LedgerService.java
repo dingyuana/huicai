@@ -27,6 +27,11 @@ public interface LedgerService {
     List<Map<String, Object>> generalLedger(Long subjectId, String period);
 
     /**
+     * 总分类账（T8）：includeUnposted=false（默认）只含 POSTED 凭证；true 含全部状态
+     */
+    List<Map<String, Object>> generalLedger(Long subjectId, String period, boolean includeUnposted);
+
+    /**
      * 明细账：按科目+期间+日期范围（可选），展示逐笔分录明细（期初行+滚动余额+voucherNo/voucherDate）
      * startDate/endDate 为 null 时退化为按期间过滤
      */

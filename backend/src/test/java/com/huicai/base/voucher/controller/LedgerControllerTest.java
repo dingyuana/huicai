@@ -63,7 +63,7 @@ class LedgerControllerTest {
     @Test
     @DisplayName("总分类账_RequestParam正确绑定")
     void generalLedger_params_boundCorrectly() throws Exception {
-        when(ledgerService.generalLedger(eq(1001L), eq("202601"))).thenReturn(List.of());
+        when(ledgerService.generalLedger(eq(1001L), eq("202601"), eq(false))).thenReturn(List.of());
 
         mvc.perform(get("/api/base/voucher/v1/ledgers/general")
                         .param("subjectId", "1001")
@@ -73,9 +73,22 @@ class LedgerControllerTest {
     }
 
     @Test
+    @DisplayName("总分类账_includeUnposted参数绑定(T8)")
+    void generalLedger_includeUnposted_boundCorrectly() throws Exception {
+        when(ledgerService.generalLedger(eq(1001L), eq("202601"), eq(true))).thenReturn(List.of());
+
+        mvc.perform(get("/api/base/voucher/v1/ledgers/general")
+                        .param("subjectId", "1001")
+                        .param("period", "202601")
+                        .param("includeUnposted", "true"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(200));
+    }
+
+    @Test
     @DisplayName("明细账_RequestParam正确绑定")
     void subsidiaryLedger_params_boundCorrectly() throws Exception {
-        when(ledgerService.subsidiaryLedger(eq(1001L), eq("202601"), isNull(), isNull())).thenReturn(List.of());
+        when(ledgerService.subsidiaryLedger(eq(1001L), eq("202601"), isNull(), isNull(), eq(false))).thenReturn(List.of());
 
         mvc.perform(get("/api/base/voucher/v1/ledgers/subsidiary")
                         .param("subjectId", "1001")

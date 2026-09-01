@@ -113,6 +113,11 @@ public class LedgerServiceImpl implements LedgerService {
 
     @Override
     public List<Map<String, Object>> generalLedger(Long subjectId, String period) {
+        return generalLedger(subjectId, period, false);
+    }
+
+    @Override
+    public List<Map<String, Object>> generalLedger(Long subjectId, String period, boolean includeUnposted) {
         Subject subject = subjectService.getById(subjectId);
         if (subject == null) {
             return new ArrayList<>();
@@ -124,9 +129,9 @@ public class LedgerServiceImpl implements LedgerService {
                         .eq(SubjectBalanceEntity::getSubjectId, subjectId)
                         .eq(SubjectBalanceEntity::getPeriod, period));
 
-        // T6: 投影查询携带 voucherNo/voucherDate；includeUnposted=true 保持现行为（T8 改为默认 false）
+        // T6/T8: 投影查询携带 voucherNo/voucherDate；includeUnposted 控制是否含未过账凭证（默认 false=仅 POSTED）
         List<LedgerEntryRowDTO> entries =
-                voucherEntryMapper.selectSubsidiaryRows(subjectId, period, null, null, true);
+                voucherEntryMapper.selectSubsidiaryRows(subjectId, period, null, null, includeUnposted);
 
         List<Map<String, Object>> rows = new ArrayList<>();
 

@@ -38,8 +38,11 @@ public class LedgerController {
 
     @Operation(summary = "总分类账")
     @GetMapping("/general")
-    public R<List<Map<String, Object>>> generalLedger(@RequestParam Long subjectId, @RequestParam String period) {
-        return R.ok(ledgerService.generalLedger(subjectId, period));
+    public R<List<Map<String, Object>>> generalLedger(
+            @RequestParam Long subjectId,
+            @RequestParam String period,
+            @RequestParam(required = false, defaultValue = "false") boolean includeUnposted) {
+        return R.ok(ledgerService.generalLedger(subjectId, period, includeUnposted));
     }
 
     @Operation(summary = "明细账")
@@ -48,8 +51,9 @@ public class LedgerController {
             @RequestParam Long subjectId,
             @RequestParam String period,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate) {
-        return R.ok(ledgerService.subsidiaryLedger(subjectId, period, startDate, endDate));
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate,
+            @RequestParam(required = false, defaultValue = "false") boolean includeUnposted) {
+        return R.ok(ledgerService.subsidiaryLedger(subjectId, period, startDate, endDate, includeUnposted));
     }
 
     @Operation(summary = "辅助核算账")

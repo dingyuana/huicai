@@ -411,7 +411,7 @@ class LedgerServiceImplTest {
         entry2.setCredit(new BigDecimal("200.00"));
         entry2.setSummary("银行取现");
 
-        when(voucherEntryMapper.selectSubsidiaryRows(subjectId, period, null, null, true))
+        when(voucherEntryMapper.selectSubsidiaryRows(subjectId, period, null, null, false))
                 .thenReturn(List.of(entry1, entry2));
 
         // Act
@@ -470,7 +470,7 @@ class LedgerServiceImplTest {
         verify(subjectService).getById(subjectId);
         verify(subjectBalanceMapper).selectOne(any());
         verify(subjectBalanceMapper).selectList(any());
-        verify(voucherEntryMapper).selectSubsidiaryRows(subjectId, period, null, null, true);
+        verify(voucherEntryMapper).selectSubsidiaryRows(subjectId, period, null, null, false);
     }
 
     @Test
@@ -512,7 +512,7 @@ class LedgerServiceImplTest {
         entry2.setCredit(BigDecimal.ZERO);
         entry2.setSummary("归还借款");
 
-        when(voucherEntryMapper.selectSubsidiaryRows(subjectId, period, null, null, true))
+        when(voucherEntryMapper.selectSubsidiaryRows(subjectId, period, null, null, false))
                 .thenReturn(List.of(entry1, entry2));
 
         // Act
@@ -544,7 +544,7 @@ class LedgerServiceImplTest {
         verify(subjectService).getById(subjectId);
         verify(subjectBalanceMapper).selectOne(any());
         verify(subjectBalanceMapper).selectList(any());
-        verify(voucherEntryMapper).selectSubsidiaryRows(subjectId, period, null, null, true);
+        verify(voucherEntryMapper).selectSubsidiaryRows(subjectId, period, null, null, false);
     }
 
     @Test
@@ -588,7 +588,7 @@ class LedgerServiceImplTest {
         entry.setDebit(new BigDecimal("500.00"));
         entry.setCredit(BigDecimal.ZERO);
         entry.setSummary("销售收入");
-        when(voucherEntryMapper.selectSubsidiaryRows(subjectId, period, null, null, true)).thenReturn(List.of(entry));
+        when(voucherEntryMapper.selectSubsidiaryRows(subjectId, period, null, null, false)).thenReturn(List.of(entry));
 
         // Act
         List<Map<String, Object>> result = ledgerService.generalLedger(subjectId, period);
@@ -616,6 +616,27 @@ class LedgerServiceImplTest {
         verify(subjectService).getById(subjectId);
         verify(subjectBalanceMapper).selectOne(any());
         verify(subjectBalanceMapper).selectList(any());
+        verify(voucherEntryMapper).selectSubsidiaryRows(subjectId, period, null, null, false);
+    }
+
+    @Test
+    @DisplayName("总分类账 - includeUnposted=true 透传给 Mapper(T8)")
+    void generalLedger_passesIncludeUnpostedToMapper() {
+        Long subjectId = 1L;
+        String period = "202607";
+        Subject subject = new Subject();
+        subject.setId(subjectId);
+        subject.setCode("1001");
+        subject.setName("库存现金");
+        subject.setDirection("debit");
+        subject.setIsLeaf(true);
+        when(subjectService.getById(subjectId)).thenReturn(subject);
+        when(subjectBalanceMapper.selectOne(any())).thenReturn(null);
+        when(subjectBalanceMapper.selectList(any())).thenReturn(List.of());
+        when(voucherEntryMapper.selectSubsidiaryRows(subjectId, period, null, null, true)).thenReturn(List.of());
+
+        ledgerService.generalLedger(subjectId, period, true);
+
         verify(voucherEntryMapper).selectSubsidiaryRows(subjectId, period, null, null, true);
     }
 
