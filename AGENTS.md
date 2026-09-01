@@ -4,14 +4,14 @@
 
 ## §0 项目状态（硬数字，每次 commit 后更新）
 
-> **更新基准**：commit `cbadbd8` (2026-09-01) — test: 核销单ArapSettlementService状态机单元测试
+> **更新基准**：commit `91e0cd5` (2026-09-01) — feat: 明细账日期范围过滤+试算平衡空数据提示
 > **当前分支**：`feature/reconciliation-workbench`
 > **关联文档**：[项目说明](docs/CORE-项目说明.md)、[技术方案](docs/CORE-技术方案.md)、[需求分析](docs/CORE-需求分析.md)、[需求登记册](docs/development/requirements/REQUIREMENTS_REGISTRY.md)、[文档注册表](docs/CORE-文档注册表.md)、[测试策略](docs/testing/TEST-STRATEGY.md)、[Flyway治理规范](docs/development/flyway-governance.md)
 
 | 维度 | 数据 |
 |------|------|
 | 后端代码 | 458+ Java 文件 |
-| 测试用例 | 1754 个 `@Test` 方法 / 210 个测试类（0 Failures, 0 Errors）|
+| 测试用例 | 1757 个 `@Test` 方法 / 210 个测试类（0 Failures, 0 Errors）|
 | 数据库 | PostgreSQL 16 / V1 baseline (merged V1-V137) |
 | API 端点 | 496+ 个后端端点 |
 | 核心模块 | 基础数据、总账、应收应付、现金管理、固定资产、费用报销、发票税务、预算、财务报表、存储管理 |
