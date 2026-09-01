@@ -38,10 +38,24 @@ class LedgerControllerTest {
     @Test
     @DisplayName("科目余额表_RequestParam正确绑定")
     void subjectBalance_params_boundCorrectly() throws Exception {
-        when(ledgerService.subjectBalance(eq("202601"))).thenReturn(List.of());
+        when(ledgerService.subjectBalance(eq("202601"), eq(false), eq(false), isNull())).thenReturn(List.of());
 
         mvc.perform(get("/api/base/voucher/v1/ledgers/subject-balance")
                         .param("period", "202601"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(200));
+    }
+
+    @Test
+    @DisplayName("科目余额表_可选过滤参数正确绑定(T5)")
+    void subjectBalance_filterParams_boundCorrectly() throws Exception {
+        when(ledgerService.subjectBalance(eq("202601"), eq(true), eq(true), eq("1002"))).thenReturn(List.of());
+
+        mvc.perform(get("/api/base/voucher/v1/ledgers/subject-balance")
+                        .param("period", "202601")
+                        .param("includeZero", "true")
+                        .param("includeNoMovement", "true")
+                        .param("subjectCodePrefix", "1002"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(200));
     }

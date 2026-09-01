@@ -56,6 +56,11 @@ public class LedgerServiceImpl implements LedgerService {
 
     @Override
     public List<Map<String, Object>> subjectBalance(String period) {
+        return subjectBalance(period, false, false, null);
+    }
+
+    @Override
+    public List<Map<String, Object>> subjectBalance(String period, boolean includeZero, boolean includeNoMovement, String subjectCodePrefix) {
         List<SubjectBalanceEntity> balances = subjectBalanceMapper.selectList(
                 new LambdaQueryWrapper<SubjectBalanceEntity>()
                         .eq(SubjectBalanceEntity::getPeriod, period)
@@ -72,6 +77,22 @@ public class LedgerServiceImpl implements LedgerService {
             if (subject == null || !Boolean.TRUE.equals(subject.getIsLeaf())) {
                 continue;
             }
+            // T5 过滤：科目编码前缀
+            if (subjectCodePrefix != null && !subjectCodePrefix.isBlank()
+                    && !subject.getCode().startsWith(subjectCodePrefix)) {
+                continue;
+            }
+            BigDecimal end = b.getEndBalance() == null ? BigDecimal.ZERO : b.getEndBalance();
+            // T5 过滤：零余额科目
+            if (!includeZero && end.compareTo(BigDecimal.ZERO) == 0) {
+                continue;
+            }
+            BigDecimal d = b.getDebitTotal() == null ? BigDecimal.ZERO : b.getDebitTotal();
+            BigDecimal c = b.getCreditTotal() == null ? BigDecimal.ZERO : b.getCreditTotal();
+            // T5 过滤：无发生额科目
+            if (!includeNoMovement && d.compareTo(BigDecimal.ZERO) == 0 && c.compareTo(BigDecimal.ZERO) == 0) {
+                continue;
+            }
             YearTotals yt = yearTotals.get(b.getSubjectId());
             Map<String, Object> row = new HashMap<>();
             row.put("subjectId", b.getSubjectId());
@@ -79,9 +100,9 @@ public class LedgerServiceImpl implements LedgerService {
             row.put("subjectName", subject.getName());
             row.put("direction", subject.getDirection());
             row.put("beginBalance", b.getBeginBalance());
-            row.put("debitTotal", b.getDebitTotal());
-            row.put("creditTotal", b.getCreditTotal());
-            row.put("endBalance", b.getEndBalance());
+            row.put("debitTotal", d);
+            row.put("creditTotal", c);
+            row.put("endBalance", end);
             row.put("yearBeginBalance", yt == null ? BigDecimal.ZERO : yt.beginBalance);
             row.put("yearDebitTotal", yt == null ? BigDecimal.ZERO : yt.debitTotal);
             row.put("yearCreditTotal", yt == null ? BigDecimal.ZERO : yt.creditTotal);

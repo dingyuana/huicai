@@ -177,7 +177,8 @@ class LedgerServiceImplTest {
         subject.setIsLeaf(true);
         when(subjectService.getById(1L)).thenReturn(subject);
 
-        List<Map<String, Object>> result = ledgerService.subjectBalance(period);
+        // fixture 为无发生额科目，需显式 includeNoMovement=true 防止被 T5 默认过滤排除
+        List<Map<String, Object>> result = ledgerService.subjectBalance(period, true, true, null);
 
         assertEquals(1, result.size());
         assertEquals(0, BigDecimal.ZERO.compareTo((BigDecimal) result.get(0).get("yearBeginBalance")));
@@ -230,7 +231,7 @@ class LedgerServiceImplTest {
         subject.setIsLeaf(true);
         when(subjectService.getById(1L)).thenReturn(subject);
 
-        List<Map<String, Object>> result = ledgerService.subjectBalance(period);
+        List<Map<String, Object>> result = ledgerService.subjectBalance(period, true, true, null);
 
         assertEquals(1, result.size());
         // 年初余额 = 最早期间(202601)快照期初 = 200
@@ -239,6 +240,119 @@ class LedgerServiceImplTest {
         assertEquals(0, new BigDecimal("400.00").compareTo((BigDecimal) result.get(0).get("yearDebitTotal")));
         // 本年贷方 = 50 + 0 = 50
         assertEquals(0, new BigDecimal("50.00").compareTo((BigDecimal) result.get(0).get("yearCreditTotal")));
+    }
+
+    @Test
+    @DisplayName("科目余额表 - 编码前缀过滤(T5)")
+    void subjectBalance_filterByCodePrefix() {
+        String period = "202607";
+
+        SubjectBalanceEntity b1002 = new SubjectBalanceEntity();
+        b1002.setSubjectId(1L);
+        b1002.setPeriod(period);
+        b1002.setBeginBalance(new BigDecimal("100.00"));
+        b1002.setDebitTotal(new BigDecimal("50.00"));
+        b1002.setCreditTotal(BigDecimal.ZERO);
+        b1002.setEndBalance(new BigDecimal("150.00"));
+
+        SubjectBalanceEntity b2202 = new SubjectBalanceEntity();
+        b2202.setSubjectId(2L);
+        b2202.setPeriod(period);
+        b2202.setBeginBalance(new BigDecimal("200.00"));
+        b2202.setDebitTotal(BigDecimal.ZERO);
+        b2202.setCreditTotal(new BigDecimal("80.00"));
+        b2202.setEndBalance(new BigDecimal("120.00"));
+
+        when(subjectBalanceMapper.selectList(any()))
+                .thenReturn(List.of(b1002, b2202))
+                .thenReturn(List.of());
+
+        Subject s1002 = new Subject();
+        s1002.setId(1L);
+        s1002.setCode("100299");
+        s1002.setName("银行存款-工行");
+        s1002.setDirection("debit");
+        s1002.setIsLeaf(true);
+
+        Subject s2202 = new Subject();
+        s2202.setId(2L);
+        s2202.setCode("220299");
+        s2202.setName("应付账款-某供应商");
+        s2202.setDirection("credit");
+        s2202.setIsLeaf(true);
+
+        when(subjectService.getById(1L)).thenReturn(s1002);
+        when(subjectService.getById(2L)).thenReturn(s2202);
+
+        List<Map<String, Object>> result = ledgerService.subjectBalance(period, true, true, "1002");
+
+        assertEquals(1, result.size(), "应只返回 1002 前缀科目");
+        assertEquals("100299", result.get(0).get("subjectCode"));
+    }
+
+    @Test
+    @DisplayName("科目余额表 - includeZero/includeNoMovement 过滤(T5)")
+    void subjectBalance_filterByZeroAndNoMovement() {
+        String period = "202607";
+
+        // 科目1：期末余额>0 且有发生额 → 默认含 / 各种组合均含
+        SubjectBalanceEntity active = new SubjectBalanceEntity();
+        active.setSubjectId(1L);
+        active.setPeriod(period);
+        active.setBeginBalance(new BigDecimal("100.00"));
+        active.setDebitTotal(new BigDecimal("50.00"));
+        active.setCreditTotal(BigDecimal.ZERO);
+        active.setEndBalance(new BigDecimal("150.00"));
+
+        // 科目2：期末余额=0 → includeZero=false 时排除
+        SubjectBalanceEntity zeroEnd = new SubjectBalanceEntity();
+        zeroEnd.setSubjectId(2L);
+        zeroEnd.setPeriod(period);
+        zeroEnd.setBeginBalance(new BigDecimal("100.00"));
+        zeroEnd.setDebitTotal(new BigDecimal("100.00"));
+        zeroEnd.setCreditTotal(BigDecimal.ZERO);
+        zeroEnd.setEndBalance(BigDecimal.ZERO);
+
+        // 科目3：无发生额 → includeNoMovement=false 时排除
+        SubjectBalanceEntity noMove = new SubjectBalanceEntity();
+        noMove.setSubjectId(3L);
+        noMove.setPeriod(period);
+        noMove.setBeginBalance(new BigDecimal("500.00"));
+        noMove.setDebitTotal(BigDecimal.ZERO);
+        noMove.setCreditTotal(BigDecimal.ZERO);
+        noMove.setEndBalance(new BigDecimal("500.00"));
+
+        // 每次 selectList 都返回同一批 3 行（本测试不涉及本年累计断言，重复返回无副作用）
+        when(subjectBalanceMapper.selectList(any())).thenReturn(List.of(active, zeroEnd, noMove));
+
+        for (Long id : new Long[]{1L, 2L, 3L}) {
+            Subject s = new Subject();
+            s.setId(id);
+            s.setCode("100" + id);
+            s.setName("科目" + id);
+            s.setDirection("debit");
+            s.setIsLeaf(true);
+            when(subjectService.getById(id)).thenReturn(s);
+        }
+
+        // 默认（false/false）：只含 科目1
+        List<Map<String, Object>> defaultRows = ledgerService.subjectBalance(period, false, false, null);
+        assertEquals(1, defaultRows.size(), "默认应排除零余额与无发生额科目");
+        assertEquals(1L, defaultRows.get(0).get("subjectId"));
+
+        // includeZero=true：加回科目2
+        List<Map<String, Object>> withZero = ledgerService.subjectBalance(period, true, false, null);
+        assertEquals(2, withZero.size(), "includeZero=true 应含零余额科目2");
+        assertTrue(withZero.stream().anyMatch(r -> r.get("subjectId").equals(2L)));
+
+        // includeNoMovement=true：加回科目3
+        List<Map<String, Object>> withMove = ledgerService.subjectBalance(period, false, true, null);
+        assertEquals(2, withMove.size(), "includeNoMovement=true 应含无发生额科目3");
+        assertTrue(withMove.stream().anyMatch(r -> r.get("subjectId").equals(3L)));
+
+        // 全开：3 个科目全含
+        List<Map<String, Object>> allRows = ledgerService.subjectBalance(period, true, true, null);
+        assertEquals(3, allRows.size(), "全开应含全部3个科目");
     }
 
     @Test

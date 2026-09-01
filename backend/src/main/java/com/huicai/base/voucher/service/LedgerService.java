@@ -12,6 +12,12 @@ public interface LedgerService {
 
     /**
      * 科目余额表：按期间列出所有末级科目的期初/借方/贷方/期末余额
+     * T5: 可选过滤参数 — includeZero(含零余额科目,默认false) / includeNoMovement(含无发生额科目,默认false) / subjectCodePrefix(科目编码前缀)
+     */
+    List<Map<String, Object>> subjectBalance(String period, boolean includeZero, boolean includeNoMovement, String subjectCodePrefix);
+
+    /**
+     * 科目余额表：默认行为（不含零余额、不含无发生额、不按编码前缀过滤），兼容旧调用
      */
     List<Map<String, Object>> subjectBalance(String period);
 

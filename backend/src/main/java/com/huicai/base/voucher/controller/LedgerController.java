@@ -28,8 +28,12 @@ public class LedgerController {
 
     @Operation(summary = "科目余额表")
     @GetMapping("/subject-balance")
-    public R<List<Map<String, Object>>> subjectBalance(@RequestParam String period) {
-        return R.ok(ledgerService.subjectBalance(period));
+    public R<List<Map<String, Object>>> subjectBalance(
+            @RequestParam String period,
+            @RequestParam(required = false, defaultValue = "false") boolean includeZero,
+            @RequestParam(required = false, defaultValue = "false") boolean includeNoMovement,
+            @RequestParam(required = false) String subjectCodePrefix) {
+        return R.ok(ledgerService.subjectBalance(period, includeZero, includeNoMovement, subjectCodePrefix));
     }
 
     @Operation(summary = "总分类账")
