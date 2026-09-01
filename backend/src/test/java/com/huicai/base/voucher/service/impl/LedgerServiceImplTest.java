@@ -12,7 +12,6 @@ import com.huicai.base.system.service.SubjectService;
 import com.huicai.base.voucher.dto.AuxiliarySummaryRow;
 import com.huicai.base.voucher.dto.LedgerEntryRowDTO;
 import com.huicai.base.voucher.dto.vo.AuxiliaryLedgerRowVO;
-import com.huicai.base.voucher.entity.VoucherEntryEntity;
 import com.huicai.base.voucher.mapper.VoucherEntryMapper;
 import com.huicai.common.exception.BusinessException;
 import org.junit.jupiter.api.DisplayName;
@@ -280,21 +279,26 @@ class LedgerServiceImplTest {
         balance.setBeginBalance(new BigDecimal("1000.00"));
         when(subjectBalanceMapper.selectOne(any())).thenReturn(balance);
 
-        VoucherEntryEntity entry1 = new VoucherEntryEntity();
+        LedgerEntryRowDTO entry1 = new LedgerEntryRowDTO();
         entry1.setVoucherId(10L);
+        entry1.setVoucherNo("V-202607-0001");
+        entry1.setVoucherDate(java.time.LocalDate.of(2026, 7, 1));
         entry1.setSubjectId(subjectId);
         entry1.setDebit(new BigDecimal("500.00"));
         entry1.setCredit(BigDecimal.ZERO);
         entry1.setSummary("销售收入");
 
-        VoucherEntryEntity entry2 = new VoucherEntryEntity();
+        LedgerEntryRowDTO entry2 = new LedgerEntryRowDTO();
         entry2.setVoucherId(20L);
+        entry2.setVoucherNo("V-202607-0002");
+        entry2.setVoucherDate(java.time.LocalDate.of(2026, 7, 10));
         entry2.setSubjectId(subjectId);
         entry2.setDebit(BigDecimal.ZERO);
         entry2.setCredit(new BigDecimal("200.00"));
         entry2.setSummary("银行取现");
 
-        when(voucherEntryMapper.selectBySubjectIdAndPeriod(subjectId, period)).thenReturn(List.of(entry1, entry2));
+        when(voucherEntryMapper.selectSubsidiaryRows(subjectId, period, null, null, true))
+                .thenReturn(List.of(entry1, entry2));
 
         // Act
         List<Map<String, Object>> result = ledgerService.generalLedger(subjectId, period);
@@ -314,6 +318,8 @@ class LedgerServiceImplTest {
         Map<String, Object> r1 = result.get(1);
         assertEquals("ENTRY", r1.get("type"));
         assertEquals(10L, r1.get("voucherId"));
+        assertEquals("V-202607-0001", r1.get("voucherNo"), "分录1应带凭证号(T6)");
+        assertEquals(java.time.LocalDate.of(2026, 7, 1), r1.get("voucherDate"), "分录1应带凭证日期(T6)");
         assertEquals("销售收入", r1.get("summary"));
         assertEquals(new BigDecimal("500.00"), r1.get("debit"));
         assertEquals(BigDecimal.ZERO, r1.get("credit"));
@@ -324,6 +330,7 @@ class LedgerServiceImplTest {
         Map<String, Object> r2 = result.get(2);
         assertEquals("ENTRY", r2.get("type"));
         assertEquals(20L, r2.get("voucherId"));
+        assertEquals("V-202607-0002", r2.get("voucherNo"), "分录2应带凭证号(T6)");
         assertEquals("银行取现", r2.get("summary"));
         assertEquals(BigDecimal.ZERO, r2.get("debit"));
         assertEquals(new BigDecimal("200.00"), r2.get("credit"));
@@ -349,7 +356,7 @@ class LedgerServiceImplTest {
         verify(subjectService).getById(subjectId);
         verify(subjectBalanceMapper).selectOne(any());
         verify(subjectBalanceMapper).selectList(any());
-        verify(voucherEntryMapper).selectBySubjectIdAndPeriod(subjectId, period);
+        verify(voucherEntryMapper).selectSubsidiaryRows(subjectId, period, null, null, true);
     }
 
     @Test
@@ -373,21 +380,26 @@ class LedgerServiceImplTest {
         balance.setBeginBalance(new BigDecimal("5000.00"));
         when(subjectBalanceMapper.selectOne(any())).thenReturn(balance);
 
-        VoucherEntryEntity entry1 = new VoucherEntryEntity();
+        LedgerEntryRowDTO entry1 = new LedgerEntryRowDTO();
         entry1.setVoucherId(30L);
+        entry1.setVoucherNo("V-202607-0003");
+        entry1.setVoucherDate(java.time.LocalDate.of(2026, 7, 2));
         entry1.setSubjectId(subjectId);
         entry1.setDebit(BigDecimal.ZERO);
         entry1.setCredit(new BigDecimal("1000.00"));
         entry1.setSummary("新增借款");
 
-        VoucherEntryEntity entry2 = new VoucherEntryEntity();
+        LedgerEntryRowDTO entry2 = new LedgerEntryRowDTO();
         entry2.setVoucherId(40L);
+        entry2.setVoucherNo("V-202607-0004");
+        entry2.setVoucherDate(java.time.LocalDate.of(2026, 7, 5));
         entry2.setSubjectId(subjectId);
         entry2.setDebit(new BigDecimal("500.00"));
         entry2.setCredit(BigDecimal.ZERO);
         entry2.setSummary("归还借款");
 
-        when(voucherEntryMapper.selectBySubjectIdAndPeriod(subjectId, period)).thenReturn(List.of(entry1, entry2));
+        when(voucherEntryMapper.selectSubsidiaryRows(subjectId, period, null, null, true))
+                .thenReturn(List.of(entry1, entry2));
 
         // Act
         List<Map<String, Object>> result = ledgerService.generalLedger(subjectId, period);
@@ -418,7 +430,7 @@ class LedgerServiceImplTest {
         verify(subjectService).getById(subjectId);
         verify(subjectBalanceMapper).selectOne(any());
         verify(subjectBalanceMapper).selectList(any());
-        verify(voucherEntryMapper).selectBySubjectIdAndPeriod(subjectId, period);
+        verify(voucherEntryMapper).selectSubsidiaryRows(subjectId, period, null, null, true);
     }
 
     @Test
@@ -454,13 +466,15 @@ class LedgerServiceImplTest {
         // 该期间无余额快照行 → selectOne 返回 null（正常业务：余额快照只在过账时写入）
         when(subjectBalanceMapper.selectOne(any())).thenReturn(null);
 
-        VoucherEntryEntity entry = new VoucherEntryEntity();
+        LedgerEntryRowDTO entry = new LedgerEntryRowDTO();
         entry.setVoucherId(10L);
+        entry.setVoucherNo("V-202607-0005");
+        entry.setVoucherDate(java.time.LocalDate.of(2026, 7, 1));
         entry.setSubjectId(subjectId);
         entry.setDebit(new BigDecimal("500.00"));
         entry.setCredit(BigDecimal.ZERO);
         entry.setSummary("销售收入");
-        when(voucherEntryMapper.selectBySubjectIdAndPeriod(subjectId, period)).thenReturn(List.of(entry));
+        when(voucherEntryMapper.selectSubsidiaryRows(subjectId, period, null, null, true)).thenReturn(List.of(entry));
 
         // Act
         List<Map<String, Object>> result = ledgerService.generalLedger(subjectId, period);
@@ -488,7 +502,7 @@ class LedgerServiceImplTest {
         verify(subjectService).getById(subjectId);
         verify(subjectBalanceMapper).selectOne(any());
         verify(subjectBalanceMapper).selectList(any());
-        verify(voucherEntryMapper).selectBySubjectIdAndPeriod(subjectId, period);
+        verify(voucherEntryMapper).selectSubsidiaryRows(subjectId, period, null, null, true);
     }
 
     // ─── subsidiaryLedger ──────────────────────────────────────────────────

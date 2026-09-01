@@ -103,7 +103,9 @@ public class LedgerServiceImpl implements LedgerService {
                         .eq(SubjectBalanceEntity::getSubjectId, subjectId)
                         .eq(SubjectBalanceEntity::getPeriod, period));
 
-        List<VoucherEntryEntity> entries = voucherEntryMapper.selectBySubjectIdAndPeriod(subjectId, period);
+        // T6: 投影查询携带 voucherNo/voucherDate；includeUnposted=true 保持现行为（T8 改为默认 false）
+        List<LedgerEntryRowDTO> entries =
+                voucherEntryMapper.selectSubsidiaryRows(subjectId, period, null, null, true);
 
         List<Map<String, Object>> rows = new ArrayList<>();
 
@@ -116,7 +118,7 @@ public class LedgerServiceImpl implements LedgerService {
         opening.put("running", running);
         rows.add(opening);
 
-        for (VoucherEntryEntity e : entries) {
+        for (LedgerEntryRowDTO e : entries) {
             BigDecimal d = e.getDebit() == null ? BigDecimal.ZERO : e.getDebit();
             BigDecimal c = e.getCredit() == null ? BigDecimal.ZERO : e.getCredit();
             if (isDebit) {
@@ -127,6 +129,8 @@ public class LedgerServiceImpl implements LedgerService {
             Map<String, Object> row = new HashMap<>();
             row.put("type", "ENTRY");
             row.put("voucherId", e.getVoucherId());
+            row.put("voucherNo", e.getVoucherNo());
+            row.put("voucherDate", e.getVoucherDate());
             row.put("summary", e.getSummary());
             row.put("debit", d);
             row.put("credit", c);

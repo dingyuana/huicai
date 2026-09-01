@@ -194,17 +194,21 @@ public class LedgerChainRealDBTest extends AbstractMapperTest {
 
         List<Map<String, Object>> rows = ledgerService.generalLedger(debitSubjectId, TEST_PERIOD);
 
-        assertEquals(3, rows.size(), "应为 期初 + 1笔分录 + 本期合计");
+        assertEquals(4, rows.size(), "应为 期初 + 1笔分录 + 本期合计 + 本年累计(T4)");
         assertEquals("OPENING", rows.get(0).get("type"));
         assertEquals(0, BigDecimal.ZERO.compareTo((BigDecimal) rows.get(0).get("running")), "期初为0（期初建账零余额）");
 
         assertEquals("ENTRY", rows.get(1).get("type"));
         assertEquals(0, new BigDecimal("500.00").compareTo((BigDecimal) rows.get(1).get("debit")));
         assertEquals(0, new BigDecimal("500.00").compareTo((BigDecimal) rows.get(1).get("running")), "借方科目滚动余额=500");
+        assertNotNull(rows.get(1).get("voucherNo"), "总账分录行应带凭证号(T6)");
+        assertNotNull(rows.get(1).get("voucherDate"), "总账分录行应带凭证日期(T6)");
 
         assertEquals("CLOSING", rows.get(2).get("type"));
         assertEquals(0, new BigDecimal("500.00").compareTo((BigDecimal) rows.get(2).get("debit")));
         assertEquals(0, new BigDecimal("500.00").compareTo((BigDecimal) rows.get(2).get("running")));
+
+        assertEquals("YEAR_TOTAL", rows.get(3).get("type"), "CLOSING 后应有本年累计行(T4)");
     }
 
     @Test
