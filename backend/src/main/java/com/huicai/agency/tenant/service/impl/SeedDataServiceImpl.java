@@ -69,7 +69,7 @@ public class SeedDataServiceImpl implements SeedDataService {
                 "cr_amount_template, summary_template, direction, assist_type, assist_required, line_order, " +
                 "enterprise_id, created_at, updated_at, deleted) " +
                 "SELECT " +
-                "  (SELECT id FROM t_voucher_template WHERE template_code = ref.template_code AND enterprise_id = ?), " +
+                "  (SELECT id FROM t_voucher_template WHERE template_code = tpl.template_code AND enterprise_id = ?), " +
                 "  COALESCE(" +
                 "    (SELECT id FROM t_subject WHERE code = sc.code AND enterprise_id = ?), " +
                 "    ref.subject_id" +
