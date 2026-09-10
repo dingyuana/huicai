@@ -490,14 +490,52 @@ class ArapSettlementServiceImplTest {
 
         service.reverse(1L);
 
-        // 对冲单金额取负
+        // 对冲单金额取负，类型继承原单（chk_settlement_type 仅允许 RECEIVE/PAY）
         verify(mapper).insert(argThat((ArapSettlementEntity reversal) -> new BigDecimal("-1000.00").compareTo(reversal.getTotalAmount()) == 0
-                && "REVERSAL".equals(reversal.getSettlementType())));
+                && "RECEIVE".equals(reversal.getSettlementType())));
         // 原单据金额回滚
         assertEquals(0, BigDecimal.ZERO.compareTo(doc.getSettledAmount()));
         assertEquals(0, new BigDecimal("1000.00").compareTo(doc.getUnsettledAmount()));
         // 原核销单状态 REVERSED
         assertEquals(ArapStatus.REVERSED, entity.getStatus());
         verify(logMapper).insert(any(ReconciliationLogEntity.class));
+    }
+
+    @Test
+    @DisplayName("reverse - 对称回滚来源单据(RECEIPT)已核销金额")
+    void reverse_restoresSourceDocAmounts() {
+        ArapSettlementEntity entity = settlement(1L, ArapStatus.CONFIRMED);
+        entity.setSourceDocId(20L);
+        entity.setSourceDocType("RECEIPT");
+        when(mapper.selectById(1L)).thenReturn(entity);
+
+        ArapSettlementEntryEntity entry = entryWithDoc(10L, "1000.00");
+        when(entryMapper.selectList(any(LambdaQueryWrapper.class))).thenReturn(List.of(entry));
+
+        BusinessDocEntity targetDoc = approvedDoc(10L, new BigDecimal("1000.00"));
+        targetDoc.setSettledAmount(new BigDecimal("1000.00"));
+        targetDoc.setUnsettledAmount(BigDecimal.ZERO);
+        targetDoc.setStatus("FULLY_RECONCILED");
+        when(businessDocMapper.selectById(10L)).thenReturn(targetDoc);
+
+        BusinessDocEntity sourceDoc = approvedDoc(20L, new BigDecimal("1000.00"));
+        sourceDoc.setSettledAmount(new BigDecimal("1000.00"));
+        sourceDoc.setUnsettledAmount(BigDecimal.ZERO);
+        sourceDoc.setStatus("FULLY_RECONCILED");
+        when(businessDocMapper.selectById(20L)).thenReturn(sourceDoc);
+        when(businessDocMapper.updateById(any(BusinessDocEntity.class))).thenReturn(1);
+        when(mapper.insert(any(ArapSettlementEntity.class))).thenReturn(1);
+        when(entryMapper.insert(any(ArapSettlementEntryEntity.class))).thenReturn(1);
+        when(mapper.updateById(any(ArapSettlementEntity.class))).thenReturn(1);
+
+        service.reverse(1L);
+
+        // 来源单据金额回滚 + 状态还原
+        assertEquals(0, BigDecimal.ZERO.compareTo(sourceDoc.getSettledAmount()));
+        assertEquals(0, new BigDecimal("1000.00").compareTo(sourceDoc.getUnsettledAmount()));
+        assertEquals("APPROVED", sourceDoc.getStatus());
+        // 对冲单继承来源单据链接（溯源）
+        verify(mapper).insert(argThat((ArapSettlementEntity rev) -> "RECEIPT".equals(rev.getSourceDocType())
+                && Long.valueOf(20L).equals(rev.getSourceDocId())));
     }
 }

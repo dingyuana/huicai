@@ -439,7 +439,7 @@ public class ArapSettlementServiceImpl implements ArapSettlementService {
         // 创建对冲核销单（红冲）— 对齐 Voucher 红冲模式
         ArapSettlementEntity reverseSettlement = new ArapSettlementEntity();
         reverseSettlement.setSettlementNo(entity.getSettlementNo() + "-H");
-        reverseSettlement.setSettlementType("REVERSAL");
+        reverseSettlement.setSettlementType(entity.getSettlementType()); // 继承原单类型，chk_settlement_type 仅允许 RECEIVE/PAY
         reverseSettlement.setSettlementDate(entity.getSettlementDate());
         reverseSettlement.setPeriod(entity.getPeriod());
         reverseSettlement.setPartyId(entity.getPartyId());
@@ -447,6 +447,8 @@ public class ArapSettlementServiceImpl implements ArapSettlementService {
         reverseSettlement.setTotalAmount(entity.getTotalAmount().negate()); // 金额取负
         reverseSettlement.setDiscountAmount(entity.getDiscountAmount());
         reverseSettlement.setStatus(ArapStatus.DRAFT);
+        reverseSettlement.setSourceDocId(entity.getSourceDocId());
+        reverseSettlement.setSourceDocType(entity.getSourceDocType());
         reverseSettlement.setReversedFromSettlementId(id);
         reverseSettlement.setCreatedBy(DEFAULT_USER_ID);
         mapper.insert(reverseSettlement);
@@ -487,6 +489,38 @@ public class ArapSettlementServiceImpl implements ArapSettlementService {
                     } catch (Exception e) {
                         log.warn("反核销同步发票状态失败(不影响反核销): {}", e.getMessage());
                     }
+                }
+            }
+        }
+
+        // P0-fix: 反核销对称回滚来源单据（RECEIPT/PAYMENT/bank_txn）— 与 approve() L239-268 对称，原实现仅回滚明细目标单据
+        if (entity.getSourceDocId() != null && entity.getSourceDocType() != null) {
+            String srcNorm = entity.getSourceDocType().toLowerCase();
+            if ("receipt".equals(srcNorm) || "payment".equals(srcNorm)) {
+                BusinessDocEntity sourceDoc = businessDocMapper.selectById(entity.getSourceDocId());
+                if (sourceDoc != null) {
+                    BigDecimal srcNewSettled = (sourceDoc.getSettledAmount() != null
+                            ? sourceDoc.getSettledAmount() : BigDecimal.ZERO)
+                            .subtract(entity.getTotalAmount());
+                    sourceDoc.setSettledAmount(srcNewSettled);
+                    sourceDoc.setUnsettledAmount(sourceDoc.getAmount().subtract(srcNewSettled));
+                    sourceDoc.setStatus(srcNewSettled.compareTo(BigDecimal.ZERO) == 0
+                            ? ("VOUCHERED".equals(sourceDoc.getStatus()) ? "VOUCHERED" : "APPROVED")
+                            : "PARTIALLY_RECONCILED");
+                    if (businessDocMapper.updateById(sourceDoc) == 0) {
+                        throw new OptimisticLockingFailureException("来源单据反核销版本冲突, id=" + sourceDoc.getId());
+                    }
+                }
+            } else if ("bank_txn".equals(srcNorm)) {
+                try {
+                    com.huicai.base.business.entity.BankStatementEntity stmt =
+                            bankStatementMapper.selectById(entity.getSourceDocId());
+                    if (stmt != null && "MATCHED".equals(stmt.getMatchStatus())) {
+                        stmt.setMatchStatus("UNMATCHED");
+                        bankStatementMapper.updateById(stmt);
+                    }
+                } catch (Exception e) {
+                    log.warn("银行流水反核销标记失败: {}", e.getMessage());
                 }
             }
         }
