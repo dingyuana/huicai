@@ -63,7 +63,7 @@ public interface OutputInvoiceMapper extends BaseMapper<OutputInvoiceEntity> {
         SELECT
           customer_id AS customerId,
           customer_name AS customerName,
-          SUM(amount_ex_tax) AS salesAmount,
+          SUM(total_amount - tax_amount) AS salesAmount,
           SUM(tax_amount) AS taxAmount,
           SUM(total_amount) AS totalAmount,
           tax_rate AS rate

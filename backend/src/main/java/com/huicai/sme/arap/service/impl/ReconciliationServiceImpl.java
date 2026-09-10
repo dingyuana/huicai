@@ -779,6 +779,14 @@ public class ReconciliationServiceImpl implements ReconciliationService {
                         .eq(BusinessDocEntity::getDocType, targetDocType)
                         .gt(BusinessDocEntity::getUnsettledAmount, BigDecimal.ZERO)
                         .in(BusinessDocEntity::getStatus, List.of("APPROVED", "SUBMITTED", "VOUCHERED", "PARTIALLY_RECONCILED"))
+                        // P44: 防重复核销 — 排除已存在未完结核销单的目标单据
+                        // 单据 settled_amount 在核销单审批执行后才更新, 仅靠 unsettledAmount>0 过滤
+                        // 会导致 SUBMITTED 状态核销单的目标单据被重复匹配(2026-09-10 实测同一单据被核销3次)
+                        .notExists("SELECT 1 FROM t_arap_settlement_entry se "
+                                + "JOIN t_arap_settlement s ON se.settlement_id = s.id "
+                                + "WHERE se.business_doc_id = t_business_doc.id "
+                                + "AND se.deleted = 0 AND s.deleted = 0 "
+                                + "AND s.status IN ('DRAFT','SUBMITTED','CONFIRMED','EXECUTED')")
                         .orderByAsc(BusinessDocEntity::getDueDate)
         );
         for (BusinessDocEntity inv : invoices) {

@@ -668,7 +668,7 @@ async function onConfirmFifoSelected() {
       targetDocType: isReceipt ? 'INVOICE_OUT' : 'INVOICE_IN',
       targetDocId: p.targetDocId,
       amount: p.amount,
-      matchScore: 100,
+      matchScore: p.matchScore ?? 1,
       matchMethod: 'AUTO',
     }))
     await batchExecuteReconciliation(requests)

@@ -22,7 +22,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, watch, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth.store'
 import WorkbenchPanel from './WorkbenchPanel.vue'
@@ -68,6 +68,16 @@ async function refreshActive() {
 onMounted(() => {
   syncTabFromQuery()
 })
+
+// URL query 变化（菜单跳转 / 直接输入带 tab 的地址进入）时，
+// 同步激活 tab 并自动刷新对应面板数据
+watch(
+  () => route.query.tab,
+  () => {
+    syncTabFromQuery()
+    nextTick(() => refreshActive())
+  },
+)
 </script>
 
 <style scoped>

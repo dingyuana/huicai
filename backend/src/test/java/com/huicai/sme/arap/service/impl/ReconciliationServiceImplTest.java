@@ -1,5 +1,6 @@
 package com.huicai.sme.arap.service.impl;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.huicai.common.exception.BusinessException;
 import com.huicai.sme.arap.entity.*;
 import com.huicai.sme.arap.mapper.*;
@@ -597,6 +598,25 @@ class ReconciliationServiceImplTest {
         // dry-run: 不落库、不更新单据
         verify(businessDocMapper, never()).updateById(any(BusinessDocEntity.class));
         verify(logMapper, never()).insert(any(ReconciliationLogEntity.class));
+    }
+
+    @Test
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    void autoReconcileFifo_查询排除已有未完结核销单的目标单据() {
+        com.baomidou.mybatisplus.core.metadata.TableInfoHelper.initTableInfo(
+                new org.apache.ibatis.builder.MapperBuilderAssistant(
+                        new com.baomidou.mybatisplus.core.MybatisConfiguration(), ""), BusinessDocEntity.class);
+        when(businessDocMapper.selectList(any())).thenReturn(List.of());
+
+        service.autoReconcileFifo(5L, "INVOICE_OUT", new BigDecimal("700"), "receipt", 1L, "202606", "FIFO测试");
+
+        org.mockito.ArgumentCaptor<LambdaQueryWrapper> captor =
+                org.mockito.ArgumentCaptor.forClass(LambdaQueryWrapper.class);
+        verify(businessDocMapper).selectList(captor.capture());
+        String sqlSegment = (String) captor.getValue().getSqlSegment();
+        assertTrue(sqlSegment.contains("NOT EXISTS"), "应包含 NOT EXISTS 防重复核销守卫: " + sqlSegment);
+        assertTrue(sqlSegment.contains("t_arap_settlement_entry"), "守卫应关联核销分录表: " + sqlSegment);
+        assertTrue(sqlSegment.contains("SUBMITTED"), "守卫应覆盖 SUBMITTED 状态: " + sqlSegment);
     }
 
     // ==================== 异常池 ====================

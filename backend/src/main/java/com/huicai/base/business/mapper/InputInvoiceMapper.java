@@ -44,7 +44,7 @@ public interface InputInvoiceMapper extends BaseMapper<InputInvoiceEntity> {
         SELECT
           vendor_id AS vendorId,
           vendor_name AS vendorName,
-          SUM(amount_ex_tax) AS amountExTax,
+          SUM(total_amount - tax_amount) AS amountExTax,
           SUM(tax_amount) AS taxAmount,
           SUM(total_amount) AS totalAmount,
           tax_rate AS rate,
@@ -54,7 +54,7 @@ public interface InputInvoiceMapper extends BaseMapper<InputInvoiceEntity> {
         WHERE deleted = 0 AND period = #{period}
           AND (#{vendorId} IS NULL OR vendor_id = #{vendorId})
         GROUP BY vendor_id, vendor_name, tax_rate, certification_status, declared_status
-        ORDER BY amount_ex_tax DESC
+        ORDER BY total_amount - tax_amount DESC
     """)
     List<Map<String, Object>> appendixIIByVendorAndRate(@Param("period") String period, @Param("vendorId") Long vendorId);
 }

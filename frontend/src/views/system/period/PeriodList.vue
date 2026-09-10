@@ -110,7 +110,8 @@ async function fetchData() {
   loading.value = true
   try {
     const res = await getPeriodPage(query.value)
-    list.value = res.records
+    // 按期间编码升序排序（时间顺序：从早到晚）
+    list.value = res.records.sort((a, b) => a.periodCode.localeCompare(b.periodCode))
     total.value = res.total
   } catch {
     // handled

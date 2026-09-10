@@ -13,7 +13,9 @@
           <el-select v-model="settlementQuery.status" placeholder="全部" style="width:120px" clearable @change="fetchData">
             <el-option label="全部" value="" />
             <el-option label="草稿" value="DRAFT" />
+            <el-option label="已提交" value="SUBMITTED" />
             <el-option label="已确认" value="CONFIRMED" />
+            <el-option label="已执行" value="EXECUTED" />
             <el-option label="已记账" value="VOUCHERED" />
             <el-option label="已冲销" value="REVERSED" />
           </el-select>
@@ -219,13 +221,14 @@ function fmtAmount(v: number | null | undefined) {
 }
 
 function statusType(s: string): 'success' | 'warning' | 'info' | 'danger' | 'primary' {
-  if (s === 'CONFIRMED' || s === 'VOUCHERED') return 'success'
-  if (s === 'REVERSED') return 'danger'
+  if (s === 'CONFIRMED' || s === 'VOUCHERED' || s === 'EXECUTED') return 'success'
+  if (s === 'SUBMITTED') return 'warning'
+  if (s === 'REVERSED' || s === 'REJECTED') return 'danger'
   return 'info'
 }
 
 function statusLabel(s: string) {
-  const map: Record<string, string> = { DRAFT: '草稿', CONFIRMED: '已确认', VOUCHERED: '已记账', REVERSED: '已冲销', CANCELLED: '已取消', REJECTED: '已驳回' }
+  const map: Record<string, string> = { DRAFT: '草稿', SUBMITTED: '已提交', CONFIRMED: '已确认', EXECUTED: '已执行', VOUCHERED: '已记账', REVERSED: '已冲销', CANCELLED: '已取消', REJECTED: '已驳回' }
   return map[s] || s
 }
 
