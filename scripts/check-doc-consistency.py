@@ -65,9 +65,9 @@ DESIGN_DOCS = {
 
 
 def run_git(args):
-    """执行 git 命令"""
+    """执行 git 命令（关闭 quotepath，输出原生 UTF-8 路径，避免中文文件名被转义为八进制导致分类失效）"""
     result = subprocess.run(
-        ['git', '-C', str(REPO_ROOT)] + args,
+        ['git', '-C', str(REPO_ROOT), '-c', 'core.quotepath=false'] + args,
         capture_output=True, text=True, timeout=30
     )
     return result.stdout.strip()
