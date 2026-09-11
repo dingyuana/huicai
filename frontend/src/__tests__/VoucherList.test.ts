@@ -27,6 +27,11 @@ vi.mock('@/api/modules/voucher', () => ({
   ],
 }))
 
+// Mock 默认会计期间工具（P57）— 固定返回 202609，避免依赖真实日期/企业接口
+vi.mock('@/utils/period', () => ({
+  resolveDefaultPeriod: vi.fn().mockResolvedValue('202609'),
+}))
+
 // Mock element-plus ElMessage
 vi.mock('element-plus', async (importOriginal) => {
   const actual: any = await importOriginal()
@@ -91,6 +96,23 @@ describe('VoucherList — 凭证列表组件', () => {
     await nextTick()
 
     expect(getVoucherPage).toHaveBeenCalled()
+  })
+
+  it('onMounted 默认查询当前会计期间（P57）', async () => {
+    const { getVoucherPage } = await import('@/api/modules/voucher')
+    const { resolveDefaultPeriod } = await import('@/utils/period')
+    vi.mocked(getVoucherPage).mockResolvedValue(mockPageResponse([], 0))
+
+    shallowMount(VoucherList, { global: { plugins: [router] } })
+    await nextTick()
+    await nextTick()
+
+    expect(resolveDefaultPeriod).toHaveBeenCalled()
+    expect(getVoucherPage).toHaveBeenCalledWith(expect.objectContaining({
+      period: '202609',
+      current: 1,
+      size: 20,
+    }))
   })
 
   it('分页查询携带正确参数', async () => {

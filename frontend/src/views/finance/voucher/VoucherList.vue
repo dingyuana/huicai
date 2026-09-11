@@ -179,6 +179,7 @@ import {
   type VoucherVO,
   type VoucherQueryDTO,
 } from '@/api/modules/voucher'
+import { resolveDefaultPeriod } from '@/utils/period'
 
 const router = useRouter()
 const loading = ref(false)
@@ -365,7 +366,10 @@ async function onBatchPost() {
   await fetchData()
 }
 
-onMounted(fetchData)
+onMounted(async () => {
+  query.value.period = await resolveDefaultPeriod()
+  fetchData()
+})
 
 /** 导出凭证到 Excel */
 async function handleExport() {
