@@ -17,7 +17,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 # 注意：docs/design/ 下文档统一使用中文 DSN-*.md 命名（2026-08 文档体系改版）
 CODE_TO_DOC = {
     # 应收应付模块
-    'arap/': ['docs/design/DSN-应收应付管理.md', 'docs/specs/P30-reconciliation-workbench-enhance.md'],
+    'arap/': ['docs/design/DSN-应收应付管理.md', 'docs/specs/P30-reconciliation-workbench-enhance.md', 'docs/specs/S-28-反核销制证凭证联动作废.md'],
     # 总账/凭证模块
     'finance/': ['docs/design/DSN-总账管理.md'],
     # 税务/发票模块
@@ -151,9 +151,10 @@ def check_rule1_migration_vs_doc(migrations):
         content = (REPO_ROOT / m).read_text()
         tables = re.findall(r'(?:TABLE|table)\s+(?:IF NOT EXISTS\s+)?(\w+)', content, re.IGNORECASE)
         for table in tables:
-            # 找对应设计文档
+            # 找对应设计文档：按表名前缀匹配模块（如 t_finance_xxx -> finance）
             for code_prefix, docs in CODE_TO_DOC.items():
-                if table in ['t_' + code_prefix.rstrip('/')] or any(table.startswith(t) for t in ['t_']):
+                module = code_prefix.rstrip('/')
+                if table == 't_' + module or table.startswith('t_' + module + '_'):
                     for doc in docs:
                         doc_path = REPO_ROOT / doc
                         if doc_path.exists():
@@ -292,7 +293,9 @@ def check_rule0_code_changed_no_doc(changed_files):
     for bf in backend_files:
         # 找对应的设计文档
         for code_prefix, docs in CODE_TO_DOC.items():
-            if code_prefix in bf:
+            # 路径组件级匹配（避免 'ai/' 误命中 'huicai/agency/' 等包名子串）
+            # 注意：code_prefix 自带尾斜杠，先 rstrip 再构造正则，避免 'finance//' 双斜杠永不匹配
+            if re.search(r'(^|/)' + re.escape(code_prefix.rstrip('/')) + r'/', bf):
                 for doc in docs:
                     if doc not in changed_files:
                         findings.append({

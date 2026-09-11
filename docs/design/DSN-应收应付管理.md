@@ -1,9 +1,9 @@
 # 02-应收应付管理设计
 
 > **关联PRD**：../prd/业务单据管理-PRD-V1.0.md, ../prd/应收应付核销-PRD-V1.0.md
-> **关联SPEC**：P30-reconciliation-workbench-enhance.md, P36-invoice-reverse-chain.md, P42-reconciliation-frontend.md, P43-bad-debt-provision.md, P51-aging-analysis.md, P52-customer-reconciliation.md, P53-procurement-payment-finance.md
+> **关联SPEC**：P30-reconciliation-workbench-enhance.md, P36-invoice-reverse-chain.md, P42-reconciliation-frontend.md, P43-bad-debt-provision.md, P51-aging-analysis.md, P52-customer-reconciliation.md, P53-procurement-payment-finance.md, S-28-反核销制证凭证联动作废.md
 > **编号**：HUICAI-DES-003
-> **版本**：V1.3 | **修改日期**：2026-07-09 | **修改人**：Hermes | **修改内容**：核销单列表字段补全 + 详情客户名称 + 核销依据表格
+> **版本**：V1.4 | **修改日期**：2026-09-11 | **修改人**：Hermes | **修改内容**：补反核销流程（S-28/SPC-111 制证凭证联动作废）与 reverse API
 > 代码包：`com.huicai.module.arap`
 > 设计文档：[项目说明](../CORE-项目说明.md) | [技术方案](../CORE-技术方案.md) | [需求分析](../CORE-需求分析.md)
 
@@ -78,9 +78,13 @@
                               ↓
                        核销工作台 ← 唯一入口
                               ↓
-                   推荐匹配 → 执行核销 → 核销单(DRAFT)
+                 推荐匹配 → 执行核销 → 核销单(DRAFT)
                               ↓
-                   generateVoucher → 凭证(DRAFT)
+                 generateVoucher → 凭证(DRAFT)
+                              ↓
+                       reverse（反核销，S-28/SPC-111）
+                              ├─ DRAFT 凭证 → 联动作废 + 清空核销单/单据双侧挂接
+                              └─ 非 DRAFT 凭证 → 拦截，提示先红冲（铁律#3）
 ```
 
 ## 5. API 端点
@@ -94,6 +98,7 @@
 | /api/v1/reconciliation/tolerance/default | GET | **获取默认容差配置**（新增） |
 | /api/v1/arap-settlements/** | CRUD | 核销单 |
 | /api/v1/arap-settlements/{id}/generate-voucher | POST | 生成凭证 |
+| /api/v1/arap-settlements/{id}/reverse | POST | **反核销**（S-28：DRAFT 凭证联动作废并清空双侧挂接；非 DRAFT 拦截提示先红冲） |
 | /api/v1/prepayments/** | CRUD | 预收预付 |
 || /api/v1/bad-debts/** | CRUD | 坏账 | P43 |
 || /api/v1/aging-analysis/** | 账龄分析 | 账龄分析表、到期债权表、逾期预警 | P51 |
