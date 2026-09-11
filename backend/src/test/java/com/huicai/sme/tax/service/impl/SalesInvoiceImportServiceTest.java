@@ -5,6 +5,7 @@ import com.huicai.base.masterdata.mapper.CustomerMapper;
 import com.huicai.base.business.entity.BusinessDocEntity;
 import com.huicai.base.business.mapper.BusinessDocEntryMapper;
 import com.huicai.base.business.mapper.BusinessDocMapper;
+import com.huicai.base.voucher.entity.VoucherEntryEntity;
 import com.huicai.base.voucher.mapper.VoucherEntryMapper;
 import com.huicai.base.voucher.mapper.VoucherMapper;
 import com.huicai.base.voucher.service.VoucherNoService;
@@ -15,6 +16,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.ArgumentCaptor;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.lang.reflect.Method;
@@ -320,5 +322,45 @@ class SalesInvoiceImportServiceTest {
         m.setAccessible(true);
         String result = (String) m.invoke(service, "这是一条普通备注");
         assertNull(result);
+    }
+
+    // ==================== 销项收入科目 5001→6001 (RED: 应 FAIL) ====================
+
+    @Test
+    void createVoucher_蓝字发票_收入科目应为6001而非5001() throws Exception {
+        Subject subject1122 = stubSubject(1L, "1122");
+        Subject subject5001 = stubSubject(99L, "5001");
+        Subject subject6001 = stubSubject(20L, "6001");
+        Subject subject222101 = stubSubject(3L, "2221.01");
+
+        // mock: findSubjectByCode 按调用顺序返回 — 第2次查询"6001"
+        when(subjectMapper.selectList(any()))
+                .thenReturn(List.of(subject1122))
+                .thenReturn(List.of(subject6001))
+                .thenReturn(List.of(subject222101));
+        when(voucherNoService.generateNextNo(anyString(), anyLong())).thenReturn("JZ2026060001");
+
+        BusinessDocEntity doc = new BusinessDocEntity();
+        doc.setId(100L);
+        SalesInvoiceImportService.ParsedInvoiceRow row = stubRow(1, "INV-001", "91110000ABC", "测试客户");
+
+        Method m = SalesInvoiceImportService.class.getDeclaredMethod(
+                "createVoucher", BusinessDocEntity.class,
+                SalesInvoiceImportService.ParsedInvoiceRow.class, Long.class, String.class);
+        m.setAccessible(true);
+        m.invoke(service, doc, row, 10L, "202606");
+
+        ArgumentCaptor<VoucherEntryEntity> captor = ArgumentCaptor.forClass(VoucherEntryEntity.class);
+        verify(voucherEntryMapper, times(3)).insert(captor.capture());
+
+        // 收入贷方分录：debit=0, credit=1000 (不含税金额)
+        VoucherEntryEntity revenueEntry = captor.getAllValues().stream()
+                .filter(e -> e.getDebit().compareTo(BigDecimal.ZERO) == 0
+                        && e.getCredit().compareTo(new BigDecimal("1000")) == 0)
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("未找到收入贷方分录"));
+
+        assertEquals(subject6001.getId(), revenueEntry.getSubjectId(),
+                "销项收入科目应为6001(主营业务收入)而非5001(生产成本)");
     }
 }

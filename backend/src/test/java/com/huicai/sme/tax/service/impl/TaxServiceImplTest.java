@@ -22,6 +22,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.ArgumentCaptor;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
@@ -417,7 +418,7 @@ class TaxServiceImplTest {
         when(outputMapper.selectById(1L)).thenReturn(inv);
         when(templateMatcher.match(any())).thenReturn(null);
         when(voucherNoService.generateNextNo(anyString(), anyLong())).thenReturn("记-202608-0001");
-        when(subjectMapper.selectList(any())).thenReturn(List.of(subject(101L, "1122"), subject(102L, "5001"), subject(103L, "2221.01")));
+        when(subjectMapper.selectList(any())).thenReturn(List.of(subject(101L, "1122"), subject(102L, "6001"), subject(103L, "2221.01")));
 
         service.generateVoucherFromInvoice(1L, 100L);
 
@@ -432,7 +433,7 @@ class TaxServiceImplTest {
         when(outputMapper.selectById(5L)).thenReturn(inv);
         when(templateMatcher.match(any())).thenReturn(null);
         when(voucherNoService.generateNextNo(anyString(), anyLong())).thenReturn("记-202608-0002");
-        when(subjectMapper.selectList(any())).thenReturn(List.of(subject(101L, "1122"), subject(102L, "5001"), subject(103L, "2221.01")));
+        when(subjectMapper.selectList(any())).thenReturn(List.of(subject(101L, "1122"), subject(102L, "6001"), subject(103L, "2221.01")));
 
         List<VoucherEntryEntity> inserted = new ArrayList<>();
         doAnswer(a -> { inserted.add(a.getArgument(0)); return 1; })
@@ -553,5 +554,65 @@ class TaxServiceImplTest {
     @Test
     void taxBurden_type非法_抛异常() {
         assertThrows(BusinessException.class, () -> service.taxBurden("202607", "INVALID"));
+    }
+
+    // ==================== 销项收入科目 5001→6001 (RED: 应 FAIL) ====================
+
+    @Test
+    void generateVoucherFromInvoice_蓝字_收入科目应为6001而非5001() {
+        Subject subject1122 = subject(1L, "1122");
+        Subject subject5001 = subject(99L, "5001");
+        Subject subject6001 = subject(20L, "6001");
+        Subject subject222101 = subject(3L, "2221.01");
+
+        OutputInvoiceEntity inv = stubOutputInvoice(1L, "CONFIRMED", "1000.00", "130.00", "1130.00");
+        when(outputMapper.selectById(1L)).thenReturn(inv);
+        when(templateMatcher.match(any())).thenReturn(null);
+        when(voucherNoService.generateNextNo(anyString(), anyLong())).thenReturn("记-202608-0001");
+        when(subjectMapper.selectList(any()))
+                .thenReturn(List.of(subject1122, subject5001, subject6001, subject222101));
+
+        service.generateVoucherFromInvoice(1L, 100L);
+
+        ArgumentCaptor<VoucherEntryEntity> captor = ArgumentCaptor.forClass(VoucherEntryEntity.class);
+        verify(voucherEntryMapper, times(3)).insert(captor.capture());
+
+        VoucherEntryEntity revenueEntry = captor.getAllValues().stream()
+                .filter(e -> e.getDebit().compareTo(BigDecimal.ZERO) == 0
+                        && e.getCredit().compareTo(new BigDecimal("1000.00")) == 0)
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("未找到收入贷方分录"));
+
+        assertEquals(subject6001.getId(), revenueEntry.getSubjectId(),
+                "销项收入科目应为6001(主营业务收入)而非5001(生产成本)");
+    }
+
+    @Test
+    void batchGenerateVoucherFromInvoices_收入科目应为6001而非5001() {
+        Subject subject1122 = subject(1L, "1122");
+        Subject subject5001 = subject(99L, "5001");
+        Subject subject6001 = subject(20L, "6001");
+        Subject subject222101 = subject(3L, "2221.01");
+
+        OutputInvoiceEntity inv1 = stubOutputInvoice(1L, "CONFIRMED", "500.00", "65.00", "565.00");
+        OutputInvoiceEntity inv2 = stubOutputInvoice(2L, "CONFIRMED", "500.00", "65.00", "565.00");
+        when(outputMapper.selectBatchIds(List.of(1L, 2L))).thenReturn(List.of(inv1, inv2));
+        when(voucherNoService.generateNextNo(anyString(), anyLong())).thenReturn("记-202608-0002");
+        when(subjectMapper.selectList(any()))
+                .thenReturn(List.of(subject1122, subject5001, subject6001, subject222101));
+
+        service.batchGenerateVoucherFromInvoices(List.of(1L, 2L), 100L, false);
+
+        ArgumentCaptor<VoucherEntryEntity> captor = ArgumentCaptor.forClass(VoucherEntryEntity.class);
+        verify(voucherEntryMapper, times(3)).insert(captor.capture());
+
+        VoucherEntryEntity revenueEntry = captor.getAllValues().stream()
+                .filter(e -> e.getDebit().compareTo(BigDecimal.ZERO) == 0
+                        && e.getCredit().compareTo(new BigDecimal("1000.00")) == 0)
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("未找到收入贷方分录"));
+
+        assertEquals(subject6001.getId(), revenueEntry.getSubjectId(),
+                "批量凭证收入科目应为6001(主营业务收入)而非5001(生产成本)");
     }
 }

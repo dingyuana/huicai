@@ -495,10 +495,10 @@ public class SalesInvoiceImportService {
     protected void createVoucher(BusinessDocEntity doc, ParsedInvoiceRow row, Long customerId, String period) {
         String voucherNo = voucherNoService.generateNextNo(period, DEFAULT_VOUCHER_TYPE_ID);
         Subject subjectBank = findSubjectByCode("1122");
-        Subject subjectRevenue = findSubjectByCode("5001");
+        Subject subjectRevenue = findSubjectByCode("6001");
         Subject subjectOutputTax = findSubjectByCode("2221.01");
         if (subjectBank == null || subjectRevenue == null) {
-            throw new BusinessException(500, "缺少基础科目配置(1122/5001)");
+            throw new BusinessException(500, "缺少基础科目配置(1122/6001)");
         }
 
         BigDecimal exclTaxAmount = row.amount != null ? row.amount : BigDecimal.ZERO;
@@ -535,7 +535,7 @@ public class SalesInvoiceImportService {
             crAr.setSortOrder(sort++);
             voucherEntryMapper.insert(crAr);
 
-            // 借：主营业务收入 5001
+            // 借：主营业务收入 6001
             VoucherEntryEntity drRev = new VoucherEntryEntity();
             drRev.setVoucherId(voucher.getId());
             drRev.setSubjectId(subjectRevenue.getId());
@@ -568,7 +568,7 @@ public class SalesInvoiceImportService {
             entryDr.setSortOrder(sort++);
             voucherEntryMapper.insert(entryDr);
 
-            // 贷：主营业务收入 5001
+            // 贷：主营业务收入 6001
             VoucherEntryEntity entryCr1 = new VoucherEntryEntity();
             entryCr1.setVoucherId(voucher.getId());
             entryCr1.setSubjectId(subjectRevenue.getId());
@@ -601,7 +601,7 @@ public class SalesInvoiceImportService {
 
     void ensureStandardSubjects() {
         ensureSubject("1122", "应收账款", 1, "debit", null);
-        ensureSubject("5001", "主营业务收入", 1, "credit", null);
+        ensureSubject("6001", "主营业务收入", 1, "credit", null);
         ensureSubject("2221", "应交税费", 1, "credit", null);
         ensureSubject("2221.01", "应交增值税-销项税额", 2, "credit", "2221");
     }

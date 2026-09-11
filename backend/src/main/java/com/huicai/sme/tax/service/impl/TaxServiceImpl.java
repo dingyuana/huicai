@@ -396,12 +396,12 @@ public class TaxServiceImpl implements TaxService {
 
         // 2. 降级: 硬编码科目 — 1 次批量查询替代 3 次串行查询
         String voucherNo = voucherNoService.generateNextNo(inv.getPeriod(), VOUCHER_TYPE_ID);
-        java.util.Map<String, Subject> subjects = findSubjectsByCodes(java.util.List.of("1122", "5001", "2221.01"));
+        java.util.Map<String, Subject> subjects = findSubjectsByCodes(java.util.List.of("1122", "6001", "2221.01"));
         Subject subjectAr = subjects.get("1122");
-        Subject subjectRevenue = subjects.get("5001");
+        Subject subjectRevenue = subjects.get("6001");
         Subject subjectOutputTax = subjects.get("2221.01");
         if (subjectAr == null || subjectRevenue == null) {
-            throw new BusinessException(500, "缺少基础科目配置(1122/5001)");
+            throw new BusinessException(500, "缺少基础科目配置(1122/6001)");
         }
 
         BigDecimal exclTax = inv.getAmount() != null ? inv.getAmount() : BigDecimal.ZERO;
@@ -440,7 +440,7 @@ public class TaxServiceImpl implements TaxService {
             crAr.setSortOrder(sort++);
             voucherEntryMapper.insert(crAr);
 
-            // 借：主营业务收入 5001
+            // 借：主营业务收入 6001
             VoucherEntryEntity drRev = new VoucherEntryEntity();
             drRev.setVoucherId(voucher.getId());
             drRev.setSubjectId(subjectRevenue.getId());
@@ -472,7 +472,7 @@ public class TaxServiceImpl implements TaxService {
             dr.setSortOrder(sort++);
             voucherEntryMapper.insert(dr);
 
-            // 贷：主营业务收入 5001
+            // 贷：主营业务收入 6001
             VoucherEntryEntity cr1 = new VoucherEntryEntity();
             cr1.setVoucherId(voucher.getId());
             cr1.setSubjectId(subjectRevenue.getId());
@@ -1039,12 +1039,12 @@ public class TaxServiceImpl implements TaxService {
                 .filter(java.util.Objects::nonNull)
                 .reduce((a, b) -> a + ", " + b).orElse("");
         String voucherNo = voucherNoService.generateNextNo(period, VOUCHER_TYPE_ID);
-        java.util.Map<String, Subject> subjects = findSubjectsByCodes(java.util.List.of("1122", "5001", "2221.01"));
+        java.util.Map<String, Subject> subjects = findSubjectsByCodes(java.util.List.of("1122", "6001", "2221.01"));
         Subject subjectAr = subjects.get("1122");
-        Subject subjectRevenue = subjects.get("5001");
+        Subject subjectRevenue = subjects.get("6001");
         Subject subjectOutputTax = subjects.get("2221.01");
         if (subjectAr == null || subjectRevenue == null) {
-            throw new BusinessException(500, "缺少基础科目配置(1122/5001)");
+            throw new BusinessException(500, "缺少基础科目配置(1122/6001)");
         }
         VoucherEntity voucher = new VoucherEntity();
         voucher.setVoucherNo(voucherNo);
