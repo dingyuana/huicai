@@ -86,7 +86,7 @@ docs/
 | HUICAI-PRD-012 | [Agency分支-PRD-V1.0.md](./prd/Agency分支-PRD-V1.0.md) | DSN-应收应付管理 | S-26 | ✅ |
 | HUICAI-PRD-013 | [公共参数-PRD-V1.0.md](./prd/公共参数-PRD-V1.0.md) | DSN-基础数据管理 | 待建 | ⚠️ 部分实现 |
 | HUICAI-PRD-014 | [权限安全审计-PRD-V1.0.md](./prd/权限安全审计-PRD-V1.0.md) | DSN-基础数据管理 | S-01、S-02 | ✅ |
-| HUICAI-PRD-007 | [凭证模板引擎-PRD-V1.0.md](./prd/凭证模板引擎-PRD-V1.0.md) | DSN-总账管理 | P22、P37、S-17 | ✅ |
+| HUICAI-PRD-015 | [凭证模板引擎-PRD-V1.0.md](./prd/凭证模板引擎-PRD-V1.0.md) | DSN-总账管理 | P22、P37、S-17 | ✅ |
 | HUICAI-PRD-PLAN | [PRD-拆解计划.md](./prd/PRD-拆解计划.md) | — | — | ✅ |
 
 ### 2.2 DSN 模块设计文档（design/ — 13份）
