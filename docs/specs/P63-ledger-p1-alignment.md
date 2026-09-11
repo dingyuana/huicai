@@ -61,8 +61,8 @@
 
 ### 1. 输入契约
 
-- **余额表**：`GET /ledgers/subject-balance?period=YYYYMM`（参数不变）
-- **总账**：`GET /ledgers/general?subjectId&period`（参数不变）
+- **余额表**：`GET /api/base/voucher/v1/ledgers/subject-balance?period=YYYYMM`（参数不变）
+- **总账**：`GET /api/base/voucher/v1/ledgers/general?subjectId&period`（参数不变）
 
 ### 2. 输出契约
 
@@ -113,7 +113,7 @@
 
 ### 1. 输入契约
 
-**API**：`GET /ledgers/subject-balance`，新增可选参数：
+**API**：`GET /api/base/voucher/v1/ledgers/subject-balance`，新增可选参数：
 
 | 参数 | 类型 | 必填 | 约束 |
 |------|------|------|------|
@@ -137,7 +137,7 @@
 
 ### 1. 输入契约
 
-**API**：`GET /ledgers/subject-balance`、`/general`、`/subsidiary`，新增可选参数：
+**API**：`GET /api/base/voucher/v1/ledgers/subject-balance`、`/api/base/voucher/v1/ledgers/general`、`/api/base/voucher/v1/ledgers/subsidiary`，新增可选参数：
 
 | 参数 | 类型 | 必填 | 约束 |
 |------|------|------|------|
