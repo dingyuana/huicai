@@ -1,7 +1,7 @@
 # P3 任务书：银行流水智能导入主动生单改造 — R1 触发时机 + R3 bug 修复
 
 > 日期：2026-06-13 | 任务 ID：P3-BANK-IMPORT-ACTIVE
-> 上游文档：`docs/specs/02-数据导入模块详细规格.md`、Go 版 `internal/service/bank_txn_review_service.go`、`AutoGenerationService.java`（已读）
+> 上游文档：`docs/specs/S-29-数据导入模块详细规格.md`、Go 版 `internal/service/bank_txn_review_service.go`、`AutoGenerationService.java`（已读）
 > 关联 commit：`3daa958`（AutoGenerationService 14K 已 commit）
 > 老丁原话："实现导入流水后主动生成凭证的过程"
 

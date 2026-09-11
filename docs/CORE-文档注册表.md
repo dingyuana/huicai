@@ -116,8 +116,8 @@ docs/
 | 编号范围 | 说明 | 数量 |
 |----------|------|------|
 | P0~P65 | 功能规格文档（P 系列，含 P-BUSINESSDOC-LIST/P-SALARY/P-TRANSFER），按开发顺序增量编号 | 60份 |
-| S-00~S-28 | 系统级规范文档（S 系列，S-17 含 S-17-1 子文档），按业务域分层编号 | 13份 |
-| 其他 | SPEC-CONTRACT-SCHEMA.md（契约规范）、T1-BankStatement数据隔离测试方案.md、timestamp-precision.md、02-数据导入模块详细规格.md | 4份 |
+| S-00~S-29 | 系统级规范文档（S 系列，S-17 含 S-17-1 子文档），按业务域分层编号 | 14份 |
+| 其他 | SPEC-CONTRACT-SCHEMA.md（契约规范）、T1-BankStatement数据隔离测试方案.md、timestamp-precision.md | 3份 |
 
 **全部 SPEC 按模块归类**：
 
@@ -126,7 +126,7 @@ docs/
 | 凭证管理 | P22-voucher-state-machine、P37-voucher-type-rules、S-17-期末自动化结转、S-18-结账控制 |
 | 应收应付核销 | P30、P30-P1-unified-settlement-path、P36、P42、P43-bad-debt、P51、P52、P53、S-28-反核销制证凭证联动作废、P10 |
 | 发票税务 | P40-input-invoice、P41-invoice-driven-finance、P13-tax-declaration、P36-1-red-flush-voucher、P57-declare-status-split、P58-invoice-payment-reconcile、P61-vat-appendix-and-burden |
-| 资金管理 | P1-bank-import、P14-bank-reconciliation、P23-bank-statement |
+| 资金管理 | P1-bank-import、P14-bank-reconciliation、P23-bank-statement、S-29-数据导入模块详细规格 |
 | 固定资产 | S-23 |
 | 工资薪酬 | S-14（待建） |
 | 基础数据 | S-04、S-05 |
