@@ -3,6 +3,7 @@ package com.huicai.sme.arap.service.impl;
 import cn.hutool.core.util.IdUtil;
 import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.huicai.common.exception.BusinessException;
@@ -436,6 +437,8 @@ public class ArapSettlementServiceImpl implements ArapSettlementService {
         if (!ArapStatus.isSettlementReversible(entity.getStatus())) {
             throw new BusinessException("仅已确认或已记账的核销单可反核销, 当前: " + entity.getStatus());
         }
+        // P0-fix: 制证后反核销 — 联动作废 DRAFT 制证凭证，避免幽灵凭证残留挂在 REVERSED 核销单上
+        Long voidedVoucherId = voidDraftVoucherIfAny(entity);
         // 创建对冲核销单（红冲）— 对齐 Voucher 红冲模式
         ArapSettlementEntity reverseSettlement = new ArapSettlementEntity();
         reverseSettlement.setSettlementNo(entity.getSettlementNo() + "-H");
@@ -469,7 +472,7 @@ public class ArapSettlementServiceImpl implements ArapSettlementService {
             reverseEntry.setAfterBalance(entry.getAfterBalance());
             entryMapper.insert(reverseEntry);
             // P0-fix: 反核销回滚业务单据 settled/unsettled 金额（原实现漏调）
-            restoreUnsettledAmount(entry);
+            restoreUnsettledAmount(entry, voidedVoucherId);
             // P0-fix: 反核销同步回滚发票状态（与正向 onReconciliationUpdate 对称）
             if (entry.getBusinessDocId() != null) {
                 BusinessDocEntity doc = businessDocMapper.selectById(entry.getBusinessDocId());
@@ -527,20 +530,59 @@ public class ArapSettlementServiceImpl implements ArapSettlementService {
 
         // 原核销单状态改为 REVERSED
         entity.setStatus(ArapStatus.REVERSED);
-        mapper.updateById(entity);
+        if (voidedVoucherId != null) {
+            // MyBatis-Plus updateById 默认忽略 null 字段，须用 UpdateWrapper 显式置空凭证挂接
+            // （voucherNo 为 exist=false 内存字段不落库，仅更新持久化列 voucher_id）
+            mapper.update(null, new UpdateWrapper<ArapSettlementEntity>()
+                    .eq("id", entity.getId())
+                    .set("status", ArapStatus.REVERSED)
+                    .set("voucher_id", null));
+        } else {
+            mapper.updateById(entity);
+        }
         logReconciliationLog(entity, "REVERSE", "红冲反核销，创建对冲单据 id=" + reverseSettlement.getId(), null, DEFAULT_USER_ID);
     }
 
-    private void restoreUnsettledAmount(ArapSettlementEntryEntity entry) {
+    private Long voidDraftVoucherIfAny(ArapSettlementEntity entity) {
+        if (entity.getVoucherId() == null) {
+            return null;
+        }
+        VoucherEntity voucher = voucherMapper.selectById(entity.getVoucherId());
+        if (voucher == null) {
+            return null;
+        }
+        if (!"DRAFT".equals(voucher.getStatus())) {
+            throw new BusinessException("核销单已制证且凭证状态为 " + voucher.getStatus()
+                    + "，请先红冲凭证后再反核销: voucherId=" + voucher.getId());
+        }
+        voucherEntryMapper.deleteByVoucherId(voucher.getId());
+        voucherMapper.deleteById(voucher.getId());
+        log.info("反核销联动作废制证凭证: voucherId={}, voucherNo={}", voucher.getId(), voucher.getVoucherNo());
+        return voucher.getId();
+    }
+
+    private void restoreUnsettledAmount(ArapSettlementEntryEntity entry, Long voidedVoucherId) {
         if (entry.getBusinessDocId() != null) {
             BusinessDocEntity doc = businessDocMapper.selectById(entry.getBusinessDocId());
             if (doc != null) {
                 BigDecimal newSettled = doc.getSettledAmount().subtract(entry.getSettledAmount());
                 doc.setSettledAmount(newSettled);
                 doc.setUnsettledAmount(doc.getAmount().subtract(newSettled));
+                // P0-fix: 制证凭证已作废时清空单据凭证挂接，且不保持 VOUCHERED（凭证已不存在）
+                boolean voucherVoided = voidedVoucherId != null
+                        && Long.valueOf(voidedVoucherId).equals(doc.getVoucherId());
+                if (voucherVoided) {
+                    // updateById 忽略 null 字段：实体置空防止旧值回写 + UpdateWrapper 显式清 DB 列
+                    doc.setVoucherId(null);
+                    doc.setVoucherNo(null);
+                    businessDocMapper.update(null, new UpdateWrapper<BusinessDocEntity>()
+                            .eq("id", doc.getId())
+                            .set("voucher_id", null)
+                            .set("voucher_no", null));
+                }
                 // P0-fix: 按剩余金额定状态，不盲目回退 APPROVED（已制证单据保持 VOUCHERED）
                 doc.setStatus(newSettled.compareTo(BigDecimal.ZERO) == 0
-                        ? ("VOUCHERED".equals(doc.getStatus()) ? "VOUCHERED" : "APPROVED")
+                        ? ("VOUCHERED".equals(doc.getStatus()) && !voucherVoided ? "VOUCHERED" : "APPROVED")
                         : "PARTIALLY_RECONCILED");
                 if (businessDocMapper.updateById(doc) == 0) {
                     throw new OptimisticLockingFailureException("BusinessDoc反核销版本冲突, id=" + doc.getId());

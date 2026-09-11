@@ -1,6 +1,7 @@
 package com.huicai.sme.arap.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.huicai.base.business.dto.vo.ArapSettlementVO;
@@ -537,5 +538,72 @@ class ArapSettlementServiceImplTest {
         // 对冲单继承来源单据链接（溯源）
         verify(mapper).insert(argThat((ArapSettlementEntity rev) -> "RECEIPT".equals(rev.getSourceDocType())
                 && Long.valueOf(20L).equals(rev.getSourceDocId())));
+    }
+
+    @Test
+    @DisplayName("reverse - 制证后反核销联动作废 DRAFT 凭证并清空单据凭证挂接")
+    void reverse_voidsDraftVoucherAndClearsDocVoucher() {
+        ArapSettlementEntity entity = settlement(1L, ArapStatus.VOUCHERED);
+        entity.setVoucherId(555L);
+        entity.setVoucherNo("SK-202608-001");
+        when(mapper.selectById(1L)).thenReturn(entity);
+
+        VoucherEntity voucher = new VoucherEntity();
+        voucher.setId(555L);
+        voucher.setVoucherNo("SK-202608-001");
+        voucher.setStatus("DRAFT");
+        when(voucherMapper.selectById(555L)).thenReturn(voucher);
+
+        ArapSettlementEntryEntity entry = entryWithDoc(10L, "1000.00");
+        when(entryMapper.selectList(any(LambdaQueryWrapper.class))).thenReturn(List.of(entry));
+
+        BusinessDocEntity targetDoc = approvedDoc(10L, new BigDecimal("1000.00"));
+        targetDoc.setSettledAmount(new BigDecimal("1000.00"));
+        targetDoc.setUnsettledAmount(BigDecimal.ZERO);
+        targetDoc.setStatus("VOUCHERED");
+        targetDoc.setVoucherId(555L);
+        targetDoc.setVoucherNo("SK-202608-001");
+        when(businessDocMapper.selectById(10L)).thenReturn(targetDoc);
+        when(businessDocMapper.updateById(any(BusinessDocEntity.class))).thenReturn(1);
+        when(businessDocMapper.update(isNull(), any(UpdateWrapper.class))).thenReturn(1);
+        when(mapper.insert(any(ArapSettlementEntity.class))).thenReturn(1);
+        when(entryMapper.insert(any(ArapSettlementEntryEntity.class))).thenReturn(1);
+        when(mapper.update(isNull(), any(UpdateWrapper.class))).thenReturn(1);
+
+        service.reverse(1L);
+
+        // 凭证被作废（逻辑删除）
+        verify(voucherEntryMapper).deleteByVoucherId(555L);
+        verify(voucherMapper).deleteById(555L);
+        // 单据凭证挂接清空 = 实体置空（防 updateById 回写旧值）+ UpdateWrapper 显式置空 DB 列
+        assertNull(targetDoc.getVoucherId());
+        assertNull(targetDoc.getVoucherNo());
+        verify(businessDocMapper).update(isNull(), argThat((UpdateWrapper<BusinessDocEntity> w) ->
+                w.getSqlSet().contains("voucher_id")
+                        && w.getSqlSet().contains("voucher_no")));
+        assertEquals("APPROVED", targetDoc.getStatus());
+        // 核销单状态 REVERSED + UpdateWrapper 显式置空凭证挂接（updateById 会忽略 null 字段）
+        assertEquals(ArapStatus.REVERSED, entity.getStatus());
+        verify(mapper).update(isNull(), argThat((UpdateWrapper<ArapSettlementEntity> w) ->
+                w.getSqlSet().contains("voucher_id")));
+    }
+
+    @Test
+    @DisplayName("reverse - 制证凭证非 DRAFT（已提交/审核/过账）时拦截反核销")
+    void reverse_nonDraftVoucher_throws() {
+        ArapSettlementEntity entity = settlement(1L, ArapStatus.VOUCHERED);
+        entity.setVoucherId(555L);
+        when(mapper.selectById(1L)).thenReturn(entity);
+
+        VoucherEntity voucher = new VoucherEntity();
+        voucher.setId(555L);
+        voucher.setStatus("AUDITED");
+        when(voucherMapper.selectById(555L)).thenReturn(voucher);
+
+        BusinessException ex = assertThrows(BusinessException.class, () -> service.reverse(1L));
+        assertTrue(ex.getMessage().contains("请先红冲凭证"));
+        // 未作废凭证
+        verify(voucherMapper, never()).deleteById(any(Long.class));
+        verify(voucherEntryMapper, never()).deleteByVoucherId(any(Long.class));
     }
 }
