@@ -4,7 +4,7 @@
 
 ## §0 项目状态（硬数字，每次 commit 后更新）
 
-> **更新基准**：commit `4843440` (2026-09-11) — fix: 反核销联动作废DRAFT凭证并清空双侧凭证挂接
+> **更新基准**：commit `5e881d2` (2026-09-11) — fix: 文档一致性脚本关闭quotepath修复中文路径
 > **当前分支**：`feature/reconciliation-workbench`
 > **关联文档**：[项目说明](docs/CORE-项目说明.md)、[技术方案](docs/CORE-技术方案.md)、[需求分析](docs/CORE-需求分析.md)、[需求登记册](docs/development/requirements/REQUIREMENTS_REGISTRY.md)、[文档注册表](docs/CORE-文档注册表.md)、[测试策略](docs/testing/TEST-STRATEGY.md)、[Flyway治理规范](docs/development/flyway-governance.md)
 
