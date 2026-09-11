@@ -18,7 +18,7 @@ docs/
 │
 ├── prd/                        ← 产品需求文档（18份，含1份拆解计划）
 ├── design/                     ← 模块设计文档（13份 DSN + 2份分析）
-├── specs/                      ← SPEC 规格契约（66份）
+├── specs/                      ← SPEC 规格契约（77份）
 ├── architecture/               ← 架构设计文档（7份）
 │
 ├── development/                ← 开发文档
@@ -64,7 +64,7 @@ docs/
 > **顺序**：PRD（需求层）→ DSN（设计层）→ SPEC（契约层）→ 代码 + @Test
 > **PRD**：回答 What，对应 16 个模块需求
 > **DSN**：回答 Architecture，13 份模块级设计
-> **SPEC**：回答 How，66 份功能点级契约
+> **SPEC**：回答 How，77 份功能点级契约
 
 ### 2.1 PRD 产品需求文档（prd/ — 15份，含拆解计划）
 
@@ -111,20 +111,20 @@ docs/
 > - [DSN-PRD合理性评估.md](./design/analysis/DSN-PRD合理性评估.md)
 > - [DSN-PRD差距分析.md](./design/analysis/DSN-PRD差距分析.md)
 
-### 2.3 SPEC 规格契约文档（specs/ — 68份）
+### 2.3 SPEC 规格契约文档（specs/ — 77份）
 
 | 编号范围 | 说明 | 数量 |
 |----------|------|------|
-| P0~P61 | 功能规格文档（P 系列），按开发顺序增量编号 | 52份 |
-| S-00~S-28 | 系统级规范文档（S 系列），按业务域分层编号 | 14份 |
-| 其他 | SPEC-CONTRACT-SCHEMA.md（契约规范）、T1-*（测试方案）、timestamp-precision.md | 3份 |
+| P0~P65 | 功能规格文档（P 系列，含 P-BUSINESSDOC-LIST/P-SALARY/P-TRANSFER），按开发顺序增量编号 | 60份 |
+| S-00~S-28 | 系统级规范文档（S 系列，S-17 含 S-17-1 子文档），按业务域分层编号 | 13份 |
+| 其他 | SPEC-CONTRACT-SCHEMA.md（契约规范）、T1-BankStatement数据隔离测试方案.md、timestamp-precision.md、02-数据导入模块详细规格.md | 4份 |
 
 **全部 SPEC 按模块归类**：
 
 | 对应模块 | SPEC 文件 |
 |---------|---------|
 | 凭证管理 | P22-voucher-state-machine、P37-voucher-type-rules、S-17-期末自动化结转、S-18-结账控制 |
-| 应收应付核销 | P30、P30-P1-unified-settlement-path、P36、P42、P43-bad-debt、P51、P52、P53、S-28-反核销制证凭证联动作废、P10（已归档） |
+| 应收应付核销 | P30、P30-P1-unified-settlement-path、P36、P42、P43-bad-debt、P51、P52、P53、S-28-反核销制证凭证联动作废、P10 |
 | 发票税务 | P40-input-invoice、P41-invoice-driven-finance、P13-tax-declaration、P36-1-red-flush-voucher、P57-declare-status-split、P58-invoice-payment-reconcile、P61-vat-appendix-and-burden |
 | 资金管理 | P1-bank-import、P14-bank-reconciliation、P23-bank-statement |
 | 固定资产 | S-23 |
