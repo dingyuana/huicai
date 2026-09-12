@@ -352,6 +352,51 @@ class ArapSettlementServiceImplTest {
         verify(businessDocMapper, atLeastOnce()).updateById(any(BusinessDocEntity.class));
     }
 
+    @Test
+    @DisplayName("approve - 同步销项发票状态(P30-P1场景D)")
+    void approve_syncsOutputInvoiceStatus() {
+        when(mapper.selectById(1L)).thenReturn(settlement(1L, ArapStatus.SUBMITTED));
+
+        BusinessDocEntity doc = approvedDoc(10L, new BigDecimal("1000.00"));
+        doc.setInvoiceId(888L);
+        when(entryMapper.selectList(any(LambdaQueryWrapper.class)))
+                .thenReturn(List.of(entryWithDoc(10L, "1000.00")));
+        when(businessDocMapper.selectById(10L)).thenReturn(doc);
+        when(businessDocMapper.updateById(any(BusinessDocEntity.class))).thenReturn(1);
+        when(mapper.updateById(any(ArapSettlementEntity.class))).thenReturn(1);
+
+        service.approve(1L);
+
+        // 全额核销后未核销余额为0，同步给销项发票状态机（BigDecimal 按数值比较，忽略 scale）
+        verify(outputInvoiceStateMachineService).onReconciliationUpdate(eq(888L),
+                argThat(v -> v != null && v.compareTo(BigDecimal.ZERO) == 0), anyLong());
+        verify(inputInvoiceStateMachineService, never()).onReconciliationUpdate(anyLong(), any(), anyLong());
+    }
+
+    @Test
+    @DisplayName("approve - 操作人取自登录上下文并写入审计日志(P30-P1场景F)")
+    void approve_recordsOperatorFromSecurityContext() {
+        when(mapper.selectById(1L)).thenReturn(settlement(1L, ArapStatus.SUBMITTED));
+
+        BusinessDocEntity doc = approvedDoc(10L, new BigDecimal("1000.00"));
+        when(entryMapper.selectList(any(LambdaQueryWrapper.class)))
+                .thenReturn(List.of(entryWithDoc(10L, "1000.00")));
+        when(businessDocMapper.selectById(10L)).thenReturn(doc);
+        when(businessDocMapper.updateById(any(BusinessDocEntity.class))).thenReturn(1);
+        when(mapper.updateById(any(ArapSettlementEntity.class))).thenReturn(1);
+
+        try (org.mockito.MockedStatic<com.huicai.base.system.util.SecurityUtils> mocked =
+                     mockStatic(com.huicai.base.system.util.SecurityUtils.class)) {
+            mocked.when(com.huicai.base.system.util.SecurityUtils::getCurrentUserId).thenReturn(42L);
+            service.approve(1L);
+        }
+
+        org.mockito.ArgumentCaptor<ReconciliationLogEntity> captor =
+                org.mockito.ArgumentCaptor.forClass(ReconciliationLogEntity.class);
+        verify(logMapper).insert(captor.capture());
+        assertEquals(42L, captor.getValue().getCreatedBy());
+    }
+
     // ─── 驳回/取消 ───────────────────────────────────────────────────────
 
     @Test

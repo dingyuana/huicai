@@ -1,11 +1,11 @@
 ---
 标题: P1 统一核销写路径（execute→SUBMITTED→approve→CONFIRMED）
 编号: P30-P1
-版本: v2.1 (2026-08-27)
+版本: v2.2 (2026-09-12)
 关联PRD: PRD05-02（核销工作台增强）
-状态: 开发中
+状态: ✅ 已完成（2026-09-12 验收闭环）
 关联SPEC: P30-reconciliation-workbench-enhance.md
-test_ref: ReconciliationServiceImplTest(50) + CoreWriteOperationConcurrencyTest(7) + ArapSettlementServiceImpl.approve(P1四测)
+test_ref: ReconciliationServiceImplTest(53) + CoreWriteOperationConcurrencyTest(7) + ArapSettlementServiceImplTest(30，含场景D/F补测)
 
 ## 背景
 
@@ -102,3 +102,8 @@ reverse(settlementId) → 反向核销单 + restoreUnsettledAmount()（含金额
 - When approve(id)
 - Then logReconciliationLog 记录 operatorId=42
 - And SecurityUtils.getCurrentUserId() 调用成功
+## 版本历史
+
+- v2.0 (2026-08-2x): P30-C5 引入 execute() 直接写路径（后被本 SPEC 废止）
+- v2.1 (2026-08-27): 统一写路径设计——execute() 只提报 SUBMITTED，生效逻辑全部迁至 approve()
+- v2.2 (2026-09-12): 验收闭环——实现已在代码落地（execute() 直写路径已删除，approve() 承载金额扣减/发票同步/来源同步），补齐场景 D（approve 同步销项发票状态）与场景 F（操作人审计）测试，BDD 六场景全部有对应 @Test 且 PASS。状态回写 ✅ 已完成
