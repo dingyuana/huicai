@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "慧财财务系统架构",
+    "locale": "zh-CN",
+    "quality_profile": "showcase"
+  },
+  "components": [
+    { "id": "user", "type": "external", "label": "用户", "sublabel": "财务/管理员", "pos": [40, 90], "size": [110, 60] },
+    { "id": "frontend", "type": "frontend", "label": "Vue 3 前端", "sublabel": "Element Plus + ECharts", "pos": [200, 90], "size": [150, 60] },
+    { "id": "gateway", "type": "security", "label": "API 网关", "sublabel": "Spring Security + JWT", "pos": [420, 90], "size": [160, 60] },
+    { "id": "base", "type": "backend", "label": "底座 base", "sublabel": "科目/凭证/余额/报表/RBAC", "pos": [60, 280], "size": [180, 80] },
+    { "id": "sme", "type": "backend", "label": "SME 分支", "sublabel": "发票/核销/流水/资产/报销", "pos": [400, 280], "size": [180, 80] },
+    { "id": "agency", "type": "backend", "label": "Agency 分支", "sublabel": "账套/角色/派工/批量/CRM", "pos": [740, 280], "size": [180, 80] },
+    { "id": "ai", "type": "backend", "label": "AI 服务", "sublabel": "FastAPI 科目映射/异常/OCR", "pos": [1120, 280], "size": [160, 80] },
+    { "id": "pg", "type": "database", "label": "PostgreSQL 16", "sublabel": "pgvector/pg_trgm", "pos": [100, 540], "size": [150, 60] },
+    { "id": "redis", "type": "database", "label": "Redis 7", "sublabel": "缓存/分布式锁", "pos": [420, 540], "size": [150, 60] },
+    { "id": "minio", "type": "database", "label": "MinIO", "sublabel": "文件存储", "pos": [720, 540], "size": [150, 60] },
+    { "id": "mq", "type": "messagebus", "label": "RabbitMQ", "sublabel": "异步任务", "pos": [930, 540], "size": [150, 60] }
+  ],
+  "boundaries": [
+    { "kind": "region", "label": "后端业务层 (Spring Boot 3.x + MyBatis-Plus)", "wraps": ["base", "sme", "agency"] },
+    { "kind": "region", "label": "AI 横切层 (Python FastAPI)", "wraps": ["ai"] },
+    { "kind": "region", "label": "基础设施层", "wraps": ["pg", "redis", "minio", "mq"] }
+  ],
+  "connections": [
+    { "id": "u-f", "from": "user", "to": "frontend", "label": "HTTPS", "variant": "emphasis", "labelDy": -8 },
+    { "id": "f-g", "from": "frontend", "to": "gateway", "label": "REST", "labelDy": -8 },
+    { "id": "g-base", "from": "gateway", "to": "base", "fromSide": "bottom", "toSide": "top", "label": "/api/base/**", "variant": "emphasis", "labelSegment": 1, "labelDy": 8 },
+    { "id": "g-sme", "from": "gateway", "to": "sme", "fromSide": "bottom", "toSide": "top", "label": "/api/sme/**", "variant": "emphasis", "labelAt": [500, 210] },
+    { "id": "g-agency", "from": "gateway", "to": "agency", "fromSide": "bottom", "toSide": "top", "label": "/api/agency/**", "variant": "emphasis", "labelSegment": 1, "labelDy": 8 },
+    { "id": "base-pg", "from": "base", "to": "pg", "fromSide": "bottom", "toSide": "top", "label": "JDBC", "via": [[150, 400], [175, 400]], "labelSegment": 1, "labelDy": -6 },
+    { "id": "sme-pg", "from": "sme", "to": "pg", "fromSide": "bottom", "toSide": "top", "label": "JDBC", "via": [[490, 440], [175, 440]], "labelSegment": 1, "labelDy": -6 },
+    { "id": "agency-pg", "from": "agency", "to": "pg", "fromSide": "bottom", "toSide": "top", "label": "JDBC", "via": [[830, 470], [175, 470]], "labelSegment": 1, "labelDy": -6 },
+    { "id": "base-redis", "from": "base", "to": "redis", "fromSide": "bottom", "toSide": "top", "label": "缓存/锁", "via": [[150, 410], [495, 410]], "labelSegment": 1, "labelDy": -6 },
+    { "id": "sme-mq", "from": "sme", "to": "mq", "fromSide": "bottom", "toSide": "top", "label": "发布", "variant": "dashed", "via": [[490, 500], [1005, 500]], "labelSegment": 1, "labelDy": -6 },
+    { "id": "mq-ai", "from": "mq", "to": "ai", "fromSide": "right", "toSide": "bottom", "label": "消费", "variant": "dashed", "via": [[1080, 570], [1320, 570], [1320, 390], [1200, 390]], "labelAt": [1200, 590] }
+  ]
+}
