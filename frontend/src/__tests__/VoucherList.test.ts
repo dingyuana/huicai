@@ -32,12 +32,16 @@ vi.mock('@/utils/period', () => ({
   resolveDefaultPeriod: vi.fn().mockResolvedValue('202609'),
 }))
 
-// Mock element-plus ElMessage
+// Mock element-plus ElMessage / ElMessageBox（P67 批量记账需二次确认）
 vi.mock('element-plus', async (importOriginal) => {
   const actual: any = await importOriginal()
   return {
     ...actual,
     ElMessage: { success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() },
+    ElMessageBox: {
+      confirm: vi.fn().mockResolvedValue('confirm'),
+      prompt: vi.fn().mockResolvedValue({ value: '原因' }),
+    },
   }
 })
 
@@ -250,40 +254,22 @@ describe('VoucherList — 凭证列表组件', () => {
     expect(reverseVoucher).toHaveBeenCalledWith(4)
   })
 
-  // ===== 维度 10: 批量操作 — canBatchSubmit =====
-  it('选择 DRAFT 凭证后 canBatchSubmit 为 true', async () => {
+  // ===== 维度 10: 批量操作 — 选中记录 =====
+  it('onSelectionChange 记录选中行（P67 交给 BatchActionBar 判断门槛）', async () => {
     const { getVoucherPage } = await import('@/api/modules/voucher')
     vi.mocked(getVoucherPage).mockResolvedValue(mockPageResponse([], 0))
 
     const wrapper = shallowMount(VoucherList, { global: { plugins: [router] } })
     await nextTick()
 
-    // Simulate selecting a DRAFT row
-    const draftRow = mockVoucher(1, 'DRAFT')
-    ;(wrapper.vm as any).onSelectionChange([draftRow])
+    ;(wrapper.vm as any).onSelectionChange([mockVoucher(1, 'DRAFT')])
 
-    expect((wrapper.vm as any).canBatchSubmit).toBe(true)
-    expect((wrapper.vm as any).canBatchAudit).toBe(false)
-    expect((wrapper.vm as any).canBatchPost).toBe(false)
+    expect((wrapper.vm as any).selectedRows).toHaveLength(1)
+    expect((wrapper.vm as any).selectedRows[0].id).toBe(1)
   })
 
-  // ===== 维度 11: 批量操作 — canBatchAudit =====
-  it('选择 SUBMITTED 凭证后 canBatchAudit 为 true', async () => {
-    const { getVoucherPage } = await import('@/api/modules/voucher')
-    vi.mocked(getVoucherPage).mockResolvedValue(mockPageResponse([], 0))
-
-    const wrapper = shallowMount(VoucherList, { global: { plugins: [router] } })
-    await nextTick()
-
-    ;(wrapper.vm as any).onSelectionChange([mockVoucher(2, 'SUBMITTED')])
-
-    expect((wrapper.vm as any).canBatchAudit).toBe(true)
-    expect((wrapper.vm as any).canBatchSubmit).toBe(false)
-    expect((wrapper.vm as any).canBatchPost).toBe(false)
-  })
-
-  // ===== 维度 12: 批量操作 — onBatchSubmit =====
-  it('onBatchSubmit 调用 batchSubmitVouchers 并携带 DRAFT 凭证 ID', async () => {
+  // ===== 维度 11: 批量操作 — onBatchAction submit =====
+  it("onBatchAction('submit') 对纯 DRAFT 选中调用 batchSubmitVouchers 携带全部 ID", async () => {
     const { getVoucherPage, batchSubmitVouchers } = await import('@/api/modules/voucher')
     vi.mocked(getVoucherPage).mockResolvedValue(mockPageResponse([], 0))
     vi.mocked(batchSubmitVouchers).mockResolvedValue(undefined)
@@ -293,16 +279,16 @@ describe('VoucherList — 凭证列表组件', () => {
 
     ;(wrapper.vm as any).onSelectionChange([
       mockVoucher(1, 'DRAFT'),
-      mockVoucher(2, 'SUBMITTED'),
+      mockVoucher(4, 'DRAFT'),
     ])
-    await (wrapper.vm as any).onBatchSubmit()
+    await (wrapper.vm as any).onBatchAction('submit')
     await nextTick()
 
-    expect(batchSubmitVouchers).toHaveBeenCalledWith({ ids: [1] })
+    expect(batchSubmitVouchers).toHaveBeenCalledWith({ ids: [1, 4] })
   })
 
-  // ===== 维度 13: 批量操作 — onBatchAudit =====
-  it('onBatchAudit 调用 batchAuditVouchers 并携带 SUBMITTED 凭证 ID', async () => {
+  // ===== 维度 12: 批量操作 — onBatchAction audit =====
+  it("onBatchAction('audit') 对纯 SUBMITTED 选中调用 batchAuditVouchers 携带全部 ID", async () => {
     const { getVoucherPage, batchAuditVouchers } = await import('@/api/modules/voucher')
     vi.mocked(getVoucherPage).mockResolvedValue(mockPageResponse([], 0))
     vi.mocked(batchAuditVouchers).mockResolvedValue(undefined)
@@ -310,15 +296,32 @@ describe('VoucherList — 凭证列表组件', () => {
     const wrapper = shallowMount(VoucherList, { global: { plugins: [router] } })
     await nextTick()
 
-    ;(wrapper.vm as any).onSelectionChange([
-      mockVoucher(1, 'DRAFT'),
-      mockVoucher(2, 'SUBMITTED'),
-      mockVoucher(3, 'AUDITED'),
-    ])
-    await (wrapper.vm as any).onBatchAudit()
+    ;(wrapper.vm as any).onSelectionChange([mockVoucher(2, 'SUBMITTED')])
+    await (wrapper.vm as any).onBatchAction('audit')
     await nextTick()
 
     expect(batchAuditVouchers).toHaveBeenCalledWith({ ids: [2] })
+  })
+
+  // ===== 维度 13: 批量操作 — onBatchAction post（需二次确认）=====
+  it("onBatchAction('post') 对纯 AUDITED 选中确认后调用 batchPostVouchers 携带全部 ID", async () => {
+    const { getVoucherPage, batchPostVouchers } = await import('@/api/modules/voucher')
+    const { ElMessageBox } = await import('element-plus')
+    vi.mocked(getVoucherPage).mockResolvedValue(mockPageResponse([], 0))
+    vi.mocked(batchPostVouchers).mockResolvedValue(undefined)
+
+    const wrapper = shallowMount(VoucherList, { global: { plugins: [router] } })
+    await nextTick()
+
+    ;(wrapper.vm as any).onSelectionChange([
+      mockVoucher(3, 'AUDITED'),
+      mockVoucher(5, 'AUDITED'),
+    ])
+    await (wrapper.vm as any).onBatchAction('post')
+    await nextTick()
+
+    expect(ElMessageBox.confirm).toHaveBeenCalled()
+    expect(batchPostVouchers).toHaveBeenCalledWith({ ids: [3, 5] })
   })
 
   // ===== 维度 14: 分类标签切换 =====

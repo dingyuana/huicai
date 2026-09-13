@@ -65,15 +65,21 @@
         </el-radio-button>
       </el-radio-group>
 
-        <el-space style="margin-bottom: 12px">
+        <el-space style="margin-bottom: 12px" wrap>
           <el-button type="primary" @click="openImport">导入对账单</el-button>
-          <el-button :disabled="!selectedIds.length" type="success" @click="onBatchConfirm">批量确认</el-button>
-          <el-button :disabled="!selectedIds.length" type="warning" @click="onBatchAudit">批量审核</el-button>
           <el-button :disabled="!query.accountId" @click="onAutoClassify">自动分类全部</el-button>
+          <BatchActionBar
+            :rows="selectedRows"
+            :actions="BATCH_ACTIONS"
+            :status-matrix="BATCH_STATUS_MATRIX"
+            :status-of="(row) => row.reviewStatus || 'PENDING'"
+            @action="onBatchAction"
+            @clear="clearSelection"
+          />
         </el-space>
 
-      <el-table :data="list" v-loading="loading" border stripe @selection-change="onSelectionChange" @row-click="onRowClick" style="cursor:pointer">
-        <el-table-column type="selection" width="40" />
+      <el-table ref="tableRef" :data="list" v-loading="loading" border stripe @selection-change="onSelectionChange" @row-click="onRowClick" style="cursor:pointer">
+        <el-table-column type="selection" width="40" :selectable="isBatchable" />
         <el-table-column prop="txDate" label="日期" width="110" />
         <el-table-column prop="txType" label="方向" width="70" align="center">
           <template #default="{ row }">
@@ -122,26 +128,6 @@
               {{ row.generatedDocNo }}
             </span>
             <span v-else>-</span>
-          </template>
-        </el-table-column>
-        <el-table-column label="操作" width="260" fixed="right">
-          <template #default="{ row }">
-            <el-button v-if="!row.classification || row.classification === 'other_unknown'"
-              text size="small" type="primary" @click="onClassify(row as BankStatementVO)">分类</el-button>
-            <el-button v-if="canReview(row as BankStatementVO)"
-              text size="small" type="success" @click.stop="onReview(row as BankStatementVO)">确认</el-button>
-            <el-button v-if="canAudit(row as BankStatementVO)"
-              text size="small" type="warning" @click.stop="onAudit(row as BankStatementVO)">审核</el-button>
-            <el-button v-if="row.generatedVoucherId" text size="small" type="primary"
-              @click="openVoucher(row.generatedVoucherId!)">查看凭证</el-button>
-            <el-button v-if="canApprove(row as BankStatementVO)"
-              text size="small" type="primary" :loading="approvingId === row.id" :disabled="approvingId !== null"
-              @click="onApprove(row as BankStatementVO)">核准</el-button>
-            <el-popconfirm v-if="canDelete(row as BankStatementVO)" title="确定删除该条流水?" @confirm="onDelete(row as any)">
-              <template #reference>
-                <el-button text size="small" type="danger">删除</el-button>
-              </template>
-            </el-popconfirm>
           </template>
         </el-table-column>
       </el-table>
@@ -318,22 +304,8 @@
       </template>
     </el-dialog>
 
-    <!-- 批量操作结果 -->
-    <el-dialog v-model="resultDialogVisible" title="批量操作结果" width="520">
-      <template v-if="batchResult">
-        <el-result :icon="batchResult.failed.length ? 'warning' : 'success'"
-          :title="`成功 ${batchResult.success} / ${batchResult.total} 条`"
-          :sub-title="batchResult.failed.length ? `失败 ${batchResult.failed.length} 条，原因见下方列表` : '全部执行成功'">
-        </el-result>
-        <el-table v-if="batchResult.failed.length" :data="batchResult.failed" size="small" max-height="240">
-          <el-table-column prop="id" label="流水ID" width="90" />
-          <el-table-column prop="reason" label="失败原因" />
-        </el-table>
-      </template>
-      <template #footer>
-        <el-button type="primary" @click="resultDialogVisible = false">确定</el-button>
-      </template>
-    </el-dialog>
+    <!-- 批量操作结果（P67 统一弹窗） -->
+    <BatchResultDialog v-model="resultVisible" :result="result" />
 
     <!-- 流水详情弹窗 -->
     <el-dialog v-model="detailVisible" title="流水详情" width="600px">
@@ -402,6 +374,12 @@
           @click="onApprove(detailData); detailVisible = false">核准</el-button>
         <el-button v-if="!detailEditable && detailData && detailData.generatedVoucherId" type="primary"
           @click="openVoucher(detailData.generatedVoucherId!); detailVisible = false">查看凭证</el-button>
+        <el-popconfirm v-if="!detailEditable && canDelete(detailData)" title="确定删除该条流水?"
+          @confirm="onDelete(detailData as any); detailVisible = false">
+          <template #reference>
+            <el-button type="danger">删除</el-button>
+          </template>
+        </el-popconfirm>
       </template>
     </el-dialog>
   </div>
@@ -420,9 +398,12 @@ import {
   deleteStatement, updateStatementClassification,
   getBankStatementDetail, getClassificationCounts,
   CLASSIFICATION_LABELS, REVIEW_STATUS_LABELS,
-  type BankStatementVO, type BatchResult,
+  type BankStatementVO,
 } from '@/api/modules/bankStatement'
 import { getActiveBankAccounts, type BankAccountVO } from '@/api/modules/bankAccount'
+import BatchActionBar from '@/components/batch/BatchActionBar.vue'
+import BatchResultDialog from '@/components/batch/BatchResultDialog.vue'
+import { useBatchOperation, type BatchActionDef } from '@/composables/useBatchOperation'
 
 const loading = ref(false)
 const importing = ref(false)
@@ -432,8 +413,39 @@ const approvingId = ref<number | null>(null)
 const list = ref<BankStatementVO[]>([])
 const total = ref(0)
 const accounts = ref<BankAccountVO[]>([])
-const selectedIds = ref<number[]>([])
 const selectedFile = ref<File | null>(null)
+const tableRef = ref()
+
+// P67 统一批量操作：状态矩阵基于既有批量刷新语义（PENDING/classified→确认，CONFIRMED→审核）
+const BATCH_ACTIONS: BatchActionDef[] = [
+  { key: 'confirm', label: '批量确认' },
+  { key: 'audit', label: '批量审核' },
+]
+const BATCH_STATUS_MATRIX: Record<string, string[]> = {
+  PENDING: ['confirm'],
+  classified: ['confirm'],
+  RECLASSIFIED: ['confirm'],
+  CONFIRMED: ['audit'],
+}
+function isBatchable(row: BankStatementVO) {
+  return !!BATCH_STATUS_MATRIX[row.reviewStatus || 'PENDING']
+}
+const { selectedRows, result, resultVisible, onSelectionChange, clearSelection, run } = useBatchOperation({
+  // 批量生效后旧状态筛选会过滤掉已变化记录，沿用既有逻辑重置筛选再刷新
+  refresh: async () => {
+    if (query.value.reviewStatus === 'PENDING' || query.value.reviewStatus === 'classified') {
+      query.value.reviewStatus = undefined
+    }
+    await refreshAll()
+  },
+  clearer: () => tableRef.value?.clearSelection(),
+})
+
+function onBatchAction(key: string) {
+  const def = BATCH_ACTIONS.find((a) => a.key === key)
+  if (!def) return
+  run(def, (ids) => (key === 'confirm' ? batchConfirmStatements(ids) : batchAuditStatements(ids)))
+}
 
 const importDialogVisible = ref(false)
 const activeTab = ref('csv')
@@ -442,8 +454,6 @@ const previewData = ref<{
 } | null>(null)
 const importResultVisible = ref(false)
 const importResult = ref<{ total: number; success: number; duplicate: number; failed: number; classified: number; message: string } | null>(null)
-const resultDialogVisible = ref(false)
-const batchResult = ref<BatchResult | null>(null)
 const detailVisible = ref(false)
 const detailData = ref<any>(null)
 const detailEditable = ref(false)
@@ -577,9 +587,6 @@ function onReset() {
   query.value = { current: 1, size: 20 }
   dateRange.value = null
   fetchData()
-}
-function onSelectionChange(rows: BankStatementVO[]) {
-  selectedIds.value = rows.map(r => r.id)
 }
 
 function openImport() {
@@ -791,22 +798,6 @@ async function onAutoClassify() {
   }
 }
 
-async function onBatchConfirm() {
-  if (!selectedIds.value.length) {
-    ElMessage.warning('请先选择流水')
-    return
-  }
-  try {
-    batchResult.value = await batchConfirmStatements(selectedIds.value)
-    resultDialogVisible.value = true
-    // 如果当前有筛选待确认状态，清空筛选后刷新
-    if (query.value.reviewStatus === 'PENDING' || query.value.reviewStatus === 'classified') {
-      query.value.reviewStatus = undefined
-    }
-    await refreshAll()
-  } catch { /* handled */ }
-}
-
 async function onAudit(row: BankStatementVO) {
   try {
     await auditStatement(row.id)
@@ -817,23 +808,6 @@ async function onAudit(row: BankStatementVO) {
     await refreshAll()
   } catch (e: any) {
     ElMessage.error(e?.message || '审核失败')
-  }
-}
-
-async function onBatchAudit() {
-  if (!selectedIds.value.length) {
-    ElMessage.warning('请先选择流水')
-    return
-  }
-  try {
-    batchResult.value = await batchAuditStatements(selectedIds.value)
-    resultDialogVisible.value = true
-    if (query.value.reviewStatus === 'CONFIRMED') {
-      query.value.reviewStatus = undefined
-    }
-    await refreshAll()
-  } catch (e: any) {
-    ElMessage.error(e?.message || '批量审核失败')
   }
 }
 

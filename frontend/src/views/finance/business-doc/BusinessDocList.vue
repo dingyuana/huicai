@@ -52,8 +52,12 @@
         </el-radio-button>
       </el-radio-group>
 
-      <el-table :data="list" v-loading="loading" border stripe>
-        <el-table-column prop="docNo" label="单据号" width="160" />
+      <el-table :data="list" v-loading="loading" border stripe @row-click="onRowClick">
+        <el-table-column label="单据号" width="160">
+          <template #default="{ row }">
+            <el-link type="primary" :underline="false" @click="goDetail(row as BusinessDocVO)">{{ row.docNo }}</el-link>
+          </template>
+        </el-table-column>
         <el-table-column label="类型" width="120" align="center">
           <template #default="{ row }">{{ DOC_TYPE_LABELS[row.docType] || row.docType }}</template>
         </el-table-column>
@@ -72,9 +76,9 @@
         </el-table-column>
         <el-table-column label="已核销" width="120" align="center">
           <template #default="{ row }">
-            <el-tag v-if="reconcileTagType(row) === 'success'" type="success" size="small">{{ fmtAmount(row.settledAmount) }}</el-tag>
-            <el-tag v-else-if="reconcileTagType(row) === 'warning'" type="warning" size="small">{{ fmtAmount(row.settledAmount) }}</el-tag>
-            <el-tag v-else-if="reconcileTagType(row) === 'danger'" type="danger" size="small">未核销</el-tag>
+            <el-tag v-if="reconcileTagType(row as BusinessDocVO) === 'success'" type="success" size="small">{{ fmtAmount(row.settledAmount) }}</el-tag>
+            <el-tag v-else-if="reconcileTagType(row as BusinessDocVO) === 'warning'" type="warning" size="small">{{ fmtAmount(row.settledAmount) }}</el-tag>
+            <el-tag v-else-if="reconcileTagType(row as BusinessDocVO) === 'danger'" type="danger" size="small">未核销</el-tag>
             <span v-else>-</span>
           </template>
         </el-table-column>
@@ -108,22 +112,6 @@
             <span v-else>-</span>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="320" fixed="right">
-          <template #default="{ row }">
-            <el-button text size="small" @click="goDetail(row as BusinessDocVO)">查看</el-button>
-            <el-button text size="small" v-if="row.status === 'DRAFT'" @click="goEdit(row as BusinessDocVO)">编辑</el-button>
-            <el-button text size="small" v-if="row.status === 'DRAFT'" type="success" @click="onSubmit(row as BusinessDocVO)">提交</el-button>
-            <el-button text size="small" v-if="row.status === 'SUBMITTED'" type="primary" @click="onApprove(row as BusinessDocVO)">审批</el-button>
-            <el-button text size="small" v-if="row.status === 'SUBMITTED'" type="danger" @click="onReject(row as BusinessDocVO)">驳回</el-button>
-            <el-button text size="small" v-if="row.status === 'APPROVED' && !row.voucherId" type="warning" @click="onGenerateVoucher(row as BusinessDocVO)">生成凭证</el-button>
-            <el-button text size="small" v-if="(row.status === 'APPROVED' || row.status === 'VOUCHERED') && !row.voucherId" type="danger" @click="onReverse(row as BusinessDocVO)">红冲</el-button>
-            <el-popconfirm v-if="row.status === 'DRAFT'" title="确认删除？" @confirm="onDelete(row as BusinessDocVO)">
-              <template #reference>
-                <el-button text type="danger" size="small">删除</el-button>
-              </template>
-            </el-popconfirm>
-          </template>
-        </el-table-column>
       </el-table>
 
       <div class="page-pagination">
@@ -136,10 +124,6 @@
         />
       </div>
     </el-card>
-
-    <el-dialog v-model="detailDialogVisible" title="单据详情" width="900px" top="5vh" destroy-on-close @closed="onDetailClose">
-      <BusinessDocDetail v-if="selectedDocId" :docId="selectedDocId" />
-    </el-dialog>
   </div>
 </template>
 
@@ -148,12 +132,9 @@ import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import {
-  getBusinessDocPage, deleteBusinessDoc, submitBusinessDoc,
-  approveBusinessDoc, rejectBusinessDoc, generateVoucherFromDoc,
-  reverseBusinessDoc, DOC_TYPE_LABELS, DOC_STATUS_LABELS,
+  getBusinessDocPage, DOC_TYPE_LABELS, DOC_STATUS_LABELS,
   type BusinessDocVO, type BusinessDocQuery,
 } from '@/api/modules/businessDoc'
-import BusinessDocDetail from './BusinessDocDetail.vue'
 
 const router = useRouter()
 const loading = ref(false)
@@ -163,8 +144,6 @@ const totalCount = ref(0)
 const docTypeCounts = ref<Record<string, number>>({})
 const query = ref<BusinessDocQuery>({ current: 1, size: 20 })
 const dateRange = ref<[string, string] | null>(null)
-const detailDialogVisible = ref(false)
-const selectedDocId = ref<number | null>(null)
 
 function statusType(s: string) {
   switch (s) {
@@ -235,61 +214,26 @@ function onReset() {
 function goCreate() {
   router.push({ name: 'BusinessDocEdit', query: { mode: 'create' } })
 }
-function goEdit(row: BusinessDocVO) {
-  router.push({ name: 'BusinessDocEdit', query: { mode: 'edit', id: String(row.id) } })
-}
 function goDetail(row: BusinessDocVO) {
-  selectedDocId.value = row.id
-  detailDialogVisible.value = true
+  router.push({ name: 'BusinessDocDetail', query: { id: String(row.id) } })
+}
+
+function onRowClick(row: BusinessDocVO, column: unknown, event: Event) {
+  // 排除单据号链接、源单号链接等可交互元素，避免误触
+  const target = event.target as HTMLElement
+  if (target.closest('.el-button, .el-link, .el-popconfirm')) return
+  goDetail(row)
 }
 
 async function goDetailByNo(docNo: string) {
   try {
     const res = await getBusinessDocPage({ keyword: docNo, current: 1, size: 1 })
     if (res.records && res.records.length > 0) {
-      selectedDocId.value = res.records[0].id
-      detailDialogVisible.value = true
+      router.push({ name: 'BusinessDocDetail', query: { id: String(res.records[0].id) } })
     } else {
       ElMessage.warning('未找到关联单据')
     }
   } catch { /* ignore */ }
-}
-
-function onDetailClose() {
-  detailDialogVisible.value = false
-  selectedDocId.value = null
-  fetchData()
-}
-
-async function onDelete(row: BusinessDocVO) {
-  await deleteBusinessDoc(row.id)
-  ElMessage.success('删除成功')
-  await fetchData()
-}
-async function onSubmit(row: BusinessDocVO) {
-  await submitBusinessDoc(row.id)
-  ElMessage.success('提交成功')
-  await fetchData()
-}
-async function onApprove(row: BusinessDocVO) {
-  await approveBusinessDoc(row.id)
-  ElMessage.success('审批成功')
-  await fetchData()
-}
-async function onReject(row: BusinessDocVO) {
-  await rejectBusinessDoc(row.id)
-  ElMessage.success('已驳回')
-  await fetchData()
-}
-async function onGenerateVoucher(row: BusinessDocVO) {
-  await generateVoucherFromDoc(row.id)
-  ElMessage.success('凭证已生成, 请前往凭证管理提交记账')
-  await fetchData()
-}
-async function onReverse(row: BusinessDocVO) {
-  await reverseBusinessDoc(row.id)
-  ElMessage.success('红冲成功, 新单据为草稿状态')
-  await fetchData()
 }
 
 onMounted(async () => {

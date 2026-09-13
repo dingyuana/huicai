@@ -3,7 +3,14 @@
     <el-card shadow="never">
       <div class="page-header">
         <span class="page-title">凭证管理</span>
-        <div>
+        <div class="header-actions">
+          <BatchActionBar
+            :rows="selectedRows"
+            :actions="BATCH_ACTIONS"
+            :status-matrix="BATCH_STATUS_MATRIX"
+            @action="onBatchAction"
+            @clear="clearSelection"
+          />
           <el-button type="primary" @click="goCreate">新增凭证</el-button>
           <el-button @click="handleExport">导出Excel</el-button>
           <el-button @click="fetchData">刷新</el-button>
@@ -106,13 +113,8 @@
         </el-form-item>
       </el-form>
 
-      <div class="batch-bar">
-        <el-button text :disabled="!canBatchSubmit" @click="onBatchSubmit">批量提交</el-button>
-        <el-button text :disabled="!canBatchAudit" @click="onBatchAudit">批量审核</el-button>
-        <el-button text :disabled="!canBatchPost" @click="onBatchPost">批量记账</el-button>
-      </div>
-
       <el-table
+        ref="tableRef"
         :data="list"
         v-loading="loading"
         border
@@ -153,12 +155,14 @@
           @current-change="fetchData"
         />
       </div>
+
+      <BatchResultDialog v-model="resultVisible" :result="result" />
     </el-card>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Document, Bottom, Top, SuccessFilled, Edit } from '@element-plus/icons-vue'
@@ -180,12 +184,41 @@ import {
   type VoucherQueryDTO,
 } from '@/api/modules/voucher'
 import { resolveDefaultPeriod } from '@/utils/period'
+import BatchActionBar from '@/components/batch/BatchActionBar.vue'
+import BatchResultDialog from '@/components/batch/BatchResultDialog.vue'
+import { useBatchOperation, type BatchActionDef } from '@/composables/useBatchOperation'
 
 const router = useRouter()
 const loading = ref(false)
 const list = ref<VoucherVO[]>([])
 const total = ref(0)
-const selectedRows = ref<VoucherVO[]>([])
+const tableRef = ref()
+
+// P67 统一批量操作：状态矩阵 + every() 启用语义 + 统一结果弹窗
+const BATCH_ACTIONS: BatchActionDef[] = [
+  { key: 'submit', label: '批量提交' },
+  { key: 'audit', label: '批量审核' },
+  { key: 'post', label: '批量记账', needConfirm: true, confirmText: '记账后将计入正式账簿（可通过反过账修正）。确认执行批量记账？' },
+]
+const BATCH_STATUS_MATRIX: Record<string, string[]> = {
+  DRAFT: ['submit'],
+  SUBMITTED: ['audit'],
+  AUDITED: ['post'],
+}
+const { selectedRows, result, resultVisible, onSelectionChange, clearSelection, run } = useBatchOperation({
+  refresh: fetchData,
+  clearer: () => tableRef.value?.clearSelection(),
+})
+
+function onBatchAction(key: string) {
+  const def = BATCH_ACTIONS.find((a) => a.key === key)
+  if (!def) return
+  run(def, (ids) => {
+    if (key === 'submit') return batchSubmitVouchers({ ids })
+    if (key === 'audit') return batchAuditVouchers({ ids })
+    return batchPostVouchers({ ids })
+  })
+}
 
 // 分类标签
 const tabType = ref('')
@@ -208,10 +241,6 @@ const query = ref<VoucherQueryDTO>({
   current: 1,
   size: 20,
 })
-
-const canBatchSubmit = computed(() => selectedRows.value.some((r) => r.status === 'DRAFT'))
-const canBatchAudit = computed(() => selectedRows.value.some((r) => r.status === 'SUBMITTED'))
-const canBatchPost = computed(() => selectedRows.value.some((r) => r.status === 'AUDITED'))
 
 /** 批量操作是否可选 */
 function isBatchable(row: VoucherVO) {
@@ -280,10 +309,6 @@ function onTabChange() {
   fetchData()
 }
 
-function onSelectionChange(rows: VoucherVO[]) {
-  selectedRows.value = rows
-}
-
 function goCreate() {
   router.push({ name: 'VoucherEdit', query: { mode: 'create' } })
 }
@@ -342,30 +367,6 @@ async function onUnpost(row: VoucherVO) {
   await fetchData()
 }
 
-async function onBatchSubmit() {
-  const ids = selectedRows.value.filter((r) => r.status === 'DRAFT').map((r) => r.id)
-  if (ids.length === 0) return
-  await batchSubmitVouchers({ ids })
-  ElMessage.success(`已提交 ${ids.length} 张凭证`)
-  await fetchData()
-}
-
-async function onBatchAudit() {
-  const ids = selectedRows.value.filter((r) => r.status === 'SUBMITTED').map((r) => r.id)
-  if (ids.length === 0) return
-  await batchAuditVouchers({ ids })
-  ElMessage.success(`已审核 ${ids.length} 张凭证`)
-  await fetchData()
-}
-
-async function onBatchPost() {
-  const ids = selectedRows.value.filter((r) => r.status === 'AUDITED').map((r) => r.id)
-  if (ids.length === 0) return
-  await batchPostVouchers({ ids })
-  ElMessage.success(`已记账 ${ids.length} 张凭证`)
-  await fetchData()
-}
-
 onMounted(async () => {
   query.value.period = await resolveDefaultPeriod()
   fetchData()
@@ -418,8 +419,11 @@ async function handleExport() {
 .filter-form {
   margin-bottom: 12px;
 }
-.batch-bar {
-  margin-bottom: 12px;
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 .page-pagination {
   margin-top: 16px;
