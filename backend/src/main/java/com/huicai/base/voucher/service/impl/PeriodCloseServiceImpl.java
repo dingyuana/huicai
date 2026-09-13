@@ -1,6 +1,9 @@
 package com.huicai.base.voucher.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.huicai.agency.tenant.entity.EnterpriseEntity;
+import com.huicai.agency.tenant.mapper.EnterpriseMapper;
+import com.huicai.common.context.EnterpriseContextHolder;
 import com.huicai.common.exception.BusinessException;
 import com.huicai.base.voucher.entity.VoucherEntity;
 import com.huicai.base.voucher.entity.VoucherEntryEntity;
@@ -39,6 +42,7 @@ public class PeriodCloseServiceImpl implements PeriodCloseService {
     private final PeriodService periodService;
     private final SubjectService subjectService;
     private final SubjectMapper subjectMapper;
+    private final EnterpriseMapper enterpriseMapper;
 
     @Override
     public Map<String, Object> checkBeforeClose(String period) {
@@ -51,6 +55,12 @@ public class PeriodCloseServiceImpl implements PeriodCloseService {
         }
         if ("locked".equals(periodEntity.getStatus())) {
             throw BusinessException.badRequest("期间已锁定, 不能结账");
+        }
+
+        try {
+            validateCloseOrder(period);
+        } catch (BusinessException e) {
+            issues.add(e.getMessage());
         }
 
         Long unposted = voucherMapper.selectCount(
@@ -299,6 +309,7 @@ public class PeriodCloseServiceImpl implements PeriodCloseService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void closePeriod(String period, Long userId) {
+        validateCloseOrder(period);
         Map<String, Object> check = checkBeforeClose(period);
         if (!Boolean.TRUE.equals(check.get("passed"))) {
             throw BusinessException.badRequest("结账检查未通过: " + check.get("issues"));
@@ -320,6 +331,7 @@ public class PeriodCloseServiceImpl implements PeriodCloseService {
         if (!"closed".equals(periodEntity.getStatus())) {
             throw BusinessException.badRequest("仅已结账期间可反结账");
         }
+        validateReopenOrder(period);
         periodEntity.setStatus("open");
         periodEntity.setUpdatedBy(userId);
         periodEntity.setUpdatedAt(LocalDateTime.now());
@@ -340,5 +352,54 @@ public class PeriodCloseServiceImpl implements PeriodCloseService {
             throw BusinessException.notFound("会计期间不存在: " + period);
         }
         return p;
+    }
+
+    private void validateCloseOrder(String period) {
+        findPeriod(period);
+        String startPeriod = resolveStartPeriod();
+        if (period.equals(startPeriod)) {
+            return;
+        }
+        String prev = shiftPeriod(period, -1);
+        PeriodEntity prevEntity = periodService.getByPeriodCode(prev);
+        if (prevEntity == null) {
+            if (startPeriod != null && period.compareTo(startPeriod) > 0) {
+                throw BusinessException.badRequest(
+                        "上一会计期间 " + prev + " 不存在, 请先初始化期间");
+            }
+            return;
+        }
+        if (!"closed".equals(prevEntity.getStatus())) {
+            throw BusinessException.badRequest(
+                    "上一会计期间 " + prev + " 尚未结账, 请先完成上期结账后再结 " + period);
+        }
+    }
+
+    private void validateReopenOrder(String period) {
+        String next = shiftPeriod(period, 1);
+        PeriodEntity nextEntity = periodService.getByPeriodCode(next);
+        if (nextEntity != null && "closed".equals(nextEntity.getStatus())) {
+            throw BusinessException.badRequest(
+                    "下一会计期间 " + next + " 已结账, 请先反结账 " + next + " 后再反结 " + period);
+        }
+    }
+
+    private String resolveStartPeriod() {
+        Long enterpriseId = EnterpriseContextHolder.get();
+        if (enterpriseId == null) {
+            return null;
+        }
+        EnterpriseEntity enterprise = enterpriseMapper.selectById(enterpriseId);
+        return enterprise == null ? null : enterprise.getStartPeriod();
+    }
+
+    /** YYYYMM 月历推算，delta=-1 上一期、+1 下一期，自动跨年回绕。 */
+    private static String shiftPeriod(String period, int delta) {
+        int year = Integer.parseInt(period.substring(0, 4));
+        int month = Integer.parseInt(period.substring(4, 6));
+        int total = year * 12 + (month - 1) + delta;
+        int newYear = Math.floorDiv(total, 12);
+        int newMonth = Math.floorMod(total, 12) + 1;
+        return String.format("%04d%02d", newYear, newMonth);
     }
 }

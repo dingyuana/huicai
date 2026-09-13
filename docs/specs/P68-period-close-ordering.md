@@ -1,9 +1,9 @@
 ---
 标题: P68 期末结账按期间顺序约束（防止跨期跳结/跳反）
 编号: P68
-版本: v0.1 (2026-09-13)
+版本: v1.0 (2026-09-13)
 关联PRD: REQ-2026-083
-状态: 📝 草案待审核
+状态: ✅ 已实现待验收（TDD：26 单测 + 5 控制器 + 4 契约测试全绿）
 关联SPEC: P57（企业建账期间通用化）、REQ-2026-009（期间结账）
 预估工时: 4h（后端校验 1h + 测试 2h + 前端提示 1h）
 
@@ -88,3 +88,4 @@
 ## 版本历史
 
 - v0.1 (2026-09-13)：草案，基于现场断链数据与 PeriodCloseServiceImpl 现状。待老丁审核。
+- v1.0 (2026-09-13)：老丁批准，TDD 落地 PeriodCloseServiceImpl（新增 EnterpriseMapper 依赖、validateCloseOrder/validateReopenOrder/shiftPeriod）。硬校验在 closePeriod/reopenPeriod 抛具体异常；checkBeforeClose 以 issue 软提示。PeriodCloseServiceImplTest 26 例（新增 12 例含 6 BDD + 边界/负向断言）、PeriodCloseControllerTest 5 例、PeriodCloseRestContractTest 4 例全绿。存量断链数据仍按本文「人工处置」执行。

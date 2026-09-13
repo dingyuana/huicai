@@ -2,6 +2,9 @@ package com.huicai.base.voucher.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.conditions.query.LambdaQueryChainWrapper;
+import com.huicai.agency.tenant.entity.EnterpriseEntity;
+import com.huicai.agency.tenant.mapper.EnterpriseMapper;
+import com.huicai.common.context.EnterpriseContextHolder;
 import com.huicai.common.exception.BusinessException;
 import com.huicai.base.voucher.entity.VoucherEntity;
 import com.huicai.base.voucher.entity.VoucherEntryEntity;
@@ -19,6 +22,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
+import org.mockito.MockedStatic;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
@@ -44,13 +48,14 @@ class PeriodCloseServiceImplTest {
     @Mock private PeriodService periodService;
     @Mock private SubjectService subjectService;
     @Mock private SubjectMapper subjectMapper;
+    @Mock private EnterpriseMapper enterpriseMapper;
 
     private PeriodCloseServiceImpl service;
 
     @BeforeEach
     void setUp() {
         service = new PeriodCloseServiceImpl(voucherMapper, voucherEntryMapper,
-                subjectBalanceService, periodService, subjectService, subjectMapper);
+                subjectBalanceService, periodService, subjectService, subjectMapper, enterpriseMapper);
     }
 
     private PeriodEntity stubPeriod(String status) {
@@ -153,6 +158,191 @@ class PeriodCloseServiceImplTest {
         BusinessException ex = assertThrows(BusinessException.class,
                 () -> service.reopenPeriod("202607", 1L));
         assertTrue(ex.getMessage().contains("已结账"));
+    }
+
+    // ==================== P68 结账期间顺序约束 ====================
+
+    private PeriodEntity periodEntity(String code, String status) {
+        PeriodEntity p = new PeriodEntity();
+        p.setId((long) code.hashCode());
+        p.setPeriodCode(code);
+        p.setYear(Integer.parseInt(code.substring(0, 4)));
+        p.setMonth(Integer.parseInt(code.substring(4, 6)));
+        p.setStatus(status);
+        return p;
+    }
+
+    /** 某期间结账检查全过: 无未记账凭证、试算平衡、无草稿红冲 */
+    private void stubCheckPassesFor(String period) {
+        when(voucherMapper.selectCount(any(LambdaQueryWrapper.class))).thenReturn(0L);
+        Map<String, Object> trial = new HashMap<>();
+        trial.put("balanced", true);
+        trial.put("totalDebitTotal", BigDecimal.ZERO);
+        trial.put("totalCreditTotal", BigDecimal.ZERO);
+        when(subjectBalanceService.checkTrialBalance(period)).thenReturn(trial);
+    }
+
+    /** stub 当前企业 start_period（mock 静态 EnterpriseContextHolder），返回 try 资源 */
+    private MockedStatic<EnterpriseContextHolder> stubEnterpriseStartPeriod(String startPeriod) {
+        MockedStatic<EnterpriseContextHolder> holder = mockStatic(EnterpriseContextHolder.class);
+        holder.when(EnterpriseContextHolder::get).thenReturn(1L);
+        EnterpriseEntity enterprise = new EnterpriseEntity();
+        enterprise.setId(1L);
+        enterprise.setStartPeriod(startPeriod);
+        when(enterpriseMapper.selectById(1L)).thenReturn(enterprise);
+        return holder;
+    }
+
+    @Test
+    @DisplayName("场景1 首个期间(start_period=202401)且检查全过可直接结账")
+    void closeOrder_firstPeriod_canClose() {
+        PeriodEntity p202401 = periodEntity("202401", "open");
+        stubFindPeriod(p202401);
+        stubCheckPassesFor("202401");
+        try (MockedStatic<EnterpriseContextHolder> holder = stubEnterpriseStartPeriod("202401")) {
+            service.closePeriod("202401", 1L);
+        }
+        // 起始期不查询上一期
+        verify(periodService, never()).getByPeriodCode("202312");
+        verify(periodService).updateById(argThat(e -> "closed".equals(e.getStatus())));
+    }
+
+    @Test
+    @DisplayName("场景2 上期未结账就结本期: 抛错且期间保持 open、无 UPDATE")
+    void closeOrder_prevNotClosed_throwsAndNoUpdate() {
+        stubFindPeriod(periodEntity("202402", "open"));
+        when(periodService.getByPeriodCode("202401"))
+                .thenReturn(periodEntity("202401", "open"));
+        try (MockedStatic<EnterpriseContextHolder> holder = stubEnterpriseStartPeriod("202401")) {
+            BusinessException ex = assertThrows(BusinessException.class,
+                    () -> service.closePeriod("202402", 1L));
+            assertTrue(ex.getMessage().contains("202401 尚未结账"), ex.getMessage());
+        }
+        verify(periodService, never()).updateById(any());
+    }
+
+    @Test
+    @DisplayName("场景3 上期已结账且本期检查全过: 允许结账")
+    void closeOrder_prevClosed_canClose() {
+        stubFindPeriod(periodEntity("202402", "open"));
+        when(periodService.getByPeriodCode("202401"))
+                .thenReturn(periodEntity("202401", "closed"));
+        stubCheckPassesFor("202402");
+        try (MockedStatic<EnterpriseContextHolder> holder = stubEnterpriseStartPeriod("202401")) {
+            service.closePeriod("202402", 1L);
+        }
+        verify(periodService).updateById(argThat(e -> "closed".equals(e.getStatus())));
+    }
+
+    @Test
+    @DisplayName("场景4 跨年上推: 结 start_period=202401 不要求 202312 存在")
+    void closeOrder_startPeriod_crossYearRollbackAllowed() {
+        stubFindPeriod(periodEntity("202401", "open"));
+        stubCheckPassesFor("202401");
+        try (MockedStatic<EnterpriseContextHolder> holder = stubEnterpriseStartPeriod("202401")) {
+            service.closePeriod("202401", 1L);
+        }
+        verify(periodService, never()).getByPeriodCode("202312");
+        verify(periodService).updateById(argThat(e -> "closed".equals(e.getStatus())));
+    }
+
+    @Test
+    @DisplayName("上期记录缺失且本期晚于 start_period: 报错先初始化期间")
+    void closeOrder_prevMissingAfterStart_throws() {
+        stubFindPeriod(periodEntity("202402", "open"));
+        when(periodService.getByPeriodCode("202401")).thenReturn(null);
+        try (MockedStatic<EnterpriseContextHolder> holder = stubEnterpriseStartPeriod("202401")) {
+            BusinessException ex = assertThrows(BusinessException.class,
+                    () -> service.closePeriod("202402", 1L));
+            assertTrue(ex.getMessage().contains("202401 不存在"), ex.getMessage());
+            assertTrue(ex.getMessage().contains("初始化期间"), ex.getMessage());
+        }
+        verify(periodService, never()).updateById(any());
+    }
+
+    @Test
+    @DisplayName("存量企业无 start_period 且上期缺失: 向后兼容放行结账")
+    void closeOrder_legacyNoStartPeriod_prevMissing_passes() {
+        stubFindPeriod(periodEntity("202402", "open"));
+        when(periodService.getByPeriodCode("202401")).thenReturn(null);
+        stubCheckPassesFor("202402");
+        // 不 mock 静态上下文: EnterpriseContextHolder.get() 返回 null
+        service.closePeriod("202402", 1L);
+        verify(periodService).updateById(argThat(e -> "closed".equals(e.getStatus())));
+    }
+
+    @Test
+    @DisplayName("上期为 locked(非 closed): 仍视为未结账而拦截")
+    void closeOrder_prevLocked_throws() {
+        stubFindPeriod(periodEntity("202402", "open"));
+        when(periodService.getByPeriodCode("202401"))
+                .thenReturn(periodEntity("202401", "locked"));
+        try (MockedStatic<EnterpriseContextHolder> holder = stubEnterpriseStartPeriod("202401")) {
+            BusinessException ex = assertThrows(BusinessException.class,
+                    () -> service.closePeriod("202402", 1L));
+            assertTrue(ex.getMessage().contains("202401 尚未结账"), ex.getMessage());
+        }
+        verify(periodService, never()).updateById(any());
+    }
+
+    @Test
+    @DisplayName("checkBeforeClose 顺序不满足时以 issue 软提示(passed=false)而不直接抛顺序异常")
+    void checkBeforeClose_orderIssue_addedAsIssue() {
+        stubFindPeriod(periodEntity("202402", "open"));
+        when(periodService.getByPeriodCode("202401"))
+                .thenReturn(periodEntity("202401", "open"));
+        stubCheckPassesFor("202402");
+        try (MockedStatic<EnterpriseContextHolder> holder = stubEnterpriseStartPeriod("202401")) {
+            Map<String, Object> r = service.checkBeforeClose("202402");
+            assertFalse((Boolean) r.get("passed"));
+            @SuppressWarnings("unchecked")
+            List<String> issues = (List<String>) r.get("issues");
+            assertTrue(issues.stream().anyMatch(i -> i.contains("202401 尚未结账")));
+        }
+        verify(periodService, never()).updateById(any());
+    }
+
+    @Test
+    @DisplayName("场景5 反结账降序: 下一期已结账时反结本期被拦截")
+    void reopenOrder_nextClosed_throwsAndNoUpdate() {
+        stubFindPeriod(periodEntity("202401", "closed"));
+        when(periodService.getByPeriodCode("202402"))
+                .thenReturn(periodEntity("202402", "closed"));
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> service.reopenPeriod("202401", 1L));
+        assertTrue(ex.getMessage().contains("202402 已结账"), ex.getMessage());
+        verify(periodService, never()).updateById(any());
+    }
+
+    @Test
+    @DisplayName("场景6 反结账最末已结期: 下一期未结账时反结成功")
+    void reopenOrder_lastClosed_canReopen() {
+        stubFindPeriod(periodEntity("202401", "closed"));
+        when(periodService.getByPeriodCode("202402"))
+                .thenReturn(periodEntity("202402", "open"));
+        service.reopenPeriod("202401", 1L);
+        verify(periodService).updateById(argThat(e -> "open".equals(e.getStatus())));
+    }
+
+    @Test
+    @DisplayName("下一期记录不存在(尚未启用): 反结本期放行")
+    void reopenOrder_nextMissing_canReopen() {
+        stubFindPeriod(periodEntity("202412", "closed"));
+        when(periodService.getByPeriodCode("202501")).thenReturn(null);
+        service.reopenPeriod("202412", 1L);
+        verify(periodService).updateById(argThat(e -> "open".equals(e.getStatus())));
+    }
+
+    @Test
+    @DisplayName("跨年下推: 202412 的下一期推算为 202501")
+    void reopenOrder_crossYearNextRollback() {
+        stubFindPeriod(periodEntity("202412", "closed"));
+        when(periodService.getByPeriodCode("202501"))
+                .thenReturn(periodEntity("202501", "closed"));
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> service.reopenPeriod("202412", 1L));
+        assertTrue(ex.getMessage().contains("202501 已结账"), ex.getMessage());
+        verify(periodService, never()).updateById(any());
     }
 
     // ==================== generateProfitCarryOver ====================
