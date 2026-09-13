@@ -38,27 +38,22 @@ class ReportServiceImplTest {
 
     @Test
     void balanceSheet_returns_period_and_data() {
-        Map<String, Object> agg = new HashMap<>();
-        agg.put("totalAssets", 5000.0);
-        agg.put("totalLiabilities", 3000.0);
-        agg.put("totalEquity", 2000.0);
-        when(reportDataMapper.balanceSheetAggregate("202606")).thenReturn(agg);
         when(reportDataMapper.subjectBalance("202606")).thenReturn(new ArrayList<>());
 
         Map<String, Object> r = service.balanceSheet("202606");
         assertNotNull(r);
         assertEquals("202606", r.get("period"));
+        assertEquals(Boolean.TRUE, r.get("balanced"));
     }
 
     @Test
-    void balanceSheet_groups_3xxx_as_equity() {
-        // 模拟科目数据: 1xxx=资产, 2xxx=负债, 3xxx=权益, 4xxx=权益
+    void balanceSheet_groups_3xxx_and_4xxx_by_spec() {
+        // P69: 3xxx 共同类借余入资产/贷余入负债；4xxx 权益
         List<Map<String, Object>> balances = new ArrayList<>();
         Map<String, Object> a1 = new HashMap<>(); a1.put("code", "1002"); a1.put("name", "银行存款"); a1.put("end_balance", 5000.0); a1.put("direction", "debit"); balances.add(a1);
-        Map<String, Object> l1 = new HashMap<>(); l1.put("code", "2001"); l1.put("name", "短期借款"); l1.put("end_balance", 3000.0); l1.put("direction", "credit"); balances.add(l1);
-        Map<String, Object> e1 = new HashMap<>(); e1.put("code", "3001"); e1.put("name", "实收资本"); e1.put("end_balance", 1000.0); e1.put("direction", "credit"); balances.add(e1);
-        Map<String, Object> e2 = new HashMap<>(); e2.put("code", "4001"); e2.put("name", "资本公积"); e2.put("end_balance", 500.0); e2.put("direction", "credit"); balances.add(e2);
-        when(reportDataMapper.balanceSheetAggregate("202606")).thenReturn(new HashMap<>());
+        Map<String, Object> c1 = new HashMap<>(); c1.put("code", "3101"); c1.put("name", "共同贷余"); c1.put("end_balance", 3000.0); c1.put("direction", "credit"); balances.add(c1);
+        Map<String, Object> e1 = new HashMap<>(); e1.put("code", "4001"); e1.put("name", "实收资本"); e1.put("end_balance", 1000.0); e1.put("direction", "credit"); balances.add(e1);
+        Map<String, Object> e2 = new HashMap<>(); e2.put("code", "4002"); e2.put("name", "资本公积"); e2.put("end_balance", 500.0); e2.put("direction", "credit"); balances.add(e2);
         when(reportDataMapper.subjectBalance("202606")).thenReturn(balances);
 
         Map<String, Object> r = service.balanceSheet("202606");
@@ -68,11 +63,11 @@ class ReportServiceImplTest {
 
         assertEquals(1, assets.size(), "1xxx 应归为资产");
         assertEquals("1002", assets.get(0).get("code"));
-        assertEquals(1, liab.size(), "2xxx 应归为负债");
-        assertEquals("2001", liab.get(0).get("code"));
-        assertEquals(2, equity.size(), "3xxx/4xxx 应归为权益");
-        assertEquals("3001", equity.get(0).get("code"));
-        assertEquals("4001", equity.get(1).get("code"));
+        assertEquals(1, liab.size(), "3xxx 贷余应归为负债");
+        assertEquals("3101", liab.get(0).get("code"));
+        assertEquals(2, equity.size(), "4xxx 应归为权益");
+        assertEquals("4001", equity.get(0).get("code"));
+        assertEquals("4002", equity.get(1).get("code"));
     }
 
     @Test
@@ -82,7 +77,6 @@ class ReportServiceImplTest {
         Map<String, Object> a1 = new HashMap<>(); a1.put("code", "1002"); a1.put("name", "银行存款"); a1.put("end_balance", 200000.0); a1.put("direction", "debit"); balances.add(a1);
         Map<String, Object> a2 = new HashMap<>(); a2.put("code", "1601"); a2.put("name", "固定资产"); a2.put("end_balance", 100000.0); a2.put("direction", "debit"); balances.add(a2);
         Map<String, Object> e1 = new HashMap<>(); e1.put("code", "4001"); e1.put("name", "实收资本"); e1.put("end_balance", 300000.0); e1.put("direction", "credit"); balances.add(e1);
-        when(reportDataMapper.balanceSheetAggregate("202610")).thenReturn(new HashMap<>());
         when(reportDataMapper.subjectBalance("202610")).thenReturn(balances);
 
         Map<String, Object> r = service.balanceSheet("202610");
@@ -104,7 +98,6 @@ class ReportServiceImplTest {
         List<Map<String, Object>> balances = new ArrayList<>();
         Map<String, Object> a1 = new HashMap<>(); a1.put("code", "1002"); a1.put("name", "银行存款"); a1.put("end_balance", 3000.0); a1.put("direction", "debit"); balances.add(a1);
         Map<String, Object> l1 = new HashMap<>(); l1.put("code", "2001"); l1.put("name", "短期借款"); l1.put("end_balance", 3000.0); l1.put("direction", "credit"); balances.add(l1);
-        when(reportDataMapper.balanceSheetAggregate("202606")).thenReturn(new HashMap<>());
         when(reportDataMapper.subjectBalance("202606")).thenReturn(balances);
 
         Map<String, Object> r = service.balanceSheet("202606");
@@ -112,6 +105,178 @@ class ReportServiceImplTest {
         assertEquals(new BigDecimal("3000.00"), r.get("totalAssets"));
         assertEquals(new BigDecimal("3000.00"), r.get("totalLiabilities"));
         assertEquals(new BigDecimal("3000.00"), r.get("totalLiabEquity"));
+        assertEquals(Boolean.TRUE, r.get("balanced"));
+    }
+
+    // ==================== P69 资产负债表恒等式 ====================
+
+    private Map<String, Object> bal(String code, String name, String direction,
+                                    double debitTotal, double creditTotal, double endBalance) {
+        Map<String, Object> m = new HashMap<>();
+        m.put("code", code);
+        m.put("name", name);
+        m.put("direction", direction);
+        m.put("debit_total", debitTotal);
+        m.put("credit_total", creditTotal);
+        m.put("end_balance", endBalance);
+        return m;
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<Map<String, Object>> items(Map<String, Object> r, String key) {
+        return (List<Map<String, Object>>) r.get(key);
+    }
+
+    @Test
+    void p69_scenario1_uncarriedProfit_balancesWithCurrentYearProfit() {
+        List<Map<String, Object>> b = new ArrayList<>();
+        b.add(bal("1122", "应收账款", "debit", 11300, 0, 11300));
+        b.add(bal("2221.01", "销项税额", "credit", 0, 1300, 1300));
+        b.add(bal("6001", "主营业务收入", "credit", 0, 10000, 10000));
+        when(reportDataMapper.subjectBalance("202606")).thenReturn(b);
+
+        Map<String, Object> r = service.balanceSheet("202606");
+
+        assertEquals(new BigDecimal("11300.00"), r.get("totalAssets"));
+        assertEquals(new BigDecimal("1300.00"), r.get("totalLiabilities"));
+        assertEquals(new BigDecimal("10000.00"), r.get("currentYearProfit"));
+        assertEquals(new BigDecimal("11300.00"), r.get("totalLiabEquity"));
+        assertEquals(Boolean.TRUE, r.get("balanced"));
+        assertEquals(new BigDecimal("0.00"), r.get("diff"));
+        assertEquals(0, items(r, "unbalancedItems").size());
+        assertEquals(0, items(r, "equity").size(), "6* 不应以自身名义进入权益明细");
+    }
+
+    @Test
+    void p69_scenario2_carriedProfit_notDoubleCounted() {
+        List<Map<String, Object>> b = new ArrayList<>();
+        b.add(bal("1002", "银行存款", "debit", 10000, 0, 10000));
+        b.add(bal("4103", "本年利润", "credit", 0, 10000, 10000));
+        b.add(bal("6001", "主营业务收入", "credit", 10000, 10000, 0));
+        when(reportDataMapper.subjectBalance("202606")).thenReturn(b);
+
+        Map<String, Object> r = service.balanceSheet("202606");
+
+        assertEquals(new BigDecimal("10000.00"), r.get("currentYearProfit"),
+                "已结转时本年利润行只取 4103，不与 6* 重复");
+        assertEquals(new BigDecimal("10000.00"), r.get("totalEquity"));
+        assertEquals(Boolean.TRUE, r.get("balanced"));
+    }
+
+    @Test
+    void p69_scenario3_costClassifiedIntoInventory() {
+        List<Map<String, Object>> b = new ArrayList<>();
+        b.add(bal("1002", "银行存款", "debit", 5000, 0, 5000));
+        b.add(bal("5001", "生产成本", "debit", 3000, 0, 3000));
+        b.add(bal("4001", "实收资本", "credit", 0, 8000, 8000));
+        when(reportDataMapper.subjectBalance("202606")).thenReturn(b);
+
+        Map<String, Object> r = service.balanceSheet("202606");
+
+        assertEquals(new BigDecimal("8000.00"), r.get("totalAssets"), "5001 借余计入存货资产");
+        assertEquals(new BigDecimal("3000.00"), r.get("costInInventory"));
+        assertEquals("5001", items(r, "assets").get(1).get("code"));
+        assertEquals(Boolean.TRUE, r.get("balanced"));
+    }
+
+    @Test
+    void p69_scenario4_commonClass3_fallsByDirection() {
+        List<Map<String, Object>> b = new ArrayList<>();
+        b.add(bal("3101", "共同借余", "debit", 2000, 0, 2000));
+        b.add(bal("3102", "共同贷余", "credit", 0, 2000, 2000));
+        when(reportDataMapper.subjectBalance("202606")).thenReturn(b);
+
+        Map<String, Object> r = service.balanceSheet("202606");
+
+        assertEquals(new BigDecimal("2000.00"), r.get("totalAssets"), "3* 借余入资产");
+        assertEquals(new BigDecimal("2000.00"), r.get("totalLiabilities"), "3* 贷余入负债");
+        assertEquals("3101", items(r, "assets").get(0).get("code"));
+        assertEquals("3102", items(r, "liabilities").get(0).get("code"));
+        assertEquals(Boolean.TRUE, r.get("balanced"));
+    }
+
+    @Test
+    void p69_scenario5_unclassified_isDiagnosable() {
+        // 借贷试算平衡(借5000=贷4000负债+贷1000异常科目)，但贷方异常科目落在 1-6 之外无法归类
+        List<Map<String, Object>> b = new ArrayList<>();
+        b.add(bal("1002", "银行存款", "debit", 5000, 0, 5000));
+        b.add(bal("2001", "短期借款", "credit", 0, 4000, 4000));
+        Map<String, Object> orphan = bal("9001", "无法归类科目", "credit", 0, 1000, 1000);
+        b.add(orphan);
+        when(reportDataMapper.subjectBalance("202606")).thenReturn(b);
+
+        Map<String, Object> r = service.balanceSheet("202606");
+
+        assertEquals(Boolean.FALSE, r.get("balanced"));
+        assertEquals(new BigDecimal("1000.00"), r.get("diff"),
+                "无法归类的贷方科目被排除在恒等式外，差额即其金额");
+        List<Map<String, Object>> bad = items(r, "unbalancedItems");
+        assertEquals(1, bad.size());
+        assertEquals("9001", bad.get(0).get("code"));
+    }
+
+    @Test
+    void p69_scenario5b_missingDirection_isDiagnosable() {
+        List<Map<String, Object>> b = new ArrayList<>();
+        b.add(bal("1002", "银行存款", "debit", 4000, 0, 4000));
+        b.add(bal("2001", "短期借款", "credit", 0, 4000, 4000));
+        Map<String, Object> noDir = new HashMap<>();
+        noDir.put("code", "2241"); noDir.put("name", "缺方向科目"); noDir.put("end_balance", 1000.0);
+        b.add(noDir);
+        when(reportDataMapper.subjectBalance("202606")).thenReturn(b);
+
+        Map<String, Object> r = service.balanceSheet("202606");
+
+        assertEquals(Boolean.FALSE, r.get("balanced"));
+        List<Map<String, Object>> bad = items(r, "unbalancedItems");
+        assertEquals(1, bad.size());
+        assertEquals("2241", bad.get(0).get("code"));
+        assertEquals("missing-direction", bad.get(0).get("classifiedTo"));
+    }
+
+    @Test
+    void p69_scenario7_singleAlgorithm_totalsInternallyConsistent() {
+        List<Map<String, Object>> b = new ArrayList<>();
+        b.add(bal("1002", "银行存款", "debit", 200000, 0, 200000));
+        b.add(bal("1122", "应收账款", "debit", 85800, 0, 85800));
+        b.add(bal("5001", "生产成本", "debit", 75929.20, 0, 75929.20));
+        b.add(bal("2221.01", "销项税额", "credit", 0, 9870.80, 9870.80));
+        b.add(bal("4001", "实收资本", "credit", 0, 300000, 300000));
+        b.add(bal("6001", "主营业务收入", "credit", 0, 51858.40, 51858.40));
+        when(reportDataMapper.subjectBalance("202401")).thenReturn(b);
+
+        Map<String, Object> r = service.balanceSheet("202401");
+
+        BigDecimal ta = (BigDecimal) r.get("totalAssets");
+        BigDecimal tle = (BigDecimal) r.get("totalLiabEquity");
+        assertEquals(0, ta.compareTo(tle), "明细归类合计与对外合计必须一致");
+        assertEquals(Boolean.TRUE, r.get("balanced"));
+    }
+
+    @Test
+    void p69_creditBalanceCostClass_showsNegativeInventoryButBalances() {
+        List<Map<String, Object>> b = new ArrayList<>();
+        b.add(bal("1002", "银行存款", "debit", 309870.80, 0, 309870.80));
+        b.add(bal("5001", "生产成本误记贷方", "credit", 0, 75929.20, 75929.20));
+        b.add(bal("4001", "实收资本", "credit", 0, 233941.60, 233941.60));
+        when(reportDataMapper.subjectBalance("202401")).thenReturn(b);
+
+        Map<String, Object> r = service.balanceSheet("202401");
+
+        assertEquals(new BigDecimal("-75929.20"), r.get("costInInventory"),
+                "误记会在存货上显性化为负值，不靠报表掩盖");
+        assertEquals(new BigDecimal("233941.60"), r.get("totalAssets"));
+        assertEquals(Boolean.TRUE, r.get("balanced"));
+    }
+
+    @Test
+    void p69_emptyData_isBalancedZero() {
+        when(reportDataMapper.subjectBalance("202606")).thenReturn(new ArrayList<>());
+
+        Map<String, Object> r = service.balanceSheet("202606");
+
+        assertEquals(new BigDecimal("0.00"), r.get("totalAssets"));
+        assertEquals(new BigDecimal("0.00"), r.get("totalLiabEquity"));
         assertEquals(Boolean.TRUE, r.get("balanced"));
     }
 

@@ -13,6 +13,7 @@ import com.huicai.base.voucher.service.PeriodCloseService;
 import com.huicai.base.voucher.constant.VoucherType;
 import com.huicai.base.balance.entity.SubjectBalanceEntity;
 import com.huicai.base.balance.service.SubjectBalanceService;
+import com.huicai.base.report.service.ReportService;
 import com.huicai.base.system.entity.PeriodEntity;
 import com.huicai.base.system.entity.Subject;
 import com.huicai.base.system.mapper.SubjectMapper;
@@ -43,6 +44,7 @@ public class PeriodCloseServiceImpl implements PeriodCloseService {
     private final SubjectService subjectService;
     private final SubjectMapper subjectMapper;
     private final EnterpriseMapper enterpriseMapper;
+    private final ReportService reportService;
 
     @Override
     public Map<String, Object> checkBeforeClose(String period) {
@@ -75,6 +77,12 @@ public class PeriodCloseServiceImpl implements PeriodCloseService {
         Map<String, Object> trial = subjectBalanceService.checkTrialBalance(period);
         if (!Boolean.TRUE.equals(trial.get("balanced"))) {
             issues.add("试算不平衡, 借方发生 " + trial.get("totalDebitTotal") + " / 贷方发生 " + trial.get("totalCreditTotal"));
+        }
+
+        Map<String, Object> balanceSheet = reportService.balanceSheet(period);
+        if (!Boolean.TRUE.equals(balanceSheet.get("balanced"))) {
+            issues.add("资产负债表不平衡（差额 " + balanceSheet.get("diff")
+                    + "），请核对差异科目后再结账");
         }
 
         Long unReversed = voucherMapper.selectCount(

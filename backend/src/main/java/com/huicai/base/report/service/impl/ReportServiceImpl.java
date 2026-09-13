@@ -33,55 +33,115 @@ public class ReportServiceImpl implements ReportService {
     @Override
     public Map<String, Object> balanceSheet(String period) {
         Map<String, Object> result = new LinkedHashMap<>();
-        Map<String, Object> aggregate = reportDataMapper.balanceSheetAggregate(period);
         List<Map<String, Object>> balances = reportDataMapper.subjectBalance(period);
 
-        // 按科目编码前缀分组
         List<Map<String, Object>> assets = new ArrayList<>();
         List<Map<String, Object>> liab = new ArrayList<>();
         List<Map<String, Object>> equity = new ArrayList<>();
+        List<Map<String, Object>> unbalancedItems = new ArrayList<>();
         BigDecimal totalAssets = BigDecimal.ZERO;
         BigDecimal totalLiab = BigDecimal.ZERO;
-        BigDecimal totalEquity = BigDecimal.ZERO;
+        BigDecimal totalEquityExProfit = BigDecimal.ZERO;
+        BigDecimal costInInventory = BigDecimal.ZERO;
+        BigDecimal profit4103 = BigDecimal.ZERO;
+        BigDecimal currentPeriodProfit = BigDecimal.ZERO;
 
         for (Map<String, Object> row : balances) {
-            String code = (String) row.get("code");
-            if (code == null) continue;
-            BigDecimal balance = toBigDecimal(row.get("end_balance"));
-            String direction = (String) row.get("direction");
-            boolean isDebit = "debit".equals(direction);
-            BigDecimal signedBalance;
-            if (code.startsWith("1")) {
-                signedBalance = isDebit ? balance : balance.negate();
-            } else if (code.startsWith("2")) {
-                signedBalance = isDebit ? balance.negate() : balance;
-            } else if (code.startsWith("3") || code.startsWith("4")) {
-                signedBalance = isDebit ? balance.negate() : balance;
-            } else {
+            String code = String.valueOf(row.get("code"));
+            if (code == null || code.equals("null")) {
                 continue;
             }
-            if (code.startsWith("1")) {
-                assets.add(row);
-                totalAssets = totalAssets.add(signedBalance);
-            } else if (code.startsWith("2")) {
-                liab.add(row);
-                totalLiab = totalLiab.add(signedBalance);
-            } else if (code.startsWith("3") || code.startsWith("4")) {
-                equity.add(row);
-                totalEquity = totalEquity.add(signedBalance);
+            String direction = (String) row.get("direction");
+            BigDecimal endBalance = toBigDecimal(row.get("end_balance"));
+            char top = code.charAt(0);
+
+            if (top >= '1' && top <= '6' && (direction == null || direction.isBlank())) {
+                unbalancedItems.add(unclassified(code, row.get("name"), endBalance, "missing-direction"));
+                continue;
+            }
+
+            switch (top) {
+                case '1' -> {
+                    BigDecimal signed = "debit".equals(direction) ? endBalance : endBalance.negate();
+                    assets.add(row);
+                    totalAssets = totalAssets.add(signed);
+                }
+                case '5' -> {
+                    BigDecimal signed = "debit".equals(direction) ? endBalance : endBalance.negate();
+                    assets.add(row);
+                    totalAssets = totalAssets.add(signed);
+                    costInInventory = costInInventory.add(signed);
+                }
+                case '2' -> {
+                    BigDecimal signed = "credit".equals(direction) ? endBalance : endBalance.negate();
+                    liab.add(row);
+                    totalLiab = totalLiab.add(signed);
+                }
+                case '3' -> {
+                    BigDecimal signed = "debit".equals(direction) ? endBalance : endBalance.negate();
+                    if (signed.signum() >= 0) {
+                        assets.add(row);
+                        totalAssets = totalAssets.add(signed);
+                    } else {
+                        liab.add(row);
+                        totalLiab = totalLiab.add(signed.negate());
+                    }
+                }
+                case '4' -> {
+                    BigDecimal signed = "credit".equals(direction) ? endBalance : endBalance.negate();
+                    if (code.equals("4103")) {
+                        profit4103 = signed;
+                    } else {
+                        equity.add(row);
+                        totalEquityExProfit = totalEquityExProfit.add(signed);
+                    }
+                }
+                case '6' -> {
+                    BigDecimal currentNet = "credit".equals(direction)
+                            ? toBigDecimal(row.get("credit_total")).subtract(toBigDecimal(row.get("debit_total")))
+                            : toBigDecimal(row.get("debit_total")).subtract(toBigDecimal(row.get("credit_total")));
+                    currentPeriodProfit = currentPeriodProfit.add(currentNet);
+                }
+                default -> unbalancedItems.add(
+                        unclassified(code, row.get("name"), endBalance, "unclassified"));
             }
         }
+
+        BigDecimal currentYearProfit = profit4103.add(currentPeriodProfit);
+        BigDecimal totalEquity = totalEquityExProfit.add(currentYearProfit);
+        BigDecimal totalLiabEquity = totalLiab.add(totalEquity);
+        BigDecimal diff = totalAssets.subtract(totalLiabEquity).setScale(2, RoundingMode.HALF_UP);
+        boolean balanced = diff.abs().compareTo(new BigDecimal("0.01")) < 0
+                && unbalancedItems.isEmpty();
+
         result.put("period", period);
         result.put("assets", assets);
         result.put("liabilities", liab);
         result.put("equity", equity);
-        result.put("totalAssets", toBigDecimal(totalAssets));
-        result.put("totalLiabilities", toBigDecimal(totalLiab));
-        result.put("totalEquity", toBigDecimal(totalEquity));
-        result.put("totalLiabEquity", toBigDecimal(totalLiab.add(totalEquity)));
-        result.put("balanced", totalAssets.subtract(totalLiab).subtract(totalEquity).abs()
-                .compareTo(new BigDecimal("0.01")) < 0);
+        result.put("currentYearProfit", money(currentYearProfit));
+        result.put("costInInventory", money(costInInventory));
+        result.put("totalAssets", money(totalAssets));
+        result.put("totalLiabilities", money(totalLiab));
+        result.put("totalEquity", money(totalEquity));
+        result.put("totalLiabEquity", money(totalLiabEquity));
+        result.put("diff", diff);
+        result.put("unbalancedItems", unbalancedItems);
+        result.put("balanced", balanced);
         return result;
+    }
+
+    private static Map<String, Object> unclassified(String code, Object name,
+                                                     BigDecimal endBalance, String reason) {
+        Map<String, Object> bad = new LinkedHashMap<>();
+        bad.put("code", code);
+        bad.put("name", name);
+        bad.put("endBalance", endBalance);
+        bad.put("classifiedTo", reason);
+        return bad;
+    }
+
+    private static BigDecimal money(BigDecimal v) {
+        return v.setScale(2, RoundingMode.HALF_UP);
     }
 
     @Override

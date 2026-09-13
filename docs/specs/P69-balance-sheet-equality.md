@@ -1,9 +1,9 @@
 ---
 标题: P69 资产负债表平衡根治（全科目归类 + 本年利润取数 + 不平衡强校验）
 编号: P69
-版本: v0.1 (2026-09-13)
+版本: v1.0 (2026-09-13)
 关联PRD: REQ-2026-082（三大报表自动生成 REQ-2026-034 的根治项）
-状态: 📝 草案待审核
+状态: ✅ 算法层已实现待验收（ReportServiceImplTest 17 例 + 结账联动 PeriodCloseServiceImplTest 28 例，报表包 36 例全绿）；第八节部署与存量脏数据仍为运营项
 关联SPEC: P17（报表中心）、P68（结账顺序）、REQ-2026-008（科目余额/试算平衡）
 预估工时: 10h（算法重写 4h + 强校验/诊断 2h + 测试 3h + 前端提示 1h）
 
@@ -143,3 +143,11 @@
 ## 版本历史
 
 - v0.1 (2026-09-13)：基于现场不平数据（差 75929.20）、报表源码与部署版本比对形成根因三层（取数遗漏/错记+部署滞后/无强校验），草案待老丁审核。
+- v1.0 (2026-09-13)：老丁批准，TDD 落地。
+  - `ReportServiceImpl.balanceSheet` 重写为单一归类算法：1*→资产、2*→负债、3* 共同类按方向落位、4*→权益（4103 单列为本年利润行组成）、5* 成本归集→资产存货（`costInInventory` 透明展示，误记贷余显性化为负存货）、6* 当期未结转净额（credit_total-debit_total / 反向）计入本年利润行，与 4103 相加避免"未结转漏计、已结转重复"。
+  - 删除自相矛盾且从未被使用的死聚合 `ReportDataMapper.balanceSheetAggregate`（明细与汇总同一口径）。
+  - 新增返回字段 `currentYearProfit/costInInventory/diff/unbalancedItems`；落在 1-6 之外或 direction 缺失的科目进入 `unbalancedItems`（不再静默 continue），`balanced` 同时要求 |diff|<0.01 且无未归类项。所有金额输出统一 scale=2。
+  - `PeriodCloseServiceImpl` 新增 ReportService 依赖，`checkBeforeClose` 在试算平衡后追加资产负债恒等式 issue（P69 §七），不平衡阻止 closePeriod。
+  - 实测现场 202401 数据：5001 误记贷余 75929.20 现以负存货呈现，资产 309870.80 = 负债 9870.80 + 权益 300000，恒等式成立且错误不被掩盖。
+  - 测试：ReportServiceImplTest 17 例（含 7 BDD + 缺方向/空数据/负存货）、PeriodCloseServiceImplTest 28 例（含场景6 不平阻止结账）、报表包合计 36 例、PeriodClose 控制器 5 + 契约 4 全绿。
+  - 第八节（重新部署 jar、凭证 323/324 5001→6001 存量修正、进项 5001 另议）仍为人工运营项，不在代码内执行。

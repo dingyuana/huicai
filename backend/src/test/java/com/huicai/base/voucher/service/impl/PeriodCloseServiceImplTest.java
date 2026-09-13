@@ -12,6 +12,7 @@ import com.huicai.base.voucher.mapper.VoucherEntryMapper;
 import com.huicai.base.voucher.mapper.VoucherMapper;
 import com.huicai.base.balance.entity.SubjectBalanceEntity;
 import com.huicai.base.balance.service.SubjectBalanceService;
+import com.huicai.base.report.service.ReportService;
 import com.huicai.base.system.entity.PeriodEntity;
 import com.huicai.base.system.entity.Subject;
 import com.huicai.base.system.mapper.SubjectMapper;
@@ -49,13 +50,15 @@ class PeriodCloseServiceImplTest {
     @Mock private SubjectService subjectService;
     @Mock private SubjectMapper subjectMapper;
     @Mock private EnterpriseMapper enterpriseMapper;
+    @Mock private ReportService reportService;
 
     private PeriodCloseServiceImpl service;
 
     @BeforeEach
     void setUp() {
         service = new PeriodCloseServiceImpl(voucherMapper, voucherEntryMapper,
-                subjectBalanceService, periodService, subjectService, subjectMapper, enterpriseMapper);
+                subjectBalanceService, periodService, subjectService, subjectMapper,
+                enterpriseMapper, reportService);
     }
 
     private PeriodEntity stubPeriod(String status) {
@@ -87,6 +90,21 @@ class PeriodCloseServiceImplTest {
         trial.put("totalDebitTotal", BigDecimal.ZERO);
         trial.put("totalCreditTotal", BigDecimal.ZERO);
         when(subjectBalanceService.checkTrialBalance("202607")).thenReturn(trial);
+        stubBalanceSheetBalanced("202607");
+    }
+
+    private void stubBalanceSheetBalanced(String period) {
+        Map<String, Object> sheet = new HashMap<>();
+        sheet.put("balanced", true);
+        sheet.put("diff", BigDecimal.ZERO);
+        when(reportService.balanceSheet(period)).thenReturn(sheet);
+    }
+
+    private void stubBalanceSheetUnbalanced(String period, String diff) {
+        Map<String, Object> sheet = new HashMap<>();
+        sheet.put("balanced", false);
+        sheet.put("diff", new BigDecimal(diff));
+        when(reportService.balanceSheet(period)).thenReturn(sheet);
     }
 
     // ==================== checkBeforeClose ====================
@@ -180,6 +198,7 @@ class PeriodCloseServiceImplTest {
         trial.put("totalDebitTotal", BigDecimal.ZERO);
         trial.put("totalCreditTotal", BigDecimal.ZERO);
         when(subjectBalanceService.checkTrialBalance(period)).thenReturn(trial);
+        stubBalanceSheetBalanced(period);
     }
 
     /** stub 当前企业 start_period（mock 静态 EnterpriseContextHolder），返回 try 资源 */
@@ -343,6 +362,48 @@ class PeriodCloseServiceImplTest {
                 () -> service.reopenPeriod("202412", 1L));
         assertTrue(ex.getMessage().contains("202501 已结账"), ex.getMessage());
         verify(periodService, never()).updateById(any());
+    }
+
+    // ==================== P69 结账联动资产负债恒等式 ====================
+
+    @Test
+    @DisplayName("场景6 资产负债表不平衡时阻止结账, 期间状态不变且无 UPDATE")
+    void closePeriod_unbalancedSheet_blocks() {
+        stubFindPeriod(periodEntity("202401", "open"));
+        when(voucherMapper.selectCount(any(LambdaQueryWrapper.class))).thenReturn(0L);
+        Map<String, Object> trial = new HashMap<>();
+        trial.put("balanced", true);
+        trial.put("totalDebitTotal", BigDecimal.ZERO);
+        trial.put("totalCreditTotal", BigDecimal.ZERO);
+        when(subjectBalanceService.checkTrialBalance("202401")).thenReturn(trial);
+        stubBalanceSheetUnbalanced("202401", "75929.20");
+        try (MockedStatic<EnterpriseContextHolder> holder = stubEnterpriseStartPeriod("202401")) {
+            BusinessException ex = assertThrows(BusinessException.class,
+                    () -> service.closePeriod("202401", 1L));
+            assertTrue(ex.getMessage().contains("资产负债表不平衡"), ex.getMessage());
+            assertTrue(ex.getMessage().contains("75929.20"), ex.getMessage());
+        }
+        verify(periodService, never()).updateById(any());
+    }
+
+    @Test
+    @DisplayName("checkBeforeClose 资产负债表不平衡时以 issue 提示(passed=false)")
+    void checkBeforeClose_unbalancedSheet_addsIssue() {
+        stubFindPeriod(periodEntity("202401", "open"));
+        when(voucherMapper.selectCount(any(LambdaQueryWrapper.class))).thenReturn(0L);
+        Map<String, Object> trial = new HashMap<>();
+        trial.put("balanced", true);
+        trial.put("totalDebitTotal", BigDecimal.ZERO);
+        trial.put("totalCreditTotal", BigDecimal.ZERO);
+        when(subjectBalanceService.checkTrialBalance("202401")).thenReturn(trial);
+        stubBalanceSheetUnbalanced("202401", "100.00");
+        try (MockedStatic<EnterpriseContextHolder> holder = stubEnterpriseStartPeriod("202401")) {
+            Map<String, Object> r = service.checkBeforeClose("202401");
+            assertFalse((Boolean) r.get("passed"));
+            @SuppressWarnings("unchecked")
+            List<String> issues = (List<String>) r.get("issues");
+            assertTrue(issues.stream().anyMatch(i -> i.contains("资产负债表不平衡")));
+        }
     }
 
     // ==================== generateProfitCarryOver ====================

@@ -108,29 +108,6 @@ public interface ReportDataMapper {
     List<Map<String, Object>> cashFlowData(@Param("period") String period);
 
     /**
-     * 资产/负债/权益数据
-     */
-    @Select("""
-        SELECT
-          SUM(CASE WHEN s.code LIKE '1%' THEN
-            CASE WHEN s.direction = 'debit' THEN sb.end_balance ELSE -sb.end_balance END
-            ELSE 0 END) AS total_assets,
-          SUM(CASE WHEN s.code LIKE '14%' OR s.code LIKE '15%' THEN
-            CASE WHEN s.direction = 'debit' THEN sb.end_balance ELSE -sb.end_balance END
-            ELSE 0 END) AS current_assets,
-          SUM(CASE WHEN s.code LIKE '16%' THEN
-            CASE WHEN s.direction = 'debit' THEN sb.end_balance ELSE -sb.end_balance END
-            ELSE 0 END) AS fixed_assets,
-          SUM(CASE WHEN s.code LIKE '2%' OR s.code LIKE '3%' OR s.code LIKE '4%' OR s.code LIKE '5%' THEN
-            CASE WHEN s.direction = 'credit' THEN sb.end_balance ELSE -sb.end_balance END
-            ELSE 0 END) AS total_liab_eq
-        FROM t_subject_balance sb
-        INNER JOIN t_subject s ON s.id = sb.subject_id
-        WHERE s.deleted = 0 AND sb.period = #{period}
-    """)
-    Map<String, Object> balanceSheetAggregate(@Param("period") String period);
-
-    /**
      * 趋势数据(多期)
      */
     @Select("""
