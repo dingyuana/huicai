@@ -169,12 +169,16 @@ function onRowClick(row: T, _column: unknown, event: Event) {
 
 ## 7. 本期落地范围（A+B 类，C/D 不动）
 
-### 已完成（本次）
+### 已完成
 - `finance/business-doc/BusinessDocList.vue`：去操作列，单据号链接 + 点击行整页进入详情。
 - `finance/bank-statement/BankStatementView.vue`：去操作列，动作（含新迁入的删除）收敛进既有详情弹窗。
+- `tax/output-invoice/OutputInvoiceList.vue`（Batch1）：发票号改 el-link；行点击加 onRowClick，排除 selection 列与按钮/链接/勾选框等交互元素后进入既有详情弹窗（P67 批量逻辑保持不变）。
+- `finance/pending-pool/PendingPool.vue`（Batch1）：去 fixed 操作列；行点击进入「处理」弹窗（el-descriptions 详情 + 处理/预览/删除动作），预览与删除（el-popconfirm）迁入弹窗 footer。
 
-### A 类待改造（约 18 个，分批 PR）
-`tax/input-invoice/InputInvoiceList`、`tax/output-invoice/OutputInvoiceList`、`finance/bank-journal/BankJournalList`、`finance/cash-journal/CashJournalList`、`finance/ticket/TicketList`、`arap/ExpenseList`、`finance/prepayment/PrepaymentView`、`arap/prepayment/PrepaymentList`、`arap/bad-debt/BadDebtList`、`arap/purchase-return/PurchaseReturnList`、`arap/customer-statement/CustomerStatementList`、`asset/card/AssetCardList`、`asset/disposal/AssetDisposalList`、`budget/BudgetList`、`budget/AdjustmentList`、`ai/task/AiTaskList`、`ai/anomaly/AnomalyList`、`finance/pending-pool/PendingPool`
+### A 类待改造（约 16 个，分批 PR；本批审计后多数因动作无详情承载而暂缓）
+`tax/input-invoice/InputInvoiceList`、`finance/bank-journal/BankJournalList`、`finance/cash-journal/CashJournalList`、`finance/ticket/TicketList`、`arap/ExpenseList`、`finance/prepayment/PrepaymentView`、`arap/prepayment/PrepaymentList`、`arap/bad-debt/BadDebtList`、`arap/purchase-return/PurchaseReturnList`、`arap/customer-statement/CustomerStatementList`、`asset/card/AssetCardList`、`asset/disposal/AssetDisposalList`、`budget/BudgetList`、`budget/AdjustmentList`、`ai/task/AiTaskList`、`ai/anomaly/AnomalyList`
+
+> Batch1 审计结论：上述 16 个页面的操作列动作（submit/approve/reject/delete/genVoucher 等）当前既无详情路由、也无可承载的详情弹窗，仅有「新增/编辑」或动作专用弹窗；需先补详情承载再去操作列，不可硬删导致功能丢失。
 
 > 注：每个页面改造前必须先确认它**是否已有详情页/弹窗**；没有的先补详情承载动作，再去操作列，禁止"先删列导致功能丢失"。
 
@@ -198,4 +202,5 @@ function onRowClick(row: T, _column: unknown, event: Event) {
 
 ## 版本历史
 
-- v0.1 (2026-09-13)：草案。现状盘点 + token + 列表交互统一规则（A/B/C/D 分类）+ 本期改造清单。待老丁审核。
+- v0.1 (2026-09-13)：草案。现状盘点 + token + 列表交互统一规则（A/B/C/D 分类）+ 本期改造清单。
+- v0.2 (2026-09-13)：老丁批准。Batch1 落地 OutputInvoiceList、PendingPool（去操作列/行点击进入详情承载）；其余 16 个 A 类页面经审计因动作无详情承载暂缓，需先补详情承载。

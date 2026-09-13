@@ -119,9 +119,13 @@
         </el-form-item>
       </el-form>
 
-      <el-table ref="tableRef" :data="list" v-loading="loading" border @selection-change="onSelectionChange" @row-click="showDetail" style="cursor:pointer">
+      <el-table ref="tableRef" :data="list" v-loading="loading" border @selection-change="onSelectionChange" @row-click="onRowClick" style="cursor:pointer">
         <el-table-column type="selection" width="50" :selectable="rowSelectable" />
-        <el-table-column prop="invoiceNo" label="发票号" width="180" />
+        <el-table-column label="发票号" width="180">
+          <template #default="{ row }">
+            <el-link type="primary" :underline="false" @click="showDetail(row)">{{ row.invoiceNo }}</el-link>
+          </template>
+        </el-table-column>
         <el-table-column prop="invoiceDate" label="开票日期" width="120" />
         <el-table-column prop="customerName" label="客户" min-width="160" show-overflow-tooltip />
         <el-table-column label="金额" width="120" align="right">
@@ -397,6 +401,14 @@ const showDetail = async (row: any) => {
     detail.value = row
     detailVisible.value = true
   }
+}
+
+/** 行点击：排除 selection 列、按钮、链接等交互元素后进入详情 */
+function onRowClick(row: any, column: any, event: Event) {
+  if (column?.type === 'selection') return
+  const t = event.target as HTMLElement
+  if (t.closest('.el-button, .el-link, .el-popconfirm, .el-checkbox, .el-tag, a')) return
+  showDetail(row)
 }
 
 const onDelete = async (row: any) => {

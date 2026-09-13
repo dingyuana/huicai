@@ -37,15 +37,6 @@
             <el-tag type="info" size="small">待人工</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="200" fixed="right">
-          <template #default="{ row }">
-            <el-button text size="small" type="primary" @click.stop="openProcess(row as BankStatementVO)">处理</el-button>
-            <el-button text size="small" type="primary" @click.stop="preview(row as BankStatementVO)">预览</el-button>
-            <el-popconfirm title="确定删除?" @confirm="onDelete(row as any)">
-              <template #reference><el-button text size="small" type="danger" @click.stop>删除</el-button></template>
-            </el-popconfirm>
-          </template>
-        </el-table-column>
       </el-table>
 
       <div class="page-pagination">
@@ -80,8 +71,14 @@
         </el-form>
       </template>
       <template #footer>
-        <el-button @click="processVisible = false">取消</el-button>
+        <el-button @click="processVisible = false">关闭</el-button>
         <el-button type="primary" :loading="processing" @click="onProcess">确认处理</el-button>
+        <el-button v-if="currentRow" type="primary" @click="preview(currentRow as BankStatementVO); processVisible = false">预览凭证</el-button>
+        <el-popconfirm v-if="currentRow" title="确定删除?" @confirm="onDelete(currentRow as any); processVisible = false">
+          <template #reference>
+            <el-button type="danger">删除</el-button>
+          </template>
+        </el-popconfirm>
       </template>
     </el-dialog>
 
@@ -182,10 +179,10 @@ async function preview(row: BankStatementVO) {
   }
 }
 
-// Row click opens preview
+// Row click opens process dialog (detail + actions)
 function onRowClick(row: any, column: any) {
   if (column?.type === 'selection') return
-  preview(row)
+  openProcess(row)
 }
 
 async function onDelete(row: any) {
