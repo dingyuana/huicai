@@ -1,7 +1,8 @@
 # 测试策略与规范
 
 > **编号**：HUICAI-TEST-001
-> **版本**：V1.0 | **日期**：2026-08-19 | **作者**：Hermes
+> **版本**：V1.1 | **日期**：2026-09-13 | **作者**：Hermes
+> **V1.1 变更**：测试硬数字回写（后端 1776 @Test/210 类；前端 17 个 Vitest 测试文件；E2E 19 个 Playwright 测试文件）
 > **关联文档**：[项目说明](../CORE-项目说明.md)、[技术方案](../CORE-技术方案.md)
 > **关联 Skill**：`dy-测试方法`（分层策略、pitfall 库）、`dy-测试门禁`（完成前验证）
 
@@ -11,10 +12,10 @@
 
 | 维度 | 数据 |
 |------|------|
-| 后端测试 | 1479 个 `@Test` 方法，0 Failures，0 Errors |
+| 后端测试 | 1776 个 `@Test` 方法 / 210 个测试类，0 Failures，0 Errors |
 | 测试框架 | JUnit 5 + Mockito + Testcontainers |
-| 前端测试 | 零（无 Vitest/Jest 测试） |
-| E2E 测试 | Playwright 骨架存在，无持续运行 |
+| 前端测试 | 17 个 Vitest 测试文件（frontend/src/__tests__） |
+| E2E 测试 | Playwright 19 个测试文件（e2e/tests/），无持续 CI 运行 |
 | 覆盖率门禁 | JaCoCo 配置就绪，branch ≥ 70% |
 | CI | 无自动 CI（本地 `mvn test` 前置） |
 
