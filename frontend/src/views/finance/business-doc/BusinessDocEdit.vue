@@ -216,8 +216,11 @@ async function selectCustomer(item: any) {
         name: item.name,
         isActive: true,
       } as any)
-      customers.value.push({ id: created.id, name: created.name })
-      form.value.customerId = created.id
+      const newId = created.id
+      if (newId != null) {
+        customers.value.push({ id: newId, name: created.name })
+        form.value.customerId = newId
+      }
       customerQuery.value = created.name
       ElMessage.success(`客户「${created.name}」已创建`)
     } catch { /* cancelled */ }
@@ -236,8 +239,11 @@ async function selectSupplier(item: any) {
         name: item.name,
         isActive: true,
       } as any)
-      suppliers.value.push({ id: created.id, name: created.name })
-      form.value.supplierId = created.id
+      const newId = created.id
+      if (newId != null) {
+        suppliers.value.push({ id: newId, name: created.name })
+        form.value.supplierId = newId
+      }
       supplierQuery.value = created.name
       ElMessage.success(`供应商「${created.name}」已创建`)
     } catch { /* cancelled */ }

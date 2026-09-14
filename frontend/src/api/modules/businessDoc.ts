@@ -31,8 +31,11 @@ export interface BusinessDocVO {
   summary?: string
   source?: string
   attachmentIds?: string
+  settlementAccountId?: number
   voucherId?: number
   voucherNo?: string
+  invoiceId?: number
+  invoiceNo?: string
   enrichedSummary?: string
   settledAmount?: number
   unsettledAmount?: number

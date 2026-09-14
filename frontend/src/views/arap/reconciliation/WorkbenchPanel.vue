@@ -586,10 +586,11 @@ function onFifoSelectionChange(rows: ReconciliationFifoPreview[]) {
   isIndeterminate.value = rows.length > 0 && !checkAll.value
 }
 
-function onCheckAll(val: boolean) {
-  checkAll.value = val
+function onCheckAll(val: string | number | boolean) {
+  const checked = val === true
+  checkAll.value = checked
   isIndeterminate.value = false
-  selectedPreviews.value = val ? (fifoResult.value || []).slice() : []
+  selectedPreviews.value = checked ? (fifoResult.value || []).slice() : []
   // 让 el-table 同步勾选状态
   nextTick(() => {
     const tables = document.querySelectorAll('.el-table__body-wrapper')

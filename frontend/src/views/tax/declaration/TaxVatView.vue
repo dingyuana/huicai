@@ -88,13 +88,13 @@
           <template v-if="appendixI">
             <el-row :gutter="20">
               <el-col :span="8">
-                <el-statistic label="合计销售额(不含税)" :value="fmtAmount(appendixI.totalSalesAmount)" />
+                <el-statistic label="合计销售额(不含税)" :value="Number(fmtAmount(appendixI.totalSalesAmount))" />
               </el-col>
               <el-col :span="8">
-                <el-statistic label="合计销项税" :value="fmtAmount(appendixI.totalTaxAmount)" />
+                <el-statistic label="合计销项税" :value="Number(fmtAmount(appendixI.totalTaxAmount))" />
               </el-col>
               <el-col :span="8">
-                <el-statistic label="合计含税金额" :value="fmtAmount(appendixI.totalAmount)" />
+                <el-statistic label="合计含税金额" :value="Number(fmtAmount(appendixI.totalAmount))" />
               </el-col>
             </el-row>
             <el-table :data="appendixI.rows" border size="small" style="margin-top: 12px">
@@ -121,13 +121,13 @@
           <template v-if="appendixII">
             <el-row :gutter="20">
               <el-col :span="8">
-                <el-statistic label="合计金额(不含税)" :value="fmtAmount(appendixII.totalAmountExTax)" />
+                <el-statistic label="合计金额(不含税)" :value="Number(fmtAmount(appendixII.totalAmountExTax))" />
               </el-col>
               <el-col :span="8">
-                <el-statistic label="合计进项税" :value="fmtAmount(appendixII.totalTaxAmount)" />
+                <el-statistic label="合计进项税" :value="Number(fmtAmount(appendixII.totalTaxAmount))" />
               </el-col>
               <el-col :span="8">
-                <el-statistic label="可抵扣税额" :value="fmtAmount(appendixII.deductibleTax)">
+                <el-statistic label="可抵扣税额" :value="Number(fmtAmount(appendixII.deductibleTax))">
                   <template #title><span style="color:#67c23a;font-size:14px">已认证已申报</span></template>
                 </el-statistic>
               </el-col>
