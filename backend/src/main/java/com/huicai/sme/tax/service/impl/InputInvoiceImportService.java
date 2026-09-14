@@ -375,9 +375,9 @@ public class InputInvoiceImportService {
     @Transactional
     String createVoucher(BusinessDocEntity doc, ParsedInputInvoiceRow row, Long vendorId, String period) {
         String voucherNo = voucherNoService.generateNextNo(period, DEFAULT_VOUCHER_TYPE_ID);
-        Subject subjectBank = findSubjectByCode("2202");
-        Subject subjectRevenue = findSubjectByCode("5001");
-        Subject subjectInputTax = findSubjectByCode("2221.01");
+        Subject subjectPayable = requireSubjectByCode("2202");
+        Subject subjectInventory = requireSubjectByCode("1405");
+        Subject subjectInputTax = requireSubjectByCode("2221.02");
 
         VoucherEntity voucher = new VoucherEntity();
         voucher.setVoucherNo(voucherNo);
@@ -398,11 +398,9 @@ public class InputInvoiceImportService {
         docMapper.updateById(doc);
 
         int sort = 1;
-        // 借: 5001 销售收入 (采购: 借 5001/进项税)
-        addVoucherEntry(voucher.getId(), subjectRevenue.getId(), row.amount, BigDecimal.ZERO, row.goodsName, sort++);
+        addVoucherEntry(voucher.getId(), subjectInventory.getId(), row.amount, BigDecimal.ZERO, row.goodsName, sort++);
         addVoucherEntry(voucher.getId(), subjectInputTax.getId(), row.taxAmount, BigDecimal.ZERO, row.goodsName, sort++);
-        // 贷: 2202 应付账款
-        addVoucherEntry(voucher.getId(), subjectBank.getId(), BigDecimal.ZERO, row.totalAmount, row.goodsName, sort++);
+        addVoucherEntry(voucher.getId(), subjectPayable.getId(), BigDecimal.ZERO, row.totalAmount, row.goodsName, sort++);
         
         return voucherNo;
     }
@@ -473,17 +471,11 @@ public class InputInvoiceImportService {
         return null;
     }
 
-    private Subject findSubjectByCode(String code) {
+    Subject requireSubjectByCode(String code) {
         List<Subject> list = subjectMapper.selectList(
                 new LambdaQueryWrapper<Subject>().eq(Subject::getCode, code));
         if (list.isEmpty()) {
-            // 自动创建
-            Subject s = new Subject();
-            s.setCode(code);
-            s.setName("P10-2-AUTO-" + code);
-            s.setIsLeaf(true);
-            subjectMapper.insert(s);
-            return s;
+            throw BusinessException.badRequest("未配置科目 " + code + "，请先在科目档案中新增");
         }
         return list.get(0);
     }

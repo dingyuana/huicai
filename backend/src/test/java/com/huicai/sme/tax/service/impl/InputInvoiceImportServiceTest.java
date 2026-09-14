@@ -1,5 +1,6 @@
 package com.huicai.sme.tax.service.impl;
 
+import com.huicai.base.business.entity.BusinessDocEntity;
 import com.huicai.base.business.entity.InputInvoiceEntity;
 import com.huicai.base.business.mapper.BusinessDocEntryMapper;
 import com.huicai.base.business.mapper.BusinessDocMapper;
@@ -7,7 +8,10 @@ import com.huicai.base.business.mapper.InputInvoiceMapper;
 import com.huicai.base.business.util.ColumnMappingResolver;
 import com.huicai.base.masterdata.entity.VendorEntity;
 import com.huicai.base.masterdata.mapper.VendorMapper;
+import com.huicai.base.system.entity.Subject;
 import com.huicai.base.system.mapper.SubjectMapper;
+import com.huicai.base.voucher.entity.VoucherEntity;
+import com.huicai.base.voucher.entity.VoucherEntryEntity;
 import com.huicai.base.voucher.mapper.VoucherEntryMapper;
 import com.huicai.base.voucher.mapper.VoucherMapper;
 import com.huicai.base.voucher.service.VoucherNoService;
@@ -31,6 +35,8 @@ import java.util.concurrent.ConcurrentHashMap;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -48,6 +54,7 @@ class InputInvoiceImportServiceTest {
     @Mock private InvoiceDedupUtil invoiceDedupUtil;
 
     @Captor private ArgumentCaptor<InputInvoiceEntity> invoiceCaptor;
+    @Captor private ArgumentCaptor<VoucherEntryEntity> entryCaptor;
 
     private InputInvoiceImportService service;
 
@@ -368,5 +375,116 @@ class InputInvoiceImportServiceTest {
         assertEquals(1, result.get("duplicateSkipped"));
         verify(spy, times(1)).previewInvoices(mockFile);
         verify(spy, times(1)).confirmImport("test-batch");
+    }
+
+    // ==================== P70 createVoucher ====================
+
+    private Subject stubSubject(Long id, String code, String name, String direction) {
+        Subject s = new Subject();
+        s.setId(id);
+        s.setCode(code);
+        s.setName(name);
+        s.setDirection(direction);
+        s.setIsLeaf(true);
+        return s;
+    }
+
+    private void stubRequiredSubjects(InputInvoiceImportService spy, Map<String, Subject> configured) {
+        doAnswer(inv -> {
+            String code = inv.getArgument(0);
+            Subject s = configured.get(code);
+            if (s == null) {
+                throw BusinessException.badRequest("未配置科目 " + code);
+            }
+            return s;
+        }).when(spy).requireSubjectByCode(anyString());
+    }
+
+    @Test
+    @DisplayName("createVoucher: 借库存商品1405+进项税2221.02，贷应付2202，金额平衡")
+    void createVoucher_正确科目与金额_借贷平衡() {
+        InputInvoiceImportService spy = spy(service);
+        stubRequiredSubjects(spy, Map.of(
+                "1405", stubSubject(16L, "1405", "库存商品", "debit"),
+                "2221.02", stubSubject(700L, "2221.02", "应交增值税-进项税额", "debit"),
+                "2202", stubSubject(44L, "2202", "应付账款", "credit")));
+        when(voucherNoService.generateNextNo(any(), anyLong())).thenReturn("FK2026060001");
+        when(voucherMapper.insert(any(VoucherEntity.class))).thenAnswer(inv -> {
+            inv.getArgument(0, VoucherEntity.class).setId(9001L);
+            return 1;
+        });
+
+        BusinessDocEntity doc = new BusinessDocEntity();
+        var row = stubRow(1, "INV001", "91110000ABC", "供应商A");
+        row.goodsName = "采购商品";
+
+        String no = spy.createVoucher(doc, row, 5L, "202606");
+
+        assertEquals("FK2026060001", no);
+        verify(spy).requireSubjectByCode("1405");
+        verify(spy).requireSubjectByCode("2221.02");
+        verify(spy).requireSubjectByCode("2202");
+        verify(subjectMapper, never()).insert(any(Subject.class));
+
+        verify(voucherEntryMapper, times(3)).insert(entryCaptor.capture());
+        List<VoucherEntryEntity> entries = entryCaptor.getAllValues();
+        assertEquals(16L, entries.get(0).getSubjectId());
+        assertEquals(0, new BigDecimal("1000").compareTo(entries.get(0).getDebit()));
+        assertEquals(0, BigDecimal.ZERO.compareTo(entries.get(0).getCredit()));
+        assertEquals(700L, entries.get(1).getSubjectId());
+        assertEquals(0, new BigDecimal("130").compareTo(entries.get(1).getDebit()));
+        assertEquals(44L, entries.get(2).getSubjectId());
+        assertEquals(0, new BigDecimal("1130").compareTo(entries.get(2).getCredit()));
+        assertEquals(0, BigDecimal.ZERO.compareTo(entries.get(2).getDebit()));
+        assertNotNull(doc.getVoucherId());
+    }
+
+    @Test
+    @DisplayName("createVoucher: 缺进项税科目2221.02时抛BusinessException且不产生凭证/分录")
+    void createVoucher_缺进项税科目_抛异常且无半成品() {
+        InputInvoiceImportService spy = spy(service);
+        stubRequiredSubjects(spy, Map.of(
+                "1405", stubSubject(16L, "1405", "库存商品", "debit"),
+                "2202", stubSubject(44L, "2202", "应付账款", "credit")));
+
+        BusinessDocEntity doc = new BusinessDocEntity();
+        var row = stubRow(1, "INV001", "91110000ABC", "供应商A");
+
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> spy.createVoucher(doc, row, 5L, "202606"));
+        assertTrue(ex.getMessage().contains("2221.02"));
+        verify(subjectMapper, never()).insert(any(Subject.class));
+        verify(voucherMapper, never()).insert(any(VoucherEntity.class));
+        verify(voucherEntryMapper, never()).insert(any(VoucherEntryEntity.class));
+        verify(docMapper, never()).updateById(any(BusinessDocEntity.class));
+        assertNull(doc.getVoucherId());
+    }
+
+    @Test
+    @DisplayName("createVoucher: 缺库存商品1405时抛BusinessException且不自动建科目")
+    void createVoucher_缺库存商品科目_抛异常() {
+        InputInvoiceImportService spy = spy(service);
+        stubRequiredSubjects(spy, Map.of(
+                "2221.02", stubSubject(700L, "2221.02", "应交增值税-进项税额", "debit"),
+                "2202", stubSubject(44L, "2202", "应付账款", "credit")));
+
+        BusinessDocEntity doc = new BusinessDocEntity();
+        var row = stubRow(1, "INV001", "91110000ABC", "供应商A");
+
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> spy.createVoucher(doc, row, 5L, "202606"));
+        assertTrue(ex.getMessage().contains("1405"));
+        verify(subjectMapper, never()).insert(any(Subject.class));
+        verify(voucherMapper, never()).insert(any(VoucherEntity.class));
+    }
+
+    @Test
+    @DisplayName("requireSubjectByCode: 科目不存在时抛BusinessException且不自动建科目")
+    void requireSubjectByCode_不存在_抛异常不自动建() {
+        when(subjectMapper.selectList(any())).thenReturn(List.of());
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> service.requireSubjectByCode("2221.02"));
+        assertTrue(ex.getMessage().contains("2221.02"));
+        verify(subjectMapper, never()).insert(any(Subject.class));
     }
 }
