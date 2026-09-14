@@ -5,9 +5,9 @@
 > **重编号说明**：原编号 P57 与 P57-declare-status-split（申报状态拆分）重复，2026-09-13 重编号为 P71，需求回链同步更新
 > **关联需求**：REQ-2026-077
 > **前置**：P55（期间软删修复）、P17（报表中心）
-> **状态**：草案待审核
+> **状态**：已实现 ✅（2026-09-14 代码已全部落地，commit b24c7c0，测试已补充至 4 个 current-period 场景 + 7 个 switch 场景 = 11 tests pass）
 
-> **test_ref**：EnterpriseControllerTest
+> **test_ref**：EnterpriseControllerTest（11 tests: 7 switch + 4 current-period）；SubjectBalanceServiceImplTest（35 tests 覆盖 initOpeningBalances/validateOpeningBeforePost/clearOpeningBalances BDD 场景）
 ---
 
 ## 1. 输入契约

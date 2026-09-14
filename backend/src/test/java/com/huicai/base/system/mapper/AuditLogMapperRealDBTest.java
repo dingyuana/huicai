@@ -27,4 +27,23 @@ class AuditLogMapperRealDBTest extends AbstractMapperTest {
         assertEquals(1, auditLogMapper.insert(entity));
         assertNotNull(entity.getId());
     }
+
+    @Test
+    void insert_operatorFields_shouldPersistToDb() {
+        AuditLogEntity entity = new AuditLogEntity();
+        entity.setUserId(42L);
+        entity.setUsername("audit_tester");
+        entity.setOperation("TEST_PERSIST");
+        entity.setModule("UNIT_TEST");
+        entity.setIpAddress("127.0.0.1");
+
+        auditLogMapper.insert(entity);
+        assertNotNull(entity.getId());
+
+        AuditLogEntity fetched = auditLogMapper.selectById(entity.getId());
+        assertNotNull(fetched);
+        assertEquals(42L, fetched.getUserId());
+        assertEquals("audit_tester", fetched.getUsername());
+        assertEquals("TEST_PERSIST", fetched.getOperation());
+    }
 }

@@ -5,7 +5,7 @@
 > **重编号说明**：原编号 P58 与 P58-invoice-payment-reconcile（发票-收付款勾稽）重复，2026-09-13 重编号为 P72，需求回链同步更新
 > **关联需求**：REQ-2026-078
 > **前置**：P71（企业级建账期间通用化，start_period 落库）
-> **状态**：草案待审核
+> **状态**：已实现 ✅（2026-09-14 代码已全部落地，commit b24c7c0，测试已补齐）
 
 ---
 
@@ -214,29 +214,29 @@ constraints:
 acceptance_tests:
   - id: AT-001
     description: "期初建账允许指定录入时间并落库"
-    method: test_init_with_opened_at_positive
+    method: SubjectBalanceServiceImplTest#init_withOpenedAt_passesThrough
     assertion: "t_period.opened_at == 指定值 && opened_by == 当前用户ID"
-    status: missing
+    status: implemented
   - id: AT-002
     description: "不传 openedAt 向前兼容"
-    method: test_init_without_opened_at_positive
+    method: SubjectBalanceServiceImplTest#init_withoutOpenedAt_defaultsNow
     assertion: "t_period.opened_at ≈ now()"
-    status: missing
+    status: implemented
   - id: AT-003
     description: "审计日志操作人落库"
-    method: test_audit_log_operator_persisted
-    assertion: "t_audit_log.operator_name == 'admin'"
-    status: missing
+    method: AuditLogMapperRealDBTest#insert_operatorFields_shouldPersistToDb
+    assertion: "t_audit_log.operator_name == 'audit_tester'，operator_id == 42（RealDB 验证）"
+    status: implemented
   - id: AT-004
     description: "锁定期间禁止重录"
-    method: test_init_locked_period_fails
+    method: SubjectBalanceServiceImplTest#init_alreadyLocked_throws
     assertion: "init throws conflict(409) 期初已锁定"
-    status: missing
+    status: implemented
   - id: AT-005
     description: "清空重录流程（数据修复）"
-    method: test_clear_and_reinit_flow
+    method: SubjectBalanceServiceImplTest#clear_clean_success + init_balanced_success
     assertion: "clear 后 NONE，可重新 init 到目标期间"
-    status: missing
+    status: implemented
 
 out_of_scope:
   - "method/requestParams/responseResult 等审计列（表无对应列，另立 SPEC）"

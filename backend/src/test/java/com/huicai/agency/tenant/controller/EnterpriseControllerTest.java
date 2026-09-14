@@ -8,13 +8,16 @@ import com.huicai.agency.user.entity.AgencyUserEntity;
 import com.huicai.agency.user.mapper.AgencyUserEnterpriseMapper;
 import com.huicai.agency.user.mapper.AgencyUserMapper;
 import com.huicai.base.system.entity.MenuEntity;
+import com.huicai.base.system.entity.PeriodEntity;
 import com.huicai.base.system.entity.UserEntity;
 import com.huicai.base.system.mapper.MenuMapper;
+import com.huicai.base.system.mapper.PeriodMapper;
 import com.huicai.base.system.mapper.RoleMenuMapper;
 import com.huicai.base.system.mapper.UserMapper;
 import com.huicai.base.system.mapper.UserRoleMapper;
 import com.huicai.base.system.service.MenuService;
 import com.huicai.base.system.service.impl.UserDetailsServiceImpl;
+import com.huicai.common.context.EnterpriseContextHolder;
 import com.huicai.config.security.JwtProvider;
 import com.huicai.config.security.LoginUser;
 import org.junit.jupiter.api.DisplayName;
@@ -92,6 +95,9 @@ class EnterpriseControllerTest {
 
     @MockBean
     private MenuService menuService;
+
+    @MockBean
+    private PeriodMapper periodMapper;
 
     @SuppressWarnings("unchecked")
     private void stubToken(String token, Long userId, String username, String userType,
@@ -285,5 +291,95 @@ class EnterpriseControllerTest {
                         .param("enterpriseId", "1"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(404));
+    }
+
+    // ========== current-period 接口测试 (P71) ==========
+
+    @Test
+    @DisplayName("current-period: start_period存在且有数据期间 -> 返回最近有数据期间")
+    void currentPeriod_startPeriodWithData_returnsHasDataPeriod() throws Exception {
+        stubAdmin();
+        EnterpriseContextHolder.set(1L);
+
+        EnterpriseEntity enterprise = new EnterpriseEntity();
+        enterprise.setId(1L);
+        enterprise.setDeleted(0);
+        enterprise.setStartPeriod("202401");
+        when(enterpriseMapper.selectById(1L)).thenReturn(enterprise);
+        when(enterpriseMapper.selectLatestPeriodWithData(1L)).thenReturn("202403");
+
+        mvc.perform(get("/api/v1/enterprise/current-period")
+                        .header("Authorization", "Bearer " + TOKEN_ADMIN))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(200))
+                .andExpect(jsonPath("$.data.currentPeriod").value("202403"))
+                .andExpect(jsonPath("$.data.startPeriod").value("202401"))
+                .andExpect(jsonPath("$.data.hasDataPeriod").value("202403"));
+
+        EnterpriseContextHolder.clear();
+    }
+
+    @Test
+    @DisplayName("current-period: start_period存在但无数据期间 -> 返回start_period本身")
+    void currentPeriod_startPeriodNoData_returnsStartPeriod() throws Exception {
+        stubAdmin();
+        EnterpriseContextHolder.set(1L);
+
+        EnterpriseEntity enterprise = new EnterpriseEntity();
+        enterprise.setId(1L);
+        enterprise.setDeleted(0);
+        enterprise.setStartPeriod("202401");
+        when(enterpriseMapper.selectById(1L)).thenReturn(enterprise);
+        when(enterpriseMapper.selectLatestPeriodWithData(1L)).thenReturn(null);
+
+        mvc.perform(get("/api/v1/enterprise/current-period")
+                        .header("Authorization", "Bearer " + TOKEN_ADMIN))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(200))
+                .andExpect(jsonPath("$.data.currentPeriod").value("202401"))
+                .andExpect(jsonPath("$.data.startPeriod").value("202401"))
+                .andExpect(jsonPath("$.data.hasDataPeriod").doesNotExist());
+
+        EnterpriseContextHolder.clear();
+    }
+
+    @Test
+    @DisplayName("current-period: 存量企业start_period为空 -> 返回企业最新期间")
+    void currentPeriod_legacyNoStartPeriod_returnsLatestPeriod() throws Exception {
+        stubAdmin();
+        EnterpriseContextHolder.set(1L);
+
+        EnterpriseEntity enterprise = new EnterpriseEntity();
+        enterprise.setId(1L);
+        enterprise.setDeleted(0);
+        enterprise.setStartPeriod(null);
+        when(enterpriseMapper.selectById(1L)).thenReturn(enterprise);
+
+        PeriodEntity latestPeriod = new PeriodEntity();
+        latestPeriod.setPeriodCode("202601");
+        when(periodMapper.selectOne(any())).thenReturn(latestPeriod);
+
+        mvc.perform(get("/api/v1/enterprise/current-period")
+                        .header("Authorization", "Bearer " + TOKEN_ADMIN))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(200))
+                .andExpect(jsonPath("$.data.currentPeriod").value("202601"));
+
+        EnterpriseContextHolder.clear();
+    }
+
+    @Test
+    @DisplayName("current-period: 未切换企业 -> 返回400")
+    void currentPeriod_noContext_returns400() throws Exception {
+        stubAdmin();
+        // 故意不调 EnterpriseContextHolder.set()，确保 ThreadLocal 为空
+        EnterpriseContextHolder.clear();
+
+        mvc.perform(get("/api/v1/enterprise/current-period")
+                        .header("Authorization", "Bearer " + TOKEN_ADMIN))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(400));
+
+        EnterpriseContextHolder.clear();
     }
 }
