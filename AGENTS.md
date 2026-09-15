@@ -11,7 +11,7 @@
 | 维度 | 数据 |
 |------|------|
 | 后端代码 | 461+ Java 文件 |
-| 测试用例 | 1811 个 `@Test` 方法 / 210 个测试类（快测 1598 通过，0 Failures, 0 Errors）|
+| 测试用例 | 1812 个 `@Test` 方法 / 210 个测试类（快测 1599 通过，0 Failures, 0 Errors）|
 | 数据库 | PostgreSQL 16 / V1 baseline (merged V1-V146) |
 | API 端点 | 510+ 个后端端点 |
 | 核心模块 | 基础数据、总账、应收应付、现金管理、固定资产、费用报销、发票税务、预算、财务报表、存储管理 |
@@ -40,6 +40,8 @@
 12. **逻辑删除**：关键财务表禁止物理删除，统一使用 `deleted` 字段（Integer，0=正常，1=删除），所有查询必须带 `deleted = 0` 条件
 13. **DTO/VO 隔离**：禁止将数据库 Entity 直接暴露给前端 Controller 返回值，入参必须定义 DTO/Param，出参必须定义 VO
 14. **异常处理**：禁止直接抛出原生 `Exception` 或 `RuntimeException`，必须使用 `BusinessException`（`com.huicai.common.exception`），统一错误码管理
+15. **竞品对标**：创建或修改需求时，必须主动对比成熟竞品（用友、金蝶、SAP、QuickBooks等）的同类功能设计与开发经验，识别差异点和最佳实践，纳入 SPEC 背景分析。禁止闭门造车式设计
+16. **需求变更审计**：任何需求修改必须记录变更原因、对标竞品结论、影响范围，同步更新 REQUIREMENTS_REGISTRY 版本历史
 
 ---
 
