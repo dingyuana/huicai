@@ -2,8 +2,8 @@ import { describe, it, expect } from 'vitest'
 import { REVIEW_STATUS_LABELS } from '@/api/modules/bankStatement'
 
 describe('P73 银行流水状态命名去歧义', () => {
-  it('BDD: payment_created 显示"待核销"而非"已生单"', () => {
-    expect(REVIEW_STATUS_LABELS['payment_created']).toBe('待核销')
+  it('BDD: payment_created 显示"待制证"而非"已生单"', () => {
+    expect(REVIEW_STATUS_LABELS['payment_created']).toBe('待制证')
   })
 
   it('BDD: voucher_generated 显示"已制证"', () => {
