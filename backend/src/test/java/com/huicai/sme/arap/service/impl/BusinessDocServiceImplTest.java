@@ -12,6 +12,7 @@ import com.huicai.base.business.entity.BusinessDocEntryEntity;
 import com.huicai.base.business.entity.OutputInvoiceEntity;
 import com.huicai.base.business.mapper.BusinessDocEntryMapper;
 import com.huicai.base.business.mapper.BusinessDocMapper;
+import com.huicai.base.business.mapper.BankStatementMapper;
 import com.huicai.base.business.mapper.OutputInvoiceMapper;
 import com.huicai.base.business.util.TemplateMatcher;
 import com.huicai.base.business.service.BusinessDocService;
@@ -75,6 +76,7 @@ class BusinessDocServiceImplTest {
 
     @Mock private BusinessDocMapper docMapper;
     @Mock private BusinessDocEntryMapper docEntryMapper;
+    @Mock private BankStatementMapper statementMapper;
     @Mock private VoucherMapper voucherMapper;
     @Mock private VoucherEntryMapper voucherEntryMapper;
     @Mock private VoucherNoService voucherNoService;
@@ -588,6 +590,73 @@ class BusinessDocServiceImplTest {
         assertTrue(ex.getMessage().contains("该单据已生成凭证"));
         // then — 负向
         verify(voucherMapper, never()).insert(any(VoucherEntity.class));
+    }
+
+    // ====================================================================
+    // 6.1 P73 generateVoucher 流水状态联动
+    // ====================================================================
+
+    private void mockHardcodedVoucherPath(BusinessDocEntity entity) {
+        when(docMapper.selectById(DOC_ID)).thenReturn(entity);
+        when(templateMatcher.match(any(TemplateContext.class))).thenReturn(null);
+        when(docEntryMapper.selectByDocId(DOC_ID)).thenReturn(List.of(entryEntity()));
+        when(voucherNoService.generateNextNo(anyString(), anyLong())).thenReturn("V2026060001");
+        when(subjectMapper.selectOne(any())).thenReturn(subject("1002", "银行存款"));
+        doAnswer(inv -> {
+            VoucherEntity v = inv.getArgument(0);
+            v.setId(200L);
+            return 1;
+        }).when(voucherMapper).insert(any(VoucherEntity.class));
+        lenient().when(subjectMapper.selectById(anyLong())).thenReturn(null);
+        lenient().when(customerMapper.selectBatchIds(anyList())).thenReturn(Collections.emptyList());
+        lenient().when(userMapper.selectBatchIds(anyList())).thenReturn(Collections.emptyList());
+        lenient().when(outputInvoiceMapper.selectOne(any())).thenReturn(null);
+    }
+
+    @Test
+    @DisplayName("testGenerateVoucher_流水单据_联动更新流水为已制证")
+    void testGenerateVoucher_流水单据_联动更新流水状态() {
+        // given — 来源于银行流水的 APPROVED 单据
+        BusinessDocEntity entity = approvedDoc();
+        entity.setBankStatementId(555L);
+        mockHardcodedVoucherPath(entity);
+
+        // when
+        service.generateVoucher(DOC_ID, USER_ID);
+
+        // then — 正向：流水被联动更新（条件更新 payment_created→voucher_generated）
+        verify(statementMapper).update(isNull(), argThat(w -> w != null));
+    }
+
+    @Test
+    @DisplayName("testGenerateVoucher_非流水单据_不联动流水")
+    void testGenerateVoucher_非流水单据_不联动流水() {
+        // given — 无 bankStatementId 的普通单据
+        BusinessDocEntity entity = approvedDoc();
+        mockHardcodedVoucherPath(entity);
+
+        // when
+        service.generateVoucher(DOC_ID, USER_ID);
+
+        // then — 负向：不应触碰流水表
+        verify(statementMapper, never()).update(any(), any());
+    }
+
+    @Test
+    @DisplayName("testGenerateVoucher_流水已制证_幂等不报错")
+    void testGenerateVoucher_流水已制证_幂等不报错() {
+        // given — 流水已是 voucher_generated（条件更新命中 0 行）
+        BusinessDocEntity entity = approvedDoc();
+        entity.setBankStatementId(555L);
+        mockHardcodedVoucherPath(entity);
+        when(statementMapper.update(isNull(), any())).thenReturn(0);
+
+        // when
+        BusinessDocVO vo = service.generateVoucher(DOC_ID, USER_ID);
+
+        // then — 单据正常制证，流水更新 0 行不抛异常
+        assertNotNull(vo);
+        verify(statementMapper).update(isNull(), any());
     }
 
     // ====================================================================

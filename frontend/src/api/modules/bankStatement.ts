@@ -72,8 +72,8 @@ export const REVIEW_STATUS_LABELS: Record<string, string> = {
   CONFIRMED: '已确认',
   RECLASSIFIED: '已重分类',
   classified: '已分类',
-  voucher_generated: 'A已制证',
-  payment_created: 'B已生单',
+  voucher_generated: '已制证',
+  payment_created: '待核销',
   manual_pending: '待人工',
   approved: '已过账',
 }

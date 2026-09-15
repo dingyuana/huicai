@@ -69,7 +69,7 @@
         <el-tag size="small" type="info">共 {{ totalCount }} 条</el-tag>
         <el-tag size="small" type="warning">待确认 {{ statusCounts.pending }}</el-tag>
         <el-tag size="small" type="success">已确认 {{ statusCounts.confirmed }}</el-tag>
-        <el-tag size="small" type="primary">已生单 {{ statusCounts.paymentCreated }}</el-tag>
+        <el-tag size="small" type="primary">待核销 {{ statusCounts.paymentCreated }}</el-tag>
         <el-tag size="small" type="primary">已制证 {{ statusCounts.voucherGenerated }}</el-tag>
         <el-tag v-if="statusCounts.approved > 0" size="small" type="success">已过账 {{ statusCounts.approved }}</el-tag>
       </div>

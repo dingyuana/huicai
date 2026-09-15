@@ -17,6 +17,7 @@ import com.huicai.base.voucher.entity.VoucherTemplateEntity;
 import com.huicai.base.voucher.entity.VoucherTemplateLineEntity;
 import com.huicai.base.business.mapper.BusinessDocEntryMapper;
 import com.huicai.base.business.mapper.BusinessDocMapper;
+import com.huicai.base.business.mapper.BankStatementMapper;
 import com.huicai.base.voucher.mapper.VoucherEntryMapper;
 import com.huicai.base.voucher.mapper.VoucherMapper;
 import com.huicai.base.business.service.BusinessDocService;
@@ -89,6 +90,7 @@ public class BusinessDocServiceImpl implements BusinessDocService {
 
     private final BusinessDocMapper docMapper;
     private final BusinessDocEntryMapper docEntryMapper;
+    private final BankStatementMapper statementMapper;
     private final VoucherMapper voucherMapper;
     private final VoucherEntryMapper voucherEntryMapper;
     private final VoucherNoService voucherNoService;
@@ -326,6 +328,30 @@ public class BusinessDocServiceImpl implements BusinessDocService {
         docMapper.updateById(entity);
     }
 
+    /** P73: 单据置 VOUCHERED，并联动来源流水 review_status: payment_created→voucher_generated（条件更新幂等）. */
+    private void markDocVouchered(BusinessDocEntity entity, VoucherEntity voucher, Long userId) {
+        entity.setVoucherId(voucher.getId());
+        entity.setVoucherNo(voucher.getVoucherNo());
+        entity.setStatus(BusinessDocStatus.VOUCHERED);
+        entity.setUpdatedBy(userId);
+        entity.setUpdatedAt(LocalDateTime.now());
+        docMapper.updateById(entity);
+
+        if (entity.getBankStatementId() != null) {
+            int updated = statementMapper.update(null,
+                    new com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper<com.huicai.base.business.entity.BankStatementEntity>()
+                            .eq("id", entity.getBankStatementId())
+                            .eq("review_status", "payment_created")
+                            .eq("deleted", 0)
+                            .set("review_status", "voucher_generated")
+                            .setSql("version = version + 1"));
+            if (updated > 0) {
+                log.info("P73 流水状态联动: stmtId={}, payment_created→voucher_generated, docId={}",
+                        entity.getBankStatementId(), entity.getId());
+            }
+        }
+    }
+
     @Override
     @Transactional
     public BusinessDocVO generateVoucher(Long id, Long userId) {
@@ -439,12 +465,7 @@ public class BusinessDocServiceImpl implements BusinessDocService {
         voucher.setTotalCredit(totalC);
         voucherMapper.updateById(voucher);
 
-        entity.setVoucherId(voucher.getId());
-        entity.setVoucherNo(voucher.getVoucherNo());
-        entity.setStatus(BusinessDocStatus.VOUCHERED);
-        entity.setUpdatedBy(userId);
-        entity.setUpdatedAt(LocalDateTime.now());
-        docMapper.updateById(entity);
+        markDocVouchered(entity, voucher, userId);
 
         log.info("单据生成凭证: docId={}, voucherId={}, voucherNo={}",
                 id, voucher.getId(), voucher.getVoucherNo());
@@ -570,12 +591,7 @@ public class BusinessDocServiceImpl implements BusinessDocService {
         voucher.setTotalCredit(maxAmt);
         voucherMapper.updateById(voucher);
 
-        entity.setVoucherId(voucher.getId());
-        entity.setVoucherNo(voucher.getVoucherNo());
-        entity.setStatus(BusinessDocStatus.VOUCHERED);
-        entity.setUpdatedBy(userId);
-        entity.setUpdatedAt(LocalDateTime.now());
-        docMapper.updateById(entity);
+        markDocVouchered(entity, voucher, userId);
 
         log.info("单据模板制证: docId={}, voucherId={}, templateId={}", entity.getId(), voucher.getId(), template.getId());
         return getDetail(entity.getId());
@@ -647,12 +663,7 @@ public class BusinessDocServiceImpl implements BusinessDocService {
         voucher.setTotalCredit(maxAmt);
         voucherMapper.updateById(voucher);
 
-        entity.setVoucherId(voucher.getId());
-        entity.setVoucherNo(voucher.getVoucherNo());
-        entity.setStatus(BusinessDocStatus.VOUCHERED);
-        entity.setUpdatedBy(userId);
-        entity.setUpdatedAt(LocalDateTime.now());
-        docMapper.updateById(entity);
+        markDocVouchered(entity, voucher, userId);
 
         log.info("转账单生成凭证: docId={}, voucherId={}, dr={}, cr={}",
                 id, voucher.getId(), totalD, totalC);
