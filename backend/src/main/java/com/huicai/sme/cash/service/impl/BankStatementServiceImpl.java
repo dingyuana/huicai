@@ -95,8 +95,7 @@ public class BankStatementServiceImpl implements BankStatementService {
                         .or().like(BankStatementEntity::getExternalNo, keyword))
                 .ge(minAmount != null, BankStatementEntity::getAmount, minAmount)
                 .le(maxAmount != null, BankStatementEntity::getAmount, maxAmount)
-                // 待处理状态排前面，方便用户优先处理
-                .last("ORDER BY CASE review_status WHEN 'PENDING' THEN 0 WHEN 'manual_pending' THEN 1 WHEN 'classified' THEN 2 WHEN 'RECLASSIFIED' THEN 3 WHEN 'CONFIRMED' THEN 4 WHEN 'voucher_generated' THEN 5 WHEN 'payment_created' THEN 6 WHEN 'approved' THEN 7 ELSE 8 END, tx_date DESC");
+                .last("ORDER BY tx_date DESC");
 
         if (shouldFilter(reviewStatus)) {
             String[] statuses = reviewStatus.split(",");
