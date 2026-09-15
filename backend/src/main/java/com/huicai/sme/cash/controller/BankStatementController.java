@@ -147,6 +147,12 @@ public class BankStatementController {
         return R.ok(service.classificationCounts(accountId, reviewStatus));
     }
 
+    @Operation(summary = "按状态统计当前账户的流水数量")
+    @GetMapping("/status-counts")
+    public R<Map<String, Integer>> statusCounts(@RequestParam Long accountId) {
+        return R.ok(service.statusCounts(accountId));
+    }
+
     @Operation(summary = "确认匹配")
     @PostMapping("/{statementId}/confirm-match")
     public R<Integer> confirmMatch(@PathVariable Long statementId, @RequestParam Long journalId) {

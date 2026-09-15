@@ -38,5 +38,11 @@ public interface BankStatementMapper extends BaseMapper<BankStatementEntity> {
           + "WHERE account_id = #{accountId} AND deleted = 0 AND review_status = #{reviewStatus} "
           + "GROUP BY category")
     List<Map<String, Object>> countByClassificationByReview(@Param("accountId") Long accountId,
-                                                            @Param("reviewStatus") String reviewStatus);
+                                                             @Param("reviewStatus") String reviewStatus);
+
+    @Select("SELECT COALESCE(review_status, 'PENDING') AS review_status, COUNT(*) AS cnt "
+          + "FROM t_bank_statement "
+          + "WHERE account_id = #{accountId} AND deleted = 0 "
+          + "GROUP BY review_status")
+    List<Map<String, Object>> countByReviewStatus(@Param("accountId") Long accountId);
 }

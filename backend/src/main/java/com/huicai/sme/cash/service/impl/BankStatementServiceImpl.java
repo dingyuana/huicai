@@ -95,7 +95,8 @@ public class BankStatementServiceImpl implements BankStatementService {
                         .or().like(BankStatementEntity::getExternalNo, keyword))
                 .ge(minAmount != null, BankStatementEntity::getAmount, minAmount)
                 .le(maxAmount != null, BankStatementEntity::getAmount, maxAmount)
-                .orderByDesc(BankStatementEntity::getTxDate);
+                // 待处理状态排前面，方便用户优先处理
+                .last("ORDER BY CASE review_status WHEN 'PENDING' THEN 0 WHEN 'manual_pending' THEN 1 WHEN 'classified' THEN 2 WHEN 'RECLASSIFIED' THEN 3 WHEN 'CONFIRMED' THEN 4 WHEN 'voucher_generated' THEN 5 WHEN 'payment_created' THEN 6 WHEN 'approved' THEN 7 ELSE 8 END, tx_date DESC");
 
         if (shouldFilter(reviewStatus)) {
             String[] statuses = reviewStatus.split(",");
@@ -742,6 +743,19 @@ public class BankStatementServiceImpl implements BankStatementService {
             String cls = row.get("classification") == null ? BankClassification.OTHER_UNKNOWN : String.valueOf(row.get("classification"));
             Number cnt = (Number) row.get("cnt");
             result.put(cls, cnt == null ? 0 : cnt.intValue());
+        }
+        return result;
+    }
+
+    @Override
+    public Map<String, Integer> statusCounts(Long accountId) {
+        if (accountId == null) return Map.of();
+        List<Map<String, Object>> rows = statementMapper.countByReviewStatus(accountId);
+        Map<String, Integer> result = new LinkedHashMap<>();
+        for (Map<String, Object> row : rows) {
+            String status = String.valueOf(row.get("review_status"));
+            Number cnt = (Number) row.get("cnt");
+            result.put(status, cnt == null ? 0 : cnt.intValue());
         }
         return result;
     }

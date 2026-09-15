@@ -65,6 +65,15 @@
         </el-radio-button>
       </el-radio-group>
 
+      <div v-if="query.accountId" class="status-summary">
+        <el-tag size="small" type="info">共 {{ totalCount }} 条</el-tag>
+        <el-tag size="small" type="warning">待确认 {{ statusCounts.pending }}</el-tag>
+        <el-tag size="small" type="success">已确认 {{ statusCounts.confirmed }}</el-tag>
+        <el-tag size="small" type="primary">已生单 {{ statusCounts.paymentCreated }}</el-tag>
+        <el-tag size="small" type="primary">已制证 {{ statusCounts.voucherGenerated }}</el-tag>
+        <el-tag v-if="statusCounts.approved > 0" size="small" type="success">已过账 {{ statusCounts.approved }}</el-tag>
+      </div>
+
         <el-space style="margin-bottom: 12px" wrap>
           <el-button type="primary" @click="openImport">导入对账单</el-button>
           <el-button :disabled="!query.accountId" @click="onAutoClassify">自动分类全部</el-button>
@@ -396,7 +405,7 @@ import {
   batchConfirmStatements,
   auditStatement, batchAuditStatements,
   deleteStatement, updateStatementClassification,
-  getBankStatementDetail, getClassificationCounts,
+  getBankStatementDetail, getClassificationCounts, getStatusCounts,
   CLASSIFICATION_LABELS, REVIEW_STATUS_LABELS,
   type BankStatementVO,
 } from '@/api/modules/bankStatement'
@@ -471,6 +480,18 @@ const columnMapping = ref<Record<string, string>>({})
 // 分类 tab 计数: { classification: count }
 const classificationCounts = ref<Record<string, number>>({})
 const totalCount = computed(() => Object.values(classificationCounts.value).reduce((a, b) => a + b, 0))
+
+const statusCountsRaw = ref<Record<string, number>>({})
+const statusCounts = computed(() => {
+  const r = statusCountsRaw.value
+  return {
+    pending: (r['PENDING'] || 0) + (r['manual_pending'] || 0) + (r['classified'] || 0) + (r['RECLASSIFIED'] || 0),
+    confirmed: r['CONFIRMED'] || 0,
+    paymentCreated: r['payment_created'] || 0,
+    voucherGenerated: r['voucher_generated'] || 0,
+    approved: r['approved'] || 0,
+  }
+})
 
 const query = ref<{
   accountId?: string
@@ -562,13 +583,19 @@ async function fetchData() {
 async function fetchClassificationCounts() {
   if (!query.value.accountId) {
     classificationCounts.value = {}
+    statusCountsRaw.value = {}
     return
   }
   try {
-    const res: any = await getClassificationCounts(query.value.accountId, query.value.reviewStatus)
-    classificationCounts.value = res || {}
+    const [clsRes, stsRes]: [any, any] = await Promise.all([
+      getClassificationCounts(query.value.accountId, query.value.reviewStatus),
+      getStatusCounts(query.value.accountId),
+    ])
+    classificationCounts.value = clsRes || {}
+    statusCountsRaw.value = stsRes || {}
   } catch {
     classificationCounts.value = {}
+    statusCountsRaw.value = {}
   }
 }
 
@@ -879,8 +906,9 @@ onMounted(async () => {
 }
 .page-title { font-size: 16px; font-weight: 600; }
 .filter-form { margin-bottom: 12px; }
-.classification-tabs { margin-bottom: 12px; flex-wrap: wrap; row-gap: 4px; }
+.classification-tabs { margin-bottom: 8px; flex-wrap: wrap; row-gap: 4px; }
 .classification-tabs :deep(.el-radio-button__inner) { padding: 8px 14px; }
+.status-summary { display: flex; gap: 6px; margin-bottom: 12px; flex-wrap: wrap; }
 :deep(.preview-row-error) {
   background-color: #fef0f0 !important;
   color: var(--el-color-danger);
