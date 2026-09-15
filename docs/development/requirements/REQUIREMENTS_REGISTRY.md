@@ -205,6 +205,7 @@
 | REQ-2026-075 | 代理工作台前端 | P1 | 客户列表、切换、批量操作 UI | SPC-126-S-26 | 🆕 规划中 |
 | REQ-2026-077 | 企业级建账期间通用化 | P1 | start_period 落库自动回填、默认期间接口、过账校验基于建账期间、前端 11 处默认期间改造 | SPC-P71 | ✅ 已实现（代码 commit b24c7c0；current-period 接口 11 tests + SubjectBalanceServiceImpl 35 tests 全绿；V134 migration） |
 | REQ-2026-078 | 期初建账审计增强 | P1 | 期初建账允许任意指定录入时间（建账日期）；记录期初建账日期、录入人员；审计日志修复操作人落库 | SPC-P72 | ✅ 已实现（代码 commit b24c7c0；opened_at/opened_by 落库测试 + AuditLog operator_id/operator_name RealDB 断言；V135 migration） |
+| REQ-2026-079 | 银行流水核销体验优化 | P1 | 状态命名去歧义（payment_created→待核销）、核销工作台批量制证、小额直制证阈值配置、仪表盘待核销提醒 | SPC-P73 | 🆕 规划中（SPEC 待审核） |
 
 ---
 
