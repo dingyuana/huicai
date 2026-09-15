@@ -68,7 +68,7 @@
       <div class="pagination">
         <el-pagination
           v-if="total > 0"
-          v-model:current="query.current"
+          v-model:current-page="query.current"
           v-model:page-size="query.size"
           :total="total"
           :page-sizes="[10, 20, 50]"

@@ -143,7 +143,7 @@
 
       <el-pagination
         v-if="total > 0"
-        v-model:current="query.current"
+        v-model:current-page="query.current"
         v-model:page-size="query.size"
         :total="total"
         layout="total, prev, pager, next"

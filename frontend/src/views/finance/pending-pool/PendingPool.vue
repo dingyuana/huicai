@@ -41,7 +41,7 @@
 
       <div class="page-pagination">
         <el-pagination
-          v-model:current="query.current"
+          v-model:current-page="query.current"
           v-model:page-size="query.size"
           :page-sizes="[10, 20, 50]"
           :total="total"
