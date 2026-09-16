@@ -12,6 +12,16 @@
         <el-tab-pane label="已完成" name="completed" />
       </el-tabs>
     <FilterBar :model="query">
+        <template v-if="scope === 'completed'">
+        <el-form-item label="快捷时段">
+          <el-radio-group v-model="quickDate" size="small" @change="onQuickDate">
+            <el-radio-button value="thisMonth">本月</el-radio-button>
+            <el-radio-button value="last3">近3个月</el-radio-button>
+            <el-radio-button value="last6">近6个月</el-radio-button>
+            <el-radio-button value="last12">近12个月</el-radio-button>
+          </el-radio-group>
+        </el-form-item>
+        </template>
         <el-form-item label="状态">
           <el-select v-model="query.status" placeholder="全部" clearable style="width:130px">
             <el-option v-for="(label, value) in DOC_STATUS_LABELS" :key="value" :label="label" :value="value" />
@@ -26,6 +36,7 @@
             format="YYYY-MM-DD"
             value-format="YYYY-MM-DD"
             style="width:240px"
+            @change="onDateRangeChange"
           />
         </el-form-item>
         <el-form-item label="金额">
@@ -55,6 +66,9 @@
       </el-radio-group>
 
       <el-table :data="list" v-loading="loading" border stripe @row-click="onRowClick">
+        <template #empty>
+          <el-empty v-if="scope === 'completed' && !dateRange" description="请先选择日期范围（快捷时段或自定义）查询已完成单据" />
+        </template>
         <el-table-column label="单据号" width="160">
           <template #default="{ row }">
             <el-link type="primary" :underline="false" @click="goDetail(row as BusinessDocVO)">{{ row.docNo }}</el-link>
@@ -147,7 +161,38 @@ const totalCount = ref(0)
 const docTypeCounts = ref<Record<string, number>>({})
 const query = ref<BusinessDocQuery>({ current: 1, size: 20 })
 const dateRange = ref<[string, string] | null>(null)
+const quickDate = ref('')
 const scope = ref<'pending' | 'completed'>('pending')
+
+function fmtDate(d: Date): string {
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
+function onDateRangeChange(val: [string, string] | null) {
+  query.value.startDate = val?.[0]
+  query.value.endDate = val?.[1]
+  quickDate.value = ''
+  onSearch()
+}
+
+// 快捷时段：本月 / 近3月 / 近6月 / 近12月
+function onQuickDate(val: string | number | boolean | undefined) {
+  if (typeof val !== 'string') return
+  const today = new Date()
+  const end = fmtDate(today)
+  let start: Date
+  if (val === 'thisMonth') start = new Date(today.getFullYear(), today.getMonth(), 1)
+  else if (val === 'last3') start = new Date(today.getFullYear(), today.getMonth() - 3, today.getDate())
+  else if (val === 'last6') start = new Date(today.getFullYear(), today.getMonth() - 6, today.getDate())
+  else start = new Date(today.getFullYear() - 1, today.getMonth(), today.getDate())
+  dateRange.value = [fmtDate(start), end]
+  query.value.startDate = fmtDate(start)
+  query.value.endDate = end
+  onSearch()
+}
 
 function statusType(s: string) {
   switch (s) {
@@ -178,12 +223,18 @@ function reconcileTagType(row: BusinessDocVO) {
 }
 
 async function fetchCounts() {
+  // R1/R5: 已完成视图必须有日期条件，避免全量统计（网络阻塞）
+  if (scope.value === 'completed' && (!query.value.startDate || !query.value.endDate)) {
+    totalCount.value = 0
+    docTypeCounts.value = {}
+    return
+  }
   try {
-    const all = await getBusinessDocPage({ current: 1, size: 1, scope: scope.value }) as any
+    const all = await getBusinessDocPage({ current: 1, size: 1, scope: scope.value, startDate: query.value.startDate, endDate: query.value.endDate }) as any
     totalCount.value = all.total || 0
     const counts: Record<string, number> = {}
     for (const key of Object.keys(DOC_TYPE_LABELS)) {
-      const res = await getBusinessDocPage({ docType: key, current: 1, size: 1, scope: scope.value }) as any
+      const res = await getBusinessDocPage({ docType: key, current: 1, size: 1, scope: scope.value, startDate: query.value.startDate, endDate: query.value.endDate }) as any
       counts[key] = res.total || 0
     }
     docTypeCounts.value = counts
@@ -191,6 +242,12 @@ async function fetchCounts() {
 }
 
 async function fetchData() {
+  // R1: 已完成视图必须有日期条件，否则不发起请求（展示空态提示）
+  if (scope.value === 'completed' && (!query.value.startDate || !query.value.endDate)) {
+    list.value = []
+    total.value = 0
+    return
+  }
   loading.value = true
   try {
     const res = await getBusinessDocPage({ ...query.value, scope: scope.value })
@@ -205,6 +262,8 @@ async function fetchData() {
 
 function onScopeChange() {
   query.value.current = 1
+  query.value.startDate = dateRange.value?.[0] || undefined
+  query.value.endDate = dateRange.value?.[1] || undefined
   fetchCounts()
   fetchData()
 }
@@ -214,12 +273,15 @@ function onSearch() {
   query.value.startDate = dateRange.value?.[0] || undefined
   query.value.endDate = dateRange.value?.[1] || undefined
   fetchData()
+  fetchCounts()
 }
 function onReset() {
   query.value = { current: 1, size: 20 }
   scope.value = 'pending'
   dateRange.value = null
+  quickDate.value = ''
   fetchData()
+  fetchCounts()
 }
 
 function goCreate() {
