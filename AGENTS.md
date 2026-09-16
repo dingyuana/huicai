@@ -4,7 +4,7 @@
 
 ## §0 项目状态（硬数字，每次 commit 后更新）
 
-> **更新基准**：commit `07f1a45` (2026-09-16) — feat(statement): P73批2 小额直制证阈值+仪表盘待核销提醒
+> **更新基准**：commit `ad5ecdd` (2026-09-16) — fix(backend): 核销关键词搜索支持客户/供应商名称
 > **当前分支**：`feature/batch-ops-unification`
 > **关联文档**：[项目说明](docs/CORE-项目说明.md)、[技术方案](docs/CORE-技术方案.md)、[需求分析](docs/CORE-需求分析.md)、[需求登记册](docs/development/requirements/REQUIREMENTS_REGISTRY.md)、[文档注册表](docs/CORE-文档注册表.md)、[测试策略](docs/testing/TEST-STRATEGY.md)、[Flyway治理规范](docs/development/flyway-governance.md)
 
