@@ -1,6 +1,7 @@
 package com.huicai.sme.tax.service.impl;
 
 import com.huicai.common.exception.BusinessException;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.huicai.base.business.entity.InputInvoiceEntity;
 import com.huicai.base.business.entity.OutputInvoiceEntity;
 import com.huicai.base.system.entity.Subject;
@@ -614,5 +615,86 @@ class TaxServiceImplTest {
 
         assertEquals(subject6001.getId(), revenueEntry.getSubjectId(),
                 "批量凭证收入科目应为6001(主营业务收入)而非5001(生产成本)");
+    }
+
+    // ==================== pageQueryOutput scope/日期过滤 (对齐 §4.5 大表条件显示) ====================
+
+    @Test
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    void pageQueryOutput_scopeCompleted_SQL含statusIN且参数含全部终态() {
+        // given
+        com.baomidou.mybatisplus.core.metadata.TableInfoHelper.initTableInfo(
+                new org.apache.ibatis.builder.MapperBuilderAssistant(
+                        new com.baomidou.mybatisplus.core.MybatisConfiguration(), ""), OutputInvoiceEntity.class);
+        Page<OutputInvoiceEntity> page = new Page<>(1, 20, 1);
+        page.setRecords(new ArrayList<>());
+        when(outputMapper.selectPage(any(), any())).thenReturn(page);
+
+        // when
+        service.pageQueryOutput(null, null, null, null, "completed", null, null, 1, 20);
+
+        // then — 正向: SQL 含 status IN, 参数含全部终态
+        ArgumentCaptor<com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper> captor =
+                ArgumentCaptor.forClass(com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper.class);
+        verify(outputMapper).selectPage(any(), captor.capture());
+        String sql = (String) captor.getValue().getSqlSegment();
+        assertTrue(sql.contains("status IN"), "completed 应生成 status IN: " + sql);
+        String params = captor.getValue().getParamNameValuePairs().toString();
+        assertTrue(params.contains("VOUCHERED"), "应含已生成凭证: " + params);
+        assertTrue(params.contains("FULLY_RECONCILED"), "应含已核销: " + params);
+        assertTrue(params.contains("PARTIALLY_RECONCILED"), "应含部分核销: " + params);
+        assertTrue(params.contains("VOIDED"), "应含已作废: " + params);
+        assertTrue(params.contains("REVERSED"), "应含已冲销: " + params);
+        // then — 负向: 不生成 status NOT IN
+        assertFalse(sql.contains("status NOT IN"), "completed 不应生成 status NOT IN: " + sql);
+    }
+
+    @Test
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    void pageQueryOutput_scopePending_排除全部终态() {
+        // given
+        com.baomidou.mybatisplus.core.metadata.TableInfoHelper.initTableInfo(
+                new org.apache.ibatis.builder.MapperBuilderAssistant(
+                        new com.baomidou.mybatisplus.core.MybatisConfiguration(), ""), OutputInvoiceEntity.class);
+        Page<OutputInvoiceEntity> page = new Page<>(1, 20, 1);
+        page.setRecords(new ArrayList<>());
+        when(outputMapper.selectPage(any(), any())).thenReturn(page);
+
+        // when
+        service.pageQueryOutput(null, null, null, null, "pending", null, null, 1, 20);
+
+        // then — 正向: SQL 含 status NOT IN
+        ArgumentCaptor<com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper> captor =
+                ArgumentCaptor.forClass(com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper.class);
+        verify(outputMapper).selectPage(any(), captor.capture());
+        String sql = (String) captor.getValue().getSqlSegment();
+        assertTrue(sql.contains("status NOT IN"), "pending 应生成 status NOT IN: " + sql);
+        // then — 负向: 不生成 status IN
+        assertFalse(sql.contains("status IN"), "pending 不应生成 status IN: " + sql);
+    }
+
+    @Test
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    void pageQueryOutput_带日期范围_生成invoiceDate区间条件() {
+        // given
+        com.baomidou.mybatisplus.core.metadata.TableInfoHelper.initTableInfo(
+                new org.apache.ibatis.builder.MapperBuilderAssistant(
+                        new com.baomidou.mybatisplus.core.MybatisConfiguration(), ""), OutputInvoiceEntity.class);
+        Page<OutputInvoiceEntity> page = new Page<>(1, 20, 1);
+        page.setRecords(new ArrayList<>());
+        when(outputMapper.selectPage(any(), any())).thenReturn(page);
+
+        // when — completed 视图必带日期
+        service.pageQueryOutput(null, null, null, null, "completed",
+                java.time.LocalDate.of(2026, 1, 1), java.time.LocalDate.of(2026, 8, 31), 1, 20);
+
+        // then — 正向: 同时生成日期区间条件
+        ArgumentCaptor<com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper> captor =
+                ArgumentCaptor.forClass(com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper.class);
+        verify(outputMapper).selectPage(any(), captor.capture());
+        String sql = (String) captor.getValue().getSqlSegment();
+        assertTrue(sql.contains("invoice_date"), "应过滤开票日期: " + sql);
+        assertTrue(sql.contains(">="), "应含 startDate 下界: " + sql);
+        assertTrue(sql.contains("<="), "应含 endDate 上界: " + sql);
     }
 }

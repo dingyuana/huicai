@@ -244,9 +244,16 @@ public class TaxServiceImpl implements TaxService {
     }
 
     // ========== 销项发票 ==========
+
+    /** 销项发票流程终态集合：凭证/核销/作废/冲销属于"已完成"视图（对齐 §4.5 大表条件显示规范） */
+    private static final java.util.Set<String> OUTPUT_INVOICE_TERMINAL_STATUSES = java.util.Set.of(
+            InvoiceStatus.VOUCHERED, InvoiceStatus.FULLY_RECONCILED, InvoiceStatus.PARTIALLY_RECONCILED,
+            InvoiceStatus.VOIDED, InvoiceStatus.REVERSED);
+
     @Override
-    public IPage<OutputInvoiceEntity> pageQueryOutput(String customerName, String period, String status,
-                                                       String invoiceType, Integer current, Integer size) {
+    public IPage<OutputInvoiceEntity> pageQueryOutput(String customerName, String period, String status, String invoiceType,
+                                                       String scope, LocalDate startDate, LocalDate endDate,
+                                                       Integer current, Integer size) {
         Page<OutputInvoiceEntity> page = new Page<>(
                 current == null ? 1 : current,
                 size == null ? 20 : size
@@ -260,6 +267,19 @@ public class TaxServiceImpl implements TaxService {
         }
         if (StrUtil.isNotBlank(status)) {
             wrapper.eq(OutputInvoiceEntity::getStatus, status);
+        }
+        // §4.5: pending=未完成(流程未终结) / completed=已完成(流程终态)
+        if ("pending".equalsIgnoreCase(scope)) {
+            wrapper.notIn(OutputInvoiceEntity::getStatus, OUTPUT_INVOICE_TERMINAL_STATUSES);
+        } else if ("completed".equalsIgnoreCase(scope)) {
+            wrapper.in(OutputInvoiceEntity::getStatus, OUTPUT_INVOICE_TERMINAL_STATUSES);
+        }
+        // 日期范围过滤（已完成视图必须带日期条件，对齐 BusinessDoc 的 .ge/.le 写法）
+        if (startDate != null) {
+            wrapper.ge(OutputInvoiceEntity::getInvoiceDate, startDate);
+        }
+        if (endDate != null) {
+            wrapper.le(OutputInvoiceEntity::getInvoiceDate, endDate);
         }
         if (StrUtil.isNotBlank(invoiceType)) {
             if ("RED".equals(invoiceType)) {

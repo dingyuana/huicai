@@ -4,7 +4,7 @@
 
 ## §0 项目状态（硬数字，每次 commit 后更新）
 
-> **更新基准**：commit `444dd6e` (2026-09-16) — feat(business-doc): 已完成视图需选日期范围才查询
+> **更新基准**：commit `TBD` (2026-09-16) — feat(output-invoice): 已完成视图需选日期范围才查询
 > **当前分支**：`feature/batch-ops-unification`
 > **关联文档**：[项目说明](docs/CORE-项目说明.md)、[技术方案](docs/CORE-技术方案.md)、[需求分析](docs/CORE-需求分析.md)、[需求登记册](docs/development/requirements/REQUIREMENTS_REGISTRY.md)、[文档注册表](docs/CORE-文档注册表.md)、[测试策略](docs/testing/TEST-STRATEGY.md)、[Flyway治理规范](docs/development/flyway-governance.md)
 

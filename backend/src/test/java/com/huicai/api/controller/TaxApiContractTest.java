@@ -67,7 +67,7 @@ class TaxApiContractTest {
 
     @Test
     void getOutputInvoiceList_success() throws Exception {
-        when(taxService.pageQueryOutput(any(), any(), any(), any(), any(), any()))
+        when(taxService.pageQueryOutput(any(), any(), any(), any(), any(), any(), any(), any(), any()))
                 .thenReturn(new Page<>());
         mvc.perform(get("/api/sme/tax/v1/tax/output-invoices/page"))
                 .andExpect(status().isOk())

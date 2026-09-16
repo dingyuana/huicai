@@ -21,6 +21,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 
@@ -167,9 +168,12 @@ public class TaxController {
             @RequestParam(required = false) String period,
             @RequestParam(required = false) String status,
             @RequestParam(required = false) String invoiceType,
+            @RequestParam(required = false) String scope,
+            @RequestParam(required = false) @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE) LocalDate startDate,
+            @RequestParam(required = false) @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE) LocalDate endDate,
             @RequestParam(defaultValue = "1") Integer current,
             @RequestParam(defaultValue = "20") Integer size) {
-        return R.ok(service.pageQueryOutput(customerName, period, status, invoiceType, current, size));
+        return R.ok(service.pageQueryOutput(customerName, period, status, invoiceType, scope, startDate, endDate, current, size));
     }
 
     @Operation(summary = "销项发票详情")
