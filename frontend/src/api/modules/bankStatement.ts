@@ -100,6 +100,31 @@ export function getBankStatementPage(params: {
 export function getClassificationCounts(accountId: string, reviewStatus?: string, scope?: string): Promise<Record<string, number>> {
   return request.get('/sme/cash/v1/bank-statements/classification-counts', { params: { accountId, reviewStatus, scope } })
 }
+
+export interface BankStatementMonthGroup {
+  month: string
+  count: number
+  totalAmount: number
+  items: BankStatementVO[]
+}
+
+export function getBankStatementGrouped(params: {
+  accountId?: string
+  status?: string
+  classification?: string
+  reviewStatus?: string
+  scope?: string
+  direction?: string
+  counterAccount?: string
+  summary?: string
+  keyword?: string
+  minAmount?: number
+  maxAmount?: number
+  startDate?: string
+  endDate?: string
+}): Promise<BankStatementMonthGroup[]> {
+  return request.get('/sme/cash/v1/bank-statements/grouped', { params })
+}
 export function getStatusCounts(accountId: string): Promise<Record<string, number>> {
   return request.get('/sme/cash/v1/bank-statements/status-counts', { params: { accountId } })
 }

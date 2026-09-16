@@ -53,7 +53,6 @@
       <el-radio-group v-model="scope" class="scope-tabs" @change="onScopeChange">
         <el-radio-button value="pending">待处理</el-radio-button>
         <el-radio-button value="vouchered">已制证</el-radio-button>
-        <el-radio-button value="all">全部</el-radio-button>
       </el-radio-group>
 
       <el-radio-group v-model="query.classification" class="classification-tabs" @change="onSearch">
@@ -88,6 +87,54 @@
           />
         </el-space>
 
+      <template v-if="scope === 'vouchered'">
+        <el-collapse v-if="monthGroups.length" v-model="expandedMonths">
+          <el-collapse-item v-for="g in monthGroups" :key="g.month" :name="g.month">
+            <template #title>
+              <span class="month-group-title">{{ g.month }} · {{ g.count }} 条 · 合计 {{ fmtAmount(g.totalAmount) }}</span>
+            </template>
+            <el-table :data="g.items" border stripe size="small" @row-click="onRowClick" style="cursor:pointer">
+              <el-table-column prop="txDate" label="日期" width="110" />
+              <el-table-column prop="txType" label="方向" width="70" align="center">
+                <template #default="{ row }">
+                  <el-tag :type="row.txType === 'INCOME' ? 'success' : 'warning'" size="small">
+                    {{ row.txType === 'INCOME' ? '收' : '支' }}
+                  </el-tag>
+                </template>
+              </el-table-column>
+              <el-table-column label="金额" width="130" align="right">
+                <template #default="{ row }">{{ fmtAmount(row.amount) }}</template>
+              </el-table-column>
+              <el-table-column prop="counterAccount" label="对方" min-width="140" show-overflow-tooltip />
+              <el-table-column prop="summary" label="摘要" min-width="180" show-overflow-tooltip />
+              <el-table-column label="分类" width="100" align="center">
+                <template #default="{ row }">
+                  <el-tag v-if="row.classification && row.classification !== 'other_unknown'" type="success" size="small">
+                    {{ CLASSIFICATION_LABELS[row.classification] || row.classification }}
+                  </el-tag>
+                  <el-tag v-else type="info" size="small">未分类</el-tag>
+                </template>
+              </el-table-column>
+              <el-table-column label="流程状态" width="100" align="center">
+                <template #default="{ row }">
+                  <el-tag :type="reviewStatusTagType(row.reviewStatus)" size="small">
+                    {{ REVIEW_STATUS_LABELS[row.reviewStatus] || '待确认' }}
+                  </el-tag>
+                </template>
+              </el-table-column>
+              <el-table-column label="生成结果" width="130" align="center">
+                <template #default="{ row }">
+                  <span v-if="row.generatedVoucherNo" style="color:var(--el-color-success)">{{ row.generatedVoucherNo }}</span>
+                  <span v-else-if="row.generatedDocNo" style="color:var(--el-color-primary)">{{ row.generatedDocNo }}</span>
+                  <span v-else>-</span>
+                </template>
+              </el-table-column>
+            </el-table>
+          </el-collapse-item>
+        </el-collapse>
+        <el-empty v-else description="暂无已制证流水" />
+      </template>
+      <template v-else>
       <el-table ref="tableRef" :data="list" v-loading="loading" border stripe @selection-change="onSelectionChange" @row-click="onRowClick" style="cursor:pointer">
         <el-table-column type="selection" width="40" :selectable="isBatchable" />
         <el-table-column prop="txDate" label="日期" width="110" />
@@ -151,6 +198,7 @@
         style="margin-top:12px;justify-content:flex-end"
         @change="fetchData"
       />
+      </template>
     </el-card>
 
     <!-- 导入对话框: CSV + Excel 双标签 -->
@@ -400,7 +448,7 @@ import { ref, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { UploadFilled } from '@element-plus/icons-vue'
 import {
-  getBankStatementPage, previewStatementExcel, previewStatementExcelWithMapping,
+  getBankStatementPage, getBankStatementGrouped, previewStatementExcel, previewStatementExcelWithMapping,
   confirmStatementImport, importStatementCsv, parseExcelHeaders,
   classifyStatement, reviewStatement, approveStatement,
   batchConfirmStatements,
@@ -409,6 +457,7 @@ import {
   getBankStatementDetail, getClassificationCounts, getStatusCounts,
   CLASSIFICATION_LABELS, REVIEW_STATUS_LABELS,
   type BankStatementVO,
+  type BankStatementMonthGroup,
 } from '@/api/modules/bankStatement'
 import { getActiveBankAccounts, type BankAccountVO } from '@/api/modules/bankAccount'
 import BatchActionBar from '@/components/batch/BatchActionBar.vue'
@@ -509,6 +558,8 @@ const query = ref<{
 })
 
 const scope = ref<'pending' | 'vouchered' | 'all'>('pending')
+const monthGroups = ref<BankStatementMonthGroup[]>([])
+const expandedMonths = ref<string[]>([])
 
 function onScopeChange() {
   query.value.current = 1
@@ -577,9 +628,18 @@ function getSubjectPath(row: any) {
 async function fetchData() {
   loading.value = true
   try {
-    const res = await getBankStatementPage({ ...query.value, scope: scope.value } as any)
-    list.value = (res as any).records || []
-    total.value = (res as any).total || 0
+    if (scope.value === 'vouchered') {
+      const groups = await getBankStatementGrouped({ ...query.value, scope: 'vouchered' } as any)
+      monthGroups.value = groups || []
+      total.value = monthGroups.value.reduce((sum, g) => sum + (g.count || 0), 0)
+      if (!expandedMonths.value.length && monthGroups.value.length) {
+        expandedMonths.value = [monthGroups.value[0].month]
+      }
+    } else {
+      const res = await getBankStatementPage({ ...query.value, scope: scope.value } as any)
+      list.value = (res as any).records || []
+      total.value = (res as any).total || 0
+    }
   } finally {
     loading.value = false
   }

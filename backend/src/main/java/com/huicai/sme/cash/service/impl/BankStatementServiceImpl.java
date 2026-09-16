@@ -13,6 +13,7 @@ import com.huicai.base.business.constant.BankClassification;
 import com.huicai.base.business.constant.StatementStatus;
 import com.huicai.sme.cash.entity.BankJournalEntity;
 import com.huicai.base.business.entity.BankStatementEntity;
+import com.huicai.base.business.dto.vo.BankStatementMonthGroupVO;
 import com.huicai.base.business.entity.ClassificationRuleEntity;
 import com.huicai.base.business.util.ColumnMappingResolver;
 import com.huicai.sme.cash.mapper.BankJournalMapper;
@@ -74,6 +75,65 @@ public class BankStatementServiceImpl implements BankStatementService {
      * 之前用 {@code .eq(StrUtil.isNotBlank(...))} 在收到显式空串或哨兵时仍可能下发错误的 WHERE 条件.
      */
     @Override
+    public List<BankStatementMonthGroupVO> groupByMonth(Long accountId, String status, String classification, String reviewStatus,
+            LocalDate startDate, LocalDate endDate, String direction,
+            String counterAccount, String summary, String keyword,
+            BigDecimal minAmount, BigDecimal maxAmount, String scope) {
+        LambdaQueryWrapper<BankStatementEntity> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(accountId != null, BankStatementEntity::getAccountId, accountId)
+                .eq(shouldFilter(status), BankStatementEntity::getMatchStatus, status)
+                .eq(shouldFilter(classification), BankStatementEntity::getClassification, classification)
+                .ge(startDate != null, BankStatementEntity::getTxDate, startDate)
+                .le(endDate != null, BankStatementEntity::getTxDate, endDate)
+                .eq(shouldFilter(direction), BankStatementEntity::getTxType, direction)
+                .like(shouldFilter(counterAccount), BankStatementEntity::getCounterAccount, counterAccount)
+                .like(shouldFilter(summary), BankStatementEntity::getSummary, summary)
+                .and(shouldFilter(keyword), w -> w
+                        .like(BankStatementEntity::getCounterAccount, keyword)
+                        .or().like(BankStatementEntity::getSummary, keyword)
+                        .or().like(BankStatementEntity::getExternalNo, keyword))
+                .ge(minAmount != null, BankStatementEntity::getAmount, minAmount)
+                .le(maxAmount != null, BankStatementEntity::getAmount, maxAmount)
+                .last("ORDER BY tx_date DESC");
+
+        if ("pending".equalsIgnoreCase(scope)) {
+            wrapper.and(w -> w.isNull(BankStatementEntity::getReviewStatus)
+                    .or().notIn(BankStatementEntity::getReviewStatus, "voucher_generated", "approved"));
+        } else if ("vouchered".equalsIgnoreCase(scope)) {
+            wrapper.in(BankStatementEntity::getReviewStatus, "voucher_generated", "approved");
+        }
+
+        if (shouldFilter(reviewStatus)) {
+            String[] statuses = reviewStatus.split(",");
+            if (statuses.length > 1) {
+                wrapper.in(BankStatementEntity::getReviewStatus, Arrays.asList(statuses));
+            } else {
+                wrapper.eq(BankStatementEntity::getReviewStatus, reviewStatus);
+            }
+        }
+
+        List<BankStatementEntity> all = statementMapper.selectList(wrapper);
+        Map<String, List<BankStatementEntity>> byMonth = all.stream().collect(
+                java.util.stream.Collectors.groupingBy(
+                        s -> s.getTxDate() == null ? "UNKNOWN" : s.getTxDate().toString().substring(0, 7),
+                        java.util.TreeMap::new,
+                        java.util.stream.Collectors.toList()));
+
+        List<BankStatementMonthGroupVO> groups = new java.util.ArrayList<>();
+        byMonth.forEach((month, items) -> {
+            BankStatementMonthGroupVO g = new BankStatementMonthGroupVO();
+            g.setMonth(month);
+            g.setCount(items.size());
+            g.setTotalAmount(items.stream()
+                    .map(s -> s.getAmount() != null ? s.getAmount().abs() : BigDecimal.ZERO)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add));
+            g.setItems(items);
+            groups.add(g);
+        });
+        groups.sort((a, b) -> b.getMonth().compareTo(a.getMonth()));
+        return groups;
+    }
+
     public IPage<BankStatementEntity> pageQuery(Long accountId, String status, String classification, String reviewStatus,
             LocalDate startDate, LocalDate endDate, String direction,
             String counterAccount, String summary, String keyword,

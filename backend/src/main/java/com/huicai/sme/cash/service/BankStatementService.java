@@ -14,6 +14,11 @@ public interface BankStatementService {
             String counterAccount, String summary, String keyword,
             BigDecimal minAmount, BigDecimal maxAmount,
             String scope, Integer current, Integer size);
+
+    List<com.huicai.base.business.dto.vo.BankStatementMonthGroupVO> groupByMonth(Long accountId, String status, String classification, String reviewStatus,
+            LocalDate startDate, LocalDate endDate, String direction,
+            String counterAccount, String summary, String keyword,
+            BigDecimal minAmount, BigDecimal maxAmount, String scope);
     int importFromCsv(Long accountId, String csvContent);
     List<Map<String, Object>> autoMatch(Long accountId);
     int confirmMatch(Long statementId, Long journalId);
