@@ -126,11 +126,15 @@ public interface BankStatementService {
     BankStatementEntity updateClassification(Long id, String classification);
 
     /**
-     * 按 accountId + 可选 reviewStatus 统计各分类的流水数量.
-     * 返回结构: { classification: count }, 未分类 (NULL classification) 归入 "other_unknown" 键.
+     * 按 accountId + 查询条件统计各分类的流水数量.
+     * 过滤条件与 pageQuery 一致（classification 本身除外），返回结构: { classification: count },
+     * 未分类 (NULL classification) 归入 "other_unknown" 键.
      */
-    Map<String, Integer> classificationCounts(Long accountId, String scope, String reviewStatus);
+    Map<String, Integer> classificationCounts(Long accountId, String scope, String reviewStatus,
+                                              LocalDate startDate, LocalDate endDate, String direction,
+                                              String counterAccount, String summary, String keyword,
+                                              BigDecimal minAmount, BigDecimal maxAmount);
 
-    /** 按 accountId 统计各 reviewStatus 的流水数量. 返回: { reviewStatus: count } */
-    Map<String, Integer> statusCounts(Long accountId);
+    /** 按 accountId + 查询条件统计各 reviewStatus 的流水数量. 返回: { reviewStatus: count } */
+    Map<String, Integer> statusCounts(Long accountId, String scope, LocalDate startDate, LocalDate endDate);
 }

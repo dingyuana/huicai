@@ -97,8 +97,20 @@ export function getBankStatementPage(params: {
 }): Promise<PageResult<BankStatementVO>> {
   return request.get('/sme/cash/v1/bank-statements/page', { params })
 }
-export function getClassificationCounts(accountId: string, reviewStatus?: string, scope?: string): Promise<Record<string, number>> {
-  return request.get('/sme/cash/v1/bank-statements/classification-counts', { params: { accountId, reviewStatus, scope } })
+export function getClassificationCounts(params: {
+  accountId: string
+  reviewStatus?: string
+  scope?: string
+  direction?: string
+  counterAccount?: string
+  summary?: string
+  keyword?: string
+  minAmount?: number
+  maxAmount?: number
+  startDate?: string
+  endDate?: string
+}): Promise<Record<string, number>> {
+  return request.get('/sme/cash/v1/bank-statements/classification-counts', { params })
 }
 
 export interface BankStatementMonthGroup {
@@ -125,8 +137,13 @@ export function getBankStatementGrouped(params: {
 }): Promise<BankStatementMonthGroup[]> {
   return request.get('/sme/cash/v1/bank-statements/grouped', { params })
 }
-export function getStatusCounts(accountId: string): Promise<Record<string, number>> {
-  return request.get('/sme/cash/v1/bank-statements/status-counts', { params: { accountId } })
+export function getStatusCounts(params: {
+  accountId: string
+  scope?: string
+  startDate?: string
+  endDate?: string
+}): Promise<Record<string, number>> {
+  return request.get('/sme/cash/v1/bank-statements/status-counts', { params })
 }
 export function getBankStatementDetail(id: number): Promise<BankStatementVO> {
   return request.get(`/sme/cash/v1/bank-statements/${id}`)

@@ -697,10 +697,20 @@ async function fetchClassificationCounts() {
     statusCountsRaw.value = {}
     return
   }
+  if (scope.value === 'vouchered' && (!query.value.startDate || !query.value.endDate)) {
+    classificationCounts.value = {}
+    statusCountsRaw.value = {}
+    return
+  }
   try {
     const [clsRes, stsRes]: [any, any] = await Promise.all([
-      getClassificationCounts(query.value.accountId, query.value.reviewStatus, scope.value),
-      getStatusCounts(query.value.accountId),
+      getClassificationCounts({ ...query.value, scope: scope.value } as any),
+      getStatusCounts({
+        accountId: query.value.accountId,
+        scope: scope.value,
+        startDate: query.value.startDate,
+        endDate: query.value.endDate,
+      } as any),
     ])
     classificationCounts.value = clsRes || {}
     statusCountsRaw.value = stsRes || {}
@@ -724,7 +734,7 @@ async function refreshCountsOnly() {
   await fetchClassificationCounts()
 }
 
-function onSearch() { query.value.current = 1; fetchData() }
+function onSearch() { query.value.current = 1; refreshAll() }
 function onReset() {
   query.value = { current: 1, size: 20 }
   scope.value = 'pending'

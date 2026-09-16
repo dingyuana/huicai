@@ -799,16 +799,42 @@ public class BankStatementServiceImpl implements BankStatementService {
     }
 
     @Override
-    public Map<String, Integer> classificationCounts(Long accountId, String scope, String reviewStatus) {
+    public Map<String, Integer> classificationCounts(Long accountId, String scope, String reviewStatus,
+                                                     LocalDate startDate, LocalDate endDate, String direction,
+                                                     String counterAccount, String summary, String keyword,
+                                                     BigDecimal minAmount, BigDecimal maxAmount) {
         if (accountId == null) return Map.of();
-        List<Map<String, Object>> rows;
-        if (StrUtil.isNotBlank(scope)) {
-            rows = statementMapper.countByClassificationWithScope(accountId, scope);
-        } else if (StrUtil.isNotBlank(reviewStatus)) {
-            rows = statementMapper.countByClassificationByReview(accountId, reviewStatus);
-        } else {
-            rows = statementMapper.countByClassification(accountId);
+        com.baomidou.mybatisplus.core.conditions.query.QueryWrapper<BankStatementEntity> qw =
+                new com.baomidou.mybatisplus.core.conditions.query.QueryWrapper<>();
+        qw.select("category AS classification", "COUNT(*) AS cnt")
+                .eq("deleted", 0)
+                .eq("account_id", accountId)
+                .ge(startDate != null, "tx_date", startDate)
+                .le(endDate != null, "tx_date", endDate)
+                .eq(shouldFilter(direction), "tx_type", direction)
+                .like(shouldFilter(counterAccount), "counter_account", counterAccount)
+                .like(shouldFilter(summary), "summary", summary)
+                .and(shouldFilter(keyword), w -> w
+                        .like("counter_account", keyword)
+                        .or().like("summary", keyword)
+                        .or().like("external_no", keyword))
+                .ge(minAmount != null, "amount", minAmount)
+                .le(maxAmount != null, "amount", maxAmount);
+        if ("pending".equalsIgnoreCase(scope)) {
+            qw.and(w -> w.isNull("review_status").or().notIn("review_status", "voucher_generated", "approved"));
+        } else if ("vouchered".equalsIgnoreCase(scope)) {
+            qw.in("review_status", "voucher_generated", "approved");
         }
+        if (shouldFilter(reviewStatus)) {
+            String[] statuses = reviewStatus.split(",");
+            if (statuses.length > 1) {
+                qw.in("review_status", Arrays.asList(statuses));
+            } else {
+                qw.eq("review_status", reviewStatus);
+            }
+        }
+        qw.groupBy("category");
+        List<Map<String, Object>> rows = statementMapper.selectMaps(qw);
         Map<String, Integer> result = new LinkedHashMap<>();
         for (Map<String, Object> row : rows) {
             String cls = row.get("classification") == null ? BankClassification.OTHER_UNKNOWN : String.valueOf(row.get("classification"));
@@ -819,9 +845,22 @@ public class BankStatementServiceImpl implements BankStatementService {
     }
 
     @Override
-    public Map<String, Integer> statusCounts(Long accountId) {
+    public Map<String, Integer> statusCounts(Long accountId, String scope, LocalDate startDate, LocalDate endDate) {
         if (accountId == null) return Map.of();
-        List<Map<String, Object>> rows = statementMapper.countByReviewStatus(accountId);
+        com.baomidou.mybatisplus.core.conditions.query.QueryWrapper<BankStatementEntity> qw =
+                new com.baomidou.mybatisplus.core.conditions.query.QueryWrapper<>();
+        qw.select("COALESCE(review_status, 'PENDING') AS review_status", "COUNT(*) AS cnt")
+                .eq("deleted", 0)
+                .eq("account_id", accountId)
+                .ge(startDate != null, "tx_date", startDate)
+                .le(endDate != null, "tx_date", endDate);
+        if ("pending".equalsIgnoreCase(scope)) {
+            qw.and(w -> w.isNull("review_status").or().notIn("review_status", "voucher_generated", "approved"));
+        } else if ("vouchered".equalsIgnoreCase(scope)) {
+            qw.in("review_status", "voucher_generated", "approved");
+        }
+        qw.groupBy("review_status");
+        List<Map<String, Object>> rows = statementMapper.selectMaps(qw);
         Map<String, Integer> result = new LinkedHashMap<>();
         for (Map<String, Object> row : rows) {
             String status = String.valueOf(row.get("review_status"));

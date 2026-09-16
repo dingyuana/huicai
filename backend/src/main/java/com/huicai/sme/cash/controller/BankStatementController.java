@@ -166,14 +166,26 @@ public class BankStatementController {
     @GetMapping("/classification-counts")
     public R<Map<String, Integer>> classificationCounts(@RequestParam Long accountId,
                                                          @RequestParam(required = false) String reviewStatus,
-                                                         @RequestParam(required = false) String scope) {
-        return R.ok(service.classificationCounts(accountId, scope, reviewStatus));
+                                                         @RequestParam(required = false) String scope,
+                                                         @RequestParam(required = false) @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE) java.time.LocalDate startDate,
+                                                         @RequestParam(required = false) @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE) java.time.LocalDate endDate,
+                                                         @RequestParam(required = false) String direction,
+                                                         @RequestParam(required = false) String counterAccount,
+                                                         @RequestParam(required = false) String summary,
+                                                         @RequestParam(required = false) String keyword,
+                                                         @RequestParam(required = false) java.math.BigDecimal minAmount,
+                                                         @RequestParam(required = false) java.math.BigDecimal maxAmount) {
+        return R.ok(service.classificationCounts(accountId, scope, reviewStatus, startDate, endDate,
+                direction, counterAccount, summary, keyword, minAmount, maxAmount));
     }
 
     @Operation(summary = "按状态统计当前账户的流水数量")
     @GetMapping("/status-counts")
-    public R<Map<String, Integer>> statusCounts(@RequestParam Long accountId) {
-        return R.ok(service.statusCounts(accountId));
+    public R<Map<String, Integer>> statusCounts(@RequestParam Long accountId,
+                                                 @RequestParam(required = false) String scope,
+                                                 @RequestParam(required = false) @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE) java.time.LocalDate startDate,
+                                                 @RequestParam(required = false) @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE) java.time.LocalDate endDate) {
+        return R.ok(service.statusCounts(accountId, scope, startDate, endDate));
     }
 
     @Operation(summary = "确认匹配")

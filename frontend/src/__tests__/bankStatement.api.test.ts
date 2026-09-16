@@ -23,7 +23,7 @@ describe('BankStatement API Module', () => {
 
   it('getClassificationCounts calls correct endpoint', async () => {
     mockRequest.get.mockResolvedValue({ income: 5, expense: 3 })
-    const result = await bsApi.getClassificationCounts('1')
+    const result = await bsApi.getClassificationCounts({ accountId: '1' })
     expect(mockRequest.get).toHaveBeenCalledWith('/sme/cash/v1/bank-statements/classification-counts', { params: { accountId: '1' } })
     expect(result).toEqual({ income: 5, expense: 3 })
   })
