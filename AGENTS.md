@@ -4,7 +4,7 @@
 
 ## §0 项目状态（硬数字，每次 commit 后更新）
 
-> **更新基准**：commit `aea1237` (2026-09-16) — feat(frontend): 统计区统一为简洁StatBar，流水页新增金额汇总
+> **更新基准**：commit `732eab6` (2026-09-16) — feat(business-doc): 单据列表按待处理/已完成分区显示
 > **当前分支**：`feature/batch-ops-unification`
 > **关联文档**：[项目说明](docs/CORE-项目说明.md)、[技术方案](docs/CORE-技术方案.md)、[需求分析](docs/CORE-需求分析.md)、[需求登记册](docs/development/requirements/REQUIREMENTS_REGISTRY.md)、[文档注册表](docs/CORE-文档注册表.md)、[测试策略](docs/testing/TEST-STRATEGY.md)、[Flyway治理规范](docs/development/flyway-governance.md)
 

@@ -13,6 +13,7 @@
 | 2 | 新增金额区间筛选（amountMin / amountMax） | 前后端 | DTO + Service + 前端 |
 | 3 | 已核销列徽章化（绿/黄/红三态） | 纯前端 | BusinessDocList.vue |
 | 4 | 新增源单号列，可点击跳转关联单据 | 前端 | BusinessDocList.vue |
+| 5 | 新增 scope 视图分区（pending=待处理/completed=已完成），默认待处理，单据流程终结（VOUCHERED/已核销/已冲销/已关闭/已作废）自动归入已完成 | 前后端 | DTO + Service + 前端 |
 
 ## 后端接口契约
 
@@ -58,6 +59,7 @@ private BigDecimal amountMax;
 | amount | BigDecimal | 金额 |
 | docDate | LocalDate | 单据日期 |
 | status | String | 状态 |
+| scope | String | 视图范围：pending=待处理（流程未终结，默认），completed=已完成（已制证/已核销/已冲销/已关闭/已作废），空=全部 |
 | settledAmount | BigDecimal | 已核销金额 |
 | unsettledAmount | BigDecimal | 未核销金额 |
 
@@ -85,6 +87,8 @@ private BigDecimal amountMax;
 | LIST-02 | Given 金额区间筛选 When 查询 Then 仅返回区间内单据 |
 | LIST-03 | Given 核销列展示 When 未核销 Then 显示红色徽章 |
 | LIST-04 | Given 源单号列 When 点击编号 Then 跳转关联单据详情 |
+| LIST-05 | Given scope=pending When 查询 Then SQL 含 status NOT IN 终结状态（VOUCHERED/FULLY_RECONCILED/REVERSED/CLOSED）且不含 status IN |
+| LIST-06 | Given scope=completed When 查询 Then SQL 含 status IN 终结状态且不含 status NOT IN |
 
 ## 前端交互
 
