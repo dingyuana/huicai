@@ -89,9 +89,16 @@ private BigDecimal amountMax;
 | LIST-04 | Given 源单号列 When 点击编号 Then 跳转关联单据详情 |
 | LIST-05 | Given scope=pending When 查询 Then SQL 含 status NOT IN 终结状态（VOUCHERED/FULLY_RECONCILED/REVERSED/CLOSED）且不含 status IN |
 | LIST-06 | Given scope=completed When 查询 Then SQL 含 status IN 终结状态且不含 status NOT IN |
+| LIST-07 | Given scope=completed 且未选日期范围 When 查询 Then 前端不发请求，展示空态提示"请先选择日期范围"，计数均为 0 |
+| LIST-08 | Given scope=completed 且选择快捷时段/自定义日期 When 查询 Then 列表与页签计数均带同一起始/截止日期条件请求 |
 
 ## 前端交互
 
+- scope 分区：顶部 tabs（待处理/已完成），默认待处理
+- 已完成视图条件显示（设计规范 frontend-design-system §4.5 R1-R6）：必须带日期范围才查询
+  - 快捷时段：本月 / 近3个月 / 近6个月 / 近12个月（el-radio-button）
+  - 自定义日期：`el-date-picker` type="daterange"，格式 `yyyy-MM-dd`；选择后清空快捷时段
+  - 未选日期：不发起请求，表格空态提示"请先选择日期范围（快捷时段或自定义）查询已完成单据"，页签计数为 0
 - 日期范围：`el-date-picker` type="daterange"，格式 `yyyy-MM-dd`
 - 金额区间：两个 `el-input-number`，min=0，precision=2
 - 已核销徽章：
