@@ -6,11 +6,25 @@
         <el-button @click="fetchData">刷新</el-button>
       </div>
 
+      <el-tabs v-model="scope" class="scope-root-tabs" @tab-change="onScopeChange">
+        <el-tab-pane label="待处理" name="pending" />
+        <el-tab-pane label="已制证" name="vouchered" />
+      </el-tabs>
+
       <el-form :model="query" inline class="filter-form">
         <el-form-item label="银行账户">
           <el-select v-model="query.accountId" placeholder="选择账户" clearable style="width:240px" @change="onAccountChange">
             <el-option v-for="a in accounts" :key="a.id" :label="`${a.accountName} (${a.accountNo})`" :value="a.id" />
           </el-select>
+        </el-form-item>
+        <template v-if="scope === 'vouchered'">
+        <el-form-item label="快捷时段">
+          <el-radio-group v-model="quickDate" size="small" @change="onQuickDate">
+            <el-radio-button value="thisMonth">本月</el-radio-button>
+            <el-radio-button value="last3">近3个月</el-radio-button>
+            <el-radio-button value="last6">近6个月</el-radio-button>
+            <el-radio-button value="last12">近12个月</el-radio-button>
+          </el-radio-group>
         </el-form-item>
         <el-form-item label="日期范围">
           <el-date-picker
@@ -48,12 +62,8 @@
           <el-button type="primary" @click="onSearch">查询</el-button>
           <el-button @click="onReset">重置</el-button>
         </el-form-item>
+        </template>
       </el-form>
-
-      <el-radio-group v-model="scope" class="scope-tabs" @change="onScopeChange">
-        <el-radio-button value="pending">待处理</el-radio-button>
-        <el-radio-button value="vouchered">已制证</el-radio-button>
-      </el-radio-group>
 
       <el-radio-group v-model="query.classification" class="classification-tabs" @change="onSearch">
         <el-radio-button :key="'__all__'" :value="''">全部 ({{ totalCount }})</el-radio-button>
@@ -74,7 +84,7 @@
         <el-tag v-if="statusCounts.approved > 0" size="small" type="success">已过账 {{ statusCounts.approved }}</el-tag>
       </div>
 
-        <el-space style="margin-bottom: 12px" wrap>
+        <el-space v-if="scope === 'pending'" style="margin-bottom: 12px" wrap>
           <el-button type="primary" @click="openImport">导入对账单</el-button>
           <el-button :disabled="!query.accountId" @click="onAutoClassify">自动分类全部</el-button>
           <BatchActionBar
@@ -132,7 +142,8 @@
             </el-table>
           </el-collapse-item>
         </el-collapse>
-        <el-empty v-else description="暂无已制证流水" />
+        <el-empty v-else-if="query.startDate && query.endDate" description="所选日期范围内暂无已制证流水" />
+        <el-empty v-else description="请先选择日期范围（本月/近3个月/近6个月/近12个月或自定义）查询已制证流水" />
       </template>
       <template v-else>
       <el-table ref="tableRef" :data="list" v-loading="loading" border stripe @selection-change="onSelectionChange" @row-click="onRowClick" style="cursor:pointer">
@@ -560,10 +571,17 @@ const query = ref<{
 const scope = ref<'pending' | 'vouchered' | 'all'>('pending')
 const monthGroups = ref<BankStatementMonthGroup[]>([])
 const expandedMonths = ref<string[]>([])
+const quickDate = ref('')
 
 function onScopeChange() {
   query.value.current = 1
   query.value.reviewStatus = undefined
+  if (scope.value === 'vouchered') {
+    monthGroups.value = []
+    total.value = 0
+    refreshCountsOnly()
+    return
+  }
   refreshAll()
 }
 
@@ -572,6 +590,29 @@ const dateRange = ref<[string, string] | null>(null)
 function onDateRangeChange(val: [string, string] | null) {
   query.value.startDate = val?.[0]
   query.value.endDate = val?.[1]
+  quickDate.value = ''
+  onSearch()
+}
+
+function fmtDate(d: Date): string {
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
+function onQuickDate(val: string | number | boolean | undefined) {
+  if (typeof val !== 'string') return
+  const today = new Date()
+  const end = fmtDate(today)
+  let start: Date
+  if (val === 'thisMonth') start = new Date(today.getFullYear(), today.getMonth(), 1)
+  else if (val === 'last3') start = new Date(today.getFullYear(), today.getMonth() - 3, today.getDate())
+  else if (val === 'last6') start = new Date(today.getFullYear(), today.getMonth() - 6, today.getDate())
+  else start = new Date(today.getFullYear() - 1, today.getMonth(), today.getDate())
+  dateRange.value = [fmtDate(start), end]
+  query.value.startDate = fmtDate(start)
+  query.value.endDate = end
   onSearch()
 }
 
@@ -629,6 +670,11 @@ async function fetchData() {
   loading.value = true
   try {
     if (scope.value === 'vouchered') {
+      if (!query.value.startDate || !query.value.endDate) {
+        monthGroups.value = []
+        total.value = 0
+        return
+      }
       const groups = await getBankStatementGrouped({ ...query.value, scope: 'vouchered' } as any)
       monthGroups.value = groups || []
       total.value = monthGroups.value.reduce((sum, g) => sum + (g.count || 0), 0)
@@ -674,11 +720,17 @@ async function refreshAll() {
   await Promise.all([fetchData(), fetchClassificationCounts()])
 }
 
+async function refreshCountsOnly() {
+  await fetchClassificationCounts()
+}
+
 function onSearch() { query.value.current = 1; fetchData() }
 function onReset() {
   query.value = { current: 1, size: 20 }
   scope.value = 'pending'
   dateRange.value = null
+  quickDate.value = ''
+  expandedMonths.value = []
   fetchData()
 }
 
@@ -971,9 +1023,12 @@ onMounted(async () => {
   margin-bottom: 16px;
 }
 .page-title { font-size: 16px; font-weight: 600; }
+.scope-root-tabs :deep(.el-tabs__header) { margin-bottom: 14px; }
+.scope-root-tabs :deep(.el-tabs__item) { font-size: 15px; font-weight: 600; padding: 0 24px; height: 42px; line-height: 42px; }
 .filter-form { margin-bottom: 12px; }
 .classification-tabs { margin-bottom: 8px; flex-wrap: wrap; row-gap: 4px; }
 .classification-tabs :deep(.el-radio-button__inner) { padding: 8px 14px; }
+.month-group-title { font-weight: 600; }
 .status-summary { display: flex; gap: 6px; margin-bottom: 12px; flex-wrap: wrap; }
 :deep(.preview-row-error) {
   background-color: #fef0f0 !important;
