@@ -1,17 +1,18 @@
 <template>
   <div class="bank-statement">
     <el-card shadow="never">
-      <div class="page-header">
-        <span class="page-title">银行对账单</span>
-        <el-button @click="fetchData">刷新</el-button>
-      </div>
+      <PageHeader title="银行对账单">
+        <template #actions>
+          <el-button @click="fetchData">刷新</el-button>
+        </template>
+      </PageHeader>
 
       <el-tabs v-model="scope" class="scope-root-tabs" @tab-change="onScopeChange">
         <el-tab-pane label="待处理" name="pending" />
         <el-tab-pane label="已制证" name="vouchered" />
       </el-tabs>
 
-      <el-form :model="query" inline class="filter-form">
+      <FilterBar :model="query">
         <el-form-item label="银行账户">
           <el-select v-model="query.accountId" placeholder="选择账户" clearable style="width:240px" @change="onAccountChange">
             <el-option v-for="a in accounts" :key="a.id" :label="`${a.accountName} (${a.accountNo})`" :value="a.id" />
@@ -63,7 +64,7 @@
           <el-button @click="onReset">重置</el-button>
         </el-form-item>
         </template>
-      </el-form>
+      </FilterBar>
 
       <el-radio-group v-model="query.classification" class="classification-tabs" @change="onSearch">
         <el-radio-button :key="'__all__'" :value="''">全部 ({{ totalCount }})</el-radio-button>
@@ -471,6 +472,8 @@ import {
   type BankStatementVO,
   type BankStatementMonthGroup,
 } from '@/api/modules/bankStatement'
+import PageHeader from '@/components/page/PageHeader.vue'
+import FilterBar from '@/components/page/FilterBar.vue'
 import { getActiveBankAccounts, type BankAccountVO } from '@/api/modules/bankAccount'
 import BatchActionBar from '@/components/batch/BatchActionBar.vue'
 import BatchResultDialog from '@/components/batch/BatchResultDialog.vue'
@@ -1033,13 +1036,6 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-.bank-statement .page-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 16px;
-}
-.page-title { font-size: 16px; font-weight: 600; }
 .scope-root-tabs :deep(.el-tabs__header) { margin-bottom: 14px; }
 .scope-root-tabs :deep(.el-tabs__item) { font-size: 15px; font-weight: 600; padding: 0 24px; height: 42px; line-height: 42px; }
 .filter-form { margin-bottom: 12px; }

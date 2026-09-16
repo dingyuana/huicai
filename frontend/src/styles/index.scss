@@ -1,29 +1,44 @@
-// 全局样式
+// 全局样式 & 设计令牌
 * {
   box-sizing: border-box;
 }
 
-.page-container {
-  padding: 20px;
+:root {
+  --font-title: 16px;
+  --font-weight-title: 600;
+  --font-color-title: #303133;
+  --font-size-base: 14px;
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 12px;
+  --space-lg: 16px;
+  --space-xl: 20px;
+  --card-shadow: none;
+  --card-radius: 4px;
+  --color-primary: #409eff;
+  --color-text-primary: #303133;
+  --color-text-secondary: #909399;
+  --color-bg: #fff;
 }
 
-// 响应式表格
+.page-container {
+  padding: var(--space-xl);
+}
+
 .el-table {
   width: 100%;
 }
 
-// 搜索表单区域
 .search-form {
-  background: #fff;
-  padding: 20px;
-  margin-bottom: 16px;
-  border-radius: 4px;
+  background: var(--color-bg);
+  padding: var(--space-xl);
+  margin-bottom: var(--space-lg);
+  border-radius: var(--card-radius);
 }
 
-// 操作栏
 .table-toolbar {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 16px;
+  margin-bottom: var(--space-lg);
 }

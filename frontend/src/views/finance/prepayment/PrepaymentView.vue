@@ -237,6 +237,6 @@ onMounted(async () => {
 <style scoped>
 .page-header { display: flex; justify-content: space-between; margin-bottom: 16px; }
 .page-title { font-size: 16px; font-weight: 600; }
-.filter-form { margin-bottom: 16px; }
+.filter-form { margin-bottom: 12px; }
 .page-pagination { margin-top: 16px; text-align: right; }
 </style>

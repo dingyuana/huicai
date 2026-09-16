@@ -685,7 +685,7 @@ const onImportConfirm = async () => {
 }
 
 .page-title {
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 600;
   color: #303133;
 }
@@ -697,7 +697,7 @@ const onImportConfirm = async () => {
 }
 
 .filter-form {
-  margin-bottom: 16px;
+  margin-bottom: 12px;
 }
 
 /* 统计卡片样式 */

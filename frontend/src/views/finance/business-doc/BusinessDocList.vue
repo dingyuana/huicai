@@ -1,15 +1,13 @@
 <template>
   <div class="doc-list">
     <el-card shadow="never">
-      <div class="page-header">
-        <span class="page-title">业务单据</span>
-        <div>
-          <el-button type="primary" @click="goCreate">新增单据</el-button>
-          <el-button @click="fetchData">刷新</el-button>
-        </div>
-      </div>
-
-      <el-form :model="query" inline class="filter-form">
+    <PageHeader title="业务单据">
+      <template #actions>
+        <el-button type="primary" @click="goCreate">新增单据</el-button>
+        <el-button @click="fetchData">刷新</el-button>
+      </template>
+    </PageHeader>
+    <FilterBar :model="query">
         <el-form-item label="状态">
           <el-select v-model="query.status" placeholder="全部" clearable style="width:130px">
             <el-option v-for="(label, value) in DOC_STATUS_LABELS" :key="value" :label="label" :value="value" />
@@ -39,8 +37,8 @@
         <el-form-item>
           <el-button type="primary" @click="onSearch">查询</el-button>
           <el-button @click="onReset">重置</el-button>
-        </el-form-item>
-      </el-form>
+      </el-form-item>
+    </FilterBar>
 
       <el-radio-group v-model="query.docType" class="doc-type-tabs" @change="onSearch">
         <el-radio-button :value="''">全部 ({{ totalCount }})</el-radio-button>
@@ -135,7 +133,8 @@ import {
   getBusinessDocPage, DOC_TYPE_LABELS, DOC_STATUS_LABELS,
   type BusinessDocVO, type BusinessDocQuery,
 } from '@/api/modules/businessDoc'
-
+import PageHeader from '@/components/page/PageHeader.vue'
+import FilterBar from '@/components/page/FilterBar.vue'
 const router = useRouter()
 const loading = ref(false)
 const list = ref<BusinessDocVO[]>([])
@@ -243,14 +242,6 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-.doc-list .page-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 16px;
-}
-.page-title { font-size: 16px; font-weight: 600; }
-.filter-form { margin-bottom: 12px; }
 .page-pagination {
   margin-top: 16px;
   display: flex;
