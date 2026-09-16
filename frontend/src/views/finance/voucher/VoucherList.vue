@@ -19,71 +19,31 @@
 
       <!-- 统计卡片 -->
       <el-row :gutter="16" style="margin-bottom:16px">
-        <el-col :span="4">
-          <el-card class="stat-card" shadow="hover" :style="{ animationDelay: '0s' }">
-            <div class="stat-content">
-              <div class="stat-info">
-                <span class="stat-label">总凭证数</span>
-                <span class="stat-value">{{ fmtNum(stats.totalCount || 0) }}</span>
-              </div>
-              <div class="stat-icon icon-total">
-                <el-icon><Document /></el-icon>
-              </div>
-            </div>
-          </el-card>
-        </el-col>
-        <el-col :span="5">
-          <el-card class="stat-card" shadow="hover" :style="{ animationDelay: '0.1s' }">
-            <div class="stat-content">
-              <div class="stat-info">
-                <span class="stat-label">借方合计</span>
-                <span class="stat-value">¥ {{ fmtAmount(stats.totalDebit) }}</span>
-              </div>
-              <div class="stat-icon icon-debit">
-                <el-icon><Bottom /></el-icon>
-              </div>
-            </div>
-          </el-card>
-        </el-col>
-        <el-col :span="5">
-          <el-card class="stat-card" shadow="hover" :style="{ animationDelay: '0.2s' }">
-            <div class="stat-content">
-              <div class="stat-info">
-                <span class="stat-label">贷方合计</span>
-                <span class="stat-value">¥ {{ fmtAmount(stats.totalCredit) }}</span>
-              </div>
-              <div class="stat-icon icon-credit">
-                <el-icon><Top /></el-icon>
-              </div>
-            </div>
-          </el-card>
-        </el-col>
-        <el-col :span="5">
-          <el-card class="stat-card" shadow="hover" :style="{ animationDelay: '0.3s' }">
-            <div class="stat-content">
-              <div class="stat-info">
-                <span class="stat-label">已记账</span>
-                <span class="stat-value">{{ fmtNum(stats.postedCount || 0) }}</span>
-              </div>
-              <div class="stat-icon icon-posted">
-                <el-icon><SuccessFilled /></el-icon>
-              </div>
-            </div>
-          </el-card>
-        </el-col>
-        <el-col :span="5">
-          <el-card class="stat-card" shadow="hover" :style="{ animationDelay: '0.4s' }">
-            <div class="stat-content">
-              <div class="stat-info">
-                <span class="stat-label">草稿</span>
-                <span class="stat-value">{{ fmtNum(stats.draftCount || 0) }}</span>
-              </div>
-              <div class="stat-icon icon-draft">
-                <el-icon><Edit /></el-icon>
-              </div>
-            </div>
-          </el-card>
-        </el-col>
+        <StatCard :span="4" iconClass="icon-total">
+          <template #icon><Document /></template>
+          <template #label>总凭证数</template>
+          {{ fmtNum(stats.totalCount || 0) }}
+        </StatCard>
+        <StatCard :span="5" iconClass="icon-debit">
+          <template #icon><Bottom /></template>
+          <template #label>借方合计</template>
+          ¥ {{ fmtAmount(stats.totalDebit) }}
+        </StatCard>
+        <StatCard :span="5" iconClass="icon-credit">
+          <template #icon><Top /></template>
+          <template #label>贷方合计</template>
+          ¥ {{ fmtAmount(stats.totalCredit) }}
+        </StatCard>
+        <StatCard :span="5" iconClass="icon-posted">
+          <template #icon><SuccessFilled /></template>
+          <template #label>已记账</template>
+          {{ fmtNum(stats.postedCount || 0) }}
+        </StatCard>
+        <StatCard :span="5" iconClass="icon-draft">
+          <template #icon><Edit /></template>
+          <template #label>草稿</template>
+          {{ fmtNum(stats.draftCount || 0) }}
+        </StatCard>
       </el-row>
 
       <!-- 分类标签 -->
@@ -187,6 +147,7 @@ import { resolveDefaultPeriod } from '@/utils/period'
 import BatchActionBar from '@/components/batch/BatchActionBar.vue'
 import BatchResultDialog from '@/components/batch/BatchResultDialog.vue'
 import { useBatchOperation, type BatchActionDef } from '@/composables/useBatchOperation'
+import StatCard from '@/components/page/StatCard.vue'
 
 const router = useRouter()
 const loading = ref(false)
@@ -430,41 +391,4 @@ async function handleExport() {
   display: flex;
   justify-content: flex-end;
 }
-/* 统计卡片 */
-.stat-card {
-  border-radius: 8px;
-  transition: all 0.3s ease;
-}
-.stat-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0,0,0,0.1) !important;
-}
-.stat-content {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-.stat-info {
-  display: flex;
-  flex-direction: column;
-}
-.stat-label {
-  font-size: 12px;
-  color: #909399;
-  margin-bottom: 4px;
-}
-.stat-value {
-  font-size: 18px;
-  font-weight: 600;
-  color: #303133;
-}
-.stat-icon {
-  font-size: 28px;
-  opacity: 0.6;
-}
-.icon-total { color: #409EFF; }
-.icon-debit { color: #67C23A; }
-.icon-credit { color: #E6A23C; }
-.icon-posted { color: #67C23A; }
-.icon-draft { color: #909399; }
 </style>
