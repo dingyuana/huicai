@@ -18,84 +18,36 @@
 
       <!-- 统计栏 -->
       <el-row :gutter="16" style="margin-bottom:16px">
-        <el-col :span="4">
-          <el-card class="stat-card" shadow="hover" :style="{ animationDelay: '0s' }">
-            <div class="stat-content">
-              <div class="stat-info">
-                <span class="stat-label">总发票数</span>
-                <span class="stat-value">{{ fmtNum(stats.totalCount || 0) }}</span>
-              </div>
-              <div class="stat-icon icon-total">
-                <el-icon><Document /></el-icon>
-              </div>
-            </div>
-          </el-card>
-        </el-col>
-        <el-col :span="5">
-          <el-card class="stat-card" shadow="hover" :style="{ animationDelay: '0.1s' }">
-            <div class="stat-content">
-              <div class="stat-info">
-                <span class="stat-label">蓝字总金额</span>
-                <span class="stat-value">¥ {{ fmtAmount(stats.blueAmount) }}</span>
-              </div>
-              <div class="stat-icon icon-blue">
-                <el-icon><Money /></el-icon>
-              </div>
-            </div>
-          </el-card>
-        </el-col>
-        <el-col :span="5">
-          <el-card class="stat-card" shadow="hover" :style="{ animationDelay: '0.2s' }">
-            <div class="stat-content">
-              <div class="stat-info">
-                <span class="stat-label">红字金额</span>
-                <span class="stat-value">¥ {{ fmtAmount(stats.redAmount) }}</span>
-              </div>
-              <div class="stat-icon icon-red">
-                <el-icon><Minus /></el-icon>
-              </div>
-            </div>
-          </el-card>
-        </el-col>
-        <el-col :span="3">
-          <el-card class="stat-card" shadow="hover" :style="{ animationDelay: '0.3s' }">
-            <div class="stat-content">
-              <div class="stat-info">
-                <span class="stat-label">红字数</span>
-                <span class="stat-value">{{ fmtNum(stats.redCount || 0) }}</span>
-              </div>
-              <div class="stat-icon icon-red-count">
-                <el-icon><Warning /></el-icon>
-              </div>
-            </div>
-          </el-card>
-        </el-col>
-        <el-col :span="3">
-          <el-card class="stat-card" shadow="hover" :style="{ animationDelay: '0.4s' }">
-            <div class="stat-content">
-              <div class="stat-info">
-                <span class="stat-label">已冲销</span>
-                <span class="stat-value">{{ fmtNum(stats.reversedCount || 0) }}</span>
-              </div>
-              <div class="stat-icon icon-reversed">
-                <el-icon><Refresh /></el-icon>
-              </div>
-            </div>
-          </el-card>
-        </el-col>
-        <el-col :span="4">
-          <el-card class="stat-card" shadow="hover" :style="{ animationDelay: '0.5s' }">
-            <div class="stat-content">
-              <div class="stat-info">
-                <span class="stat-label">已作废</span>
-                <span class="stat-value">{{ fmtNum(stats.voidedCount || 0) }}</span>
-              </div>
-              <div class="stat-icon icon-voided">
-                <el-icon><Delete /></el-icon>
-              </div>
-            </div>
-          </el-card>
-        </el-col>
+        <StatCard :span="4" iconClass="icon-total">
+          <template #icon><Document /></template>
+          <template #label>总发票数</template>
+          {{ fmtNum(stats.totalCount || 0) }}
+        </StatCard>
+        <StatCard :span="4" iconClass="icon-blue">
+          <template #icon><Money /></template>
+          <template #label>蓝字总金额</template>
+          ¥ {{ fmtAmount(stats.blueAmount) }}
+        </StatCard>
+        <StatCard :span="4" iconClass="icon-red">
+          <template #icon><Minus /></template>
+          <template #label>红字金额</template>
+          ¥ {{ fmtAmount(stats.redAmount) }}
+        </StatCard>
+        <StatCard :span="3" iconClass="icon-red-count">
+          <template #icon><Warning /></template>
+          <template #label>红字数</template>
+          {{ fmtNum(stats.redCount || 0) }}
+        </StatCard>
+        <StatCard :span="3" iconClass="icon-reversed">
+          <template #icon><Refresh /></template>
+          <template #label>已冲销</template>
+          {{ fmtNum(stats.reversedCount || 0) }}
+        </StatCard>
+        <StatCard :span="4" iconClass="icon-voided">
+          <template #icon><Delete /></template>
+          <template #label>已作废</template>
+          {{ fmtNum(stats.voidedCount || 0) }}
+        </StatCard>
       </el-row>
 
       <!-- 分类标签 -->
@@ -379,6 +331,7 @@ import { pageOutputInvoice, createOutputInvoice, getOutputInvoice, deleteOutputI
 import { previewSalesInvoices, confirmSalesInvoicesImport } from '@/api/modules/salesInvoice'
 import BatchActionBar from '@/components/batch/BatchActionBar.vue'
 import BatchResultDialog from '@/components/batch/BatchResultDialog.vue'
+import StatCard from '@/components/page/StatCard.vue'
 import { useBatchOperation, type BatchActionDef } from '@/composables/useBatchOperation'
 
 const detailVisible = ref(false)
@@ -700,132 +653,4 @@ const onImportConfirm = async () => {
   margin-bottom: 12px;
 }
 
-/* 统计卡片样式 */
-.stat-card {
-  margin-bottom: 0;
-  border-radius: 8px;
-  opacity: 0;
-  transform: translateY(20px);
-  animation: statCardIn 0.5s ease forwards;
-  transition: all 0.3s ease;
-}
-
-.stat-card:hover {
-  transform: translateY(-3px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1) !important;
-}
-
-@keyframes statCardIn {
-  from {
-    opacity: 0;
-    transform: translateY(20px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.stat-content {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-/* 统计图标：彩色渐变背景 + 白图标 */
-.stat-icon {
-  width: 56px;
-  height: 56px;
-  border-radius: 12px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
-  transition: all 0.3s ease;
-}
-.stat-icon .el-icon {
-  font-size: 28px;
-  color: #fff;
-}
-.stat-card:hover .stat-icon {
-  transform: scale(1.08) rotate(-5deg);
-}
-
-/* 数字：与logo同色渐变 + 大字号 + 现代风格 */
-.stat-info {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-.stat-label {
-  font-size: 13px;
-  color: #909399;
-  font-weight: 500;
-  letter-spacing: 0.3px;
-}
-.stat-value {
-  font-size: 30px;
-  font-weight: 700;
-  line-height: 1.1;
-  letter-spacing: -0.5px;
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
-  transition: all 0.3s ease;
-}
-
-/* 总发票数 - 蓝色渐变文字 */
-.icon-total ~ * .stat-value,
-.stat-card:has(.icon-total) .stat-value {
-  background-image: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
-}
-/* 蓝字总金额 - 绿色 */
-.stat-card:has(.icon-blue) .stat-value {
-  background-image: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);
-}
-/* 红字金额 - 粉黄 */
-.stat-card:has(.icon-red) .stat-value {
-  background-image: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
-}
-/* 红字数 - 橙粉 */
-.stat-card:has(.icon-red-count) .stat-value {
-  background-image: linear-gradient(135deg, #ff9a44 0%, #fc6076 100%);
-}
-/* 已冲销 - 紫粉 */
-.stat-card:has(.icon-reversed) .stat-value {
-  background-image: linear-gradient(135deg, #a18cd1 0%, #fbc2eb 100%);
-}
-/* 已作废 - 灰蓝 */
-.stat-card:has(.icon-voided) .stat-value {
-  background-image: linear-gradient(135deg, #8e9eab 0%, #5a6a7e 100%);
-}
-
-/* 总发票数 - 蓝色 */
-.icon-total {
-  background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
-}
-/* 蓝字总金额 - 绿色 */
-.icon-blue {
-  background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);
-}
-/* 红字金额 - 红色 */
-.icon-red {
-  background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
-}
-/* 红字数 - 橙色 */
-.icon-red-count {
-  background: linear-gradient(135deg, #ff9a44 0%, #fc6076 100%);
-}
-/* 已冲销 - 紫色 */
-.icon-reversed {
-  background: linear-gradient(135deg, #a18cd1 0%, #fbc2eb 100%);
-}
-/* 已作废 - 灰色 */
-.icon-voided {
-  background: linear-gradient(135deg, #8e9eab 0%, #eef2f3 100%);
-}
-.icon-voided .el-icon {
-  color: #5a6a7e;
-}
 </style>

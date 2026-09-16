@@ -56,4 +56,11 @@ defineProps<{ span?: number; iconClass?: string }>()
   font-size: 24px;
   color: #fff;
 }
+/* 图标色板 */
+.icon-total { background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); }
+.icon-blue { background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%); }
+.icon-red { background: linear-gradient(135deg, #fa709a 0%, #fee140 100%); }
+.icon-red-count { background: linear-gradient(135deg, #ff9a44 0%, #fc6076 100%); }
+.icon-reversed { background: linear-gradient(135deg, #a18cd1 0%, #fbc2eb 100%); }
+.icon-voided { background: linear-gradient(135deg, #8e9eab 0%, #eef2f3 100%); }
 </style>
