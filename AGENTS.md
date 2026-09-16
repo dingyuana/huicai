@@ -4,14 +4,14 @@
 
 ## §0 项目状态（硬数字，每次 commit 后更新）
 
-> **更新基准**：commit `e775a64` (2026-09-15) — docs(spec): P73银行流水核销体验优化SPEC
+> **更新基准**：commit `07f1a45` (2026-09-16) — feat(statement): P73批2 小额直制证阈值+仪表盘待核销提醒
 > **当前分支**：`feature/batch-ops-unification`
 > **关联文档**：[项目说明](docs/CORE-项目说明.md)、[技术方案](docs/CORE-技术方案.md)、[需求分析](docs/CORE-需求分析.md)、[需求登记册](docs/development/requirements/REQUIREMENTS_REGISTRY.md)、[文档注册表](docs/CORE-文档注册表.md)、[测试策略](docs/testing/TEST-STRATEGY.md)、[Flyway治理规范](docs/development/flyway-governance.md)
 
 | 维度 | 数据 |
 |------|------|
 | 后端代码 | 461+ Java 文件 |
-| 测试用例 | 1812 个 `@Test` 方法 / 210 个测试类（快测 1599 通过，0 Failures, 0 Errors）|
+| 测试用例 | 1817 个 `@Test` 方法 / 210 个测试类（快测 1604 通过，0 Failures, 0 Errors）|
 | 数据库 | PostgreSQL 16 / V1 baseline (merged V1-V146) |
 | API 端点 | 510+ 个后端端点 |
 | 核心模块 | 基础数据、总账、应收应付、现金管理、固定资产、费用报销、发票税务、预算、财务报表、存储管理 |
