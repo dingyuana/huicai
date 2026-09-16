@@ -30,11 +30,6 @@
             <el-option label="支出" value="EXPENSE" />
           </el-select>
         </el-form-item>
-        <el-form-item label="确认状态">
-          <el-select v-model="query.reviewStatus" placeholder="全部" clearable style="width:140px" @change="onSearch">
-            <el-option v-for="(label, value) in REVIEW_STATUS_LABELS" :key="value" :label="label" :value="value" />
-          </el-select>
-        </el-form-item>
         <el-form-item label="对方户名">
           <el-input v-model="query.counterAccount" placeholder="模糊匹配" clearable style="width:160px" @keyup.enter="onSearch" />
         </el-form-item>
@@ -54,6 +49,12 @@
           <el-button @click="onReset">重置</el-button>
         </el-form-item>
       </el-form>
+
+      <el-radio-group v-model="scope" class="scope-tabs" @change="onScopeChange">
+        <el-radio-button value="pending">待处理</el-radio-button>
+        <el-radio-button value="vouchered">已制证</el-radio-button>
+        <el-radio-button value="all">全部</el-radio-button>
+      </el-radio-group>
 
       <el-radio-group v-model="query.classification" class="classification-tabs" @change="onSearch">
         <el-radio-button :key="'__all__'" :value="''">全部 ({{ totalCount }})</el-radio-button>
@@ -440,11 +441,7 @@ function isBatchable(row: BankStatementVO) {
   return !!BATCH_STATUS_MATRIX[row.reviewStatus || 'PENDING']
 }
 const { selectedRows, result, resultVisible, onSelectionChange, clearSelection, run } = useBatchOperation({
-  // 批量生效后旧状态筛选会过滤掉已变化记录，沿用既有逻辑重置筛选再刷新
   refresh: async () => {
-    if (query.value.reviewStatus === 'PENDING' || query.value.reviewStatus === 'classified') {
-      query.value.reviewStatus = undefined
-    }
     await refreshAll()
   },
   clearer: () => tableRef.value?.clearSelection(),
@@ -511,6 +508,14 @@ const query = ref<{
   current: 1, size: 20,
 })
 
+const scope = ref<'pending' | 'vouchered' | 'all'>('pending')
+
+function onScopeChange() {
+  query.value.current = 1
+  query.value.reviewStatus = undefined
+  refreshAll()
+}
+
 // 日期范围 (Element Plus daterange)
 const dateRange = ref<[string, string] | null>(null)
 function onDateRangeChange(val: [string, string] | null) {
@@ -572,7 +577,7 @@ function getSubjectPath(row: any) {
 async function fetchData() {
   loading.value = true
   try {
-    const res = await getBankStatementPage(query.value as any)
+    const res = await getBankStatementPage({ ...query.value, scope: scope.value } as any)
     list.value = (res as any).records || []
     total.value = (res as any).total || 0
   } finally {
@@ -588,7 +593,7 @@ async function fetchClassificationCounts() {
   }
   try {
     const [clsRes, stsRes]: [any, any] = await Promise.all([
-      getClassificationCounts(query.value.accountId, query.value.reviewStatus),
+      getClassificationCounts(query.value.accountId, query.value.reviewStatus, scope.value),
       getStatusCounts(query.value.accountId),
     ])
     classificationCounts.value = clsRes || {}
@@ -612,6 +617,7 @@ async function refreshAll() {
 function onSearch() { query.value.current = 1; fetchData() }
 function onReset() {
   query.value = { current: 1, size: 20 }
+  scope.value = 'pending'
   dateRange.value = null
   fetchData()
 }

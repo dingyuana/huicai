@@ -13,7 +13,7 @@ public interface BankStatementService {
             LocalDate startDate, LocalDate endDate, String direction,
             String counterAccount, String summary, String keyword,
             BigDecimal minAmount, BigDecimal maxAmount,
-            Integer current, Integer size);
+            String scope, Integer current, Integer size);
     int importFromCsv(Long accountId, String csvContent);
     List<Map<String, Object>> autoMatch(Long accountId);
     int confirmMatch(Long statementId, Long journalId);
@@ -124,7 +124,7 @@ public interface BankStatementService {
      * 按 accountId + 可选 reviewStatus 统计各分类的流水数量.
      * 返回结构: { classification: count }, 未分类 (NULL classification) 归入 "other_unknown" 键.
      */
-    Map<String, Integer> classificationCounts(Long accountId, String reviewStatus);
+    Map<String, Integer> classificationCounts(Long accountId, String scope, String reviewStatus);
 
     /** 按 accountId 统计各 reviewStatus 的流水数量. 返回: { reviewStatus: count } */
     Map<String, Integer> statusCounts(Long accountId);

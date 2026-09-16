@@ -49,11 +49,12 @@ public class BankStatementController {
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) BigDecimal minAmount,
             @RequestParam(required = false) BigDecimal maxAmount,
+            @RequestParam(required = false) String scope,
             @RequestParam(defaultValue = "1") Integer current,
             @RequestParam(defaultValue = "20") Integer size) {
         return R.ok(service.pageQuery(accountId, status, classification, reviewStatus,
                 startDate, endDate, direction, counterAccount, summary, keyword,
-                minAmount, maxAmount, current, size));
+                minAmount, maxAmount, scope, current, size));
     }
 
     @Operation(summary = "获取对账单详情")
@@ -143,8 +144,9 @@ public class BankStatementController {
     @Operation(summary = "按分类统计当前账户的流水数量")
     @GetMapping("/classification-counts")
     public R<Map<String, Integer>> classificationCounts(@RequestParam Long accountId,
-                                                         @RequestParam(required = false) String reviewStatus) {
-        return R.ok(service.classificationCounts(accountId, reviewStatus));
+                                                         @RequestParam(required = false) String reviewStatus,
+                                                         @RequestParam(required = false) String scope) {
+        return R.ok(service.classificationCounts(accountId, scope, reviewStatus));
     }
 
     @Operation(summary = "按状态统计当前账户的流水数量")

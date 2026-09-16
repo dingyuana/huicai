@@ -78,7 +78,7 @@ public class BankStatementServiceImpl implements BankStatementService {
             LocalDate startDate, LocalDate endDate, String direction,
             String counterAccount, String summary, String keyword,
             BigDecimal minAmount, BigDecimal maxAmount,
-            Integer current, Integer size) {
+            String scope, Integer current, Integer size) {
         Page<BankStatementEntity> page = new Page<>(current == null ? 1 : current, size == null ? 20 : size);
         LambdaQueryWrapper<BankStatementEntity> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(accountId != null, BankStatementEntity::getAccountId, accountId)
@@ -96,6 +96,13 @@ public class BankStatementServiceImpl implements BankStatementService {
                 .ge(minAmount != null, BankStatementEntity::getAmount, minAmount)
                 .le(maxAmount != null, BankStatementEntity::getAmount, maxAmount)
                 .last("ORDER BY tx_date DESC");
+
+        if ("pending".equalsIgnoreCase(scope)) {
+            wrapper.and(w -> w.isNull(BankStatementEntity::getReviewStatus)
+                    .or().notIn(BankStatementEntity::getReviewStatus, "voucher_generated", "approved"));
+        } else if ("vouchered".equalsIgnoreCase(scope)) {
+            wrapper.in(BankStatementEntity::getReviewStatus, "voucher_generated", "approved");
+        }
 
         if (shouldFilter(reviewStatus)) {
             String[] statuses = reviewStatus.split(",");
@@ -732,11 +739,16 @@ public class BankStatementServiceImpl implements BankStatementService {
     }
 
     @Override
-    public Map<String, Integer> classificationCounts(Long accountId, String reviewStatus) {
+    public Map<String, Integer> classificationCounts(Long accountId, String scope, String reviewStatus) {
         if (accountId == null) return Map.of();
-        List<Map<String, Object>> rows = (StrUtil.isNotBlank(reviewStatus))
-                ? statementMapper.countByClassificationByReview(accountId, reviewStatus)
-                : statementMapper.countByClassification(accountId);
+        List<Map<String, Object>> rows;
+        if (StrUtil.isNotBlank(scope)) {
+            rows = statementMapper.countByClassificationWithScope(accountId, scope);
+        } else if (StrUtil.isNotBlank(reviewStatus)) {
+            rows = statementMapper.countByClassificationByReview(accountId, reviewStatus);
+        } else {
+            rows = statementMapper.countByClassification(accountId);
+        }
         Map<String, Integer> result = new LinkedHashMap<>();
         for (Map<String, Object> row : rows) {
             String cls = row.get("classification") == null ? BankClassification.OTHER_UNKNOWN : String.valueOf(row.get("classification"));

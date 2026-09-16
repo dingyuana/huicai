@@ -83,6 +83,7 @@ export function getBankStatementPage(params: {
   status?: string
   classification?: string
   reviewStatus?: string
+  scope?: string
   direction?: string
   counterAccount?: string
   summary?: string
@@ -96,8 +97,8 @@ export function getBankStatementPage(params: {
 }): Promise<PageResult<BankStatementVO>> {
   return request.get('/sme/cash/v1/bank-statements/page', { params })
 }
-export function getClassificationCounts(accountId: string, reviewStatus?: string): Promise<Record<string, number>> {
-  return request.get('/sme/cash/v1/bank-statements/classification-counts', { params: { accountId, reviewStatus } })
+export function getClassificationCounts(accountId: string, reviewStatus?: string, scope?: string): Promise<Record<string, number>> {
+  return request.get('/sme/cash/v1/bank-statements/classification-counts', { params: { accountId, reviewStatus, scope } })
 }
 export function getStatusCounts(accountId: string): Promise<Record<string, number>> {
   return request.get('/sme/cash/v1/bank-statements/status-counts', { params: { accountId } })
