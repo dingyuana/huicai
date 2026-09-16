@@ -109,6 +109,16 @@ public class BusinessDocServiceImpl implements BusinessDocService {
     public IPage<BusinessDocVO> pageQuery(BusinessDocQueryDTO q) {
         Page<BusinessDocEntity> page = new Page<>(q.getCurrent(), q.getSize());
         LambdaQueryWrapper<BusinessDocEntity> wrapper = new LambdaQueryWrapper<>();
+        final List<Long> customerIds = StrUtil.isNotBlank(q.getKeyword())
+                ? customerMapper.selectList(
+                        new LambdaQueryWrapper<CustomerEntity>().like(CustomerEntity::getName, q.getKeyword()))
+                        .stream().map(CustomerEntity::getId).toList()
+                : Collections.emptyList();
+        final List<Long> vendorIds = StrUtil.isNotBlank(q.getKeyword())
+                ? vendorMapper.selectList(
+                        new LambdaQueryWrapper<VendorEntity>().like(VendorEntity::getName, q.getKeyword()))
+                        .stream().map(VendorEntity::getId).toList()
+                : Collections.emptyList();
         wrapper.eq(StrUtil.isNotBlank(q.getDocType()), BusinessDocEntity::getDocType, q.getDocType())
                 .in(q.getDocTypes() != null && !q.getDocTypes().isEmpty(), BusinessDocEntity::getDocType, q.getDocTypes())
                 .eq(StrUtil.isNotBlank(q.getStatus()), BusinessDocEntity::getStatus, q.getStatus())
@@ -117,11 +127,18 @@ public class BusinessDocServiceImpl implements BusinessDocService {
                 .le(q.getEndDate() != null, BusinessDocEntity::getDocDate, q.getEndDate())
                 .ge(q.getAmountMin() != null, BusinessDocEntity::getAmount, q.getAmountMin())
                 .le(q.getAmountMax() != null, BusinessDocEntity::getAmount, q.getAmountMax())
-                .and(StrUtil.isNotBlank(q.getKeyword()), w -> w
-                        .like(BusinessDocEntity::getDocNo, q.getKeyword())
-                        .or().like(BusinessDocEntity::getVoucherNo, q.getKeyword())
-                        .or().like(BusinessDocEntity::getInvoiceNo, q.getKeyword())
-                        .or().like(BusinessDocEntity::getSummary, q.getKeyword()))
+                .and(StrUtil.isNotBlank(q.getKeyword()), w -> {
+                    w.like(BusinessDocEntity::getDocNo, q.getKeyword())
+                     .or().like(BusinessDocEntity::getVoucherNo, q.getKeyword())
+                     .or().like(BusinessDocEntity::getInvoiceNo, q.getKeyword())
+                     .or().like(BusinessDocEntity::getSummary, q.getKeyword());
+                    if (!customerIds.isEmpty()) {
+                        w.or().in(BusinessDocEntity::getCustomerId, customerIds);
+                    }
+                    if (!vendorIds.isEmpty()) {
+                        w.or().in(BusinessDocEntity::getSupplierId, vendorIds);
+                    }
+                })
                 .eq(StrUtil.isNotBlank(q.getVoucherNo()), BusinessDocEntity::getVoucherNo, q.getVoucherNo())
                 .orderByDesc(BusinessDocEntity::getDocDate)
                 .orderByDesc(BusinessDocEntity::getId);

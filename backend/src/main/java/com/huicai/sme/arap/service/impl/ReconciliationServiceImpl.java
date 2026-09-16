@@ -787,6 +787,7 @@ public class ReconciliationServiceImpl implements ReconciliationService {
                                 + "WHERE se.business_doc_id = t_business_doc.id "
                                 + "AND se.deleted = 0 AND s.deleted = 0 "
                                 + "AND s.status IN ('DRAFT','SUBMITTED','CONFIRMED','EXECUTED')")
+                        .orderByAsc(BusinessDocEntity::getDocDate)
                         .orderByAsc(BusinessDocEntity::getDueDate)
         );
         for (BusinessDocEntity inv : invoices) {

@@ -63,6 +63,7 @@ defineProps<{ span?: number; iconClass?: string }>()
 .icon-red-count { background: linear-gradient(135deg, #ff9a44 0%, #fc6076 100%); }
 .icon-reversed { background: linear-gradient(135deg, #a18cd1 0%, #fbc2eb 100%); }
 .icon-voided { background: linear-gradient(135deg, #8e9eab 0%, #eef2f3 100%); }
+.icon-total-amount { background: linear-gradient(135deg, #409EFF 0%, #66B1FF 100%); }
 .icon-debit { background: linear-gradient(135deg, #67C23A 0%, #409EFF 100%); }
 .icon-credit { background: linear-gradient(135deg, #E6A23C 0%, #F56C6C 100%); }
 .icon-posted { background: linear-gradient(135deg, #67C23A 0%, #3AAF9B 100%); }

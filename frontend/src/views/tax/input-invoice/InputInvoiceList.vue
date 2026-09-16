@@ -28,6 +28,26 @@
         </el-form-item>
       </el-form>
 
+      <!-- 统计栏 -->
+      <el-row :gutter="16" style="margin-bottom:16px">
+        <StatCard :span="6" iconClass="icon-draft">
+          <template #label>未认证</template>
+          ¥ {{ fmtAmount(stats.uncertified || 0) }}
+        </StatCard>
+        <StatCard :span="6" iconClass="icon-blue">
+          <template #label>已认证未申报</template>
+          ¥ {{ fmtAmount(stats.cert_undeclared || 0) }}
+        </StatCard>
+        <StatCard :span="6" iconClass="icon-posted">
+          <template #label>已勾选抵扣</template>
+          ¥ {{ fmtAmount(stats.deductible || 0) }}
+        </StatCard>
+        <StatCard :span="6" iconClass="icon-total-amount">
+          <template #label>税额合计</template>
+          ¥ {{ fmtAmount(stats.total || 0) }}
+        </StatCard>
+      </el-row>
+
       <el-table :data="list" v-loading="loading" border>
         <el-table-column prop="invoiceNo" label="发票号" width="180" />
         <el-table-column prop="invoiceDate" label="开票日期" width="120" />
@@ -149,7 +169,9 @@ import { ElMessage, ElMessageBox, type FormInstance } from 'element-plus'
 import {
   pageInputInvoice, createInputInvoice, certifyInputInvoice,
   submitInputReview, confirmInputInvoice, rejectInputInvoice, revertInputInvoice, voidInputInvoice, reverseInputInvoice,
+  inputInvoiceSummary,
 } from '@/api/modules/tax'
+import StatCard from '@/components/page/StatCard.vue'
 
 const CERT_OPTIONS = [
   { value: 'UNCERTIFIED', label: '未认证' },
@@ -182,6 +204,7 @@ const query = reactive({ vendorName: '', period: '', certStatus: '', status: '',
 const list = ref<any[]>([])
 const total = ref(0)
 const loading = ref(false)
+const stats = ref<any>({})
 const dialogVisible = ref(false)
 const formRef = ref<FormInstance>()
 const form = reactive<any>({ invoiceType: 'SPECIAL', taxRate: 13 })
@@ -267,5 +290,12 @@ const doAction = async (row: any, action: string) => {
   } catch { /* backend handles error msg */ }
 }
 
-onMounted(fetchData)
+const fetchStats = async () => {
+  try {
+    const res: any = await inputInvoiceSummary(query.period)
+    stats.value = res || {}
+  } catch { /* ignore */ }
+}
+
+onMounted(() => { fetchData(); fetchStats() })
 </script>

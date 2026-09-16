@@ -48,6 +48,11 @@
           <template #label>已作废</template>
           {{ fmtNum(stats.voidedCount || 0) }}
         </StatCard>
+        <StatCard :span="4" iconClass="icon-total-amount">
+          <template #icon><Money /></template>
+          <template #label>总金额</template>
+          ¥ {{ fmtAmount(stats.totalAmount) }}
+        </StatCard>
       </el-row>
 
       <!-- 分类标签 -->
