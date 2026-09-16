@@ -879,6 +879,63 @@ public class BankStatementServiceImpl implements BankStatementService {
                 .eq(BankStatementEntity::getReviewStatus, StatementStatus.PAYMENT_CREATED));
     }
 
+    @Override
+    public Map<String, Object> summary(Long accountId, String status, String classification, String reviewStatus,
+                                       LocalDate startDate, LocalDate endDate, String direction,
+                                       String counterAccount, String summaryText, String keyword,
+                                       BigDecimal minAmount, BigDecimal maxAmount, String scope) {
+        com.baomidou.mybatisplus.core.conditions.query.QueryWrapper<BankStatementEntity> qw =
+                new com.baomidou.mybatisplus.core.conditions.query.QueryWrapper<>();
+        qw.select("COUNT(*) AS cnt",
+                        "COALESCE(SUM(CASE WHEN tx_type IN ('INCOME','TRANSFER_IN') THEN amount ELSE 0 END), 0) AS income",
+                        "COALESCE(SUM(CASE WHEN tx_type IN ('EXPENSE','TRANSFER_OUT') THEN amount ELSE 0 END), 0) AS expense")
+                .eq("deleted", 0)
+                .eq(accountId != null, "account_id", accountId)
+                .eq(shouldFilter(status), "match_status", status)
+                .eq(shouldFilter(classification), "category", classification)
+                .ge(startDate != null, "tx_date", startDate)
+                .le(endDate != null, "tx_date", endDate)
+                .eq(shouldFilter(direction), "tx_type", direction)
+                .like(shouldFilter(counterAccount), "counter_account", counterAccount)
+                .like(shouldFilter(summaryText), "summary", summaryText)
+                .and(shouldFilter(keyword), w -> w
+                        .like("counter_account", keyword)
+                        .or().like("summary", keyword)
+                        .or().like("external_no", keyword))
+                .ge(minAmount != null, "amount", minAmount)
+                .le(maxAmount != null, "amount", maxAmount);
+        if ("pending".equalsIgnoreCase(scope)) {
+            qw.and(w -> w.isNull("review_status").or().notIn("review_status", "voucher_generated", "approved"));
+        } else if ("vouchered".equalsIgnoreCase(scope)) {
+            qw.in("review_status", "voucher_generated", "approved");
+        }
+        if (shouldFilter(reviewStatus)) {
+            String[] statuses = reviewStatus.split(",");
+            if (statuses.length > 1) {
+                qw.in("review_status", Arrays.asList(statuses));
+            } else {
+                qw.eq("review_status", reviewStatus);
+            }
+        }
+        Map<String, Object> row = statementMapper.selectMaps(qw).stream().findFirst().orElse(Map.of());
+        Number cnt = (Number) row.getOrDefault("cnt", 0);
+        BigDecimal income = toBigDecimal(row.get("income"));
+        BigDecimal expense = toBigDecimal(row.get("expense"));
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("count", cnt == null ? 0 : cnt.longValue());
+        result.put("income", income);
+        result.put("expense", expense);
+        result.put("net", income.subtract(expense));
+        return result;
+    }
+
+    private static BigDecimal toBigDecimal(Object val) {
+        if (val == null) return BigDecimal.ZERO;
+        if (val instanceof BigDecimal bd) return bd;
+        if (val instanceof Number n) return BigDecimal.valueOf(n.doubleValue());
+        return new BigDecimal(String.valueOf(val));
+    }
+
     /** 判断状态是否已锁定（不可删除/修改分类） */
     private static boolean isLocked(String reviewStatus) {
         return StatementStatus.CONFIRMED.equals(reviewStatus)

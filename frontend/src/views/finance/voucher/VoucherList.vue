@@ -18,33 +18,13 @@
       </div>
 
       <!-- 统计卡片 -->
-      <el-row :gutter="16" style="margin-bottom:16px">
-        <StatCard :span="4" iconClass="icon-total">
-          <template #icon><Document /></template>
-          <template #label>总凭证数</template>
-          {{ fmtNum(stats.totalCount || 0) }}
-        </StatCard>
-        <StatCard :span="5" iconClass="icon-debit">
-          <template #icon><Bottom /></template>
-          <template #label>借方合计</template>
-          ¥ {{ fmtAmount(stats.totalDebit) }}
-        </StatCard>
-        <StatCard :span="5" iconClass="icon-credit">
-          <template #icon><Top /></template>
-          <template #label>贷方合计</template>
-          ¥ {{ fmtAmount(stats.totalCredit) }}
-        </StatCard>
-        <StatCard :span="5" iconClass="icon-posted">
-          <template #icon><SuccessFilled /></template>
-          <template #label>已记账</template>
-          {{ fmtNum(stats.postedCount || 0) }}
-        </StatCard>
-        <StatCard :span="5" iconClass="icon-draft">
-          <template #icon><Edit /></template>
-          <template #label>草稿</template>
-          {{ fmtNum(stats.draftCount || 0) }}
-        </StatCard>
-      </el-row>
+      <StatBar :items="[
+        { label: '总凭证数', value: fmtNum(stats.totalCount || 0) },
+        { label: '借方合计', value: `¥ ${fmtAmount(stats.totalDebit)}` },
+        { label: '贷方合计', value: `¥ ${fmtAmount(stats.totalCredit)}` },
+        { label: '已记账', value: fmtNum(stats.postedCount || 0) },
+        { label: '草稿', value: fmtNum(stats.draftCount || 0) },
+      ]" />
 
       <!-- 分类标签 -->
       <el-radio-group v-model="tabType" style="margin-bottom:12px" @change="onTabChange">
@@ -125,7 +105,6 @@
 import { ref, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { Document, Bottom, Top, SuccessFilled, Edit } from '@element-plus/icons-vue'
 import {
   getVoucherPage,
   submitVoucher,
@@ -147,7 +126,7 @@ import { resolveDefaultPeriod } from '@/utils/period'
 import BatchActionBar from '@/components/batch/BatchActionBar.vue'
 import BatchResultDialog from '@/components/batch/BatchResultDialog.vue'
 import { useBatchOperation, type BatchActionDef } from '@/composables/useBatchOperation'
-import StatCard from '@/components/page/StatCard.vue'
+import StatBar from '@/components/page/StatBar.vue'
 
 const router = useRouter()
 const loading = ref(false)

@@ -113,6 +113,31 @@ export function getClassificationCounts(params: {
   return request.get('/sme/cash/v1/bank-statements/classification-counts', { params })
 }
 
+export interface BankStatementSummary {
+  count: number
+  income: number
+  expense: number
+  net: number
+}
+
+export function getBankStatementSummary(params: {
+  accountId?: string
+  status?: string
+  classification?: string
+  reviewStatus?: string
+  scope?: string
+  direction?: string
+  counterAccount?: string
+  summary?: string
+  keyword?: string
+  minAmount?: number
+  maxAmount?: number
+  startDate?: string
+  endDate?: string
+}): Promise<BankStatementSummary> {
+  return request.get('/sme/cash/v1/bank-statements/summary', { params })
+}
+
 export interface BankStatementMonthGroup {
   month: string
   count: number

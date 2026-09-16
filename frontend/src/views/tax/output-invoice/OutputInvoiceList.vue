@@ -17,43 +17,15 @@
       </div>
 
       <!-- 统计栏 -->
-      <el-row :gutter="16" style="margin-bottom:16px">
-        <StatCard :span="4" iconClass="icon-total">
-          <template #icon><Document /></template>
-          <template #label>总发票数</template>
-          {{ fmtNum(stats.totalCount || 0) }}
-        </StatCard>
-        <StatCard :span="4" iconClass="icon-blue">
-          <template #icon><Money /></template>
-          <template #label>蓝字总金额</template>
-          ¥ {{ fmtAmount(stats.blueAmount) }}
-        </StatCard>
-        <StatCard :span="4" iconClass="icon-red">
-          <template #icon><Minus /></template>
-          <template #label>红字金额</template>
-          ¥ {{ fmtAmount(stats.redAmount) }}
-        </StatCard>
-        <StatCard :span="3" iconClass="icon-red-count">
-          <template #icon><Warning /></template>
-          <template #label>红字数</template>
-          {{ fmtNum(stats.redCount || 0) }}
-        </StatCard>
-        <StatCard :span="3" iconClass="icon-reversed">
-          <template #icon><Refresh /></template>
-          <template #label>已冲销</template>
-          {{ fmtNum(stats.reversedCount || 0) }}
-        </StatCard>
-        <StatCard :span="4" iconClass="icon-voided">
-          <template #icon><Delete /></template>
-          <template #label>已作废</template>
-          {{ fmtNum(stats.voidedCount || 0) }}
-        </StatCard>
-        <StatCard :span="4" iconClass="icon-total-amount">
-          <template #icon><Money /></template>
-          <template #label>总金额</template>
-          ¥ {{ fmtAmount(stats.totalAmount) }}
-        </StatCard>
-      </el-row>
+      <StatBar :items="[
+        { label: '总发票数', value: fmtNum(stats.totalCount || 0) },
+        { label: '蓝字总金额', value: `¥ ${fmtAmount(stats.blueAmount)}` },
+        { label: '红字金额', value: `¥ ${fmtAmount(stats.redAmount)}`, color: '#f56c6c' },
+        { label: '红字数', value: fmtNum(stats.redCount || 0) },
+        { label: '已冲销', value: fmtNum(stats.reversedCount || 0) },
+        { label: '已作废', value: fmtNum(stats.voidedCount || 0) },
+        { label: '总金额', value: `¥ ${fmtAmount(stats.totalAmount)}` },
+      ]" />
 
       <!-- 分类标签 -->
       <el-radio-group v-model="tabType" style="margin-bottom:12px" @change="onTabChange">
@@ -326,7 +298,7 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue'
 import { ElMessage, type FormInstance } from 'element-plus'
-import { UploadFilled, Document, Money, Minus, Warning, Refresh, Delete, ArrowRight } from '@element-plus/icons-vue'
+import { ArrowRight } from '@element-plus/icons-vue'
 import type { OutputInvoice, BatchResult } from '@/api/modules/tax'
 import { pageOutputInvoice, createOutputInvoice, getOutputInvoice, deleteOutputInvoice,
   outputInvoiceSummary,
@@ -336,7 +308,7 @@ import { pageOutputInvoice, createOutputInvoice, getOutputInvoice, deleteOutputI
 import { previewSalesInvoices, confirmSalesInvoicesImport } from '@/api/modules/salesInvoice'
 import BatchActionBar from '@/components/batch/BatchActionBar.vue'
 import BatchResultDialog from '@/components/batch/BatchResultDialog.vue'
-import StatCard from '@/components/page/StatCard.vue'
+import StatBar from '@/components/page/StatBar.vue'
 import { useBatchOperation, type BatchActionDef } from '@/composables/useBatchOperation'
 
 const detailVisible = ref(false)

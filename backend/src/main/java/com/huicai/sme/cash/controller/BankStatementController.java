@@ -57,6 +57,27 @@ public class BankStatementController {
                 minAmount, maxAmount, scope, current, size));
     }
 
+    @Operation(summary = "对账单汇总（与分页查询同过滤条件）")
+    @GetMapping("/summary")
+    public R<Map<String, Object>> summary(
+            @RequestParam(required = false) Long accountId,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String classification,
+            @RequestParam(required = false) String reviewStatus,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) java.time.LocalDate startDate,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) java.time.LocalDate endDate,
+            @RequestParam(required = false) String direction,
+            @RequestParam(required = false) String counterAccount,
+            @RequestParam(required = false) String summary,
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) BigDecimal minAmount,
+            @RequestParam(required = false) BigDecimal maxAmount,
+            @RequestParam(required = false) String scope) {
+        return R.ok(service.summary(accountId, status, classification, reviewStatus,
+                startDate, endDate, direction, counterAccount, summary, keyword,
+                minAmount, maxAmount, scope));
+    }
+
     @Operation(summary = "按月分组查询对账单（已制证归档视图）")
     @GetMapping("/grouped")
     public R<java.util.List<com.huicai.base.business.dto.vo.BankStatementMonthGroupVO>> grouped(

@@ -29,24 +29,12 @@
       </el-form>
 
       <!-- 统计栏 -->
-      <el-row :gutter="16" style="margin-bottom:16px">
-        <StatCard :span="6" iconClass="icon-draft">
-          <template #label>未认证</template>
-          ¥ {{ fmtAmount(stats.uncertified || 0) }}
-        </StatCard>
-        <StatCard :span="6" iconClass="icon-blue">
-          <template #label>已认证未申报</template>
-          ¥ {{ fmtAmount(stats.cert_undeclared || 0) }}
-        </StatCard>
-        <StatCard :span="6" iconClass="icon-posted">
-          <template #label>已勾选抵扣</template>
-          ¥ {{ fmtAmount(stats.deductible || 0) }}
-        </StatCard>
-        <StatCard :span="6" iconClass="icon-total-amount">
-          <template #label>税额合计</template>
-          ¥ {{ fmtAmount(stats.total || 0) }}
-        </StatCard>
-      </el-row>
+      <StatBar :items="[
+        { label: '未认证', value: `¥ ${fmtAmount(stats.uncertified || 0)}` },
+        { label: '已认证未申报', value: `¥ ${fmtAmount(stats.cert_undeclared || 0)}` },
+        { label: '已勾选抵扣', value: `¥ ${fmtAmount(stats.deductible || 0)}` },
+        { label: '税额合计', value: `¥ ${fmtAmount(stats.total || 0)}` },
+      ]" />
 
       <el-table :data="list" v-loading="loading" border>
         <el-table-column prop="invoiceNo" label="发票号" width="180" />
@@ -171,7 +159,7 @@ import {
   submitInputReview, confirmInputInvoice, rejectInputInvoice, revertInputInvoice, voidInputInvoice, reverseInputInvoice,
   inputInvoiceSummary,
 } from '@/api/modules/tax'
-import StatCard from '@/components/page/StatCard.vue'
+import StatBar from '@/components/page/StatBar.vue'
 
 const CERT_OPTIONS = [
   { value: 'UNCERTIFIED', label: '未认证' },

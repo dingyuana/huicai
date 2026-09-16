@@ -85,6 +85,13 @@
         <el-tag v-if="statusCounts.approved > 0" size="small" type="success">已过账 {{ statusCounts.approved }}</el-tag>
       </div>
 
+      <StatBar v-if="statementSummary" :items="[
+        { label: '笔数', value: statementSummary.count },
+        { label: '收入总额', value: `¥ ${fmtAmount(statementSummary.income)}`, color: '#67c23a' },
+        { label: '支出总额', value: `¥ ${fmtAmount(statementSummary.expense)}`, color: '#f56c6c' },
+        { label: '净额', value: `¥ ${fmtAmount(statementSummary.net)}` },
+      ]" />
+
         <el-space v-if="scope === 'pending'" style="margin-bottom: 12px" wrap>
           <el-button type="primary" @click="openImport">导入对账单</el-button>
           <el-button :disabled="!query.accountId" @click="onAutoClassify">自动分类全部</el-button>
@@ -468,12 +475,14 @@ import {
   auditStatement, batchAuditStatements,
   deleteStatement, updateStatementClassification,
   getBankStatementDetail, getClassificationCounts, getStatusCounts,
+  getBankStatementSummary,
   CLASSIFICATION_LABELS, REVIEW_STATUS_LABELS,
   type BankStatementVO,
   type BankStatementMonthGroup,
 } from '@/api/modules/bankStatement'
 import PageHeader from '@/components/page/PageHeader.vue'
 import FilterBar from '@/components/page/FilterBar.vue'
+import StatBar from '@/components/page/StatBar.vue'
 import { getActiveBankAccounts, type BankAccountVO } from '@/api/modules/bankAccount'
 import BatchActionBar from '@/components/batch/BatchActionBar.vue'
 import BatchResultDialog from '@/components/batch/BatchResultDialog.vue'
@@ -670,8 +679,23 @@ function getSubjectPath(row: any) {
     .join(' / ')
 }
 
+const statementSummary = ref<{ count: number; income: number; expense: number; net: number } | null>(null)
+
+async function fetchSummary() {
+  if (scope.value === 'vouchered' && (!query.value.startDate || !query.value.endDate)) {
+    statementSummary.value = null
+    return
+  }
+  try {
+    statementSummary.value = await getBankStatementSummary({ ...query.value, scope: scope.value } as any)
+  } catch {
+    statementSummary.value = null
+  }
+}
+
 async function fetchData() {
   loading.value = true
+  fetchSummary()
   try {
     if (scope.value === 'vouchered') {
       if (!query.value.startDate || !query.value.endDate) {
