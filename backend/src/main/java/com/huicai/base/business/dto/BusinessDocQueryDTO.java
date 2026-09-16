@@ -22,6 +22,8 @@ public class BusinessDocQueryDTO {
     /** 金额区间 */
     private BigDecimal amountMin;
     private BigDecimal amountMax;
+    /** 视图范围: pending=待处理(流程未终结), completed=已完成(已制证/已终结), 空=全部 */
+    private String scope;
     private Integer current = 1;
     private Integer size = 20;
 }

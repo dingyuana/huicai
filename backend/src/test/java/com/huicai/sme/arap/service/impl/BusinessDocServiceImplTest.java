@@ -290,6 +290,74 @@ class BusinessDocServiceImplTest {
         assertEquals("DRAFT", result.getRecords().get(0).getStatus());
     }
 
+    @Test
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    @DisplayName("testPageQuery_scopePending_排除已终结状态")
+    void testPageQuery_scopePending_排除已终结状态() {
+        // given
+        com.baomidou.mybatisplus.core.metadata.TableInfoHelper.initTableInfo(
+                new org.apache.ibatis.builder.MapperBuilderAssistant(
+                        new com.baomidou.mybatisplus.core.MybatisConfiguration(), ""), BusinessDocEntity.class);
+        BusinessDocQueryDTO q = new BusinessDocQueryDTO();
+        q.setScope("pending");
+        Page<BusinessDocEntity> page = new Page<>(1, 20, 1);
+        page.setRecords(List.of(draftDoc()));
+        when(docMapper.selectPage(any(Page.class), any(Wrapper.class))).thenReturn(page);
+        lenient().when(customerMapper.selectBatchIds(anyList())).thenReturn(Collections.emptyList());
+        lenient().when(userMapper.selectBatchIds(anyList())).thenReturn(Collections.emptyList());
+        lenient().when(outputInvoiceMapper.selectOne(any())).thenReturn(null);
+
+        // when
+        service.pageQuery(q);
+
+        // then — 正向: SQL 含 status NOT IN, 参数含终结状态
+        ArgumentCaptor<com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper> captor =
+                org.mockito.ArgumentCaptor.forClass(com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper.class);
+        verify(docMapper).selectPage(any(Page.class), captor.capture());
+        String sql = (String) captor.getValue().getSqlSegment();
+        assertTrue(sql.contains("status NOT IN"));
+        String params = captor.getValue().getParamNameValuePairs().toString();
+        assertTrue(params.contains("VOUCHERED"), "应排除已生成凭证: " + params);
+        assertTrue(params.contains("FULLY_RECONCILED"), "应排除已核销: " + params);
+        assertTrue(params.contains("REVERSED"), "应排除已冲销: " + params);
+        // then — 负向: 不生成 status IN 条件
+        assertFalse(sql.contains("status IN"));
+    }
+
+    @Test
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    @DisplayName("testPageQuery_scopeCompleted_仅含已终结状态")
+    void testPageQuery_scopeCompleted_仅含已终结状态() {
+        // given
+        com.baomidou.mybatisplus.core.metadata.TableInfoHelper.initTableInfo(
+                new org.apache.ibatis.builder.MapperBuilderAssistant(
+                        new com.baomidou.mybatisplus.core.MybatisConfiguration(), ""), BusinessDocEntity.class);
+        BusinessDocQueryDTO q = new BusinessDocQueryDTO();
+        q.setScope("completed");
+        Page<BusinessDocEntity> page = new Page<>(1, 20, 1);
+        page.setRecords(List.of(draftDoc()));
+        when(docMapper.selectPage(any(Page.class), any(Wrapper.class))).thenReturn(page);
+        lenient().when(customerMapper.selectBatchIds(anyList())).thenReturn(Collections.emptyList());
+        lenient().when(userMapper.selectBatchIds(anyList())).thenReturn(Collections.emptyList());
+        lenient().when(outputInvoiceMapper.selectOne(any())).thenReturn(null);
+
+        // when
+        service.pageQuery(q);
+
+        // then — 正向: SQL 含 status IN, 参数含终结状态
+        ArgumentCaptor<com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper> captor =
+                org.mockito.ArgumentCaptor.forClass(com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper.class);
+        verify(docMapper).selectPage(any(Page.class), captor.capture());
+        String sql = (String) captor.getValue().getSqlSegment();
+        assertTrue(sql.contains("status IN"));
+        String params = captor.getValue().getParamNameValuePairs().toString();
+        assertTrue(params.contains("VOUCHERED"), "应含已生成凭证: " + params);
+        assertTrue(params.contains("CLOSED"), "应含已关闭: " + params);
+        assertTrue(params.contains("VOIDED"), "应含已作废: " + params);
+        // then — 负向: 不生成 status NOT IN 条件
+        assertFalse(sql.contains("status NOT IN"));
+    }
+
     // ====================================================================
     // 2. getDetail 详情查询
     // ====================================================================

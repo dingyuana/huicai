@@ -81,6 +81,7 @@ export interface BusinessDocQuery {
   endDate?: string
   amountMin?: number
   amountMax?: number
+  scope?: 'pending' | 'completed' | ''
   current?: number
   size?: number
 }

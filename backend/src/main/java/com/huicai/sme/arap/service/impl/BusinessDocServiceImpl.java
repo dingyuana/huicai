@@ -69,6 +69,11 @@ public class BusinessDocServiceImpl implements BusinessDocService {
             "PAYMENT", "EXPENSE", "INVOICE_IN", "OTHER_PAYABLE"
     );
 
+    /** 流程已终结状态: 已制证/已核销/已冲销/已关闭/已作废 (scope=completed) */
+    private static final java.util.Set<String> DOC_TERMINAL_STATUSES = java.util.Set.of(
+            "VOUCHERED", "PARTIALLY_RECONCILED", "FULLY_RECONCILED", "REVERSED", "CLOSED", "VOIDED"
+    );
+
     /**
      * 业务单据 → 凭证 科目映射 (硬编码降级).
      * 格式: docType → [{"debit": "科目代码", "credit": "科目代码"}]
@@ -139,6 +144,8 @@ public class BusinessDocServiceImpl implements BusinessDocService {
                         w.or().in(BusinessDocEntity::getSupplierId, vendorIds);
                     }
                 })
+                .in("completed".equalsIgnoreCase(q.getScope()), BusinessDocEntity::getStatus, DOC_TERMINAL_STATUSES)
+                .notIn("pending".equalsIgnoreCase(q.getScope()), BusinessDocEntity::getStatus, DOC_TERMINAL_STATUSES)
                 .eq(StrUtil.isNotBlank(q.getVoucherNo()), BusinessDocEntity::getVoucherNo, q.getVoucherNo())
                 .orderByDesc(BusinessDocEntity::getDocDate)
                 .orderByDesc(BusinessDocEntity::getId);

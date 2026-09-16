@@ -7,6 +7,10 @@
         <el-button @click="fetchData">刷新</el-button>
       </template>
     </PageHeader>
+      <el-tabs v-model="scope" class="scope-root-tabs" @tab-change="onScopeChange">
+        <el-tab-pane label="待处理" name="pending" />
+        <el-tab-pane label="已完成" name="completed" />
+      </el-tabs>
     <FilterBar :model="query">
         <el-form-item label="状态">
           <el-select v-model="query.status" placeholder="全部" clearable style="width:130px">
@@ -143,6 +147,7 @@ const totalCount = ref(0)
 const docTypeCounts = ref<Record<string, number>>({})
 const query = ref<BusinessDocQuery>({ current: 1, size: 20 })
 const dateRange = ref<[string, string] | null>(null)
+const scope = ref<'pending' | 'completed'>('pending')
 
 function statusType(s: string) {
   switch (s) {
@@ -174,11 +179,11 @@ function reconcileTagType(row: BusinessDocVO) {
 
 async function fetchCounts() {
   try {
-    const all = await getBusinessDocPage({ current: 1, size: 1 }) as any
+    const all = await getBusinessDocPage({ current: 1, size: 1, scope: scope.value }) as any
     totalCount.value = all.total || 0
     const counts: Record<string, number> = {}
     for (const key of Object.keys(DOC_TYPE_LABELS)) {
-      const res = await getBusinessDocPage({ docType: key, current: 1, size: 1 }) as any
+      const res = await getBusinessDocPage({ docType: key, current: 1, size: 1, scope: scope.value }) as any
       counts[key] = res.total || 0
     }
     docTypeCounts.value = counts
@@ -188,7 +193,7 @@ async function fetchCounts() {
 async function fetchData() {
   loading.value = true
   try {
-    const res = await getBusinessDocPage(query.value)
+    const res = await getBusinessDocPage({ ...query.value, scope: scope.value })
     list.value = res.records
     total.value = res.total
   } catch {
@@ -196,6 +201,12 @@ async function fetchData() {
   } finally {
     loading.value = false
   }
+}
+
+function onScopeChange() {
+  query.value.current = 1
+  fetchCounts()
+  fetchData()
 }
 
 function onSearch() {
@@ -206,6 +217,7 @@ function onSearch() {
 }
 function onReset() {
   query.value = { current: 1, size: 20 }
+  scope.value = 'pending'
   dateRange.value = null
   fetchData()
 }
@@ -250,4 +262,6 @@ onMounted(async () => {
 .doc-type-tabs {
   margin-bottom: 12px;
 }
+.scope-root-tabs :deep(.el-tabs__header) { margin-bottom: 14px; }
+.scope-root-tabs :deep(.el-tabs__item) { font-size: 15px; font-weight: 600; padding: 0 24px; height: 42px; line-height: 42px; }
 </style>
