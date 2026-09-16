@@ -14,6 +14,7 @@
 | 版本 | 日期 | 变更 |
 |---|---|---|
 | V1.0 | 2026-09-15 | 初版。根因：V130 种子模板科目为 借1002/贷1122（应收核销），与 P12-3 逻辑（无未结清应收→贷2203预收）冲突。修复：模板改为 借2203/贷1122（应收）、借2202/贷1123（应付）。新增 V140 修正迁移 + 端到端验证测试 |
+| V1.1 | 2026-09-16 | 遗留#1 闭环：端到端测试断言方向反转——mock 修正后模板（借2203/贷1122），断言预收冲应收正确行为 + 负向断言（不得再借1002）。测试改名 `e2e_settlementOffsetsPrepaymentAgainstReceivable`，31 测试绿 |
 
 ---
 
@@ -211,5 +212,5 @@ WHERE template_code = 'TPL_SETTLEMENT_PAYMENT' AND entries -> 0 ->> 'creditSubje
 
 ## 7. 遗留事项
 
-- `e2e_settlementDoubleCountsBankDeposit` 测试当前断言方向为"确认缺陷存在"（assertFalse(hasPrepaymentDebit)），修复后需反转为 assertTrue(hasPrepaymentDebit)。建议在后续迭代中更新断言方向。
+- ~~测试断言方向反转~~（V1.1 已闭环：`e2e_settlementOffsetsPrepaymentAgainstReceivable` 断言预收冲应收正确行为）
 - P73 批2（小额直制证阈值 + 仪表盘待核销提醒）待启动

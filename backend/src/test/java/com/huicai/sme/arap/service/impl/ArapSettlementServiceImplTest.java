@@ -495,11 +495,11 @@ class ArapSettlementServiceImplTest {
         verify(logMapper).insert(any(ReconciliationLogEntity.class));
     }
 
-// ─── 核销链路端到端验证：收款+核销双重记账缺陷 ────────────────────
+// ─── 核销链路端到端验证：预收冲应收（P74 模板修正锁定） ────────────────
 
     @Test
-    @DisplayName("端到端验证：预收收款(贷2203) → 核销凭证(借1002/贷1122) = 银行存款双重借记")
-    void e2e_settlementDoubleCountsBankDeposit() {
+    @DisplayName("端到端验证：预收收款(贷2203) → 核销凭证(借2203/贷1122) = 预收冲应收，不重复借记银行存款")
+    void e2e_settlementOffsetsPrepaymentAgainstReceivable() {
         ArapSettlementEntity entity = settlement(1L, ArapStatus.CONFIRMED);
         entity.setPeriod("202608");
         entity.setTotalAmount(new BigDecimal("10000.00"));
@@ -507,11 +507,11 @@ class ArapSettlementServiceImplTest {
         when(entryMapper.selectList(any(LambdaQueryWrapper.class)))
                 .thenReturn(List.of(entryWithDoc(100L, "10000.00")));
 
-        VoucherTemplateLineEntity debitBankLine = new VoucherTemplateLineEntity();
-        debitBankLine.setId(731L);
-        debitBankLine.setSubjectId(731L);
-        debitBankLine.setDirection("debit");
-        debitBankLine.setSummaryTemplate("应收核销");
+        VoucherTemplateLineEntity debitPrepaymentLine = new VoucherTemplateLineEntity();
+        debitPrepaymentLine.setId(2203L);
+        debitPrepaymentLine.setSubjectId(2203L);
+        debitPrepaymentLine.setDirection("debit");
+        debitPrepaymentLine.setSummaryTemplate("应收核销");
         VoucherTemplateLineEntity creditRecvLine = new VoucherTemplateLineEntity();
         creditRecvLine.setId(6L);
         creditRecvLine.setSubjectId(6L);
@@ -522,7 +522,7 @@ class ArapSettlementServiceImplTest {
         when(voucherTemplateService.matchByClassification("settlement_receivable"))
                 .thenReturn(template);
         when(voucherTemplateService.getLines(7L))
-                .thenReturn(List.of(debitBankLine, creditRecvLine));
+                .thenReturn(List.of(debitPrepaymentLine, creditRecvLine));
         when(voucherNoService.generateNextNo("202608", 2L)).thenReturn("SK-202608-SETTLE-001");
         when(voucherMapper.insert(any(VoucherEntity.class))).thenAnswer(inv -> {
             ((VoucherEntity) inv.getArgument(0)).setId(999L);
@@ -537,14 +537,15 @@ class ArapSettlementServiceImplTest {
         ArgumentCaptor<VoucherEntryEntity> entryCaptor = ArgumentCaptor.forClass(VoucherEntryEntity.class);
         verify(voucherEntryMapper, atLeast(2)).insert(entryCaptor.capture());
         List<VoucherEntryEntity> entries = entryCaptor.getAllValues();
-        boolean hasBankDebit = entries.stream().anyMatch(e -> e.getDebit().compareTo(BigDecimal.ZERO) > 0
-                && e.getSubjectId() == 731L);
+        boolean hasPrepaymentDebit = entries.stream().anyMatch(e -> e.getDebit().compareTo(BigDecimal.ZERO) > 0
+                && e.getSubjectId() == 2203L);
         boolean hasRecvCredit = entries.stream().anyMatch(e -> e.getCredit().compareTo(BigDecimal.ZERO) > 0
                 && e.getSubjectId() == 6L);
-        assertTrue(hasBankDebit, "核销凭证借记了银行存款1002 — 与收款单重复!");
-        assertTrue(hasRecvCredit, "核销凭证贷记了应收账款1122");
-        boolean hasPrepaymentDebit = entries.stream().anyMatch(e -> e.getSubjectId() == 2203L);
-        assertFalse(hasPrepaymentDebit, "缺陷确认：核销凭证未借记2203预收账款，应为预收冲应收");
+        assertTrue(hasPrepaymentDebit, "核销凭证必须借记2203预收账款（预收冲应收）");
+        assertTrue(hasRecvCredit, "核销凭证贷记应收账款1122");
+        boolean hasBankDebit = entries.stream().anyMatch(e -> e.getDebit().compareTo(BigDecimal.ZERO) > 0
+                && e.getSubjectId() == 731L);
+        assertFalse(hasBankDebit, "核销凭证不得再借记银行存款731/1002（收款单已借过一次）");
     }
 
     private VoucherTemplateLineEntity simpleLine(String direction) {
