@@ -71,7 +71,7 @@ declare module 'vue' {
     PageHeader: typeof import('./src/components/page/PageHeader.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
-    StatCard: typeof import('./src/components/page/StatCard.vue')['default']
+    StatBar: typeof import('./src/components/page/StatBar.vue')['default']
   }
   export interface ComponentCustomProperties {
     vLoading: typeof import('element-plus/es')['ElLoadingDirective']
