@@ -55,6 +55,7 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.test.util.ReflectionTestUtils;
 import static org.mockito.Mockito.*;
 
 /**
@@ -710,5 +711,117 @@ class AutoGenerationServiceTest {
         verify(docMapper, atLeastOnce()).insert(docCaptor.capture());
         BusinessDocEntity doc = docCaptor.getValue();
         assertEquals(1L, doc.getBankStatementId());
+    }
+
+    // ─── P73 批2: 小额直制证阈值 (BDD-4/5) ───
+
+    @Test
+    void testAutoGenerate_阈值开启_小额业务收款_直制证无单据() {
+        ReflectionTestUtils.setField(service, "smallAmountDirectVoucher", true);
+        ReflectionTestUtils.setField(service, "smallAmountThreshold", new BigDecimal("1000.00"));
+        BankStatementEntity stmt = newStmt("business_receipt", "in");
+        stmt.setAmount(new BigDecimal("500.00"));
+        when(statementMapper.selectById(1L)).thenReturn(stmt);
+        stubSubject("1002", 10L);
+        stubSubject("2203", 20L);
+        when(voucherNoService.generateNextNo(anyString(), anyLong())).thenReturn("SK-202606-0001");
+        when(voucherMapper.insert(any(VoucherEntity.class))).thenAnswer(inv -> {
+            ((VoucherEntity) inv.getArgument(0)).setId(99L);
+            return 1;
+        });
+
+        boolean ok = service.autoGenerate(1L, 1L);
+
+        assertTrue(ok, "直制证应返回 true");
+        verify(docMapper, never()).insert(any(BusinessDocEntity.class));
+        ArgumentCaptor<VoucherEntryEntity> captor = ArgumentCaptor.forClass(VoucherEntryEntity.class);
+        verify(voucherEntryMapper, atLeast(2)).insert(captor.capture());
+        List<VoucherEntryEntity> entries = captor.getAllValues();
+        BigDecimal expected = new BigDecimal("500.00");
+        assertTrue(entries.stream().anyMatch(e -> e.getSubjectId() == 10L && e.getDebit().compareTo(expected) == 0),
+                "应借记银行存款1002");
+        assertTrue(entries.stream().anyMatch(e -> e.getSubjectId() == 20L && e.getCredit().compareTo(expected) == 0),
+                "应贷记预收账款2203");
+    }
+
+    @Test
+    void testAutoGenerate_阈值开启_小额业务付款_直制证无单据() {
+        ReflectionTestUtils.setField(service, "smallAmountDirectVoucher", true);
+        ReflectionTestUtils.setField(service, "smallAmountThreshold", new BigDecimal("1000.00"));
+        BankStatementEntity stmt = newStmt("business_payment", "out");
+        stmt.setAmount(new BigDecimal("-500.00"));
+        when(statementMapper.selectById(1L)).thenReturn(stmt);
+        stubSubject("1002", 10L);
+        stubSubject("1123", 30L);
+        when(voucherNoService.generateNextNo(anyString(), anyLong())).thenReturn("FK-202606-0001");
+        when(voucherMapper.insert(any(VoucherEntity.class))).thenAnswer(inv -> {
+            ((VoucherEntity) inv.getArgument(0)).setId(99L);
+            return 1;
+        });
+
+        boolean ok = service.autoGenerate(1L, 1L);
+
+        assertTrue(ok, "直制证应返回 true");
+        verify(docMapper, never()).insert(any(BusinessDocEntity.class));
+        ArgumentCaptor<VoucherEntryEntity> captor = ArgumentCaptor.forClass(VoucherEntryEntity.class);
+        verify(voucherEntryMapper, atLeast(2)).insert(captor.capture());
+        List<VoucherEntryEntity> entries = captor.getAllValues();
+        BigDecimal expected = new BigDecimal("500.00");
+        assertTrue(entries.stream().anyMatch(e -> e.getSubjectId() == 30L && e.getDebit().compareTo(expected) == 0),
+                "应借记预付账款1123");
+        assertTrue(entries.stream().anyMatch(e -> e.getSubjectId() == 10L && e.getCredit().compareTo(expected) == 0),
+                "应贷记银行存款1002");
+    }
+
+    @Test
+    void testAutoGenerate_阈值关闭_小额业务收款_仍走B类生单() {
+        BankStatementEntity stmt = newStmt("business_receipt", "in");
+        stmt.setAmount(new BigDecimal("500.00"));
+        stmt.setCounterAccount("客户A");
+        when(statementMapper.selectById(1L)).thenReturn(stmt);
+        when(customerMapper.selectList(any())).thenReturn(List.of(new CustomerEntity() {{
+            setId(5L);
+            setName("客户A");
+        }}));
+        when(reconciliationService.hasOpenInvoices(eq("INVOICE_OUT"), eq(5L))).thenReturn(true);
+        when(subjectMapper.selectList(any()))
+                .thenReturn(java.util.Collections.singletonList(new Subject() {{
+                    setId(10L); setCode("1002"); setIsLeaf(true);
+                }}))
+                .thenReturn(java.util.Collections.singletonList(new Subject() {{
+                    setId(20L); setCode("1122"); setIsLeaf(true);
+                }}));
+        when(voucherNoService.generateNextNo(anyString(), anyLong())).thenReturn("REC-202606-001");
+
+        service.autoGenerate(1L, 1L);
+
+        verify(docMapper, atLeastOnce()).insert(any(BusinessDocEntity.class));
+    }
+
+    @Test
+    void testAutoGenerate_阈值开启_金额恰等于阈值_仍走B类生单() {
+        ReflectionTestUtils.setField(service, "smallAmountDirectVoucher", true);
+        ReflectionTestUtils.setField(service, "smallAmountThreshold", new BigDecimal("1000.00"));
+        BankStatementEntity stmt = newStmt("business_receipt", "in");
+        stmt.setAmount(new BigDecimal("1000.00"));
+        stmt.setCounterAccount("客户A");
+        when(statementMapper.selectById(1L)).thenReturn(stmt);
+        when(customerMapper.selectList(any())).thenReturn(List.of(new CustomerEntity() {{
+            setId(5L);
+            setName("客户A");
+        }}));
+        when(reconciliationService.hasOpenInvoices(eq("INVOICE_OUT"), eq(5L))).thenReturn(true);
+        when(subjectMapper.selectList(any()))
+                .thenReturn(java.util.Collections.singletonList(new Subject() {{
+                    setId(10L); setCode("1002"); setIsLeaf(true);
+                }}))
+                .thenReturn(java.util.Collections.singletonList(new Subject() {{
+                    setId(20L); setCode("1122"); setIsLeaf(true);
+                }}));
+        when(voucherNoService.generateNextNo(anyString(), anyLong())).thenReturn("REC-202606-001");
+
+        service.autoGenerate(1L, 1L);
+
+        verify(docMapper, atLeastOnce()).insert(any(BusinessDocEntity.class));
     }
 }

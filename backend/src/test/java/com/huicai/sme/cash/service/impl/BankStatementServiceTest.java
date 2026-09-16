@@ -305,6 +305,21 @@ class BankStatementServiceTest {
         }
 
         @Test
+        void generateVoucher_阈值直制证_B类标记voucher_generated() {
+            BankStatementEntity stmt = stubWithStatus(1L, "business_receipt", "CONFIRMED");
+            BankStatementEntity afterGen = stubWithStatus(1L, "business_receipt", "voucher_generated");
+            when(statementMapper.selectById(1L)).thenReturn(stmt, afterGen);
+            when(statementMapper.update(any(), any(UpdateWrapper.class))).thenReturn(1);
+            when(autoGenerationService.autoGenerateInNewTx(1L, 1L)).thenReturn(true);
+            when(autoGenerationService.isSmallAmountDirectVoucher(stmt)).thenReturn(true);
+
+            BankStatementEntity result = service.generateVoucher(1L, 1L);
+
+            assertEquals("voucher_generated", result.getReviewStatus());
+            verify(autoGenerationService).autoGenerateInNewTx(1L, 1L);
+        }
+
+        @Test
         void generateVoucher_autoGenerate失败_throwBadRequest() {
             BankStatementEntity stmt = stubWithStatus(1L, "bank_interest_fee", "CONFIRMED");
             when(statementMapper.selectById(1L)).thenReturn(stmt);

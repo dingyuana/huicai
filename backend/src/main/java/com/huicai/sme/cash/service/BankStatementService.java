@@ -137,4 +137,7 @@ public interface BankStatementService {
 
     /** 按 accountId + 查询条件统计各 reviewStatus 的流水数量. 返回: { reviewStatus: count } */
     Map<String, Integer> statusCounts(Long accountId, String scope, LocalDate startDate, LocalDate endDate);
+
+    /** 统计待核销 (payment_created) 流水数量, accountId 为 null 时跨账户统计 */
+    long pendingSettlementCount(Long accountId);
 }

@@ -456,6 +456,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
+import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { UploadFilled } from '@element-plus/icons-vue'
 import {
@@ -1009,6 +1010,8 @@ async function onDelete(row: any) {
   } catch { /* handled */ }
 }
 
+const route = useRoute()
+
 onMounted(async () => {
   try {
     accounts.value = await getActiveBankAccounts()
@@ -1021,6 +1024,10 @@ onMounted(async () => {
       query.value.accountId = accounts.value[0].id
     }
   } catch { /* ignore */ }
+  const rs = route.query.reviewStatus
+  if (typeof rs === 'string' && rs) {
+    query.value.reviewStatus = rs
+  }
   await Promise.all([fetchData(), fetchClassificationCounts()])
 })
 </script>

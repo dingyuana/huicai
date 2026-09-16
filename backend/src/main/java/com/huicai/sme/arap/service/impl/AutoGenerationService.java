@@ -42,6 +42,7 @@ import com.huicai.base.masterdata.mapper.CustomerMapper;
 import com.huicai.base.masterdata.mapper.VendorMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -86,6 +87,12 @@ public class AutoGenerationService {
     private final EmployeeService employeeService;
     private final ExpenseReimbursementService expenseReimbursementService;
     private final TemplateMatcher templateMatcher;
+
+    @Value("${huicai.bank.smallAmountDirectVoucher:false}")
+    private boolean smallAmountDirectVoucher;
+
+    @Value("${huicai.bank.smallAmountThreshold:1000.00}")
+    private BigDecimal smallAmountThreshold;
 
     /**
      * 对已确认分类的银行流水执行自动生单/制证.
@@ -161,8 +168,11 @@ public class AutoGenerationService {
                 generateVoucherDirect(stmt, userId);
                 break;
             case "B":
-                // B类: 先生成业务单据, 再生成凭证
-                generateDocThenVoucher(stmt, userId);
+                if (isSmallAmountDirectVoucher(stmt)) {
+                    generateVoucherDirect(stmt, userId);
+                } else {
+                    generateDocThenVoucher(stmt, userId);
+                }
                 break;
             default:
                 // C类: 不处理, 留在待认领池
@@ -232,6 +242,16 @@ public class AutoGenerationService {
             case BankClassification.SALARY_SOCIAL: {
                 Subject salaryAcct = findSubjectByCode("2211");
                 debitAcct = salaryAcct != null ? salaryAcct : findSubjectByCode("2211");
+                creditAcct = bankAcct;
+                break;
+            }
+            case BankClassification.BUSINESS_RECEIPT: {
+                debitAcct = findSubjectByCode("2203");
+                creditAcct = bankAcct;
+                break;
+            }
+            case BankClassification.BUSINESS_PAYMENT: {
+                debitAcct = findSubjectByCode("1123");
                 creditAcct = bankAcct;
                 break;
             }
@@ -800,6 +820,17 @@ public class AutoGenerationService {
 
     public static String classifyType(String classification) {
         return BankClassification.routeType(classification);
+    }
+
+    public boolean isSmallAmountDirectVoucher(BankStatementEntity stmt) {
+        if (!smallAmountDirectVoucher || smallAmountThreshold == null || stmt.getAmount() == null) {
+            return false;
+        }
+        String cls = stmt.getClassification();
+        if (!BankClassification.BUSINESS_RECEIPT.equals(cls) && !BankClassification.BUSINESS_PAYMENT.equals(cls)) {
+            return false;
+        }
+        return stmt.getAmount().abs().compareTo(smallAmountThreshold) < 0;
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)

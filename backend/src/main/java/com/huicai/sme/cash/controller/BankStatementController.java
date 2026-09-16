@@ -188,6 +188,12 @@ public class BankStatementController {
         return R.ok(service.statusCounts(accountId, scope, startDate, endDate));
     }
 
+    @Operation(summary = "待核销(payment_created)流水数量，accountId 可选，缺省跨账户")
+    @GetMapping("/pending-settlement-count")
+    public R<Long> pendingSettlementCount(@RequestParam(required = false) Long accountId) {
+        return R.ok(service.pendingSettlementCount(accountId));
+    }
+
     @Operation(summary = "确认匹配")
     @PostMapping("/{statementId}/confirm-match")
     public R<Integer> confirmMatch(@PathVariable Long statementId, @RequestParam Long journalId) {

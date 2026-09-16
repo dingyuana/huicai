@@ -26,6 +26,12 @@
           <p class="stat-value danger">-- 条</p>
         </el-card>
       </el-col>
+      <el-col :span="6">
+        <el-card shadow="hover" class="clickable-card" @click="goPendingSettlement">
+          <p class="stat-label">待核销业务单据</p>
+          <p class="stat-value danger">{{ pendingSettlementCount === null ? '--' : pendingSettlementCount }} 条</p>
+        </el-card>
+      </el-col>
     </el-row>
     <el-card class="quick-actions">
       <template #header><span>快速入口</span></template>
@@ -37,6 +43,28 @@
     </el-card>
   </div>
 </template>
+
+<script setup lang="ts">
+import { onMounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
+import { getPendingSettlementCount } from '@/api/modules/bankStatement'
+
+const router = useRouter()
+const pendingSettlementCount = ref<number | null>(null)
+
+onMounted(async () => {
+  try {
+    const n = await getPendingSettlementCount()
+    pendingSettlementCount.value = Number(n) || 0
+  } catch {
+    pendingSettlementCount.value = null
+  }
+})
+
+function goPendingSettlement() {
+  router.push({ path: '/finance/bank-statement', query: { reviewStatus: 'payment_created' } })
+}
+</script>
 
 <style scoped lang="scss">
 .dashboard {
@@ -58,5 +86,6 @@
     &.positive { color: #cf1322; }
     &.danger { color: #ff4d4f; }
   }
+  .clickable-card { cursor: pointer; }
 }
 </style>

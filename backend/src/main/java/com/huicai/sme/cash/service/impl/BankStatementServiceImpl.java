@@ -586,7 +586,8 @@ public class BankStatementServiceImpl implements BankStatementService {
         if (!ok) {
             throw BusinessException.badRequest("自动制证失败, classification=" + stmt.getClassification());
         }
-        String newStatus = "A".equals(type) ? StatementStatus.VOUCHER_GENERATED : StatementStatus.PAYMENT_CREATED;
+        boolean directVoucher = "A".equals(type) || autoGenerationService.isSmallAmountDirectVoucher(stmt);
+        String newStatus = directVoucher ? StatementStatus.VOUCHER_GENERATED : StatementStatus.PAYMENT_CREATED;
         // P38-F9: autoGenerateInNewTx 在 REQUIRES_NEW 事务中已 commit 并 bump 了 version,
         // 外层 SqlSession 一级缓存仍持有旧 version, 若用 updateById 则 WHERE version=? 命中 0 行.
         // 改用 UpdateWrapper 直接 SET review_status + version+1, 绕过乐观锁版本依赖.
@@ -868,6 +869,14 @@ public class BankStatementServiceImpl implements BankStatementService {
             result.put(status, cnt == null ? 0 : cnt.intValue());
         }
         return result;
+    }
+
+    @Override
+    public long pendingSettlementCount(Long accountId) {
+        return statementMapper.selectCount(new LambdaQueryWrapper<BankStatementEntity>()
+                .eq(BankStatementEntity::getDeleted, 0)
+                .eq(accountId != null, BankStatementEntity::getAccountId, accountId)
+                .eq(BankStatementEntity::getReviewStatus, StatementStatus.PAYMENT_CREATED));
     }
 
     /** 判断状态是否已锁定（不可删除/修改分类） */

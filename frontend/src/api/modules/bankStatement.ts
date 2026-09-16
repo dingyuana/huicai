@@ -145,6 +145,10 @@ export function getStatusCounts(params: {
 }): Promise<Record<string, number>> {
   return request.get('/sme/cash/v1/bank-statements/status-counts', { params })
 }
+
+export function getPendingSettlementCount(accountId?: string): Promise<number> {
+  return request.get('/sme/cash/v1/bank-statements/pending-settlement-count', { params: { accountId } })
+}
 export function getBankStatementDetail(id: number): Promise<BankStatementVO> {
   return request.get(`/sme/cash/v1/bank-statements/${id}`)
 }

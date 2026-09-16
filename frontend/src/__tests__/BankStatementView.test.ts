@@ -271,4 +271,20 @@ describe('BankStatementView — 银行流水组件', () => {
 
     expect((wrapper.vm as any).query.accountId).toBe('1')
   })
+
+  // ===== 维度 10: route.query.reviewStatus 初始过滤 =====
+  it('route.query.reviewStatus 挂载时应用为过滤条件', async () => {
+    const { getBankStatementPage } = await import('@/api/modules/bankStatement')
+    vi.mocked(getBankStatementPage).mockResolvedValue({ records: [], total: 0, page: 1, size: 10, pages: 0 })
+
+    await router.push({ path: '/finance/bank-statement', query: { reviewStatus: 'payment_created' } })
+    shallowMount(BankStatementView, { global: { plugins: [router] } })
+    await nextTick()
+    await nextTick()
+
+    expect(getBankStatementPage).toHaveBeenCalledWith(
+      expect.objectContaining({ reviewStatus: 'payment_created', scope: 'pending' })
+    )
+    await router.replace({ path: '/finance/bank-statement' })
+  })
 })

@@ -1,7 +1,7 @@
 # P73 SPEC — 银行流水核销体验优化（状态命名 + 批量核销 + 小额直制证 + 待办提醒）
 
-> **版本**：V1.3 | **最后修改**：2026-09-15 | **作者**：Sisyphus
-> **状态**：✅ 批1已实现（P0 状态命名 + 状态联动 Bug 修复 + 存量修正）；⏸️ 批1范围调整（批量核销跳过——勘察发现凭证已全部生成，无单可核）；⏳ 批2待启动
+> **版本**：V1.4 | **最后修改**：2026-09-16 | **作者**：Sisyphus
+> **状态**：✅ 批1已实现（P0 状态命名 + 状态联动 Bug 修复 + 存量修正）；⏸️ 批1范围调整（批量核销跳过——勘察发现凭证已全部生成，无单可核）；✅ 批2已实现（P2 小额直制证阈值 + P3 仪表盘待核销提醒）
 
 > **编号**：HUICAI-SPC-073 | 优先级：高（P73）
 > 依据：生产环境银行对账单出现 85 条 `payment_created` 状态堆积（业务单据已生成但凭证未生成），用户误解"已生单"为已完成；核销需逐条手工操作，效率低
@@ -18,6 +18,7 @@
 | V1.1 | 2026-09-15 | 批1实现：**勘察发现 85 条流水的业务单据已全部 VOUCHERED（凭证 DRAFT），批量核销无对象，范围调整为「状态联动 Bug 修复 + 存量 85 条修正」**。根因：`BusinessDocServiceImpl.generateVoucher` 三处制证落点不回写流水状态。修复：新增 `markDocVouchered()` 统一回写（条件更新幂等）。存量：UPDATE 85 条流水→voucher_generated。测试：BusinessDocServiceImplTest +3 场景（Red 2 fail → Green 39 pass），全量回归 1598 通过 0 Failures |
 | V1.2 | 2026-09-15 | 标签终定：`payment_created` 显示"待制证"（非"待核销"）。理由：系统内"制证"（核算轨：流水→单据→凭证）与"核销"（结算轨：预收预付↔发票勾稽）是两条独立轨道，payment_created 待办在核算轨，"待核销"指向错误轨道 |
 | V1.3 | 2026-09-16 | 新增 scope 状态 Tab（对标 Odoo 待对账/交易）：默认"待处理"（排除已制证/已过账），"已制证"Tab 折叠完成流水，"全部"Tab 查看全量。后端 pageQuery/classificationCounts 支持 scope=pending\|vouchered\|all。commit 8c54bd5 |
+| V1.4 | 2026-09-16 | 批2实现（老丁审批 AAA 决策）：**P2 小额直制证阈值**——`huicai.bank.smallAmountDirectVoucher`(false)+`smallAmountThreshold`(1000.00) @Value 注入；`isSmallAmountDirectVoucher()` 为路由与状态回写共用判定；B 类分支阈值命中转 `generateVoucherDirect`；fallback 补 business_receipt(借1002/贷2203)/business_payment(借1123/贷1002) 分录（与 P12-3/P74 预收预付口径一致）；`doAutoGenerate` 状态修正（直制证落 voucher_generated 而非 payment_created）。**P3 仪表盘提醒**——新增 `GET /pending-settlement-count`（accountId 可选跨账户）；DashboardView 新增"待核销业务单据 N 条"可点卡片跳转 `?reviewStatus=payment_created`；BankStatementView 挂载读取 route.query.reviewStatus。测试：AutoGenerationServiceTest +4 BDD、BankStatementServiceTest +1 状态回写、前端 BankStatementView +1 route.query、DashboardView +3（渲染/失败占位/跳转断言）。全量 1604 通过 0 Failures |
 
 ---
 
