@@ -283,15 +283,19 @@ src/components/
 
 **注意**：移除 OutputInvoice 现有的 `animation: statCardIn` 入场动画（性能/复杂度不必要）。保留 hover 微动效。
 
-### 6.3 图标色板（统一）
+### 6.3 图标色板（已落地 StatCard.vue）
 
-| 用途 | 渐变 | class |
+| 用途 | 渐变背景 | class |
 |---|---|---|
 | 总计/总数 | `#4facfe → #00f2fe` | `icon-total` |
 | 金额（正向） | `#43e97b → #38f9d7` | `icon-blue` |
-| 红字/负向 | `#fa709a → #fee140` | `icon-red` |
-| 警告 | `#ff9a44 → #fc6076` | `icon-warn` |
-| 异常/作废 | `#8e9eab → #5a6a7e` | `icon-void` |
+| 红字金额 | `#fa709a → #fee140` | `icon-red` |
+| 红字数 | `#ff9a44 → #fc6076` | `icon-red-count` |
+| 已冲销 | `#a18cd1 → #fbc2eb` | `icon-reversed` |
+| 已作废 | `#8e9eab → #eef2f3` | `icon-voided` |
+
+> 渐变背景定义在 `StatCard.vue` 的 scoped CSS 中，各页只需传 `iconClass`。
+> 渐变文字效果（OutputInvoice 原有的 `.stat-value { background-clip: text }`）已移除，统一为纯色 `#303133`。
 
 ---
 
@@ -358,11 +362,9 @@ src/components/
 | VoucherList | `views/finance/voucher/VoucherList.vue` | stat-card 改为 `<StatCard>` |
 | ClearDataView / AgencyDashboard | ... | 同上 |
 
-### P4 — 分类标签位置统一
+### P4 — 已取消
 
-| 页面 | 文件 | 操作 |
-|---|---|---|
-| System 模块（Menu/Role/User） | `views/system/.../*.vue` | 将内联在 `<el-form-item>` 中的 el-radio-group 抽出为独立 ③层 |
+> System 模块（Menu/Role/User）中的 `el-radio-group`（正常/停用）是状态筛选条件，属合法过滤项，非数据分类标签，不适用本规范 §7 的分类标签规则。保持内联在 `<el-form-item>` 中。
 
 ---
 
