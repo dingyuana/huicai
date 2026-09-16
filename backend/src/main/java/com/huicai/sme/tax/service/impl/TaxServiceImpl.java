@@ -262,7 +262,7 @@ public class TaxServiceImpl implements TaxService {
         if (StrUtil.isNotBlank(customerName)) {
             wrapper.like(OutputInvoiceEntity::getCustomerName, customerName);
         }
-        if (StrUtil.isNotBlank(period)) {
+        if (startDate == null && endDate == null && StrUtil.isNotBlank(period)) {
             wrapper.eq(OutputInvoiceEntity::getPeriod, period);
         }
         if (StrUtil.isNotBlank(status)) {

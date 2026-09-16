@@ -697,4 +697,29 @@ class TaxServiceImplTest {
         assertTrue(sql.contains(">="), "应含 startDate 下界: " + sql);
         assertTrue(sql.contains("<="), "应含 endDate 上界: " + sql);
     }
+
+    @Test
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    void pageQueryOutput_带日期范围_period条件退让() {
+        // given
+        com.baomidou.mybatisplus.core.metadata.TableInfoHelper.initTableInfo(
+                new org.apache.ibatis.builder.MapperBuilderAssistant(
+                        new com.baomidou.mybatisplus.core.MybatisConfiguration(), ""), OutputInvoiceEntity.class);
+        Page<OutputInvoiceEntity> page = new Page<>(1, 20, 1);
+        page.setRecords(new ArrayList<>());
+        when(outputMapper.selectPage(any(), any())).thenReturn(page);
+
+        // when — 同时传 period 与日期范围（对齐 BusinessDoc 日期优先退让）
+        service.pageQueryOutput(null, "2026-08", null, null, "completed",
+                java.time.LocalDate.of(2026, 1, 1), java.time.LocalDate.of(2026, 8, 31), 1, 20);
+
+        // then — 正向: 日期条件生效
+        ArgumentCaptor<com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper> captor =
+                ArgumentCaptor.forClass(com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper.class);
+        verify(outputMapper).selectPage(any(), captor.capture());
+        String sql = (String) captor.getValue().getSqlSegment();
+        assertTrue(sql.contains("invoice_date"), "日期条件应生效: " + sql);
+        // then — 负向: period 条件退让（有日期时不应用期间过滤）
+        assertFalse(sql.contains("period"), "有日期时 period 应退让: " + sql);
+    }
 }

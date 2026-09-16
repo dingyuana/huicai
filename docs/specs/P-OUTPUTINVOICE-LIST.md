@@ -37,7 +37,8 @@ IPage<OutputInvoiceEntity> pageQueryOutput(String customerName, String period, S
 - scope 为空：不附加状态过滤（保持原行为）
 - scope=pending：`status NOT IN (VOUCHERED, FULLY_RECONCILED, PARTIALLY_RECONCILED, VOIDED, REVERSED)`
 - scope=completed：`status IN` 同上集合
-- startDate/endDate 均不为空时与既有 customerName/period/status/invoiceType 条件 AND 叠加
+- startDate/endDate 与 customerName/status/invoiceType 条件 AND 叠加
+- **period 退让**：与 BusinessDoc 一致，仅当 startDate/endDate 均为空时才应用 period 过滤（日期优先）
 
 ## BDD 验收标准
 
