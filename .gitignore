@@ -57,3 +57,6 @@ ai-service/__pycache__/
 *.doc
 *.pptx
 *.ppt
+
+# Deploy backups (local snapshots, not version-controlled)
+backups/
