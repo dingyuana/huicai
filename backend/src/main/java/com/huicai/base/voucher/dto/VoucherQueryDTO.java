@@ -1,6 +1,7 @@
 package com.huicai.base.voucher.dto;
 
 import lombok.Data;
+import java.time.LocalDate;
 
 /**
  * 凭证查询请求 DTO
@@ -25,6 +26,13 @@ public class VoucherQueryDTO {
 
     /** 溯源单据号过滤 */
     private String sourceDocNo;
+
+    /** 视图范围: pending=待处理(流程未终结), completed=已完成(已制证), 空=全部 */
+    private String scope;
+
+    /** 单据日期范围（覆盖 period，优先使用） */
+    private LocalDate startDate;
+    private LocalDate endDate;
 
     /** 当前页 */
     private Integer current = 1;

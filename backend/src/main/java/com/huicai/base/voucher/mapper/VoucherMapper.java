@@ -10,6 +10,7 @@ import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
 import org.apache.ibatis.annotations.Update;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 
@@ -28,7 +29,10 @@ public interface VoucherMapper extends BaseMapper<VoucherEntity> {
                                            @Param("voucherTypeId") Long voucherTypeId,
                                            @Param("keyword") String keyword,
                                            @Param("voucherNo") String voucherNo,
-                                           @Param("sourceDocNo") String sourceDocNo);
+                                           @Param("sourceDocNo") String sourceDocNo,
+                                           @Param("scope") String scope,
+                                           @Param("startDate") LocalDate startDate,
+                                           @Param("endDate") LocalDate endDate);
 
     /**
      * 查询凭证列表（不分页，用于导出）

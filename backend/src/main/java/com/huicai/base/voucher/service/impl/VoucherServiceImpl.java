@@ -88,7 +88,10 @@ public class VoucherServiceImpl extends ServiceImpl<VoucherMapper, VoucherEntity
                 queryDTO.getVoucherTypeId(),
                 queryDTO.getKeyword(),
                 queryDTO.getVoucherNo(),
-                queryDTO.getSourceDocNo()
+                queryDTO.getSourceDocNo(),
+                queryDTO.getScope(),
+                queryDTO.getStartDate(),
+                queryDTO.getEndDate()
         );
 
         IPage<VoucherVO> voPage = new Page<>(entityPage.getCurrent(), entityPage.getSize(), entityPage.getTotal());

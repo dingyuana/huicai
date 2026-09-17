@@ -26,7 +26,13 @@
         { label: '草稿', value: fmtNum(stats.draftCount || 0) },
       ]" />
 
-      <!-- 分类标签 -->
+      <!-- 分类标签：待处理 / 已完成 -->
+      <el-tabs v-model="scope" class="scope-root-tabs" @tab-change="onScopeChange">
+        <el-tab-pane label="待处理" name="pending" />
+        <el-tab-pane label="已完成" name="completed" />
+      </el-tabs>
+
+      <!-- 分类标签（按状态细分） -->
       <el-radio-group v-model="tabType" style="margin-bottom:12px" @change="onTabChange">
         <el-radio-button value="">全部</el-radio-button>
         <el-radio-button value="DRAFT">草稿 ({{ stats.draftCount || 0 }})</el-radio-button>
@@ -36,6 +42,21 @@
       </el-radio-group>
 
       <el-form :model="query" inline class="filter-form">
+        <template v-if="scope === 'completed'">
+          <el-form-item label="快捷时段">
+            <el-radio-group v-model="quickDate" size="small" @change="onQuickDate">
+              <el-radio-button value="thisMonth">本月</el-radio-button>
+              <el-radio-button value="last3">近3个月</el-radio-button>
+              <el-radio-button value="last6">近6个月</el-radio-button>
+              <el-radio-button value="last12">近12个月</el-radio-button>
+            </el-radio-group>
+          </el-form-item>
+          <el-form-item label="日期范围">
+            <el-date-picker
+              v-model="dateRange" type="daterange" start-placeholder="起" end-placeholder="止"
+              format="YYYY-MM-DD" value-format="YYYY-MM-DD" style="width:240px" @change="onDateRangeChange" />
+          </el-form-item>
+        </template>
         <el-form-item label="期间">
           <el-input v-model="query.period" placeholder="YYYYMM" clearable style="width:120px" />
         </el-form-item>
@@ -64,6 +85,10 @@
         @row-click="goDetail"
         style="cursor:pointer"
       >
+        <template #empty>
+          <el-empty v-if="scope === 'completed' && !dateRange" description="请先选择日期范围（快捷时段或自定义）查询已完成单据" />
+        </template>
+        <el-table-column type="selection" width="48" :selectable="isBatchable" />
         <el-table-column type="selection" width="48" :selectable="isBatchable" />
         <el-table-column prop="voucherNo" label="凭证号" width="160" />
         <el-table-column prop="period" label="期间" width="80" align="center" />
@@ -133,6 +158,9 @@ const loading = ref(false)
 const list = ref<VoucherVO[]>([])
 const total = ref(0)
 const tableRef = ref()
+const scope = ref<'pending' | 'completed'>('pending')
+const quickDate = ref('')
+const dateRange = ref<[string, string] | null>(null)
 
 // P67 统一批量操作：状态矩阵 + every() 启用语义 + 统一结果弹窗
 const BATCH_ACTIONS: BatchActionDef[] = [
@@ -162,6 +190,32 @@ function onBatchAction(key: string) {
 
 // 分类标签
 const tabType = ref('')
+
+// scope 分区控制
+const onScopeChange = () => {
+  query.value.current = 1
+  quickDate.value = ''
+  dateRange.value = null
+  fetchData()
+}
+const onQuickDate = () => {
+  const now = new Date()
+  let start: Date
+  switch (quickDate.value) {
+    case 'thisMonth': start = new Date(now.getFullYear(), now.getMonth(), 1); break
+    case 'last3': start = new Date(now.getFullYear(), now.getMonth() - 3, 1); break
+    case 'last6': start = new Date(now.getFullYear(), now.getMonth() - 6, 1); break
+    case 'last12': start = new Date(now.getFullYear(), now.getMonth() - 12, 1); break
+    default: return
+  }
+  const end = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  dateRange.value = [start.toISOString().slice(0, 10), end.toISOString().slice(0, 10)]
+  fetchData()
+}
+const onDateRangeChange = () => {
+  quickDate.value = ''
+  fetchData()
+}
 
 // 汇总统计
 const stats = reactive({
@@ -206,17 +260,33 @@ function fmtNum(v: number) {
 }
 
 async function fetchData() {
+  // R1：已完成视图必须带日期范围才查询，无日期不发请求并清空列表
+    if (scope.value === 'completed' && !dateRange.value) {
+      list.value = []
+      total.value = 0
+      stats.totalCount = 0; stats.totalDebit = 0; stats.totalCredit = 0
+      stats.draftCount = 0; stats.submittedCount = 0; stats.auditedCount = 0; stats.postedCount = 0
+      return
+    }
   loading.value = true
   try {
     // 分页查询（按当前分类标签过滤）
-    const params = { ...query.value }
+    const params: any = { ...query.value, scope: scope.value }
     if (tabType.value) params.status = tabType.value
+    if (dateRange.value) {
+      params.startDate = dateRange.value[0]
+      params.endDate = dateRange.value[1]
+    }
     const res = await getVoucherPage(params)
     list.value = res.records
     total.value = res.total
 
-    // 统计汇总（无分类过滤查全部，带分类查当前分类）
-    const allParams = { period: query.value.period, keyword: query.value.keyword, current: 1, size: 9999 }
+    // 统计汇总（同受 scope/date 约束，R5）
+    const allParams: any = { period: query.value.period, keyword: query.value.keyword, current: 1, size: 9999, scope: scope.value }
+    if (dateRange.value) {
+      allParams.startDate = dateRange.value[0]
+      allParams.endDate = dateRange.value[1]
+    }
     const allRes = await getVoucherPage(allParams)
     const allRecords = allRes.records || []
     stats.totalCount = allRes.total || 0
@@ -241,6 +311,9 @@ function onSearch() {
 function onReset() {
   query.value = { period: '', status: '', keyword: '', current: 1, size: 20 }
   tabType.value = ''
+  scope.value = 'pending'
+  quickDate.value = ''
+  dateRange.value = null
   fetchData()
 }
 
@@ -309,6 +382,7 @@ async function onUnpost(row: VoucherVO) {
 
 onMounted(async () => {
   query.value.period = await resolveDefaultPeriod()
+  scope.value = 'pending'
   fetchData()
 })
 

@@ -45,6 +45,23 @@
         <if test="voucherNo != null and voucherNo != ''">
             AND v.voucher_no = #{voucherNo}
         </if>
+        <!-- period 退让：仅当 startDate/endDate 均为空时才应用 period 过滤（日期优先） -->
+        <if test="startDate == null and endDate == null and period != null and period != ''">
+            AND v.period = #{period}
+        </if>
+        <!-- scope 过滤 -->
+        <if test="scope == 'completed'">
+            AND v.status IN ('POSTED')
+        </if>
+        <if test="scope == 'pending'">
+            AND v.status NOT IN ('POSTED')
+        </if>
+        <if test="startDate != null">
+            AND v.submitted_at &gt;= #{startDate}
+        </if>
+        <if test="endDate != null">
+            AND v.submitted_at &lt;= #{endDate}
+        </if>
         ORDER BY v.period DESC, v.voucher_no DESC
     </select>
 

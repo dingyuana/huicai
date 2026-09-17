@@ -103,7 +103,7 @@ public class DataIsolationAuditTest extends AbstractMapperTest {
         // 但 Testcontainers 没有 SecurityContext，所以需要通过 Mapper 直接调用
         // 这里验证的是 XML 中已加 AND v.enterprise_id = #{enterpriseId} 条件
         Page<VoucherEntity> page = new Page<>(1, 20);
-        Page<VoucherEntity> result = voucherMapper.selectVoucherPage(page, "202608", null, null, null, null, null);
+        Page<VoucherEntity> result = voucherMapper.selectVoucherPage(page, "202608", null, null, null, null, null, null, null, null);
         assertTrue(result.getRecords().stream().anyMatch(v -> "AUDIT-VCH-A-001".equals(v.getVoucherNo())),
                 "企业A的凭证应该被查到");
         assertTrue(result.getRecords().stream().noneMatch(v -> "AUDIT-VCH-B-001".equals(v.getVoucherNo())),
