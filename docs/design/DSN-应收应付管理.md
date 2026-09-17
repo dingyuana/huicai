@@ -3,7 +3,7 @@
 > **关联PRD**：../prd/业务单据管理-PRD-V1.0.md, ../prd/应收应付核销-PRD-V1.0.md
 > **关联SPEC**：P30-reconciliation-workbench-enhance.md, P36-invoice-reverse-chain.md, P42-reconciliation-frontend.md, P43-bad-debt-provision.md, P51-aging-analysis.md, P52-customer-reconciliation.md, P53-procurement-payment-finance.md, S-28-反核销制证凭证联动作废.md
 > **编号**：HUICAI-DES-003
-> **版本**：V1.4 | **修改日期**：2026-09-11 | **修改人**：Hermes | **修改内容**：补反核销流程（S-28/SPC-111 制证凭证联动作废）与 reverse API
+> **版本**：V1.5 | **修改日期**：2026-09-17 | **修改人**：Hermes | **修改内容**：新增 §8 预收预付余额汇总报表设计（口径对齐 P75，填补 G-3 缺口）
 > 代码包：`com.huicai.module.arap`
 > 设计文档：[项目说明](../CORE-项目说明.md) | [技术方案](../CORE-技术方案.md) | [需求分析](../CORE-需求分析.md)
 
@@ -157,5 +157,73 @@
 | 对传统超越 | ✅ 统一 BusinessDoc、核销工作台统一入口 | |
 | 与传统差距 | 账龄分析前端 | 后端有，前端待完善 |
 || 待开发规范 | — | 所有模块已完成 |
+
+---
+
+## 8. 预收预付余额汇总报表（V1.5 新增，G-3）
+
+**定位**：管理型聚合报表。竞品基线（易代账/金蝶往来余额表）覆盖应收应付（P75），
+预收预付是"贷方余额"，口径对称但方向相反，目前只有单笔 CRUD + 可用余额查询，缺按往来单位的汇总管理视图。
+
+### 8.1 报表口径
+
+| 项 | 定义 |
+|----|------|
+| 数据源 | t_prepayment（含 customer_id / vendor_id / amount / settled_amount / unsettled_amount / status / period） |
+| 统计范围 | 指定期间内的有效预收预付单，`status ∈ (CONFIRMED, VOUCHERED, APPLIED)`（已生效，不含 DRAFT/REVERSED） |
+| 汇总维度 | 按往来单位（预收=客户、预付=供应商），一行一单位 |
+| 金额口径 | 期初未结清 + 本期新增 + 本期抵扣（apply-to-* 流水）+ 期末未结清 |
+| 恒等式 | 期初 + 本期新增 − 本期抵扣 − 本期冲销 = 期末（与 P75 会计恒等式对称） |
+| 导出 | EasyExcel 导出（与 P75 报表中心导出规范一致） |
+
+### 8.2 API 端点
+
+| 端点 | 方法 | 说明 | SPEC |
+|------|------|------|------|
+| /api/sme/arap/v1/prepayment/balance-summary | GET | 预收预付余额汇总（参数：period, party_type=PRE_RECEIPT\|PRE_PAYMENT, party_id） | P78 |
+| /api/sme/arap/v1/prepayment/balance-summary/export | GET | 导出 Excel | P78 |
+
+**响应结构（balance-summary 示意）：**
+
+```json
+{
+  "period": "202609",
+  "partyType": "PRE_RECEIPT",
+  "rows": [
+    {"partyId": 1, "partyName": "华东商贸",
+     "openingUnsettled": 50000.00,
+     "currentCreated": 30000.00,
+     "currentApplied": 20000.00,
+     "currentReversed": 0.00,
+     "closingUnsettled": 60000.00}
+  ],
+  "total": {"openingUnsettled": 120000.00, "currentCreated": 80000.00,
+            "currentApplied": 55000.00, "closingUnsettled": 145000.00},
+  "consistent": true
+}
+```
+
+### 8.3 异常与边界
+
+| 场景 | 处理 |
+|------|------|
+| 期间无有效单据 | 返回空 rows + total 全 0，不报错 |
+| 期初推导 | 同 P75：`openingUnsettled = closingUnsettled − currentCreated + currentApplied + currentReversed` |
+| 已冲销（REVERSED）单据 | 计入本期冲销列，不计入期末余额 |
+| 数据权限 | EnterpriseDataPermissionInterceptor 注入 enterprise_id |
+| 恒等式校验 | consistent=false 时前端高亮告警，不阻止展示 |
+
+### 8.4 与 P75 的关系
+
+P75 处理应收/应付（借方余额：客户欠我们 / 我们欠供应商），
+P78 处理预收/预付（贷方余额：我们欠客户 / 客户欠我们），
+两者共用期间校验工具类、Excel 导出组件、数据权限拦截器，
+但数据源表不同（t_business_doc vs t_prepayment），互不依赖。
+
+## 9. 成熟度与待办（更新）
+
+| 维度 | 状态 | 备注 |
+|------|------|------|
+| 预收预付余额汇总 | ❌ 待开发 | §8 已设计，SPEC P78 待建；口径复用 P75 恒等式逻辑 |
 
 > **文档结束**

@@ -3,7 +3,7 @@
 > **关联PRD**：../prd/固定资产-PRD-V1.0.md
 > **关联SPEC**：S-23-固定资产全生命周期管理.md
 > **编号**：HUICAI-DES-005
-> **版本**：V1.0 | **修改日期**：2026-07-07 | **修改人**：Hermes | **修改内容**：初始创建
+> **版本**：V1.1 | **修改日期**：2026-09-17 | **修改人**：Hermes | **修改内容**：新增 §8 折旧与资产统计报表设计（对齐竞品多维度折旧报表，填补 G-2 缺口）
 > 代码包：`com.huicai.module.asset`
 > 设计文档：[项目说明](../CORE-项目说明.md) | [技术方案](../CORE-技术方案.md) | [需求分析](../CORE-需求分析.md)
 
@@ -79,5 +79,73 @@ DRAFT ──启用──→ IN_USE ──停用──→ STOPPED (兼容 IDLE) �
 | 前端 | ✅ 完整 | 卡片/分类/处置/盘点页面 |
 | 测试 | ⚠️ 刚补齐 | AssetCardMapperTest（8场景），Mock 测试存在 |
 | 对传统覆盖 | ✅ | 直线法+双倍余额递减法均已实现 |
+
+---
+
+## 8. 折旧与资产统计报表（V1.1 新增，G-2）
+
+**定位**：管理型聚合报表。竞品基线（金蝶"多维度折旧报表统计"）能力：按类别/部门看资产家底与折旧进展。
+现状只有单卡片折旧查询（`/{id}/depreciation`），缺"整本资产账"的汇总视图。
+
+### 8.1 报表口径
+
+**报表 A：资产分类汇总**（时点快照）
+
+| 项 | 定义 |
+|----|------|
+| 数据源 | t_asset_card + t_asset_category，`status ∈ (IN_USE, STOPPED)`（未处置资产） |
+| 维度 | 按资产类别（二级展开：类别小计 + 总计行） |
+| 指标 | 资产数量、原值合计、累计折旧合计、净值合计、本期应提折旧、净值率 |
+| 本期应提 | 按各类别默认折旧方法/年限/残值率公式计算（与计提服务同一算法源，不重复实现） |
+
+**报表 B：折旧计提明细汇总**（期间区间）
+
+| 项 | 定义 |
+|----|------|
+| 数据源 | t_asset_depreciation（card_id, period, amount, cumulative） |
+| 维度 | 期间区间内，按 **部门 × 资产类别** 交叉汇总（支持切换单维度） |
+| 指标 | 计提金额合计、涉及资产数、期初累计折旧、期末累计折旧（含恒等式校验：期初+本期=期末） |
+
+### 8.2 API 端点
+
+| 端点 | 方法 | 说明 | SPEC |
+|------|------|------|------|
+| /api/sme/asset/v1/reports/category-summary | GET | 资产分类汇总（参数：period） | P77 |
+| /api/sme/asset/v1/reports/category-summary/export | GET | 导出 Excel | P77 |
+| /api/sme/asset/v1/reports/depreciation-summary | GET | 折旧计提汇总（参数：period_from, period_to, group_by=DEPT\|CATEGORY） | P77 |
+| /api/sme/asset/v1/reports/depreciation-summary/export | GET | 导出 Excel | P77 |
+
+**响应结构（category-summary 示意）：**
+
+```json
+{
+  "period": "202609",
+  "rows": [
+    {"categoryId": 1, "categoryName": "电子设备", "qty": 34, "originalValue": 260000.00,
+     "accumulatedDepreciation": 130000.00, "netValue": 130000.00,
+     "currentDepreciation": 5400.00, "netRatio": 0.50}
+  ],
+  "total": {"qty": 120, "originalValue": 1500000.00, "netValue": 820000.00}
+}
+```
+
+### 8.3 异常与边界
+
+| 场景 | 处理 |
+|------|------|
+| 未计提过折旧的资产 | 报表 B 中不出现；报表 A 的"本期应提"按公式计算，与已计提无关 |
+| 处置资产 | 排除（status=DISPOSED/SCRAPPED 不进入两表） |
+| 期间无折旧记录 | 返回空 rows + total 全 0，不报错 |
+| 数据权限 | EnterpriseDataPermissionInterceptor 注入 enterprise_id |
+
+### 8.4 铁律约束
+
+折旧金额计算是确定性公式，报表只读、不触发任何计提动作（计提仍走 `depreciate/{period}` 人工入口）。
+
+## 9. 成熟度与待办（更新）
+
+| 维度 | 状态 | 备注 |
+|------|------|------|
+| 折旧/资产统计报表 | ❌ 待开发 | §8 已设计，SPEC P77 待建 |
 
 > **文档结束**
