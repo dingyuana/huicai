@@ -46,7 +46,10 @@ public class ArapController {
             @RequestParam(defaultValue = "20") Integer size,
             @RequestParam(required = false) Long customerId,
             @RequestParam(required = false) String period,
-            @RequestParam(required = false) String status) {
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String scope,
+            @RequestParam(required = false) LocalDate startDate,
+            @RequestParam(required = false) LocalDate endDate) {
         BusinessDocQueryDTO query = new BusinessDocQueryDTO();
         query.setCurrent(current);
         query.setSize(size);
@@ -56,6 +59,9 @@ public class ArapController {
         }
         query.setPeriod(period);
         query.setStatus(status);
+        query.setScope(scope);
+        query.setStartDate(startDate);
+        query.setEndDate(endDate);
         return R.ok(docService.pageQuery(query));
     }
 
@@ -66,7 +72,10 @@ public class ArapController {
             @RequestParam(defaultValue = "20") Integer size,
             @RequestParam(required = false) Long vendorId,
             @RequestParam(required = false) String period,
-            @RequestParam(required = false) String status) {
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String scope,
+            @RequestParam(required = false) LocalDate startDate,
+            @RequestParam(required = false) LocalDate endDate) {
         BusinessDocQueryDTO query = new BusinessDocQueryDTO();
         query.setCurrent(current);
         query.setSize(size);
@@ -76,6 +85,9 @@ public class ArapController {
         }
         query.setPeriod(period);
         query.setStatus(status);
+        query.setScope(scope);
+        query.setStartDate(startDate);
+        query.setEndDate(endDate);
         return R.ok(docService.pageQuery(query));
     }
 

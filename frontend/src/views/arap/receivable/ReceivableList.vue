@@ -6,7 +6,28 @@
         <el-alert title="本页聚焦应收款项的回款状态，如需编辑单据请前往「财务核心 → 业务单据」" type="info" :closable="false" size="small" style="margin-bottom:16px" />
       </div>
 
+      <!-- 分类标签：待处理 / 已完成 -->
+      <el-tabs v-model="scope" class="scope-root-tabs" @tab-change="onScopeChange">
+        <el-tab-pane label="待处理" name="pending" />
+        <el-tab-pane label="已完成" name="completed" />
+      </el-tabs>
+
       <el-form :model="query" inline class="filter-form">
+        <template v-if="scope === 'completed'">
+          <el-form-item label="快捷时段">
+            <el-radio-group v-model="quickDate" size="small" @change="onQuickDate">
+              <el-radio-button value="thisMonth">本月</el-radio-button>
+              <el-radio-button value="last3">近3个月</el-radio-button>
+              <el-radio-button value="last6">近6个月</el-radio-button>
+              <el-radio-button value="last12">近12个月</el-radio-button>
+            </el-radio-group>
+          </el-form-item>
+          <el-form-item label="日期范围">
+            <el-date-picker
+              v-model="dateRange" type="daterange" start-placeholder="起" end-placeholder="止"
+              format="YYYY-MM-DD" value-format="YYYY-MM-DD" style="width:240px" @change="onDateRangeChange" />
+          </el-form-item>
+        </template>
         <el-form-item label="客户">
           <el-select v-model="query.customerId" filterable clearable placeholder="全部客户" style="width:200px" @change="fetchData">
             <el-option v-for="c in customers" :key="c.id" :label="c.name" :value="c.id" />
@@ -21,6 +42,9 @@
       </el-form>
 
       <el-table :data="list" v-loading="loading" border :row-class-name="rowClassName">
+        <template #empty>
+          <el-empty v-if="scope === 'completed' && !dateRange" description="请先选择日期范围（快捷时段或自定义）查询已完成单据" />
+        </template>
         <el-table-column label="核销进度" width="110" align="center">
           <template #default="{ row }">
             <el-progress 
@@ -113,6 +137,9 @@ const query = reactive({ customerId: undefined as number | undefined, period: ''
 const list = ref<any[]>([])
 const total = ref(0)
 const loading = ref(false)
+const scope = ref<'pending' | 'completed'>('pending')
+const quickDate = ref('')
+const dateRange = ref<[string, string] | null>(null)
 
 const fmtAmount = (v: any) => Number(v || 0).toFixed(2)
 
@@ -126,17 +153,51 @@ const rowClassName = ({ row }: { row: any }) => {
 }
 
 const fetchData = async () => {
+  if (scope.value === 'completed' && !dateRange.value) {
+    list.value = []
+    total.value = 0
+    return
+  }
   loading.value = true
   try {
-    const params: any = { current: query.current, size: query.size }
+    const params: any = { current: query.current, size: query.size, scope: scope.value }
     if (query.customerId) params.customerId = query.customerId
     if (query.period) params.period = query.period
+    if (dateRange.value) {
+      params.startDate = dateRange.value[0]
+      params.endDate = dateRange.value[1]
+    }
     const res: any = await pageReceivable(params)
     list.value = res.records || []
     total.value = res.total || 0
   } finally {
     loading.value = false
   }
+}
+
+const onScopeChange = () => {
+  query.current = 1
+  quickDate.value = ''
+  dateRange.value = null
+  fetchData()
+}
+const onQuickDate = () => {
+  const now = new Date()
+  let start: Date
+  switch (quickDate.value) {
+    case 'thisMonth': start = new Date(now.getFullYear(), now.getMonth(), 1); break
+    case 'last3': start = new Date(now.getFullYear(), now.getMonth() - 3, 1); break
+    case 'last6': start = new Date(now.getFullYear(), now.getMonth() - 6, 1); break
+    case 'last12': start = new Date(now.getFullYear(), now.getMonth() - 12, 1); break
+    default: return
+  }
+  const end = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  dateRange.value = [start.toISOString().slice(0, 10), end.toISOString().slice(0, 10)]
+  fetchData()
+}
+const onDateRangeChange = () => {
+  quickDate.value = ''
+  fetchData()
 }
 
 // 详情
@@ -154,6 +215,7 @@ const openDetail = async (row: any) => {
 
 onMounted(async () => {
   customers.value = (await listCustomer()) as any[]
+  scope.value = 'pending'
   fetchData()
 })
 </script>
