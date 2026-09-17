@@ -39,7 +39,7 @@ class PrepaymentControllerTest {
     @DisplayName("分页查询预付款_默认参数正确生效")
     void pageQuery_defaultParams_applied() throws Exception {
         IPage<PrepaymentEntity> page = new Page<>(1, 20);
-        when(prepaymentService.pageQuery(isNull(), isNull(), isNull(), eq(1), eq(20))).thenReturn(page);
+        when(prepaymentService.pageQuery(isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), eq(1), eq(20))).thenReturn(page);
 
         mvc.perform(get("/api/sme/arap/v1/prepayment/page"))
                 .andExpect(status().isOk())
@@ -50,12 +50,13 @@ class PrepaymentControllerTest {
     @DisplayName("分页查询预付款_自定义参数正确绑定")
     void pageQuery_customParams_boundCorrectly() throws Exception {
         IPage<PrepaymentEntity> page = new Page<>(2, 50);
-        when(prepaymentService.pageQuery(eq(100L), eq(200L), eq("CONFIRMED"), eq(2), eq(50))).thenReturn(page);
+        when(prepaymentService.pageQuery(eq(100L), eq(200L), eq("CONFIRMED"), eq("completed"), isNull(), isNull(), eq(2), eq(50))).thenReturn(page);
 
         mvc.perform(get("/api/sme/arap/v1/prepayment/page")
                         .param("vendorId", "100")
                         .param("customerId", "200")
                         .param("status", "CONFIRMED")
+                        .param("scope", "completed")
                         .param("current", "2")
                         .param("size", "50"))
                 .andExpect(status().isOk());

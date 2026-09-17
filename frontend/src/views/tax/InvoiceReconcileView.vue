@@ -18,19 +18,31 @@
         <el-tab-pane label="销项发票（按客户）" name="OUTPUT" />
       </el-tabs>
 
+      <el-tabs v-model="scope" class="scope-root-tabs" @tab-change="onScopeChange">
+        <el-tab-pane label="待处理（未付款）" name="pending" />
+        <el-tab-pane label="已完成（已付款/部分）" name="completed" />
+      </el-tabs>
+
       <el-form :model="query" inline class="filter-form">
+        <template v-if="scope === 'completed'">
+          <el-form-item label="快捷时段">
+            <el-radio-group v-model="quickDate" size="small" @change="onQuickDate">
+              <el-radio-button value="thisMonth">本月</el-radio-button>
+              <el-radio-button value="last3">近3个月</el-radio-button>
+              <el-radio-button value="last6">近6个月</el-radio-button>
+              <el-radio-button value="last12">近12个月</el-radio-button>
+            </el-radio-group>
+          </el-form-item>
+          <el-form-item label="开票日期">
+            <el-date-picker v-model="dateRange" type="daterange" start-placeholder="起" end-placeholder="止"
+              format="YYYY-MM-DD" value-format="YYYY-MM-DD" style="width:240px" @change="onDateRangeChange" />
+          </el-form-item>
+        </template>
         <el-form-item label="期间">
           <el-input v-model="query.period" placeholder="YYYYMM" clearable style="width:120px" />
         </el-form-item>
         <el-form-item :label="tabType === 'INPUT' ? '供应商' : '客户'">
           <el-input v-model="query.partyName" clearable style="width:180px" :placeholder="tabType === 'INPUT' ? '供应商名称' : '客户名称'" />
-        </el-form-item>
-        <el-form-item label="勾稽状态">
-          <el-select v-model="query.reconcileStatus" clearable placeholder="全部" style="width:130px">
-            <el-option label="未付款" value="UNPAID" />
-            <el-option label="部分付款" value="PARTIAL" />
-            <el-option label="已付款" value="PAID" />
-          </el-select>
         </el-form-item>
         <el-form-item>
           <el-button type="primary" @click="fetchData">查询</el-button>
@@ -39,6 +51,9 @@
       </el-form>
 
       <el-table :data="list" v-loading="loading" border stripe>
+        <template #empty>
+          <el-empty v-if="scope === 'completed' && !dateRange" description="请先选择日期范围（快捷时段或自定义开票日期）查询已完成勾稽" />
+        </template>
         <el-table-column prop="invoiceNo" label="发票号" width="180" />
         <el-table-column prop="invoiceDate" label="开票日" width="110" />
         <el-table-column :label="tabType === 'INPUT' ? '供应商' : '客户'" min-width="150" show-overflow-tooltip>
@@ -97,6 +112,9 @@ import {
 } from '@/api/modules/tax'
 
 const tabType = ref<'INPUT' | 'OUTPUT'>('INPUT')
+const scope = ref<'pending' | 'completed'>('pending')
+const quickDate = ref('')
+const dateRange = ref<[string, string] | null>(null)
 const loading = ref(false)
 const list = ref<InvoiceReconcileVO[]>([])
 
@@ -119,33 +137,64 @@ function fmtAmount(v: number | undefined) {
 }
 
 async function fetchData() {
+  // R1：已完成视图必须带开票日期范围才查询
+  if (scope.value === 'completed' && !dateRange.value) {
+    list.value = []
+    return
+  }
   loading.value = true
   try {
-    const params: any = {
-      period: query.period || undefined,
-      reconcileStatus: query.reconcileStatus || undefined,
-    }
+    const scoped = scope.value === 'completed' ? ['PAID', 'PARTIAL'] : ['UNPAID']
+    const params: any = { period: query.period || undefined }
     if (query.partyName) {
       if (tabType.value === 'INPUT') params.vendorName = query.partyName
       else params.customerName = query.partyName
     }
-    // 后端按 vendorId/customerId 过滤；此处按名称前端过滤（后端暂不支持名称模糊）
     const res = tabType.value === 'INPUT'
       ? await queryInputReconcile({ period: params.period })
       : await queryOutputReconcile({ period: params.period })
     let data = res || []
-    if (query.partyName) {
-      const kw = query.partyName.trim()
-      data = data.filter((r: InvoiceReconcileVO) =>
-        (tabType.value === 'INPUT' ? r.vendorName : r.customerName)?.includes(kw))
-    }
-    if (params.reconcileStatus) {
-      data = data.filter((r: InvoiceReconcileVO) => r.reconcileStatus === params.reconcileStatus)
+    data = data.filter((r: InvoiceReconcileVO) => r.reconcileStatus && scoped.includes(r.reconcileStatus))
+    if (data.length) {
+      if (query.partyName) {
+        const kw = query.partyName.trim()
+        data = data.filter((r: InvoiceReconcileVO) =>
+          (tabType.value === 'INPUT' ? r.vendorName : r.customerName)?.includes(kw))
+      }
+      if (dateRange.value) {
+        const [s, e] = dateRange.value
+        data = data.filter((r: InvoiceReconcileVO) =>
+          r.invoiceDate && r.invoiceDate >= s && r.invoiceDate <= e)
+      }
     }
     list.value = data
   } finally {
     loading.value = false
   }
+}
+
+function onScopeChange() {
+  quickDate.value = ''
+  dateRange.value = null
+  fetchData()
+}
+function onQuickDate() {
+  const now = new Date()
+  let start: Date
+  switch (quickDate.value) {
+    case 'thisMonth': start = new Date(now.getFullYear(), now.getMonth(), 1); break
+    case 'last3': start = new Date(now.getFullYear(), now.getMonth() - 3, 1); break
+    case 'last6': start = new Date(now.getFullYear(), now.getMonth() - 6, 1); break
+    case 'last12': start = new Date(now.getFullYear(), now.getMonth() - 12, 1); break
+    default: return
+  }
+  const end = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  dateRange.value = [start.toISOString().slice(0, 10), end.toISOString().slice(0, 10)]
+  fetchData()
+}
+function onDateRangeChange() {
+  quickDate.value = ''
+  fetchData()
 }
 
 function onTabChange() {
@@ -156,7 +205,6 @@ function onTabChange() {
 function onReset() {
   query.period = ''
   query.partyName = ''
-  query.reconcileStatus = ''
   fetchData()
 }
 

@@ -63,7 +63,8 @@ public class PrepaymentServiceImpl implements PrepaymentService {
     private final SubjectMapper subjectMapper;
 
     @Override
-    public IPage<PrepaymentEntity> pageQuery(Long vendorId, Long customerId, String status, Integer current, Integer size) {
+    public IPage<PrepaymentEntity> pageQuery(Long vendorId, Long customerId, String status, String scope,
+                                             LocalDate startDate, LocalDate endDate, Integer current, Integer size) {
         Page<PrepaymentEntity> page = new Page<>(
                 current == null ? 1 : current,
                 size == null ? 20 : size
@@ -73,6 +74,13 @@ public class PrepaymentServiceImpl implements PrepaymentService {
                 .eq(customerId != null, PrepaymentEntity::getCustomerId, customerId)
                 .eq(StrUtil.isNotBlank(status), PrepaymentEntity::getStatus, status)
                 .orderByDesc(PrepaymentEntity::getCreatedAt);
+        if (StrUtil.isNotBlank(scope) && "completed".equals(scope)) {
+            wrapper.in(PrepaymentEntity::getStatus, "CONFIRMED");
+        } else if (StrUtil.isNotBlank(scope) && "pending".equals(scope)) {
+            wrapper.notIn(PrepaymentEntity::getStatus, "CONFIRMED");
+        }
+        if (startDate != null) wrapper.ge(PrepaymentEntity::getTxDate, startDate);
+        if (endDate != null) wrapper.le(PrepaymentEntity::getTxDate, endDate);
         return prepaymentMapper.selectPage(page, wrapper);
     }
 

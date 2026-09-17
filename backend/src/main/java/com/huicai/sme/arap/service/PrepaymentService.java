@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.huicai.sme.arap.entity.PrepaymentEntity;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.List;
 
 /**
@@ -18,7 +19,8 @@ import java.util.List;
 public interface PrepaymentService {
 
     /** 分页查询预付款/预收款 */
-    IPage<PrepaymentEntity> pageQuery(Long vendorId, Long customerId, String status, Integer current, Integer size);
+    IPage<PrepaymentEntity> pageQuery(Long vendorId, Long customerId, String status, String scope,
+                                      LocalDate startDate, LocalDate endDate, Integer current, Integer size);
 
     /** 根据 ID 查询 */
     PrepaymentEntity getById(Long id);

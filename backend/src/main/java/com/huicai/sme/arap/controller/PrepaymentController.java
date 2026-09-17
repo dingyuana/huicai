@@ -10,6 +10,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.List;
 
 @Tag(name = "预收/预付管理")
@@ -27,8 +28,11 @@ public class PrepaymentController {
             @RequestParam(required = false) Long customerId,
             @RequestParam(required = false) String status,
             @RequestParam(defaultValue = "1") Integer current,
-            @RequestParam(defaultValue = "20") Integer size) {
-        return R.ok(prepaymentService.pageQuery(vendorId, customerId, status, current, size));
+            @RequestParam(defaultValue = "20") Integer size,
+            @RequestParam(required = false) String scope,
+            @RequestParam(required = false) LocalDate startDate,
+            @RequestParam(required = false) LocalDate endDate) {
+        return R.ok(prepaymentService.pageQuery(vendorId, customerId, status, scope, startDate, endDate, current, size));
     }
 
     @Operation(summary = "查询预付款详情")

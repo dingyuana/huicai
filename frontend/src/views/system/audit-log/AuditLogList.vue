@@ -36,6 +36,9 @@
       </div>
 
       <el-table :data="list" v-loading="loading" border stripe style="width: 100%">
+        <template #empty>
+          <el-empty v-if="!query.startDate && !query.endDate" description="请先选择日期范围（开始/结束日期）查询审计日志" />
+        </template>
         <el-table-column prop="id" label="ID" width="70" />
         <el-table-column prop="username" label="操作人" width="120" />
         <el-table-column prop="module" label="模块" width="100">
@@ -116,6 +119,12 @@ const detailVisible = ref(false)
 const detail = ref<AuditLogVO | null>(null)
 
 async function fetchData() {
+  // R1：审计日志为历史归档视图，必须带日期条件才允许查询
+  if (!query.startDate && !query.endDate) {
+    list.value = []
+    total.value = 0
+    return
+  }
   loading.value = true
   try {
     const params: Record<string, any> = { page: query.page, size: query.size }
@@ -160,7 +169,9 @@ function formatJson(obj: any): string {
   }
 }
 
-onMounted(fetchData)
+onMounted(() => {
+  // 不自动拉全量，带日期条件后由查询按钮触发
+})
 </script>
 
 <style scoped lang="scss">

@@ -6,7 +6,26 @@
         <el-button type="primary" @click="showCreate">新增</el-button>
       </div>
 
+      <el-tabs v-model="scope" class="scope-root-tabs" @tab-change="onScopeChange">
+        <el-tab-pane label="待处理" name="pending" />
+        <el-tab-pane label="已完成" name="completed" />
+      </el-tabs>
+
       <el-form :model="query" inline class="filter-form">
+        <template v-if="scope === 'completed'">
+          <el-form-item label="快捷时段">
+            <el-radio-group v-model="quickDate" size="small" @change="onQuickDate">
+              <el-radio-button value="thisMonth">本月</el-radio-button>
+              <el-radio-button value="last3">近3个月</el-radio-button>
+              <el-radio-button value="last6">近6个月</el-radio-button>
+              <el-radio-button value="last12">近12个月</el-radio-button>
+            </el-radio-group>
+          </el-form-item>
+          <el-form-item label="日期范围">
+            <el-date-picker v-model="dateRange" type="daterange" start-placeholder="起" end-placeholder="止"
+              format="YYYY-MM-DD" value-format="YYYY-MM-DD" style="width:240px" @change="onDateRangeChange" />
+          </el-form-item>
+        </template>
         <el-form-item label="类型">
           <el-select v-model="query.kind" clearable placeholder="全部" style="width:120px">
             <el-option value="RECEIPT" label="预收" />
@@ -24,6 +43,9 @@
       </el-form>
 
       <el-table :data="list" v-loading="loading" border>
+        <template #empty>
+          <el-empty v-if="scope === 'completed' && !dateRange" description="请先选择日期范围（快捷时段或自定义）查询已完成预收/预付" />
+        </template>
         <el-table-column prop="id" label="编号" width="70" />
         <el-table-column label="类型" width="70" align="center">
           <template #default="{ row }">
@@ -138,6 +160,9 @@ const STATUS_MAP = Object.fromEntries(STATUS_OPTIONS.map(o => [o.value, o.label]
 const STATUS_TAG: Record<string, any> = { DRAFT: 'info', CONFIRMED: 'warning', APPLIED: 'success', REVERSED: 'danger' }
 
 const query = reactive({ kind: '', status: '', current: 1, size: 20 })
+const scope = ref<'pending' | 'completed'>('pending')
+const quickDate = ref('')
+const dateRange = ref<[string, string] | null>(null)
 const list = ref<any[]>([])
 const total = ref(0)
 const loading = ref(false)
@@ -182,14 +207,49 @@ function onTypeChange() {
 }
 
 async function fetchData() {
+  if (scope.value === 'completed' && !dateRange.value) {
+    list.value = []
+    total.value = 0
+    return
+  }
   loading.value = true
   try {
-    const res: any = await pagePrepayment(query)
+    const params: any = { ...query, scope: scope.value }
+    if (dateRange.value) {
+      params.startDate = dateRange.value[0]
+      params.endDate = dateRange.value[1]
+    }
+    const res: any = await pagePrepayment(params)
     list.value = res.records || []
     total.value = res.total || 0
   } finally {
     loading.value = false
   }
+}
+
+function onScopeChange() {
+  query.current = 1
+  quickDate.value = ''
+  dateRange.value = null
+  fetchData()
+}
+function onQuickDate() {
+  const now = new Date()
+  let start: Date
+  switch (quickDate.value) {
+    case 'thisMonth': start = new Date(now.getFullYear(), now.getMonth(), 1); break
+    case 'last3': start = new Date(now.getFullYear(), now.getMonth() - 3, 1); break
+    case 'last6': start = new Date(now.getFullYear(), now.getMonth() - 6, 1); break
+    case 'last12': start = new Date(now.getFullYear(), now.getMonth() - 12, 1); break
+    default: return
+  }
+  const end = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  dateRange.value = [start.toISOString().slice(0, 10), end.toISOString().slice(0, 10)]
+  fetchData()
+}
+function onDateRangeChange() {
+  quickDate.value = ''
+  fetchData()
 }
 
 async function doCreate() {
@@ -230,6 +290,7 @@ onMounted(async () => {
     customers.value = (c as any[]).map((x: any) => ({ id: x.id, name: x.name }))
     vendors.value = (v as any[]).map((x: any) => ({ id: x.id, name: x.name }))
   } catch { /* ignore */ }
+  scope.value = 'pending'
   fetchData()
 })
 </script>
