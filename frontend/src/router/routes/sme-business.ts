@@ -114,6 +114,14 @@ const routes: RouteRecordRaw[] = [
     meta: { title: '应收应付余额汇总', permission: 'arap:settlement:list', keepAlive: true },
   },
 
+  // ─── 预收预付余额汇总 (P78) ───
+  {
+    path: 'arap/prepayment-balance-summary',
+    name: 'PrepaymentSummaryView',
+    component: () => import('@/views/arap/balance/PrepaymentSummaryView.vue'),
+    meta: { title: '预收预付余额汇总', permission: 'arap:settlement:list', keepAlive: true },
+  },
+
   // ─── 费用报销（作为 Tab 内嵌在业务单据页）───
   {
     path: 'arap/expense',

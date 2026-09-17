@@ -3,6 +3,8 @@ package com.huicai.sme.arap.controller;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.huicai.common.response.R;
 import com.huicai.sme.arap.entity.PrepaymentEntity;
+import com.huicai.sme.arap.service.PrepaymentBalanceReportService;
+import com.huicai.sme.arap.service.PrepaymentBalanceReportService.PrepaymentBalanceSummaryVO;
 import com.huicai.sme.arap.service.PrepaymentService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -20,6 +22,7 @@ import java.util.List;
 public class PrepaymentController {
 
     private final PrepaymentService prepaymentService;
+    private final PrepaymentBalanceReportService prepaymentBalanceReportService;
 
     @Operation(summary = "分页查询预付款/预收款")
     @GetMapping("/page")
@@ -115,6 +118,15 @@ public class PrepaymentController {
             suggestedOffset = totalPrepayment.min(amount);
         }
         return R.ok(new AvailablePrepaymentVO(hasAvailable, totalPrepayment, suggestedOffset));
+    }
+
+    @Operation(summary = "预收预付余额汇总（P78，贷方往来余额，一行一单位）")
+    @GetMapping("/balance-summary")
+    public R<PrepaymentBalanceSummaryVO> getBalanceSummary(
+            @RequestParam String period,
+            @RequestParam(required = false) String partyType,
+            @RequestParam(required = false) Long partyId) {
+        return R.ok(prepaymentBalanceReportService.getBalanceSummary(period, partyType, partyId));
     }
 
     record AvailablePrepaymentVO(

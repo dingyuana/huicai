@@ -86,11 +86,12 @@ P75 补齐了应收应付（借方：客户欠我们 / 我们欠供应商）的�
 
 **口径定义（对齐代码实证）**：
 
-- **数据源**：`t_prepayment`（`PrepaymentEntity`：`vendorId/customerId/amount/settledAmount/unsettledAmount/status/period`），预收按 `customerId` 分组（`PRE_RECEIPT`），预付按 `vendorId` 分组（`PRE_PAYMENT`）。
-- **本期新增 currentCreated**：`t_prepayment` 按 `period=查询期间`、`status=CONFIRMED`（`PrepaymentServiceImpl.create()` 落 `ArapStatus.CONFIRMED`）聚合 `amount`。
-- **本期抵扣 currentApplied**：`apply-to-payable/receivable` 时 `PrepaymentServiceImpl` 将预收预付单置 `APPLIED` 并生成 `t_arap_settlement`（`ArapStatus.CONFIRMED`）；按结算单 `period=查询期间` 聚合。
-- **本期冲销 currentReversed**：`reverse()` 冲销（`REVERSED`），按原单 `period` 归属聚合。
-- **期末未结清 closingUnsettled**：`status ∈ (CONFIRMED, APPLIED)`（未冲销的有效预收预付单）求和 `unsettledAmount`；`REVERSED` 不计。
+- **数据源**：`t_prepayment`（`PrepaymentEntity`：`vendorId/customerId/amount/settledAmount/unsettledAmount/status/period/txDate`），预收按 `customerId` 分组（`PRE_RECEIPT`），预付按 `vendorId` 分组（`PRE_PAYMENT`）；两侧互不混入。
+- **期间归属（关键）**：`PrepaymentEntity.period` 在 `create()` 未赋值，可能为 null。有效期间 = `period`（非空则用），否则回退 `txDate` 的 `yyyyMM`。所有"本期/期初"列以此有效期间归属。
+- **本期新增 currentCreated**：预收/预付单 `status=CONFIRMED` 且 有效期间=查询期间，聚合 `amount`。
+- **本期抵扣 currentApplied**：`t_arap_settlement` 按 **`settlementNo` 前缀隔离**——预收冲应收前缀 `YS-`（`partyType=CUSTOMER`），预付冲应付前缀 `YF-`（`partyType=VENDOR`）；`status ∈ (CONFIRMED, VOUCHERED)`、`period=查询期间`、`totalAmount>0`，聚合 `totalAmount`。前缀隔离是关键：P75 普通核销单前缀为 `JS/FS`（收款/付款），若不做前缀隔离，P78 会把 P75 已统计的普通核销单重复计入 currentApplied。
+- **本期冲销 currentReversed**：`reverse()` 置 `status=REVERSED`，按单据有效期间（回退 `txDate` 月）归属，聚合 `amount`。
+- **期末未结清 closingUnsettled**：`status ∈ (CONFIRMED, APPLIED)` 且 有效期间 ≤ 查询期间（累计口径，对齐 P75 的 `period ≤` 逻辑）求和 `unsettledAmount`；`REVERSED/DRAFT` 不计。
 - **期初推导**：`openingUnsettled = closingUnsettled − currentCreated + currentApplied + currentReversed`（会计恒等式，对齐 P75；不建冗余快照表）。
 - **恒等式校验**：`openingUnsettled + currentCreated − currentApplied − currentReversed == closingUnsettled`（服务内部断言，`BigDecimal.compareTo`；失败标 `consistent=false` 不阻断）。
 

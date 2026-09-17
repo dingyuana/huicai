@@ -54,3 +54,30 @@ export function getOpenPrepayments(vendorId: number): Promise<Prepayment[]> {
 export function getOpenPrepaymentsForCustomer(customerId: number): Promise<Prepayment[]> {
   return request.get(`/sme/arap/v1/prepayment/open-customer/${customerId}`)
 }
+
+// ===== 预收预付余额汇总 (P78) =====
+export interface PrepaymentBalancePartyVO {
+  partyId: number
+  partyName: string | null
+  openingUnsettled: number
+  currentCreated: number
+  currentApplied: number
+  currentReversed: number
+  closingUnsettled: number
+}
+
+export interface PrepaymentBalanceSummaryVO {
+  period: string
+  partyType: string | null
+  consistent: boolean
+  preReceiptTotal: number
+  prePaymentTotal: number
+  preReceipts: PrepaymentBalancePartyVO[]
+  prePayments: PrepaymentBalancePartyVO[]
+}
+
+export function getPrepaymentBalanceSummary(
+  params: { period: string; partyType?: string; partyId?: number }
+): Promise<PrepaymentBalanceSummaryVO> {
+  return request.get('/sme/arap/v1/prepayment/balance-summary', { params })
+}
