@@ -56,39 +56,40 @@ P75 补齐了应收应付（借方：客户欠我们 / 我们欠供应商）的�
 
 - **触发条件**：`GET /api/sme/arap/v1/prepayment/balance-summary`
 - **必填参数**：`period`（YYYYMM 会计期间，如 `202609`；6 位数字，对齐 P75/代码实证）
-- **可选参数**：`party_type`（`PRE_RECEIPT` 预收=客户 / `PRE_PAYMENT` 预付=供应商）、`party_id`（按单位过滤）
+- **可选参数**：`partyType`（`PRE_RECEIPT` 预收=客户 / `PRE_PAYMENT` 预付=供应商；camelCase，对齐 P75 `@RequestParam` 约定）、`partyId`（按往来单位过滤，PRE_RECEIPT 对应 customerId，PRE_PAYMENT 对应 vendorId）
 - **前置条件**：期间存在；数据权限拦截器自动注入 enterprise_id（铁律#6）
+- **校验顺序（fail fast）**：`requirePeriod` → `normalizePartyType` → `requirePeriodExists`（参数合法性先于查库，避免传非法 partyType 时先被"期间不存在"挡住）
 
 ### 3.2 输出契约
 
 ```jsonc
 {
   "period": "202609",
-  "partyType": "PRE_RECEIPT",
-  "rows": [
+  "partyType": "PRE_RECEIPT",          // 显式指定单侧时回显；null = 两侧都出
+  "consistent": true,
+  "preReceiptTotal": 60000.00,         // 预收侧期末未结清合计（Σ preReceipts.closingUnsettled）
+  "prePaymentTotal": 30000.00,         // 预付侧期末未结清合计（Σ prePayments.closingUnsettled）
+  "preReceipts": [                      // 预收（按客户）；指定 partyType=PRE_PAYMENT 时为空
     {
       "partyId": 1001, "partyName": "华东商贸",
       "openingUnsettled": 50000.00,   // 期初未结清
-      "currentCreated": 30000.00,     // 本期新增（预收/预付单）
-      "currentApplied": 20000.00,     // 本期抵扣（apply-to-payable/receivable）
-      "currentReversed": 0.00,       // 本期冲销（reverse）
+      "currentCreated": 30000.00,     // 本期新增（预收/预付单 amount）
+      "currentApplied": 20000.00,     // 本期抵扣（YS-/YF- 结算单前缀隔离）
+      "currentReversed": 0.00,        // 本期冲销（reverse）
       "closingUnsettled": 60000.00    // 期末未结清
     }
   ],
-  "total": {
-    "openingUnsettled": 120000.00, "currentCreated": 80000.00,
-    "currentApplied": 55000.00, "currentReversed": 10000.00,
-    "closingUnsettled": 135000.00
-  },
-  "consistent": true
+  "prePayments": [ /* 预付（按供应商），结构同 preReceipts；指定 partyType=PRE_RECEIPT 时为空 */ ]
 }
 ```
+
+> 两侧分列对齐 P75 的 `receivables`/`payables` 结构；指定 `partyType` 时仅出对应侧，另一侧列表为空。
 
 **口径定义（对齐代码实证）**：
 
 - **数据源**：`t_prepayment`（`PrepaymentEntity`：`vendorId/customerId/amount/settledAmount/unsettledAmount/status/period/txDate`），预收按 `customerId` 分组（`PRE_RECEIPT`），预付按 `vendorId` 分组（`PRE_PAYMENT`）；两侧互不混入。
 - **期间归属（关键）**：`PrepaymentEntity.period` 在 `create()` 未赋值，可能为 null。有效期间 = `period`（非空则用），否则回退 `txDate` 的 `yyyyMM`。所有"本期/期初"列以此有效期间归属。
-- **本期新增 currentCreated**：预收/预付单 `status=CONFIRMED` 且 有效期间=查询期间，聚合 `amount`。
+- **本期新增 currentCreated**：预收/预付单 `status ∈ (CONFIRMED, APPLIED, REVERSED)`（排除 DRAFT）且 有效期间=查询期间，聚合 `amount`（含当期新建后已被抵扣/冲销的单据——"本期新增"按落库归属，不按当前状态）。
 - **本期抵扣 currentApplied**：`t_arap_settlement` 按 **`settlementNo` 前缀隔离**——预收冲应收前缀 `YS-`（`partyType=CUSTOMER`），预付冲应付前缀 `YF-`（`partyType=VENDOR`）；`status ∈ (CONFIRMED, VOUCHERED)`、`period=查询期间`、`totalAmount>0`，聚合 `totalAmount`。前缀隔离是关键：P75 普通核销单前缀为 `JS/FS`（收款/付款），若不做前缀隔离，P78 会把 P75 已统计的普通核销单重复计入 currentApplied。
 - **本期冲销 currentReversed**：`reverse()` 置 `status=REVERSED`，按单据有效期间（回退 `txDate` 月）归属，聚合 `amount`。
 - **期末未结清 closingUnsettled**：`status ∈ (CONFIRMED, APPLIED)` 且 有效期间 ≤ 查询期间（累计口径，对齐 P75 的 `period ≤` 逻辑）求和 `unsettledAmount`；`REVERSED/DRAFT` 不计。
@@ -111,7 +112,7 @@ t_prepayment（status，ArpStatus 常量）
 |------|------|--------|
 | `period` 缺失或格式非法（非 6 位数字） | `BusinessException`（400，提示期间必填 YYYYMM） | P78_001 |
 | 期间不存在 | `BusinessException`（400，提示创建期间） | P78_002 |
-| `party_type` 非法（非 PRE_RECEIPT/PRE_PAYMENT） | `BusinessException`（400） | P78_003 |
+| `partyType` 非法（非 PRE_RECEIPT/PRE_PAYMENT，null 允许） | `BusinessException`（400） | P78_003 |
 | 恒等式断言失败 | 日志告警 + 返回数据标 `consistent=false`，不阻断 | P78_004（WARN） |
 | 数据隔离 | 拦截器注入 enterprise_id，越权查空 | — |
 
