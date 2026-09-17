@@ -4,11 +4,12 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.huicai.sme.cash.entity.TicketEntity;
 import com.huicai.sme.cash.entity.TicketTransactionEntity;
 
+import java.time.LocalDate;
 import java.util.List;
 
 public interface TicketService {
 
-    IPage<TicketEntity> pageQuery(String ticketType, String status, Integer current, Integer size);
+    IPage<TicketEntity> pageQuery(String ticketType, String status, Integer current, Integer size, String scope, LocalDate startDate, LocalDate endDate);
 
     TicketEntity getById(Long id);
 

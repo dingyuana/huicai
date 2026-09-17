@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.*;
 
 import com.huicai.sme.arap.entity.ExpenseReimbursementEntity;
 import java.util.List;
+import java.time.LocalDate;
 
 @Tag(name = "费用报销单 - P11-2")
 @RestController
@@ -26,8 +27,11 @@ public class ExpenseReimbursementController {
             @RequestParam(required = false) Long employeeId,
             @RequestParam(required = false) String status,
             @RequestParam(defaultValue = "1") Integer current,
-            @RequestParam(defaultValue = "20") Integer size) {
-        return R.ok(service.pageQuery(employeeId, status, current, size));
+            @RequestParam(defaultValue = "20") Integer size,
+            @RequestParam(required = false) String scope,
+            @RequestParam(required = false) LocalDate startDate,
+            @RequestParam(required = false) LocalDate endDate) {
+        return R.ok(service.pageQuery(employeeId, status, current, size, scope, startDate, endDate));
     }
 
     @Operation(summary = "查询全部")

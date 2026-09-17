@@ -5,10 +5,11 @@ import com.huicai.sme.arap.dto.ExpenseReimbursementVO;
 import com.huicai.sme.arap.entity.ExpenseReimbursementEntity;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.List;
 
 public interface ExpenseReimbursementService {
-    IPage<ExpenseReimbursementVO> pageQuery(Long employeeId, String status, Integer current, Integer size);
+    IPage<ExpenseReimbursementVO> pageQuery(Long employeeId, String status, Integer current, Integer size, String scope, LocalDate startDate, LocalDate endDate);
     List<ExpenseReimbursementVO> listAll();
 
     ExpenseReimbursementVO getById(Long id);

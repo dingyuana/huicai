@@ -31,13 +31,21 @@ public class TicketServiceImpl extends ServiceImpl<TicketMapper, TicketEntity>
 
     @Override
     public IPage<TicketEntity> pageQuery(String ticketType, String status,
-                                         Integer current, Integer size) {
+                                         Integer current, Integer size, String scope, LocalDate startDate, LocalDate endDate) {
         Page<TicketEntity> page = new Page<>(current == null ? 1 : current, size == null ? 20 : size);
         LambdaQueryWrapper<TicketEntity> wrapper = new LambdaQueryWrapper<TicketEntity>()
                 .eq(StrUtil.isNotBlank(ticketType), TicketEntity::getTicketType, ticketType)
                 .eq(StrUtil.isNotBlank(status), TicketEntity::getStatus, status)
+                .eq(TicketEntity::getDeleted, 0)
                 .orderByDesc(TicketEntity::getIssueDate)
                 .orderByDesc(TicketEntity::getId);
+        if (StrUtil.isNotBlank(scope) && "completed".equals(scope)) {
+            wrapper.in(TicketEntity::getStatus, "CASHED", "VOIDED");
+        } else if (StrUtil.isNotBlank(scope) && "pending".equals(scope)) {
+            wrapper.notIn(TicketEntity::getStatus, "CASHED", "VOIDED");
+        }
+        if (startDate != null) wrapper.ge(TicketEntity::getIssueDate, startDate);
+        if (endDate != null) wrapper.le(TicketEntity::getIssueDate, endDate);
         return baseMapper.selectPage(page, wrapper);
     }
 

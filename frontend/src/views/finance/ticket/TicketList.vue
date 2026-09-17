@@ -2,8 +2,27 @@
   <div class="ticket-page">
     <el-card shadow="never">
       <div class="page-header"><span class="page-title">票据管理</span></div>
+      <!-- 分类标签：待处理 / 已完成 -->
+      <el-tabs v-model="scope" class="scope-root-tabs" @tab-change="onScopeChange">
+        <el-tab-pane label="待处理" name="pending" />
+        <el-tab-pane label="已完成" name="completed" />
+      </el-tabs>
       <div class="toolbar">
         <el-form :model="query" inline>
+          <template v-if="scope === 'completed'">
+            <el-form-item label="快捷时段">
+              <el-radio-group v-model="quickDate" size="small" @change="onQuickDate">
+                <el-radio-button value="thisMonth">本月</el-radio-button>
+                <el-radio-button value="last3">近3个月</el-radio-button>
+                <el-radio-button value="last6">近6个月</el-radio-button>
+                <el-radio-button value="last12">近12个月</el-radio-button>
+              </el-radio-group>
+            </el-form-item>
+            <el-form-item label="日期范围">
+              <el-date-picker v-model="dateRange" type="daterange" start-placeholder="起" end-placeholder="止"
+                format="YYYY-MM-DD" value-format="YYYY-MM-DD" style="width:240px" @change="onDateRangeChange" />
+            </el-form-item>
+          </template>
           <el-form-item label="类型"><el-select v-model="query.ticketType" placeholder="全部" style="width:130px" @change="fetchData">
             <el-option label="全部" value="" /><el-option label="支票" value="CHECK" /><el-option label="汇票" value="DRAFT" />
             <el-option label="本票" value="CASHIER_CHECK" /><el-option label="银行承兑" value="BANK_ACCEPTANCE" />
@@ -17,6 +36,9 @@
         <el-button type="primary" @click="openCreate">新增票据</el-button>
       </div>
       <el-table :data="list" v-loading="loading" border stripe style="width:100%">
+        <template #empty>
+          <el-empty v-if="scope === 'completed' && !dateRange" description="请先选择日期范围（快捷时段或自定义）查询已完成票据" />
+        </template>
         <el-table-column prop="ticketNo" label="票据编号" width="140" />
         <el-table-column prop="ticketType" label="类型" width="100">
           <template #default="{row}">{{ ({CHECK:'支票',DRAFT:'汇票',CASHIER_CHECK:'本票',BANK_ACCEPTANCE:'银行承兑'} as any)[row.ticketType]||row.ticketType }}</template>
@@ -83,14 +105,52 @@ import { ElMessage } from 'element-plus'
 const loading = ref(false), saving = ref(false), dialogVisible = ref(false), txDialog = ref(false)
 const list = ref<any[]>([]), total = ref(0), transactions = ref<any[]>([])
 const query = ref({ ticketType: '', status: '', current: 1, size: 20 })
+const scope = ref<'pending' | 'completed'>('pending')
+const quickDate = ref('')
+const dateRange = ref<[string, string] | null>(null)
 const form = ref({ ticketNo: '', ticketType: 'CHECK', amount: 0, issueDate: null, expireDate: null, payee: '', drawer: '', remark: '' })
 
 async function fetchData() {
+  // R1：已完成视图必须带日期范围才查询
+  if (scope.value === 'completed' && !dateRange.value) {
+    list.value = []; total.value = 0
+    return
+  }
   loading.value = true
   try {
-    const res: any = await request.get('/sme/cash/v1/tickets/page', { params: query.value })
+    const params: any = { ...query.value, scope: scope.value }
+    if (dateRange.value) {
+      params.startDate = dateRange.value[0]
+      params.endDate = dateRange.value[1]
+    }
+    const res: any = await request.get('/sme/cash/v1/tickets/page', { params })
     list.value = res.records; total.value = res.total
   } finally { loading.value = false }
+}
+
+function onScopeChange() {
+  query.value.current = 1
+  quickDate.value = ''
+  dateRange.value = null
+  fetchData()
+}
+function onQuickDate() {
+  const now = new Date()
+  let start: Date
+  switch (quickDate.value) {
+    case 'thisMonth': start = new Date(now.getFullYear(), now.getMonth(), 1); break
+    case 'last3': start = new Date(now.getFullYear(), now.getMonth() - 3, 1); break
+    case 'last6': start = new Date(now.getFullYear(), now.getMonth() - 6, 1); break
+    case 'last12': start = new Date(now.getFullYear(), now.getMonth() - 12, 1); break
+    default: return
+  }
+  const end = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  dateRange.value = [start.toISOString().slice(0, 10), end.toISOString().slice(0, 10)]
+  fetchData()
+}
+function onDateRangeChange() {
+  quickDate.value = ''
+  fetchData()
 }
 
 function openCreate() {

@@ -53,13 +53,13 @@ class ExpenseReimbursementControllerTest {
     void page_optionalParams_useDefaults() throws Exception {
         // given
         IPage<ExpenseReimbursementVO> page = new Page<>(1, 20);
-        when(service.pageQuery(isNull(), isNull(), eq(1), eq(20))).thenReturn(page);
+        when(service.pageQuery(isNull(), isNull(), eq(1), eq(20), isNull(), isNull(), isNull())).thenReturn(page);
 
         // when & then - 不传任何可选参数
         mvc.perform(get("/api/sme/arap/v1/expense-reimbursements/page"))
                 .andExpect(status().isOk());
 
-        verify(service).pageQuery(isNull(), isNull(), eq(1), eq(20));
+        verify(service).pageQuery(isNull(), isNull(), eq(1), eq(20), isNull(), isNull(), isNull());
     }
 
     @Test
@@ -67,17 +67,18 @@ class ExpenseReimbursementControllerTest {
     void page_allParams_boundCorrectly() throws Exception {
         // given
         IPage<ExpenseReimbursementVO> page = new Page<>(2, 50);
-        when(service.pageQuery(eq(10L), eq("APPROVED"), eq(2), eq(50))).thenReturn(page);
+        when(service.pageQuery(eq(10L), eq("APPROVED"), eq(2), eq(50), eq("completed"), isNull(), isNull())).thenReturn(page);
 
         // when & then
         mvc.perform(get("/api/sme/arap/v1/expense-reimbursements/page")
                         .param("employeeId", "10")
                         .param("status", "APPROVED")
                         .param("current", "2")
-                        .param("size", "50"))
+                        .param("size", "50")
+                        .param("scope", "completed"))
                 .andExpect(status().isOk());
 
-        verify(service).pageQuery(eq(10L), eq("APPROVED"), eq(2), eq(50));
+        verify(service).pageQuery(eq(10L), eq("APPROVED"), eq(2), eq(50), eq("completed"), isNull(), isNull());
     }
 
     @Test

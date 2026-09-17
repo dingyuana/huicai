@@ -56,7 +56,7 @@ class ExpenseReimbursementRestContractTest {
 
     @Test @DisplayName("GET /page — 分页")
     void page() throws Exception {
-        when(service.pageQuery(any(), any(), anyInt(), anyInt())).thenReturn(null);
+        when(service.pageQuery(any(), any(), anyInt(), anyInt(), any(), any(), any())).thenReturn(null);
         mvc.perform(get(BASE + "/page").param("current", "1").param("size", "10").contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.code").value(200));
     }

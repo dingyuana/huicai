@@ -51,7 +51,7 @@ public class ExpenseReimbursementServiceImpl implements ExpenseReimbursementServ
     private final DeptMapper deptMapper;
 
     @Override
-    public IPage<ExpenseReimbursementVO> pageQuery(Long employeeId, String status, Integer current, Integer size) {
+    public IPage<ExpenseReimbursementVO> pageQuery(Long employeeId, String status, Integer current, Integer size, String scope, LocalDate startDate, LocalDate endDate) {
         Page<ExpenseReimbursementEntity> page = new Page<>(
                 current == null ? 1 : current,
                 size == null ? 20 : size
@@ -59,6 +59,13 @@ public class ExpenseReimbursementServiceImpl implements ExpenseReimbursementServ
         LambdaQueryWrapper<ExpenseReimbursementEntity> wrapper = new LambdaQueryWrapper<>();
         if (employeeId != null) wrapper.eq(ExpenseReimbursementEntity::getApplicantId, employeeId);
         if (StrUtil.isNotBlank(status)) wrapper.eq(ExpenseReimbursementEntity::getStatus, status);
+        if (StrUtil.isNotBlank(scope) && "completed".equals(scope)) {
+            wrapper.in(ExpenseReimbursementEntity::getStatus, "VOUCHERED", "APPROVED");
+        } else if (StrUtil.isNotBlank(scope) && "pending".equals(scope)) {
+            wrapper.notIn(ExpenseReimbursementEntity::getStatus, "VOUCHERED", "APPROVED");
+        }
+        if (startDate != null) wrapper.ge(ExpenseReimbursementEntity::getCreatedAt, startDate.atStartOfDay());
+        if (endDate != null) wrapper.le(ExpenseReimbursementEntity::getCreatedAt, endDate.atTime(23, 59, 59));
         wrapper.orderByDesc(ExpenseReimbursementEntity::getCreatedAt);
         IPage<ExpenseReimbursementEntity> entityPage = mapper.selectPage(page, wrapper);
 

@@ -6,7 +6,27 @@
         <el-button type="primary" @click="$router.push('/arap/expense/edit')">新增报销</el-button>
       </div>
 
+      <!-- 分类标签：待处理 / 已完成 -->
+      <el-tabs v-model="scope" class="scope-root-tabs" @tab-change="onScopeChange">
+        <el-tab-pane label="待处理" name="pending" />
+        <el-tab-pane label="已完成" name="completed" />
+      </el-tabs>
+
       <el-form :model="query" inline class="filter-form">
+        <template v-if="scope === 'completed'">
+          <el-form-item label="快捷时段">
+            <el-radio-group v-model="quickDate" size="small" @change="onQuickDate">
+              <el-radio-button value="thisMonth">本月</el-radio-button>
+              <el-radio-button value="last3">近3个月</el-radio-button>
+              <el-radio-button value="last6">近6个月</el-radio-button>
+              <el-radio-button value="last12">近12个月</el-radio-button>
+            </el-radio-group>
+          </el-form-item>
+          <el-form-item label="日期范围">
+            <el-date-picker v-model="dateRange" type="daterange" start-placeholder="起" end-placeholder="止"
+              format="YYYY-MM-DD" value-format="YYYY-MM-DD" style="width:240px" @change="onDateRangeChange" />
+          </el-form-item>
+        </template>
         <el-form-item label="员工">
           <el-select v-model="query.employeeId" filterable clearable placeholder="按工号/姓名搜索" style="width:150px">
             <el-option v-for="e in employees" :key="e.id" :value="e.id as number" :label="`${e.code} ${e.name}`" />
@@ -23,6 +43,9 @@
       </el-form>
 
       <el-table :data="list" v-loading="loading" border>
+        <template #empty>
+          <el-empty v-if="scope === 'completed' && !dateRange" description="请先选择日期范围（快捷时段或自定义）查询已完成单据" />
+        </template>
         <el-table-column prop="id" label="编号" width="70" />
         <el-table-column label="员工" width="140">
           <template #default="{ row }">{{ row.employeeName || employeeLabel(row.employeeId) }}</template>
@@ -95,6 +118,9 @@ const list = ref<any[]>([])
 const total = ref(0)
 const loading = ref(false)
 const employees = ref<Employee[]>([])
+const scope = ref<"pending" | "completed">("pending")
+const quickDate = ref("")
+const dateRange = ref<[string, string] | null>(null)
 
 const employeeLabel = (id?: number) => {
   const e = employees.value.find((x) => x.id === id)
@@ -109,17 +135,54 @@ onMounted(async () => {
   } catch {
     /* 员工列表加载失败不阻塞列表 */
   }
+  scope.value = 'pending'
+  fetchData()
 })
 
 const fetchData = async () => {
+  if (scope.value === 'completed' && !dateRange.value) {
+    list.value = []
+    total.value = 0
+    return
+  }
   loading.value = true
   try {
-    const res: any = await pageExpense(query)
+    const params: any = { ...query, scope: scope.value }
+    if (dateRange.value) {
+      params.startDate = dateRange.value[0]
+      params.endDate = dateRange.value[1]
+    }
+    const res: any = await pageExpense(params)
     list.value = res.records || []
     total.value = res.total || 0
   } finally {
     loading.value = false
   }
+}
+
+const onScopeChange = () => {
+  query.current = 1
+  quickDate.value = ''
+  dateRange.value = null
+  fetchData()
+}
+const onQuickDate = () => {
+  const now = new Date()
+  let start: Date
+  switch (quickDate.value) {
+    case 'thisMonth': start = new Date(now.getFullYear(), now.getMonth(), 1); break
+    case 'last3': start = new Date(now.getFullYear(), now.getMonth() - 3, 1); break
+    case 'last6': start = new Date(now.getFullYear(), now.getMonth() - 6, 1); break
+    case 'last12': start = new Date(now.getFullYear(), now.getMonth() - 12, 1); break
+    default: return
+  }
+  const end = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  dateRange.value = [start.toISOString().slice(0, 10), end.toISOString().slice(0, 10)]
+  fetchData()
+}
+const onDateRangeChange = () => {
+  quickDate.value = ''
+  fetchData()
 }
 
 const onSubmit = async (row: any) => {
@@ -147,7 +210,6 @@ const onAutoVoucher = async (row: any) => {
   fetchData()
 }
 
-onMounted(fetchData)
 </script>
 <style scoped>
 .page-header { display:flex; justify-content:space-between; margin-bottom:16px; }

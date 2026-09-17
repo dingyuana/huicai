@@ -11,6 +11,7 @@ import com.huicai.base.system.util.SecurityUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDate;
 import java.util.List;
 
 @Tag(name = "票据管理")
@@ -27,8 +28,11 @@ public class TicketController {
             @RequestParam(required = false) String ticketType,
             @RequestParam(required = false) String status,
             @RequestParam(defaultValue = "1") Integer current,
-            @RequestParam(defaultValue = "20") Integer size) {
-        return R.ok(ticketService.pageQuery(ticketType, status, current, size));
+            @RequestParam(defaultValue = "20") Integer size,
+            @RequestParam(required = false) String scope,
+            @RequestParam(required = false) LocalDate startDate,
+            @RequestParam(required = false) LocalDate endDate) {
+        return R.ok(ticketService.pageQuery(ticketType, status, current, size, scope, startDate, endDate));
     }
 
     @Operation(summary = "查询详情")
