@@ -164,3 +164,97 @@ export function completeAssetInventory(id: number): Promise<AssetInventory> {
 export function deleteAssetInventory(id: number): Promise<void> {
   return request.delete(`/sme/asset/v1/asset-inventories/${id}`)
 }
+
+// ─── P77 折旧与资产统计报表 ───
+
+export type AssetReportGroupBy = 'CATEGORY' | 'DEPT' | 'DEPT_CATEGORY'
+
+export interface AssetCategorySummaryRowVO {
+  categoryId: number
+  categoryName: string
+  qty: number
+  originalValue: number | null
+  accumulatedDepreciation: number | null
+  netValue: number | null
+  currentDepreciation: number | null
+  netRatio: number | null
+}
+
+export interface AssetCategorySummaryVO {
+  period: string
+  rows: AssetCategorySummaryRowVO[]
+  totalQty: number
+  totalOriginalValue: number | null
+  totalNetValue: number | null
+}
+
+export interface AssetDepreciationRowVO {
+  dimKey: string
+  deptId: number | null
+  deptName: string
+  categoryId: number | null
+  categoryName: string
+  assetCount: number
+  depreciated: number | null
+  openingAccumulated: number | null
+  closingAccumulated: number | null
+}
+
+export interface AssetDepreciationSummaryVO {
+  periodFrom: string
+  periodTo: string
+  groupBy: AssetReportGroupBy
+  rows: AssetDepreciationRowVO[]
+  totalDepreciated: number | null
+  consistent: boolean
+}
+
+export function getAssetCategorySummary(params: { period: string; categoryId?: number }): Promise<AssetCategorySummaryVO> {
+  return request.get('/sme/asset/v1/asset-reports/category-summary', { params })
+}
+
+export function getAssetDepreciationSummary(params: {
+  periodFrom: string
+  periodTo: string
+  groupBy?: AssetReportGroupBy
+}): Promise<AssetDepreciationSummaryVO> {
+  return request.get('/sme/asset/v1/asset-reports/depreciation-summary', { params })
+}
+
+export function exportAssetCategorySummary(params: { period: string; categoryId?: number }): Promise<void> {
+  return request.get('/sme/asset/v1/asset-reports/category-summary/export', {
+    params,
+    responseType: 'blob',
+  }).then((res: any) => {
+    const blob = new Blob([res], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `资产分类汇总_${params.period}.xlsx`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  })
+}
+
+export function exportAssetDepreciationSummary(params: {
+  periodFrom: string
+  periodTo: string
+  groupBy?: AssetReportGroupBy
+}): Promise<void> {
+  return request.get('/sme/asset/v1/asset-reports/depreciation-summary/export', {
+    params,
+    responseType: 'blob',
+  }).then((res: any) => {
+    const blob = new Blob([res], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `折旧计提汇总_${params.periodFrom}-${params.periodTo}.xlsx`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  })
+}

@@ -46,10 +46,10 @@
 
 | # | 优先级 | 改动 | 文件 | 风险 | 状态 |
 |---|--------|------|------|------|------|
-| 1 | P0 | 资产分类汇总端点 `GET /api/sme/asset/v1/reports/category-summary`（类别 × 数量/原值/累计折旧/净值/本期应提/净值率） | `AssetReportController`（新建）+ `AssetCategorySummaryVO` + Service 聚合 | ✅ 低（纯聚合） | 📝 待开发 |
-| 2 | P0 | 折旧计提汇总端点 `GET /api/sme/asset/v1/reports/depreciation-summary`（期间区间 × 部门×类别） | 同上 | ✅ 低 | 📝 待开发 |
-| 3 | P0 | 两表 Excel 导出（`/export`） | 同上 | ✅ 低 | 📝 待开发 |
-| 4 | P0 | 前端资产统计视图（分类汇总 + 折旧统计 + 导出） | `frontend/src/views/asset/report/AssetStatView.vue` | ✅ 低 | 📝 待开发 |
+| 1 | P0 | 资产分类汇总端点 `GET /api/sme/asset/v1/asset-reports/category-summary`（类别 × 数量/原值/累计折旧/净值/本期已提/净值率） | `AssetReportController`（新建）+ `AssetCategorySummaryVO` + `AssetReportService` 聚合 | ✅ 低（纯聚合） | ✅ 已完成 |
+| 2 | P0 | 折旧计提汇总端点 `GET /api/sme/asset/v1/asset-reports/depreciation-summary`（期间区间 × 部门/类别/部门+类别） | 同上 | ✅ 低 | ✅ 已完成 |
+| 3 | P0 | 两表 Excel 导出（`/export`，hutool ExcelUtil） | 同上 | ✅ 低 | ✅ 已完成 |
+| 4 | P0 | 前端资产统计视图（分类汇总 + 折旧统计 + 导出） | `frontend/src/views/asset/AssetReportView.vue` | ✅ 低 | ✅ 已完成 |
 
 ---
 
@@ -57,15 +57,17 @@
 
 ### 3.1 输入契约
 
-**报表 A（资产分类汇总）**：`GET /api/sme/asset/v1/reports/category-summary`
-- **必填**：`period`（YYYYMM，本期应提折旧的计提期）
-- **可选**：`category_id`（按类别过滤）
+**报表 A（资产分类汇总）**：`GET /api/sme/asset/v1/asset-reports/category-summary`
+- **必填**：`period`（YYYYMM，本期已提折旧的计提期）
+- **可选**：`categoryId`（按类别过滤）
 - 前置：数据权限拦截器注入 enterprise_id（铁律#6）
 
-**报表 B（折旧计提汇总）**：`GET /api/sme/asset/v1/reports/depreciation-summary`
-- **必填**：`period_from`、`period_to`（YYYYMM 区间，`period_from ≤ period_to`）
-- **可选**：`group_by`（`CATEGORY` 默认 / `DEPT` / `DEPT_CATEGORY` 交叉）
+**报表 B（折旧计提汇总）**：`GET /api/sme/asset/v1/asset-reports/depreciation-summary`
+- **必填**：`periodFrom`、`periodTo`（YYYYMM 区间，`periodFrom ≤ periodTo`）
+- **可选**：`groupBy`（`CATEGORY` 默认 / `DEPT` / `DEPT_CATEGORY` 交叉）
 - 前置：同上
+
+**导出**：`GET /api/sme/asset/v1/asset-reports/category-summary/export`、`GET /api/sme/asset/v1/asset-reports/depreciation-summary/export`（参数同上，hutool ExcelUtil 流式下载）
 
 ### 3.2 输出契约
 
@@ -79,7 +81,7 @@
       "originalValue": 260000.00, "accumulatedDepreciation": 130000.00,
       "netValue": 130000.00, "currentDepreciation": 5400.00, "netRatio": 0.50 }
   ],
-  "total": { "qty": 120, "originalValue": 1500000.00, "netValue": 820000.00 }
+  "totalQty": 120, "totalOriginalValue": 1500000.00, "totalNetValue": 820000.00
 }
 ```
 
@@ -89,27 +91,29 @@
 {
   "periodFrom": "202601", "periodTo": "202606", "groupBy": "DEPT_CATEGORY",
   "rows": [
-    { "dimKey": "研发部/电子设备", "deptId": 2, "deptName": "研发部",
+    { "dimKey": "2|1", "deptId": 2, "deptName": "研发部",
       "categoryId": 1, "categoryName": "电子设备",
       "assetCount": 20, "depreciated": 45000.00,
       "openingAccumulated": 90000.00, "closingAccumulated": 135000.00 }
   ],
-  "total": { "depreciated": 210000.00 }, "consistent": true
+  "totalDepreciated": 210000.00, "consistent": true
 }
 ```
 
+> `dimKey` 为分组键（`DEPT` 维度=deptId、`CATEGORY` 维度=categoryId、`DEPT_CATEGORY` 维度=`deptId|categoryId`），`deptName/categoryName` 为前端展示名（CATEGORY/DEPT 单维度下另一字段为 `-`）。
+
 **口径定义（对齐代码实证）**：
 
-- **报表 A 范围**：`t_asset_card` `status ∈ (IN_USE, STOPPED)`（未处置资产，排除 DISPOSED/SCRAPPED/DRAFT），按 `categoryId` 分组。
+- **报表 A 范围**：`t_asset_card` `status ∈ (IN_USE, IDLE/STOPPED)`（未处置资产，排除 DISPOSED/SCRAPPED/DRAFT，负向集合 `EXCLUDED`），按 `categoryId` 分组。
   - `originalValue` = Σ 卡片原值；`accumulatedDepreciation` = Σ 卡片累计折旧；`netValue` = Σ 卡片净值；
-  - `currentDepreciation` = 该类别卡片在 `period` 的应提折旧，**复用计提服务同一算法源**（直线法/双倍余额递减法），不重复实现公式；
+  - `currentDepreciation` = 该类别卡片在 `period` 的**已计提**折旧合计（读 `t_asset_depreciation` 该期间 `depreciationAmount` 之和；未跑 `depreciatePeriod` 的期间为 0）——报表只读不代计提（铁律#1），不复用计提算法源；
   - `netRatio` = netValue / originalValue（originalValue=0 返回 null）。
-- **报表 B 范围**：`t_asset_depreciation` 期间区间内记录，按 `group_by` 分组（部门取 `t_asset_card.deptId`，类别取 `categoryId`）；
-  - `depreciated` = Σ 区间内 `depreciationAmount`；`assetCount` = 去重资产数；
-  - `openingAccumulated` = 区间前一期累计折旧（取 `period_from` 前一个月的 `accumulatedDepreciation`，无则 0）；`closingAccumulated` = `period_to` 末累计折旧。
-- **恒等式**：`openingAccumulated + depreciated == closingAccumulated`（每行校验，`BigDecimal.compareTo`；失败标 `consistent=false`）。
+- **报表 B 范围**：有效卡片的 `t_asset_depreciation` 流水，按 `groupBy` 分组（部门取 `t_asset_card.deptId`，类别取 `categoryId`）；
+  - `depreciated` = Σ 区间内 `depreciationAmount`（`periodFrom ≤ period ≤ periodTo`）；`assetCount` = 该维度下资产卡片数；
+  - `openingAccumulated` = 每资产取 `period < periodFrom` 最大 period 的 `accumulatedDepreciation`（无则 0）；`closingAccumulated` = 取 `period ≤ periodTo` 最大 period 的累计（无则卡片当前 `accumulatedDepreciation`）。
+- **恒等式**：`openingAccumulated + depreciated == closingAccumulated`（每行 `BigDecimal.compareTo` 校验；失败标 `consistent=false`，不阻断）。
 - **金额**：全部 `BigDecimal`（铁律#7）。
-- **导出**：EasyExcel，列同上 + 合计行。
+- **导出**：hutool `ExcelUtil`（对齐既有报表中心 `ReportServiceImpl.writeCellValue` 模式，非 EasyExcel），列同报表 + null 单元格写空串。
 
 ### 3.3 状态流转（数据口径，非状态机）
 
@@ -126,14 +130,15 @@ t_asset_card（status，只读纳入口径）
 
 | 场景 | 处理 | 错误码 |
 |------|------|--------|
-| `period`/`period_from`/`period_to` 缺失或格式非法（非 6 位） | `BusinessException`（400） | P77_001 |
-| 报表 B `period_from > period_to` | `BusinessException`（400） | P77_002 |
-| `group_by` 非法 | `BusinessException`（400） | P77_003 |
-| 类别/期间无数据 | 返回空 rows + total 全 0，不报错 | — |
-| 恒等式断言失败 | 日志告警 + 返回标 `consistent=false`，不阻断 | P77_004（WARN） |
-| 数据隔离 | 拦截器注入 enterprise_id | — |
+| `period`/`periodFrom`/`periodTo` 缺失或格式非法（非 6 位） | `BusinessException.badRequest`（400） | P77_001 |
+| 报表 B `periodFrom > periodTo` | `BusinessException.badRequest`（400） | P77_004 |
+| `groupBy` 非法 | `BusinessException.badRequest`（400） | P77_003 |
+| 类别/期间无数据 | 返回空 rows + 合计 0，不报错 | — |
+| 恒等式不成立 | 返回标 `consistent=false`（行仍完整），不阻断、不告警 | — |
+| 导出 Excel 写流失败 | `BusinessException`（500） | P77_006 |
+| 数据隔离 | 拦截器注入 enterprise_id（t_asset_* 继承 BaseEntity） | — |
 
-**事务**：纯聚合只读，无写操作，不加 `@Transactional`。
+**事务**：纯聚合只读，服务方法标 `@Transactional(readOnly = true)`（无写操作）。
 
 ---
 
@@ -148,29 +153,29 @@ Then 该行 qty=2, originalValue=30000.00, accumulatedDepreciation=15000.00, net
 And 负向断言：DISPOSED 卡片不计入（qty=2 而非 3）
 ```
 
-### 场景 2：本期应提复用计提算法（L1，Service 纯逻辑）
+### 场景 2：本期已提读已计提结果（L1，Service 纯逻辑）
 
 ```gherkin
-Given 一张 IN_USE 卡片（原值 10000，残值 1000，年限 5，直线法，已提 1 期）
-When 查询该卡片 currentDepreciation
-Then 与 计提服务 depreciate 算出的单期金额一致（同一算法源，不另写公式）
+Given 一张 IN_USE 卡片，t_asset_depreciation 在 202609 有一条 depreciationAmount=5400
+When 查询 category-summary?period=202609 该卡片所属类别
+Then currentDepreciation=5400.00（读已计提流水，不重算；未跑计提的期间该值为 0）
 ```
 
 ### 场景 3：折旧计提汇总恒等式（L2 集成，🟡 数据口径）
 
 ```gherkin
 Given 研发部/电子设备 类别在 202601-202606 计提 45000，期初累计折旧 90000
-When 查询 depreciation-summary?period_from=202601&period_to=202606&group_by=DEPT_CATEGORY
+When 查询 depreciation-summary?periodFrom=202601&periodTo=202606&groupBy=DEPT_CATEGORY
 Then 该行 openingAccumulated=90000.00, depreciated=45000.00, closingAccumulated=135000.00
-And openingAccumulated + depreciated == closingAccumulated
+And openingAccumulated + depreciated == closingAccumulated（consistent=true）
 ```
 
 ### 场景 4：期间参数守卫（L2 Controller）
 
 ```gherkin
-Given period_from=202606&period_to=202601（from>to），或 group_by=FOO
+Given periodFrom=202606&periodTo=202601（from>to），或 groupBy=FOO
 When 调用 depreciation-summary
-Then 分别返回 400 P77_002 / P77_003
+Then 分别返回 400 P77_004 / P77_003
 ```
 
 ### 场景 5：处置资产排除（L2 集成）
@@ -196,9 +201,9 @@ Then 结果不含企业 A 资产（拦截器注入 enterprise_id）
 | 维度 | 影响 |
 |------|------|
 | 数据库 | 无 schema 变更（纯聚合查询） |
-| 后端 | 新建 `AssetReportController` + 2 VO + Service 聚合（复用计提算法源） |
-| 前端 | +1 视图（AssetStatView.vue，两表 Tab）+ 路由注册 |
-| 测试 | +6 测试（6 场景） |
+| 后端 | 新建 `AssetReportController` + 4 VO + `AssetReportService` 聚合（报表 A/B + 2 导出） |
+| 前端 | +1 视图（`views/asset/AssetReportView.vue`，两表 Tab）+ `sme-asset.ts` 路由 + 侧边栏 |
+| 测试 | +7 测试（AssetReportServiceImplTest：分类汇总/恒等式成立/恒等式破坏/期间格式/区间倒挂/groupBy非法/不手工注入enterprise_id） |
 | API | 新增 4 端点（2 查询 + 2 导出） |
 
 ---
@@ -303,7 +308,7 @@ acceptance_tests:
   - id: AT-004
     description: "期间参数守卫"
     method: test_period_params_guard
-    assertion: "from>to 返回 400 P77_002；group_by 非法 400 P77_003"
+    assertion: "from>to 返回 400 P77_004；groupBy 非法 400 P77_003"
     status: missing
   - id: AT-005
     description: "处置资产排除"

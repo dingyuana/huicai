@@ -44,6 +44,14 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/asset/inventory/AssetInventoryList.vue'),
     meta: { title: '资产盘点', permission: 'asset:inventory:list', keepAlive: true },
   },
+
+  // ─── P77 折旧与资产统计报表（只读聚合，不触发计提） ───
+  {
+    path: 'asset/report',
+    name: 'AssetReportView',
+    component: () => import('@/views/asset/AssetReportView.vue'),
+    meta: { title: '折旧与资产统计', permission: 'asset:card:list', keepAlive: true },
+  },
 ]
 
 export default routes

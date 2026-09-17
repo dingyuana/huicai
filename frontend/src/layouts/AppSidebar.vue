@@ -96,6 +96,7 @@
         <el-menu-item index="/asset/depreciation">折旧计提</el-menu-item>
         <el-menu-item index="/asset/disposal">资产处置</el-menu-item>
         <el-menu-item index="/asset/inventory">资产盘点</el-menu-item>
+        <el-menu-item index="/asset/report">折旧与统计</el-menu-item>
       </el-sub-menu>
 
       <!-- 报表中心 -->
