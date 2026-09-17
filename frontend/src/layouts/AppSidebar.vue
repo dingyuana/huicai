@@ -68,6 +68,7 @@
         <!-- 票据管理暂时隐藏（路由仍保留，恢复时取消注释） -->
         <!-- <el-menu-item index="/finance/ticket">票据管理</el-menu-item> -->
         <el-menu-item index="/arap/reconciliation">核销管理</el-menu-item>
+        <el-menu-item index="/arap/balance-summary">余额汇总</el-menu-item>
         <el-menu-item index="/arap/expense">费用报销</el-menu-item>
       </el-sub-menu>
 

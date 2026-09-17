@@ -324,3 +324,27 @@ export function getPurchaseReturn(id: number): Promise<any> {
 export function getAvailablePrepayment(params: { vendorId: number; amount?: number }): Promise<any> {
   return request.get('/sme/arap/v1/prepayment/available', { params })
 }
+
+// ===== 应收应付余额汇总 (P75) =====
+export interface ArapBalancePartyVO {
+  partyId: number
+  partyName: string
+  openingUnsettled: number
+  currentAmount: number
+  currentSettled: number
+  closingUnsettled: number
+}
+
+export interface ArapBalanceSummaryVO {
+  period: string
+  consistent: boolean
+  receivableTotal: number
+  payableTotal: number
+  receivables: ArapBalancePartyVO[]
+  payables: ArapBalancePartyVO[]
+}
+
+/** 查询应收应付余额汇总（期初/本期应收(付)/本期实收(付)/期末余额，一行一客商） */
+export function getBalanceSummary(params: { period: string; customerId?: number; vendorId?: number }): Promise<ArapBalanceSummaryVO> {
+  return request.get('/sme/arap/v1/report/balances', { params })
+}

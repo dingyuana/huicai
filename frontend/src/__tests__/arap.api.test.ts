@@ -94,4 +94,11 @@ describe('ARAP API Module', () => {
     expect(mockRequest.get).toHaveBeenCalledWith('/sme/arap/v1/aging-analysis/summary', { params: { period: '202607' } })
     expect(result).toEqual({ buckets: [] })
   })
+
+  it('getBalanceSummary calls correct endpoint', async () => {
+    mockRequest.get.mockResolvedValue({ period: '202609', consistent: true, receivableTotal: 0, payableTotal: 0, receivables: [], payables: [] })
+    const result = await arapApi.getBalanceSummary({ period: '202609' })
+    expect(mockRequest.get).toHaveBeenCalledWith('/sme/arap/v1/report/balances', { params: { period: '202609' } })
+    expect(result).toEqual({ period: '202609', consistent: true, receivableTotal: 0, payableTotal: 0, receivables: [], payables: [] })
+  })
 })
