@@ -81,7 +81,7 @@ class TaxControllerTest {
     @Test
     @DisplayName("进项发票分页查询_参数正确绑定")
     void inputInvoicesPage_params_applied() throws Exception {
-        when(taxService.pageQueryInput(any(), any(), any(), eq(1), eq(20))).thenReturn(new Page<>());
+        when(taxService.pageQueryInput(any(), any(), any(), any(), any(), any(), eq(1), eq(20))).thenReturn(new Page<>());
 
         mvc.perform(get("/api/sme/tax/v1/tax/input-invoices/page"))
                 .andExpect(status().isOk())

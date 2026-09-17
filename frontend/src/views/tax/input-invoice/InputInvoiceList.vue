@@ -6,7 +6,36 @@
         <el-button type="primary" @click="openEdit()">新增发票</el-button>
       </div>
 
+      <!-- 统计栏 -->
+      <StatBar :items="[
+        { label: '未认证', value: `¥ ${fmtAmount(stats.uncertified || 0)}` },
+        { label: '已认证未申报', value: `¥ ${fmtAmount(stats.cert_undeclared || 0)}` },
+        { label: '已勾选抵扣', value: `¥ ${fmtAmount(stats.deductible || 0)}` },
+        { label: '税额合计', value: `¥ ${fmtAmount(stats.total || 0)}` },
+      ]" />
+
+      <!-- 分类标签：待处理 / 已完成 -->
+      <el-tabs v-model="scope" class="scope-root-tabs" @tab-change="onScopeChange">
+        <el-tab-pane label="待处理" name="pending" />
+        <el-tab-pane label="已完成" name="completed" />
+      </el-tabs>
+
       <el-form :model="query" inline class="filter-form">
+        <template v-if="scope === 'completed'">
+          <el-form-item label="快捷时段">
+            <el-radio-group v-model="quickDate" size="small" @change="onQuickDate">
+              <el-radio-button value="thisMonth">本月</el-radio-button>
+              <el-radio-button value="last3">近3个月</el-radio-button>
+              <el-radio-button value="last6">近6个月</el-radio-button>
+              <el-radio-button value="last12">近12个月</el-radio-button>
+            </el-radio-group>
+          </el-form-item>
+          <el-form-item label="日期范围">
+            <el-date-picker
+              v-model="dateRange" type="daterange" start-placeholder="起" end-placeholder="止"
+              format="YYYY-MM-DD" value-format="YYYY-MM-DD" style="width:240px" @change="onDateRangeChange" />
+          </el-form-item>
+        </template>
         <el-form-item label="供应商">
           <el-input v-model="query.vendorName" clearable style="width:180px" />
         </el-form-item>
@@ -28,15 +57,10 @@
         </el-form-item>
       </el-form>
 
-      <!-- 统计栏 -->
-      <StatBar :items="[
-        { label: '未认证', value: `¥ ${fmtAmount(stats.uncertified || 0)}` },
-        { label: '已认证未申报', value: `¥ ${fmtAmount(stats.cert_undeclared || 0)}` },
-        { label: '已勾选抵扣', value: `¥ ${fmtAmount(stats.deductible || 0)}` },
-        { label: '税额合计', value: `¥ ${fmtAmount(stats.total || 0)}` },
-      ]" />
-
       <el-table :data="list" v-loading="loading" border>
+        <template #empty>
+          <el-empty v-if="scope === 'completed' && !dateRange" description="请先选择日期范围（快捷时段或自定义）查询已完成单据" />
+        </template>
         <el-table-column prop="invoiceNo" label="发票号" width="180" />
         <el-table-column prop="invoiceDate" label="开票日期" width="120" />
         <el-table-column prop="vendorName" label="供应商" min-width="160" show-overflow-tooltip />
@@ -204,6 +228,9 @@ const rules = {
   taxRate: [{ required: true, message: '请选择税率', trigger: 'change' }],
   invoiceType: [{ required: true, message: '请选择发票类型', trigger: 'change' }],
 }
+const scope = ref<'pending' | 'completed'>('pending')
+const quickDate = ref('')
+const dateRange = ref<[string, string] | null>(null)
 
 const fmtAmount = (v: any) => Number(v || 0).toFixed(2)
 
@@ -213,10 +240,52 @@ const recalcTax = () => {
   }
 }
 
+const onScopeChange = () => {
+  query.current = 1
+  quickDate.value = ''
+  dateRange.value = null
+  fetchData()
+  fetchStats()
+}
+
+const onQuickDate = () => {
+  const now = new Date()
+  let start: Date
+  switch (quickDate.value) {
+    case 'thisMonth': start = new Date(now.getFullYear(), now.getMonth(), 1); break
+    case 'last3': start = new Date(now.getFullYear(), now.getMonth() - 3, 1); break
+    case 'last6': start = new Date(now.getFullYear(), now.getMonth() - 6, 1); break
+    case 'last12': start = new Date(now.getFullYear(), now.getMonth() - 12, 1); break
+    default: return
+  }
+  const end = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  dateRange.value = [
+    start.toISOString().slice(0, 10),
+    end.toISOString().slice(0, 10),
+  ]
+  fetchData()
+}
+
+const onDateRangeChange = () => {
+  quickDate.value = ''
+  fetchData()
+}
+
 const fetchData = async () => {
+  // R1：已完成视图必须带日期范围才查询，无日期不发请求并清空列表
+  if (scope.value === 'completed' && !dateRange.value) {
+    list.value = []
+    total.value = 0
+    return
+  }
   loading.value = true
   try {
-    const res: any = await pageInputInvoice(query)
+    const params: any = { ...query, scope: scope.value }
+    if (dateRange.value) {
+      params.startDate = dateRange.value[0]
+      params.endDate = dateRange.value[1]
+    }
+    const res: any = await pageInputInvoice(params)
     list.value = res.records || []
     total.value = res.total || 0
   } finally {
@@ -279,6 +348,11 @@ const doAction = async (row: any, action: string) => {
 }
 
 const fetchStats = async () => {
+  // R5：已完成视图统计与列表同受日期约束，无日期不发请求
+  if (scope.value === 'completed' && !dateRange.value) {
+    stats.value = {}
+    return
+  }
   try {
     const res: any = await inputInvoiceSummary(query.period)
     stats.value = res || {}

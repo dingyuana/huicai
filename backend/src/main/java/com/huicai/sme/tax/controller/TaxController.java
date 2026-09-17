@@ -78,9 +78,12 @@ public class TaxController {
             @RequestParam(required = false) String vendorName,
             @RequestParam(required = false) String period,
             @RequestParam(required = false) String certStatus,
+            @RequestParam(required = false) String scope,
+            @RequestParam(required = false) LocalDate startDate,
+            @RequestParam(required = false) LocalDate endDate,
             @RequestParam(defaultValue = "1") Integer current,
             @RequestParam(defaultValue = "20") Integer size) {
-        return R.ok(service.pageQueryInput(vendorName, period, certStatus, current, size));
+        return R.ok(service.pageQueryInput(vendorName, period, certStatus, scope, startDate, endDate, current, size));
     }
 
     @Operation(summary = "创建进项发票")

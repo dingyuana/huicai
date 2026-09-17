@@ -125,6 +125,7 @@ public class TaxServiceImpl implements TaxService {
     // ========== 进项发票 ==========
     @Override
     public IPage<InputInvoiceEntity> pageQueryInput(String vendorName, String period, String certStatus,
+                                                     String scope, LocalDate startDate, LocalDate endDate,
                                                      Integer current, Integer size) {
         Page<InputInvoiceEntity> page = new Page<>(
                 current == null ? 1 : current,
@@ -134,11 +135,25 @@ public class TaxServiceImpl implements TaxService {
         if (StrUtil.isNotBlank(vendorName)) {
             wrapper.like(InputInvoiceEntity::getVendorName, vendorName);
         }
-        if (StrUtil.isNotBlank(period)) {
+        // period 退让：仅当 startDate/endDate 均为空时才应用 period 过滤（日期优先，对齐 BusinessDoc）
+        if (startDate == null && endDate == null && StrUtil.isNotBlank(period)) {
             wrapper.eq(InputInvoiceEntity::getPeriod, period);
         }
         if (StrUtil.isNotBlank(certStatus)) {
             wrapper.eq(InputInvoiceEntity::getCertificationStatus, certStatus);
+        }
+        // scope 过滤（对齐 BusinessDoc 模式）
+        if ("pending".equalsIgnoreCase(scope)) {
+            wrapper.notIn(InputInvoiceEntity::getStatus, INPUT_INVOICE_TERMINAL_STATUSES);
+        } else if ("completed".equalsIgnoreCase(scope)) {
+            wrapper.in(InputInvoiceEntity::getStatus, INPUT_INVOICE_TERMINAL_STATUSES);
+        }
+        // 日期范围过滤（已完成视图必带日期）
+        if (startDate != null) {
+            wrapper.ge(InputInvoiceEntity::getInvoiceDate, startDate);
+        }
+        if (endDate != null) {
+            wrapper.le(InputInvoiceEntity::getInvoiceDate, endDate);
         }
         wrapper.orderByDesc(InputInvoiceEntity::getInvoiceDate);
         IPage<InputInvoiceEntity> result = inputMapper.selectPage(page, wrapper);
@@ -247,6 +262,10 @@ public class TaxServiceImpl implements TaxService {
 
     /** 销项发票流程终态集合：凭证/核销/作废/冲销属于"已完成"视图（对齐 §4.5 大表条件显示规范） */
     private static final java.util.Set<String> OUTPUT_INVOICE_TERMINAL_STATUSES = java.util.Set.of(
+            InvoiceStatus.VOUCHERED, InvoiceStatus.FULLY_RECONCILED, InvoiceStatus.PARTIALLY_RECONCILED,
+            InvoiceStatus.VOIDED, InvoiceStatus.REVERSED);
+
+    private static final java.util.Set<String> INPUT_INVOICE_TERMINAL_STATUSES = java.util.Set.of(
             InvoiceStatus.VOUCHERED, InvoiceStatus.FULLY_RECONCILED, InvoiceStatus.PARTIALLY_RECONCILED,
             InvoiceStatus.VOIDED, InvoiceStatus.REVERSED);
 

@@ -7,6 +7,7 @@ import com.huicai.sme.tax.dto.BatchOperationResult;
 import com.huicai.sme.tax.entity.TaxDeclarationEntity;
 import com.huicai.sme.tax.entity.TaxTypeEntity;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 
@@ -23,7 +24,7 @@ public interface TaxService {
     void deleteTaxType(Long id);
 
     // 进项发票
-    IPage<InputInvoiceEntity> pageQueryInput(String vendorName, String period, String certStatus, Integer current, Integer size);
+    IPage<InputInvoiceEntity> pageQueryInput(String vendorName, String period, String certStatus, String scope, LocalDate startDate, LocalDate endDate, Integer current, Integer size);
     InputInvoiceEntity createInput(InputInvoiceEntity entity);
     InputInvoiceEntity certify(Long id, String deductionPeriod);
 
