@@ -47,7 +47,7 @@
 | # | 优先级 | 改动 | 文件 | 风险 | 状态 |
 |---|--------|------|------|------|------|
 | 1 | P0 | 费用汇总端点 `GET /api/sme/arap/v1/expense-reimbursements/summary`（期间区间 + group_by + 同比环比） | `ExpenseReimbursementController` + `ExpenseSummaryVO` + Service 聚合（仿 `ArapBalanceReportServiceImpl` LambdaQueryWrapper + Java 分组） | ✅ 低（纯聚合，无 schema 变更） | 📝 待开发 |
-| 2 | P0 | 导出端点 `GET .../summary/export`（EasyExcel） | 同上 | ✅ 低 | 📝 待开发 |
+| 2 | P0 | 导出端点 `GET .../summary/export`（hutool ExcelUtil，对齐既有报表中心 `ReportServiceImpl`） | 同上 | ✅ 低 | 📝 待开发 |
 | 3 | P0 | 前端费用汇总视图（维度切换 + 期间选择 + 表格 + 导出按钮） | `frontend/src/views/arap/expense/ExpenseSummaryView.vue` | ✅ 低 | 📝 待开发 |
 | 4 | P2 | 费用类型字典表（替代 expenseType 字符串） | 后续迭代 | ⚠️ 中 | 后续 |
 
@@ -58,11 +58,11 @@
 ### 3.1 输入契约
 
 - **触发条件**：`GET /api/sme/arap/v1/expense-reimbursements/summary`
-- **必填参数**：`period_from`、`period_to`（YYYYMM 6 位数字区间，如 `202601`~`202606`；`period_from ≤ period_to`）
+- **必填参数**：`periodFrom`、`periodTo`（YYYYMM 6 位数字区间，如 `202601`~`202606`；`periodFrom ≤ periodTo`，camelCase 对齐 P75 `@RequestParam` 约定）
 - **可选参数**：
-  - `group_by`：`DEPT`（默认）/ `EXPENSE_TYPE` / `EMPLOYEE`
-  - `include_yoy`（默认 true）：同比列（去年同期同区间）
-  - `include_mom`（默认 true）：环比列（上一等长区间）
+  - `groupBy`：`DEPT`（默认）/ `EXPENSE_TYPE` / `EMPLOYEE`
+  - `includeYoy`（默认 true）：同比列（去年同期同区间）
+  - `includeMom`（默认 true）：环比列（上一等长区间）
 - **前置条件**：数据权限拦截器自动注入 enterprise_id（铁律#6）
 
 ### 3.2 输出契约
@@ -72,11 +72,13 @@
   "periodFrom": "202601", "periodTo": "202606", "groupBy": "DEPT",
   "rows": [
     { "dimId": 1, "dimName": "研发部", "count": 42, "amount": 152000.00,
-      "amountYoy": 138000.00, "amountMom": 28000.00, "perCapita": 15200.00 }
+      "perCapita": 15200.00, "amountYoy": 138000.00, "amountMom": 28000.00 }
   ],
-  "total": { "count": 180, "amount": 620000.00 }
+  "totalCount": 180, "totalAmount": 620000.00
 }
 ```
+
+> `perCapita` 仅 DEPT 维度输出，其余维度为 null；`amountYoy/amountMom` 缺数据或未启用时 null。合计列为顶层扁平 `totalCount`/`totalAmount`（对齐 `ExpenseSummaryVO` record，非嵌套 `total` 对象）。
 
 **口径定义（对齐代码实证）**：
 
@@ -89,7 +91,7 @@
 - **指标**：`count`（单据数）、`amount`（金额合计，BigDecimal）、`perCapita`（仅 DEPT 维度：amount / 期末在职人数，`t_employee` 按 `deptId` 且在职状态计数；其余维度不输出 perCapita，返回 null）
 - **同比**：去年同期同区间（`periodFrom-12m` ~ `periodTo-12m`）同维度金额合计；无上年数据返回 null（前端 "—"）
 - **环比**：上一等长区间（`periodFrom - 等长` ~ `periodTo - 1m`）；同环比缺数据返回 null
-- **导出**：EasyExcel，列 = 维度 + 单数 + 金额 + 同比 + 环比 + 合计行（与其他报表中心导出规范一致）
+- **导出**：hutool `ExcelUtil`（对齐既有报表中心 `ReportServiceImpl.writeExcel` 的 `writeCellValue` 模式，非 EasyExcel），列 = 维度 + 单数 + 金额 + 人均 + 同比 + 环比 + 合计行；null 单元格写空串。
 
 ### 3.3 状态流转（数据口径，非状态机）
 
@@ -103,10 +105,10 @@ t_expense_reimbursement（status）
 
 | 场景 | 处理 | 错误码 |
 |------|------|--------|
-| `period_from`/`period_to` 缺失或格式非法（非 6 位数字） | `BusinessException`（400） | P76_001 |
-| `period_from > period_to` | `BusinessException`（400） | P76_002 |
-| `group_by` 非法（非 DEPT/EXPENSE_TYPE/EMPLOYEE） | `BusinessException`（400） | P76_003 |
-| 区间内无有效单据 | 返回空 rows + total 全 0，不报错 | — |
+| `periodFrom`/`periodTo` 缺失或格式非法（非 6 位数字） | `BusinessException`（400） | P76_001 |
+| `periodFrom > periodTo` | `BusinessException`（400） | P76_002 |
+| `groupBy` 非法（非 DEPT/EXPENSE_TYPE/EMPLOYEE） | `BusinessException`（400） | P76_003 |
+| 区间内无有效单据 | 返回空 rows + totalCount/totalAmount 全 0，不报错 | — |
 | 同比/环比区间无数据 | 对应列返回 null，不影响主列 | — |
 | 数据隔离 | 拦截器注入 enterprise_id，越权查空 | — |
 
@@ -120,9 +122,9 @@ t_expense_reimbursement（status）
 
 ```gherkin
 Given 202601-202606 研发部 3 张 APPROVED/VOUCHERED 报销单（金额 100/200/300），市场部 2 张（500/600）
-When 查询 summary?period_from=202601&period_to=202606&group_by=DEPT
+When 查询 summary?periodFrom=202601&periodTo=202606&groupBy=DEPT
 Then 研发部行 count=3, amount=600.00；市场部行 count=2, amount=1100.00
-And total.amount == 1700.00
+And totalAmount == 1700.00
 ```
 
 ### 场景 2：已生效状态过滤（L2 集成，🟡 数据口径）

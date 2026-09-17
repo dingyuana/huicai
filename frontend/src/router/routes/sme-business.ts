@@ -135,6 +135,14 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/arap/ExpenseEdit.vue'),
     meta: { title: '编辑报销单', permission: 'arap:expense:create' },
   },
+
+  // ─── 费用汇总报表 (P76) ───
+  {
+    path: 'arap/expense-summary',
+    name: 'ExpenseSummaryView',
+    component: () => import('@/views/arap/expense/ExpenseSummaryView.vue'),
+    meta: { title: '费用汇总', permission: 'arap:expense:list', keepAlive: true },
+  },
 ]
 
 export default routes

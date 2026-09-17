@@ -56,3 +56,58 @@ export function generateVoucherExpenseReimbursement(id: number, voucherId: numbe
 export function autoVoucherExpenseReimbursement(id: number): Promise<any> {
   return request.post(`/sme/arap/v1/expense-reimbursements/${id}/auto-voucher`)
 }
+
+// ===== 费用汇总报表 (P76) =====
+export type ExpenseGroupBy = 'DEPT' | 'EXPENSE_TYPE' | 'EMPLOYEE'
+
+export interface ExpenseSummaryRowVO {
+  dimId: number | null
+  dimName: string | null
+  count: number
+  amount: number
+  perCapita: number | null
+  amountYoy: number | null
+  amountMom: number | null
+}
+
+export interface ExpenseSummaryVO {
+  periodFrom: string
+  periodTo: string
+  groupBy: ExpenseGroupBy
+  rows: ExpenseSummaryRowVO[]
+  totalCount: number
+  totalAmount: number
+}
+
+export function getExpenseSummary(params: {
+  periodFrom: string
+  periodTo: string
+  groupBy?: ExpenseGroupBy
+  includeYoy?: boolean
+  includeMom?: boolean
+}): Promise<ExpenseSummaryVO> {
+  return request.get('/sme/arap/v1/expense-reimbursements/summary', { params })
+}
+
+export function exportExpenseSummary(params: {
+  periodFrom: string
+  periodTo: string
+  groupBy?: ExpenseGroupBy
+  includeYoy?: boolean
+  includeMom?: boolean
+}): Promise<void> {
+  return request.get('/sme/arap/v1/expense-reimbursements/summary/export', {
+    params,
+    responseType: 'blob',
+  }).then((res: any) => {
+    const blob = new Blob([res], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `费用汇总_${params.groupBy ?? 'DEPT'}_${params.periodFrom}-${params.periodTo}.xlsx`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  })
+}

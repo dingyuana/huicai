@@ -4,8 +4,11 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.huicai.common.response.R;
 import com.huicai.sme.arap.dto.ExpenseReimbursementVO;
 import com.huicai.sme.arap.service.ExpenseReimbursementService;
+import com.huicai.sme.arap.service.ExpenseSummaryReportService;
+import com.huicai.sme.arap.service.ExpenseSummaryReportService.ExpenseSummaryVO;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
@@ -20,6 +23,7 @@ import java.time.LocalDate;
 public class ExpenseReimbursementController {
 
     private final ExpenseReimbursementService service;
+    private final ExpenseSummaryReportService expenseSummaryReportService;
 
     @Operation(summary = "分页查询")
     @GetMapping("/page")
@@ -89,5 +93,28 @@ public class ExpenseReimbursementController {
     @PostMapping("/{id}/auto-voucher")
     public R<ExpenseReimbursementVO> autoVoucher(@PathVariable Long id) {
         return R.ok(service.generateVoucherForApproved(id));
+    }
+
+    @Operation(summary = "费用汇总报表（P76，部门/费用类型/员工 × 期间区间，含同比/环比/人均）")
+    @GetMapping("/summary")
+    public R<ExpenseSummaryVO> getExpenseSummary(
+            @RequestParam String periodFrom,
+            @RequestParam String periodTo,
+            @RequestParam(required = false) String groupBy,
+            @RequestParam(required = false) Boolean includeYoy,
+            @RequestParam(required = false) Boolean includeMom) {
+        return R.ok(expenseSummaryReportService.getSummary(periodFrom, periodTo, groupBy, includeYoy, includeMom));
+    }
+
+    @Operation(summary = "费用汇总报表导出（P76，Excel）")
+    @GetMapping("/summary/export")
+    public void exportExpenseSummary(
+            @RequestParam String periodFrom,
+            @RequestParam String periodTo,
+            @RequestParam(required = false) String groupBy,
+            @RequestParam(required = false) Boolean includeYoy,
+            @RequestParam(required = false) Boolean includeMom,
+            HttpServletResponse response) {
+        expenseSummaryReportService.exportSummary(periodFrom, periodTo, groupBy, includeYoy, includeMom, response);
     }
 }
