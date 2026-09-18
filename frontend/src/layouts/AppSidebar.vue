@@ -122,6 +122,7 @@
         <el-menu-item v-if="authStore.isAgencyAdmin" index="/agency/accountant-list">会计管理</el-menu-item>
         <el-menu-item v-if="authStore.isAgencyAdmin" index="/agency/assignment-manage">客户分配</el-menu-item>
         <el-menu-item v-if="authStore.isAgencyAdmin" index="/agency/dashboard">主管仪表盘</el-menu-item>
+        <el-menu-item index="/agency/service-progress">服务进度与工作量</el-menu-item>
       </el-sub-menu>
 
       <!-- 系统管理（所有用户可见） -->

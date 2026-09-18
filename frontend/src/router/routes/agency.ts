@@ -42,6 +42,12 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/agency/AccountantDetail.vue'),
         meta: { title: '会计详情', agencyRole: 'AGENCY_ADMIN' },
       },
+      {
+        path: 'service-progress',
+        name: 'AgencyServiceProgress',
+        component: () => import('@/views/agency/ServiceProgressView.vue'),
+        meta: { title: '服务进度与工作量' },
+      },
     ],
   },
 ]

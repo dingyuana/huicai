@@ -156,3 +156,78 @@ export interface CurrentPeriodVO {
 export function getCurrentPeriod(): Promise<CurrentPeriodVO> {
   return request.get('/v1/enterprise/current-period')
 }
+
+// ========== P79: 代理服务进度与工作量统计 ==========
+
+export type ProgressStage = 'INTAKE' | 'BOOKING' | 'REVIEW' | 'FILING' | 'DONE'
+export type ProgressStatus = 'PENDING' | 'IN_PROGRESS' | 'DONE'
+export type WorkloadGroupBy = 'USER' | 'ENTERPRISE'
+
+export interface ServiceProgressRowVO {
+  progressId: number
+  enterpriseId: number
+  enterpriseName: string
+  period: string
+  stage: ProgressStage
+  status: ProgressStatus
+  assignedTo: number | null
+  assignedToName: string
+  dueDate: string | null
+  overtime: boolean
+}
+
+export interface ServiceProgressSummaryVO {
+  total: number
+  done: number
+  inProgress: number
+  pending: number
+  overtime: number
+}
+
+export interface ServiceProgressVO {
+  agencyId: number
+  period: string | null
+  rows: ServiceProgressRowVO[]
+  summary: ServiceProgressSummaryVO
+}
+
+export interface WorkloadRowVO {
+  userId: number
+  userName: string
+  assignedCustomers: number
+  completionRate: number | null
+  inProgress: number
+  overtime: number
+}
+
+export interface WorkloadVO {
+  periodFrom: string
+  periodTo: string
+  groupBy: WorkloadGroupBy
+  rows: WorkloadRowVO[]
+}
+
+export function getServiceProgress(params: {
+  period?: string
+  enterpriseId?: number
+  stage?: ProgressStage
+  status?: ProgressStatus
+}): Promise<ServiceProgressVO> {
+  return request.get('/v1/agency/service-progress', { params })
+}
+
+export function getServiceOvertime(): Promise<ServiceProgressRowVO[]> {
+  return request.get('/v1/agency/service-progress/overtime')
+}
+
+export function forceServiceDone(id: number, remark: string): Promise<void> {
+  return request.post(`/v1/agency/service-progress/${id}/force-done`, { remark })
+}
+
+export function getWorkload(params: {
+  periodFrom: string
+  periodTo: string
+  groupBy?: WorkloadGroupBy
+}): Promise<WorkloadVO> {
+  return request.get('/v1/agency/workload', { params })
+}

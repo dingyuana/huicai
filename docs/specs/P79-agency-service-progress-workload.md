@@ -47,12 +47,14 @@ Agency 分支已完成多租户基础设施（S-26：用户⇔多企业切换、
 
 | # | 优先级 | 改动 | 文件 | 风险 | 状态 |
 |---|--------|------|------|------|------|
-| 1 | P0 | 新表 `t_service_progress`（migration） | `V1XX__t_service_progress.sql` | 🟡 数据迁移 | 📝 待开发 |
-| 2 | P0 | 实体/Mapper/Service（进度读写 + 节点推进事件监听） | `com.huicai.agency.dashboard` | 🟡 事件埋点跨模块 | 📝 待开发 |
-| 3 | P0 | 进度端点 `GET /api/v1/agency/service-progress` + `/overtime` + `/{id}/force-done` | `ServiceProgressController` | ✅ 低 | 📝 待开发 |
-| 4 | P0 | 工作量端点 `GET /api/v1/agency/workload` + `/export` | 同上 | ✅ 低 | 📝 待开发 |
-| 5 | P1 | 事件发布点：发票导入完成/凭证过账/结账完成/申报 APPROVED 4 个埋点 | 发票/凭证/结账/税务 4 模块 | 🟡 跨模块 | 📝 待开发 |
-| 6 | P1 | 前端代理工作台"进度/工作量"两个 Tab | `frontend/src/views/agency/...` | ✅ 低 | 📝 待开发 |
+| 1 | P0 | 新表 `t_service_progress`（migration） | `V148__t_service_progress.sql` | 🟡 数据迁移 | ✅ 已完成 |
+| 2 | P0 | 实体/Mapper/Service（进度读写 + 节点推进 advanceStage） | `com.huicai.agency.dashboard` | ✅ 低 | ✅ 已完成 |
+| 3 | P0 | 进度端点 `GET /api/v1/agency/service-progress` + `/overtime` + `/{id}/force-done` | `ServiceProgressController` | ✅ 低 | ✅ 已完成 |
+| 4 | P0 | 工作量端点 `GET /api/v1/agency/workload` | 同上 | ✅ 低 | ✅ 已完成 |
+| 5 | P1 | 事件发布点：发票导入完成/凭证过账/结账完成/申报 APPROVED 4 个埋点（调 `advanceStage`） | 发票/凭证/结账/税务 4 模块 | 🟡 跨模块 | 📝 待开发 |
+| 6 | P1 | 前端代理工作台"进度/工作量"两个 Tab | `frontend/src/views/agency/ServiceProgressView.vue` | ✅ 低 | ✅ 已完成 |
+
+> **V1 交付边界**：P0（新表 + 实体/服务 + 端点 + 前端）已完成。P1 第 5 项"4 模块事件埋点"为跨模块改动（需改发票/凭证/结账/税务 4 个既有模块），留待下一迭代；当前 `advanceStage` 已就绪，事件源只需一行调用接入。
 
 ---
 
@@ -60,25 +62,36 @@ Agency 分支已完成多租户基础设施（S-26：用户⇔多企业切换、
 
 ### 3.1 数据模型（新表）
 
+> **数据模型对齐项目事实**：项目无 `tenant_id` 概念，租户维度 = `agency_id`（代账公司），客户维度 = `enterprise_id`。
+> 实体 `ServiceProgressEntity extends BaseEntity`（自动带 `enterprise_id/created_by/created_at/updated_by/updated_at/version/deleted`）。
+> **数据权限**：`t_service_progress` 列入 `EnterpriseDataPermissionInterceptor.SHARED_TABLES`（同 `t_agency_user_enterprise`），
+> 拦截器**跳过自动注入** enterprise_id，由 Service 手动 `eq(agency_id)` 隔离 —— 避免破坏"经理看全部客户"的跨企业查询。
+
 ```sql
 CREATE TABLE t_service_progress (
-    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    tenant_id BIGINT NOT NULL,
-    enterprise_id BIGINT NOT NULL,
-    period VARCHAR(6) NOT NULL,
-    stage VARCHAR(20) NOT NULL,          -- INTAKE/BOOKING/REVIEW/FILING/DONE
-    status VARCHAR(20) NOT NULL DEFAULT 'PENDING',  -- PENDING/IN_PROGRESS/DONE
-    assigned_to BIGINT,
-    started_at TIMESTAMP,
-    finished_at TIMESTAMP,
-    due_date DATE,                        -- FILING 按税种申报期限，其他按合同 SLA
-    overtime_notified_at TIMESTAMP,
-    created_at TIMESTAMP,
-    updated_at TIMESTAMP,
-    UNIQUE (tenant_id, enterprise_id, period, stage)
+    id                    BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    agency_id             BIGINT       NOT NULL,          -- 代账公司（租户）
+    enterprise_id         BIGINT       NOT NULL,          -- 被服务客户企业
+    period                VARCHAR(6)   NOT NULL,
+    stage                 VARCHAR(20)  NOT NULL,          -- INTAKE/BOOKING/REVIEW/FILING/DONE
+    status                VARCHAR(20)  NOT NULL DEFAULT 'PENDING',
+    assigned_to           BIGINT,                          -- t_agency_user.id
+    started_at            TIMESTAMP,
+    finished_at           TIMESTAMP,
+    due_date              DATE,                            -- 申报期限/合同 SLA（V1 手工填）
+    overtime_notified_at  TIMESTAMP,
+    remark                VARCHAR(500),
+    created_by            BIGINT,
+    created_at            TIMESTAMP    DEFAULT now(),
+    updated_by            BIGINT,
+    updated_at            TIMESTAMP    DEFAULT now(),
+    version               INTEGER      DEFAULT 0,
+    deleted               INTEGER      DEFAULT 0,
+    CONSTRAINT uq_service_progress UNIQUE (agency_id, enterprise_id, period, stage)
 );
-CREATE INDEX idx_sp_period_stage ON t_service_progress (tenant_id, period, stage);
-CREATE INDEX idx_sp_assignee ON t_service_progress (tenant_id, assigned_to, status);
+CREATE INDEX idx_sp_agency_period_stage ON t_service_progress (agency_id, period, stage);
+CREATE INDEX idx_sp_assignee ON t_service_progress (agency_id, assigned_to, status);
+CREATE INDEX idx_sp_due ON t_service_progress (agency_id, due_date, status);
 ```
 
 **实体字段对齐项目约定**：`t_` 前缀、IDENTITY 主键、状态 String 大写、金额（如有）BigDecimal（本表无金额）。
@@ -96,7 +109,7 @@ CREATE INDEX idx_sp_assignee ON t_service_progress (tenant_id, assigned_to, stat
 - 权限：仅经理；请求体 `remark`（必填）；写审计日志（铁律#5）
 
 **工作量端点** `GET /api/v1/agency/workload`：
-- 参数：`period_from`、`period_to`（YYYYMM 区间）、`group_by`（`USER` 默认 / `ENTERPRISE`）
+- 参数：`periodFrom`、`periodTo`（YYYYMM 区间）、`groupBy`（`USER` 默认 / `ENTERPRISE`）
 
 ### 3.3 输出契约
 
@@ -112,7 +125,7 @@ CREATE INDEX idx_sp_assignee ON t_service_progress (tenant_id, assigned_to, stat
   "summary": { "total": 42, "done": 30, "inProgress": 9, "overtime": 3 }
 }
 
-// workload（group_by=USER）
+// workload（groupBy=USER）
 {
   "periodFrom": "202601", "periodTo": "202606", "groupBy": "USER",
   "rows": [
@@ -212,9 +225,9 @@ And 每日扫描幂等：第二次扫描不重复提醒（overtime_notified_at �
 
 ```gherkin
 Given 王会计分配 18 家客户，区间内 18×4 节点中 67 个 DONE
-When GET /workload?period_from=202601&period_to=202606&group_by=USER
+When GET /workload?periodFrom=202601&periodTo=202606&groupBy=USER
 Then 王会计行 assignedCustomers=18, completionRate=67/72≈0.93, 在办/超期计数正确
-And 负向断言：他人数据不混入（enterprise_id 隔离）
+And 负向断言：他人数据不混入（agency_id 租户隔离，Service 手动 eq(agency_id)）
 ```
 
 ### 场景 6：负向断言——零业务状态变更（L1）
