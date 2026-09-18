@@ -18,6 +18,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.mock.web.MockMultipartFile;
+import org.springframework.context.ApplicationEventPublisher;
 
 import java.io.ByteArrayOutputStream;
 import java.lang.reflect.Field;
@@ -53,6 +54,7 @@ class InputInvoiceImportRealDataTest {
     @Mock private SubjectMapper subjectMapper;
     @Mock private InputInvoiceMapper inputInvoiceMapper;
     @Mock private InvoiceDedupUtil invoiceDedupUtil;
+    @Mock private ApplicationEventPublisher eventPublisher;
 
     private InputInvoiceImportService service;
     private final ColumnMappingResolver realResolver = new ColumnMappingResolver();
@@ -63,7 +65,7 @@ class InputInvoiceImportRealDataTest {
         service = new InputInvoiceImportService(
                 docMapper, docEntryMapper, voucherMapper, voucherEntryMapper,
                 voucherNoService, vendorMapper, subjectMapper, inputInvoiceMapper,
-                realResolver, invoiceDedupUtil);
+                realResolver, invoiceDedupUtil, eventPublisher);
 
         lenient().when(invoiceDedupUtil.findExisting(any())).thenReturn(Collections.emptySet());
         lenient().when(vendorMapper.selectList(any())).thenReturn(Collections.emptyList());
@@ -104,7 +106,7 @@ class InputInvoiceImportRealDataTest {
         service = new InputInvoiceImportService(
                 docMapper, docEntryMapper, voucherMapper, voucherEntryMapper,
                 voucherNoService, vendorMapper, subjectMapper, inputInvoiceMapper,
-                realResolver, invoiceDedupUtil);
+                realResolver, invoiceDedupUtil, eventPublisher);
 
         lenient().when(invoiceDedupUtil.findExisting(any())).thenReturn(Collections.emptySet());
         lenient().when(vendorMapper.selectList(any())).thenReturn(Collections.emptyList());
@@ -132,7 +134,7 @@ class InputInvoiceImportRealDataTest {
         service = new InputInvoiceImportService(
                 docMapper, docEntryMapper, voucherMapper, voucherEntryMapper,
                 voucherNoService, vendorMapper, subjectMapper, inputInvoiceMapper,
-                realResolver, invoiceDedupUtil);
+                realResolver, invoiceDedupUtil, eventPublisher);
 
         return Stream.of(
                 DynamicTest.dynamicTest("空文件抛异常", () -> {

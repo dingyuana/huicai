@@ -25,6 +25,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.ArgumentCaptor;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
@@ -49,6 +50,7 @@ class TaxServiceImplTest {
     @Mock private VoucherNoService voucherNoService;
     @Mock private SubjectMapper subjectMapper;
     @Mock private TemplateMatcher templateMatcher;
+    @Mock private ApplicationEventPublisher eventPublisher;
     @InjectMocks private TaxServiceImpl service;
 
     private InputInvoiceEntity stubInput(Long id, String status) {

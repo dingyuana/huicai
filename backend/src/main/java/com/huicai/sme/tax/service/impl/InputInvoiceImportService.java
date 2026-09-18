@@ -3,6 +3,7 @@ import com.huicai.base.business.util.ColumnMappingResolver;
 
 import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.huicai.common.event.ServiceProgressStageEvent;
 import com.huicai.common.exception.BusinessException;
 import com.huicai.base.masterdata.entity.VendorEntity;
 import com.huicai.base.masterdata.mapper.VendorMapper;
@@ -22,7 +23,9 @@ import com.huicai.sme.tax.constant.InvoiceStatus;
 import com.huicai.base.business.mapper.InputInvoiceMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
+import com.huicai.base.system.util.SecurityUtils;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -63,6 +66,7 @@ public class InputInvoiceImportService {
     private final InputInvoiceMapper inputInvoiceMapper;
     private final ColumnMappingResolver columnMappingResolver;
     private final InvoiceDedupUtil invoiceDedupUtil;
+    private final ApplicationEventPublisher eventPublisher; // P79：INTAKE 节点推进事件
 
     private final Map<String, List<ParsedInputInvoiceRow>> batchCache = new ConcurrentHashMap<>();
 
@@ -297,6 +301,7 @@ public class InputInvoiceImportService {
 
         int success = 0, docCreated = 0, voucherCreated = 0, duplicateSkipped = 0;
         List<Map<String, Object>> errors = new ArrayList<>();
+        Set<String> successPeriods = new TreeSet<>(); // P79 INTAKE：成功导入的发票期间（去重）
 
         for (ParsedInputInvoiceRow row : rows) {
             try {
@@ -318,6 +323,7 @@ public class InputInvoiceImportService {
                 // P40: 导入时只创建发票，审核通过后才创建业务单据和凭证
                 insertInputInvoice(row, vendorId, period);
                 success++;
+                successPeriods.add(period);
             } catch (Exception e) {
                 log.warn("处理采购发票行失败 row={}: {}", row.rowNum, e.getMessage());
                 Map<String, Object> err = new LinkedHashMap<>();
@@ -325,6 +331,22 @@ public class InputInvoiceImportService {
                 err.put("invoiceNo", row.invoiceNo);
                 err.put("message", e.getMessage());
                 errors.add(err);
+            }
+        }
+
+        // P79 INTAKE：本期发票导入完成 → 发事件推进 INTAKE 节点（监听器按 agencyId 降级；无安全上下文时静默跳过，绝不影响业务）
+        if (!successPeriods.isEmpty()) {
+            try {
+                Long agencyId = SecurityUtils.getCurrentAgencyId();
+                Long enterpriseId = SecurityUtils.getCurrentEnterpriseId();
+                for (String p : successPeriods) {
+                    eventPublisher.publishEvent(
+                            new ServiceProgressStageEvent(agencyId, enterpriseId, p, ServiceProgressStageEvent.STAGE_INTAKE));
+                }
+                log.info("P79 发票导入完成发 INTAKE 事件: agencyId={} enterpriseId={} periods={}",
+                        agencyId, enterpriseId, successPeriods);
+            } catch (Exception ex) {
+                log.debug("P79 INTAKE 事件跳过（无安全上下文或发布失败，不影响业务）: periods={}", successPeriods);
             }
         }
 

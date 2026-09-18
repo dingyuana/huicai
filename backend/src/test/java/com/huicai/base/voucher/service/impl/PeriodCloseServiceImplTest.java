@@ -25,6 +25,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.MockedStatic;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -51,6 +52,7 @@ class PeriodCloseServiceImplTest {
     @Mock private SubjectMapper subjectMapper;
     @Mock private EnterpriseMapper enterpriseMapper;
     @Mock private ReportService reportService;
+    @Mock private ApplicationEventPublisher eventPublisher;
 
     private PeriodCloseServiceImpl service;
 
@@ -58,7 +60,7 @@ class PeriodCloseServiceImplTest {
     void setUp() {
         service = new PeriodCloseServiceImpl(voucherMapper, voucherEntryMapper,
                 subjectBalanceService, periodService, subjectService, subjectMapper,
-                enterpriseMapper, reportService);
+                enterpriseMapper, reportService, eventPublisher);
     }
 
     private PeriodEntity stubPeriod(String status) {

@@ -33,10 +33,12 @@ import com.huicai.base.system.service.PeriodService;
 import com.huicai.base.system.service.SubjectService;
 import com.huicai.base.system.service.VoucherTypeService;
 import com.huicai.base.system.util.SecurityUtils;
+import com.huicai.common.event.ServiceProgressStageEvent;
 import com.huicai.base.business.entity.OutputInvoiceEntity;
 import com.huicai.base.business.mapper.OutputInvoiceMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -77,6 +79,7 @@ public class VoucherServiceImpl extends ServiceImpl<VoucherMapper, VoucherEntity
     private final OutputInvoiceMapper outputInvoiceMapper;
     private final BusinessDocMapper businessDocMapper;
     private final ObjectMapper objectMapper = new ObjectMapper();
+    private final ApplicationEventPublisher eventPublisher; // P79：BOOKING 节点推进事件
 
     @Override
     public IPage<VoucherVO> pageQuery(VoucherQueryDTO queryDTO) {
@@ -354,11 +357,13 @@ public class VoucherServiceImpl extends ServiceImpl<VoucherMapper, VoucherEntity
     @Override
     @Transactional
     public void batchPost(List<Long> ids, Long userId) {
+        Set<String> touchedPeriods = new LinkedHashSet<>();
         for (Long id : ids) {
             VoucherEntity entity = getValidVoucher(id);
             assertStatus(entity, "AUDITED");
             assertPeriodOpen(entity.getPeriod());
             subjectBalanceService.validateOpeningBeforePost(entity.getPeriod());
+            touchedPeriods.add(entity.getPeriod());
         }
 
         voucherMapper.batchUpdateStatus(ids, "POSTED", userId, null);
@@ -370,6 +375,27 @@ public class VoucherServiceImpl extends ServiceImpl<VoucherMapper, VoucherEntity
         }
 
         log.info("批量记账凭证: ids={}, userId={}", ids, userId);
+
+        // P79 BOOKING：过账后若本次涉及的期间已无剩余待过账(AUDITED)凭证，视为本期记账完成
+        // （监听器按 agencyId 降级；无安全上下文时静默跳过，绝不影响业务）
+        for (String period : touchedPeriods) {
+            Long auditRemain = voucherMapper.selectCount(
+                    new LambdaQueryWrapper<VoucherEntity>()
+                            .eq(VoucherEntity::getPeriod, period)
+                            .eq(VoucherEntity::getStatus, "AUDITED"));
+            if (auditRemain != null && auditRemain == 0) {
+                try {
+                    Long agencyId = SecurityUtils.getCurrentAgencyId();
+                    Long enterpriseId = SecurityUtils.getCurrentEnterpriseId();
+                    eventPublisher.publishEvent(new ServiceProgressStageEvent(
+                            agencyId, enterpriseId, period, ServiceProgressStageEvent.STAGE_BOOKING));
+                    log.info("P79 本期记账完成发 BOOKING 事件: agencyId={} enterpriseId={} period={}",
+                            agencyId, enterpriseId, period);
+                } catch (Exception ex) {
+                    log.debug("P79 BOOKING 事件跳过（无安全上下文或发布失败，不影响业务）: period={}", period);
+                }
+            }
+        }
     }
 
     @Override

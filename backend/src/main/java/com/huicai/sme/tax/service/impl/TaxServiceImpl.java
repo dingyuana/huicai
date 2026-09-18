@@ -36,8 +36,11 @@ import com.huicai.common.util.TemplateContext;
 import com.huicai.base.voucher.entity.VoucherTemplateEntity;
 import com.huicai.base.voucher.entity.VoucherTemplateLineEntity;
 import com.huicai.base.voucher.service.VoucherTemplateService;
+import com.huicai.base.system.util.SecurityUtils;
+import com.huicai.common.event.ServiceProgressStageEvent;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -71,6 +74,7 @@ public class TaxServiceImpl implements TaxService {
     private final VoucherTemplateService voucherTemplateService;
     private final BusinessDocMapper businessDocMapper;
     private final OutputInvoiceStateMachineService outputInvoiceStateMachineService;
+    private final ApplicationEventPublisher eventPublisher; // P79：FILING 节点推进事件
 
     // ========== 税种 ==========
     @Override
@@ -865,6 +869,19 @@ public class TaxServiceImpl implements TaxService {
         } catch (Exception e) {
             log.error("P18-1 申报自动生成凭证失败, 可手工调用 generateVoucherFromDeclaration: declarationId={}, error={}", id, e.getMessage());
         }
+
+        // P79 FILING：本期申报审批通过 → 发事件推进 FILING 节点（监听器按 agencyId 降级；无安全上下文时静默跳过，绝不影响业务）
+        try {
+            Long agencyId = SecurityUtils.getCurrentAgencyId();
+            Long enterpriseId = SecurityUtils.getCurrentEnterpriseId();
+            eventPublisher.publishEvent(new ServiceProgressStageEvent(
+                    agencyId, enterpriseId, entity.getPeriod(), ServiceProgressStageEvent.STAGE_FILING));
+            log.info("P79 申报通过发 FILING 事件: agencyId={} enterpriseId={} period={}",
+                    agencyId, enterpriseId, entity.getPeriod());
+        } catch (Exception ex) {
+            log.debug("P79 FILING 事件跳过（无安全上下文或发布失败，不影响业务）: period={}", entity.getPeriod());
+        }
+
         return declarationMapper.selectById(id);
     }
 

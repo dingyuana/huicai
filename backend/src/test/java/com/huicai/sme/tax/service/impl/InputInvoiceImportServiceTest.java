@@ -25,6 +25,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.lang.reflect.Field;
@@ -52,6 +53,7 @@ class InputInvoiceImportServiceTest {
     @Mock private InputInvoiceMapper inputInvoiceMapper;
     @Mock private ColumnMappingResolver columnMappingResolver;
     @Mock private InvoiceDedupUtil invoiceDedupUtil;
+    @Mock private ApplicationEventPublisher eventPublisher;
 
     @Captor private ArgumentCaptor<InputInvoiceEntity> invoiceCaptor;
     @Captor private ArgumentCaptor<VoucherEntryEntity> entryCaptor;
@@ -63,7 +65,7 @@ class InputInvoiceImportServiceTest {
         service = new InputInvoiceImportService(
                 docMapper, docEntryMapper, voucherMapper, voucherEntryMapper,
                 voucherNoService, vendorMapper, subjectMapper, inputInvoiceMapper,
-                columnMappingResolver, invoiceDedupUtil);
+                columnMappingResolver, invoiceDedupUtil, eventPublisher);
     }
 
     private InputInvoiceImportService.ParsedInputInvoiceRow stubRow(int rowNum, String invoiceNo,

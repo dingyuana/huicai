@@ -5,6 +5,7 @@ import com.huicai.agency.tenant.entity.EnterpriseEntity;
 import com.huicai.agency.tenant.mapper.EnterpriseMapper;
 import com.huicai.common.context.EnterpriseContextHolder;
 import com.huicai.common.exception.BusinessException;
+import com.huicai.common.event.ServiceProgressStageEvent;
 import com.huicai.base.voucher.entity.VoucherEntity;
 import com.huicai.base.voucher.entity.VoucherEntryEntity;
 import com.huicai.base.voucher.mapper.VoucherEntryMapper;
@@ -19,8 +20,10 @@ import com.huicai.base.system.entity.Subject;
 import com.huicai.base.system.mapper.SubjectMapper;
 import com.huicai.base.system.service.PeriodService;
 import com.huicai.base.system.service.SubjectService;
+import com.huicai.base.system.util.SecurityUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -45,6 +48,7 @@ public class PeriodCloseServiceImpl implements PeriodCloseService {
     private final SubjectMapper subjectMapper;
     private final EnterpriseMapper enterpriseMapper;
     private final ReportService reportService;
+    private final ApplicationEventPublisher eventPublisher; // P79：REVIEW 节点推进事件
 
     @Override
     public Map<String, Object> checkBeforeClose(String period) {
@@ -330,6 +334,18 @@ public class PeriodCloseServiceImpl implements PeriodCloseService {
         periodService.updateById(periodEntity);
 
         log.info("期间已结账: period={}, userId={}", period, userId);
+
+        // P79 REVIEW：本期结账完成 → 发事件推进 REVIEW 节点（监听器按 agencyId 降级；无安全上下文时静默跳过，绝不影响业务）
+        try {
+            Long agencyId = SecurityUtils.getCurrentAgencyId();
+            Long enterpriseId = SecurityUtils.getCurrentEnterpriseId();
+            eventPublisher.publishEvent(new ServiceProgressStageEvent(
+                    agencyId, enterpriseId, period, ServiceProgressStageEvent.STAGE_REVIEW));
+            log.info("P79 结账完成发 REVIEW 事件: agencyId={} enterpriseId={} period={}",
+                    agencyId, enterpriseId, period);
+        } catch (Exception ex) {
+            log.debug("P79 REVIEW 事件跳过（无安全上下文或发布失败，不影响业务）: period={}", period);
+        }
     }
 
     @Override

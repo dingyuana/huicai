@@ -51,10 +51,10 @@ Agency 分支已完成多租户基础设施（S-26：用户⇔多企业切换、
 | 2 | P0 | 实体/Mapper/Service（进度读写 + 节点推进 advanceStage） | `com.huicai.agency.dashboard` | ✅ 低 | ✅ 已完成 |
 | 3 | P0 | 进度端点 `GET /api/v1/agency/service-progress` + `/overtime` + `/{id}/force-done` | `ServiceProgressController` | ✅ 低 | ✅ 已完成 |
 | 4 | P0 | 工作量端点 `GET /api/v1/agency/workload` | 同上 | ✅ 低 | ✅ 已完成 |
-| 5 | P1 | 事件发布点：发票导入完成/凭证过账/结账完成/申报 APPROVED 4 个埋点（调 `advanceStage`） | 发票/凭证/结账/税务 4 模块 | 🟡 跨模块 | 📝 待开发 |
+| 5 | P1 | 事件发布点：发票导入完成/凭证过账/结账完成/申报 APPROVED 4 个埋点（Spring `ApplicationEvent` 解耦，监听器调 `advanceStage`） | 发票/凭证/结账/税务 4 模块 + `common.event` + `agency.dashboard.listener` | 🟡 跨模块 | ✅ 已完成 |
 | 6 | P1 | 前端代理工作台"进度/工作量"两个 Tab | `frontend/src/views/agency/ServiceProgressView.vue` | ✅ 低 | ✅ 已完成 |
 
-> **V1 交付边界**：P0（新表 + 实体/服务 + 端点 + 前端）已完成。P1 第 5 项"4 模块事件埋点"为跨模块改动（需改发票/凭证/结账/税务 4 个既有模块），留待下一迭代；当前 `advanceStage` 已就绪，事件源只需一行调用接入。
+> **V1 交付边界**：P0（新表 + 实体/服务 + 端点 + 前端）已完成。P1 第 5 项"4 模块事件埋点"亦已完成——采用 Spring `ApplicationEvent` 解耦（事件类 `common.event.ServiceProgressStageEvent` + 监听器 `agency.dashboard.listener.ServiceProgressStageEventListener`），下层 4 事件源只发事件、不 import 上层 agency 类，无反向依赖；进度推进是纯旁路（监听器吞异常 + agencyId 空降级），绝不拖垮业务。
 
 ---
 
@@ -139,19 +139,19 @@ CREATE INDEX idx_sp_due ON t_service_progress (agency_id, due_date, status);
 
 - **节点推进触发规则（事件驱动，不新建触发入口）**：
 
-| 触发事件 | 推进到 | 来源 |
+| 触发事件 | 推进到 | 来源（Service 层埋点 → 发 `ServiceProgressStageEvent`） |
 |---------|--------|------|
-| 客户企业本期发票导入完成 | INTAKE=DONE | InputInvoiceController 事件 |
-| 本期凭证全部过账 | BOOKING=DONE | VoucherController batch-post 后校验事件 |
-| 本期结账完成 | REVIEW=DONE | PeriodCloseController 事件 |
-| 纳税申报 APPROVED | FILING=DONE | TaxController declarations 事件 |
-| 人工 force-done（经理，留审计） | 任意节点 DONE | 管理入口 |
+| 客户企业本期发票导入完成 | INTAKE=DONE | `InputInvoiceImportService.confirmImport` 成功后，按成功发票期间去重逐期发事件 |
+| 本期凭证全部过账 | BOOKING=DONE | `VoucherServiceImpl.batchPost` 过账后，按 `touchedPeriods` 查 AUDITED 余量=0 才发事件（"全部过账"聚合判断） |
+| 本期结账完成 | REVIEW=DONE | `PeriodCloseServiceImpl.closePeriod` 期间置 closed 后发事件 |
+| 纳税申报 APPROVED | FILING=DONE | `TaxServiceImpl.approveDeclaration` 审批通过（状态=APPROVED）后发事件 |
+| 人工 force-done（经理，留审计） | 任意节点 DONE | 管理入口 `ServiceProgressController /{id}/force-done` |
 
 - **工作量指标（只读聚合，无新表）**：
   - `assignedCustomers`：`t_agency_user_enterprise` 当前有效分配数（S-26）
   - `completionRate`：`DONE` 节点数 / 应做节点数（期间区间）
   - `inProgress` / `overtime`：按经办人分组聚合
-- **事件幂等**：同一 `(tenant, enterprise, period, stage)` 已 DONE 的事件不重复推进（唯一约束 + 状态前置检查）
+- **事件幂等**：同一 `(agency_id, enterprise_id, period, stage)` 已 DONE 的事件不重复推进（唯一约束 + 状态前置检查）
 - **节点只进不退**：stage 推进只允许前进（INTAKE→BOOKING→REVIEW→FILING→DONE），乱序事件忽略记日志；反结账/红冲不回退进度（过程记录），经理可 force 重置（留审计）
 - **超期提醒**：每日批量扫描 `due_date < 今天 且 overtime_notified_at IS NULL`，走既有消息通道，幂等（扫后回写 notified_at）
 
