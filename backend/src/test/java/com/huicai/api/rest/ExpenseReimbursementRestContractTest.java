@@ -36,6 +36,7 @@ class ExpenseReimbursementRestContractTest {
 
     @Autowired private MockMvc mvc;
     @MockBean private ExpenseReimbursementService service;
+    @MockBean private com.huicai.sme.arap.service.ExpenseSummaryReportService expenseSummaryReportService; // P76: 控制器构造器新增参数
     private static final String BASE = "/api/sme/arap/v1/expense-reimbursements";
 
     @MockBean private com.huicai.config.security.JwtProvider jwtProvider;
