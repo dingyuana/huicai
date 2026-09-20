@@ -270,3 +270,36 @@ acceptance_tests:
 **Given** 银行流水记录存在，classification 为 null 或未识别分类（如 salary_social）
 **When** 用户触发自动制证流程
 **Then** resolveVoucherType() 走 default 分支，生成凭证的 voucher_type_id = 1（JZ 记账凭证，兜底）
+
+---
+
+## 8. 凭证类别限制校验（P75 新增）
+
+> **版本**：V1.1 | **最后修改**：2026-09-20 | **作者**：Hermes
+> **关联**：P75 应收应付余额汇总
+
+在 `VoucherServiceImpl.create()` 和 `update()` 中新增 `validateVoucherTypeLimit()` 校验，确保凭证类别与科目匹配：
+
+| 凭证类型 | 校验规则 | 错误提示 |
+|----------|----------|----------|
+| JZ (记账凭证) | 无限制 | — |
+| SK (收款凭证) | 借方至少一条分录的科目为现金/银行类科目（编码 1001/1002/1012/1015 等） | "收款凭证借方必须有现金或银行科目" |
+| FK (付款凭证) | 贷方至少一条分录的科目为现金/银行类科目 | "付款凭证贷方必须有现金或银行科目" |
+| ZZ (转账凭证) | 借贷方均不能包含现金/银行类科目 | "转账凭证不能包含现金或银行科目" |
+
+**实现方式**：`VoucherServiceImpl.validateVoucherTypeLimit(long voucherTypeId, List<EntryDTO> entries)`
+- 查询 `SubjectMapper.getCashBankCodes()` 获取现金/银行科目编码集合
+- 批量查询分录对应科目的编码
+- 按上述规则校验，不通过则抛 `BusinessException`
+
+**期初锁定校验（P75 新增）**：`assertPeriodOpen()` 中新增 `opening_status` 检查：
+- 当 `PeriodEntity.getOpeningStatus() == "none"`（期初建账未完成）时，阻止凭证创建
+- 错误提示："期初建账未完成，请先录入期初余额: {period}"
+- 仅在 `create()` 和 `update()` 中调用（`assertPeriodOpen` 是共用方法）
+
+```java
+// 期初锁定检查
+if ("none".equals(periodEntity.getOpeningStatus())) {
+    throw BusinessException.badRequest("期初建账未完成，请先录入期初余额: " + period);
+}
+```

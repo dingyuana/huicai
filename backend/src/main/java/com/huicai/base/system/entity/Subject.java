@@ -39,6 +39,9 @@ public class Subject {
     /** 是否启用 */
     private Boolean isActive;
 
+    /** 所属会计制度编码: CAS(企业会计准则)/SME(小企业会计准则)/NPO(民间非营利)/NULL(自定义) */
+    private String accountingStandard;
+
     /** 备注 */
     private String remark;
 

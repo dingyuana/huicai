@@ -261,7 +261,7 @@ async function handleDelete(row: SubjectVO) {
 async function handleImportStandard() {
   try {
     await ElMessageBox.confirm(
-      '确认一键导入国家标准科目？此操作会为所有6大类（资产/负债/共同/权益/成本/损益）创建一级科目。\\n注意：科目表必须为空才能导入。',
+      '确认一键导入国家标准科目？此操作会为所有6大类（资产/负债/共同/权益/成本/损益）创建一级科目。\n已存在的科目编码将自动跳过（增量导入）。',
       '导入确认',
       { confirmButtonText: '确认导入', cancelButtonText: '取消', type: 'warning' }
     )

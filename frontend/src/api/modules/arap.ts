@@ -348,3 +348,16 @@ export interface ArapBalanceSummaryVO {
 export function getBalanceSummary(params: { period: string; customerId?: number; vendorId?: number }): Promise<ArapBalanceSummaryVO> {
   return request.get('/sme/arap/v1/report/balances', { params })
 }
+
+export interface PeriodEntity {
+  id: number
+  year: number
+  month: number
+  periodCode: string
+  status: string
+  openingStatus: string
+}
+
+export function listPeriods(): Promise<PeriodEntity[]> {
+  return request.get('/v1/periods/list')
+}

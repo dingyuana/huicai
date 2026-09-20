@@ -28,10 +28,12 @@ import com.huicai.base.system.entity.PeriodEntity;
 import com.huicai.base.system.entity.Subject;
 import com.huicai.base.system.entity.UserEntity;
 import com.huicai.base.system.entity.VoucherTypeEntity;
+import com.huicai.base.system.mapper.SubjectMapper;
 import com.huicai.base.system.mapper.UserMapper;
 import com.huicai.base.system.service.PeriodService;
 import com.huicai.base.system.service.SubjectService;
 import com.huicai.base.system.service.VoucherTypeService;
+import com.huicai.base.voucher.constant.VoucherType;
 import com.huicai.base.system.util.SecurityUtils;
 import com.huicai.common.event.ServiceProgressStageEvent;
 import com.huicai.base.business.entity.OutputInvoiceEntity;
@@ -73,6 +75,7 @@ public class VoucherServiceImpl extends ServiceImpl<VoucherMapper, VoucherEntity
     private final VoucherTypeService voucherTypeService;
     private final VoucherTemplateService voucherTemplateService;
     private final SubjectService subjectService;
+    private final SubjectMapper subjectMapper;
     private final PeriodService periodService;
     private final UserMapper userMapper;
     private final VoucherStateMachineService voucherStateMachineService;
@@ -137,6 +140,7 @@ public class VoucherServiceImpl extends ServiceImpl<VoucherMapper, VoucherEntity
         validateLeafSubjects(dto.getEntries());
         // P1-4: 辅助核算强校验拦截
         validateAssistJson(dto.getEntries());
+        validateVoucherTypeLimit(dto.getVoucherTypeId(), dto.getEntries());
 
         // 生成凭证号
         String voucherNo = voucherNoService.generateNextNo(dto.getPeriod(), dto.getVoucherTypeId());
@@ -548,6 +552,39 @@ public class VoucherServiceImpl extends ServiceImpl<VoucherMapper, VoucherEntity
         }
     }
 
+    private void validateVoucherTypeLimit(long voucherTypeId, List<EntryDTO> entries) {
+        if (voucherTypeId == VoucherType.JZ) {
+            return;
+        }
+        List<String> cashBankCodes = subjectMapper.getCashBankCodes();
+        if (cashBankCodes.isEmpty()) {
+            return;
+        }
+        Set<String> cashBankCodeSet = new HashSet<>(cashBankCodes);
+        Set<Long> subjectIds = entries.stream().map(EntryDTO::getSubjectId).collect(Collectors.toSet());
+        if (subjectIds.isEmpty()) {
+            return;
+        }
+        Map<Long, Subject> subjectMap = subjectMapper.selectList(
+                new LambdaQueryWrapper<Subject>().in(Subject::getId, subjectIds)
+        ).stream().collect(Collectors.toMap(Subject::getId, s -> s));
+        boolean hasCashBankInDebit = entries.stream()
+                .filter(e -> e.getDebit().compareTo(BigDecimal.ZERO) > 0)
+                .anyMatch(e -> { Subject s = subjectMap.get(e.getSubjectId()); return s != null && cashBankCodeSet.contains(s.getCode()); });
+        boolean hasCashBankInCredit = entries.stream()
+                .filter(e -> e.getCredit().compareTo(BigDecimal.ZERO) > 0)
+                .anyMatch(e -> { Subject s = subjectMap.get(e.getSubjectId()); return s != null && cashBankCodeSet.contains(s.getCode()); });
+        if (voucherTypeId == VoucherType.SK && !hasCashBankInDebit) {
+            throw BusinessException.badRequest("收款凭证借方必须有现金或银行科目");
+        }
+        if (voucherTypeId == VoucherType.FK && !hasCashBankInCredit) {
+            throw BusinessException.badRequest("付款凭证贷方必须有现金或银行科目");
+        }
+        if (voucherTypeId == VoucherType.ZZ && (hasCashBankInDebit || hasCashBankInCredit)) {
+            throw BusinessException.badRequest("转账凭证不能包含现金或银行科目");
+        }
+    }
+
     /**
      * 构建分录实体列表
      */
@@ -605,6 +642,9 @@ public class VoucherServiceImpl extends ServiceImpl<VoucherMapper, VoucherEntity
         }
         if ("locked".equals(periodEntity.getStatus())) {
             throw BusinessException.badRequest("会计期间已锁定, 不可操作: " + period);
+        }
+        if ("none".equals(periodEntity.getOpeningStatus())) {
+            throw BusinessException.badRequest("期初建账未完成，请先录入期初余额: " + period);
         }
     }
 

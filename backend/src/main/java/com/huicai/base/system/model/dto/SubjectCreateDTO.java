@@ -30,6 +30,9 @@ public class SubjectCreateDTO {
     @Schema(description = "辅助核算类型: customer/vendor/department/project/employee")
     private String auxCalcType;
 
+    @Schema(description = "所属会计制度: CAS/SME/NPO/null")
+    private String accountingStandard;
+
     @Schema(description = "是否启用")
     private Boolean isActive;
 

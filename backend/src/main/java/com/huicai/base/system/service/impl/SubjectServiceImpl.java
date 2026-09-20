@@ -167,12 +167,6 @@ public class SubjectServiceImpl implements SubjectService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public int importStandard() {
-        // 检查是否已有科目数据（含逻辑删除的记录）
-        Long totalCount = subjectMapper.selectCountPhysical();
-        if (totalCount > 0) {
-            throw BusinessException.badRequest("系统已存在科目记录（含已删除科目），请先手动清空所有科目数据后再导入");
-        }
-
         // 国家标准的 6 类一级科目定义
         // 格式: {code, name, direction, category}
         List<StandardSubject> level1Subjects = Arrays.asList(
@@ -281,6 +275,12 @@ public class SubjectServiceImpl implements SubjectService {
 
         int count = 0;
         for (StandardSubject s : level1Subjects) {
+            Subject existing = subjectMapper.selectOne(new LambdaQueryWrapper<Subject>()
+                    .eq(Subject::getCode, s.code).eq(Subject::getDeleted, 0));
+            if (existing != null) {
+                continue;
+            }
+
             Subject subject = new Subject();
             subject.setCode(s.code);
             subject.setName(s.name);
@@ -289,6 +289,7 @@ public class SubjectServiceImpl implements SubjectService {
             subject.setIsLeaf(true);
             subject.setIsActive(true);
             subject.setRemark(s.category + "类");
+            subject.setAccountingStandard("CAS");
 
             // 为应收账款和预收账款启用客户辅助核算
             if ("1122".equals(s.code) || "2203".equals(s.code)) {
