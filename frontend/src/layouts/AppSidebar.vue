@@ -18,40 +18,55 @@
         <template #title>首页</template>
       </el-menu-item>
 
-      <!-- 基础数据 -->
-      <el-sub-menu index="basis">
-        <template #title>
-          <el-icon><Notebook /></el-icon>
-          <span>基础数据</span>
-        </template>
-        <el-menu-item index="/basis/account-and-summary">科目摘要</el-menu-item>
-        <el-menu-item index="/basis/period">会计期间</el-menu-item>
-        <el-menu-item index="/basis/party">客商档案</el-menu-item>
-        <el-menu-item index="/system/classification-rule">分类规则</el-menu-item>
-        <el-sub-menu index="system">
-          <template #title>
-            <el-icon><Setting /></el-icon>
-            <span>系统参数</span>
-          </template>
-          <el-menu-item index="/basis/config">系统参数</el-menu-item>
-          <el-menu-item index="/system/clear-data">数据维护</el-menu-item>
-        </el-sub-menu>
-        <el-menu-item index="/finance/voucher-setup?tab=type">凭证类型</el-menu-item>
-        <el-menu-item index="/finance/voucher-template-ref">模板参考库</el-menu-item>
-        <el-menu-item index="/finance/bank-account">银行账户</el-menu-item>
-      </el-sub-menu>
-
-      <!-- 财务核心 -->
+      <!-- 总账 -->
       <el-sub-menu index="finance">
         <template #title>
           <el-icon><Coin /></el-icon>
-          <span>财务核心</span>
+          <span>总账</span>
         </template>
         <el-menu-item index="/finance/voucher">凭证管理</el-menu-item>
         <el-menu-item index="/finance/ledger">账簿查询</el-menu-item>
-        <el-menu-item index="/finance/period-close">期末结账</el-menu-item>
         <el-menu-item index="/finance/beginning-balance">期初建账</el-menu-item>
+        <el-menu-item index="/finance/period-close">期末结账</el-menu-item>
         <el-menu-item index="/finance/carryover-guide">结转向导</el-menu-item>
+      </el-sub-menu>
+
+      <!-- 资金管理 -->
+      <el-sub-menu index="cash">
+        <template #title>
+          <el-icon><Wallet /></el-icon>
+          <span>资金管理</span>
+        </template>
+        <el-menu-item index="/finance/bank-account">银行账户</el-menu-item>
+        <el-menu-item index="/finance/bank-journal">银行日记账</el-menu-item>
+        <el-menu-item index="/finance/bank-statement">银行对账单</el-menu-item>
+        <el-menu-item index="/finance/pending-pool">待处理流水</el-menu-item>
+        <el-menu-item index="/finance/bank-reconciliation">银行对账</el-menu-item>
+        <el-menu-item index="/finance/cash-journal">现金日记账</el-menu-item>
+        <!-- 票据管理暂时隐藏（路由仍保留，恢复时取消注释） -->
+        <!-- <el-menu-item index="/finance/ticket">票据管理</el-menu-item> -->
+      </el-sub-menu>
+
+      <!-- 往来管理 -->
+      <el-sub-menu index="arap">
+        <template #title>
+          <el-icon><Connection /></el-icon>
+          <span>往来管理</span>
+        </template>
+        <el-menu-item index="/arap/reconciliation">核销管理</el-menu-item>
+        <el-menu-item index="/arap/balance-summary">应收应付余额汇总</el-menu-item>
+        <el-menu-item index="/finance/prepayment">预收预付</el-menu-item>
+        <el-menu-item index="/arap/prepayment-balance-summary">预收预付余额</el-menu-item>
+      </el-sub-menu>
+
+      <!-- 费用管理 -->
+      <el-sub-menu index="expense">
+        <template #title>
+          <el-icon><Files /></el-icon>
+          <span>费用管理</span>
+        </template>
+        <el-menu-item index="/arap/expense">费用报销</el-menu-item>
+        <el-menu-item index="/arap/expense-summary">费用汇总</el-menu-item>
       </el-sub-menu>
 
       <!-- 业务单据 -->
@@ -61,28 +76,18 @@
           <span>业务单据</span>
         </template>
         <el-menu-item index="/finance/business-doc">业务单据</el-menu-item>
-        <el-menu-item index="/finance/bank-journal">银行日记账</el-menu-item>
-        <el-menu-item index="/finance/bank-statement">银行对账单</el-menu-item>
-        <el-menu-item index="/finance/bank-reconciliation">银行对账</el-menu-item>
-        <el-menu-item index="/finance/cash-journal">现金日记账</el-menu-item>
-        <!-- 票据管理暂时隐藏（路由仍保留，恢复时取消注释） -->
-        <!-- <el-menu-item index="/finance/ticket">票据管理</el-menu-item> -->
-        <el-menu-item index="/arap/reconciliation">核销管理</el-menu-item>
-        <el-menu-item index="/arap/balance-summary">余额汇总</el-menu-item>
-        <el-menu-item index="/arap/prepayment-balance-summary">预收预付余额</el-menu-item>
-        <el-menu-item index="/arap/expense">费用报销</el-menu-item>
-        <el-menu-item index="/arap/expense-summary">费用汇总</el-menu-item>
       </el-sub-menu>
 
-      <!-- 税务发票 -->
+      <!-- 发票税务 -->
       <el-sub-menu index="tax">
         <template #title>
           <el-icon><Ticket /></el-icon>
-          <span>税务发票</span>
+          <span>发票税务</span>
         </template>
         <el-menu-item index="/tax/input-invoice">进项发票</el-menu-item>
         <el-menu-item index="/tax/output-invoice">销项发票</el-menu-item>
         <el-menu-item index="/tax/vat">增值税计算</el-menu-item>
+        <el-menu-item index="/tax/invoice-reconcile">发票勾稽</el-menu-item>
       </el-sub-menu>
 
       <!-- 固定资产 -->
@@ -96,7 +101,7 @@
         <el-menu-item index="/asset/depreciation">折旧计提</el-menu-item>
         <el-menu-item index="/asset/disposal">资产处置</el-menu-item>
         <el-menu-item index="/asset/inventory">资产盘点</el-menu-item>
-        <el-menu-item index="/asset/report">折旧与统计</el-menu-item>
+        <el-menu-item index="/asset/report">折旧与资产统计</el-menu-item>
       </el-sub-menu>
 
       <!-- 报表中心 -->
@@ -111,18 +116,18 @@
         <el-menu-item index="/report/cash-flow">现金流量表</el-menu-item>
       </el-sub-menu>
 
-      <!-- 代理公司（SUPER_ADMIN / AGENCY 可见） -->
-      <el-sub-menu v-if="authStore.isSuperAdmin || authStore.isAgency" index="agency">
+      <!-- 基础资料 -->
+      <el-sub-menu index="basis">
         <template #title>
-          <el-icon><OfficeBuilding /></el-icon>
-          <span>代理公司</span>
+          <el-icon><Notebook /></el-icon>
+          <span>基础资料</span>
         </template>
-        <el-menu-item index="/agency/enterprise-list">客户列表</el-menu-item>
-        <el-menu-item index="/agency/batch-operation">批量操作</el-menu-item>
-        <el-menu-item v-if="authStore.isAgencyAdmin" index="/agency/accountant-list">会计管理</el-menu-item>
-        <el-menu-item v-if="authStore.isAgencyAdmin" index="/agency/assignment-manage">客户分配</el-menu-item>
-        <el-menu-item v-if="authStore.isAgencyAdmin" index="/agency/dashboard">主管仪表盘</el-menu-item>
-        <el-menu-item index="/agency/service-progress">服务进度与工作量</el-menu-item>
+        <el-menu-item index="/basis/account-and-summary">科目摘要</el-menu-item>
+        <el-menu-item index="/basis/period">会计期间</el-menu-item>
+        <el-menu-item index="/basis/party">客商档案</el-menu-item>
+        <el-menu-item index="/finance/voucher-setup?tab=type">凭证类型</el-menu-item>
+        <el-menu-item index="/finance/voucher-template-ref">模板参考库</el-menu-item>
+        <el-menu-item index="/system/classification-rule">分类规则</el-menu-item>
       </el-sub-menu>
 
       <!-- 系统管理（所有用户可见） -->
@@ -136,6 +141,22 @@
         <el-menu-item index="/system/menu">菜单管理</el-menu-item>
         <el-menu-item index="/system/dept">部门管理</el-menu-item>
         <el-menu-item index="/system/audit-log">操作日志</el-menu-item>
+        <el-menu-item index="/basis/config">系统参数</el-menu-item>
+        <el-menu-item index="/system/clear-data">数据维护</el-menu-item>
+      </el-sub-menu>
+
+      <!-- 代理公司（SUPER_ADMIN / AGENCY 可见） -->
+      <el-sub-menu v-if="authStore.isSuperAdmin || authStore.isAgency" index="agency">
+        <template #title>
+          <el-icon><OfficeBuilding /></el-icon>
+          <span>代理公司</span>
+        </template>
+        <el-menu-item index="/agency/enterprise-list">客户列表</el-menu-item>
+        <el-menu-item index="/agency/batch-operation">批量操作</el-menu-item>
+        <el-menu-item v-if="authStore.isAgencyAdmin" index="/agency/accountant-list">会计管理</el-menu-item>
+        <el-menu-item v-if="authStore.isAgencyAdmin" index="/agency/assignment-manage">客户分配</el-menu-item>
+        <el-menu-item v-if="authStore.isAgencyAdmin" index="/agency/dashboard">主管仪表盘</el-menu-item>
+        <el-menu-item index="/agency/service-progress">服务进度与工作量</el-menu-item>
       </el-sub-menu>
 
       <!-- 实验室（SUPER_ADMIN 且 Flag 开启时可见） -->
@@ -161,8 +182,8 @@ import { useAppStore } from '@/stores/app.store'
 import { useAuthStore } from '@/stores/auth.store'
 import { useLabStore } from '@/stores/lab.store'
 import {
-  HomeFilled, Notebook, Coin, Document, Ticket, Box, DataAnalysis, Setting,
-  User, OfficeBuilding, Monitor, TrendCharts, MagicStick,
+  HomeFilled, Coin, Wallet, Connection, Files, Document, Ticket, Box,
+  DataAnalysis, Notebook, Setting, OfficeBuilding, MagicStick,
 } from '@element-plus/icons-vue'
 
 const route = useRoute()
