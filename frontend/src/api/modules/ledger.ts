@@ -88,6 +88,29 @@ export function getTrialBalance(period: string): Promise<TrialBalance> {
   return request.get('/base/voucher/v1/ledgers/trial-balance', { params: { period } })
 }
 
+export function getMultiColumnLedger(parentSubjectCode: string, period: string): Promise<SubjectBalanceRow[]> {
+  return request.get('/base/voucher/v1/ledgers/multi-column', { params: { parentSubjectCode, period } })
+}
+
+export interface QuantityAmountLedgerRow {
+  voucherNo: string
+  voucherDate: string
+  subjectCode: string
+  subjectName: string
+  summary: string
+  debitQuantity: number
+  creditQuantity: number
+  unitPrice: number
+  debitAmount: number
+  creditAmount: number
+  closingQuantity: number
+  closingAmount: number
+}
+
+export function getQuantityAmountLedger(subjectCode: string, period: string): Promise<QuantityAmountLedgerRow[]> {
+  return request.get('/base/voucher/v1/ledgers/quantity-amount', { params: { subjectCode, period } })
+}
+
 export type AuxiliaryDimensionType = 'customer' | 'vendor' | 'department' | 'project' | 'employee'
 
 export interface AuxiliaryLedgerRow {

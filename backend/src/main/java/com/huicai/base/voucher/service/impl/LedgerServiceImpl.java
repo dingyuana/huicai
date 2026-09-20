@@ -6,7 +6,9 @@ import com.huicai.base.voucher.dto.AuxiliarySummaryRow;
 import com.huicai.base.voucher.dto.LedgerEntryRowDTO;
 import com.huicai.base.voucher.dto.vo.AuxiliaryLedgerRowVO;
 import com.huicai.base.voucher.dto.vo.LedgerRowVO;
+import com.huicai.base.voucher.dto.vo.QuantityAmountLedgerRowVO;
 import com.huicai.base.voucher.dto.vo.SubjectBalanceRowVO;
+import com.huicai.base.voucher.entity.VoucherEntryEntity;
 import com.huicai.base.balance.mapper.SubjectBalanceMapper;
 import com.huicai.base.voucher.mapper.VoucherEntryMapper;
 import com.huicai.base.voucher.service.LedgerService;
@@ -19,6 +21,7 @@ import com.huicai.base.masterdata.mapper.EmployeeMapper;
 import com.huicai.base.system.entity.DeptEntity;
 import com.huicai.base.system.entity.Subject;
 import com.huicai.base.system.mapper.DeptMapper;
+import com.huicai.base.system.mapper.SubjectMapper;
 import com.huicai.base.system.service.SubjectService;
 import com.huicai.common.exception.BusinessException;
 import lombok.RequiredArgsConstructor;
@@ -41,6 +44,7 @@ public class LedgerServiceImpl implements LedgerService {
     private final SubjectBalanceMapper subjectBalanceMapper;
     private final VoucherEntryMapper voucherEntryMapper;
     private final SubjectService subjectService;
+    private final SubjectMapper subjectMapper;
     private final CustomerMapper customerMapper;
     private final VendorMapper vendorMapper;
     private final DeptMapper deptMapper;
@@ -430,5 +434,56 @@ public class LedgerServiceImpl implements LedgerService {
             }
         }
         return result;
+    }
+
+    @Override
+    public List<SubjectBalanceRowVO> multiColumnLedger(String parentSubjectCode, String period) {
+        List<Subject> children = subjectMapper.selectList(
+                new LambdaQueryWrapper<Subject>()
+                        .like(Subject::getCode, parentSubjectCode + ".")
+                        .eq(Subject::getLevel, 3)
+                        .eq(Subject::getDeleted, 0));
+        if (children.isEmpty()) {
+            return new ArrayList<>();
+        }
+        Set<Long> childIds = children.stream().map(Subject::getId).collect(Collectors.toSet());
+        List<SubjectBalanceEntity> balances = subjectBalanceMapper.selectList(
+                new LambdaQueryWrapper<SubjectBalanceEntity>()
+                        .in(SubjectBalanceEntity::getSubjectId, childIds)
+                        .eq(SubjectBalanceEntity::getPeriod, period));
+        return balances.stream().map(b -> {
+            SubjectBalanceRowVO vo = new SubjectBalanceRowVO();
+            Subject child = children.stream().filter(s -> s.getId().equals(b.getSubjectId())).findFirst().orElse(null);
+            vo.setSubjectId(b.getSubjectId());
+            vo.setSubjectCode(child != null ? child.getCode() : null);
+            vo.setSubjectName(child != null ? child.getName() : null);
+            vo.setDirection(child != null ? child.getDirection() : null);
+            vo.setBeginBalance(b.getBeginBalance());
+            vo.setDebitTotal(b.getDebitTotal());
+            vo.setCreditTotal(b.getCreditTotal());
+            vo.setEndBalance(b.getEndBalance());
+            return vo;
+        }).collect(Collectors.toList());
+    }
+
+    @Override
+    public List<QuantityAmountLedgerRowVO> quantityAmountLedger(String subjectCode, String period) {
+        Subject subject = subjectMapper.selectOne(
+                new LambdaQueryWrapper<Subject>().eq(Subject::getCode, subjectCode).eq(Subject::getDeleted, 0));
+        if (subject == null) {
+            return new ArrayList<>();
+        }
+        List<VoucherEntryEntity> entries = voucherEntryMapper.selectList(
+                new LambdaQueryWrapper<VoucherEntryEntity>()
+                        .eq(VoucherEntryEntity::getSubjectId, subject.getId()));
+        return entries.stream().map(e -> {
+            QuantityAmountLedgerRowVO vo = new QuantityAmountLedgerRowVO();
+            vo.setSubjectCode(subjectCode);
+            vo.setSubjectName(subject.getName());
+            vo.setDebitQuantity(e.getQuantity());
+            vo.setUnitPrice(e.getUnitPrice());
+            vo.setDebitAmount(e.getDebit());
+            return vo;
+        }).collect(Collectors.toList());
     }
 }

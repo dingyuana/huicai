@@ -36,6 +36,12 @@ public class VoucherEntryEntity extends BaseEntity {
     @TableField(typeHandler = JsonbTypeHandler.class)
     private String assistJson;
 
+    /** 数量（数量金额式账簿专用） */
+    private BigDecimal quantity;
+
+    /** 单价（数量金额式账簿专用） */
+    private BigDecimal unitPrice;
+
     /** 排序号 */
     private Integer sortOrder;
 

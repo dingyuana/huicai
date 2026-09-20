@@ -3,6 +3,7 @@ package com.huicai.base.voucher.controller;
 import com.huicai.common.response.R;
 import com.huicai.base.voucher.dto.vo.AuxiliaryLedgerRowVO;
 import com.huicai.base.voucher.dto.vo.LedgerRowVO;
+import com.huicai.base.voucher.dto.vo.QuantityAmountLedgerRowVO;
 import com.huicai.base.voucher.dto.vo.SubjectBalanceRowVO;
 import com.huicai.base.voucher.service.LedgerService;
 import com.huicai.base.balance.service.SubjectBalanceService;
@@ -71,5 +72,21 @@ public class LedgerController {
     @GetMapping("/trial-balance")
     public R<Map<String, Object>> trialBalance(@RequestParam String period) {
         return R.ok(subjectBalanceService.checkTrialBalance(period));
+    }
+
+    @Operation(summary = "多栏式明细账（按父科目查看子科目余额）")
+    @GetMapping("/multi-column")
+    public R<List<SubjectBalanceRowVO>> multiColumnLedger(
+            @RequestParam String parentSubjectCode,
+            @RequestParam String period) {
+        return R.ok(ledgerService.multiColumnLedger(parentSubjectCode, period));
+    }
+
+    @Operation(summary = "数量金额式账簿（存货科目数量/单价/金额）")
+    @GetMapping("/quantity-amount")
+    public R<List<QuantityAmountLedgerRowVO>> quantityAmountLedger(
+            @RequestParam String subjectCode,
+            @RequestParam String period) {
+        return R.ok(ledgerService.quantityAmountLedger(subjectCode, period));
     }
 }

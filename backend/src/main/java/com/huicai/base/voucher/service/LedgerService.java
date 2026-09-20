@@ -2,9 +2,12 @@ package com.huicai.base.voucher.service;
 
 import com.huicai.base.voucher.dto.vo.AuxiliaryLedgerRowVO;
 import com.huicai.base.voucher.dto.vo.LedgerRowVO;
+import com.huicai.base.voucher.dto.vo.QuantityAmountLedgerRowVO;
 import com.huicai.base.voucher.dto.vo.SubjectBalanceRowVO;
 
+import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 账簿查询服务
@@ -48,4 +51,16 @@ public interface LedgerService {
      * dimensionValue 为空时按维度值全量分组
      */
     List<AuxiliaryLedgerRowVO> auxiliaryLedger(String dimensionType, String period, Long dimensionValue);
+
+    /**
+     * 多栏式明细账：按父科目编码+期间，列出所有子科目的期初余额/本期借/贷/期末余额
+     * 用于展示如 管理费用(6602) → 办公费、差旅费、工资 等子科目明细
+     */
+    List<SubjectBalanceRowVO> multiColumnLedger(String parentSubjectCode, String period);
+
+    /**
+     * 数量金额式账簿：按科目编码+期间，列出各凭证分录的数量、单价、金额
+     * 用于原材料、库存商品等存货科目的数量金额核算
+     */
+    List<QuantityAmountLedgerRowVO> quantityAmountLedger(String subjectCode, String period);
 }

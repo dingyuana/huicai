@@ -166,29 +166,78 @@
           <el-button type="primary" @click="loadAuxiliary">查询</el-button>
         </div>
         <el-table :data="auxRows" v-loading="auxLoading" border stripe>
-          <el-table-column prop="subjectCode" label="科目编码" width="140" />
-          <el-table-column prop="subjectName" label="科目名称" min-width="180" />
-          <el-table-column label="核算维度" min-width="160">
-            <template #default="{ row }">{{ row.dimensionName || '-' }}</template>
-          </el-table-column>
-          <el-table-column label="方向" width="70" align="center">
-            <template #default="{ row }">{{ row.direction === 'debit' ? '借' : '贷' }}</template>
-          </el-table-column>
-          <el-table-column label="期初余额" width="140" align="right">
-            <template #default="{ row }">{{ fmt(row.beginBalance) }}</template>
-          </el-table-column>
-          <el-table-column label="本期借方" width="140" align="right">
-            <template #default="{ row }">{{ fmt(row.debitTotal) }}</template>
-          </el-table-column>
-          <el-table-column label="本期贷方" width="140" align="right">
-            <template #default="{ row }">{{ fmt(row.creditTotal) }}</template>
-          </el-table-column>
-          <el-table-column label="期末余额" width="140" align="right">
-            <template #default="{ row }">{{ fmt(row.endBalance) }}</template>
-          </el-table-column>
-        </el-table>
-      </el-tab-pane>
-    </el-tabs>
+           <el-table-column prop="subjectCode" label="科目编码" width="140" />
+           <el-table-column prop="subjectName" label="科目名称" min-width="180" />
+           <el-table-column label="核算维度" min-width="160">
+             <template #default="{ row }">{{ row.dimensionName || '-' }}</template>
+           </el-table-column>
+           <el-table-column label="方向" width="70" align="center">
+             <template #default="{ row }">{{ row.direction === 'debit' ? '借' : '贷' }}</template>
+           </el-table-column>
+           <el-table-column label="期初余额" width="140" align="right">
+             <template #default="{ row }">{{ fmt(row.beginBalance) }}</template>
+           </el-table-column>
+           <el-table-column label="本期借方" width="140" align="right">
+             <template #default="{ row }">{{ fmt(row.debitTotal) }}</template>
+           </el-table-column>
+           <el-table-column label="本期贷方" width="140" align="right">
+             <template #default="{ row }">{{ fmt(row.creditTotal) }}</template>
+           </el-table-column>
+           <el-table-column label="期末余额" width="140" align="right">
+             <template #default="{ row }">{{ fmt(row.endBalance) }}</template>
+           </el-table-column>
+         </el-table>
+       </el-tab-pane>
+
+       <el-tab-pane label="多栏式明细账" name="multiColumn">
+         <div class="filter-bar">
+           <el-input v-model="mcParentCode" placeholder="父科目编码 如 6602" style="width:200px" />
+           <el-input v-model="mcPeriod" placeholder="会计期间 YYYYMM" style="width:160px" />
+           <el-button type="primary" @click="loadMultiColumn">查询</el-button>
+         </div>
+         <el-table :data="mcRows" v-loading="mcLoading" border stripe>
+           <el-table-column prop="subjectCode" label="科目编码" width="140" />
+           <el-table-column prop="subjectName" label="科目名称" min-width="180" />
+           <el-table-column label="方向" width="70" align="center">
+             <template #default="{ row }">{{ row.direction === 'debit' ? '借' : '贷' }}</template>
+           </el-table-column>
+           <el-table-column label="期初余额" width="140" align="right">
+             <template #default="{ row }">{{ fmt(row.beginBalance) }}</template>
+           </el-table-column>
+           <el-table-column label="本期借方" width="140" align="right">
+             <template #default="{ row }">{{ fmt(row.debitTotal) }}</template>
+           </el-table-column>
+           <el-table-column label="本期贷方" width="140" align="right">
+             <template #default="{ row }">{{ fmt(row.creditTotal) }}</template>
+           </el-table-column>
+           <el-table-column label="期末余额" width="140" align="right">
+             <template #default="{ row }">{{ fmt(row.endBalance) }}</template>
+           </el-table-column>
+         </el-table>
+       </el-tab-pane>
+
+       <el-tab-pane label="数量金额式账簿" name="quantityAmount">
+         <div class="filter-bar">
+           <el-input v-model="qaSubjectCode" placeholder="科目编码 如 1403" style="width:200px" />
+           <el-input v-model="qaPeriod" placeholder="会计期间 YYYYMM" style="width:160px" />
+           <el-button type="primary" @click="loadQuantityAmount">查询</el-button>
+         </div>
+         <el-table :data="qaRows" v-loading="qaLoading" border stripe>
+           <el-table-column prop="voucherNo" label="凭证号" width="140" />
+           <el-table-column prop="subjectCode" label="科目编码" width="120" />
+           <el-table-column prop="subjectName" label="科目名称" min-width="160" />
+           <el-table-column label="数量" width="120" align="right">
+             <template #default="{ row }">{{ fmt(row.debitQuantity) }}</template>
+           </el-table-column>
+           <el-table-column label="单价" width="120" align="right">
+             <template #default="{ row }">{{ fmt(row.unitPrice) }}</template>
+           </el-table-column>
+           <el-table-column label="金额" width="140" align="right">
+             <template #default="{ row }">{{ fmt(row.debitAmount) }}</template>
+           </el-table-column>
+         </el-table>
+       </el-tab-pane>
+     </el-tabs>
 
     <el-dialog v-model="trialDialogVisible" title="试算平衡结果" width="520">
       <div v-if="trialResult">
@@ -229,7 +278,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { getSubjectBalance, getGeneralLedger, getSubsidiaryLedger, getTrialBalance, getAuxiliaryLedger, type SubjectBalanceRow, type LedgerRow, type TrialBalance, type AuxiliaryLedgerRow, type AuxiliaryDimensionType } from '@/api/modules/ledger'
+import { getSubjectBalance, getGeneralLedger, getSubsidiaryLedger, getTrialBalance, getAuxiliaryLedger, getMultiColumnLedger, getQuantityAmountLedger, type SubjectBalanceRow, type LedgerRow, type TrialBalance, type AuxiliaryLedgerRow, type AuxiliaryDimensionType, type QuantityAmountLedgerRow } from '@/api/modules/ledger'
 import { getSubjectTree, type SubjectVO } from '@/api/modules/subject'
 import { listCustomer, listVendor } from '@/api/modules/arap'
 import { getDeptTree, type DeptVO } from '@/api/modules/system'
@@ -260,6 +309,16 @@ const auxLoading = ref(false)
 const auxRows = ref<AuxiliaryLedgerRow[]>([])
 const auxValueOptions = ref<{ value: number; label: string }[]>([])
 const auxValueLoading = ref(false)
+
+const mcParentCode = ref('')
+const mcPeriod = ref(currentPeriod)
+const mcLoading = ref(false)
+const mcRows = ref<SubjectBalanceRow[]>([])
+
+const qaSubjectCode = ref('')
+const qaPeriod = ref(currentPeriod)
+const qaLoading = ref(false)
+const qaRows = ref<QuantityAmountLedgerRow[]>([])
 
 const trialDialogVisible = ref(false)
 const trialResult = ref<TrialBalance | null>(null)
@@ -396,6 +455,36 @@ async function onTrialBalance() {
   }
   trialResult.value = await getTrialBalance(balancePeriod.value)
   trialDialogVisible.value = true
+}
+
+async function loadMultiColumn() {
+  if (!mcParentCode.value || !mcPeriod.value) {
+    ElMessage.warning('请输入父科目编码和期间')
+    return
+  }
+  mcLoading.value = true
+  try {
+    mcRows.value = await getMultiColumnLedger(mcParentCode.value, mcPeriod.value)
+  } catch {
+    // handled
+  } finally {
+    mcLoading.value = false
+  }
+}
+
+async function loadQuantityAmount() {
+  if (!qaSubjectCode.value || !qaPeriod.value) {
+    ElMessage.warning('请输入科目编码和期间')
+    return
+  }
+  qaLoading.value = true
+  try {
+    qaRows.value = await getQuantityAmountLedger(qaSubjectCode.value, qaPeriod.value)
+  } catch {
+    // handled
+  } finally {
+    qaLoading.value = false
+  }
 }
 
 onMounted(async () => {
