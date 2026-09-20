@@ -16,6 +16,7 @@ import com.huicai.base.system.mapper.SubjectMapper;
 import com.huicai.sme.tax.constant.InvoiceStatus;
 import com.huicai.base.business.entity.InputInvoiceEntity;
 import com.huicai.base.business.entity.OutputInvoiceEntity;
+import com.huicai.base.business.entity.BusinessDocEntity;
 import com.huicai.sme.tax.dto.vo.AppendixIResponse;
 import com.huicai.sme.tax.dto.vo.AppendixIIResponse;
 import com.huicai.sme.tax.dto.vo.AppendixIRow;
@@ -55,6 +56,8 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 import java.util.Map;
 
 @Slf4j
@@ -322,9 +325,9 @@ public class TaxServiceImpl implements TaxService {
         }
         wrapper.orderByDesc(OutputInvoiceEntity::getInvoiceDate);
         IPage<OutputInvoiceEntity> result = outputMapper.selectPage(page, wrapper);
-        // 回填关联编号（docNo / voucherNo）+ 红冲关联信息
-        for (OutputInvoiceEntity inv : result.getRecords()) {
-            fillOutputInvoiceDetails(inv);
+        List<OutputInvoiceEntity> records = result.getRecords();
+        if (!records.isEmpty()) {
+            batchFillOutputInvoiceDetails(records);
         }
         return result;
     }
@@ -375,6 +378,72 @@ public class TaxServiceImpl implements TaxService {
             }
         }
         // P34: 应收单已合并到业务单据，不再回填 receivableNo
+    }
+
+    private void batchFillOutputInvoiceDetails(List<OutputInvoiceEntity> records) {
+        List<Long> originalIds = records.stream().map(OutputInvoiceEntity::getReversedByInvoiceId).filter(id -> id != null).collect(Collectors.toList());
+        List<Long> docIds = records.stream().map(OutputInvoiceEntity::getDocId).filter(id -> id != null).collect(Collectors.toList());
+        List<Long> voucherIds = records.stream().map(OutputInvoiceEntity::getVoucherId).filter(id -> id != null).collect(Collectors.toList());
+        List<String> originalInvoiceNos = records.stream().map(OutputInvoiceEntity::getOriginalInvoiceNo).filter(s -> s != null && !s.isEmpty()).collect(Collectors.toList());
+
+        Map<Long, String> reversedNoMap = new HashMap<>();
+        if (!originalIds.isEmpty()) {
+            List<OutputInvoiceEntity> redInvoices = outputMapper.selectList(
+                    new LambdaQueryWrapper<OutputInvoiceEntity>().in(OutputInvoiceEntity::getId, originalIds));
+            for (OutputInvoiceEntity ri : redInvoices) {
+                reversedNoMap.put(ri.getId(), ri.getInvoiceNo());
+            }
+        }
+
+        Map<Long, String> docNoMap = new HashMap<>();
+        Map<Long, String> docStatusMap = new HashMap<>();
+        if (!docIds.isEmpty()) {
+            List<BusinessDocEntity> docs = businessDocMapper.selectList(
+                    new LambdaQueryWrapper<BusinessDocEntity>().in(BusinessDocEntity::getId, docIds));
+            for (BusinessDocEntity doc : docs) {
+                docNoMap.put(doc.getId(), doc.getDocNo());
+                docStatusMap.put(doc.getId(), doc.getStatus());
+            }
+        }
+
+        Map<Long, String> voucherNoMap = new HashMap<>();
+        Map<Long, String> voucherStatusMap = new HashMap<>();
+        if (!voucherIds.isEmpty()) {
+            List<VoucherEntity> vouchers = voucherMapper.selectList(
+                    new LambdaQueryWrapper<VoucherEntity>().in(VoucherEntity::getId, voucherIds));
+            for (VoucherEntity v : vouchers) {
+                voucherNoMap.put(v.getId(), v.getVoucherNo());
+                voucherStatusMap.put(v.getId(), v.getStatus());
+            }
+        }
+
+        Map<String, Long> invoiceNoToId = new HashMap<>();
+        if (!originalInvoiceNos.isEmpty()) {
+            List<OutputInvoiceEntity> originals = outputMapper.selectList(
+                    new LambdaQueryWrapper<OutputInvoiceEntity>().in(OutputInvoiceEntity::getInvoiceNo, originalInvoiceNos));
+            for (OutputInvoiceEntity oi : originals) {
+                invoiceNoToId.put(oi.getInvoiceNo(), oi.getId());
+            }
+        }
+
+        for (OutputInvoiceEntity inv : records) {
+            if (inv.getOriginalInvoiceNo() != null && !inv.getOriginalInvoiceNo().isEmpty()) {
+                Long origId = invoiceNoToId.get(inv.getOriginalInvoiceNo());
+                if (origId != null) inv.setOriginalInvoiceId(origId);
+            }
+            if (inv.getReversedByInvoiceId() != null) {
+                String no = reversedNoMap.get(inv.getReversedByInvoiceId());
+                if (no != null) inv.setReversedByInvoiceNo(no);
+            }
+            if (inv.getDocId() != null && docNoMap.containsKey(inv.getDocId())) {
+                inv.setDocNo(docNoMap.get(inv.getDocId()));
+                inv.setDocStatus(docStatusMap.get(inv.getDocId()));
+            }
+            if (inv.getVoucherId() != null && voucherNoMap.containsKey(inv.getVoucherId())) {
+                inv.setVoucherNo(voucherNoMap.get(inv.getVoucherId()));
+                inv.setVoucherStatus(voucherStatusMap.get(inv.getVoucherId()));
+            }
+        }
     }
 
     @Override

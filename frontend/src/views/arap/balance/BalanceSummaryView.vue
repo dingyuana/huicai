@@ -98,6 +98,12 @@
 import { onMounted, ref, computed } from 'vue'
 import { ElMessage } from 'element-plus'
 import VChart from 'vue-echarts'
+import { use } from 'echarts/core'
+import { CanvasRenderer } from 'echarts/renderers'
+import { BarChart } from 'echarts/charts'
+import { TitleComponent, TooltipComponent, LegendComponent, GridComponent } from 'echarts/components'
+
+use([CanvasRenderer, BarChart, TitleComponent, TooltipComponent, LegendComponent, GridComponent])
 import { getBalanceSummary, type ArapBalanceSummaryVO, type PeriodEntity, listPeriods } from '@/api/modules/arap'
 
 type BalanceTab = 'receivable' | 'payable'
