@@ -313,6 +313,12 @@ function countAutoMatches(): number {
     it.matchLevel === 'L1' || it.matchLevel === 'L2' || it.matchLevel === 'L3' || it.matchLevel === 'L4').length
 }
 
+function countExactMatches(): number {
+  if (!recommendResult.value || !recommendResult.value.items) return 0
+  return recommendResult.value.items.filter((it: any) =>
+    it.matchLevel === 'L1' || it.matchLevel === 'L2' || it.matchLevel === 'L3').length
+}
+
 function fmtAmount(v: number | null | undefined) {
   return v == null ? '' : Number(v).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
