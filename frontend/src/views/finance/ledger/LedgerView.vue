@@ -126,6 +126,68 @@
           </el-table-column>
         </el-table>
       </el-tab-pane>
+
+      <el-tab-pane label="辅助核算账" name="auxiliary">
+        <div class="filter-bar">
+          <el-select
+            v-model="auxDimensionType"
+            placeholder="选择辅助核算维度"
+            style="width:180px"
+            @change="onAuxDimensionTypeChange"
+          >
+            <el-option label="客户" value="customer" />
+            <el-option label="供应商" value="vendor" />
+            <el-option label="部门" value="department" />
+            <el-option label="项目" value="project" />
+            <el-option label="员工" value="employee" />
+          </el-select>
+          <el-select
+            v-if="auxDimensionType && auxDimensionType !== 'project'"
+            v-model="auxDimensionValue"
+            :placeholder="auxValueLoading ? '加载中...' : '选择具体维度（可空）'"
+            style="width:220px"
+            clearable
+            filterable
+          >
+            <el-option
+              v-for="opt in auxValueOptions"
+              :key="opt.value"
+              :label="opt.label"
+              :value="opt.value"
+            />
+          </el-select>
+          <el-input
+            v-else-if="auxDimensionType === 'project'"
+            model-value="项目无实体可不选"
+            disabled
+            style="width:220px"
+          />
+          <el-input v-model="auxPeriod" placeholder="会计期间 YYYYMM" style="width:160px" />
+          <el-button type="primary" @click="loadAuxiliary">查询</el-button>
+        </div>
+        <el-table :data="auxRows" v-loading="auxLoading" border stripe>
+          <el-table-column prop="subjectCode" label="科目编码" width="140" />
+          <el-table-column prop="subjectName" label="科目名称" min-width="180" />
+          <el-table-column label="核算维度" min-width="160">
+            <template #default="{ row }">{{ row.dimensionName || '-' }}</template>
+          </el-table-column>
+          <el-table-column label="方向" width="70" align="center">
+            <template #default="{ row }">{{ row.direction === 'debit' ? '借' : '贷' }}</template>
+          </el-table-column>
+          <el-table-column label="期初余额" width="140" align="right">
+            <template #default="{ row }">{{ fmt(row.beginBalance) }}</template>
+          </el-table-column>
+          <el-table-column label="本期借方" width="140" align="right">
+            <template #default="{ row }">{{ fmt(row.debitTotal) }}</template>
+          </el-table-column>
+          <el-table-column label="本期贷方" width="140" align="right">
+            <template #default="{ row }">{{ fmt(row.creditTotal) }}</template>
+          </el-table-column>
+          <el-table-column label="期末余额" width="140" align="right">
+            <template #default="{ row }">{{ fmt(row.endBalance) }}</template>
+          </el-table-column>
+        </el-table>
+      </el-tab-pane>
     </el-tabs>
 
     <el-dialog v-model="trialDialogVisible" title="试算平衡结果" width="520">
@@ -167,8 +229,11 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { getSubjectBalance, getGeneralLedger, getSubsidiaryLedger, getTrialBalance, type SubjectBalanceRow, type LedgerRow, type TrialBalance } from '@/api/modules/ledger'
+import { getSubjectBalance, getGeneralLedger, getSubsidiaryLedger, getTrialBalance, getAuxiliaryLedger, type SubjectBalanceRow, type LedgerRow, type TrialBalance, type AuxiliaryLedgerRow, type AuxiliaryDimensionType } from '@/api/modules/ledger'
 import { getSubjectTree, type SubjectVO } from '@/api/modules/subject'
+import { listCustomer, listVendor } from '@/api/modules/arap'
+import { getDeptTree, type DeptVO } from '@/api/modules/system'
+import { listEmployee } from '@/api/modules/employee'
 
 const router = useRouter()
 const activeTab = ref('balance')
@@ -187,6 +252,14 @@ const slPeriod = ref(currentPeriod)
 const slSubjectId = ref<number | undefined>(undefined)
 const slLoading = ref(false)
 const slRows = ref<LedgerRow[]>([])
+
+const auxDimensionType = ref<AuxiliaryDimensionType | undefined>(undefined)
+const auxDimensionValue = ref<number | undefined>(undefined)
+const auxPeriod = ref(currentPeriod)
+const auxLoading = ref(false)
+const auxRows = ref<AuxiliaryLedgerRow[]>([])
+const auxValueOptions = ref<{ value: number; label: string }[]>([])
+const auxValueLoading = ref(false)
 
 const trialDialogVisible = ref(false)
 const trialResult = ref<TrialBalance | null>(null)
@@ -255,6 +328,64 @@ async function loadSubsidiary() {
     // handled
   } finally {
     slLoading.value = false
+  }
+}
+
+function onAuxDimensionTypeChange() {
+  auxDimensionValue.value = undefined
+  auxValueOptions.value = []
+  if (auxDimensionType.value) {
+    loadAuxValueOptions(auxDimensionType.value)
+  }
+}
+
+async function loadAuxValueOptions(type: AuxiliaryDimensionType) {
+  auxValueLoading.value = true
+  try {
+    if (type === 'customer') {
+      const list = await listCustomer()
+      auxValueOptions.value = list.filter(c => c.id != null).map(c => ({ value: c.id!, label: c.name }))
+    } else if (type === 'vendor') {
+      const list = await listVendor()
+      auxValueOptions.value = list.filter(v => v.id != null).map(v => ({ value: v.id!, label: v.name }))
+    } else if (type === 'department') {
+      const tree = await getDeptTree()
+      const flat: { value: number; label: string }[] = []
+      const walk = (nodes: DeptVO[]) => {
+        for (const n of nodes) {
+          flat.push({ value: n.id, label: n.name })
+          if (n.children?.length) walk(n.children)
+        }
+      }
+      walk(tree)
+      auxValueOptions.value = flat
+    } else if (type === 'employee') {
+      const list = await listEmployee()
+      auxValueOptions.value = list.filter(e => e.id != null).map(e => ({ value: e.id!, label: e.name }))
+    }
+  } catch {
+    // handled
+  } finally {
+    auxValueLoading.value = false
+  }
+}
+
+async function loadAuxiliary() {
+  if (!auxDimensionType.value) {
+    ElMessage.warning('请选择辅助核算维度类型')
+    return
+  }
+  if (!auxPeriod.value || !/^\d{6}$/.test(auxPeriod.value)) {
+    ElMessage.warning('请输入正确的会计期间（6位数字 YYYYMM）')
+    return
+  }
+  auxLoading.value = true
+  try {
+    auxRows.value = await getAuxiliaryLedger(auxDimensionType.value, auxPeriod.value, auxDimensionValue.value)
+  } catch {
+    // handled
+  } finally {
+    auxLoading.value = false
   }
 }
 

@@ -87,3 +87,29 @@ export function getSubsidiaryLedger(
 export function getTrialBalance(period: string): Promise<TrialBalance> {
   return request.get('/base/voucher/v1/ledgers/trial-balance', { params: { period } })
 }
+
+export type AuxiliaryDimensionType = 'customer' | 'vendor' | 'department' | 'project' | 'employee'
+
+export interface AuxiliaryLedgerRow {
+  dimensionType: string
+  dimensionValue?: number
+  dimensionName?: string
+  subjectId: number
+  subjectCode: string
+  subjectName: string
+  direction: 'debit' | 'credit'
+  beginBalance: number
+  debitTotal: number
+  creditTotal: number
+  endBalance: number
+}
+
+export function getAuxiliaryLedger(
+  dimensionType: AuxiliaryDimensionType,
+  period: string,
+  dimensionValue?: number,
+): Promise<AuxiliaryLedgerRow[]> {
+  return request.get('/base/voucher/v1/ledgers/auxiliary', {
+    params: { dimensionType, period, ...(dimensionValue ? { dimensionValue } : {}) },
+  })
+}
