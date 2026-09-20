@@ -4,7 +4,7 @@
       <div class="page-header"><span class="page-title">现金日记账</span></div>
       <div class="toolbar">
         <el-form :model="query" inline>
-          <el-form-item label="期间"><el-input v-model="query.period" placeholder="YYYYMM" style="width:120px" /></el-form-item>
+          <el-form-item label="期间"><PeriodNavigator v-model="query.period" @change="fetchData" /></el-form-item>
           <el-form-item label="开始"><el-date-picker v-model="query.startDate" type="date" style="width:140px" /></el-form-item>
           <el-form-item label="结束"><el-date-picker v-model="query.endDate" type="date" style="width:140px" /></el-form-item>
           <el-form-item><el-button type="primary" @click="fetchData">查询</el-button></el-form-item>
@@ -56,6 +56,7 @@
 import request from '@/api/request'
 import { ref } from 'vue'
 import { ElMessage } from 'element-plus'
+import PeriodNavigator from '@/components/finance/PeriodNavigator.vue'
 
 const loading = ref(false), saving = ref(false), dialogVisible = ref(false), isEdit = ref(false)
 const list = ref<any[]>([]), total = ref(0)

@@ -8,7 +8,7 @@
 
       <el-form :model="query" inline class="filter-form">
         <el-form-item label="期间">
-          <el-input v-model="query.period" placeholder="YYYYMM" style="width:120px" clearable />
+          <PeriodNavigator v-model="query.period" @change="fetchData" />
         </el-form-item>
         <el-form-item label="状态">
           <el-select v-model="query.status" clearable placeholder="全部" style="width:130px">
@@ -105,6 +105,7 @@ import { onMounted, reactive, ref } from 'vue'
 import { ElMessage, type FormInstance } from 'element-plus'
 import { useRouter } from 'vue-router'
 import { pageBudget, createBudget, submitBudget, approveBudget, executionAnalysis } from '@/api/modules/budget'
+import PeriodNavigator from '@/components/finance/PeriodNavigator.vue'
 
 const router = useRouter()
 

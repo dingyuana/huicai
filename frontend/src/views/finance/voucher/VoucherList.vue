@@ -58,7 +58,7 @@
           </el-form-item>
         </template>
         <el-form-item label="期间">
-          <el-input v-model="query.period" placeholder="YYYYMM" clearable style="width:120px" />
+          <PeriodNavigator v-model="query.period" @change="fetchData" />
         </el-form-item>
         <el-form-item label="状态">
           <el-select v-model="query.status" placeholder="全部" clearable style="width:130px">
@@ -152,6 +152,7 @@ import BatchActionBar from '@/components/batch/BatchActionBar.vue'
 import BatchResultDialog from '@/components/batch/BatchResultDialog.vue'
 import { useBatchOperation, type BatchActionDef } from '@/composables/useBatchOperation'
 import StatBar from '@/components/page/StatBar.vue'
+import PeriodNavigator from '@/components/finance/PeriodNavigator.vue'
 
 const router = useRouter()
 const loading = ref(false)

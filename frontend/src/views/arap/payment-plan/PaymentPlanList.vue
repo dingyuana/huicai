@@ -7,7 +7,7 @@
 
       <el-form :model="query" inline class="filter-form">
         <el-form-item label="期间">
-          <el-input v-model="query.period" placeholder="YYYYMM" style="width:130px" />
+          <PeriodNavigator v-model="query.period" @change="fetchPlan" />
         </el-form-item>
         <el-form-item label="供应商">
           <el-input v-model="query.vendorId" placeholder="供应商ID" style="width:130px" />
@@ -59,6 +59,7 @@
 import { onMounted, reactive, ref } from 'vue'
 import { resolveDefaultPeriod } from '@/utils/period'
 import { generatePaymentPlan } from '@/api/modules/arap'
+import PeriodNavigator from '@/components/finance/PeriodNavigator.vue'
 
 const query = reactive({
   period: '',

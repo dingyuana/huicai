@@ -69,6 +69,7 @@ declare module 'vue' {
     ElUpload: typeof import('element-plus/es')['ElUpload']
     FilterBar: typeof import('./src/components/page/FilterBar.vue')['default']
     PageHeader: typeof import('./src/components/page/PageHeader.vue')['default']
+    PeriodNavigator: typeof import('./src/components/finance/PeriodNavigator.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
     StatBar: typeof import('./src/components/page/StatBar.vue')['default']

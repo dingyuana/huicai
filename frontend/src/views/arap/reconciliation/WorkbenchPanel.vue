@@ -19,7 +19,7 @@
         <el-input v-model="query.keyword" placeholder="搜索客户/供应商" clearable style="width:200px" />
       </el-form-item>
       <el-form-item label="期间">
-        <el-input v-model="query.period" placeholder="YYYYMM" style="width:100px" clearable />
+        <PeriodNavigator v-model="query.period" @change="fetchData" />
       </el-form-item>
       <el-form-item>
         <el-button type="primary" @click="onSearch">查询</el-button>

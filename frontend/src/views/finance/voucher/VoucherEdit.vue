@@ -12,7 +12,7 @@
 
       <el-form :model="form" :rules="formRules" ref="formRef" label-width="100" inline>
         <el-form-item label="会计期间" prop="period">
-          <el-input v-model="form.period" placeholder="YYYYMM" style="width:140px" />
+          <PeriodNavigator v-model="form.period" @change="loadVoucher" />
         </el-form-item>
         <el-form-item label="凭证类型" prop="voucherTypeId">
           <el-select v-model="form.voucherTypeId" placeholder="选择类型" style="width:180px" filterable>
@@ -125,6 +125,7 @@ import {
 } from '@/api/modules/voucher'
 import { getAllVoucherTypes, type VoucherTypeVO } from '@/api/modules/voucherType'
 import { getSubjectTree, type SubjectVO } from '@/api/modules/subject'
+import PeriodNavigator from '@/components/finance/PeriodNavigator.vue'
 
 const route = useRoute()
 const router = useRouter()

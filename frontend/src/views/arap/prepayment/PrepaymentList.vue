@@ -24,7 +24,7 @@
                 </el-select>
               </el-form-item>
               <el-form-item label="期间">
-                <el-input v-model="query.period" placeholder="YYYYMM" style="width:100px" clearable />
+                <PeriodNavigator v-model="query.period" @change="fetchData" />
               </el-form-item>
               <el-form-item>
                 <el-button type="primary" @click="fetchData">查询</el-button>
@@ -90,7 +90,7 @@
                 </el-select>
               </el-form-item>
               <el-form-item label="期间">
-                <el-input v-model="query.period" placeholder="YYYYMM" style="width:100px" clearable />
+                <PeriodNavigator v-model="query.period" @change="fetchData" />
               </el-form-item>
               <el-form-item>
                 <el-button type="primary" @click="fetchData">查询</el-button>
@@ -220,6 +220,7 @@ import { pageReceivable } from '@/api/modules/arap'
 import { pagePayable } from '@/api/modules/arap'
 import { pageVendor, listVendor } from '@/api/modules/arap'
 import { pageCustomer, listCustomer } from '@/api/modules/arap'
+import PeriodNavigator from '@/components/finance/PeriodNavigator.vue'
 
 const activeTab = ref('vendor')
 const loading = ref(false)

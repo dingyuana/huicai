@@ -55,7 +55,7 @@
           <el-input v-model="query.customerName" clearable style="width:180px" />
         </el-form-item>
         <el-form-item label="期间">
-          <el-input v-model="query.period" placeholder="YYYYMM" style="width:120px" clearable />
+          <PeriodNavigator v-model="query.period" @change="fetchData" />
         </el-form-item>
         <template v-if="scope === 'completed'">
         <el-form-item label="日期范围">
@@ -341,6 +341,7 @@ import BatchActionBar from '@/components/batch/BatchActionBar.vue'
 import BatchResultDialog from '@/components/batch/BatchResultDialog.vue'
 import StatBar from '@/components/page/StatBar.vue'
 import { useBatchOperation, type BatchActionDef } from '@/composables/useBatchOperation'
+import PeriodNavigator from '@/components/finance/PeriodNavigator.vue'
 
 const detailVisible = ref(false)
 const detail = ref<OutputInvoice | null>(null)

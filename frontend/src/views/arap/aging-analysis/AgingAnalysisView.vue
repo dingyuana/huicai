@@ -7,7 +7,7 @@
 
       <el-form :model="query" inline class="filter-form">
         <el-form-item label="期间">
-          <el-input v-model="query.period" placeholder="YYYYMM" style="width:130px" />
+          <PeriodNavigator v-model="query.period" @change="fetchAging" />
         </el-form-item>
         <el-form-item>
           <el-button type="primary" @click="fetchAll">查询</el-button>
@@ -104,6 +104,7 @@ import { ElMessage } from 'element-plus'
 import dayjs from 'dayjs'
 import { resolveDefaultPeriod } from '@/utils/period'
 import request from '@/api/request'
+import PeriodNavigator from '@/components/finance/PeriodNavigator.vue'
 
 const activeTab = ref('distribution')
 

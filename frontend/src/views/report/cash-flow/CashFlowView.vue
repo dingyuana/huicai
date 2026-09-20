@@ -7,7 +7,7 @@
 
       <el-form :model="query" inline class="filter-form">
         <el-form-item label="期间">
-          <el-input v-model="query.period" placeholder="YYYYMM" style="width:120px" />
+          <PeriodNavigator v-model="query.period" @change="fetchData" />
         </el-form-item>
         <el-form-item>
           <el-button type="primary" @click="fetchData">查询</el-button>
@@ -31,6 +31,7 @@
 import { onMounted, reactive, ref, computed } from 'vue'
 import { resolveDefaultPeriod } from '@/utils/period'
 import { cashFlowStatement } from '@/api/modules/report'
+import PeriodNavigator from '@/components/finance/PeriodNavigator.vue'
 
 const query = reactive({ period: '' })
 const result = ref<any>(null)

@@ -16,7 +16,7 @@
           </el-select>
         </el-form-item>
         <el-form-item label="期间">
-          <el-input v-model="query.period" placeholder="YYYYMM" style="width:160px" />
+          <PeriodNavigator v-model="query.period" @change="onLoad" />
         </el-form-item>
       </el-form>
 
@@ -114,6 +114,7 @@ import {
   type Adjustment, type ReconciliationSummary, type UnmatchedItem, type MatchResult,
 } from '@/api/modules/bankReconciliation'
 import { getActiveBankAccounts, type BankAccountVO } from '@/api/modules/bankAccount'
+import PeriodNavigator from '@/components/finance/PeriodNavigator.vue'
 
 const loading = ref(false)
 const running = ref(false)

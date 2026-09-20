@@ -3,7 +3,7 @@
     <el-tabs v-model="activeTab">
       <el-tab-pane label="科目余额表" name="balance">
         <div class="filter-bar">
-          <el-input v-model="balancePeriod" placeholder="会计期间 YYYYMM" style="width:160px" />
+          <PeriodNavigator v-model="balancePeriod" @change="loadBalance" />
           <el-button type="primary" @click="loadBalance">查询</el-button>
           <el-button @click="onTrialBalance">试算平衡</el-button>
         </div>
@@ -48,7 +48,7 @@
             placeholder="选择末级科目"
             style="width:280px"
           />
-          <el-input v-model="glPeriod" placeholder="会计期间 YYYYMM" style="width:160px" />
+          <PeriodNavigator v-model="glPeriod" @change="loadGeneral" />
           <el-button type="primary" @click="loadGeneral">查询</el-button>
         </div>
         <el-table :data="glRows" v-loading="glLoading" border stripe>
@@ -92,7 +92,7 @@
             placeholder="选择末级科目"
             style="width:280px"
           />
-          <el-input v-model="slPeriod" placeholder="会计期间 YYYYMM" style="width:160px" />
+          <PeriodNavigator v-model="slPeriod" @change="loadSubsidiary" />
           <el-button type="primary" @click="loadSubsidiary">查询</el-button>
         </div>
         <el-table :data="slRows" v-loading="slLoading" border stripe>
@@ -162,7 +162,7 @@
             disabled
             style="width:220px"
           />
-          <el-input v-model="auxPeriod" placeholder="会计期间 YYYYMM" style="width:160px" />
+          <PeriodNavigator v-model="auxPeriod" @change="loadAuxiliary" />
           <el-button type="primary" @click="loadAuxiliary">查询</el-button>
         </div>
         <el-table :data="auxRows" v-loading="auxLoading" border stripe>
@@ -192,7 +192,7 @@
        <el-tab-pane label="多栏式明细账" name="multiColumn">
          <div class="filter-bar">
            <el-input v-model="mcParentCode" placeholder="父科目编码 如 6602" style="width:200px" />
-           <el-input v-model="mcPeriod" placeholder="会计期间 YYYYMM" style="width:160px" />
+           <PeriodNavigator v-model="mcPeriod" @change="loadMultiColumn" />
            <el-button type="primary" @click="loadMultiColumn">查询</el-button>
          </div>
          <el-table :data="mcRows" v-loading="mcLoading" border stripe>
@@ -219,7 +219,7 @@
        <el-tab-pane label="数量金额式账簿" name="quantityAmount">
          <div class="filter-bar">
            <el-input v-model="qaSubjectCode" placeholder="科目编码 如 1403" style="width:200px" />
-           <el-input v-model="qaPeriod" placeholder="会计期间 YYYYMM" style="width:160px" />
+           <PeriodNavigator v-model="qaPeriod" @change="loadQuantityAmount" />
            <el-button type="primary" @click="loadQuantityAmount">查询</el-button>
          </div>
          <el-table :data="qaRows" v-loading="qaLoading" border stripe>

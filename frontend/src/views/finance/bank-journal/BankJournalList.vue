@@ -16,7 +16,7 @@
           </el-select>
         </el-form-item>
         <el-form-item label="期间">
-          <el-input v-model="query.period" placeholder="YYYYMM" clearable style="width:120px" />
+          <PeriodNavigator v-model="query.period" @change="fetchData" />
         </el-form-item>
         <el-form-item label="类型">
           <el-select v-model="query.txType" placeholder="全部" clearable style="width:130px">
@@ -128,6 +128,7 @@ import {
   generateVoucherFromJournal, TX_TYPE_LABELS, type BankJournalVO,
 } from '@/api/modules/bankJournal'
 import { getActiveBankAccounts, type BankAccountVO } from '@/api/modules/bankAccount'
+import PeriodNavigator from '@/components/finance/PeriodNavigator.vue'
 
 const loading = ref(false)
 const saving = ref(false)

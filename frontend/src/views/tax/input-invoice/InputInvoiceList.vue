@@ -40,7 +40,7 @@
           <el-input v-model="query.vendorName" clearable style="width:180px" />
         </el-form-item>
         <el-form-item label="期间">
-          <el-input v-model="query.period" placeholder="YYYYMM" style="width:120px" clearable />
+          <PeriodNavigator v-model="query.period" @change="fetchData" />
         </el-form-item>
         <el-form-item label="认证状态">
           <el-select v-model="query.certStatus" clearable placeholder="全部" style="width:130px">
@@ -184,6 +184,7 @@ import {
   inputInvoiceSummary,
 } from '@/api/modules/tax'
 import StatBar from '@/components/page/StatBar.vue'
+import PeriodNavigator from '@/components/finance/PeriodNavigator.vue'
 
 const CERT_OPTIONS = [
   { value: 'UNCERTIFIED', label: '未认证' },

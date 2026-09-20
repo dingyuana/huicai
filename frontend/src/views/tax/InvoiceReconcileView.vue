@@ -39,7 +39,7 @@
           </el-form-item>
         </template>
         <el-form-item label="期间">
-          <el-input v-model="query.period" placeholder="YYYYMM" clearable style="width:120px" />
+          <PeriodNavigator v-model="query.period" @change="fetchData" />
         </el-form-item>
         <el-form-item :label="tabType === 'INPUT' ? '供应商' : '客户'">
           <el-input v-model="query.partyName" clearable style="width:180px" :placeholder="tabType === 'INPUT' ? '供应商名称' : '客户名称'" />
@@ -110,6 +110,7 @@ import {
   queryOutputReconcile,
   type InvoiceReconcileVO,
 } from '@/api/modules/tax'
+import PeriodNavigator from '@/components/finance/PeriodNavigator.vue'
 
 const tabType = ref<'INPUT' | 'OUTPUT'>('INPUT')
 const scope = ref<'pending' | 'completed'>('pending')

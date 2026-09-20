@@ -8,7 +8,7 @@
 
       <el-form inline>
         <el-form-item label="会计期间">
-          <el-input v-model="period" placeholder="YYYYMM" style="width:160px" />
+          <PeriodNavigator v-model="period" @change="refresh" />
         </el-form-item>
         <el-form-item>
           <el-button type="primary" @click="onCheck">结账前检查</el-button>

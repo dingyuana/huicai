@@ -8,7 +8,7 @@
 
       <el-form :model="query" inline class="filter-form">
         <el-form-item label="期间">
-          <el-input v-model="query.period" placeholder="YYYYMM" style="width:120px" />
+          <PeriodNavigator v-model="query.period" @change="fetchData" />
         </el-form-item>
         <el-form-item>
           <el-button type="primary" @click="fetchData">查询</el-button>
@@ -143,6 +143,7 @@ import { onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/api/request'
 import { pageStatements, sendStatement, confirmStatement, disputeStatement, generateStatements } from '@/api/modules/arap'
+import PeriodNavigator from '@/components/finance/PeriodNavigator.vue'
 
 const STATUS_MAP: Record<string, string> = {
   DRAFT: '草稿',

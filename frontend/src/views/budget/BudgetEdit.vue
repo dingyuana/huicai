@@ -6,7 +6,7 @@
       </div>
       <el-form :model="form" label-width="120" style="max-width:800px">
         <el-row :gutter="20">
-          <el-col :span="12"><el-form-item label="预算期间"><el-input v-model="form.period" placeholder="YYYYMM" /></el-form-item></el-col>
+          <el-col :span="12"><el-form-item label="预算期间"><PeriodNavigator v-model="form.period"  /></el-form-item></el-col>
           <el-col :span="12"><el-form-item label="预算类型"><el-select v-model="form.budgetType" style="width:100%">
             <el-option label="费用预算" value="EXPENSE" /><el-option label="收入预算" value="REVENUE" /><el-option label="资本支出" value="CAPEX" />
           </el-select></el-form-item></el-col>
@@ -57,6 +57,7 @@ import request from '@/api/request'
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useRoute, useRouter } from 'vue-router'
+import PeriodNavigator from '@/components/finance/PeriodNavigator.vue'
 
 const route = useRoute()
 const router = useRouter()
