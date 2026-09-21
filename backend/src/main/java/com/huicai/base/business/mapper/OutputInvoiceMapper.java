@@ -118,6 +118,7 @@ public interface OutputInvoiceMapper extends BaseMapper<OutputInvoiceEntity> {
     int nullOutVoucherIds();
 
     @Select("""
+        <script>
         SELECT
           customer_id AS customerId,
           customer_name AS customerName,
@@ -127,9 +128,12 @@ public interface OutputInvoiceMapper extends BaseMapper<OutputInvoiceEntity> {
           tax_rate AS rate
         FROM t_output_invoice
         WHERE deleted = 0 AND period = #{period}
-          AND (#{customerId} IS NULL OR customer_id = #{customerId})
+        <if test="customerId != null">
+          AND customer_id = #{customerId}
+        </if>
         GROUP BY customer_id, customer_name, tax_rate
-        ORDER BY total_amount DESC
+        ORDER BY SUM(total_amount) DESC
+        </script>
     """)
     List<Map<String, Object>> appendixIByCustomerAndRate(@Param("period") String period, @Param("customerId") Long customerId);
 

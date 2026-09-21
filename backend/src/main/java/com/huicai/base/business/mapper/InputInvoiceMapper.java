@@ -41,6 +41,7 @@ public interface InputInvoiceMapper extends BaseMapper<InputInvoiceEntity> {
     int nullOutDocId();
 
     @Select("""
+        <script>
         SELECT
           vendor_id AS vendorId,
           vendor_name AS vendorName,
@@ -52,9 +53,12 @@ public interface InputInvoiceMapper extends BaseMapper<InputInvoiceEntity> {
           declared_status AS declareStatus
         FROM t_input_invoice
         WHERE deleted = 0 AND period = #{period}
-          AND (#{vendorId} IS NULL OR vendor_id = #{vendorId})
+        <if test="vendorId != null">
+          AND vendor_id = #{vendorId}
+        </if>
         GROUP BY vendor_id, vendor_name, tax_rate, certification_status, declared_status
-        ORDER BY total_amount - tax_amount DESC
+        ORDER BY SUM(total_amount - tax_amount) DESC
+        </script>
     """)
     List<Map<String, Object>> appendixIIByVendorAndRate(@Param("period") String period, @Param("vendorId") Long vendorId);
 }
