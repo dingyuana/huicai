@@ -89,7 +89,6 @@
           <el-empty v-if="scope === 'completed' && !dateRange" description="请先选择日期范围（快捷时段或自定义）查询已完成单据" />
         </template>
         <el-table-column type="selection" width="48" :selectable="isBatchable" />
-        <el-table-column type="selection" width="48" :selectable="isBatchable" />
         <el-table-column prop="voucherNo" label="凭证号" width="160" />
         <el-table-column prop="period" label="期间" width="80" align="center" />
         <el-table-column prop="voucherTypeName" label="凭证类型" width="100" align="center" />
