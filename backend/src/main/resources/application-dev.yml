@@ -21,6 +21,15 @@ spring:
           max-idle: 8
           min-idle: 0
 
+  rabbitmq:
+    listener:
+      simple:
+        enabled: false
+    host: localhost
+    port: 5672
+    username: huicai
+    password: huicai123
+
   servlet:
     multipart:
       max-file-size: 50MB
@@ -30,3 +39,6 @@ spring:
 # 人仍是凭证审核的最终负责人 (凭证状态 PENDING_REVIEW 等待人工终审)
 invoice:
   auto-flow-after-import: true
+
+ai:
+  enabled: false
