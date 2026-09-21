@@ -29,6 +29,7 @@
             <el-button text size="small" v-if="row.status === 'open'" type="warning" @click="handleClose(row as PeriodVO)">结账</el-button>
             <el-button text size="small" v-if="row.status === 'open'" @click="handleLock(row as PeriodVO)">锁定</el-button>
             <el-button text size="small" v-if="row.status === 'locked'" type="primary" @click="handleUnlock(row as PeriodVO)">解锁</el-button>
+            <el-button text size="small" v-if="row.status === 'closed'" type="warning" @click="handleUnClose(row as PeriodVO)">反结账</el-button>
             <el-popconfirm title="确认删除此期间？" @confirm="handleDelete(row as PeriodVO)">
               <template #reference>
                 <el-button text type="danger" size="small">删除</el-button>
@@ -190,6 +191,15 @@ async function handleLock(row: PeriodVO) {
 async function handleUnlock(row: PeriodVO) {
   await unlockPeriod(row.id)
   ElMessage.success('期间已解锁')
+  await fetchData()
+}
+
+async function handleUnClose(row: PeriodVO) {
+  try {
+    await ElMessageBox.confirm(`确认对期间 ${row.periodCode} 执行反结账？反结账后期间将恢复开启状态，可重新操作凭证。`, '反结账确认', { type: 'warning' })
+  } catch { return }
+  await unlockPeriod(row.id)
+  ElMessage.success('反结账成功')
   await fetchData()
 }
 
