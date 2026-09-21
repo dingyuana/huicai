@@ -26,7 +26,7 @@ export interface PeriodUpdateParam {
   endDate?: string
 }
 
-export function getPeriodPage(params: { page: number; size: number }): Promise<PageResult<PeriodVO>> {
+export function getPeriodPage(params: { current: number; size: number }): Promise<PageResult<PeriodVO>> {
   return request.get('/v1/periods', { params })
 }
 

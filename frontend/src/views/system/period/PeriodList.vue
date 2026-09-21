@@ -41,7 +41,7 @@
 
       <div class="page-pagination">
         <el-pagination
-          v-model:current-page="query.page"
+          v-model:current-page="query.current"
           v-model:page-size="query.size"
           :total="total"
           layout="total, prev, pager, next, jumper"
@@ -91,7 +91,7 @@ const isEdit = ref(false)
 const editId = ref<number | null>(null)
 const formRef = ref<FormInstance>()
 
-const query = ref({ page: 1, size: 20 })
+const query = ref({ current: 1, size: 20 })
 const form = ref({ year: new Date().getFullYear(), month: 1, startDate: '', endDate: '' })
 const formRules = {
   year: [{ required: true, message: '请选择会计年度', trigger: 'blur' }],
