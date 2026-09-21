@@ -96,6 +96,18 @@ describe('OutputInvoiceList — 销项发票列表组件', () => {
     expect(outputInvoiceSummary).toHaveBeenCalled()
   })
 
+  it('切换筛选条件时统计随列表刷新并携带筛选参数', async () => {
+    const { pageOutputInvoice, outputInvoiceSummary } = await import('@/api/modules/tax')
+    const wrapper = shallowMount(OutputInvoiceList, { global: { plugins: [router] } })
+    await nextTick()
+    await nextTick()
+    ;(wrapper.vm as any).onScopeChange()
+    await nextTick()
+    await nextTick()
+    expect(pageOutputInvoice).toHaveBeenCalled()
+    expect(outputInvoiceSummary).toHaveBeenCalledWith(expect.objectContaining({ scope: 'pending' }))
+  })
+
   // ===== 维度 2: 行点击打开详情 =====
   it('onRowClick: 非交互元素点击触发 showDetail 打开详情弹窗', async () => {
     const { getOutputInvoice } = await import('@/api/modules/tax')

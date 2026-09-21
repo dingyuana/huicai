@@ -85,9 +85,17 @@ describe('Tax API Module', () => {
 
     it('outputInvoiceSummary calls correct endpoint', async () => {
       mockRequest.get.mockResolvedValue({ total: 50, audited: 40 })
-      const result = await taxApi.outputInvoiceSummary('202607')
+      const result = await taxApi.outputInvoiceSummary({ period: '202607' })
       expect(mockRequest.get).toHaveBeenCalledWith('/sme/tax/v1/tax/output-invoices/summary', { params: { period: '202607' } })
       expect(result).toEqual({ total: 50, audited: 40 })
+    })
+
+    it('outputInvoiceSummary passes filter params', async () => {
+      mockRequest.get.mockResolvedValue({ totalCount: 3 })
+      await taxApi.outputInvoiceSummary({ scope: 'pending', customerName: '客户', startDate: '2026-08-01', endDate: '2026-08-31' })
+      expect(mockRequest.get).toHaveBeenCalledWith('/sme/tax/v1/tax/output-invoices/summary', {
+        params: { scope: 'pending', customerName: '客户', startDate: '2026-08-01', endDate: '2026-08-31' },
+      })
     })
 
     it('calculateVat calls correct endpoint', async () => {

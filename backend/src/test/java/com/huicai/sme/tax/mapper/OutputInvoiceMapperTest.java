@@ -13,6 +13,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -317,5 +318,107 @@ public class OutputInvoiceMapperTest extends AbstractMapperTest {
 
         OutputInvoiceEntity finalCheck = outputInvoiceMapper.selectById(e.getId());
         assertEquals("{\"account_code\":\"6001\",\"confidence\":0.88}", finalCheck.getAiMappingResult());
+    }
+
+    private OutputInvoiceEntity insertInvoice(String invoiceNo, LocalDate date, String period, String customerName,
+                                              String amount, String invoiceType, String status) {
+        OutputInvoiceEntity e = new OutputInvoiceEntity();
+        e.setInvoiceNo(invoiceNo);
+        e.setInvoiceDate(date);
+        e.setPeriod(period);
+        e.setCustomerId(testCustomerId);
+        e.setCustomerName(customerName);
+        e.setAmount(new BigDecimal(amount));
+        e.setTaxRate(new BigDecimal("0.13"));
+        e.setTaxAmount(new BigDecimal("0.00"));
+        e.setTotalAmount(new BigDecimal(amount));
+        e.setInvoiceType(invoiceType);
+        e.setStatus(status);
+        e.setCreatedBy(1L);
+        e.setDeleted(0);
+        outputInvoiceMapper.insert(e);
+        return e;
+    }
+
+    private void assertNumber(String field, long expected, Map<String, Object> summary) {
+        assertEquals(expected, ((Number) summary.get(field)).longValue());
+    }
+
+    private void assertAmount(String field, String expected, Map<String, Object> summary) {
+        assertEquals(0, new BigDecimal(expected).compareTo(new BigDecimal(summary.get(field).toString())));
+    }
+
+    /**
+     * 场景 7：summaryByFilter 汇总（对齐 pageQueryOutput 过滤口径）
+     *
+     * 验证：scope(pending/completed)、period、日期范围、customerName、invoiceType(RED) 各筛选组合下的
+     * 汇总口径与列表查询一致，防止统计卡片与列表数据漂移
+     */
+    @Test
+    void summaryByFilter_matches_list_filters() {
+        // A: 202606 测试客户 SPECIAL +10000 CONFIRMED（未完成）
+        insertInvoice("INV-SBF-001", LocalDate.of(2026, 6, 10), "202606", "测试客户", "10000.00", "SPECIAL", "CONFIRMED");
+        // B: 202606 测试客户 SPECIAL +20000 VOUCHERED（已完成终态）
+        insertInvoice("INV-SBF-002", LocalDate.of(2026, 6, 15), "202606", "测试客户", "20000.00", "SPECIAL", "VOUCHERED");
+        // C: 202606 测试客户 RED -500（红字，未完成）
+        insertInvoice("INV-SBF-003", LocalDate.of(2026, 6, 20), "202606", "测试客户", "-500.00", "RED", "PENDING_CONFIRM");
+        // D: 202607 其他客户 PLAIN +3000 REVERSED（已完成，已冲销）
+        insertInvoice("INV-SBF-004", LocalDate.of(2026, 7, 5), "202607", "其他客户", "3000.00", "PLAIN", "REVERSED");
+
+        // 1. scope=pending：仅 A、C
+        Map<String, Object> pending = outputInvoiceMapper.summaryByFilter(
+                null, null, null, null, "pending", null, null);
+        assertNumber("totalCount", 2, pending);
+        assertAmount("totalAmount", "9500.00", pending);
+        assertNumber("redCount", 1, pending);
+        assertAmount("blueAmount", "10000.00", pending);
+        assertAmount("redAmount", "-500.00", pending);
+
+        // 2. scope=completed：仅 B、D
+        Map<String, Object> completed = outputInvoiceMapper.summaryByFilter(
+                null, null, null, null, "completed", null, null);
+        assertNumber("totalCount", 2, completed);
+        assertNumber("reversedCount", 1, completed);
+
+        // 3. pending + period=202606：仅 A、C
+        Map<String, Object> pendingPeriod = outputInvoiceMapper.summaryByFilter(
+                null, "202606", null, null, "pending", null, null);
+        assertNumber("totalCount", 2, pendingPeriod);
+
+        // 4. pending + customerName 模糊：仅 A、B、C（"测试客户" 匹配，D 为"其他客户"）
+        Map<String, Object> pendingCustomer = outputInvoiceMapper.summaryByFilter(
+                "测试", null, null, null, "pending", null, null);
+        assertNumber("totalCount", 3, pendingCustomer);
+
+        // 5. pending + invoiceType=RED：仅 C
+        Map<String, Object> red = outputInvoiceMapper.summaryByFilter(
+                null, null, null, "RED", "pending", null, null);
+        assertNumber("totalCount", 1, red);
+        assertNumber("redCount", 1, red);
+        assertAmount("redAmount", "-500.00", red);
+
+        // 6. pending + invoiceType=SPECIAL：仅 A
+        Map<String, Object> special = outputInvoiceMapper.summaryByFilter(
+                null, null, null, "SPECIAL", "pending", null, null);
+        assertNumber("totalCount", 1, special);
+        assertAmount("totalAmount", "10000.00", special);
+
+        // 7. pending + 日期范围 06-15~06-30：仅 C（period 同时传入应被忽略）
+        Map<String, Object> dateRange = outputInvoiceMapper.summaryByFilter(
+                null, "202606", null, null, "pending",
+                LocalDate.of(2026, 6, 15), LocalDate.of(2026, 6, 30));
+        assertNumber("totalCount", 1, dateRange);
+
+        // 8. status=REVERSED：仅 D（前端 tabType=REVERSED 传 status）
+        Map<String, Object> reversed = outputInvoiceMapper.summaryByFilter(
+                null, null, "REVERSED", null, "completed", null, null);
+        assertNumber("totalCount", 1, reversed);
+        assertNumber("reversedCount", 1, reversed);
+
+        // 9. 无任何筛选：全部 4 条
+        Map<String, Object> all = outputInvoiceMapper.summaryByFilter(
+                null, null, null, null, null, null, null);
+        assertNumber("totalCount", 4, all);
+        assertAmount("totalAmount", "32500.00", all);
     }
 }

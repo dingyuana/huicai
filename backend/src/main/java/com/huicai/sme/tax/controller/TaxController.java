@@ -201,9 +201,18 @@ public class TaxController {
     @Operation(summary = "销项汇总")
     @GetMapping("/output-invoices/summary")
     public R<Map<String, Object>> outputSummary(
-            @RequestParam(required = false) String period) {
-        if (period != null) return R.ok(service.outputSummary(period));
-        return R.ok(service.outputSummaryAll());
+            @RequestParam(required = false) String customerName,
+            @RequestParam(required = false) String period,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String invoiceType,
+            @RequestParam(required = false) String scope,
+            @RequestParam(required = false) @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE) LocalDate startDate,
+            @RequestParam(required = false) @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE) LocalDate endDate) {
+        if (customerName == null && status == null && invoiceType == null && scope == null && startDate == null && endDate == null) {
+            if (period != null) return R.ok(service.outputSummary(period));
+            return R.ok(service.outputSummaryAll());
+        }
+        return R.ok(service.outputSummaryFilter(customerName, period, status, invoiceType, scope, startDate, endDate));
     }
 
     @Operation(summary = "销项按税率分组")

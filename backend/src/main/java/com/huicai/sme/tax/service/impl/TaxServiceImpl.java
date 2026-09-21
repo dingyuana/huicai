@@ -709,6 +709,12 @@ public class TaxServiceImpl implements TaxService {
     }
 
     @Override
+    public Map<String, Object> outputSummaryFilter(String customerName, String period, String status, String invoiceType,
+                                                   String scope, LocalDate startDate, LocalDate endDate) {
+        return outputMapper.summaryByFilter(customerName, period, status, invoiceType, scope, startDate, endDate);
+    }
+
+    @Override
     public List<Map<String, Object>> outputByTaxRate(String period) {
         return outputMapper.byTaxRate(period);
     }

@@ -55,7 +55,7 @@
           <el-input v-model="query.customerName" clearable style="width:180px" />
         </el-form-item>
         <el-form-item label="期间">
-          <PeriodNavigator v-model="query.period" @change="fetchData" />
+          <PeriodNavigator v-model="query.period" @change="refresh" />
         </el-form-item>
         <template v-if="scope === 'completed'">
         <el-form-item label="日期范围">
@@ -72,7 +72,7 @@
         </el-form-item>
         </template>
         <el-form-item>
-          <el-button type="primary" @click="fetchData">查询</el-button>
+          <el-button type="primary" @click="refresh">查询</el-button>
         </el-form-item>
       </el-form>
 
@@ -352,7 +352,7 @@ const tabType = ref('')
 
 const onTabChange = () => {
   query.current = 1
-  fetchData()
+  refresh()
 }
 
 // 已完成视图：快捷时段 / 日期范围互斥（对齐 §4.5 规范）
@@ -365,9 +365,9 @@ function fmtDate(d: Date): string {
 
 function onDateRangeChange(val: [string, string] | null) {
   quickDate.value = ''
-  if (!val) { dateRange.value = null; fetchData(); return }
+  if (!val) { dateRange.value = null; refresh(); return }
   dateRange.value = val
-  fetchData()
+  refresh()
 }
 
 function onQuickDate(val: string | number | boolean | undefined) {
@@ -380,14 +380,14 @@ function onQuickDate(val: string | number | boolean | undefined) {
   else if (val === 'last6') start = new Date(today.getFullYear(), today.getMonth() - 6, today.getDate())
   else start = new Date(today.getFullYear() - 1, today.getMonth(), today.getDate())
   dateRange.value = [fmtDate(start), end]
-  fetchData()
+  refresh()
 }
 
 function onScopeChange() {
   query.current = 1
   quickDate.value = ''
   dateRange.value = null
-  fetchData()
+  refresh()
 }
 
 const showDetail = async (row: any) => {
@@ -532,6 +532,22 @@ const recalcTax = () => {
   }
 }
 
+const buildFilterParams = () => {
+  const params: any = { scope: scope.value }
+  if (query.customerName) params.customerName = query.customerName
+  if (query.period) params.period = query.period
+  if (tabType.value === 'REVERSED') {
+    params.status = 'REVERSED'
+  } else if (tabType.value) {
+    params.invoiceType = tabType.value
+  }
+  if (dateRange.value) {
+    params.startDate = dateRange.value[0]
+    params.endDate = dateRange.value[1]
+  }
+  return params
+}
+
 const fetchData = async () => {
   // R1：已完成视图必须带日期范围才查询，无日期不发请求并清空列表
   if (scope.value === 'completed' && !dateRange.value) {
@@ -541,18 +557,7 @@ const fetchData = async () => {
   }
   loading.value = true
   try {
-    const params: any = { current: query.current, size: query.size, scope: scope.value }
-    if (query.customerName) params.customerName = query.customerName
-    if (query.period) params.period = query.period
-    if (tabType.value === 'REVERSED') {
-      params.status = 'REVERSED'
-    } else if (tabType.value) {
-      params.invoiceType = tabType.value
-    }
-    if (dateRange.value) {
-      params.startDate = dateRange.value[0]
-      params.endDate = dateRange.value[1]
-    }
+    const params: any = { current: query.current, size: query.size, ...buildFilterParams() }
     const res: any = await pageOutputInvoice(params)
     list.value = res.records || []
     total.value = res.total || 0
@@ -567,8 +572,10 @@ const fetchStats = async () => {
     stats.value = {}
     return
   }
-  try { stats.value = await outputInvoiceSummary() } catch {}
+  try { stats.value = await outputInvoiceSummary(buildFilterParams()) } catch {}
 }
+
+const refresh = () => { fetchData(); fetchStats() }
 
 const openEdit = () => {
   Object.assign(form, {
@@ -589,7 +596,7 @@ const onSubmit = async () => {
   })
 }
 
-onMounted(() => { fetchData(); fetchStats() })
+onMounted(() => { refresh() })
 
 // P56/P67 销项发票批量操作（统一批量组件，逻辑保持不变）
 const tableRef = ref()

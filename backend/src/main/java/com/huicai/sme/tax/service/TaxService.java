@@ -47,6 +47,8 @@ public interface TaxService {
     void generateVoucherFromInvoice(Long invoiceId, Long userId);
     Map<String, Object> outputSummary(String period);
     Map<String, Object> outputSummaryAll();
+    Map<String, Object> outputSummaryFilter(String customerName, String period, String status, String invoiceType,
+                                            String scope, java.time.LocalDate startDate, java.time.LocalDate endDate);
     List<Map<String, Object>> outputByTaxRate(String period);
 
     // 增值税计算

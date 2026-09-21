@@ -28,6 +28,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -237,6 +238,34 @@ class TaxServiceImplTest {
 
         List<Map<String, Object>> r = service.outputByTaxRate("202606");
         assertEquals(2, r.size());
+    }
+
+    @Test
+    void outputSummaryFilter_delegates_with_all_filters() {
+        Map<String, Object> mock = new HashMap<>();
+        mock.put("totalCount", 7);
+        mock.put("totalAmount", new BigDecimal("9800.00"));
+        mock.put("blueAmount", new BigDecimal("10000.00"));
+        mock.put("redAmount", new BigDecimal("-200.00"));
+        when(outputMapper.summaryByFilter("客户A", "202608", "REVERSED", null, "completed",
+                LocalDate.of(2026, 8, 1), LocalDate.of(2026, 8, 31))).thenReturn(mock);
+
+        Map<String, Object> r = service.outputSummaryFilter("客户A", "202608", "REVERSED", null, "completed",
+                LocalDate.of(2026, 8, 1), LocalDate.of(2026, 8, 31));
+        assertEquals(7, r.get("totalCount"));
+        verify(outputMapper).summaryByFilter("客户A", "202608", "REVERSED", null, "completed",
+                LocalDate.of(2026, 8, 1), LocalDate.of(2026, 8, 31));
+    }
+
+    @Test
+    void outputSummaryFilter_delegates_scope_only() {
+        Map<String, Object> mock = new HashMap<>();
+        mock.put("totalCount", 3);
+        when(outputMapper.summaryByFilter(null, null, null, null, "pending", null, null)).thenReturn(mock);
+
+        Map<String, Object> r = service.outputSummaryFilter(null, null, null, null, "pending", null, null);
+        assertEquals(3, r.get("totalCount"));
+        verify(outputMapper).summaryByFilter(null, null, null, null, "pending", null, null);
     }
 
     // ==================== submitDeclaration ====================

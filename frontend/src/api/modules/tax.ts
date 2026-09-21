@@ -126,9 +126,7 @@ export function markVouchered(id: number): Promise<void> {
 export function createOutputInvoice(data: OutputInvoice): Promise<OutputInvoice> {
   return request.post('/sme/tax/v1/tax/output-invoices', data)
 }
-export function outputInvoiceSummary(period?: string): Promise<any> {
-  const params: any = {}
-  if (period) params.period = period
+export function outputInvoiceSummary(params?: Record<string, any>): Promise<any> {
   return request.get('/sme/tax/v1/tax/output-invoices/summary', { params })
 }
 export function calculateVat(period: string): Promise<any> {

@@ -8,6 +8,7 @@ import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
 import org.apache.ibatis.annotations.Update;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 
@@ -49,6 +50,63 @@ public interface OutputInvoiceMapper extends BaseMapper<OutputInvoiceEntity> {
         GROUP BY tax_rate
     """)
     List<Map<String, Object>> byTaxRate(@Param("period") String period);
+
+    /**
+     * 销项汇总 — 按列表页筛选条件聚合（对齐 pageQueryOutput 过滤口径）
+     * scope: pending=未完成(status NOT IN 终态) / completed=已完成(status IN 终态)
+     * invoiceType: RED=红字(amount<0 或 reversed_by_invoice_id 非空)，其他=对应类型且排除红字/已冲销
+     */
+    @Select("""
+        <script>
+        SELECT
+          COUNT(*) AS "totalCount",
+          SUM(amount) AS "totalAmount",
+          SUM(CASE WHEN amount &lt; 0 THEN 1 ELSE 0 END) AS "redCount",
+          SUM(CASE WHEN status = 'VOIDED' THEN 1 ELSE 0 END) AS "voidedCount",
+          SUM(CASE WHEN status = 'REVERSED' THEN 1 ELSE 0 END) AS "reversedCount",
+          SUM(CASE WHEN amount &gt;= 0 THEN amount ELSE 0 END) AS "blueAmount",
+          SUM(CASE WHEN amount &lt; 0 THEN amount ELSE 0 END) AS "redAmount"
+        FROM t_output_invoice
+        WHERE deleted = 0
+        <if test="customerName != null and customerName != ''">
+          AND customer_name LIKE CONCAT('%', #{customerName}, '%')
+        </if>
+        <if test="period != null and period != '' and startDate == null and endDate == null">
+          AND period = #{period}
+        </if>
+        <if test="status != null and status != ''">
+          AND status = #{status}
+        </if>
+        <if test="scope != null and scope == 'pending'.toString()">
+          AND status NOT IN ('VOUCHERED', 'FULLY_RECONCILED', 'PARTIALLY_RECONCILED', 'VOIDED', 'REVERSED')
+        </if>
+        <if test="scope != null and scope == 'completed'.toString()">
+          AND status IN ('VOUCHERED', 'FULLY_RECONCILED', 'PARTIALLY_RECONCILED', 'VOIDED', 'REVERSED')
+        </if>
+        <if test="startDate != null">
+          AND invoice_date &gt;= #{startDate}
+        </if>
+        <if test="endDate != null">
+          AND invoice_date &lt;= #{endDate}
+        </if>
+        <if test="invoiceType != null and invoiceType == 'RED'.toString()">
+          AND (amount &lt; 0 OR reversed_by_invoice_id IS NOT NULL)
+        </if>
+        <if test="invoiceType != null and invoiceType != '' and invoiceType != 'RED'.toString()">
+          AND invoice_type = #{invoiceType}
+          AND amount &gt;= 0
+          AND reversed_by_invoice_id IS NULL
+          AND status != 'REVERSED'
+        </if>
+        </script>
+    """)
+    Map<String, Object> summaryByFilter(@Param("customerName") String customerName,
+                                        @Param("period") String period,
+                                        @Param("status") String status,
+                                        @Param("invoiceType") String invoiceType,
+                                        @Param("scope") String scope,
+                                        @Param("startDate") LocalDate startDate,
+                                        @Param("endDate") LocalDate endDate);
 
     @Update("UPDATE t_output_invoice SET status = #{status}, remark = #{remark}, updated_at = now() WHERE id = #{id} AND deleted = 0")
     int updateStatusDirect(@Param("id") Long id, @Param("status") String status, @Param("remark") String remark);
