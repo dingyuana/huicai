@@ -263,15 +263,17 @@ function fmtNum(v: number) {
 
 async function fetchData() {
   // R1：已完成视图必须带日期范围才查询，无日期不发请求并清空列表
-    if (scope.value === 'completed' && !dateRange.value) {
-      list.value = []
-      total.value = 0
-      stats.totalCount = 0; stats.totalDebit = 0; stats.totalCredit = 0
-      stats.draftCount = 0; stats.submittedCount = 0; stats.auditedCount = 0; stats.postedCount = 0
-      return
-    }
-  if (!(await validatePeriod(query.value.period))) {
-    query.value.period = ''
+  if (scope.value === 'completed' && !dateRange.value) {
+    list.value = []
+    total.value = 0
+    stats.totalCount = 0; stats.totalDebit = 0; stats.totalCredit = 0
+    stats.draftCount = 0; stats.submittedCount = 0; stats.auditedCount = 0; stats.postedCount = 0
+    return
+  }
+  const prevPeriod = query.value.period
+  const validPeriod = await validatePeriod(query.value.period)
+  if (!validPeriod) {
+    query.value.period = prevPeriod  // 还原到导航前的有效期间
     loading.value = false
     return
   }
@@ -311,7 +313,7 @@ async function fetchData() {
 }
 
 async function validatePeriod(period: string): Promise<boolean> {
-  if (!period) return false
+  if (!period) return true  // 空期间允许查询（由 API 返回空结果）
   if (periodsSet.value.size === 0) {
     try {
       const periods = await getAllPeriods()

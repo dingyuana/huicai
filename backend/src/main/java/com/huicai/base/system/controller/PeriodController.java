@@ -6,6 +6,8 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.huicai.common.response.R;
 import com.huicai.base.system.entity.PeriodEntity;
 import com.huicai.base.system.service.PeriodService;
+import com.huicai.base.voucher.service.PeriodCloseService;
+import com.huicai.base.system.util.SecurityUtils;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -21,6 +23,7 @@ import java.util.List;
 public class PeriodController {
 
     private final PeriodService periodService;
+    private final PeriodCloseService periodCloseService;
 
     @Operation(summary = "获取期间列表(分页)")
     @GetMapping
@@ -79,7 +82,10 @@ public class PeriodController {
     @Operation(summary = "关闭期间")
     @PostMapping("/{id}/close")
     public R<Void> closePeriod(@PathVariable Long id) {
-        periodService.closePeriod(id);
+        PeriodEntity entity = periodService.getById(id);
+        if (entity != null) {
+            periodCloseService.closePeriod(entity.getPeriodCode(), SecurityUtils.getCurrentUserId());
+        }
         return R.ok();
     }
 
