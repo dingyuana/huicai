@@ -151,6 +151,7 @@ export interface CurrentPeriodVO {
   currentPeriod: string | null
   startPeriod: string | null
   hasDataPeriod: string | null
+  earliestUnclosedPeriod: string | null
 }
 
 export function getCurrentPeriod(): Promise<CurrentPeriodVO> {

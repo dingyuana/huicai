@@ -13,9 +13,12 @@
           <el-button type="primary" @click="fetchData">查询</el-button>
           <el-button @click="onExport">导出</el-button>
         </el-form-item>
+        <el-form-item>
+          <el-checkbox v-model="hideZeroRows">隐藏零值行</el-checkbox>
+        </el-form-item>
       </el-form>
 
-      <el-table :data="list" v-loading="loading" border show-summary :summary-method="summaryRow">
+      <el-table :data="visibleRows" v-loading="loading" border show-summary :summary-method="summaryRow">
         <el-table-column prop="code" label="科目编码" width="120" />
         <el-table-column prop="name" label="科目名称" min-width="180" />
         <el-table-column prop="level" label="层级" width="60" align="center" />
@@ -37,8 +40,8 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue'
-import { resolveDefaultPeriod } from '@/utils/period'
+import { computed, onMounted, reactive, ref } from 'vue'
+import { resolveEarliestUnclosedPeriod } from '@/utils/period'
 import { ElMessage } from 'element-plus'
 import { subjectBalance } from '@/api/modules/report'
 import PeriodNavigator from '@/components/finance/PeriodNavigator.vue'
@@ -46,6 +49,14 @@ import PeriodNavigator from '@/components/finance/PeriodNavigator.vue'
 const query = reactive({ period: '' })
 const list = ref<any[]>([])
 const loading = ref(false)
+const hideZeroRows = ref(true)
+
+const isZeroRow = (r: any) =>
+  [r.begin_balance, r.debit_total, r.credit_total, r.end_balance].every(v => Number(v || 0) === 0)
+
+const visibleRows = computed(() =>
+  hideZeroRows.value ? list.value.filter(r => !isZeroRow(r)) : list.value
+)
 
 const fmtAmount = (v: any) => Number(v || 0).toFixed(2)
 
@@ -76,7 +87,7 @@ const onExport = () => {
 }
 
 onMounted(async () => {
-  query.period = await resolveDefaultPeriod()
+  query.period = await resolveEarliestUnclosedPeriod()
   fetchData()
 })
 </script>

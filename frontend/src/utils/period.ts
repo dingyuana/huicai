@@ -16,3 +16,19 @@ export async function resolveDefaultPeriod(): Promise<string> {
   }
   return dayjs().format('YYYYMM')
 }
+
+/**
+ * 获取企业最早未完成结账的期间（报表默认期间）。
+ * 回退策略：接口异常或该字段为空 -> resolveDefaultPeriod()。
+ */
+export async function resolveEarliestUnclosedPeriod(): Promise<string> {
+  try {
+    const vo = await getCurrentPeriod()
+    if (vo && vo.earliestUnclosedPeriod) {
+      return vo.earliestUnclosedPeriod
+    }
+  } catch (e) {
+    // 未切换企业/接口异常时按默认期间回退
+  }
+  return resolveDefaultPeriod()
+}

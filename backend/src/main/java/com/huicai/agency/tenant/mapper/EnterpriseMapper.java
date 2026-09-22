@@ -20,4 +20,14 @@ public interface EnterpriseMapper extends BaseMapper<EnterpriseEntity> {
             ) x
             """)
     String selectLatestPeriodWithData(@Param("enterpriseId") Long enterpriseId);
+
+    /**
+     * 查询企业最早未结账的期间（status != 'closed' 中 period_code 最小者）。
+     */
+    @Select("""
+            SELECT period_code FROM t_period
+            WHERE deleted = 0 AND enterprise_id = #{enterpriseId} AND status != 'closed'
+            ORDER BY period_code ASC LIMIT 1
+            """)
+    String selectEarliestUnclosedPeriod(@Param("enterpriseId") Long enterpriseId);
 }

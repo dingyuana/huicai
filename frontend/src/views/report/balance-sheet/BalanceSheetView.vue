@@ -13,6 +13,9 @@
           <el-button type="primary" @click="fetchData">查询</el-button>
           <el-button @click="onExport">导出</el-button>
         </el-form-item>
+        <el-form-item>
+          <el-checkbox v-model="hideZeroRows">隐藏零值行</el-checkbox>
+        </el-form-item>
       </el-form>
 
       <el-alert v-if="result" :title="result.balanced ? '资产=负债+所有者权益, 平衡 ✓' : '⚠ 资产≠负债+所有者权益, 请检查!'" :type="result.balanced ? 'success' : 'error'" show-icon :closable="false" style="margin-bottom: 16px" />
@@ -20,7 +23,7 @@
       <el-row :gutter="20" v-if="result">
         <el-col :span="12">
           <h3>资产</h3>
-          <el-table :data="result.assets" border>
+          <el-table :data="visibleAssets" border>
             <el-table-column prop="code" label="编码" width="100" />
             <el-table-column prop="name" label="科目" min-width="140" />
             <el-table-column label="余额" align="right" width="140">
@@ -34,7 +37,7 @@
         </el-col>
         <el-col :span="12">
           <h3>负债</h3>
-          <el-table :data="result.liabilities" border>
+          <el-table :data="visibleLiabilities" border>
             <el-table-column prop="code" label="编码" width="100" />
             <el-table-column prop="name" label="科目" min-width="140" />
             <el-table-column label="余额" align="right" width="140">
@@ -42,7 +45,7 @@
             </el-table-column>
           </el-table>
           <h3 style="margin-top: 16px">所有者权益</h3>
-          <el-table :data="result.equity" border>
+          <el-table :data="visibleEquity" border>
             <el-table-column prop="code" label="编码" width="100" />
             <el-table-column prop="name" label="科目" min-width="140" />
             <el-table-column label="余额" align="right" width="140">
@@ -60,14 +63,21 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue'
-import { resolveDefaultPeriod } from '@/utils/period'
+import { computed, onMounted, reactive, ref } from 'vue'
+import { resolveEarliestUnclosedPeriod } from '@/utils/period'
 import { balanceSheet } from '@/api/modules/report'
 import PeriodNavigator from '@/components/finance/PeriodNavigator.vue'
 
 const query = reactive({ period: '' })
 const result = ref<any>(null)
+const hideZeroRows = ref(true)
 const fmtAmount = (v: any) => Number(v || 0).toFixed(2)
+
+const isZeroRow = (r: any) => Number(r.end_balance || 0) === 0
+
+const visibleAssets = computed(() => hideZeroRows.value ? result.value.assets.filter((r: any) => !isZeroRow(r)) : result.value.assets)
+const visibleLiabilities = computed(() => hideZeroRows.value ? result.value.liabilities.filter((r: any) => !isZeroRow(r)) : result.value.liabilities)
+const visibleEquity = computed(() => hideZeroRows.value ? result.value.equity.filter((r: any) => !isZeroRow(r)) : result.value.equity)
 
 const fetchData = async () => {
   if (!query.period) return
@@ -79,7 +89,7 @@ const onExport = () => {
 }
 
 onMounted(async () => {
-  query.period = await resolveDefaultPeriod()
+  query.period = await resolveEarliestUnclosedPeriod()
   fetchData()
 })
 </script>

@@ -307,6 +307,7 @@ class EnterpriseControllerTest {
         enterprise.setStartPeriod("202401");
         when(enterpriseMapper.selectById(1L)).thenReturn(enterprise);
         when(enterpriseMapper.selectLatestPeriodWithData(1L)).thenReturn("202403");
+        when(enterpriseMapper.selectEarliestUnclosedPeriod(1L)).thenReturn("202402");
 
         mvc.perform(get("/api/v1/enterprise/current-period")
                         .header("Authorization", "Bearer " + TOKEN_ADMIN))
@@ -314,7 +315,8 @@ class EnterpriseControllerTest {
                 .andExpect(jsonPath("$.code").value(200))
                 .andExpect(jsonPath("$.data.currentPeriod").value("202403"))
                 .andExpect(jsonPath("$.data.startPeriod").value("202401"))
-                .andExpect(jsonPath("$.data.hasDataPeriod").value("202403"));
+                .andExpect(jsonPath("$.data.hasDataPeriod").value("202403"))
+                .andExpect(jsonPath("$.data.earliestUnclosedPeriod").value("202402"));
 
         EnterpriseContextHolder.clear();
     }
@@ -331,6 +333,7 @@ class EnterpriseControllerTest {
         enterprise.setStartPeriod("202401");
         when(enterpriseMapper.selectById(1L)).thenReturn(enterprise);
         when(enterpriseMapper.selectLatestPeriodWithData(1L)).thenReturn(null);
+        when(enterpriseMapper.selectEarliestUnclosedPeriod(1L)).thenReturn("202401");
 
         mvc.perform(get("/api/v1/enterprise/current-period")
                         .header("Authorization", "Bearer " + TOKEN_ADMIN))
@@ -338,7 +341,8 @@ class EnterpriseControllerTest {
                 .andExpect(jsonPath("$.code").value(200))
                 .andExpect(jsonPath("$.data.currentPeriod").value("202401"))
                 .andExpect(jsonPath("$.data.startPeriod").value("202401"))
-                .andExpect(jsonPath("$.data.hasDataPeriod").doesNotExist());
+                .andExpect(jsonPath("$.data.hasDataPeriod").doesNotExist())
+                .andExpect(jsonPath("$.data.earliestUnclosedPeriod").value("202401"));
 
         EnterpriseContextHolder.clear();
     }

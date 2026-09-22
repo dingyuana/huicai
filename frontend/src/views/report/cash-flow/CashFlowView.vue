@@ -13,9 +13,12 @@
           <el-button type="primary" @click="fetchData">查询</el-button>
           <el-button @click="onExport">导出</el-button>
         </el-form-item>
+        <el-form-item>
+          <el-checkbox v-model="hideZeroRows">隐藏零值行</el-checkbox>
+        </el-form-item>
       </el-form>
 
-      <el-table v-if="result" :data="rows" border>
+      <el-table v-if="result" :data="visibleRows" border>
         <el-table-column prop="label" label="项目" min-width="200" />
         <el-table-column label="金额" align="right" width="180">
           <template #default="{ row }">
@@ -29,12 +32,13 @@
 
 <script setup lang="ts">
 import { onMounted, reactive, ref, computed } from 'vue'
-import { resolveDefaultPeriod } from '@/utils/period'
+import { resolveEarliestUnclosedPeriod } from '@/utils/period'
 import { cashFlowStatement } from '@/api/modules/report'
 import PeriodNavigator from '@/components/finance/PeriodNavigator.vue'
 
 const query = reactive({ period: '' })
 const result = ref<any>(null)
+const hideZeroRows = ref(true)
 
 const fmtAmount = (v: any) => Number(v || 0).toFixed(2)
 
@@ -57,6 +61,10 @@ const rows = computed(() => {
   ]
 })
 
+const visibleRows = computed(() =>
+  hideZeroRows.value ? rows.value.filter(r => r.amount === '' || Number(r.amount) !== 0) : rows.value
+)
+
 const fetchData = async () => {
   if (!query.period) return
   result.value = await cashFlowStatement(query.period)
@@ -67,7 +75,7 @@ const onExport = () => {
 }
 
 onMounted(async () => {
-  query.period = await resolveDefaultPeriod()
+  query.period = await resolveEarliestUnclosedPeriod()
   fetchData()
 })
 </script>
