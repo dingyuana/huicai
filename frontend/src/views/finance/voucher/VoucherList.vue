@@ -271,6 +271,7 @@ async function fetchData() {
       return
     }
   if (!(await validatePeriod(query.value.period))) {
+    query.value.period = ''
     loading.value = false
     return
   }
