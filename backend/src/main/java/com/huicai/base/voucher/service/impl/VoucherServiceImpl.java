@@ -4,6 +4,9 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.huicai.common.context.EnterpriseContextHolder;
+import com.huicai.agency.tenant.entity.EnterpriseEntity;
+import com.huicai.agency.tenant.mapper.EnterpriseMapper;
 import com.huicai.common.exception.BusinessException;
 import com.huicai.base.voucher.dto.VoucherCreateDTO;
 import com.huicai.base.voucher.dto.VoucherCreateDTO.EntryDTO;
@@ -77,6 +80,7 @@ public class VoucherServiceImpl extends ServiceImpl<VoucherMapper, VoucherEntity
     private final SubjectService subjectService;
     private final SubjectMapper subjectMapper;
     private final PeriodService periodService;
+    private final EnterpriseMapper enterpriseMapper;
     private final UserMapper userMapper;
     private final VoucherStateMachineService voucherStateMachineService;
     private final OutputInvoiceMapper outputInvoiceMapper;
@@ -627,7 +631,8 @@ public class VoucherServiceImpl extends ServiceImpl<VoucherMapper, VoucherEntity
     }
 
     /**
-     * 校验期间是否可操作（未关闭、未锁定）
+     * 校验期间是否可操作（未关闭、未锁定）。
+     * 期初建账仅对 startPeriod 生效（企业最早业务期间）。
      */
     private void assertPeriodOpen(String period) {
         LambdaQueryWrapper<PeriodEntity> wrapper = new LambdaQueryWrapper<>();
@@ -643,8 +648,14 @@ public class VoucherServiceImpl extends ServiceImpl<VoucherMapper, VoucherEntity
         if ("locked".equals(periodEntity.getStatus())) {
             throw BusinessException.badRequest("会计期间已锁定, 不可操作: " + period);
         }
-        if ("none".equals(periodEntity.getOpeningStatus())) {
-            throw BusinessException.badRequest("期初建账未完成，请先录入期初余额: " + period);
+        // 仅 startPeriod 且 openingStatus='none' 时阻止
+        Long enterpriseId = EnterpriseContextHolder.get();
+        if (enterpriseId != null) {
+            EnterpriseEntity enterprise = enterpriseMapper.selectById(enterpriseId);
+            if (enterprise != null && period.equals(enterprise.getStartPeriod())
+                    && "none".equals(periodEntity.getOpeningStatus())) {
+                throw BusinessException.badRequest("期初建账未完成，请先录入期初余额: " + period);
+            }
         }
     }
 
