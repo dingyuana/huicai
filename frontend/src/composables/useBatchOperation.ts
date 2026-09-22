@@ -131,7 +131,12 @@ export function useBatchOperation(options: UseBatchOptions = {}) {
       await options.refresh?.()
     } catch (e: any) {
       // 全有全无契约（如凭证批量接口）整批报错时走这里
-      ElMessage.error(e?.message || '批量操作失败')
+      const msg = e?.message || '批量操作失败'
+      if (msg.includes('期初建账未完成')) {
+        ElMessage.error(`${msg}，请前往「基础数据-期初建账」录入期初余额`)
+      } else {
+        ElMessage.error(msg)
+      }
     } finally {
       running.value = false
     }
