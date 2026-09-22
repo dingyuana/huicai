@@ -17,6 +17,7 @@ public interface InvoicePaymentReconcileMapper extends BaseMapper<InvoiceReconci
 
     /** 进项发票勾稽：发票 JOIN 其关联业务单(INVOICE_IN) 的 settled_amount */
     @Select("""
+        <script>
         SELECT
             i.id AS invoice_id,
             i.invoice_no AS invoice_no,
@@ -29,23 +30,29 @@ public interface InvoicePaymentReconcileMapper extends BaseMapper<InvoiceReconci
             COALESCE(b.settled_amount, 0) AS paid_amount,
             (i.total_amount - COALESCE(b.settled_amount, 0)) AS unpaid_amount,
             CASE
-                WHEN COALESCE(b.settled_amount, 0) <= 0 THEN 'UNPAID'
-                WHEN COALESCE(b.settled_amount, 0) >= i.total_amount THEN 'PAID'
+                WHEN COALESCE(b.settled_amount, 0) &lt;= 0 THEN 'UNPAID'
+                WHEN COALESCE(b.settled_amount, 0) &gt;= i.total_amount THEN 'PAID'
                 ELSE 'PARTIAL'
             END AS reconcile_status,
             (i.status = 'REVERSED') AS has_red_flushed
         FROM t_input_invoice i
         LEFT JOIN t_business_doc b ON b.invoice_id = i.id AND b.doc_type = 'INVOICE_IN' AND b.deleted = 0
         WHERE i.deleted = 0
-          AND (#{period} IS NULL OR i.period = #{period})
-          AND (#{vendorId} IS NULL OR i.vendor_id = #{vendorId})
+        <if test="period != null and period != ''">
+          AND i.period = #{period}
+        </if>
+        <if test="vendorId != null">
+          AND i.vendor_id = #{vendorId}
+        </if>
         ORDER BY i.invoice_date DESC
+        </script>
     """)
     List<InvoiceReconcileVO> queryInputReconcile(@Param("period") String period,
                                                  @Param("vendorId") Long vendorId);
 
     /** 销项发票勾稽：发票 JOIN 其关联业务单(INVOICE_OUT) 的 settled_amount */
     @Select("""
+        <script>
         SELECT
             i.id AS invoice_id,
             i.invoice_no AS invoice_no,
@@ -53,22 +60,27 @@ public interface InvoicePaymentReconcileMapper extends BaseMapper<InvoiceReconci
             i.customer_name AS customer_name,
             i.total_amount AS amount,
             i.tax_amount AS tax_amount,
-            i.certification_status AS certification_status,
-            i.declared_status AS declared_status,
+            NULL::varchar AS certification_status,
+            NULL::varchar AS declared_status,
             COALESCE(b.settled_amount, 0) AS paid_amount,
             (i.total_amount - COALESCE(b.settled_amount, 0)) AS unpaid_amount,
             CASE
-                WHEN COALESCE(b.settled_amount, 0) <= 0 THEN 'UNPAID'
-                WHEN COALESCE(b.settled_amount, 0) >= i.total_amount THEN 'PAID'
+                WHEN COALESCE(b.settled_amount, 0) &lt;= 0 THEN 'UNPAID'
+                WHEN COALESCE(b.settled_amount, 0) &gt;= i.total_amount THEN 'PAID'
                 ELSE 'PARTIAL'
             END AS reconcile_status,
             (i.status = 'REVERSED') AS has_red_flushed
         FROM t_output_invoice i
         LEFT JOIN t_business_doc b ON b.invoice_id = i.id AND b.doc_type = 'INVOICE_OUT' AND b.deleted = 0
         WHERE i.deleted = 0
-          AND (#{period} IS NULL OR i.period = #{period})
-          AND (#{customerId} IS NULL OR i.customer_id = #{customerId})
+        <if test="period != null and period != ''">
+          AND i.period = #{period}
+        </if>
+        <if test="customerId != null">
+          AND i.customer_id = #{customerId}
+        </if>
         ORDER BY i.invoice_date DESC
+        </script>
     """)
     List<InvoiceReconcileVO> queryOutputReconcile(@Param("period") String period,
                                                   @Param("customerId") Long customerId);

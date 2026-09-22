@@ -96,4 +96,13 @@ class InvoicePaymentReconcileMapperRealDBTest extends AbstractMapperTest {
         assertEquals("UNPAID", r.get(0).getReconcileStatus());
         assertEquals(new BigDecimal("1000.00"), r.get(0).getPaidAmount());
     }
+
+    @Test
+    void reconcile_nullFilters_doNotFail() {
+        inputInvoiceMapper.insert(invoice(904L, new BigDecimal("800.00"), "CERTIFIED", "DECLARED"));
+
+        List<InvoiceReconcileVO> r = reconcileMapper.queryInputReconcile(null, null);
+        assertFalse(r.isEmpty(), "NULL 筛选应返回全部进项发票而非报错");
+        assertTrue(r.stream().anyMatch(v -> "INV-RDB-904".equals(v.getInvoiceNo())));
+    }
 }

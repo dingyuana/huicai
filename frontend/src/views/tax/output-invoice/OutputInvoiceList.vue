@@ -55,7 +55,7 @@
           <el-input v-model="query.customerName" clearable style="width:180px" />
         </el-form-item>
         <el-form-item label="期间">
-          <PeriodNavigator v-model="query.period" @change="refresh" />
+          <PeriodNavigator v-model="query.period" @change="onPeriodChange" />
         </el-form-item>
         <template v-if="scope === 'completed'">
         <el-form-item label="日期范围">
@@ -78,7 +78,7 @@
 
       <el-table ref="tableRef" :data="list" v-loading="loading" border @selection-change="onSelectionChange" @row-click="onRowClick" style="cursor:pointer">
         <template #empty>
-          <el-empty v-if="scope === 'completed' && !dateRange" description="请先选择日期范围（快捷时段或自定义）查询已完成单据" />
+          <el-empty v-if="scope === 'completed' && !dateRange && !query.period" description="请先选择期间或日期范围（快捷时段/自定义）查询已完成单据" />
         </template>
         <el-table-column type="selection" width="50" :selectable="rowSelectable" />
         <el-table-column label="发票号" width="180">
@@ -366,6 +366,7 @@ function fmtDate(d: Date): string {
 function onDateRangeChange(val: [string, string] | null) {
   quickDate.value = ''
   if (!val) { dateRange.value = null; refresh(); return }
+  query.period = ''
   dateRange.value = val
   refresh()
 }
@@ -379,7 +380,16 @@ function onQuickDate(val: string | number | boolean | undefined) {
   else if (val === 'last3') start = new Date(today.getFullYear(), today.getMonth() - 3, today.getDate())
   else if (val === 'last6') start = new Date(today.getFullYear(), today.getMonth() - 6, today.getDate())
   else start = new Date(today.getFullYear() - 1, today.getMonth(), today.getDate())
+  query.period = ''
   dateRange.value = [fmtDate(start), end]
+  refresh()
+}
+
+function onPeriodChange(val: string) {
+  query.period = val
+  quickDate.value = ''
+  dateRange.value = null
+  query.current = 1
   refresh()
 }
 
@@ -549,8 +559,8 @@ const buildFilterParams = () => {
 }
 
 const fetchData = async () => {
-  // R1：已完成视图必须带日期范围才查询，无日期不发请求并清空列表
-  if (scope.value === 'completed' && !dateRange.value) {
+  // 已完成视图必须带期间或日期范围才查询：无任何时间条件则不发请求并清空列表
+  if (scope.value === 'completed' && !dateRange.value && !query.period) {
     list.value = []
     total.value = 0
     return
@@ -567,8 +577,8 @@ const fetchData = async () => {
 }
 
 const fetchStats = async () => {
-  // R5：已完成视图统计与列表同受日期约束，无日期不发请求
-  if (scope.value === 'completed' && !dateRange.value) {
+  // 已完成视图统计与列表同受时间条件约束：无期间且无日期范围不发请求
+  if (scope.value === 'completed' && !dateRange.value && !query.period) {
     stats.value = {}
     return
   }
