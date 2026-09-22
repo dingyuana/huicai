@@ -86,7 +86,14 @@
         style="cursor:pointer"
       >
         <template #empty>
-          <el-empty v-if="scope === 'completed'" description="暂无已完成（已记账）凭证" />
+          <el-empty
+            v-if="scope === 'completed'"
+            description="暂无已完成（已记账）凭证"
+          />
+          <el-empty
+            v-else
+            description="本期无待处理凭证。已记账凭证请切换到「已完成」标签查看"
+          />
         </template>
         <el-table-column type="selection" width="48" :selectable="isBatchable" />
         <el-table-column prop="voucherNo" label="凭证号" width="160" />
