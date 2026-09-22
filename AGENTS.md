@@ -4,7 +4,7 @@
 
 ## §0 项目状态（硬数字，每次 commit 后更新）
 
-> **更新基准**：commit `44f1d8c` (2026-09-22) — fix(voucher): allow completed scope to query without date range, and add validatePeriod before fetchData
+> **更新基准**：commit `88879c4` (2026-09-22) — fix(voucher): fix misleading empty-state message for completed scope
 > **当前分支**：`main`
 > **关联文档**：[项目说明](docs/CORE-项目说明.md)、[技术方案](docs/CORE-技术方案.md)、[需求分析](docs/CORE-需求分析.md)、[需求登记册](docs/development/requirements/REQUIREMENTS_REGISTRY.md)、[文档注册表](docs/CORE-文档注册表.md)、[测试策略](docs/testing/TEST-STRATEGY.md)、[Flyway治理规范](docs/development/flyway-governance.md)
 
