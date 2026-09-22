@@ -28,7 +28,9 @@ public class PeriodController {
             @RequestParam(defaultValue = "1") Integer current,
             @RequestParam(defaultValue = "20") Integer size) {
         return R.ok(periodService.page(new Page<>(current, size),
-                new LambdaQueryWrapper<PeriodEntity>().orderByDesc(PeriodEntity::getPeriodCode)));
+                new LambdaQueryWrapper<PeriodEntity>()
+                        .orderByAsc(PeriodEntity::getYear)
+                        .orderByAsc(PeriodEntity::getMonth)));
     }
 
     @Operation(summary = "获取期间列表(全量)")
