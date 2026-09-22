@@ -147,6 +147,7 @@ import {
   type VoucherQueryDTO,
 } from '@/api/modules/voucher'
 import { resolveDefaultPeriod } from '@/utils/period'
+import { getAllPeriods } from '@/api/modules/period'
 import BatchActionBar from '@/components/batch/BatchActionBar.vue'
 import BatchResultDialog from '@/components/batch/BatchResultDialog.vue'
 import { useBatchOperation, type BatchActionDef } from '@/composables/useBatchOperation'
@@ -161,6 +162,7 @@ const tableRef = ref()
 const scope = ref<'pending' | 'completed'>('pending')
 const quickDate = ref('')
 const dateRange = ref<[string, string] | null>(null)
+const periodsSet = ref<Set<string>>(new Set())
 
 // P67 统一批量操作：状态矩阵 + every() 启用语义 + 统一结果弹窗
 const BATCH_ACTIONS: BatchActionDef[] = [
@@ -268,6 +270,10 @@ async function fetchData() {
       stats.draftCount = 0; stats.submittedCount = 0; stats.auditedCount = 0; stats.postedCount = 0
       return
     }
+  if (!(await validatePeriod(query.value.period))) {
+    loading.value = false
+    return
+  }
   loading.value = true
   try {
     // 分页查询（按当前分类标签过滤）
@@ -301,6 +307,21 @@ async function fetchData() {
   } finally {
     loading.value = false
   }
+}
+
+async function validatePeriod(period: string): Promise<boolean> {
+  if (!period) return false
+  if (periodsSet.value.size === 0) {
+    try {
+      const periods = await getAllPeriods()
+      periodsSet.value = new Set(periods.map(p => p.periodCode))
+    } catch {
+      return true
+    }
+  }
+  if (periodsSet.value.has(period)) return true
+  ElMessage.warning(`期间 ${period} 不存在于系统中，请先在「基础数据-会计期间」创建该期间`)
+  return false
 }
 
 function onSearch() {
