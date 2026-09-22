@@ -97,9 +97,8 @@ public class ReportServiceImpl implements ReportService {
                     }
                 }
                 case '6' -> {
-                    BigDecimal currentNet = "credit".equals(direction)
-                            ? toBigDecimal(row.get("credit_total")).subtract(toBigDecimal(row.get("debit_total")))
-                            : toBigDecimal(row.get("debit_total")).subtract(toBigDecimal(row.get("credit_total")));
+                    BigDecimal currentNet = toBigDecimal(row.get("credit_total"))
+                            .subtract(toBigDecimal(row.get("debit_total")));
                     currentPeriodProfit = currentPeriodProfit.add(currentNet);
                 }
                 default -> unbalancedItems.add(

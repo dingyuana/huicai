@@ -4,6 +4,9 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.huicai.base.system.entity.PeriodEntity;
 import com.huicai.base.system.service.PeriodService;
+import com.huicai.base.voucher.service.PeriodCloseService;
+import com.huicai.config.security.LoginUser;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -11,6 +14,9 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.MediaType;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.test.web.servlet.MockMvc;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -33,6 +39,22 @@ class PeriodControllerTest {
 
     @MockBean
     private PeriodService periodService;
+
+    @MockBean
+    private PeriodCloseService periodCloseService;
+
+    @BeforeEach
+    void setUpSecurityContext() {
+        com.huicai.base.system.entity.UserEntity user = new com.huicai.base.system.entity.UserEntity();
+        user.setId(1L);
+        user.setUsername("test");
+        user.setPassword("test123");
+        user.setEnterpriseId(1L);
+        user.setUserType("ENTERPRISE");
+        LoginUser loginUser = new LoginUser(user, List.of(new SimpleGrantedAuthority("ROLE_USER")));
+        SecurityContextHolder.getContext().setAuthentication(
+                new UsernamePasswordAuthenticationToken(loginUser, null, loginUser.getAuthorities()));
+    }
 
     @Test
     @DisplayName("分页查询期间_默认参数正确生效")
@@ -166,15 +188,19 @@ class PeriodControllerTest {
     }
 
     @Test
-    @DisplayName("关闭期间_PathVariable正确解析_返回200")
+    @DisplayName("关闭期间_委托PeriodCloseService按periodCode执行")
     void closePeriod_pathVariable_boundCorrectly() throws Exception {
-        doNothing().when(periodService).closePeriod(anyLong());
+        PeriodEntity entity = new PeriodEntity();
+        entity.setId(1L);
+        entity.setPeriodCode("202401");
+        when(periodService.getById(eq(1L))).thenReturn(entity);
+        doNothing().when(periodCloseService).closePeriod(any(), any());
 
         mvc.perform(post("/api/v1/periods/1/close"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(200));
 
-        verify(periodService).closePeriod(eq(1L));
+        verify(periodCloseService).closePeriod(eq("202401"), any());
     }
 
     @Test

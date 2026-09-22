@@ -281,6 +281,24 @@ class ReportServiceImplTest {
     }
 
     @Test
+    void p69_expenseClass_reducesCurrentYearProfit() {
+        List<Map<String, Object>> b = new ArrayList<>();
+        b.add(bal("1002", "银行存款", "debit", 0, 27, 973));
+        b.add(bal("6603", "财务费用", "debit", 27, 0, 27));
+        b.add(bal("4001", "实收资本", "credit", 0, 0, 1000));
+        when(reportDataMapper.subjectBalance("202606")).thenReturn(b);
+
+        Map<String, Object> r = service.balanceSheet("202606");
+
+        assertEquals(new BigDecimal("973.00"), r.get("totalAssets"));
+        assertEquals(new BigDecimal("-27.00"), r.get("currentYearProfit"),
+                "费用类损益科目必须冲减当期利润");
+        assertEquals(new BigDecimal("973.00"), r.get("totalLiabEquity"));
+        assertEquals(new BigDecimal("0.00"), r.get("diff"));
+        assertEquals(Boolean.TRUE, r.get("balanced"));
+    }
+
+    @Test
     void incomeStatement_returns_period_map() {
         Map<String, Object> periodData = new HashMap<>();
         periodData.put("revenue", 10000.0);
