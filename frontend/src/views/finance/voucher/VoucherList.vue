@@ -26,12 +26,6 @@
         { label: '草稿', value: fmtNum(stats.draftCount || 0) },
       ]" />
 
-      <!-- 分类标签：待处理 / 已完成 -->
-      <el-tabs v-model="scope" class="scope-root-tabs" @tab-change="onScopeChange">
-        <el-tab-pane label="待处理" name="pending" />
-        <el-tab-pane label="已完成" name="completed" />
-      </el-tabs>
-
       <!-- 分类标签（按状态细分） -->
       <el-radio-group v-model="tabType" style="margin-bottom:12px" @change="onTabChange">
         <el-radio-button value="">全部</el-radio-button>
@@ -42,7 +36,7 @@
       </el-radio-group>
 
       <el-form :model="query" inline class="filter-form">
-        <template v-if="scope === 'completed'">
+        <template>
           <el-form-item label="快捷时段">
             <el-radio-group v-model="quickDate" size="small" @change="onQuickDate">
               <el-radio-button value="thisMonth">本月</el-radio-button>
@@ -86,14 +80,7 @@
         style="cursor:pointer"
       >
         <template #empty>
-          <el-empty
-            v-if="scope === 'completed'"
-            description="暂无已完成（已记账）凭证"
-          />
-          <el-empty
-            v-else
-            description="本期无待处理凭证。已记账凭证请切换到「已完成」标签查看"
-          />
+          <el-empty description="暂无凭证数据" />
         </template>
         <el-table-column type="selection" width="48" :selectable="isBatchable" />
         <el-table-column prop="voucherNo" label="凭证号" width="160" />
@@ -166,7 +153,6 @@ const loading = ref(false)
 const list = ref<VoucherVO[]>([])
 const total = ref(0)
 const tableRef = ref()
-const scope = ref<'pending' | 'completed'>('pending')
 const quickDate = ref('')
 const dateRange = ref<[string, string] | null>(null)
 const periodsSet = ref<Set<string>>(new Set())
@@ -200,13 +186,6 @@ function onBatchAction(key: string) {
 // 分类标签
 const tabType = ref('')
 
-// scope 分区控制
-const onScopeChange = () => {
-  query.value.current = 1
-  quickDate.value = ''
-  dateRange.value = null
-  fetchData()
-}
 const onQuickDate = () => {
   const now = new Date()
   let start: Date
@@ -279,7 +258,7 @@ async function fetchData() {
   loading.value = true
   try {
     // 分页查询（按当前分类标签过滤）
-    const params: any = { ...query.value, scope: scope.value }
+    const params: any = { ...query.value }
     if (tabType.value) params.status = tabType.value
     if (dateRange.value) {
       params.startDate = dateRange.value[0]
@@ -289,8 +268,8 @@ async function fetchData() {
     list.value = res.records
     total.value = res.total
 
-    // 统计汇总（同受 scope/date 约束，R5）
-    const allParams: any = { period: query.value.period, keyword: query.value.keyword, current: 1, size: 9999, scope: scope.value }
+    // 统计汇总（同受 date 约束，R5）
+    const allParams: any = { period: query.value.period, keyword: query.value.keyword, current: 1, size: 9999 }
     if (dateRange.value) {
       allParams.startDate = dateRange.value[0]
       allParams.endDate = dateRange.value[1]
@@ -311,7 +290,7 @@ async function fetchData() {
   }
 }
 
-async function validatePeriod(period: string): Promise<boolean> {
+async function validatePeriod(period?: string): Promise<boolean> {
   if (!period) return true  // 空期间允许查询（由 API 返回空结果）
   if (periodsSet.value.size === 0) {
     try {
@@ -334,7 +313,6 @@ function onSearch() {
 function onReset() {
   query.value = { period: '', status: '', keyword: '', current: 1, size: 20 }
   tabType.value = ''
-  scope.value = 'pending'
   quickDate.value = ''
   dateRange.value = null
   fetchData()
@@ -405,7 +383,6 @@ async function onUnpost(row: VoucherVO) {
 
 onMounted(async () => {
   query.value.period = await resolveDefaultPeriod()
-  scope.value = 'pending'
   fetchData()
 })
 
