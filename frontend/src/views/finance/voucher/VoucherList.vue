@@ -86,7 +86,7 @@
         style="cursor:pointer"
       >
         <template #empty>
-          <el-empty v-if="scope === 'completed' && !dateRange" description="请先选择日期范围（快捷时段或自定义）查询已完成单据" />
+          <el-empty v-if="scope === 'completed'" description="暂无已完成（已记账）凭证" />
         </template>
         <el-table-column type="selection" width="48" :selectable="isBatchable" />
         <el-table-column prop="voucherNo" label="凭证号" width="160" />
