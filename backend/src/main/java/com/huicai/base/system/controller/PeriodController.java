@@ -27,7 +27,8 @@ public class PeriodController {
     public R<IPage<PeriodEntity>> list(
             @RequestParam(defaultValue = "1") Integer current,
             @RequestParam(defaultValue = "20") Integer size) {
-        return R.ok(periodService.page(new Page<>(current, size)));
+        return R.ok(periodService.page(new Page<>(current, size),
+                new LambdaQueryWrapper<PeriodEntity>().orderByDesc(PeriodEntity::getPeriodCode)));
     }
 
     @Operation(summary = "获取期间列表(全量)")

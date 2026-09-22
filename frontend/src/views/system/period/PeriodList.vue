@@ -25,10 +25,7 @@
         <el-table-column label="操作" width="340" fixed="right">
           <template #default="{ row }">
             <el-button text size="small" @click="openEdit(row as PeriodVO)">编辑</el-button>
-            <el-button text size="small" v-if="row.status !== 'open'" type="success" @click="handleOpen(row as PeriodVO)">开启</el-button>
             <el-button text size="small" v-if="row.status === 'open'" type="warning" @click="handleClose(row as PeriodVO)">结账</el-button>
-            <el-button text size="small" v-if="row.status === 'open'" @click="handleLock(row as PeriodVO)">锁定</el-button>
-            <el-button text size="small" v-if="row.status === 'locked'" type="primary" @click="handleUnlock(row as PeriodVO)">解锁</el-button>
             <el-button text size="small" v-if="row.status === 'closed'" type="warning" @click="handleUnClose(row as PeriodVO)">反结账</el-button>
             <el-popconfirm title="确认删除此期间？" @confirm="handleDelete(row as PeriodVO)">
               <template #reference>
@@ -79,7 +76,7 @@
 import { ref, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import type { FormInstance } from 'element-plus'
-import { getPeriodPage, createPeriod, updatePeriod, deletePeriod, openPeriod, closePeriod, lockPeriod, unlockPeriod } from '@/api/modules/period'
+import { getPeriodPage, createPeriod, updatePeriod, deletePeriod, closePeriod, unlockPeriod } from '@/api/modules/period'
 import type { PeriodVO, PeriodCreateParam } from '@/api/modules/period'
 
 const loading = ref(false)
@@ -166,12 +163,6 @@ async function handleDelete(row: PeriodVO) {
   }
 }
 
-async function handleOpen(row: PeriodVO) {
-  await openPeriod(row.id)
-  ElMessage.success('期间已开启')
-  await fetchData()
-}
-
 async function handleClose(row: PeriodVO) {
   try {
     await closePeriod(row.id)
@@ -180,18 +171,6 @@ async function handleClose(row: PeriodVO) {
   } catch {
     // handled
   }
-}
-
-async function handleLock(row: PeriodVO) {
-  await lockPeriod(row.id)
-  ElMessage.success('期间已锁定')
-  await fetchData()
-}
-
-async function handleUnlock(row: PeriodVO) {
-  await unlockPeriod(row.id)
-  ElMessage.success('期间已解锁')
-  await fetchData()
 }
 
 async function handleUnClose(row: PeriodVO) {
