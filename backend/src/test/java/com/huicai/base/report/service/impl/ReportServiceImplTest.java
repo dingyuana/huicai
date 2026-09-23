@@ -144,7 +144,11 @@ class ReportServiceImplTest {
         assertEquals(Boolean.TRUE, r.get("balanced"));
         assertEquals(new BigDecimal("0.00"), r.get("diff"));
         assertEquals(0, items(r, "unbalancedItems").size());
-        assertEquals(0, items(r, "equity").size(), "6* 不应以自身名义进入权益明细");
+        // P88①：本年利润(未结转 6001 → currentYearProfit=10000) 以合成行进入权益区；
+        // 但绝不应出现 6001 自身名义的行（P69 不变量仍成立）
+        assertEquals(1, items(r, "equity").size(), "未结转本年利润应产生 1 行合成权益行");
+        assertEquals("本年利润(含未结转)", items(r, "equity").get(0).get("name"));
+        assertEquals(new BigDecimal("10000.00"), items(r, "equity").get(0).get("end_balance"));
     }
 
     @Test

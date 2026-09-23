@@ -51,12 +51,15 @@ public interface ReportDataMapper {
 
     /**
      * 累计数据(从年初到本期)
+     * 口径与 incomeStatementData 对齐：revenue=credit 方向 6xx(营业收入)；
+     * cost/expense/other_expense 各段独立，避免 Java 侧漏项。
      */
     @Select("""
         SELECT
-          SUM(CASE WHEN s.code LIKE '6%' THEN e.credit - e.debit ELSE 0 END) AS cumulative_revenue,
+          SUM(CASE WHEN s.direction = 'credit' AND s.code LIKE '6%' THEN e.credit - e.debit ELSE 0 END) AS cumulative_revenue,
           SUM(CASE WHEN s.code LIKE '6401%' OR s.code LIKE '6402%' THEN e.debit - e.credit ELSE 0 END) AS cumulative_cost,
-          SUM(CASE WHEN s.code LIKE '6%' THEN e.debit - e.credit ELSE 0 END) AS cumulative_cost_expense
+          SUM(CASE WHEN s.code LIKE '6601%' OR s.code LIKE '6602%' OR s.code LIKE '6603%' THEN e.debit - e.credit ELSE 0 END) AS cumulative_expense,
+          SUM(CASE WHEN s.code LIKE '6604%' OR s.code LIKE '6605%' OR s.code LIKE '6606%' OR s.code LIKE '6607%' OR s.code LIKE '6608%' OR s.code LIKE '6609%' OR s.code LIKE '6610%' OR s.code LIKE '6611%' OR s.code LIKE '6612%' OR s.code LIKE '6613%' OR s.code LIKE '6614%' OR s.code LIKE '6615%' OR s.code LIKE '6616%' OR s.code LIKE '6617%' OR s.code LIKE '6701%' OR s.code LIKE '6711%' THEN e.debit - e.credit ELSE 0 END) AS cumulative_other_expense
         FROM t_voucher_entry e
         INNER JOIN t_voucher v ON v.id = e.voucher_id
         INNER JOIN t_subject s ON s.id = e.subject_id
@@ -66,6 +69,21 @@ public interface ReportDataMapper {
     """)
     Map<String, Object> cumulativeData(@Param("yearStart") String yearStart,
                                        @Param("period") String period);
+
+    /**
+     * P88③：现金及现金等价物(1001 库存现金 + 1002 银行存款) 期初/期末余额，
+     * 供现金流量表补"期初/期末现金余额"闭环 + 与净流量勾稽。
+     */
+    @Select("""
+        SELECT COALESCE(SUM(sb.begin_balance), 0) AS begin_cash,
+               COALESCE(SUM(sb.end_balance), 0)   AS end_cash
+        FROM t_subject_balance sb
+        INNER JOIN t_subject s ON s.id = sb.subject_id
+        WHERE sb.period = #{period}
+          AND s.code LIKE '100%'
+          AND s.deleted = 0
+    """)
+    Map<String, Object> cashSubjectBalance(@Param("period") String period);
 
     /**
      * 现金流量表(基于现金流分配)

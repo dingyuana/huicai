@@ -49,14 +49,16 @@ const fmtAmount = (v: any) => Number(v || 0).toFixed(2)
 
 const rows = computed(() => {
   if (!result.value) return []
+  const r = result.value
+  // P88②：累计列逐行接后端字段，不再硬编码 0（旧版除首尾外全部写 0，累计数自相矛盾）
   return [
-    { label: '一、营业收入',    current: result.value.revenue,         cumulative: result.value.cumulativeRevenue, bold: true },
-    { label: '减:营业成本',    current: result.value.cost,            cumulative: 0, bold: false },
-    { label: '二、毛利',       current: result.value.grossProfit,     cumulative: 0, bold: true },
-    { label: '减:期间费用',    current: result.value.expense,         cumulative: 0, bold: false },
-    { label: '三、营业利润',   current: result.value.operatingProfit, cumulative: 0, bold: true },
-    { label: '减:其他支出',    current: result.value.otherExpense,    cumulative: 0, bold: false },
-    { label: '四、利润总额',   current: result.value.totalProfit,     cumulative: result.value.cumulativeProfit, bold: true },
+    { label: '一、营业收入',    current: r.revenue,         cumulative: r.cumulativeRevenue, bold: true },
+    { label: '减:营业成本',    current: r.cost,            cumulative: r.cumulativeCost, bold: false },
+    { label: '二、毛利',       current: r.grossProfit,     cumulative: r.cumulativeGrossProfit, bold: true },
+    { label: '减:期间费用',    current: r.expense,         cumulative: r.cumulativeExpense, bold: false },
+    { label: '三、营业利润',   current: r.operatingProfit, cumulative: r.cumulativeOperatingProfit, bold: true },
+    { label: '减:其他支出',    current: r.otherExpense,    cumulative: r.cumulativeOtherExpense, bold: false },
+    { label: '四、利润总额',   current: r.totalProfit,     cumulative: r.cumulativeProfit, bold: true },
   ]
 })
 

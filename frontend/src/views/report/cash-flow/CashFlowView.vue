@@ -22,7 +22,7 @@
         <el-table-column prop="label" label="项目" min-width="200" />
         <el-table-column label="金额" align="right" width="180">
           <template #default="{ row }">
-            <span :class="{ 'amount-bold': row.bold }">{{ fmtAmount(row.amount) }}</span>
+            <span :class="{ 'amount-bold': row.bold, amount-warn: row.warn }">{{ fmtAmount(row.amount) }}</span>
           </template>
         </el-table-column>
       </el-table>
@@ -44,25 +44,36 @@ const fmtAmount = (v: any) => Number(v || 0).toFixed(2)
 
 const rows = computed(() => {
   if (!result.value) return []
-  return [
+  const r = result.value
+  const list = [
     { label: '一、经营活动现金流量',   amount: '', bold: true },
-    { label: '  现金流入',           amount: result.value.operatingIn, bold: false },
-    { label: '  现金流出',           amount: result.value.operatingOut, bold: false },
-    { label: '  经营活动净流量',     amount: result.value.operatingNet, bold: true },
+    { label: '  现金流入',           amount: r.operatingIn, bold: false },
+    { label: '  现金流出',           amount: r.operatingOut, bold: false },
+    { label: '  经营活动净流量',     amount: r.operatingNet, bold: true },
     { label: '二、投资活动现金流量',   amount: '', bold: true },
-    { label: '  现金流入',           amount: result.value.investingIn, bold: false },
-    { label: '  现金流出',           amount: result.value.investingOut, bold: false },
-    { label: '  投资活动净流量',     amount: result.value.investingNet, bold: true },
+    { label: '  现金流入',           amount: r.investingIn, bold: false },
+    { label: '  现金流出',           amount: r.investingOut, bold: false },
+    { label: '  投资活动净流量',     amount: r.investingNet, bold: true },
     { label: '三、筹资活动现金流量',   amount: '', bold: true },
-    { label: '  现金流入',           amount: result.value.financingIn, bold: false },
-    { label: '  现金流出',           amount: result.value.financingOut, bold: false },
-    { label: '  筹资活动净流量',     amount: result.value.financingNet, bold: true },
-    { label: '四、现金及现金等价物净增加额', amount: result.value.totalNet, bold: true },
+    { label: '  现金流入',           amount: r.financingIn, bold: false },
+    { label: '  现金流出',           amount: r.financingOut, bold: false },
+    { label: '  筹资活动净流量',     amount: r.financingNet, bold: true },
+    { label: '四、现金及现金等价物净增加额', amount: r.totalNet, bold: true },
+    // P88③：期初/期末现金闭环（fixed=报表骨架，零值不隐藏）
+    { label: '加：期初现金及现金等价物余额', amount: r.openingCash, bold: false, fixed: true },
+    { label: '五、期末现金及现金等价物余额', amount: r.closingCash, bold: true, fixed: true },
   ]
+  // P88③：勾稽提示行（差异才显示）
+  if (r.cashCheckOk === false) {
+    list.push({ label: '⚠ 勾稽差异（期末现金 vs 科目余额）', amount: r.cashCheckDiff, bold: false, warn: true, fixed: true })
+  }
+  return list
 })
 
 const visibleRows = computed(() =>
-  hideZeroRows.value ? rows.value.filter(r => r.amount === '' || Number(r.amount) !== 0) : rows.value
+  hideZeroRows.value
+    ? rows.value.filter(r => r.amount === '' || Number(r.amount) !== 0 || r.fixed)
+    : rows.value
 )
 
 const fetchData = async () => {
@@ -84,5 +95,9 @@ onMounted(async () => {
 .amount-bold {
   font-weight: 600;
   color: #409eff;
+}
+.amount-warn {
+  color: #f56c6c;
+  font-weight: 600;
 }
 </style>
