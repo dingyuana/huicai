@@ -184,8 +184,7 @@ describe('Reconciliation API Module', () => {
 
       expect(mockRequest.post).toHaveBeenCalledWith(
         '/sme/arap/v1/reconciliation/auto-fifo',
-        null,
-        { params },
+        params,
       )
       expect(result).toEqual(mockFifoResult)
     })
@@ -204,8 +203,7 @@ describe('Reconciliation API Module', () => {
 
       expect(mockRequest.post).toHaveBeenCalledWith(
         '/sme/arap/v1/reconciliation/auto-fifo',
-        null,
-        { params },
+        params,
       )
     })
   })
