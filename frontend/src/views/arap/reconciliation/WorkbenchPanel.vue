@@ -28,7 +28,7 @@
     </el-form>
 
     <el-table :data="list" v-loading="loading" border stripe @row-click="onRowClick" style="cursor:pointer">
-      <el-table-column prop="docNo" label="单据号" width="160" />
+      <el-table-column prop="docNo" label="单据号" width="190" show-overflow-tooltip />
       <el-table-column prop="docDate" label="日期" width="110" />
       <el-table-column :label="activeTab === 'RECEIPT' ? '客户' : '供应商'" min-width="140" show-overflow-tooltip>
         <template #default="{ row }">
