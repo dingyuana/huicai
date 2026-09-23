@@ -6,10 +6,12 @@ import com.huicai.agency.tenant.mapper.EnterpriseMapper;
 import com.huicai.common.context.EnterpriseContextHolder;
 import com.huicai.common.exception.BusinessException;
 import com.huicai.common.event.ServiceProgressStageEvent;
-import com.huicai.base.voucher.entity.VoucherEntity;
 import com.huicai.base.voucher.dto.SubjectProfitTotalRow;
+import com.huicai.base.voucher.entity.VoucherEntity;
 import com.huicai.base.voucher.entity.VoucherEntryEntity;
+import com.huicai.base.voucher.entity.CloseLogEntity;
 import com.huicai.base.voucher.mapper.VoucherEntryMapper;
+import com.huicai.base.voucher.mapper.CloseLogMapper;
 import com.huicai.base.voucher.mapper.VoucherMapper;
 import com.huicai.base.voucher.service.PeriodCloseService;
 import com.huicai.base.voucher.constant.VoucherType;
@@ -33,6 +35,7 @@ import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -50,6 +53,7 @@ public class PeriodCloseServiceImpl implements PeriodCloseService {
     private final EnterpriseMapper enterpriseMapper;
     private final ReportService reportService;
     private final ApplicationEventPublisher eventPublisher; // P79：REVIEW 节点推进事件
+    private final CloseLogMapper closeLogMapper; // P85：结账日志（t_close_log），须追加在末尾避免改既有构造顺序
 
     @Override
     public Map<String, Object> checkBeforeClose(String period) {
@@ -314,6 +318,7 @@ public class PeriodCloseServiceImpl implements PeriodCloseService {
             throw BusinessException.badRequest("结账检查未通过: " + check.get("issues"));
         }
 
+        long closeStart = System.currentTimeMillis();
         PeriodEntity periodEntity = findPeriod(period);
         periodEntity.setStatus("closed");
         periodEntity.setUpdatedBy(userId);
@@ -321,6 +326,8 @@ public class PeriodCloseServiceImpl implements PeriodCloseService {
         periodService.updateById(periodEntity);
 
         log.info("期间已结账: period={}, userId={}", period, userId);
+        appendCloseLog(period, "CLOSE", userId, true, "期间 " + period + " 已结账",
+                System.currentTimeMillis() - closeStart);
 
         // P79 REVIEW：本期结账完成 → 发事件推进 REVIEW 节点（监听器按 agencyId 降级；无安全上下文时静默跳过，绝不影响业务）
         try {
@@ -338,6 +345,7 @@ public class PeriodCloseServiceImpl implements PeriodCloseService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void reopenPeriod(String period, Long userId) {
+        long reopenStart = System.currentTimeMillis();
         PeriodEntity periodEntity = findPeriod(period);
         if (!"closed".equals(periodEntity.getStatus())) {
             throw BusinessException.badRequest("仅已结账期间可反结账");
@@ -364,11 +372,58 @@ public class PeriodCloseServiceImpl implements PeriodCloseService {
         periodEntity.setUpdatedAt(LocalDateTime.now());
         periodService.updateById(periodEntity);
         log.info("期间已反结账: period={}, userId={}", period, userId);
+        appendCloseLog(period, "REOPEN", userId, true, "期间 " + period + " 已反结账",
+                System.currentTimeMillis() - reopenStart);
     }
 
     @Override
     public List<Map<String, Object>> listCloseLog(String period) {
-        return new ArrayList<>();
+        // P85：读 t_close_log 落库日志（替代原空实现）。
+        // 只读查询，失败时返回空列表而不是抛异常——日志查询不应阻断结账主流程。
+        try {
+            List<CloseLogEntity> logs = closeLogMapper.selectList(
+                    new LambdaQueryWrapper<CloseLogEntity>()
+                            .eq(CloseLogEntity::getPeriod, period)
+                            .eq(CloseLogEntity::getDeleted, 0)
+                            .orderByDesc(CloseLogEntity::getId));
+            List<Map<String, Object>> result = new ArrayList<>(logs.size());
+            for (CloseLogEntity c : logs) {
+                Map<String, Object> row = new LinkedHashMap<>();
+                row.put("id", c.getId());
+                row.put("period", c.getPeriod());
+                row.put("action", c.getAction());
+                row.put("operatorId", c.getOperatorId());
+                row.put("result", c.getResult());
+                row.put("detail", c.getDetail());
+                row.put("durationMs", c.getDurationMs());
+                row.put("createdAt", c.getCreatedAt());
+                result.add(row);
+            }
+            return result;
+        } catch (Exception e) {
+            log.warn("查询结账日志失败 period={}, 返回空列表: {}", period, e.getMessage());
+            return new ArrayList<>();
+        }
+    }
+
+    /**
+     * P85：追加一条结账日志。异常时只告警不抛出——日志记录是旁路，绝不影响结账业务结果。
+     */
+    private void appendCloseLog(String period, String action, Long userId,
+                                boolean success, String detail, long durationMs) {
+        try {
+            CloseLogEntity entity = new CloseLogEntity();
+            entity.setPeriod(period);
+            entity.setAction(action);
+            entity.setOperatorId(userId);
+            entity.setResult(success ? "success" : "fail");
+            entity.setDetail(detail);
+            entity.setDurationMs(durationMs);
+            entity.setDeleted(0);
+            closeLogMapper.insert(entity);
+        } catch (Exception e) {
+            log.warn("P85 结账日志写入失败 period={} action={}: {}", period, action, e.getMessage());
+        }
     }
 
     private PeriodEntity findPeriod(String period) {

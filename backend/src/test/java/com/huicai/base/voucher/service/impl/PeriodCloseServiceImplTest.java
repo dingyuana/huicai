@@ -8,7 +8,9 @@ import com.huicai.common.context.EnterpriseContextHolder;
 import com.huicai.common.exception.BusinessException;
 import com.huicai.base.voucher.entity.VoucherEntity;
 import com.huicai.base.voucher.entity.VoucherEntryEntity;
+import com.huicai.base.voucher.entity.CloseLogEntity;
 import com.huicai.base.voucher.mapper.VoucherEntryMapper;
+import com.huicai.base.voucher.mapper.CloseLogMapper;
 import com.huicai.base.voucher.dto.SubjectProfitTotalRow;
 import com.huicai.base.voucher.mapper.VoucherMapper;
 import com.huicai.base.balance.entity.SubjectBalanceEntity;
@@ -54,6 +56,7 @@ class PeriodCloseServiceImplTest {
     @Mock private EnterpriseMapper enterpriseMapper;
     @Mock private ReportService reportService;
     @Mock private ApplicationEventPublisher eventPublisher;
+    @Mock private CloseLogMapper closeLogMapper; // P85 结账日志
 
     private PeriodCloseServiceImpl service;
 
@@ -61,7 +64,7 @@ class PeriodCloseServiceImplTest {
     void setUp() {
         service = new PeriodCloseServiceImpl(voucherMapper, voucherEntryMapper,
                 subjectBalanceService, periodService, subjectService, subjectMapper,
-                enterpriseMapper, reportService, eventPublisher);
+                enterpriseMapper, reportService, eventPublisher, closeLogMapper);
     }
 
     private PeriodEntity stubPeriod(String status) {
