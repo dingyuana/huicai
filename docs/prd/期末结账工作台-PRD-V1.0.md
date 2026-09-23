@@ -25,7 +25,7 @@
 | 编号 | 功能点 | 优先级 | 状态 | 验收标准 | 关联SPEC |
 |------|--------|--------|------|---------|---------|
 | P84 | 结账工作台（4 步向导 + Drawer 凭证卡片 + 一键人工审核记账 + 专属聚合 API） | P1 | ❌ 待建 | 全程不离开结账页；generate 返回凭证清单（id/no/类型/借贷合计）；batch 端点同事务完成 审核+过账；记账后 Drawer 卡片状态即时变 ✅ | P84 |
-| P85 | 结转序列补全（折旧自动制证 + 结账日志表 + 全表扫描性能修复） | P1 | ❌ 待建 | 按期间为"使用中"资产生成 DRAFT 折旧凭证（金额=P77 口径）；`listCloseLog` 落地 t_close_log；`generateProfitCarryOver` 消除 `selectList(null)` 全表扫描（改 SQL 聚合按期间/租户过滤） | P85 |
+| P85 | 结转序列补全（折旧自动制证 + 结账日志表 + 全表扫描性能修复） | P1 | ✅ 已修复（commit b40a9e5/7cf5620/1a044f5） | 三子项全部落地：①`generateProfitCarryOver` 改单条聚合 SQL（消除 `selectList(null)` + 两层 N+1），`HAVING ABS(debit-credit)<>0` 排除借贷对冲科目；②`t_close_log` 建表落地（V151），`listCloseLog` 空实现替换，`operator_id` 自定义列（`created_by` 是 exist=false 不落库）；③DEPR- 折旧制证（`sme.asset` 包，凭证号=幂等键，6602/1602，DRAFT 人工审核）。附带发现 V102_5 漏 seed 1602 累计折旧（V152 补）。`generate-sequence` 端点 + 费用科目映射推到 P84 | P85 |
 | P86 | 子模块前置检查扩展（固定资产计提/发票认证/申报 完成度进 Checklist） | P2 | ❌ 待建 | check 返回结构化 checkItems（code/passed/detail/actionLink），新增 3 项基于既有事实：当期折旧未制证、进项未认证张数、申报未提交——只检查事实，不新建"子模块结账"状态 | P86 |
 | P87 | 期末锁全链路 + 反结账未过账结转凭证防护 | P1 | ✅ 已修复（commit e893232） | 现状 trace 后比立项预判好：`assertPeriodOpen` 已覆盖 7 个写入口（制证/修改/删除/提交/审核/反过账/过账），真实缺口仅 2 处已补——①`reverse`(红冲) 补拦截；②`reopenPeriod` 反结账前扫 CLOSE-/DISTRIB-/DEPR- DRAFT 凭证，存在则拦（只拦不自动删，守人工铁律） | P87 |
 
