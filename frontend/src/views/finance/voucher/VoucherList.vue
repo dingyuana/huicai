@@ -83,7 +83,12 @@
           <el-empty description="暂无凭证数据" />
         </template>
         <el-table-column type="selection" width="48" :selectable="isBatchable" />
-        <el-table-column prop="voucherNo" label="凭证号" width="160" />
+        <el-table-column label="凭证号" width="200">
+          <template #default="{ row }">
+            <span>{{ row.voucherNo }}</span>
+            <el-tag v-if="String(row.voucherNo).startsWith('CLOSE-')" type="warning" size="small" style="margin-left:6px">结转</el-tag>
+          </template>
+        </el-table-column>
         <el-table-column prop="period" label="期间" width="80" align="center" />
         <el-table-column prop="voucherTypeName" label="凭证类型" width="100" align="center" />
         <el-table-column prop="summary" label="摘要" min-width="180" show-overflow-tooltip />
@@ -121,7 +126,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import {
   getVoucherPage,
@@ -149,6 +154,7 @@ import StatBar from '@/components/page/StatBar.vue'
 import PeriodNavigator from '@/components/finance/PeriodNavigator.vue'
 
 const router = useRouter()
+const route = useRoute()
 const loading = ref(false)
 const list = ref<VoucherVO[]>([])
 const total = ref(0)
@@ -382,7 +388,10 @@ async function onUnpost(row: VoucherVO) {
 }
 
 onMounted(async () => {
-  query.value.period = await resolveDefaultPeriod()
+  const qPeriod = route.query.period as string | undefined
+  const qKeyword = route.query.keyword as string | undefined
+  query.value.period = qPeriod || (await resolveDefaultPeriod())
+  if (qKeyword) query.value.keyword = qKeyword
   fetchData()
 })
 

@@ -20,6 +20,19 @@
 
       <el-divider />
 
+      <el-alert
+        v-if="carryoverId"
+        type="info"
+        show-icon
+        :closable="false"
+        class="carryover-tip"
+      >
+        <template #title>
+          结转凭证已生成 (ID: {{ carryoverId }})，该凭证当前为草稿状态，需完成「提交 → 审核 → 记账」后结转才能生效。
+        </template>
+        <el-button size="small" type="primary" @click="gotoCarryoverVoucher">前往凭证管理审核</el-button>
+      </el-alert>
+
       <div v-if="checkResult">
         <h3>检查结果</h3>
         <el-alert
@@ -62,11 +75,14 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { checkClose, profitCarryover, closePeriod, reopenPeriod, type CloseCheckResult } from '@/api/modules/periodClose'
 
+const router = useRouter()
 const period = ref(new Date().toISOString().slice(0, 7).replace('-', ''))
 const checkResult = ref<CloseCheckResult | null>(null)
+const carryoverId = ref<number | null>(null)
 
 const canClose = computed(() => checkResult.value?.passed === true)
 
@@ -91,10 +107,18 @@ async function onCarryover() {
   await ElMessageBox.confirm(`将基于期间 ${period.value} 的所有已记账分录生成结转凭证, 是否继续?`, '提示', { type: 'warning' })
   try {
     const id = await profitCarryover(period.value)
-    ElMessage.success(`结转凭证已生成, ID: ${id}, 请前往凭证管理编辑后提交记账`)
+    carryoverId.value = id
+    ElMessage.success(`结转凭证已生成 (ID: ${id}), 该凭证需提交审核并记账后完成结转`)
   } catch {
     // handled
   }
+}
+
+function gotoCarryoverVoucher() {
+  router.push({
+    name: 'VoucherList',
+    query: { period: period.value, keyword: `CLOSE-${period.value}` },
+  })
 }
 
 async function onClose() {
@@ -143,6 +167,9 @@ async function onReopen() {
 .ok-text {
   color: #67c23a;
   margin: 12px 0;
+}
+.carryover-tip {
+  margin: 0 0 16px;
 }
 h3 {
   margin: 16px 0 12px;
