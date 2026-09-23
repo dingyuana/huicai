@@ -20,7 +20,8 @@ import com.huicai.sme.asset.dto.DepreciationVoucherResult;
  *
  * <p>依赖方向：sme.asset → base.voucher 是项目既有单向方向（sme/cash、sme/arap、
  * sme/tax 均已如此）；反向（base.voucher 依赖 sme.asset）项目内不存在，不可新增。
- * 因此 P84 的 generate-sequence 编排必须在 Controller 层完成。
+ * 因此 P84 的 generate-sequence 编排落在 {@code sme.periodclose}（编排层需同时依赖
+ * sme.asset 与 base.voucher），详见 docs/specs/P84-close-workbench.md §1.2。
  */
 public interface DepreciationVoucherService {
 

@@ -13,6 +13,7 @@ import com.huicai.base.voucher.mapper.VoucherEntryMapper;
 import com.huicai.base.voucher.mapper.CloseLogMapper;
 import com.huicai.base.voucher.dto.SubjectProfitTotalRow;
 import com.huicai.base.voucher.mapper.VoucherMapper;
+import com.huicai.base.voucher.service.VoucherService;
 import com.huicai.base.balance.entity.SubjectBalanceEntity;
 import com.huicai.base.balance.service.SubjectBalanceService;
 import com.huicai.base.report.service.ReportService;
@@ -57,6 +58,7 @@ class PeriodCloseServiceImplTest {
     @Mock private ReportService reportService;
     @Mock private ApplicationEventPublisher eventPublisher;
     @Mock private CloseLogMapper closeLogMapper; // P85 结账日志
+    @Mock private VoucherService voucherService; // P84 一键审核记账
 
     private PeriodCloseServiceImpl service;
 
@@ -64,7 +66,7 @@ class PeriodCloseServiceImplTest {
     void setUp() {
         service = new PeriodCloseServiceImpl(voucherMapper, voucherEntryMapper,
                 subjectBalanceService, periodService, subjectService, subjectMapper,
-                enterpriseMapper, reportService, eventPublisher, closeLogMapper);
+                enterpriseMapper, reportService, eventPublisher, closeLogMapper, voucherService);
     }
 
     private PeriodEntity stubPeriod(String status) {
@@ -665,5 +667,87 @@ class PeriodCloseServiceImplTest {
                 () -> service.generateProfitDistribution("202607", 1L));
         assertTrue(ex.getMessage().contains("无余额"));
         verify(voucherMapper, never()).insert(any(VoucherEntity.class));
+    }
+
+    // ===== P84：一键人工审核记账 batchReviewPost =====
+
+    /** 造一张指定状态的草稿凭证（deleted=0）。 */
+    private VoucherEntity draft(long id, String status) {
+        VoucherEntity e = new VoucherEntity();
+        e.setId(id);
+        e.setStatus(status);
+        e.setDeleted(0);
+        return e;
+    }
+
+    @Test
+    @DisplayName("P84: batchReviewPost 正常路径按序提交→审核→记账三步")
+    void batchReviewPost_success_callsThreeStepsInOrder() {
+        when(voucherMapper.selectById(11L)).thenReturn(draft(11L, "DRAFT"));
+        when(voucherMapper.selectById(12L)).thenReturn(draft(12L, "DRAFT"));
+
+        service.batchReviewPost(List.of(11L, 12L), 1L);
+
+        verify(voucherService).batchSubmit(List.of(11L, 12L), 1L);
+        verify(voucherService).batchAudit(List.of(11L, 12L), 1L);
+        verify(voucherService).batchPost(List.of(11L, 12L), 1L);
+    }
+
+    @Test
+    @DisplayName("P84: batchReviewPost 空列表抛异常且不触任何批量调用")
+    void batchReviewPost_emptyList_throws() {
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> service.batchReviewPost(List.of(), 1L));
+        assertTrue(ex.getMessage().contains("未选择"));
+        verifyNoInteractions(voucherService);
+    }
+
+    @Test
+    @DisplayName("P84: batchReviewPost 全为 null 元素时过滤后为空, 抛异常")
+    void batchReviewPost_allNullAfterFilter_throws() {
+        // 注意: List.of 不允许 null 元素(构造即 NPE), 必须用 Arrays.asList 才能造出含 null 的列表
+        List<Long> ids = java.util.Arrays.asList((Long) null, (Long) null);
+
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> service.batchReviewPost(ids, 1L));
+        assertTrue(ex.getMessage().contains("未选择有效"));
+        verifyNoInteractions(voucherService);
+    }
+
+    @Test
+    @DisplayName("P84: batchReviewPost 凭证不存在时抛异常且不推进任何状态")
+    void batchReviewPost_voucherNotFound_throws() {
+        when(voucherMapper.selectById(99L)).thenReturn(null);
+
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> service.batchReviewPost(List.of(99L), 1L));
+        assertTrue(ex.getMessage().contains("不存在"));
+        verifyNoInteractions(voucherService);
+    }
+
+    @Test
+    @DisplayName("P84: batchReviewPost 非草稿状态拦截(守人工审核铁律, 不允许覆盖既有状态)")
+    void batchReviewPost_nonDraft_throws() {
+        when(voucherMapper.selectById(21L)).thenReturn(draft(21L, "POSTED"));
+
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> service.batchReviewPost(List.of(21L), 1L));
+        assertTrue(ex.getMessage().contains("非草稿"));
+        verifyNoInteractions(voucherService);
+    }
+
+    @Test
+    @DisplayName("P84: batchReviewPost 审核步骤失败则不执行记账(同事务原子性的关键校验)")
+    void batchReviewPost_auditFails_doesNotPost() {
+        when(voucherMapper.selectById(31L)).thenReturn(draft(31L, "DRAFT"));
+        doThrow(BusinessException.badRequest("审核失败")).when(voucherService).batchAudit(anyList(), anyLong());
+
+        assertThrows(BusinessException.class,
+                () -> service.batchReviewPost(List.of(31L), 1L));
+
+        // 提交已执行, 但审核失败后记账绝不能被调用
+        verify(voucherService).batchSubmit(List.of(31L), 1L);
+        verify(voucherService).batchAudit(List.of(31L), 1L);
+        verify(voucherService, never()).batchPost(anyList(), anyLong());
     }
 }

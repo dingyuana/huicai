@@ -14,6 +14,7 @@ import com.huicai.base.voucher.mapper.VoucherEntryMapper;
 import com.huicai.base.voucher.mapper.CloseLogMapper;
 import com.huicai.base.voucher.mapper.VoucherMapper;
 import com.huicai.base.voucher.service.PeriodCloseService;
+import com.huicai.base.voucher.service.VoucherService;
 import com.huicai.base.voucher.constant.VoucherType;
 import com.huicai.base.balance.entity.SubjectBalanceEntity;
 import com.huicai.base.balance.service.SubjectBalanceService;
@@ -54,6 +55,7 @@ public class PeriodCloseServiceImpl implements PeriodCloseService {
     private final ReportService reportService;
     private final ApplicationEventPublisher eventPublisher; // P79：REVIEW 节点推进事件
     private final CloseLogMapper closeLogMapper; // P85：结账日志（t_close_log），须追加在末尾避免改既有构造顺序
+    private final VoucherService voucherService; // P84：一键审核记账（batchSubmit/batchAudit/batchPost）
 
     @Override
     public Map<String, Object> checkBeforeClose(String period) {
@@ -404,6 +406,40 @@ public class PeriodCloseServiceImpl implements PeriodCloseService {
             log.warn("查询结账日志失败 period={}, 返回空列表: {}", period, e.getMessage());
             return new ArrayList<>();
         }
+    }
+
+    @Override
+    @Transactional
+    public void batchReviewPost(List<Long> voucherIds, Long userId) {
+        // P84：一键人工审核记账。四步状态链 DRAFT→SUBMITTED→AUDITED→POSTED 在同一事务内完成，
+        // 任一步失败整体回滚，不留"部分已审核未记账"的中间态。
+        // 嵌套调用 VoucherService 的批量方法复用其状态机校验与期间锁检查；
+        // batchSubmit/batchAudit/batchPost 均为 @Transactional(REQUIRED)，加入本方法事务。
+        if (voucherIds == null || voucherIds.isEmpty()) {
+            throw BusinessException.badRequest("未选择凭证");
+        }
+        List<Long> ids = voucherIds.stream()
+                .filter(java.util.Objects::nonNull)
+                .distinct()
+                .toList();
+        if (ids.isEmpty()) {
+            throw BusinessException.badRequest("未选择有效凭证");
+        }
+        // 预校验：所有凭证必须处于 DRAFT，避免中途失败导致前几张已推进状态
+        for (Long id : ids) {
+            VoucherEntity e = voucherMapper.selectById(id);
+            if (e == null || e.getDeleted() != 0) {
+                throw BusinessException.notFound("凭证不存在: " + id);
+            }
+            if (!"DRAFT".equals(e.getStatus())) {
+                throw BusinessException.badRequest(
+                        "凭证非草稿状态, 无法一键审核记账: id=" + id + ", status=" + e.getStatus());
+            }
+        }
+        voucherService.batchSubmit(ids, userId);
+        voucherService.batchAudit(ids, userId);
+        voucherService.batchPost(ids, userId);
+        log.info("P84 一键人工审核记账完成: ids={}, userId={}", ids, userId);
     }
 
     /**
