@@ -1,9 +1,12 @@
 package com.huicai.sme.asset.controller;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.huicai.base.system.util.SecurityUtils;
 import com.huicai.common.response.R;
+import com.huicai.sme.asset.dto.DepreciationVoucherResult;
 import com.huicai.sme.asset.entity.AssetCardEntity;
 import com.huicai.sme.asset.service.AssetCardService;
+import com.huicai.sme.asset.service.DepreciationVoucherService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
@@ -19,6 +22,8 @@ import java.util.Map;
 public class AssetCardController {
 
     private final AssetCardService service;
+
+    private final DepreciationVoucherService depreciationVoucherService;
 
     @Operation(summary = "分页查询")
     @GetMapping("/page")
@@ -77,6 +82,12 @@ public class AssetCardController {
     public R<Void> depreciateOne(@PathVariable Long id, @RequestParam String period) {
         service.depreciateOne(id, period);
         return R.ok();
+    }
+
+    @Operation(summary = "按期间生成 DEPR 折旧凭证（DRAFT，需人工审核；幂等键 DEPR-{period}）")
+    @PostMapping("/depreciation-voucher/{period}")
+    public R<DepreciationVoucherResult> depreciationVoucher(@PathVariable String period) {
+        return R.ok(depreciationVoucherService.generate(period, SecurityUtils.getCurrentUserId()));
     }
 
     @Operation(summary = "最近卡片")
