@@ -9,6 +9,7 @@ import com.huicai.common.exception.BusinessException;
 import com.huicai.base.voucher.entity.VoucherEntity;
 import com.huicai.base.voucher.entity.VoucherEntryEntity;
 import com.huicai.base.voucher.mapper.VoucherEntryMapper;
+import com.huicai.base.voucher.dto.SubjectProfitTotalRow;
 import com.huicai.base.voucher.mapper.VoucherMapper;
 import com.huicai.base.balance.entity.SubjectBalanceEntity;
 import com.huicai.base.balance.service.SubjectBalanceService;
@@ -466,18 +467,10 @@ class PeriodCloseServiceImplTest {
 
         Subject profit = new Subject();
         profit.setId(64L); profit.setCode("4103"); profit.setName("本年利润"); profit.setDirection("credit");
-        Subject expense = new Subject();
-        expense.setId(85L); expense.setCode("6602"); expense.setName("管理费用"); expense.setDirection("debit");
         when(subjectMapper.selectOne(any(LambdaQueryWrapper.class))).thenReturn(profit);
-        when(subjectService.getById(85L)).thenReturn(expense);
-
-        VoucherEntity v = new VoucherEntity();
-        v.setId(200L); v.setStatus("POSTED"); v.setPeriod("202608"); v.setDeleted(0);
-        VoucherEntryEntity entry = new VoucherEntryEntity();
-        entry.setVoucherId(200L); entry.setSubjectId(85L);
-        entry.setDebit(new BigDecimal("1200.00")); entry.setCredit(BigDecimal.ZERO);
-        when(voucherEntryMapper.selectList(null)).thenReturn(List.of(entry));
-        when(voucherMapper.selectById(200L)).thenReturn(v);
+        // P85：聚合 SQL 返回一条 管理费用(6602) 借 1200 的损益科目聚合行
+        when(voucherEntryMapper.selectProfitSubjectTotals("202608"))
+                .thenReturn(List.of(row(85L, "6602", "管理费用", "debit", new BigDecimal("1200.00"), BigDecimal.ZERO)));
         when(voucherMapper.insert(any(VoucherEntity.class))).thenAnswer(inv -> {
             ((VoucherEntity) inv.getArgument(0)).setId(300L);
             return 1;
@@ -496,19 +489,11 @@ class PeriodCloseServiceImplTest {
         // 本年利润(4103, credit) 与 管理费用(6602, debit)
         Subject profit = new Subject();
         profit.setId(64L); profit.setCode("4103"); profit.setName("本年利润"); profit.setDirection("credit");
-        Subject expense = new Subject();
-        expense.setId(85L); expense.setCode("6602"); expense.setName("管理费用"); expense.setDirection("debit");
         when(subjectMapper.selectOne(any(LambdaQueryWrapper.class))).thenReturn(profit);
-        when(subjectService.getById(85L)).thenReturn(expense);
 
-        // 期间 202608 一张已记账凭证: 借 管理费用 1200 / 贷 银行存款 1200
-        VoucherEntity v = new VoucherEntity();
-        v.setId(200L); v.setStatus("POSTED"); v.setPeriod("202608"); v.setDeleted(0);
-        VoucherEntryEntity entry = new VoucherEntryEntity();
-        entry.setVoucherId(200L); entry.setSubjectId(85L);
-        entry.setDebit(new BigDecimal("1200.00")); entry.setCredit(BigDecimal.ZERO);
-        when(voucherEntryMapper.selectList(null)).thenReturn(List.of(entry));
-        when(voucherMapper.selectById(200L)).thenReturn(v);
+        // P85：聚合 SQL 已按期间+POSTED+6xx 过滤，返回 管理费用(6602) 借方合计 1200
+        when(voucherEntryMapper.selectProfitSubjectTotals("202608"))
+                .thenReturn(List.of(row(85L, "6602", "管理费用", "debit", new BigDecimal("1200.00"), BigDecimal.ZERO)));
         when(voucherMapper.insert(any(VoucherEntity.class))).thenAnswer(inv -> {
             ((VoucherEntity) inv.getArgument(0)).setId(300L);
             return 1;
@@ -541,18 +526,25 @@ class PeriodCloseServiceImplTest {
         profit.setId(64L); profit.setCode("4103"); profit.setName("本年利润"); profit.setDirection("credit");
         when(subjectMapper.selectOne(any(LambdaQueryWrapper.class))).thenReturn(profit);
 
-        // 期间 202608 一张已记账凭证但只有资产负债科目(1002)
-        VoucherEntity v = new VoucherEntity();
-        v.setId(200L); v.setStatus("POSTED"); v.setPeriod("202608"); v.setDeleted(0);
-        VoucherEntryEntity entry = new VoucherEntryEntity();
-        entry.setVoucherId(200L); entry.setSubjectId(2L);
-        entry.setDebit(BigDecimal.ZERO); entry.setCredit(new BigDecimal("1200.00"));
-        when(voucherEntryMapper.selectList(null)).thenReturn(List.of(entry));
-        when(voucherMapper.selectById(200L)).thenReturn(v);
+        // P85：聚合 SQL 只返回 6xx 损益科目；期间内只有资产负债科目(1002)时聚合结果为空
+        when(voucherEntryMapper.selectProfitSubjectTotals("202608")).thenReturn(List.of());
 
         BusinessException ex = assertThrows(BusinessException.class,
                 () -> service.generateProfitCarryOver("202608", 1L));
-        assertTrue(ex.getMessage().contains("无损益类科目余额"));
+        assertTrue(ex.getMessage().contains("无可结转的损益数据"));
+    }
+
+    /** 模拟一条损益科目聚合行（聚合 SQL 结果；替代旧 selectList+selectById+getById 逐条取） */
+    private SubjectProfitTotalRow row(Long subjectId, String code, String name, String direction,
+                                      BigDecimal debit, BigDecimal credit) {
+        SubjectProfitTotalRow row = new SubjectProfitTotalRow();
+        row.setSubjectId(subjectId);
+        row.setCode(code);
+        row.setName(name);
+        row.setDirection(direction);
+        row.setDebitTotal(debit);
+        row.setCreditTotal(credit);
+        return row;
     }
 
     // ==================== generateProfitDistribution ====================

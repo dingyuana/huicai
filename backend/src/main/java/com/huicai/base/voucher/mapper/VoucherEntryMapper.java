@@ -3,6 +3,7 @@ package com.huicai.base.voucher.mapper;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.huicai.base.voucher.dto.AuxiliarySummaryRow;
 import com.huicai.base.voucher.dto.LedgerEntryRowDTO;
+import com.huicai.base.voucher.dto.SubjectProfitTotalRow;
 import com.huicai.base.voucher.entity.VoucherEntryEntity;
 import org.apache.ibatis.annotations.Delete;
 import org.apache.ibatis.annotations.Mapper;
@@ -65,6 +66,18 @@ public interface VoucherEntryMapper extends BaseMapper<VoucherEntryEntity> {
             @Param("dimensionField") String dimensionField,
             @Param("dimensionValue") Long dimensionValue,
             @Param("period") String period);
+
+    /**
+     * P85 性能修复：按期间聚合损益类科目（6xx）借贷发生额。
+     * 替代旧的 selectList(null) 全表扫描 + N+1 selectById —— 一条 SQL 完成
+     * JOIN t_voucher（过滤 period/POSTED/deleted）+ JOIN t_subject（过滤 code LIKE '6%'）
+     * + GROUP BY subject_id。租户隔离由 EnterpriseDataPermissionInterceptor 自动注入
+     * （t_voucher/t_voucher_entry/t_subject 均为非共享表）。
+     *
+     * @param period 会计期间 YYYYMM
+     * @return 每个损益科目的借/贷发生额合计（仅含借贷双方均非全零的科目）
+     */
+    List<SubjectProfitTotalRow> selectProfitSubjectTotals(@Param("period") String period);
 
     /**
      * 批量插入分录

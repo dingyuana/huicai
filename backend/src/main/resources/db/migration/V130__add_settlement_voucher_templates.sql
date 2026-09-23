@@ -21,8 +21,14 @@ BEGIN
             TRUE, 1)
     RETURNING id INTO v_tpl_id;
 
-    INSERT INTO t_voucher_template_line (template_id, subject_id, direction, summary_template, line_order, enterprise_id)
-    VALUES (v_tpl_id, (SELECT id FROM t_subject WHERE code = '2203' AND enterprise_id = 1), 'debit',  '应收核销-收款', 1, 1);
+-- 防御性插入：2203 预收账款科目未必在早期环境的种子数据中存在（V102_5 只 seed 了硬编码 ID 的模板行，
+-- 未创建 2203 code 科目）。科目缺失时跳过插入而非报 NOT NULL 违反中断整条迁移链。
+    IF EXISTS (SELECT 1 FROM t_subject WHERE code = '2203' AND enterprise_id = 1 AND deleted = 0) THEN
+        INSERT INTO t_voucher_template_line (template_id, subject_id, direction, summary_template, line_order, enterprise_id)
+        VALUES (v_tpl_id, (SELECT id FROM t_subject WHERE code = '2203' AND enterprise_id = 1), 'debit',  '应收核销-收款', 1, 1);
+    ELSE
+        RAISE NOTICE 'V130: 预收账款(2203)科目不存在，跳过应收核销模板借方行（由后续补科目迁移或企业自建科目补齐）';
+    END IF;
     INSERT INTO t_voucher_template_line (template_id, subject_id, direction, summary_template, line_order, enterprise_id)
     VALUES (v_tpl_id, (SELECT id FROM t_subject WHERE code = '1122' AND enterprise_id = 1), 'credit', '应收核销-收款', 1, 1);
 

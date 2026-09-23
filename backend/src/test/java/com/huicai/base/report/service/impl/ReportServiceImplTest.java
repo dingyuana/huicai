@@ -340,4 +340,91 @@ class ReportServiceImplTest {
         assertEquals(2, r.size());
         assertEquals("202601", r.get(0).get("period"));
     }
+
+    // ==================== P88 三表信任级缺陷回归（阻断复发） ====================
+
+    @Test
+    void p88_balanceSheet_lossYearProfitRow_appearsInEquity() {
+        // 截图像：实收资本 200000 + 本年利润 -27（财务费用未结转）
+        List<Map<String, Object>> b = new ArrayList<>();
+        b.add(bal("1002", "银行存款", "debit", 0, 0, 124315.70));
+        b.add(bal("1122", "应收账款", "debit", 0, 0, 88457.37));
+        b.add(bal("2202", "预收账款", "credit", 0, 12800.07, 12800.07));
+        b.add(bal("4001", "实收资本", "credit", 0, 200000.00, 200000.00));
+        b.add(bal("6603", "财务费用", "debit", 27.00, 0, 27.00));
+        when(reportDataMapper.subjectBalance("202607")).thenReturn(b);
+
+        Map<String, Object> r = service.balanceSheet("202607");
+
+        // 本年利润 = 6603 未结转 -27（profit4103=0, currentPeriodProfit=-27）
+        List<Map<String, Object>> equity = items(r, "equity");
+        boolean found = equity.stream().anyMatch(e ->
+                "本年利润(含未结转)".equals(e.get("name"))
+                        && new BigDecimal("-27.00").equals(e.get("end_balance")));
+        assertTrue(found, "P88① 本年利润-27 必须以显式行出现在权益区（否则肉眼加总≠合计）");
+        // 逐行加总 = 权益合计
+        BigDecimal sumEquityRows = equity.stream()
+                .map(e -> new BigDecimal(e.get("end_balance").toString())).reduce(BigDecimal.ZERO, BigDecimal::add);
+        assertEquals(r.get("totalEquity"), sumEquityRows, "权益区逐行加总必须等于权益合计");
+        assertEquals(Boolean.TRUE, r.get("balanced"));
+    }
+
+    @Test
+    void p88_incomeStatement_revenueIsGrossNotNet() {
+        // 营业收入=credit 方向 6xx 发生额，绝不再减费用侧（旧版把净利塞进营收行）
+        Map<String, Object> periodData = new HashMap<>();
+        periodData.put("revenue", 10000.0);       // credit 6xx 毛收入
+        periodData.put("revenue_offset", 0.0);
+        periodData.put("cost", 3000.0);
+        periodData.put("expense", 2000.0);         // 6601-6603 期间费用
+        periodData.put("other_expense", 500.0);
+        when(reportDataMapper.incomeStatementData("202607")).thenReturn(periodData);
+        Map<String, Object> cum = new HashMap<>();
+        cum.put("cumulative_revenue", 10000.0);
+        cum.put("cumulative_cost", 3000.0);
+        cum.put("cumulative_expense", 2000.0);
+        cum.put("cumulative_other_expense", 500.0);
+        when(reportDataMapper.cumulativeData("202601", "202607")).thenReturn(cum);
+
+        Map<String, Object> r = service.incomeStatement("202607");
+
+        assertEquals(new BigDecimal("10000.00"), r.get("revenue"), "营业收入必须是毛收入，不能扣费用");
+        assertEquals(new BigDecimal("7000.00"), r.get("grossProfit"));
+        assertEquals(new BigDecimal("5000.00"), r.get("operatingProfit"));
+        assertEquals(new BigDecimal("4500.00"), r.get("totalProfit"));
+        // 累计逐行对齐
+        assertEquals(new BigDecimal("4500.00"), r.get("cumulativeProfit"), "累计利润总额必须扣全部费用");
+        assertEquals(new BigDecimal("5000.00"), r.get("cumulativeOperatingProfit"));
+    }
+
+    @Test
+    void p88_cashFlowStatement_closingLoopAndCheck() {
+        when(reportDataMapper.cashFlowData("202607")).thenReturn(new ArrayList<>());
+        Map<String, Object> cash = new HashMap<>();
+        cash.put("begin_cash", 200000.00);
+        cash.put("end_cash", 124315.70);
+        when(reportDataMapper.cashSubjectBalance("202607")).thenReturn(cash);
+
+        Map<String, Object> r = service.cashFlowStatement("202607");
+
+        // 无流量数据 totalNet=0 → closingCash = 200000 + 0 = 200000
+        assertEquals(new BigDecimal("200000.00"), r.get("openingCash"));
+        assertEquals(new BigDecimal("200000.00"), r.get("closingCash"));
+        // 勾稽：科目期末 124315.70 ≠ 计算期末 200000 → 差异 75684.30，应提示
+        assertEquals(new BigDecimal("-75684.30"), r.get("cashCheckDiff"));
+        assertEquals(Boolean.FALSE, r.get("cashCheckOk"), "期初+净流量 与 科目期末余额 不一致必须暴露差异");
+    }
+
+    @Test
+    void p88_cashFlowStatement_checkOkWhenConsistent() {
+        when(reportDataMapper.cashFlowData("202607")).thenReturn(new ArrayList<>());
+        Map<String, Object> cash = new HashMap<>();
+        cash.put("begin_cash", 200000.00);
+        cash.put("end_cash", 200000.00);
+        when(reportDataMapper.cashSubjectBalance("202607")).thenReturn(cash);
+
+        Map<String, Object> r = service.cashFlowStatement("202607");
+        assertEquals(Boolean.TRUE, r.get("cashCheckOk"), "期初+净流量(0)=期末，应校验通过");
+        assertEquals(new BigDecimal("0.00"), r.get("cashCheckDiff"));
+    }
 }

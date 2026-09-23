@@ -100,6 +100,31 @@
         ORDER BY t.subject_id ASC
     </select>
 
+    <!-- P85 性能修复：一条聚合 SQL 替代 selectList(null) 全表扫描 + N+1 selectById。
+         JOIN t_voucher 过滤 period/POSTED/deleted；JOIN t_subject 过滤 6xx 损益科目；
+         GROUP BY 按科目聚合借贷发生额。租户隔离由拦截器自动注入 enterprise_id。 -->
+    <select id="selectProfitSubjectTotals" resultType="com.huicai.base.voucher.dto.SubjectProfitTotalRow">
+        SELECT e.subject_id              AS subjectId,
+               s.code                    AS code,
+               s.name                    AS name,
+               s.direction               AS direction,
+               COALESCE(SUM(e.debit), 0) AS debitTotal,
+               COALESCE(SUM(e.credit), 0) AS creditTotal
+        FROM t_voucher_entry e
+        INNER JOIN t_voucher  v ON v.id = e.voucher_id AND v.deleted = 0
+        INNER JOIN t_subject  s ON s.id = e.subject_id  AND s.deleted = 0
+        WHERE e.deleted = 0
+          AND v.status  = 'POSTED'
+          AND v.period  = #{period}
+          AND s.code LIKE '6%'
+          AND (s.code &lt;&gt; '4103')
+        GROUP BY e.subject_id, s.code, s.name, s.direction
+        -- 只保留借贷净额非零的科目：净额为 0 说明本期已自动对冲，无可结转余额，
+        -- 纳入结转凭证会生成一对抵消分录（借收入/贷本年利润 + 借本年利润/贷收入），纯粹噪音
+        HAVING ABS(COALESCE(SUM(e.debit), 0) - COALESCE(SUM(e.credit), 0)) &lt;&gt; 0
+        ORDER BY e.subject_id ASC
+    </select>
+
     <insert id="batchInsert">
         INSERT INTO t_voucher_entry (id, voucher_id, subject_id, debit, credit, summary, assist_json, sort_order)
         VALUES

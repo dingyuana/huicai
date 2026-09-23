@@ -7,6 +7,7 @@ import com.huicai.common.context.EnterpriseContextHolder;
 import com.huicai.common.exception.BusinessException;
 import com.huicai.common.event.ServiceProgressStageEvent;
 import com.huicai.base.voucher.entity.VoucherEntity;
+import com.huicai.base.voucher.dto.SubjectProfitTotalRow;
 import com.huicai.base.voucher.entity.VoucherEntryEntity;
 import com.huicai.base.voucher.mapper.VoucherEntryMapper;
 import com.huicai.base.voucher.mapper.VoucherMapper;
@@ -130,21 +131,11 @@ public class PeriodCloseServiceImpl implements PeriodCloseService {
             throw BusinessException.badRequest("未配置本年利润科目(4103), 无法生成结转凭证");
         }
 
-        // 汇总本期间已记账凭证的科目借贷发生额
-        List<VoucherEntryEntity> allEntries = voucherEntryMapper.selectList(null);
-        Map<Long, BigDecimal[]> agg = new HashMap<>();
-        for (VoucherEntryEntity e : allEntries) {
-            VoucherEntity v = voucherMapper.selectById(e.getVoucherId());
-            if (v == null || !"POSTED".equals(v.getStatus())) continue;
-            if (!period.equals(v.getPeriod())) continue;
-            if (Boolean.TRUE.equals(v.getDeleted())) continue;
-            BigDecimal d = e.getDebit() == null ? BigDecimal.ZERO : e.getDebit();
-            BigDecimal c = e.getCredit() == null ? BigDecimal.ZERO : e.getCredit();
-            BigDecimal[] arr = agg.computeIfAbsent(e.getSubjectId(), k -> new BigDecimal[]{BigDecimal.ZERO, BigDecimal.ZERO});
-            arr[0] = arr[0].add(d);
-            arr[1] = arr[1].add(c);
-        }
-        if (agg.isEmpty()) {
+        // P85 性能修复：一条聚合 SQL 按期间取损益科目(6xx)借贷发生额合计。
+        // 替代旧实现 selectList(null) 全表扫描 + 对每条 selectById(N+1) + Java 里再按 6xx/期间过滤。
+        // 租户隔离由 EnterpriseDataPermissionInterceptor 自动注入（t_voucher/t_subject/t_voucher_entry 均非共享表）。
+        List<SubjectProfitTotalRow> profitTotals = voucherEntryMapper.selectProfitSubjectTotals(period);
+        if (profitTotals.isEmpty()) {
             throw BusinessException.badRequest("期间 " + period + " 无可结转的损益数据");
         }
 
@@ -163,29 +154,25 @@ public class PeriodCloseServiceImpl implements PeriodCloseService {
         BigDecimal totalD = BigDecimal.ZERO;
         BigDecimal totalC = BigDecimal.ZERO;
         int sort = 1;
-        for (Map.Entry<Long, BigDecimal[]> entry : agg.entrySet()) {
-            Long subjectId = entry.getKey();
-            if (subjectId.equals(profitSubject.getId())) continue;
-            BigDecimal debit = entry.getValue()[0];
-            BigDecimal credit = entry.getValue()[1];
+        for (SubjectProfitTotalRow t : profitTotals) {
+            // 本年利润(4103)本身不参与损益结转——它是结转目标，不是源
+            if (profitSubject.getId().equals(t.getSubjectId())) continue;
+            // 聚合查询已按 s.code LIKE '6%' 过滤出损益类科目，此处双保险
+            if (t.getCode() == null || !t.getCode().startsWith("6")) continue;
+            BigDecimal debit = t.getDebitTotal() == null ? BigDecimal.ZERO : t.getDebitTotal();
+            BigDecimal credit = t.getCreditTotal() == null ? BigDecimal.ZERO : t.getCreditTotal();
             BigDecimal net = debit.subtract(credit);
 
-            Subject subject = subjectService.getById(subjectId);
-            if (subject == null) continue;
-            // 仅处理损益类科目(6xx): 收入(credit)与费用(debit)
-            if (subject.getCode() == null || subject.getCode().length() < 3
-                    || !subject.getCode().startsWith("6")) continue;
-
             VoucherEntryEntity line;
-            if ("credit".equals(subject.getDirection())) {
+            if ("credit".equals(t.getDirection())) {
                 // 收入类: 贷方余额反向结转 -> 借收入科目 / 贷本年利润
                 if (net.signum() >= 0) continue; // 收入科目净额为借(异常)时跳过
                 BigDecimal amount = net.abs();
-                line = entryOf(voucher.getId(), subjectId, amount, BigDecimal.ZERO, sort++,
-                        "结转收入 " + subject.getName() + " 至本年利润");
+                line = entryOf(voucher.getId(), t.getSubjectId(), amount, BigDecimal.ZERO, sort++,
+                        "结转收入 " + t.getName() + " 至本年利润");
                 voucherEntryMapper.insert(line);
                 line = entryOf(voucher.getId(), profitSubject.getId(), BigDecimal.ZERO, amount, sort++,
-                        "收入结转 " + subject.getName());
+                        "收入结转 " + t.getName());
                 voucherEntryMapper.insert(line);
                 totalD = totalD.add(amount);
                 totalC = totalC.add(amount);
@@ -194,10 +181,10 @@ public class PeriodCloseServiceImpl implements PeriodCloseService {
                 if (net.signum() <= 0) continue;
                 BigDecimal amount = net;
                 line = entryOf(voucher.getId(), profitSubject.getId(), amount, BigDecimal.ZERO, sort++,
-                        "结转费用 " + subject.getName() + " 至本年利润");
+                        "结转费用 " + t.getName() + " 至本年利润");
                 voucherEntryMapper.insert(line);
-                line = entryOf(voucher.getId(), subjectId, BigDecimal.ZERO, amount, sort++,
-                        "费用结转 " + subject.getName());
+                line = entryOf(voucher.getId(), t.getSubjectId(), BigDecimal.ZERO, amount, sort++,
+                        "费用结转 " + t.getName());
                 voucherEntryMapper.insert(line);
                 totalD = totalD.add(amount);
                 totalC = totalC.add(amount);
