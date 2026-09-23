@@ -145,7 +145,7 @@ import {
   type VoucherVO,
   type VoucherQueryDTO,
 } from '@/api/modules/voucher'
-import { resolveDefaultPeriod } from '@/utils/period'
+import { resolveEarliestUnclosedPeriod } from '@/utils/period'
 import { getAllPeriods } from '@/api/modules/period'
 import BatchActionBar from '@/components/batch/BatchActionBar.vue'
 import BatchResultDialog from '@/components/batch/BatchResultDialog.vue'
@@ -338,6 +338,7 @@ function goEdit(row: VoucherVO) {
 }
 
 function goDetail(row: VoucherVO) {
+  sessionStorage.setItem('voucherListFilter', JSON.stringify(query.value))
   router.push({ name: 'VoucherDetail', query: { id: String(row.id) } })
 }
 
@@ -388,9 +389,25 @@ async function onUnpost(row: VoucherVO) {
 }
 
 onMounted(async () => {
+  // 优先恢复详情页返回前的筛选（期间/关键字等），避免返回后被重置
+  const saved = sessionStorage.getItem('voucherListFilter')
+  if (saved) {
+    try {
+      const s = JSON.parse(saved)
+      if (s && s.period) {
+        query.value.period = s.period
+        if (s.keyword) query.value.keyword = s.keyword
+        fetchData()
+        return
+      }
+    } catch {
+      // 解析失败则走默认
+    }
+    sessionStorage.removeItem('voucherListFilter')
+  }
   const qPeriod = route.query.period as string | undefined
   const qKeyword = route.query.keyword as string | undefined
-  query.value.period = qPeriod || (await resolveDefaultPeriod())
+  query.value.period = qPeriod || (await resolveEarliestUnclosedPeriod())
   if (qKeyword) query.value.keyword = qKeyword
   fetchData()
 })
