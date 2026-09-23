@@ -1,8 +1,9 @@
 # 慧财财务系统 — 文档注册表
 
-> **版本**：V4.2 | **日期**：2026-09-22 | **维护人**：Hermes
+> **版本**：V4.3 | **日期**：2026-09-22 | **维护人**：Hermes
 > **说明**：本文档是所有项目文档的权威索引，编号格式 `HUICAI-{分类}-{序号}`
 > **编号规则**：MAIN=主文档, DES=设计, ARC=架构, PRD=产品需求, SPC=规格, DEV=开发, TST=测试
+> **V4.3 变更**：登记期末结账工作台 PRD-017 + DSN-017（结账向导/结转序列/前置检查扩展/期间锁全链路，SPEC 预留 P84~P87）；数量与实际对齐（prd 20、dsn 17、specs md 91）
 > **V4.2 变更**：登记经营状况分析 PRD-016 + DSN-014（预算差异/指标预警/现金流静态预测/驾驶舱，SPEC 预留 P80~P83）；补登 DSN-015/016、P73~P79 SPEC；数量与实际对齐（prd 19、dsn 16、specs md 91）
 > **V4.1 变更**：SPEC 编号冲突修复（P57-enterprise→P71、P58-opening→P72）；登记 P66~P69、S-27 及 development/testing 新增文档；数量与实际对齐（specs 81 份、需求 83 条、audit 2 份）；TST-007 编号冲突修复（test-methodology→TST-014）；归档 testing 4 份一次性产物至 archive/test-old；登记 dir/ DIR 机制（DEV-020）
 > **V4.0 变更**：PRD/DSN/SPEC 三层体系正式确立；所有路径/版本/数量与实际对齐
@@ -16,10 +17,10 @@ docs/
 ├── CORE-项目说明.md                    ← 核心①：产品定位/设计理念/项目范围（V6.1）
 ├── CORE-技术方案.md                    ← 核心②：架构/技术栈/模块清单/设计决策（V5.1）
 ├── CORE-需求分析.md                    ← 核心③：需求全景/功能矩阵/版本规划（V5.0）
-├── CORE-文档注册表.md                  ← 本文档，权威索引（V4.2）
+├── CORE-文档注册表.md                  ← 本文档，权威索引（V4.3）
 │
-├── prd/                        ← 产品需求文档（19份，含1份拆解计划）
-├── design/                     ← 模块设计文档（16份 DSN + 2份分析 + archify 架构图产物）
+├── prd/                        ← 产品需求文档（20份，含1份拆解计划）
+├── design/                     ← 模块设计文档（17份 DSN + 2份分析 + archify 架构图产物）
 ├── specs/                      ← SPEC 规格契约（91份 md + 1份审计 JSON）
 ├── architecture/               ← 架构设计文档（7份）
 │
@@ -94,9 +95,10 @@ docs/
 | HUICAI-PRD-014 | [权限安全审计-PRD-V1.0.md](./prd/权限安全审计-PRD-V1.0.md) | DSN-基础数据管理 | S-01、S-02 | ✅ |
 | HUICAI-PRD-015 | [凭证模板引擎-PRD-V1.0.md](./prd/凭证模板引擎-PRD-V1.0.md) | DSN-总账管理 | P22、P37、S-17 | ✅ |
 | HUICAI-PRD-016 | [经营状况分析-PRD-V1.0.md](./prd/经营状况分析-PRD-V1.0.md) | DSN-经营状况分析 | P80~P83（预留） | ⚠️ 需求已定，待开发（R-132~135） |
+| HUICAI-PRD-017 | [期末结账工作台-PRD-V1.0.md](./prd/期末结账工作台-PRD-V1.0.md) | DSN-期末结账工作台 | P84~P87（预留） | ⚠️ 需求已定，待开发（R-136~139） |
 | HUICAI-PRD-PLAN | [PRD-拆解计划.md](./prd/PRD-拆解计划.md) | — | — | ✅ |
 
-### 2.2 DSN 模块设计文档（design/ — 16份）
+### 2.2 DSN 模块设计文档（design/ — 17份）
 
 | 编号 | 文件名 | 关联 PRD | 说明 |
 |------|--------|---------|------|
@@ -116,6 +118,7 @@ docs/
 | HUICAI-DES-014 | [DSN-经营状况分析.md](./design/DSN-经营状况分析.md) | 经营状况分析 PRD（HUICAI-PRD-016） | 预算差异/指标预警/现金流静态预测/驾驶舱 |
 | HUICAI-DES-015 | [DSN-代理公司场景设计.md](./design/DSN-代理公司场景设计.md) | Agency分支 PRD | 代理公司（多租户）场景设计 |
 | HUICAI-DES-016 | [DSN-前端查询条件区风格统一.md](./design/DSN-前端查询条件区风格统一.md) | — | 前端查询条件区风格统一规范 |
+| HUICAI-DES-017 | [DSN-期末结账工作台.md](./design/DSN-期末结账工作台.md) | 期末结账工作台 PRD（HUICAI-PRD-017） | 结账向导/结转序列/前置检查扩展/期间锁全链路 |
 
 > **设计分析报告**（design/analysis/，非 DSN 设计文档）：
 > - [DSN-PRD合理性评估.md](./design/analysis/DSN-PRD合理性评估.md)
