@@ -9,6 +9,7 @@ import com.huicai.common.response.R;
 import com.huicai.sme.periodclose.service.CarryoverSequenceService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -47,7 +48,7 @@ public class CloseWorkbenchController {
 
     @Operation(summary = "一键人工审核记账（DRAFT→AUDITED→POSTED，同事务）")
     @PostMapping("/batch-review-post")
-    public R<Void> batchReviewPost(@RequestBody BatchReviewPostRequest request) {
+    public R<Void> batchReviewPost(@Valid @RequestBody BatchReviewPostRequest request) {
         periodCloseService.batchReviewPost(request.voucherIds(), SecurityUtils.getCurrentUserId());
         return R.ok();
     }
