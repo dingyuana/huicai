@@ -11,6 +11,7 @@ import com.huicai.common.exception.BusinessException;
 import com.huicai.base.system.entity.UserEntity;
 import com.huicai.config.security.LoginUser;
 import com.huicai.sme.asset.service.AssetCardService;
+import com.huicai.sme.asset.service.DepreciationVoucherService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -36,6 +37,7 @@ class AssetCardRestContractTest {
 
     @Autowired private MockMvc mvc;
     @MockBean private AssetCardService service;
+    @MockBean private DepreciationVoucherService depreciationVoucherService;
     private static final String BASE = "/api/sme/asset/v1/asset-cards";
 
     @MockBean private com.huicai.config.security.JwtProvider jwtProvider;
