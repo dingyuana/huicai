@@ -5,7 +5,7 @@
 > **编号**：HUICAI-SPC-084 | 优先级：P1（结账链路操作闭环）
 > **依据**：PRD-017 §P84 + R-136 + DSN-期末结账工作台.md + `PeriodCloseController`/`PeriodCloseView.vue` 代码 trace
 > **关联**：P68（期间状态机）、P85（结转序列数据源：DEPR/CLOSE/DISTRIB）、P87（期间锁）、人工审核铁律（MEMORY）
-> **test_ref**：`PeriodCloseServiceImplTest#batchReviewPost_*`（6）、`CarryoverSequenceServiceImplTest`（8）、`TaxControllerTest`（14，完整 context 启动验证共享路径映射）
+> **test_ref**：`PeriodCloseServiceImplTest#batchReviewPost_*`（6）、`CarryoverSequenceServiceImplTest`（8）、`CloseWorkbenchRestContractTest`（8）、`TaxControllerTest`（14，完整 context 启动验证共享路径映射）
 
 ---
 
@@ -184,11 +184,26 @@ results.add(runStep(STEP_DEPR, "折旧凭证", () -> {
 
 ### 3.5 契约测试的 mock 遗漏（P85-C 教训复用）
 
-P85-C 曾给 `AssetCardController` 加依赖未同步 `@WebMvcTest` 的 `@MockBean`，导致 6 个 error。本次**主动前置检查**：`PeriodCloseRestContractTest` 是 `@WebMvcTest(PeriodCloseController.class)`，**只加载该 controller，不含** 新建的 `CloseWorkbenchController`，故不受影响。新建 controller 目前无契约测试覆盖。
+P85-C 曾给 `AssetCardController` 加依赖未同步 `@WebMvcTest` 的 `@MockBean`，导致 6 个 error。本次**主动前置检查**：`PeriodCloseRestContractTest` 是 `@WebMvcTest(PeriodCloseController.class)`，**只加载该 controller，不含** 新建的 `CloseWorkbenchController`，故不受影响。新建 controller 已补契约测试（见 §4.2）。
 
 ### 3.6 共享路径映射验证
 
 两个 controller 共享 `/api/base/voucher/v1/period-close`。这只有启动完整 Spring context 才能发现问题。**已验证**：`TaxControllerTest`（`@SpringBootTest` + H2，无需 Docker）14/14 绿，无 `Ambiguous mapping` / context 启动失败。
+
+### 3.7 异常状态码的项目约定（契约测试发现）
+
+写契约测试时发现两个与直觉不符的映射，记录以免后续踩坑：
+
+| 场景 | 返回 | 依据 |
+|---|---|---|
+| `@RequestParam` 缺失 | **500** | `GlobalExceptionHandler` 无专门分支，落通用异常处理 |
+| `@Valid` 校验失败 | **400** | `@ExceptionHandler(MethodArgumentNotValidException.class)` + `@ResponseStatus(BAD_REQUEST)` |
+
+因此 `batch-review-post` 的输入校验必须走 `@Valid`（400 语义正确）；`generate-sequence` 的 `@RequestParam period` 缺失会返回 500，与业务异常同码，契约测试只断言"报错"不断言码位。
+
+### 3.8 `@Valid` + `@NotEmpty` 补齐
+
+初版 `BatchReviewPostRequest` 无校验注解，空数组/缺字段会穿透到 service 才报错。已补 `@NotEmpty(message = "凭证ID列表不能为空")` + controller 加 `@Valid`，与项目既有范式一致（`VoucherController.batchSubmit` 用 `VoucherStatusDTO` 的 `@NotEmpty`）。
 
 ---
 
@@ -206,11 +221,19 @@ P85-C 曾给 `AssetCardController` 加依赖未同步 `@WebMvcTest` 的 `@MockBe
 - `batchReviewPost_auditFails_doesNotPost`：提交已执行、审核抛异常后 **`batchPost` 绝不被调用**——原子性语义的核心校验
 - `generateSequence_allFail_stillReturnsThreeSteps`：**即使三步全失败，仍返回 3 条结果**——保证前端始终能渲染完整步骤条
 
-### 4.2 Context 启动验证
+### 4.2 契约测试
+
+| 测试类 | 覆盖 | 结果 |
+|---|---|---|
+| `CloseWorkbenchRestContractTest` | 三步序列返回 / 部分跳过仍返 3 步 / 缺 period / JSON body 正确反序列化并调用 service / 单张 / 空数组 400 / 缺字段 400 / 仅 query 参数不触及 service | 8/8 |
+
+其中 `batchReviewPost_jsonBody` 是 `@RequestBody` vs `@RequestParam` 陷阱的回归断言：JSON body 必须能被反序列化并调用到 service。
+
+### 4.3 Context 启动验证
 
 `TaxControllerTest` 14/14（验证两个 controller 共享路径不冲突、`CarryoverSequenceServiceImpl` bean 正常装配）
 
-### 4.3 前端构建
+### 4.4 前端构建
 
 `npx vite build` 成功，2651 模块，dist 时间戳晚于源码修改（部署铁律）
 
@@ -221,7 +244,6 @@ P85-C 曾给 `AssetCardController` 加依赖未同步 `@WebMvcTest` 的 `@MockBe
 | 项 | 说明 |
 |---|---|
 | **P84 无 RealDB 测试** | `batchReviewPost` 的事务回滚行为需在真实 DB 上验证。Mock 测试无法证明 REQUIRED 传播实际生效——**这是本 SPEC 最明显的测试缺口** |
-| **`CloseWorkbenchController` 无契约测试** | 建议补 `@WebMvcTest(CloseWorkbenchController.class)`，覆盖 `@RequestBody` 反序列化 |
 | **Drawer 状态前端乐观更新** | 一键审核后前端直接置 `POSTED`，若后端实际失败则状态不一致。后端抛错时前端 catch 不刷新，但用户已看到"成功"提示前可能闪现 |
 | **`createdBy` 缺陷未修** | `BaseEntity.createdBy` 标 `@TableField(exist=false)`，所有自动生成凭证的 `created_by` 均为 NULL（含本次生成的 DEPR/CLOSE/DISTRIB）。审计仅靠 `t_close_log.operator_id` 与应用日志。建议单独开工单 |
 | **Step 3 可直达 Step 4** | 允许跳过一键审核直接结账，由后端 `closePeriod` 的"未记账凭证"检查兜底拦截 |
@@ -230,9 +252,10 @@ P85-C 曾给 `AssetCardController` 加依赖未同步 `@WebMvcTest` 的 `@MockBe
 
 ## 6. Commit
 
-- 后端契约（DTO + 编排 + batchReviewPost + Controller + 测试）：见文末
-- 前端（API 封装 + 4 步向导重写）：见文末
-- 文档（本 SPEC + PRD-017 翻转 + CORE R-136 翻转 + 注册表 V4.7）：见文末
+- 后端契约（DTO + 编排 + `batchReviewPost` + Controller + 测试）：`aa2702b`
+- 契约测试（8 例）+ `@NotEmpty`/`@Valid` 补齐：`7ce5802`
+- 前端（API 封装 + 4 步向导重写，含于 `aa2702b`）
+- 文档（本 SPEC + PRD-017 翻转 + CORE R-136 翻转 + 注册表 V4.7）：`d7d8511`
 
 ---
 
