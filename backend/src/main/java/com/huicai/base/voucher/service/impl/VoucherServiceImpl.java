@@ -410,6 +410,8 @@ public class VoucherServiceImpl extends ServiceImpl<VoucherMapper, VoucherEntity
     @Transactional
     public VoucherVO reverse(Long id, Long userId) {
         VoucherEntity original = getValidVoucher(id);
+        // P87: 红冲会向原期间插入新 DRAFT 凭证，已结账/已锁定期间禁止（先反结账再红冲）
+        assertPeriodOpen(original.getPeriod());
         if (!"POSTED".equals(original.getStatus()) && !"AUDITED".equals(original.getStatus())) {
             throw BusinessException.badRequest("仅已审核或已记账的凭证可红冲");
         }

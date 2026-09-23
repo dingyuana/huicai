@@ -356,6 +356,22 @@ public class PeriodCloseServiceImpl implements PeriodCloseService {
             throw BusinessException.badRequest("仅已结账期间可反结账");
         }
         validateReopenOrder(period);
+        // P87: 反结账前检查该期间是否存在未过账(DRAFT)的自动结转凭证(CLOSE-/DISTRIB-/DEPR-)。
+        // 半成品结转凭证不能留在重新打开的期间里——要求人工先处理(删除草稿或完成记账)再反结账，
+        // 防 reopen 后留下"垃圾草稿"污染下期期初。已 POSTED 的结转凭证保留(冲销走红冲流程)。
+        for (String prefix : new String[]{"CLOSE-", "DISTRIB-", "DEPR-"}) {
+            Long pending = voucherMapper.selectCount(
+                    new LambdaQueryWrapper<VoucherEntity>()
+                            .likeRight(VoucherEntity::getVoucherNo, prefix + period)
+                            .eq(VoucherEntity::getStatus, "DRAFT")
+                            .isNull(VoucherEntity::getReversedFrom)
+                            .eq(VoucherEntity::getDeleted, 0));
+            if (pending != null && pending > 0) {
+                throw BusinessException.badRequest(
+                        "期间 " + period + " 存在 " + pending + " 张未过账的 " + prefix
+                                + " 结转凭证，请先删除草稿或完成记账后再反结账");
+            }
+        }
         periodEntity.setStatus("open");
         periodEntity.setUpdatedBy(userId);
         periodEntity.setUpdatedAt(LocalDateTime.now());

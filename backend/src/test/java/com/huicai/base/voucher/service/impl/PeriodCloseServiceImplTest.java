@@ -180,6 +180,36 @@ class PeriodCloseServiceImplTest {
         assertTrue(ex.getMessage().contains("已结账"));
     }
 
+    // ==================== P87 反结账未过账结转凭证防护 ====================
+
+    @Test
+    @DisplayName("P87: reopenPeriod 存在未过账 CLOSE 结转凭证时拦截, 不改期间状态")
+    void reopenPeriod_blockedWhenPendingDraftCarryoverVoucher() {
+        stubFindPeriod(stubPeriod("closed"));
+        // 任一结转凭证前缀(CLOSE-)存在 DRAFT 凭证即拦截
+        when(voucherMapper.selectCount(any(LambdaQueryWrapper.class))).thenReturn(1L);
+
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> service.reopenPeriod("202607", 1L));
+        assertTrue(ex.getMessage().contains("未过账"));
+        assertTrue(ex.getMessage().contains("CLOSE-"));
+        assertTrue(ex.getMessage().contains("202607"));
+        // 拦截后不得执行 updateById(期间状态保持 closed 不被翻成 open)
+        verify(periodService, never()).updateById(any());
+    }
+
+    @Test
+    @DisplayName("P87: reopenPeriod 无未过账结转凭证(既有默认 0L)可正常反结账")
+    void reopenPeriod_passesWhenNoPendingCarryoverVoucher() {
+        stubFindPeriod(stubPeriod("closed"));
+        // setup 已默认 selectCount -> 0L, 明确复位以防其它用例污染
+        when(voucherMapper.selectCount(any(LambdaQueryWrapper.class))).thenReturn(0L);
+
+        service.reopenPeriod("202607", 1L);
+
+        verify(periodService).updateById(argThat(e -> "open".equals(e.getStatus())));
+    }
+
     // ==================== P68 结账期间顺序约束 ====================
 
     private PeriodEntity periodEntity(String code, String status) {
