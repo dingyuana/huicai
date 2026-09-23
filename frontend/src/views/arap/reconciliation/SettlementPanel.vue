@@ -29,7 +29,7 @@
 
     <el-table :data="settlementList" v-loading="settlementLoading" border stripe style="width:100%">
       <el-table-column type="index" label="序号" width="50" />
-      <el-table-column prop="settlementNo" label="核销编号" width="140" />
+      <el-table-column prop="settlementNo" label="核销编号" width="190" show-overflow-tooltip />
       <el-table-column label="类型" width="100" align="center">
         <template #default="{ row }">
           <el-tag :type="['RECEIVE','RECEIVABLE'].includes(row.settlementType)?'success':'warning'" size="small">
