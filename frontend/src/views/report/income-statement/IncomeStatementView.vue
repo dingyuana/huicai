@@ -37,7 +37,7 @@
 
 <script setup lang="ts">
 import { onMounted, reactive, ref, computed } from 'vue'
-import { resolveEarliestUnclosedPeriod } from '@/utils/period'
+import { resolveLatestClosedPeriod } from '@/utils/period'
 import { incomeStatement } from '@/api/modules/report'
 import PeriodNavigator from '@/components/finance/PeriodNavigator.vue'
 
@@ -74,7 +74,7 @@ const onExport = () => {
 }
 
 onMounted(async () => {
-  query.period = await resolveEarliestUnclosedPeriod()
+  query.period = await resolveLatestClosedPeriod()
   fetchData()
 })
 </script>

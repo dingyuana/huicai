@@ -119,6 +119,7 @@ public class EnterpriseController {
         CurrentPeriodVO vo = new CurrentPeriodVO();
         vo.setStartPeriod(startPeriod);
         vo.setEarliestUnclosedPeriod(enterpriseMapper.selectEarliestUnclosedPeriod(enterpriseId));
+        vo.setLatestClosedPeriod(enterpriseMapper.selectLatestClosedPeriod(enterpriseId));
 
         if (startPeriod != null) {
             String hasDataPeriod = enterpriseMapper.selectLatestPeriodWithData(enterpriseId);

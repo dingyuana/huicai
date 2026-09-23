@@ -28,9 +28,12 @@
         class="carryover-tip"
       >
         <template #title>
-          结转凭证已生成 (ID: {{ carryoverId }})，该凭证当前为草稿状态，需完成「提交 → 审核 → 记账」后结转才能生效。
+          结转凭证已生成 (ID: {{ carryoverId }}){{ carryoverPosted ? '，已完成提交、审核并记账' : '，当前为草稿状态，需审核并记账后结转生效' }}
         </template>
-        <el-button size="small" type="primary" @click="gotoCarryoverVoucher">前往凭证管理审核</el-button>
+        <div style="margin-top:8px">
+          <el-button v-if="!carryoverPosted" size="small" type="primary" :loading="auditing" @click="auditCarryover">审核并记账</el-button>
+          <el-button size="small" @click="gotoCarryoverVoucher">前往凭证管理查看</el-button>
+        </div>
       </el-alert>
 
       <div v-if="checkResult">
@@ -79,11 +82,14 @@ import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { resolveEarliestUnclosedPeriod } from '@/utils/period'
 import { checkClose, profitCarryover, closePeriod, reopenPeriod, type CloseCheckResult } from '@/api/modules/periodClose'
+import { submitVoucher, auditVoucher, postVoucher } from '@/api/modules/voucher'
 
 const router = useRouter()
 const period = ref('')
 const checkResult = ref<CloseCheckResult | null>(null)
 const carryoverId = ref<number | null>(null)
+const carryoverPosted = ref(false)
+const auditing = ref(false)
 
 onMounted(async () => {
   period.value = await resolveEarliestUnclosedPeriod()
@@ -124,6 +130,28 @@ function gotoCarryoverVoucher() {
     name: 'VoucherList',
     query: { period: period.value, keyword: `CLOSE-${period.value}` },
   })
+}
+
+async function auditCarryover() {
+  if (!carryoverId.value) return
+  await ElMessageBox.confirm(
+    '将对该结转凭证依次执行「提交 → 审核 → 记账」，确认完成结转凭证的审核与记账？',
+    '结转凭证审核',
+    { type: 'warning', confirmButtonText: '确认审核并记账', cancelButtonText: '取消' },
+  )
+  auditing.value = true
+  try {
+    await submitVoucher(carryoverId.value)
+    await auditVoucher(carryoverId.value)
+    await postVoucher(carryoverId.value)
+    carryoverPosted.value = true
+    ElMessage.success('结转凭证已提交、审核并记账，可继续执行结账')
+    checkResult.value = null
+  } catch (e: any) {
+    ElMessage.warning(e?.message || '审核未完成，请前往凭证管理人工处理或重试')
+  } finally {
+    auditing.value = false
+  }
 }
 
 async function onClose() {

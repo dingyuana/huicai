@@ -308,6 +308,7 @@ class EnterpriseControllerTest {
         when(enterpriseMapper.selectById(1L)).thenReturn(enterprise);
         when(enterpriseMapper.selectLatestPeriodWithData(1L)).thenReturn("202403");
         when(enterpriseMapper.selectEarliestUnclosedPeriod(1L)).thenReturn("202402");
+        when(enterpriseMapper.selectLatestClosedPeriod(1L)).thenReturn("202403");
 
         mvc.perform(get("/api/v1/enterprise/current-period")
                         .header("Authorization", "Bearer " + TOKEN_ADMIN))
@@ -316,7 +317,8 @@ class EnterpriseControllerTest {
                 .andExpect(jsonPath("$.data.currentPeriod").value("202403"))
                 .andExpect(jsonPath("$.data.startPeriod").value("202401"))
                 .andExpect(jsonPath("$.data.hasDataPeriod").value("202403"))
-                .andExpect(jsonPath("$.data.earliestUnclosedPeriod").value("202402"));
+                .andExpect(jsonPath("$.data.earliestUnclosedPeriod").value("202402"))
+                .andExpect(jsonPath("$.data.latestClosedPeriod").value("202403"));
 
         EnterpriseContextHolder.clear();
     }
@@ -334,6 +336,7 @@ class EnterpriseControllerTest {
         when(enterpriseMapper.selectById(1L)).thenReturn(enterprise);
         when(enterpriseMapper.selectLatestPeriodWithData(1L)).thenReturn(null);
         when(enterpriseMapper.selectEarliestUnclosedPeriod(1L)).thenReturn("202401");
+        when(enterpriseMapper.selectLatestClosedPeriod(1L)).thenReturn(null);
 
         mvc.perform(get("/api/v1/enterprise/current-period")
                         .header("Authorization", "Bearer " + TOKEN_ADMIN))
@@ -342,7 +345,8 @@ class EnterpriseControllerTest {
                 .andExpect(jsonPath("$.data.currentPeriod").value("202401"))
                 .andExpect(jsonPath("$.data.startPeriod").value("202401"))
                 .andExpect(jsonPath("$.data.hasDataPeriod").doesNotExist())
-                .andExpect(jsonPath("$.data.earliestUnclosedPeriod").value("202401"));
+                .andExpect(jsonPath("$.data.earliestUnclosedPeriod").value("202401"))
+                .andExpect(jsonPath("$.data.latestClosedPeriod").doesNotExist());
 
         EnterpriseContextHolder.clear();
     }

@@ -32,3 +32,19 @@ export async function resolveEarliestUnclosedPeriod(): Promise<string> {
   }
   return resolveDefaultPeriod()
 }
+
+/**
+ * 获取企业最近已结账的期间（利润表等期间报表默认期间）。
+ * 回退策略：无已结账期间或接口异常 -> resolveDefaultPeriod()。
+ */
+export async function resolveLatestClosedPeriod(): Promise<string> {
+  try {
+    const vo = await getCurrentPeriod()
+    if (vo && vo.latestClosedPeriod) {
+      return vo.latestClosedPeriod
+    }
+  } catch (e) {
+    // 未切换企业/接口异常时按默认期间回退
+  }
+  return resolveDefaultPeriod()
+}

@@ -12,4 +12,5 @@ public class CurrentPeriodVO {
     private String startPeriod;
     private String hasDataPeriod;
     private String earliestUnclosedPeriod;
+    private String latestClosedPeriod;
 }
