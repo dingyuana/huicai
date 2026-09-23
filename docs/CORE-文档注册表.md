@@ -1,8 +1,9 @@
 # 慧财财务系统 — 文档注册表
 
-> **版本**：V4.1 | **日期**：2026-09-13 | **维护人**：Hermes
+> **版本**：V4.2 | **日期**：2026-09-22 | **维护人**：Hermes
 > **说明**：本文档是所有项目文档的权威索引，编号格式 `HUICAI-{分类}-{序号}`
 > **编号规则**：MAIN=主文档, DES=设计, ARC=架构, PRD=产品需求, SPC=规格, DEV=开发, TST=测试
+> **V4.2 变更**：登记经营状况分析 PRD-016 + DSN-014（预算差异/指标预警/现金流静态预测/驾驶舱，SPEC 预留 P80~P83）；补登 DSN-015/016、P73~P79 SPEC；数量与实际对齐（prd 19、dsn 16、specs md 91）
 > **V4.1 变更**：SPEC 编号冲突修复（P57-enterprise→P71、P58-opening→P72）；登记 P66~P69、S-27 及 development/testing 新增文档；数量与实际对齐（specs 81 份、需求 83 条、audit 2 份）；TST-007 编号冲突修复（test-methodology→TST-014）；归档 testing 4 份一次性产物至 archive/test-old；登记 dir/ DIR 机制（DEV-020）
 > **V4.0 变更**：PRD/DSN/SPEC 三层体系正式确立；所有路径/版本/数量与实际对齐
 
@@ -15,11 +16,11 @@ docs/
 ├── CORE-项目说明.md                    ← 核心①：产品定位/设计理念/项目范围（V6.1）
 ├── CORE-技术方案.md                    ← 核心②：架构/技术栈/模块清单/设计决策（V5.1）
 ├── CORE-需求分析.md                    ← 核心③：需求全景/功能矩阵/版本规划（V5.0）
-├── CORE-文档注册表.md                  ← 本文档，权威索引（V4.1）
+├── CORE-文档注册表.md                  ← 本文档，权威索引（V4.2）
 │
-├── prd/                        ← 产品需求文档（18份，含1份拆解计划）
-├── design/                     ← 模块设计文档（13份 DSN + 2份分析 + archify 架构图产物）
-├── specs/                      ← SPEC 规格契约（81份 md + 1份审计 JSON）
+├── prd/                        ← 产品需求文档（19份，含1份拆解计划）
+├── design/                     ← 模块设计文档（16份 DSN + 2份分析 + archify 架构图产物）
+├── specs/                      ← SPEC 规格契约（91份 md + 1份审计 JSON）
 ├── architecture/               ← 架构设计文档（7份）
 │
 ├── development/                ← 开发文档
@@ -92,9 +93,10 @@ docs/
 | HUICAI-PRD-013 | [公共参数-PRD-V1.0.md](./prd/公共参数-PRD-V1.0.md) | DSN-基础数据管理 | 待建 | ⚠️ 部分实现 |
 | HUICAI-PRD-014 | [权限安全审计-PRD-V1.0.md](./prd/权限安全审计-PRD-V1.0.md) | DSN-基础数据管理 | S-01、S-02 | ✅ |
 | HUICAI-PRD-015 | [凭证模板引擎-PRD-V1.0.md](./prd/凭证模板引擎-PRD-V1.0.md) | DSN-总账管理 | P22、P37、S-17 | ✅ |
+| HUICAI-PRD-016 | [经营状况分析-PRD-V1.0.md](./prd/经营状况分析-PRD-V1.0.md) | DSN-经营状况分析 | P80~P83（预留） | ⚠️ 需求已定，待开发（R-132~135） |
 | HUICAI-PRD-PLAN | [PRD-拆解计划.md](./prd/PRD-拆解计划.md) | — | — | ✅ |
 
-### 2.2 DSN 模块设计文档（design/ — 13份）
+### 2.2 DSN 模块设计文档（design/ — 16份）
 
 | 编号 | 文件名 | 关联 PRD | 说明 |
 |------|--------|---------|------|
@@ -111,18 +113,22 @@ docs/
 | HUICAI-DES-011 | [DSN-工资薪酬管理.md](./design/DSN-工资薪酬管理.md) | 工资薪酬 PRD（待建） | 工资表/个税/凭证 |
 | HUICAI-DES-012 | [DSN-银行流水智能分类.md](./design/DSN-银行流水智能分类.md) | 资金管理 PRD | 竞品分析+智能分类 |
 | HUICAI-DES-013 | [DSN-前端简化方案.md](./design/DSN-前端简化方案.md) | Agency分支 PRD + 基础数据 PRD | 前端菜单精简方案 |
+| HUICAI-DES-014 | [DSN-经营状况分析.md](./design/DSN-经营状况分析.md) | 经营状况分析 PRD（HUICAI-PRD-016） | 预算差异/指标预警/现金流静态预测/驾驶舱 |
+| HUICAI-DES-015 | [DSN-代理公司场景设计.md](./design/DSN-代理公司场景设计.md) | Agency分支 PRD | 代理公司（多租户）场景设计 |
+| HUICAI-DES-016 | [DSN-前端查询条件区风格统一.md](./design/DSN-前端查询条件区风格统一.md) | — | 前端查询条件区风格统一规范 |
 
 > **设计分析报告**（design/analysis/，非 DSN 设计文档）：
 > - [DSN-PRD合理性评估.md](./design/analysis/DSN-PRD合理性评估.md)
 > - [DSN-PRD差距分析.md](./design/analysis/DSN-PRD差距分析.md)
 
-### 2.3 SPEC 规格契约文档（specs/ — 81份 md + 1份 JSON）
+### 2.3 SPEC 规格契约文档（specs/ — 91份 md + 1份 JSON）
 
 | 编号范围 | 说明 | 数量 |
 |----------|------|------|
 | P0~P72 | 功能规格文档（P 系列，含 P-BUSINESSDOC-LIST/P-SALARY/P-TRANSFER），按开发顺序增量编号 | 64份 |
+| P73~P79 | 后补批次：P73 银行流水核销 UX、P74 核销单凭证模板、P75 应收应付余额汇总（草案）、P76 费用汇总（已实现）、P77 折旧统计（已实现）、P78 预收预付汇总（已实现）、P79 代理进度（已实现 P0+P1） | 7份 |
 | S-00~S-29 | 系统级规范文档（S 系列，S-17 含 S-17-1 子文档），按业务域分层编号 | 14份 |
-| 其他 | SPEC-CONTRACT-SCHEMA.md（契约规范）、T1-BankStatement数据隔离测试方案.md、timestamp-precision.md | 3份 |
+| 其他 | SPEC-CONTRACT-SCHEMA.md（契约规范）、T1-BankStatement数据隔离测试方案.md、timestamp-precision.md、P-LARGETABLE-BATCH、P-OUTPUTINVOICE-LIST | 6份 |
 
 > **编号冲突修复记录（2026-09-13）**：原 P57/P58 编号各有两个文件。保留已实现并登记的 P57-declare-status-split、P58-invoice-payment-reconcile；将草案阶段的 P57-enterprise-start-period 重编号为 **P71**、P58-opening-balance-entry-audit 重编号为 **P72**，需求回链（REQ-2026-077/078）已同步。P69-balance-sheet-equality 由并行会话于同日新建。
 
@@ -131,7 +137,7 @@ docs/
 | 对应模块 | SPEC 文件 |
 |---------|---------|
 | 凭证管理 | P22-voucher-state-machine、P37-voucher-type-rules、S-17-期末自动化结转、S-17-1-profit-distribution、S-18-结账控制、P59-opening-balance-single-entry、P60-auxiliary-ledger-query、P62-subsidiary-date-range-and-trial-empty、P63-ledger-p1-alignment、P64-ledger-perf-and-vo、P65-ledger-frontend、P68-period-close-ordering |
-| 应收应付核销 | P30、P30-P1-unified-settlement-path、P36、P42、P43-bad-debt、P43-reconciliation-log-settlement-state-machine、P44-settlement-list-display-fix、P45-reconciliation-upstream-trace-fix、P51、P52、P53、S-28-反核销制证凭证联动作废、P10 |
+| 应收应付核销 | P30、P30-P1-unified-settlement-path、P36、P42、P43-bad-debt、P43-reconciliation-log-settlement-state-machine、P44-settlement-list-display-fix、P45-reconciliation-upstream-trace-fix、P51、P52、P53、S-28-反核销制证凭证联动作废、P10、P73-bank-statement-settlement-ux、P74-settlement-voucher-template-fix |
 | 发票税务 | P40-input-invoice、P41-invoice-driven-finance、P13-tax-declaration、P36-1-red-flush-voucher、P57-declare-status-split、P57-enterprise-start-period→**已重编号 P71**、P58-invoice-payment-reconcile、P58-opening-balance-entry-audit→**已重编号 P72**、P61-vat-appendix-and-burden |
 | 资金管理 | P1-bank-import、P14-bank-reconciliation、P23-bank-statement、P55-bank-statement-subject-and-batch-fix、S-29-数据导入模块详细规格 |
 | 固定资产 | S-23 |
@@ -139,8 +145,8 @@ docs/
 | 基础数据 | S-04、S-05、P71-enterprise-start-period（原 P57，企业级建账期间）、P72-opening-balance-entry-audit（原 P58，期初建账审计） |
 | 费用报销 | P11、P66-expense-reimbursement-frontend-polish |
 | 预算管理 | P16 |
-| 报表中心 | P17-report-center、P69-balance-sheet-equality（资产负债表平衡根治） |
-| Agency | S-26 |
+| 报表中心 | P17-report-center、P69-balance-sheet-equality（资产负债表平衡根治）、P75-arap-balance-summary（草案）、P76-expense-summary-report、P77-asset-depreciation-statistics、P78-prepayment-balance-summary |
+| Agency | S-26、P79-agency-service-progress-workload |
 | AI Agent | P40-ai-service-skeleton-enhancement、P46~P50（R-301~305，暂不拆 PRD） |
 | 业务单据增强 | P-BUSINESSDOC-LIST、P-SALARY、P-TRANSFER、P67-batch-ops-unification（前端批量操作统一） |
 | 其他/横切 | P0-project-skeleton、P4-counterparty-direction、P5-auto-reconciliation、P7-test-coverage、P8-h2-compatibility、P12-reconciliation-business-closure、P15-attachment-ocr、P18-declaration-state-machine、P19-financial-document-content-standards、P24-audit-tracking、P27-businessdoc-customer-vendor-name-fix、P32-financial-data-integrity、P33-code-vs-spec-gap-analysis、P38-fix-three-flow-traceability-gaps、P54-code-restructure-base-sme-agency、S-00-base-architecture、S-27-import-export-framework |
