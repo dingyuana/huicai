@@ -27,12 +27,14 @@
             <el-table-column prop="code" label="编码" width="100" />
             <el-table-column prop="name" label="科目" min-width="140" />
             <el-table-column label="余额" align="right" width="140">
-              <template #default="{ row }">{{ fmtAmount(row.end_balance) }}</template>
+              <template #default="{ row }">
+                <span :class="amountClass(false, row.end_balance)">{{ fmtAmount(row.end_balance) }}</span>
+              </template>
             </el-table-column>
           </el-table>
           <div class="total-row">
             <span>资产合计:</span>
-            <span class="total-amount">{{ fmtAmount(result.totalAssets) }}</span>
+            <span class="total-amount" :class="{ 'amount-negative': isNegative(result.totalAssets) }">{{ fmtAmount(result.totalAssets) }}</span>
           </div>
         </el-col>
         <el-col :span="12">
@@ -41,7 +43,9 @@
             <el-table-column prop="code" label="编码" width="100" />
             <el-table-column prop="name" label="科目" min-width="140" />
             <el-table-column label="余额" align="right" width="140">
-              <template #default="{ row }">{{ fmtAmount(row.end_balance) }}</template>
+              <template #default="{ row }">
+                <span :class="amountClass(false, row.end_balance)">{{ fmtAmount(row.end_balance) }}</span>
+              </template>
             </el-table-column>
           </el-table>
           <h3 style="margin-top: 16px">所有者权益</h3>
@@ -49,12 +53,14 @@
             <el-table-column prop="code" label="编码" width="100" />
             <el-table-column prop="name" label="科目" min-width="140" />
             <el-table-column label="余额" align="right" width="140">
-              <template #default="{ row }">{{ fmtAmount(row.end_balance) }}</template>
+              <template #default="{ row }">
+                <span :class="amountClass(false, row.end_balance)">{{ fmtAmount(row.end_balance) }}</span>
+              </template>
             </el-table-column>
           </el-table>
           <div class="total-row">
             <span>负债+权益合计:</span>
-            <span class="total-amount">{{ fmtAmount(result.totalLiabEquity) }}</span>
+            <span class="total-amount" :class="{ 'amount-negative': isNegative(result.totalLiabEquity) }">{{ fmtAmount(result.totalLiabEquity) }}</span>
           </div>
         </el-col>
       </el-row>
@@ -66,12 +72,14 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { resolveLatestClosedPeriod } from '@/utils/period'
 import { balanceSheet } from '@/api/modules/report'
+import { amountClass, formatAmount, isNegative } from '@/utils/format'
 import PeriodNavigator from '@/components/finance/PeriodNavigator.vue'
 
 const query = reactive({ period: '' })
 const result = ref<any>(null)
 const hideZeroRows = ref(true)
-const fmtAmount = (v: any) => Number(v || 0).toFixed(2)
+// P89-A：统一千分位 + 负数标红
+const fmtAmount = (v: any) => formatAmount(v)
 
 const isZeroRow = (r: any) => Number(r.end_balance || 0) === 0
 

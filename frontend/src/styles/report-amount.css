@@ -1,0 +1,20 @@
+/* 报表金额通用样式（P89-A）
+ *
+ * 放全局而非各页 scoped，理由：三张报表 + 科目余额表共用同一套金额视觉约定，
+ * 类名全局一致便于维护；且工具函数 src/utils/format.ts 的文档以这些类名为准。
+ */
+
+/* 负数标红 —— Element Plus danger 色 */
+.amount-negative {
+  color: #f56c6c;
+}
+
+/* 合计/小计行加粗 */
+.amount-bold {
+  font-weight: 600;
+}
+
+/* 告警项（如现金贷方余额等异常提示） */
+.amount-warn {
+  color: #e6a23c;
+}

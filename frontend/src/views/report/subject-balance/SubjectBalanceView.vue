@@ -23,16 +23,24 @@
         <el-table-column prop="name" label="科目名称" min-width="180" />
         <el-table-column prop="level" label="层级" width="60" align="center" />
         <el-table-column label="期初余额" width="140" align="right">
-          <template #default="{ row }">{{ fmtAmount(row.begin_balance) }}</template>
+          <template #default="{ row }">
+            <span :class="amountClass(false, row.begin_balance)">{{ fmtAmount(row.begin_balance) }}</span>
+          </template>
         </el-table-column>
         <el-table-column label="借方" width="140" align="right">
-          <template #default="{ row }">{{ fmtAmount(row.debit_total) }}</template>
+          <template #default="{ row }">
+            <span :class="amountClass(false, row.debit_total)">{{ fmtAmount(row.debit_total) }}</span>
+          </template>
         </el-table-column>
         <el-table-column label="贷方" width="140" align="right">
-          <template #default="{ row }">{{ fmtAmount(row.credit_total) }}</template>
+          <template #default="{ row }">
+            <span :class="amountClass(false, row.credit_total)">{{ fmtAmount(row.credit_total) }}</span>
+          </template>
         </el-table-column>
         <el-table-column label="期末余额" width="140" align="right">
-          <template #default="{ row }">{{ fmtAmount(row.end_balance) }}</template>
+          <template #default="{ row }">
+            <span :class="amountClass(false, row.end_balance)">{{ fmtAmount(row.end_balance) }}</span>
+          </template>
         </el-table-column>
       </el-table>
     </el-card>
@@ -44,6 +52,7 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { resolveLatestClosedPeriod } from '@/utils/period'
 import { ElMessage } from 'element-plus'
 import { subjectBalance } from '@/api/modules/report'
+import { amountClass, formatAmount } from '@/utils/format'
 import PeriodNavigator from '@/components/finance/PeriodNavigator.vue'
 
 const query = reactive({ period: '' })
@@ -58,7 +67,7 @@ const visibleRows = computed(() =>
   hideZeroRows.value ? list.value.filter(r => !isZeroRow(r)) : list.value
 )
 
-const fmtAmount = (v: any) => Number(v || 0).toFixed(2)
+const fmtAmount = (v: any) => formatAmount(v)
 
 const fetchData = async () => {
   if (!query.period) return

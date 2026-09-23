@@ -22,7 +22,7 @@
         <el-table-column prop="label" label="项目" min-width="200" />
         <el-table-column label="金额" align="right" width="180">
           <template #default="{ row }">
-            <span :class="{ 'amount-bold': row.bold, 'amount-warn': row.warn }">{{ fmtAmount(row.amount) }}</span>
+            <span :class="amountClass(row.bold, row.amount, row.warn)">{{ fmtAmount(row.amount) }}</span>
           </template>
         </el-table-column>
       </el-table>
@@ -34,13 +34,14 @@
 import { onMounted, reactive, ref, computed } from 'vue'
 import { resolveLatestClosedPeriod } from '@/utils/period'
 import { cashFlowStatement } from '@/api/modules/report'
+import { amountClass, formatAmount } from '@/utils/format'
 import PeriodNavigator from '@/components/finance/PeriodNavigator.vue'
 
 const query = reactive({ period: '' })
 const result = ref<any>(null)
 const hideZeroRows = ref(true)
 
-const fmtAmount = (v: any) => Number(v || 0).toFixed(2)
+const fmtAmount = (v: any) => formatAmount(v)
 
 const rows = computed(() => {
   if (!result.value) return []

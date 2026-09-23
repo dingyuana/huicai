@@ -22,12 +22,12 @@
         <el-table-column prop="label" label="项目" min-width="180" />
         <el-table-column label="本期金额" align="right" width="180">
           <template #default="{ row }">
-            <span :class="{ 'amount-bold': row.bold }">{{ fmtAmount(row.current) }}</span>
+            <span :class="amountClass(row.bold, row.current)">{{ fmtAmount(row.current) }}</span>
           </template>
         </el-table-column>
         <el-table-column label="本年累计" align="right" width="180">
           <template #default="{ row }">
-            <span :class="{ 'amount-bold': row.bold }">{{ fmtAmount(row.cumulative) }}</span>
+            <span :class="amountClass(row.bold, row.cumulative)">{{ fmtAmount(row.cumulative) }}</span>
           </template>
         </el-table-column>
       </el-table>
@@ -39,13 +39,15 @@
 import { onMounted, reactive, ref, computed } from 'vue'
 import { resolveLatestClosedPeriod } from '@/utils/period'
 import { incomeStatement } from '@/api/modules/report'
+import { amountClass, formatAmount } from '@/utils/format'
 import PeriodNavigator from '@/components/finance/PeriodNavigator.vue'
 
 const query = reactive({ period: '' })
 const result = ref<any>(null)
 const hideZeroRows = ref(true)
 
-const fmtAmount = (v: any) => Number(v || 0).toFixed(2)
+// P89-A：统一千分位 + 负数标红
+const fmtAmount = (v: any) => formatAmount(v)
 
 const rows = computed(() => {
   if (!result.value) return []
