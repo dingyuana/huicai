@@ -74,15 +74,20 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { resolveEarliestUnclosedPeriod } from '@/utils/period'
 import { checkClose, profitCarryover, closePeriod, reopenPeriod, type CloseCheckResult } from '@/api/modules/periodClose'
 
 const router = useRouter()
-const period = ref(new Date().toISOString().slice(0, 7).replace('-', ''))
+const period = ref('')
 const checkResult = ref<CloseCheckResult | null>(null)
 const carryoverId = ref<number | null>(null)
+
+onMounted(async () => {
+  period.value = await resolveEarliestUnclosedPeriod()
+})
 
 const canClose = computed(() => checkResult.value?.passed === true)
 
