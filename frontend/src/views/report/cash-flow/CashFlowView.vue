@@ -22,7 +22,7 @@
         <el-table-column prop="label" label="项目" min-width="200" />
         <el-table-column label="金额" align="right" width="180">
           <template #default="{ row }">
-            <span :class="{ 'amount-bold': row.bold, amount-warn: row.warn }">{{ fmtAmount(row.amount) }}</span>
+            <span :class="{ 'amount-bold': row.bold, 'amount-warn': row.warn }">{{ fmtAmount(row.amount) }}</span>
           </template>
         </el-table-column>
       </el-table>
