@@ -139,6 +139,42 @@ class ReportServiceImplTest {
     }
 
     @Test
+    void p92b_1408段码不得重复计入流动与非流动() {
+        // 回归：本套科目表 1408 是"委托加工物资"（属存货=流动资产），不是通用准则的
+        // "持有待售资产"。fallback 中流动资产已含 startsWith("14")，若非流动再单列
+        // startsWith("1408")，则 1408 会被两个独立 subtotal 同时匹配，重复计入小计。
+        // 该重复不体现在勾稽上（其他由减法反推、总计按行加总），只能靠分段断言发现。
+        List<Map<String, Object>> b = new ArrayList<>();
+        Map<String, Object> r;
+
+        r = new HashMap<>(); r.put("code","1002"); r.put("name","银行存款"); r.put("direction","debit");
+        r.put("end_balance",100000.0); r.put("account_type","CURRENT_ASSET"); b.add(r);
+        // 1408 委托加工物资：无 account_type，走 fallback，必须只落流动
+        r = new HashMap<>(); r.put("code","1408"); r.put("name","委托加工物资"); r.put("direction","debit");
+        r.put("end_balance",60000.0); b.add(r);
+        r = new HashMap<>(); r.put("code","1501"); r.put("name","无形资产"); r.put("direction","debit");
+        r.put("end_balance",30000.0); r.put("account_type","NON_CURRENT_ASSET"); b.add(r);
+
+        when(reportDataMapper.subjectBalance("202606")).thenReturn(b);
+
+        Map<String, Object> result = service.balanceSheet("202606");
+
+        // 1002 + 1408 = 160000，全部归流动
+        assertEquals(new BigDecimal("160000.00"), result.get("currentAssets"));
+        // 非流动只有 1501。若 1408 被重复计入，这里会变成 90000。
+        assertEquals(new BigDecimal("30000.00"), result.get("nonCurrentAssets"));
+        assertEquals(new BigDecimal("0.00"), result.get("otherAssets"));
+        // 三分之和必须等于资产总计（若 1408 重复计入，此处不等，显式断言兜住）
+        BigDecimal ca = (BigDecimal) result.get("currentAssets");
+        BigDecimal nca = (BigDecimal) result.get("nonCurrentAssets");
+        BigDecimal oa = (BigDecimal) result.get("otherAssets");
+        BigDecimal ta = (BigDecimal) result.get("totalAssets");
+        assertEquals(ta, ca.add(nca).add(oa),
+                "三分之和须等于资产总计；不等说明存在科目被重复计入小计");
+        assertEquals(new BigDecimal("190000.00"), ta);
+    }
+
+    @Test
     void balanceSheet_groups_3xxx_and_4xxx_by_spec() {
         // P69: 3xxx 共同类借余入资产/贷余入负债；4xxx 权益
         List<Map<String, Object>> balances = new ArrayList<>();

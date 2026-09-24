@@ -122,13 +122,16 @@ public class ReportServiceImpl implements ReportService {
         // 注意 5x 成本科目也计入资产总计（小企业会计准则下存货类）：
         //   50 生产成本 / 51 制造费用 / 52 劳务成本 / 54 工程施工 → 流动（存货）
         //   53 研发支出 → 非流动（资本化开发支出资本性支出）
+        // 14 段整体归流动：本套科目表 1408 是"委托加工物资"（属存货），
+        // 不是通用准则的"持有待售资产"。不得对 1408 单列非流动——
+        // 否则 1408 会被流动(14)与非流动(1408)两个 fallback 同时匹配，重复计入小计。
         currentAssets = subtotal(assets, "CURRENT_ASSET", c -> c.startsWith("1")
                 && (c.startsWith("10") || c.startsWith("11")
                 || c.startsWith("12") || c.startsWith("14"))
                 || c.startsWith("50") || c.startsWith("51")
                 || c.startsWith("52") || c.startsWith("54"));
         nonCurrentAssets = subtotal(assets, "NON_CURRENT_ASSET", c -> c.startsWith("1")
-                && (c.startsWith("13") || c.startsWith("1408") || c.startsWith("15")
+                && (c.startsWith("13") || c.startsWith("15")
                 || c.startsWith("16") || c.startsWith("17") || c.startsWith("18") || c.startsWith("19"))
                 || c.startsWith("53"));
         otherAssets = totalAssets.subtract(currentAssets).subtract(nonCurrentAssets);
