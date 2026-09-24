@@ -99,6 +99,7 @@ public class VoucherServiceImpl extends ServiceImpl<VoucherMapper, VoucherEntity
                 queryDTO.getKeyword(),
                 queryDTO.getVoucherNo(),
                 queryDTO.getSourceDocNo(),
+                queryDTO.getSubjectId(),
                 queryDTO.getScope(),
                 queryDTO.getStartDate(),
                 queryDTO.getEndDate()

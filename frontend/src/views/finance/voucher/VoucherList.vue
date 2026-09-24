@@ -407,6 +407,17 @@ onMounted(async () => {
   }
   const qPeriod = route.query.period as string | undefined
   const qKeyword = route.query.keyword as string | undefined
+  // P89-C 数字穿透：报表科目余额表跳入时携带 subjectId/subjectName，作为初始过滤条件。
+  // 穿透优先级高于 sessionStorage 恢复——报表跳转是用户明确的意图，不应被历史筛选覆盖。
+  const qSubjectId = route.query.subjectId as string | undefined
+  const qSubjectName = route.query.subjectName as string | undefined
+  if (qSubjectId) {
+    query.value.subjectId = Number(qSubjectId)
+    query.value.period = qPeriod || (await resolveEarliestUnclosedPeriod())
+    query.value.keyword = qSubjectName || ''
+    fetchData()
+    return
+  }
   query.value.period = qPeriod || (await resolveEarliestUnclosedPeriod())
   if (qKeyword) query.value.keyword = qKeyword
   fetchData()

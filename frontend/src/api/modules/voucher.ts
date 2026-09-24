@@ -74,6 +74,8 @@ export interface VoucherQueryDTO {
   status?: string
   voucherTypeId?: number
   keyword?: string
+  /** 科目ID过滤：仅返回含该科目分录的凭证（P89-C 数字穿透） */
+  subjectId?: number
   current?: number
   size?: number
 }

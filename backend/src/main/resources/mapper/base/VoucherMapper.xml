@@ -45,6 +45,13 @@
         <if test="voucherNo != null and voucherNo != ''">
             AND v.voucher_no = #{voucherNo}
         </if>
+        <!-- P89-C 数字穿透：仅返回含该科目分录的凭证 -->
+        <if test="subjectId != null">
+            AND v.id IN (
+                SELECT e.voucher_id FROM t_voucher_entry e
+                WHERE e.subject_id = #{subjectId} AND e.deleted = 0
+            )
+        </if>
         <!-- period 退让：仅当 startDate/endDate 均为空时才应用 period 过滤（日期优先） -->
         <if test="startDate == null and endDate == null and period != null and period != ''">
             AND v.period = #{period}

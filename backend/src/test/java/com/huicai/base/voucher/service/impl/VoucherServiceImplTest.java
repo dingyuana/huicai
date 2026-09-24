@@ -37,14 +37,14 @@ class VoucherServiceImplTest {
                         new org.apache.ibatis.session.Configuration(), ""), VoucherEntity.class);
         Page<VoucherEntity> page = new Page<>(1, 20, 1);
         page.setRecords(new ArrayList<>());
-        when(voucherMapper.selectVoucherPage(any(Page.class), any(), any(), any(), any(), any(), any(), any(), any(), any()))
+        when(voucherMapper.selectVoucherPage(any(Page.class), any(), any(), any(), any(), any(), any(), any(), any(), any(), any()))
                 .thenReturn(page);
 
         // when
         voucherService.pageQuery(voucherDto("POSTED", "completed"));
 
         // then — scope 应传 completed（终态 IN('POSTED')）
-        verify(voucherMapper).selectVoucherPage(any(Page.class), any(), any(), any(), any(), any(), any(), eq("completed"), any(), any());
+        verify(voucherMapper).selectVoucherPage(any(Page.class), any(), any(), any(), any(), any(), any(), any(), eq("completed"), any(), any());
     }
 
     @Test
@@ -55,14 +55,14 @@ class VoucherServiceImplTest {
                         new org.apache.ibatis.session.Configuration(), ""), VoucherEntity.class);
         Page<VoucherEntity> page = new Page<>(1, 20, 1);
         page.setRecords(new ArrayList<>());
-        when(voucherMapper.selectVoucherPage(any(Page.class), any(), any(), any(), any(), any(), any(), any(), any(), any()))
+        when(voucherMapper.selectVoucherPage(any(Page.class), any(), any(), any(), any(), any(), any(), any(), any(), any(), any()))
                 .thenReturn(page);
 
         // when — scope=pending 排除终态
         voucherService.pageQuery(voucherDto("DRAFT", "pending"));
 
         // then — scope 应传 pending（终态 NOT IN）
-        verify(voucherMapper).selectVoucherPage(any(Page.class), any(), any(), any(), any(), any(), any(), eq("pending"), any(), any());
+        verify(voucherMapper).selectVoucherPage(any(Page.class), any(), any(), any(), any(), any(), any(), any(), eq("pending"), any(), any());
     }
 
     @Test
@@ -73,7 +73,7 @@ class VoucherServiceImplTest {
                         new org.apache.ibatis.session.Configuration(), ""), VoucherEntity.class);
         Page<VoucherEntity> page = new Page<>(1, 20, 1);
         page.setRecords(new ArrayList<>());
-        when(voucherMapper.selectVoucherPage(any(Page.class), any(), any(), any(), any(), any(), any(), any(), any(), any()))
+        when(voucherMapper.selectVoucherPage(any(Page.class), any(), any(), any(), any(), any(), any(), any(), any(), any(), any()))
                 .thenReturn(page);
 
         // when
@@ -81,7 +81,7 @@ class VoucherServiceImplTest {
 
         // then — startDate/endDate 应传递
         verify(voucherMapper).selectVoucherPage(
-                any(Page.class), any(), any(), any(), any(), any(), any(), any(),
+                any(Page.class), any(), any(), any(), any(), any(), any(), any(), any(),
                 eq(LocalDate.of(2026, 1, 1)), eq(LocalDate.of(2026, 8, 31)));
     }
 

@@ -30,6 +30,7 @@ public interface VoucherMapper extends BaseMapper<VoucherEntity> {
                                            @Param("keyword") String keyword,
                                            @Param("voucherNo") String voucherNo,
                                            @Param("sourceDocNo") String sourceDocNo,
+                                           @Param("subjectId") Long subjectId,
                                            @Param("scope") String scope,
                                            @Param("startDate") LocalDate startDate,
                                            @Param("endDate") LocalDate endDate);

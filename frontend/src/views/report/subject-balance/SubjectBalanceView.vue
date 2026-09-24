@@ -19,7 +19,14 @@
       </el-form>
 
       <el-table :data="visibleRows" v-loading="loading" border show-summary :summary-method="summaryRow">
-        <el-table-column prop="code" label="科目编码" width="120" />
+        <el-table-column prop="code" label="科目编码" width="120">
+          <template #default="{ row }">
+            <!-- P89-C 数字穿透：点击科目编码 → 凭证列表（按该科目过滤，2 跳内达凭证明细） -->
+            <el-link type="primary" :underline="false" @click="drillToVouchers(row)">
+              {{ row.code }}
+            </el-link>
+          </template>
+        </el-table-column>
         <el-table-column prop="name" label="科目名称" min-width="180" />
         <el-table-column prop="level" label="层级" width="60" align="center" />
         <el-table-column label="期初余额" width="140" align="right">
@@ -49,6 +56,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { resolveLatestClosedPeriod } from '@/utils/period'
 import { ElMessage } from 'element-plus'
 import { subjectBalance, exportSubjectBalance } from '@/api/modules/report'
@@ -56,6 +64,7 @@ import { amountClass, formatAmount } from '@/utils/format'
 import PeriodNavigator from '@/components/finance/PeriodNavigator.vue'
 
 const query = reactive({ period: '' })
+const router = useRouter()
 const list = ref<any[]>([])
 const loading = ref(false)
 const hideZeroRows = ref(true)
@@ -102,6 +111,22 @@ const onExport = async () => {
   } catch (e) {
     // request 拦截器已统一弹错，这里不重复
   }
+}
+
+// P89-C 数字穿透：科目余额表 → 凭证列表（按科目过滤）→ 凭证明细，共 2 跳。
+// 报表科目余额按期间取数，跳转时同步带 period，避免穿透后期间对不上。
+// 注：mapper 返回 Map，key 为下划线（subject_id），不会被 Jackson 转 camelCase，故取两者。
+const drillToVouchers = (row: any) => {
+  const subjectId = row.subject_id ?? row.subjectId
+  if (!subjectId) return
+  router.push({
+    name: 'VoucherList',
+    query: {
+      period: query.period,
+      subjectId: String(subjectId),
+      subjectName: row.name || '',
+    },
+  })
 }
 
 onMounted(async () => {

@@ -27,6 +27,9 @@ public class VoucherQueryDTO {
     /** 溯源单据号过滤 */
     private String sourceDocNo;
 
+    /** 科目ID过滤：仅返回含该科目分录的凭证（P89-C 数字穿透） */
+    private Long subjectId;
+
     /** 视图范围: pending=待处理(流程未终结), completed=已完成(已制证), 空=全部 */
     private String scope;
 
