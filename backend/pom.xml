@@ -261,7 +261,14 @@
                     <environmentVariables>
                         <DOCKER_API_VERSION>1.44</DOCKER_API_VERSION>
                     </environmentVariables>
-                    <argLine>-Dapi.version=1.44 -Ddocker.api.version=1.44 -DDOCKER_API_VERSION=1.44</argLine>
+                    <!-- 显式堆大小 + GC 调优：reuseForks=true 时所有测试类共享一个 JVM，
+                         Spring 上下文与 MyBatis Mapper 元数据会持续累积。缺省 -Xmx 时 fork 取
+                         JVM 默认堆（约物理内存 1/4），小内存机器上跑到中后段必然 OOM，且 OOM
+                         发生在第几个测试类不确定（表现为每次失败类都不同）。
+                         -Xmx1536m 为 Testcontainers(PostgreSQL ~300MB) 与 OS 留出余量；
+                         -XX:+UseSerialGC 堆小、上下文多时比 G1 的 region 开销更省内存。
+                         命令行仍可用 -DargLine 覆盖（本地调试/CI 大内存时调大）。 -->
+                    <argLine>-Xmx1536m -Xms256m -XX:+UseSerialGC -XX:MaxMetaspaceSize=384m -Dapi.version=1.44 -Ddocker.api.version=1.44 -DDOCKER_API_VERSION=1.44</argLine>
                 </configuration>
             </plugin>
             <!-- JaCoCo 代码覆盖率插件：设置最低覆盖率门禁 -->
