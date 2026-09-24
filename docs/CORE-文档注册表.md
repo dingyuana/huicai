@@ -1,9 +1,10 @@
 # 慧财财务系统 — 文档注册表
 
-> **版本**：V4.10 | **日期**：2026-09-24 | **维护人**：Hermes
+> **版本**：V4.11 | **日期**：2026-09-24 | **维护人**：Hermes
 > **说明**：本文档是所有项目文档的权威索引，编号格式 `HUICAI-{分类}-{序号}`
 > **编号规则**：MAIN=主文档, DES=设计, ARC=架构, PRD=产品需求, SPC=规格, DEV=开发, TST=测试
-> **V4.10 变更**：登记 PRD-019《报表法定结构增强》V0.1 草案 + R-145 立项（P92-A 现金流本年累计 / P92-B 资产分类小计，口径待老丁拍板）；DSN-018 升 V1.1 补 P92 数据模型与端点设计。三层追溯链 PRD-019↔DSN-018↔P92（待建）已闭合（specs 仍 96）；数量与实际对齐（prd 22、dsn 18、specs md 96）
+> **V4.11 变更**：P92 SPEC V0.1 契约草案落地（现金流本年累计，零迁移，定稿"改 mapper 为期间范围参数不复制 SQL"方案）；PRD-019 §1.1/§1.2 按 SPEC 修正"照抄 trendData"的错误表述；DSN-018 同步；P89 SPEC 升 V1.4 补全量回归结果（1719 tests / 18 errors 均非本轮模块）。数量与实际对齐（prd 22、dsn 18、specs md 97）
+> **V4.10 变更**：登记 PRD-019《报表法定结构增强》V0.1 草案 + R-145 立项（P92-A 现金流本年累计 / P92-B 资产分类小计，口径待老丁拍板）；DSN-018 升 V1.1 补 P92 数据模型与端点设计。三层追溯链 PRD-019↔DSN-018↔P92 已闭合；数量与实际对齐（prd 22、dsn 18、specs md 96）
 > **V4.9 变更**：登记 P91 法定报表结构完整性（利润表法定行固定呈现，commit 569450f，已修复）；P89 SPEC 升 V1.3（补浏览器 E2E 实测 + 修 report-financial 资产负债表用例漏拦 mock 的根因，6/6 全绿），P89 状态由 🟡 翻 ✅
 > **V4.8 变更**：P89 SPEC 落地（报表显示与交互四项：千分位/对比列/数字穿透/导出抬头）；翻转 PRD-018 R-141 状态（主体已交付，余额方向列与导出审核人未做）；数量与实际对齐（prd 21、dsn 18、specs md 96）
 > **V4.7 变更**：P84/P85 SPEC 落地（结账工作台 4 步向导 + 结转序列补全三子项）；翻转 PRD-017 R-136/R-137 状态；数量与实际对齐（prd 21、dsn 18、specs md 95）
@@ -76,7 +77,7 @@ docs/
 > **顺序**：PRD（需求层）→ DSN（设计层）→ SPEC（契约层）→ 代码 + @Test
 > **PRD**：回答 What，对应 21 个模块需求（含拆解计划共 22 份）
 > **DSN**：回答 Architecture，18 份模块级设计
-> **SPEC**：回答 How，96 份功能点级契约
+> **SPEC**：回答 How，97 份功能点级契约
 
 ### 2.1 PRD 产品需求文档（prd/ — 22份，含拆解计划）
 
@@ -102,7 +103,7 @@ docs/
 | HUICAI-PRD-016 | [经营状况分析-PRD-V1.0.md](./prd/经营状况分析-PRD-V1.0.md) | DSN-经营状况分析 | P80~P83（预留） | ⚠️ 需求已定，待开发（R-132~135） |
 | HUICAI-PRD-017 | [期末结账工作台-PRD-V1.0.md](./prd/期末结账工作台-PRD-V1.0.md) | DSN-期末结账工作台 | P84 ✅ / P85 ✅ / P87 ✅（P86 预留） | ✅ P84/P85/P87 已实现（R-136/137/139），P86 待开发（R-138） |
 | HUICAI-PRD-018 | [报表质量与体验增强-PRD-V1.0.md](./prd/报表质量与体验增强-PRD-V1.0.md) | DSN-报表质量与体验增强 | P88 ✅（d74c7c6）/ P89 ✅（8df6c7e 等 4 commit）/ P90（预留）/ P91 ✅（569450f，法定报表结构） | ✅ P88 信任级缺陷已修复（R-140）；✅ P89 全交付（R-141，含方向列/导出审核人/穿透 E2E 实测）；✅ P91 利润表法定行固定（R-144）；P90 待开发（R-142） |
-| HUICAI-PRD-019 | [报表法定结构增强-PRD-V0.1草案.md](./prd/报表法定结构增强-PRD-V0.1草案.md) | DSN-报表质量与体验增强（V1.1） | P92（待建） | ⚠️ 立项中：R-145，A/B 两批次。P92-A 现金流本年累计（小改，有现成范式）；P92-B 资产分类小计（需新增 `t_subject.account_type`，口径待老丁拍板） |
+| HUICAI-PRD-019 | [报表法定结构增强-PRD-V0.1草案.md](./prd/报表法定结构增强-PRD-V0.1草案.md) | DSN-报表质量与体验增强（V1.1） | P92（V0.1 契约草案） | ⚠️ 立项中：R-145，A/B 两批次。P92-A 现金流本年累计（零迁移，改 mapper 为期间范围参数不复制 SQL，契约已定稿）；P92-B 资产分类小计（需新增 `t_subject.account_type`，口径待老丁拍板） |
 | HUICAI-PRD-PLAN | [PRD-拆解计划.md](./prd/PRD-拆解计划.md) | — | — | ✅ |
 
 ### 2.2 DSN 模块设计文档（design/ — 18份）
@@ -132,7 +133,7 @@ docs/
 > - [DSN-PRD合理性评估.md](./design/analysis/DSN-PRD合理性评估.md)
 > - [DSN-PRD差距分析.md](./design/analysis/DSN-PRD差距分析.md)
 
-### 2.3 SPEC 规格契约文档（specs/ — 91份 md + 1份 JSON）
+### 2.3 SPEC 规格契约文档（specs/ — 97份 md + 1份 JSON）
 
 | 编号范围 | 说明 | 数量 |
 |----------|------|------|
@@ -156,7 +157,7 @@ docs/
 | 基础数据 | S-04、S-05、P71-enterprise-start-period（原 P57，企业级建账期间）、P72-opening-balance-entry-audit（原 P58，期初建账审计） |
 | 费用报销 | P11、P66-expense-reimbursement-frontend-polish |
 | 预算管理 | P16 |
-| 报表中心 | P17-report-center、P69-balance-sheet-equality（资产负债表平衡根治）、P75-arap-balance-summary（草案）、P76-expense-summary-report、P77-asset-depreciation-statistics、P78-prepayment-balance-summary |
+| 报表中心 | P17-report-center、P69-balance-sheet-equality（资产负债表平衡根治）、P75-arap-balance-summary（草案）、P76-expense-summary-report、P77-asset-depreciation-statistics、P78-prepayment-balance-summary、P88-report-statement-correctness、P89-report-display-drilldown（V1.3）、P92-report-statutory-structure（V0.1 契约草案，未实现） |
 | Agency | S-26、P79-agency-service-progress-workload |
 | AI Agent | P40-ai-service-skeleton-enhancement、P46~P50（R-301~305，暂不拆 PRD） |
 | 业务单据增强 | P-BUSINESSDOC-LIST、P-SALARY、P-TRANSFER、P67-batch-ops-unification（前端批量操作统一） |

@@ -32,7 +32,7 @@
 | 对比列数据源 | 🔶 需补 | 资产负债"年初数"= 年初期间科目余额快照；利润表"上期金额"= 上期 incomeStatementData |
 | 异常规则（P90） | ❌ 待建 | 3 条起步（现金贷方余额/收入倒挂为借方/4103 连续借方亏损），独立小表 t_report_alert_rule（rule_code/formula/level），或并入 t_financial_metric（P81）统一规则源——**SPEC 评审时定** |
 | 重分类视图（P90） | 纯计算 | 无新表：预付贷方余额行 + 调整后视图 = 行级 if-else，展示层 |
-| 现金流本年累计（P92-A） | 🔶 需补 | **无新表**：`cashFlowDataYtd(period)` 变体查询，照抄 `trendData` 的 `v.period >= 年初 AND <= period` 范式（ReportDataMapper.java:140） |
+| 现金流本年累计（P92-A） | 🔶 需补 | **无新表、零迁移**：`cashFlowData` 改为期间范围参数（`startPeriod`/`endPeriod`）后调两次，**不复制 SQL**——原 40+ 行含 `flow_type` EXISTS 判定，复制会导致两处口径漂移。期间范围范式照 `cumulativeData`（ReportDataMapper.java:53-70） |
 | 资产分类小计（P92-B） | ❌ 待建 | 现状 `balanceSheet()` 仅按科目首位分大类（`case '1'/'2'/'4'`），**无流动/非流动维度**；`t_subject` **无分类字段**。需新增 `account_type` 列 + 迁移 + 存量回填——**B1 科目段规则 vs B2 表加列，待老丁拍板** |
 
 ## 4. 端点设计（全部既有端点增强，无新端点）

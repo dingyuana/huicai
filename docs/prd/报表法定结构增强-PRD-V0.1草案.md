@@ -26,18 +26,30 @@
 
 ### 1.1 现状（代码级事实）
 
-- `ReportServiceImpl.cashFlowStatement(period)` 走 `reportDataMapper.cashFlowData(period)`，**单期间**，按 `flow_type GROUP BY`。
-- 返回结构 `Map<String,Object>`，三列：本期金额（无年初/累计对照）。
-- **现成范式**：同文件 `trendData(startPeriod, endPeriod)` 已用
-  `v.period >= #{startPeriod} AND v.period <= #{endPeriod}` 的期间范围模式（ReportDataMapper.java:140）。
-  也就是说**跨期汇总的写法在项目里已有先例**，照抄即可。
+- `ReportServiceImpl.cashFlowStatement(period)` 返回**扁平 Map**（operatingIn/operatingOut/operatingNet/investing*/financing*/totalNet + P88③ 的 openingCash/closingCash/cashCheck*），非 `items` 数组。
+- 实际是**两次独立取数**：`cashFlowData(period)` 算三大活动流入/流出/净额；`cashSubjectBalance(period)` 取 `begin_cash`/`end_cash` 做勾稽校验。
+- 现有"本期金额"= 单期间流量，**本年累计是全新取数，前端无法算出**（三大活动分类靠后端 SQL 的 flow_type 判定）。
+- **现成范式**：同文件 `cumulativeData(yearStart, period)` 已用
+  `v.period >= #{yearStart} AND v.period <= #{period}` 的期间范围模式（ReportDataMapper.java:53-70，P88② 给利润表做累计数），`period.substring(0,4)+"01"` 计算年初期间也是既有写法（ReportServiceImpl.java:165）。
+
+> **修正记录**：本条初版写"照抄 `trendData`"，不准确——`trendData` 是趋势聚合（revenue/cost/expense 三个指标），与现金流三大活动分类取数无关。正确范式为 `cumulativeData`。见 SPEC P92 §6。
 
 ### 1.2 方案
 
-1. `ReportDataMapper` 新增 `cashFlowDataYtd(period)`：`v.period >= 年初期间 AND v.period <= period`。
-2. `cashFlowStatement` 改为返回 `{ items: [{flowType, currentAmount, ytdAmount}] }`。
-3. 前端 `CashFlowView.vue` 加"本年累计金额"列，套用现有 `formatAmount` 千分位。
-4. 导出 `exportCashFlow` 同步加第 4 列（hutool merge 列数 +1，注意 P89-D 踩过的单格 merge 守卫 `cols >= 4`）。
+**核心决策：改 mapper 签名，不复制 SQL。**
+
+`cashFlowData` 的注解 SQL 有 40+ 行，含 `flow_type` 的 EXISTS 子查询判定（靠对手方科目 15%/16%/17%/18%/19% 区分投资/经营活动）。复制成第二份 SQL 会导致两处判定各自演化，产生取数口径漂移——财务取数的硬伤。故：
+
+1. `ReportDataMapper.cashFlowData(period)` → `cashFlowData(startPeriod, endPeriod)`，SQL 只改 `WHERE` 期间条件，**其余 40+ 行一字不动**。
+2. `cashFlowStatement` 调两次：本期 `cashFlowData(period, period)`，累计 `cashFlowData(yearStart, period)`。
+3. 抽取现有单期间聚合为私有方法，两路复用（不复制代码）。
+4. 返回 Map 新增 `operatingInYtd` 等 7 个字段（camelCase，仅新增）。
+5. 前端 `CashFlowView.vue` 加"本年累计金额"列；期初/期末现金行沿用 `fixed: true`。
+6. 导出 `exportCashFlow` headers 加第 4 列（`writeExcel` 的 `cols` 自动跟随，merge 为 4 列跨合并，合法，无需单格守卫）。
+
+**唯一待确认口径**：`openingCashYtd = cashSubjectBalance(yearStart).begin_cash`（年初期间的期初余额）。若误用查询期间的 begin_cash，跨年时累计列期初会变成当月月初。SPEC §1.3 有详述。
+
+**零 DB 迁移**——这是本批次成本可控的核心原因。
 
 ### 1.3 验收标准（BDD）
 

@@ -1,6 +1,6 @@
 # P89 SPEC — 报表显示与交互（千分位/对比列/数字穿透/导出抬头）
 
-> **版本**：V1.3 | **最后修改**：2026-09-24 | **作者**：Hermes
+> **版本**：V1.4 | **最后修改**：2026-09-24 | **作者**：Hermes
 > **状态**：✅ 已实现（四项全部交付，测试通过，commit 8df6c7e / 0414991 / 7804583 / b906e3f / 569450f）
 > **编号**：HUICAI-SPC-089 | 优先级：P1（体验级）
 > **依据**：PRD-018 §2 P89 行 + §4.2 P89 显示与交互
@@ -130,6 +130,7 @@ P88 修完信任级缺陷后，报表"数据可信"但"不好用"。P89 补四�
 | V1.1 | 2026-09-24 | 补齐余额方向列 + 导出审核人（P89 转 ✅）；导出方向列中文统一；3 列表导出补逐格断言。ReportExportTest 增至 7 例 |
 | V1.2 | 2026-09-24 | 新增浏览器 E2E `e2e/p89drilldown.spec.ts`（2 例）实测穿透链路，验证边界由"未实测"更新为已实测 |
 | V1.3 | 2026-09-24 | 修 `e2e/report-financial.spec.ts` 资产负债表用例间歇失败（`subject-balance` 请求漏拦截打到真实后端）；`waitForTimeout(500)` 改 `waitForURL`；补 `latestClosedPeriod` mock 字段。`report-financial` + `p89drilldown` 现 6/6 全绿 |
+| V1.4 | 2026-09-24 | §7 补全量回归结果（1719 tests / 0 failures / 18 errors，单 mvn 无并发）；删除"全量回归未跑"的过期声明；记录 18 errors 分两类根因（Bean 创建失败 + positional OOM）均非本轮改动模块（base/report 48 + base/voucher 180 全绿）；记录上一轮"20 个契约测试 error"实为双 mvn 并发写同一 target 的产物 |
 
 ## 7. 验证边界（诚实声明）
 
@@ -144,8 +145,16 @@ P88 修完信任级缺陷后，报表"数据可信"但"不好用"。P89 补四�
 | 未验证项 | 说明 |
 |----------|------|
 | 导出件视觉渲染 | POI 读回校验的是单元格内容，未用 WPS/Excel 打开确认合并单元格与排版 |
-| 全量回归 | 本轮跑的是 `ReportExportTest` + `ReportServiceImplTest` + `VoucherServiceImplTest` + `VoucherControllerTest` + `VoucherPageSubjectIdRealDBTest` + 2 个 E2E 文件，非全量 |
 | `DataIsolationAuditTest` | 标 `@SlowTest` 被 `excludedGroups=slow` 排除，只过编译未过运行时（surefire 报告文件从未生成，已确认） |
+
+**已补跑全量回归**（2026-09-24，单 mvn 无并发，`-DargLine` 保留 Testcontainers 的 `-Dapi.version`）：**1719 tests / 0 failures / 18 errors / 5 skipped**。
+
+- **与本次改动无关**：本轮改动的模块全部零失败——`base/report` 48 tests / `base/voucher` 180 tests，0 failure 0 error。失败集中在 `sme/arap/controller`（BadDebt、ExpenseReimbursement）与 `agency/dashboard` 的依赖链，均非本轮改动模块。
+- **18 errors 分两类根因**（非单一问题）：
+  1. `UnsatisfiedDependencyException`：`agencySummaryService`/`agencySummaryController` Bean 创建失败（后者 `@RequiredArgsConstructor` 注入 `VoucherMapper` 等 5 个依赖）。
+  2. `OutOfMemoryError: Java heap space`：Spring 上下文加载期堆耗尽。
+- **两者都属测试基础设施层，非业务代码缺陷**。证据：失败**位置性**——同一份代码、同一 JVM 设置，上轮报 `VoucherRestContractTest`+`ReconciliationRestContractTest`，本轮换成了 BadDebt+ExpenseReimbursement，且契约测试单独跑 12+8 全通过。失败点漂移说明触发条件与 JVM 内存压力相关，而非某处代码错误。pom 里 `reuseForks=true` 导致单 JVM 累积全部 Spring 上下文，这是既有配置，与本轮改动无关。
+- **未验证项**：18 errors 是否可稳定复现、`agencySummaryService` Bean 创建失败的完整堆栈未逐层展开（已确认非本轮改动模块）。若需彻底解决，方向是拆分 surefire fork 或降低单 JVM 上下文数量——属测试基建改造，不在 P89/P92 范围。
 
 **修正记录**：
 - V1.1 曾写"浏览器端到端点击未在实测"，V1.2 已补做并更新。
