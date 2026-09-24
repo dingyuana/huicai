@@ -111,7 +111,7 @@
             <template #title>
               <span class="month-group-title">{{ g.month }} · {{ g.count }} 条 · 合计 {{ fmtAmount(g.totalAmount) }}</span>
             </template>
-            <el-table :data="g.items" border stripe size="small" @row-click="onRowClick" style="cursor:pointer">
+            <el-table :data="g.items" border stripe size="small" show-summary :summary-method="(ctx: any) => summaryMethod(ctx, g.items)" @row-click="onRowClick" style="cursor:pointer">
               <el-table-column prop="txDate" label="日期" width="110" />
               <el-table-column prop="txType" label="方向" width="70" align="center">
                 <template #default="{ row }">
@@ -154,7 +154,7 @@
         <el-empty v-else description="请先选择日期范围（本月/近3个月/近6个月/近12个月或自定义）查询已制证流水" />
       </template>
       <template v-else>
-      <el-table ref="tableRef" :data="list" v-loading="loading" border stripe @selection-change="onSelectionChange" @row-click="onRowClick" style="cursor:pointer">
+      <el-table ref="tableRef" :data="list" v-loading="loading" border stripe show-summary :summary-method="(ctx: any) => summaryMethod(ctx, list)" @selection-change="onSelectionChange" @row-click="onRowClick" style="cursor:pointer">
         <el-table-column type="selection" width="40" :selectable="isBatchable" />
         <el-table-column prop="txDate" label="日期" width="110" />
         <el-table-column prop="txType" label="方向" width="70" align="center">
@@ -668,6 +668,28 @@ function canDelete(row: any): boolean {
 
 function fmtAmount(v: number) {
   return v == null ? '' : Number(v).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+
+/**
+ * 底部小结：按方向拆分收入/支出，金额列显示净额(收-支)。
+ * 待处理表列: 0勾选 1日期 2方向 3金额 4对方 5摘要 6分类 7科目 8流程 9生成
+ * 已制证月分组表列: 0日期 1方向 2金额 3对方 4摘要 5分类 6流程 7生成（无勾选列）
+ */
+function summaryMethod(
+  { columns, data }: { columns: unknown[]; data: BankStatementVO[] },
+  rows?: BankStatementVO[] | null,
+) {
+  const list = rows || data || []
+  const income = list.reduce((s, r) => s + (r.txType === 'INCOME' ? (Number(r.amount) || 0) : 0), 0)
+  const expense = list.reduce((s, r) => s + (r.txType !== 'INCOME' ? (Number(r.amount) || 0) : 0), 0)
+  const amountIdx = columns.length >= 10 ? 3 : 2 // 待处理表有勾选列，月分组表无
+  const hasMore = scope.value !== 'vouchered' && list.length > 0 && list.length < total.value
+  return columns.map((_, index) => {
+    if (index === 0) return hasMore ? '本页合计' : '合计'
+    if (index === 1 && columns.length < 10) return `收 ${fmtAmount(income)} / 支 ${fmtAmount(expense)}`
+    if (index === amountIdx) return fmtAmount(income - expense)
+    return ''
+  })
 }
 
 function hasSubjectLevel(row: any) {

@@ -76,7 +76,7 @@
         </el-form-item>
       </el-form>
 
-      <el-table ref="tableRef" :data="list" v-loading="loading" border @selection-change="onSelectionChange" @row-click="onRowClick" style="cursor:pointer">
+      <el-table ref="tableRef" :data="list" v-loading="loading" border show-summary :summary-method="summaryMethod" @selection-change="onSelectionChange" @row-click="onRowClick" style="cursor:pointer">
         <template #empty>
           <el-empty v-if="scope === 'completed' && !dateRange && !query.period" description="请先选择期间或日期范围（快捷时段/自定义）查询已完成单据" />
         </template>
@@ -528,6 +528,18 @@ const rules = {
 const fmtAmount = (v: any) => {
   const n = Number(v || 0)
   return n.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+
+// 列索引: 0勾选 1发票号 2日期 3客户 4金额 5税额（模板列无 prop，按 index 取）
+function summaryMethod({ columns, data }: { columns: unknown[]; data: any[] }) {
+  const sumOf = (key: 'amount' | 'taxAmount') =>
+    data.reduce((s, r) => s + (Number(r[key]) || 0), 0)
+  return columns.map((_, index) => {
+    if (index === 0) return data.length < total.value ? '本页合计' : '合计'
+    if (index === 4) return fmtAmount(sumOf('amount'))
+    if (index === 5) return fmtAmount(sumOf('taxAmount'))
+    return ''
+  })
 }
 
 /** 数字格式：千分位，无小数 */
