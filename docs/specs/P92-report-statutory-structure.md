@@ -1,12 +1,12 @@
 # P92-A SPEC — 现金流量表本年累计金额
 
-> **版本**：V0.1（契约草案，**未实现、未测试**） | **最后修改**：2026-09-24 | **作者**：Hermes
-> **状态**：⚠️ 契约已定稿，代码未落地
+> **版本**：V1.0（已实现，已测试） | **最后修改**：2026-09-24 | **作者**：Hermes
+> **commit**：`29a7e13` | **test_ref**：`ReportServiceImplTest`(25例) + `ReportExportTest`(7例) + `CashFlowPeriodRangeRealDBTest`(3例，@SlowTest)
+> **状态**：✅ 已实现，后端 37/37 + RealDB 3/3 通过，前端 vite build 通过
 > **编号**：HUICAI-SPC-092 | 优先级：P1
 > **依据**：PRD-019 §1（P92-A）+ DSN-018 §3/§4（P92-A 行）
 > **关联需求**：R-145
 > **关联SPEC**：P88-report-statement-correctness（累计数口径）、P89-report-display-drilldown（导出抬头/千分位）
-> **test_ref**：（待实现后绑定）预期 ReportServiceImplTest 新增 3 例 + ReportExportTest 新增 1 例 + CashFlowYtdRealDBTest 1 例
 
 ---
 
@@ -66,7 +66,7 @@ List<Map<String, Object>> ytd =  reportDataMapper.cashFlowData(yearStart, period
 private Map<String, BigDecimal> aggregateFlow(List<Map<String, Object>> rows) { /* 现有 switch 聚合 */ }
 ```
 
-**返回 Map 新增 7 个字段**（camelCase，仅新增、不改既有）：
+**返回 Map 新增 14 个字段**（camelCase，仅新增、不改既有）：
 
 | 字段 | 含义 |
 |------|------|
@@ -79,7 +79,7 @@ private Map<String, BigDecimal> aggregateFlow(List<Map<String, Object>> rows) { 
 
 ### 1.3 关键口径 — 本年累计的期初现金
 
-这是本项唯一的口径判断，需在实现前确认：
+本项唯一的财务口径判断，已按会计常识定稿并由 `p92a_cashFlowStatement_返回全部本年累计字段` 用例固化：
 
 ```
 openingCashYtd = cashSubjectBalance(yearStart).begin_cash   // 年初期间(1月)的期初余额
@@ -124,6 +124,42 @@ rows.add(List.of("经营活动现金流入", "1", data.get("operatingIn"), data.
 - **P92A-BD3**：Given 期初现金 When 本年累计列渲染 Then `openingCashYtd` = 年初期间的 `begin_cash`（非查询期间的 begin_cash）
 - **P92A-BD4**：Given 本年累计勾稽不一致 When 渲染 Then 累计列显示差异警告行，本期列不受影响
 - **P92A-BD5**：Given 导出 Excel When 打开 Then 表头含"本年累计金额"列，共 4 列，与前端一致
+
+---
+
+## 3. 实现记录（commit `29a7e13`）
+
+### 验证结果
+
+| 层 | 结果 |
+|---|---|
+| 后端回归 | `ReportServiceImplTest` 25 + `ReportExportTest` 7 + `ReportTemplateMapperTest` 5 = **37/37** |
+| 真实 DB | `CashFlowPeriodRangeRealDBTest` **3/3**（@SlowTest，Testcontainers PostgreSQL） |
+| 前端 | vite build 通过，dist 时间戳晚于源码 |
+
+### 期间范围 SQL 的运行时验证（关键）
+
+`cashFlowData` 的区间条件是本次改动的核心，此前只在编译 + mock 层验证过（mock 无法验证 SQL 语义）。生产库直接执行结果：
+
+```
+本期 202407:    OPERATING_IN  12,800.07   OPERATING_OUT  88,484.37
+YTD  202401-09: OPERATING_IN  25,600.07   OPERATING_OUT 128,484.37
+```
+
+YTD 严格大于本期，差额对应 202409 的增量——参数化生效。
+
+### RealDB 测试的两个必要设计
+
+1. **独立 enterpriseId（9901）**：Flyway seed 已含 `1002`/`1601` 等常用科目，`(code, enterprise_id)` 唯一约束会冲突。不能用 code 前缀规避——会破坏 SQL 里 `LIKE '1002%'` 与 `LIKE '15%'~'19%'` 的判定语义。
+2. **差值断言**：测试环境 `EnterpriseContextHolder` 为 null → 租户拦截器跳过 → SQL 无 enterprise_id 过滤，Flyway seed 数据会与本次插入混在同一期间范围。绝对值断言必然被污染（如 OPERATING_IN 期望 1000 实得 13800.07），故统一采用「插入前后差值」断言。
+
+### 顺带验证：P88① 的 flow_type 分类在真实库确实有效
+
+`CashFlowPeriodRangeRealDBTest.flow_type分类_*` 用 5 笔凭证覆盖四类 flow_type，确认对手方科目 15%~19% 判投资类、其余判经营类的归类方向正确。该 40 行 EXISTS 判定此前全部走 mock，从未在真实库执行过。
+
+### 已知但不在本项范围的问题
+
+`EnterpriseDataPermissionInterceptor` 对 SQL 解析失败采取静默跳过（`catch (Exception e) → log.debug`），含复杂子查询的 SQL 若解析失败会无租户过滤执行，存在多租户数据泄漏风险。与 P92-A 无关，记录待评估。
 
 ---
 
