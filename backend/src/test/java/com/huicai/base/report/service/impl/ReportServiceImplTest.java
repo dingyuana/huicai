@@ -318,7 +318,8 @@ class ReportServiceImplTest {
 
     @Test
     void cashFlowStatement_returns_period_map() {
-        when(reportDataMapper.cashFlowData("202606")).thenReturn(new ArrayList<>());
+        when(reportDataMapper.cashFlowData("202606", "202606")).thenReturn(new ArrayList<>());
+        when(reportDataMapper.cashFlowData("202601", "202606")).thenReturn(new ArrayList<>());
 
         Map<String, Object> r = service.cashFlowStatement("202606");
         assertNotNull(r);
@@ -399,11 +400,17 @@ class ReportServiceImplTest {
 
     @Test
     void p88_cashFlowStatement_closingLoopAndCheck() {
-        when(reportDataMapper.cashFlowData("202607")).thenReturn(new ArrayList<>());
+        when(reportDataMapper.cashFlowData("202607", "202607")).thenReturn(new ArrayList<>());
+        when(reportDataMapper.cashFlowData("202601", "202607")).thenReturn(new ArrayList<>());
         Map<String, Object> cash = new HashMap<>();
         cash.put("begin_cash", 200000.00);
         cash.put("end_cash", 124315.70);
         when(reportDataMapper.cashSubjectBalance("202607")).thenReturn(cash);
+        // P92-A：年初期间(202601)的期初现金，用于本年累计列
+        Map<String, Object> cashYearStart = new HashMap<>();
+        cashYearStart.put("begin_cash", 150000.00);
+        cashYearStart.put("end_cash", 124315.70);
+        when(reportDataMapper.cashSubjectBalance("202601")).thenReturn(cashYearStart);
 
         Map<String, Object> r = service.cashFlowStatement("202607");
 
@@ -417,14 +424,107 @@ class ReportServiceImplTest {
 
     @Test
     void p88_cashFlowStatement_checkOkWhenConsistent() {
-        when(reportDataMapper.cashFlowData("202607")).thenReturn(new ArrayList<>());
+        when(reportDataMapper.cashFlowData("202607", "202607")).thenReturn(new ArrayList<>());
+        when(reportDataMapper.cashFlowData("202601", "202607")).thenReturn(new ArrayList<>());
         Map<String, Object> cash = new HashMap<>();
         cash.put("begin_cash", 200000.00);
         cash.put("end_cash", 200000.00);
         when(reportDataMapper.cashSubjectBalance("202607")).thenReturn(cash);
+        // P92-A：年初期间期初现金（与本期期末勾稽，应一致）
+        Map<String, Object> cashYearStart = new HashMap<>();
+        cashYearStart.put("begin_cash", 150000.00);
+        cashYearStart.put("end_cash", 200000.00);
+        when(reportDataMapper.cashSubjectBalance("202601")).thenReturn(cashYearStart);
 
         Map<String, Object> r = service.cashFlowStatement("202607");
         assertEquals(Boolean.TRUE, r.get("cashCheckOk"), "期初+净流量(0)=期末，应校验通过");
-        assertEquals(new BigDecimal("0.00"), r.get("cashCheckDiff"));
+        assertEquals(0, new BigDecimal("0").compareTo((BigDecimal) r.get("cashCheckDiff")));
+    }
+
+    @Test
+    void p92a_cashFlowStatement_返回全部本年累计字段() {
+        // 本期：经营流入 100 / 流出 40
+        List<Map<String, Object>> cur = flowRow("OPERATING_IN", 100.00);
+        when(reportDataMapper.cashFlowData("202607", "202607")).thenReturn(cur);
+        // 本年累计：流入 900 / 流出 300
+        List<Map<String, Object>> ytd = flowRow("OPERATING_IN", 900.00);
+        when(reportDataMapper.cashFlowData("202601", "202607")).thenReturn(ytd);
+
+        Map<String, Object> cash = new HashMap<>();
+        cash.put("begin_cash", 200000.00);
+        cash.put("end_cash", 200000.00);
+        when(reportDataMapper.cashSubjectBalance("202607")).thenReturn(cash);
+        Map<String, Object> cashYtd = new HashMap<>();
+        cashYtd.put("begin_cash", 150000.00);
+        cashYtd.put("end_cash", 200000.00);
+        when(reportDataMapper.cashSubjectBalance("202601")).thenReturn(cashYtd);
+
+        Map<String, Object> r = service.cashFlowStatement("202607");
+
+        // 本期与累计字段同时存在且各自取数（本期流入100无流出 → 净100；累计流入900无流出 → 净900）
+        assertEquals(new BigDecimal("100.00"), r.get("operatingIn"));
+        assertEquals(new BigDecimal("100.00"), r.get("operatingNet"));
+        assertEquals(new BigDecimal("900.00"), r.get("operatingInYtd"));
+        assertEquals(new BigDecimal("900.00"), r.get("operatingNetYtd"));
+        assertEquals(new BigDecimal("900.00"), r.get("totalNetYtd"));
+        // P92-A 口径：累计期初取年初期间(202601)的 begin_cash=150000，而非查询期间的 200000
+        assertEquals(new BigDecimal("150000.00"), r.get("openingCashYtd"),
+                "本年累计的期初现金必须是年初余额，取查询期间 begin_cash 会漏计年初至当月的现金");
+        // 累计期末 = 年初期初 150000 + 累计净流量 900
+        assertEquals(new BigDecimal("150900.00"), r.get("closingCashYtd"));
+        // 累计期末与本期期末余额勾稽（150900 ≠ 200000，应暴露差异）
+        assertEquals(Boolean.FALSE, r.get("cashCheckOkYtd"), "累计期末与科目期末余额不一致必须暴露差异");
+    }
+
+    @Test
+    void p92a_cashFlowStatement_年初期间本期与累计相等() {
+        // 查询期间为年初(1月)时，本期 == 本年累计
+        List<Map<String, Object>> rows = flowRow("INVESTING_OUT", 300.00);
+        when(reportDataMapper.cashFlowData("202601", "202601")).thenReturn(rows);
+        Map<String, Object> cash = new HashMap<>();
+        cash.put("begin_cash", 100000.00);
+        cash.put("end_cash", 70000.00);
+        when(reportDataMapper.cashSubjectBalance("202601")).thenReturn(cash);
+
+        Map<String, Object> r = service.cashFlowStatement("202601");
+
+        assertEquals(r.get("investingOut"), r.get("investingOutYtd"), "年初期间本期与累计应相等");
+        assertEquals(r.get("totalNet"), r.get("totalNetYtd"), "年初期间本期与累计净额应相等");
+        assertEquals(r.get("openingCash"), r.get("openingCashYtd"), "年初期间期初现金应相等");
+        assertEquals(new BigDecimal("-300.00"), r.get("investingNetYtd"));
+    }
+
+    @Test
+    void p92a_cashFlowStatement_累计与本期互不污染() {
+        // 本期为投资流出，累计同时含经营流入——断言各路分类不被串号
+        when(reportDataMapper.cashFlowData("202607", "202607"))
+                .thenReturn(List.of(flowMap("OPERATING_IN", 100.00), flowMap("OPERATING_OUT", 20.00)));
+        when(reportDataMapper.cashFlowData("202601", "202607"))
+                .thenReturn(List.of(flowMap("OPERATING_IN", 800.00), flowMap("OPERATING_OUT", 100.00),
+                        flowMap("FINANCING_IN", 500.00)));
+        Map<String, Object> cash = new HashMap<>();
+        cash.put("begin_cash", 1000.00);
+        cash.put("end_cash", 1000.00);
+        when(reportDataMapper.cashSubjectBalance(anyString())).thenReturn(cash);
+
+        Map<String, Object> r = service.cashFlowStatement("202607");
+
+        assertEquals(new BigDecimal("80.00"), r.get("operatingNet"));
+        assertEquals(new BigDecimal("700.00"), r.get("operatingNetYtd"));
+        assertEquals(0, new BigDecimal("0").compareTo((BigDecimal) r.get("financingNet")),
+                "本期无筹资流量应为 0（compareTo 而非 equals：BigDecimal.equals 连 scale 也比，ZERO 常量为 scale 0）");
+        assertEquals(new BigDecimal("500.00"), r.get("financingInYtd"));
+        assertEquals(new BigDecimal("1200.00"), r.get("totalNetYtd"), "累计净额=经营净700+筹资净500");
+    }
+
+    private static List<Map<String, Object>> flowRow(String type, double amount) {
+        return List.of(flowMap(type, amount));
+    }
+
+    private static Map<String, Object> flowMap(String type, double amount) {
+        Map<String, Object> m = new HashMap<>();
+        m.put("flow_type", type);
+        m.put("amount", amount);
+        return m;
     }
 }

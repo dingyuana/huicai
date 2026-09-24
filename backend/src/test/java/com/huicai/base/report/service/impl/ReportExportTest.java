@@ -170,7 +170,7 @@ class ReportExportTest {
         when(reportDataMapper.subjectBalance(any())).thenReturn(new ArrayList<>());
         when(reportDataMapper.incomeStatementData(any())).thenReturn(Map.of());
         when(reportDataMapper.cumulativeData(any(), any())).thenReturn(Map.of());
-        when(reportDataMapper.cashFlowData(any())).thenReturn(new ArrayList<>());
+        when(reportDataMapper.cashFlowData(any(), any())).thenReturn(new ArrayList<>());
         when(reportDataMapper.cashSubjectBalance(any())).thenReturn(Map.of());
 
         ByteArrayOutputStream out = captureStream();
@@ -250,7 +250,9 @@ class ReportExportTest {
         // 注：rows 由 exportCashFlow 硬编码生成 13 行，与 mapper 返回内容无关，
         // 所以本用例无需依赖 stub 的数据即可覆盖该分支。
         ByteArrayOutputStream out = captureStream();
-        when(reportDataMapper.cashFlowData(PERIOD)).thenReturn(new ArrayList<>());
+        // P92-A：service 会额外用年初期间(yearStart)再调一次 cashFlowData/cashSubjectBalance，
+        // 未 stub 时 Mockito 默认返回 null，toBigDecimal 走 ZERO 分支，不影响本用例断言。
+        when(reportDataMapper.cashFlowData(PERIOD, PERIOD)).thenReturn(new ArrayList<>());
         when(reportDataMapper.cashSubjectBalance(PERIOD)).thenReturn(Map.of());
 
         service.exportCashFlow(PERIOD, response);

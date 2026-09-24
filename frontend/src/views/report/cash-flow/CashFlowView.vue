@@ -19,10 +19,15 @@
       </el-form>
 
       <el-table v-if="result" :data="visibleRows" border>
-        <el-table-column prop="label" label="项目" min-width="200" />
-        <el-table-column label="金额" align="right" width="180">
+        <el-table-column prop="label" label="项目" min-width="280" />
+        <el-table-column label="本期金额" align="right" width="180">
           <template #default="{ row }">
             <span :class="amountClass(row.bold, row.amount, row.warn)">{{ fmtAmount(row.amount) }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="本年累计金额" align="right" width="180">
+          <template #default="{ row }">
+            <span :class="amountClass(row.bold, row.amountYtd, row.warn)">{{ fmtAmount(row.amountYtd) }}</span>
           </template>
         </el-table-column>
       </el-table>
@@ -47,36 +52,40 @@ const fmtAmount = (v: any) => formatAmount(v)
 const rows = computed(() => {
   if (!result.value) return []
   const r = result.value
+  // P92-A：每行同时携带本期金额(amount)与本年累计金额(amountYtd)
   const list = [
-    { label: '一、经营活动现金流量',   amount: '', bold: true },
-    { label: '  现金流入',           amount: r.operatingIn, bold: false },
-    { label: '  现金流出',           amount: r.operatingOut, bold: false },
-    { label: '  经营活动净流量',     amount: r.operatingNet, bold: true },
-    { label: '二、投资活动现金流量',   amount: '', bold: true },
-    { label: '  现金流入',           amount: r.investingIn, bold: false },
-    { label: '  现金流出',           amount: r.investingOut, bold: false },
-    { label: '  投资活动净流量',     amount: r.investingNet, bold: true },
-    { label: '三、筹资活动现金流量',   amount: '', bold: true },
-    { label: '  现金流入',           amount: r.financingIn, bold: false },
-    { label: '  现金流出',           amount: r.financingOut, bold: false },
-    { label: '  筹资活动净流量',     amount: r.financingNet, bold: true },
-    { label: '四、现金及现金等价物净增加额', amount: r.totalNet, bold: true },
+    { label: '一、经营活动现金流量',   amount: '', amountYtd: '', bold: true },
+    { label: '  现金流入',           amount: r.operatingIn,   amountYtd: r.operatingInYtd,   bold: false },
+    { label: '  现金流出',           amount: r.operatingOut,  amountYtd: r.operatingOutYtd,  bold: false },
+    { label: '  经营活动净流量',     amount: r.operatingNet,  amountYtd: r.operatingNetYtd,  bold: true },
+    { label: '二、投资活动现金流量',   amount: '', amountYtd: '', bold: true },
+    { label: '  现金流入',           amount: r.investingIn,   amountYtd: r.investingInYtd,   bold: false },
+    { label: '  现金流出',           amount: r.investingOut,  amountYtd: r.investingOutYtd,  bold: false },
+    { label: '  投资活动净流量',     amount: r.investingNet,  amountYtd: r.investingNetYtd,  bold: true },
+    { label: '三、筹资活动现金流量',   amount: '', amountYtd: '', bold: true },
+    { label: '  现金流入',           amount: r.financingIn,   amountYtd: r.financingInYtd,   bold: false },
+    { label: '  现金流出',           amount: r.financingOut,  amountYtd: r.financingOutYtd,  bold: false },
+    { label: '  筹资活动净流量',     amount: r.financingNet,  amountYtd: r.financingNetYtd,  bold: true },
+    { label: '四、现金及现金等价物净增加额', amount: r.totalNet, amountYtd: r.totalNetYtd, bold: true },
     // P88③：期初/期末现金闭环（fixed=报表骨架，零值不隐藏）
-    { label: '加：期初现金及现金等价物余额', amount: r.openingCash, bold: false, fixed: true },
-    { label: '五、期末现金及现金等价物余额', amount: r.closingCash, bold: true, fixed: true },
+    { label: '加：期初现金及现金等价物余额', amount: r.openingCash, amountYtd: r.openingCashYtd, bold: false, fixed: true },
+    { label: '五、期末现金及现金等价物余额', amount: r.closingCash, amountYtd: r.closingCashYtd, bold: true, fixed: true },
   ]
   // P88③：勾稽提示行（差异才显示）
   if (r.cashCheckOk === false) {
-    list.push({ label: '⚠ 勾稽差异（期末现金 vs 科目余额）', amount: r.cashCheckDiff, bold: false, warn: true, fixed: true })
+    list.push({ label: '⚠ 勾稽差异（期末现金 vs 科目余额）', amount: r.cashCheckDiff, amountYtd: r.cashCheckDiffYtd, bold: false, warn: true, fixed: true })
   }
   return list
 })
 
-const visibleRows = computed(() =>
-  hideZeroRows.value
-    ? rows.value.filter(r => r.amount === '' || Number(r.amount) !== 0 || r.fixed)
-    : rows.value
-)
+const visibleRows = computed(() => {
+  if (!hideZeroRows.value) return rows.value
+  // P92-A：本期或本年累计任一非零则显示该行（原先只看本期，累计有数会被误藏）
+  return rows.value.filter(r =>
+    r.fixed ||
+    r.amount === '' ||
+    (Number(r.amount) !== 0 || Number(r.amountYtd) !== 0))
+})
 
 const fetchData = async () => {
   if (!query.period) return

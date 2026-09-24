@@ -207,56 +207,92 @@ public class ReportServiceImpl implements ReportService {
 
     @Override
     public Map<String, Object> cashFlowStatement(String period) {
-        List<Map<String, Object>> rows = reportDataMapper.cashFlowData(period);
-        BigDecimal opIn = BigDecimal.ZERO;
-        BigDecimal opOut = BigDecimal.ZERO;
-        BigDecimal invIn = BigDecimal.ZERO;
-        BigDecimal invOut = BigDecimal.ZERO;
-        BigDecimal finIn = BigDecimal.ZERO;
-        BigDecimal finOut = BigDecimal.ZERO;
-        for (Map<String, Object> row : rows) {
-            String type = (String) row.get("flow_type");
-            BigDecimal amount = toBigDecimal(row.get("amount"));
-            switch (type) {
-                case "OPERATING_IN":  opIn  = opIn.add(amount); break;
-                case "OPERATING_OUT": opOut = opOut.add(amount); break;
-                case "INVESTING_IN":  invIn  = invIn.add(amount); break;
-                case "INVESTING_OUT": invOut = invOut.add(amount); break;
-                case "FINANCING_IN":  finIn  = finIn.add(amount); break;
-                case "FINANCING_OUT": finOut = finOut.add(amount); break;
-            }
-        }
-        BigDecimal opNet = opIn.subtract(opOut);
-        BigDecimal invNet = invIn.subtract(invOut);
-        BigDecimal finNet = finIn.subtract(finOut);
-        BigDecimal totalNet = opNet.add(invNet).add(finNet);
+        // P92-A：本年累计 = 年初期间(1月) 至查询期间。
+        // flow_type 判定逻辑只存在于 cashFlowData 的 SQL 一处，mapper 改为期间范围参数调两次，
+        // 不复制 SQL——否则两处判定会各自演化导致取数口径漂移。
+        String yearStart = period.substring(0, 4) + "01";
+        FlowSums cur = FlowSums.aggregate(reportDataMapper.cashFlowData(period, period));
+        FlowSums ytd = FlowSums.aggregate(reportDataMapper.cashFlowData(yearStart, period));
 
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("period", period);
-        result.put("operatingIn", opIn);
-        result.put("operatingOut", opOut);
-        result.put("operatingNet", opNet);
-        result.put("investingIn", invIn);
-        result.put("investingOut", invOut);
-        result.put("investingNet", invNet);
-        result.put("financingIn", finIn);
-        result.put("financingOut", finOut);
-        result.put("financingNet", finNet);
-        result.put("totalNet", totalNet);
+        result.put("operatingIn", cur.opIn());
+        result.put("operatingOut", cur.opOut());
+        result.put("operatingNet", cur.opNet());
+        result.put("investingIn", cur.invIn());
+        result.put("investingOut", cur.invOut());
+        result.put("investingNet", cur.invNet());
+        result.put("financingIn", cur.finIn());
+        result.put("financingOut", cur.finOut());
+        result.put("financingNet", cur.finNet());
+        result.put("totalNet", cur.totalNet());
+        result.put("operatingInYtd", ytd.opIn());
+        result.put("operatingOutYtd", ytd.opOut());
+        result.put("operatingNetYtd", ytd.opNet());
+        result.put("investingInYtd", ytd.invIn());
+        result.put("investingOutYtd", ytd.invOut());
+        result.put("investingNetYtd", ytd.invNet());
+        result.put("financingInYtd", ytd.finIn());
+        result.put("financingOutYtd", ytd.finOut());
+        result.put("financingNetYtd", ytd.finNet());
+        result.put("totalNetYtd", ytd.totalNet());
 
         // P88③：补"期初/期末现金"闭环——期初取 1001+1002 本期期初余额；
         // 期末 = 期初 + 现金净流量；并与 1001+1002 本期期末余额勾稽（差异提示，不阻断）
         Map<String, Object> cash = reportDataMapper.cashSubjectBalance(period);
         BigDecimal openingCash = toBigDecimal(getOrNull(cash, "begin_cash"));
         BigDecimal endBalanceFromSubject = toBigDecimal(getOrNull(cash, "end_cash"));
-        BigDecimal closingCash = openingCash.add(totalNet);
+        BigDecimal closingCash = openingCash.add(cur.totalNet());
         BigDecimal cashCheckDiff = endBalanceFromSubject.subtract(closingCash);
         result.put("openingCash", openingCash);
         result.put("closingCash", closingCash);
         result.put("endBalanceFromSubject", endBalanceFromSubject);
         result.put("cashCheckDiff", cashCheckDiff);
         result.put("cashCheckOk", cashCheckDiff.abs().compareTo(new BigDecimal("0.01")) < 0);
+
+        // P92-A：本年累计期初现金 = 年初期间(1月)的期初余额，即 1 月 1 日现金余额。
+        // 若误用查询期间的 begin_cash，跨年时累计期初会变成当月月初，累计列漏计年初至当月的现金。
+        // 期末现金与本期期末余额勾稽（同一时点，应一致）。
+        Map<String, Object> cashYearStart = reportDataMapper.cashSubjectBalance(yearStart);
+        BigDecimal openingCashYtd = toBigDecimal(getOrNull(cashYearStart, "begin_cash"));
+        BigDecimal closingCashYtd = openingCashYtd.add(ytd.totalNet());
+        BigDecimal cashCheckDiffYtd = endBalanceFromSubject.subtract(closingCashYtd);
+        result.put("openingCashYtd", openingCashYtd);
+        result.put("closingCashYtd", closingCashYtd);
+        result.put("cashCheckDiffYtd", cashCheckDiffYtd);
+        result.put("cashCheckOkYtd", cashCheckDiffYtd.abs().compareTo(new BigDecimal("0.01")) < 0);
         return result;
+    }
+
+    /**
+     * P92-A：现金流量表三类活动的流入/流出/净额聚合。
+     * 本期与本年累计共用同一实现，保证两路口径完全一致。
+     */
+    private record FlowSums(BigDecimal opIn, BigDecimal opOut, BigDecimal invIn, BigDecimal invOut,
+                            BigDecimal finIn, BigDecimal finOut,
+                            BigDecimal opNet, BigDecimal invNet, BigDecimal finNet, BigDecimal totalNet) {
+        static FlowSums aggregate(List<Map<String, Object>> rows) {
+            BigDecimal opIn = BigDecimal.ZERO, opOut = BigDecimal.ZERO;
+            BigDecimal invIn = BigDecimal.ZERO, invOut = BigDecimal.ZERO;
+            BigDecimal finIn = BigDecimal.ZERO, finOut = BigDecimal.ZERO;
+            for (Map<String, Object> row : rows) {
+                String type = (String) row.get("flow_type");
+                BigDecimal amount = toBigDecimal(row.get("amount"));
+                switch (type) {
+                    case "OPERATING_IN":  opIn  = opIn.add(amount); break;
+                    case "OPERATING_OUT": opOut = opOut.add(amount); break;
+                    case "INVESTING_IN":  invIn  = invIn.add(amount); break;
+                    case "INVESTING_OUT": invOut = invOut.add(amount); break;
+                    case "FINANCING_IN":  finIn  = finIn.add(amount); break;
+                    case "FINANCING_OUT": finOut = finOut.add(amount); break;
+                }
+            }
+            BigDecimal opNet = opIn.subtract(opOut);
+            BigDecimal invNet = invIn.subtract(invOut);
+            BigDecimal finNet = finIn.subtract(finOut);
+            return new FlowSums(opIn, opOut, invIn, invOut, finIn, finOut,
+                    opNet, invNet, finNet, opNet.add(invNet).add(finNet));
+        }
     }
 
     @Override
@@ -264,7 +300,7 @@ public class ReportServiceImpl implements ReportService {
         return reportDataMapper.trendData(startPeriod, endPeriod);
     }
 
-    private BigDecimal toBigDecimal(Object o) {
+    private static BigDecimal toBigDecimal(Object o) {
         if (o == null) return BigDecimal.ZERO;
         return new BigDecimal(o.toString()).setScale(2, RoundingMode.HALF_UP);
     }
@@ -381,26 +417,26 @@ public class ReportServiceImpl implements ReportService {
     @Override
     public void exportCashFlow(String period, HttpServletResponse response) throws IOException {
         Map<String, Object> data = cashFlowStatement(period);
-        String[] headers = {"项目", "行次", "本期金额"};
+        String[] headers = {"项目", "行次", "本期金额", "本年累计金额"};
         List<List<Object>> rows = new ArrayList<>();
-        rows.add(List.of("经营活动现金流入", "1", data.get("operatingIn")));
-        rows.add(List.of("经营活动现金流出", "2", data.get("operatingOut")));
-        rows.add(List.of("经营活动净额", "3", data.get("operatingNet")));
-        rows.add(List.of("投资活动现金流入", "4", data.get("investingIn")));
-        rows.add(List.of("投资活动现金流出", "5", data.get("investingOut")));
-        rows.add(List.of("投资活动净额", "6", data.get("investingNet")));
-        rows.add(List.of("筹资活动现金流入", "7", data.get("financingIn")));
-        rows.add(List.of("筹资活动现金流出", "8", data.get("financingOut")));
-        rows.add(List.of("筹资活动净额", "9", data.get("financingNet")));
-        rows.add(List.of("五、现金及现金等价物净增加额", "10", data.get("totalNet")));
+        rows.add(List.of("经营活动现金流入", "1", data.get("operatingIn"), data.get("operatingInYtd")));
+        rows.add(List.of("经营活动现金流出", "2", data.get("operatingOut"), data.get("operatingOutYtd")));
+        rows.add(List.of("经营活动净额", "3", data.get("operatingNet"), data.get("operatingNetYtd")));
+        rows.add(List.of("投资活动现金流入", "4", data.get("investingIn"), data.get("investingInYtd")));
+        rows.add(List.of("投资活动现金流出", "5", data.get("investingOut"), data.get("investingOutYtd")));
+        rows.add(List.of("投资活动净额", "6", data.get("investingNet"), data.get("investingNetYtd")));
+        rows.add(List.of("筹资活动现金流入", "7", data.get("financingIn"), data.get("financingInYtd")));
+        rows.add(List.of("筹资活动现金流出", "8", data.get("financingOut"), data.get("financingOutYtd")));
+        rows.add(List.of("筹资活动净额", "9", data.get("financingNet"), data.get("financingNetYtd")));
+        rows.add(List.of("五、现金及现金等价物净增加额", "10", data.get("totalNet"), data.get("totalNetYtd")));
         // P88③：期初/期末现金 + 勾稽校验（与 1001+1002 期末余额比对）
-        rows.add(List.of("加：期初现金及现金等价物余额", "11", data.get("openingCash")));
-        rows.add(List.of("六、期末现金及现金等价物余额", "12", data.get("closingCash")));
+        rows.add(List.of("加：期初现金及现金等价物余额", "11", data.get("openingCash"), data.get("openingCashYtd")));
+        rows.add(List.of("六、期末现金及现金等价物余额", "12", data.get("closingCash"), data.get("closingCashYtd")));
         if (Boolean.TRUE.equals(data.get("cashCheckOk"))) {
-            rows.add(List.of("勾稽校验", "13", "期末现金 = 期初 + 净流量，与 1001+1002 期末余额一致 ✓"));
+            rows.add(List.of("勾稽校验", "13", "期末现金 = 期初 + 净流量，与 1001+1002 期末余额一致 ✓", ""));
         } else {
             rows.add(List.of("勾稽校验", "13", "⚠ 差异 " + data.get("cashCheckDiff")
-                    + "（期末现金计算值 vs 科目余额 1001+1002）"));
+                    + "（期末现金计算值 vs 科目余额 1001+1002）", ""));
         }
         writeExcel(response, "现金流量表", period, headers, rows);
     }

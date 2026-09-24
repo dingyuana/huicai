@@ -117,13 +117,14 @@ public interface ReportDataMapper {
             INNER JOIN t_voucher v ON v.id = e.voucher_id
             INNER JOIN t_subject s ON s.id = e.subject_id
             WHERE v.deleted = 0 AND v.status = 'POSTED'
-              AND v.period = #{period}
+              AND v.period >= #{startPeriod} AND v.period <= #{endPeriod}
               AND s.code LIKE '1002%'
         ) t
         WHERE flow_type IS NOT NULL
         GROUP BY flow_type
     """)
-    List<Map<String, Object>> cashFlowData(@Param("period") String period);
+    List<Map<String, Object>> cashFlowData(@Param("startPeriod") String startPeriod,
+                                           @Param("endPeriod") String endPeriod);
 
     /**
      * 趋势数据(多期)
