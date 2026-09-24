@@ -13,8 +13,13 @@
           <el-button type="primary" @click="fetchData">查询</el-button>
           <el-button @click="onExport">导出</el-button>
         </el-form-item>
+        <!-- 利润表不提供"隐藏零值行"：它是法定报表，7 行标准模板行全部固定呈现。
+             隐藏任何一行（如营业收入为 0 时）都会破坏「营业收入 − 营业成本 = 毛利」的法定勾稽关系，
+             与外部报送口径不符。科目余额表/现金流量表仍保留该选项（科目明细可按需折叠）。 -->
         <el-form-item>
-          <el-checkbox v-model="hideZeroRows">隐藏零值行</el-checkbox>
+          <el-tooltip content="利润表为法定报表，结构行固定完整呈现，不参与零值隐藏">
+            <span class="statutory-hint">法定格式 · 结构固定</span>
+          </el-tooltip>
         </el-form-item>
       </el-form>
 
@@ -62,7 +67,7 @@ const query = reactive({ period: '' })
 const result = ref<any>(null)
 const prevData = ref<any>(null)
 const prevAvailable = ref(false)
-const hideZeroRows = ref(true)
+// 注意：利润表不提供"隐藏零值行"开关——法定报表结构行必须完整呈现（见 template 注释）
 
 const prevPeriodLabel = computed(() => {
   const p = prevPeriod(query.period)
@@ -77,25 +82,23 @@ const rows = computed(() => {
   if (!result.value) return []
   const r = result.value
   // P88②：累计列逐行接后端字段，不再硬编码 0（旧版除首尾外全部写 0，累计数自相矛盾）
+  // 法定报表骨架——利润表每一行都是法定格式行（标准模板 7 行），
+  // 隐藏任何一行都会破坏「营业收入 − 营业成本 = 毛利」这类法定勾稽关系，
+  // 故统一 fixed=true，零值行也不隐藏（法定报表结构必须完整呈现）。
   return [
-    { label: '一、营业收入',    prev: prevData.value?.revenue,         current: r.revenue,         cumulative: r.cumulativeRevenue, bold: true },
-    { label: '减:营业成本',    prev: prevData.value?.cost,            current: r.cost,            cumulative: r.cumulativeCost, bold: false },
-    { label: '二、毛利',       prev: prevData.value?.grossProfit,     current: r.grossProfit,     cumulative: r.cumulativeGrossProfit, bold: true },
-    { label: '减:期间费用',    prev: prevData.value?.expense,         current: r.expense,         cumulative: r.cumulativeExpense, bold: false },
-    { label: '三、营业利润',   prev: prevData.value?.operatingProfit, current: r.operatingProfit, cumulative: r.cumulativeOperatingProfit, bold: true },
-    { label: '减:其他支出',    prev: prevData.value?.otherExpense,    current: r.otherExpense,    cumulative: r.cumulativeOtherExpense, bold: false },
-    { label: '四、利润总额',   prev: prevData.value?.totalProfit,     current: r.totalProfit,     cumulative: r.cumulativeProfit, bold: true },
+    { label: '一、营业收入',    prev: prevData.value?.revenue,         current: r.revenue,         cumulative: r.cumulativeRevenue, bold: true, fixed: true },
+    { label: '减:营业成本',    prev: prevData.value?.cost,            current: r.cost,            cumulative: r.cumulativeCost, bold: false, fixed: true },
+    { label: '二、毛利',       prev: prevData.value?.grossProfit,     current: r.grossProfit,     cumulative: r.cumulativeGrossProfit, bold: true, fixed: true },
+    { label: '减:期间费用',    prev: prevData.value?.expense,         current: r.expense,         cumulative: r.cumulativeExpense, bold: false, fixed: true },
+    { label: '三、营业利润',   prev: prevData.value?.operatingProfit, current: r.operatingProfit, cumulative: r.cumulativeOperatingProfit, bold: true, fixed: true },
+    { label: '减:其他支出',    prev: prevData.value?.otherExpense,    current: r.otherExpense,    cumulative: r.cumulativeOtherExpense, bold: false, fixed: true },
+    { label: '四、利润总额',   prev: prevData.value?.totalProfit,     current: r.totalProfit,     cumulative: r.cumulativeProfit, bold: true, fixed: true },
   ]
 })
 
+// 现金流量表同款 fixed 保护：骨架行不受 hideZeroRows 影响
 const visibleRows = computed(() =>
-  hideZeroRows.value
-    ? rows.value.filter(r =>
-        Number(r.current || 0) !== 0 ||
-        Number(r.cumulative || 0) !== 0 ||
-        Number(r.prev || 0) !== 0
-      )
-    : rows.value
+  rows.value.filter(r => r.fixed || Number(r.current || 0) !== 0 || Number(r.cumulative || 0) !== 0 || Number(r.prev || 0) !== 0)
 )
 
 const fetchData = async () => {
@@ -129,3 +132,15 @@ onMounted(async () => {
   fetchData()
 })
 </script>
+
+<style scoped>
+.statutory-hint {
+  color: #909399;
+  font-size: 13px;
+  cursor: help;
+  border: 1px solid #e4e7ed;
+  border-radius: 4px;
+  padding: 4px 10px;
+  line-height: 1.4;
+}
+</style>

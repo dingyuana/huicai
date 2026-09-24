@@ -86,6 +86,36 @@ test.describe('财务报表 - 三大报表', () => {
     await expect(page.locator('.page-title')).toHaveText('利润表', { timeout: 10000 })
   })
 
+  test('利润表全零数据仍完整显示法定结构行', async ({ page }) => {
+    // 回归：法定报表每一行都是标准模板行，即使金额全 0 也必须完整呈现。
+    // 旧实现"隐藏零值行"会把营业收入/毛利等整行删掉，破坏
+    // 「营业收入 − 营业成本 = 毛利」的法定勾稽关系，外部报送不合规。
+    await mockAuth(page)
+    await page.route(url => url.toString().includes('/base/report/v1/reports/income-statement'), async route => {
+      await route.fulfill({ status: 200, contentType: 'application/json',
+        body: JSON.stringify({ code: 200, msg: 'ok', data: {
+          revenue: 0, cost: 0, grossProfit: 0, expense: 0,
+          operatingProfit: 0, otherExpense: 0, totalProfit: 0,
+          cumulativeRevenue: 0, cumulativeProfit: 0,
+        }})
+      })
+    })
+
+    await page.goto(`${BASE}/report/income-statement`, { waitUntil: 'networkidle', timeout: 15000 })
+    await page.waitForTimeout(800)
+
+    // 7 行法定结构必须全部在场
+    const statutoryRows = ['一、营业收入', '减:营业成本', '二、毛利', '减:期间费用',
+      '三、营业利润', '减:其他支出', '四、利润总额']
+    for (const label of statutoryRows) {
+      await expect(page.getByText(label).first(), `法定行缺失: ${label}`).toBeVisible({ timeout: 10000 })
+    }
+    // 零值也照常格式化呈现（0.00），不是空白或省略
+    await expect(page.getByText('0.00').first()).toBeVisible()
+    // 不应再出现"隐藏零值行"开关（法定报表无此选项）
+    await expect(page.getByText('隐藏零值行')).toHaveCount(0)
+  })
+
   test('现金流量表加载显示', async ({ page }) => {
     await mockAuth(page)
     await page.route(url => url.toString().includes('/base/report/v1/reports/cash-flow'), async route => {
