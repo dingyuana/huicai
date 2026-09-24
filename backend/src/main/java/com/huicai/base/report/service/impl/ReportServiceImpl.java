@@ -47,6 +47,14 @@ public class ReportServiceImpl implements ReportService {
         BigDecimal costInInventory = BigDecimal.ZERO;
         BigDecimal profit4103 = BigDecimal.ZERO;
         BigDecimal currentPeriodProfit = BigDecimal.ZERO;
+        // P92-B: 流动/非流动/其他三分小计。"其他"是合法报送分类（如 2701 专项储备按准则属权益
+        // 但科目编号以 2 开头），必须参与小计，否则小计 ≠ 总计（P92B-BD2 勾稽）。
+        BigDecimal currentAssets = BigDecimal.ZERO;
+        BigDecimal nonCurrentAssets = BigDecimal.ZERO;
+        BigDecimal otherAssets = BigDecimal.ZERO;
+        BigDecimal currentLiabilities = BigDecimal.ZERO;
+        BigDecimal nonCurrentLiabilities = BigDecimal.ZERO;
+        BigDecimal otherLiabilities = BigDecimal.ZERO;
 
         for (Map<String, Object> row : balances) {
             String code = String.valueOf(row.get("code"));
@@ -108,6 +116,36 @@ public class ReportServiceImpl implements ReportService {
             }
         }
 
+        // P92-B: 流动/非流动/其他三分小计（口径：三分 + 科目表 account_type 维护 + 小计行不折叠）
+        // 不修改上方 switch 的主分类逻辑——小计是对已分类行的二次汇总，零侵入。
+        // 取值优先 account_type，缺失时按科目段兜底（P92B-BD3：未分类不得静默丢弃）。
+        // 注意 5x 成本科目也计入资产总计（小企业会计准则下存货类）：
+        //   50 生产成本 / 51 制造费用 / 52 劳务成本 / 54 工程施工 → 流动（存货）
+        //   53 研发支出 → 非流动（资本化开发支出资本性支出）
+        currentAssets = subtotal(assets, "CURRENT_ASSET", c -> c.startsWith("1")
+                && (c.startsWith("10") || c.startsWith("11")
+                || c.startsWith("12") || c.startsWith("14"))
+                || c.startsWith("50") || c.startsWith("51")
+                || c.startsWith("52") || c.startsWith("54"));
+        nonCurrentAssets = subtotal(assets, "NON_CURRENT_ASSET", c -> c.startsWith("1")
+                && (c.startsWith("13") || c.startsWith("1408") || c.startsWith("15")
+                || c.startsWith("16") || c.startsWith("17") || c.startsWith("18") || c.startsWith("19"))
+                || c.startsWith("53"));
+        otherAssets = totalAssets.subtract(currentAssets).subtract(nonCurrentAssets);
+
+        currentLiabilities = subtotal(liab, "CURRENT_LIABILITY", c -> c.startsWith("2")
+                && (c.startsWith("20") || c.startsWith("21") || c.startsWith("22")));
+        nonCurrentLiabilities = subtotal(liab, "NON_CURRENT_LIABILITY", c -> c.startsWith("2")
+                && (c.startsWith("24") || c.startsWith("25") || c.startsWith("27")
+                || c.startsWith("28") || c.startsWith("29")));
+        otherLiabilities = totalLiab.subtract(currentLiabilities).subtract(nonCurrentLiabilities);
+        // 勾稽（P92B-BD2）：各小计之和必须等于总计。otherAssets/otherLiabilities 由减法反推得出，
+        // 因此上述等式恒成立；这里显式校验而非依赖恒等式，防止未来改动 switch 分类后小计漏项。
+        if (currentAssets.add(nonCurrentAssets).add(otherAssets).compareTo(totalAssets) != 0
+                || currentLiabilities.add(nonCurrentLiabilities).add(otherLiabilities).compareTo(totalLiab) != 0) {
+            throw new IllegalStateException("资产负债表流动分类小计与总计不一致");
+        }
+
         BigDecimal currentYearProfit = profit4103.add(currentPeriodProfit);
         BigDecimal totalEquity = totalEquityExProfit.add(currentYearProfit);
         BigDecimal totalLiabEquity = totalLiab.add(totalEquity);
@@ -133,6 +171,16 @@ public class ReportServiceImpl implements ReportService {
         result.put("assets", assets);
         result.put("liabilities", liab);
         result.put("equity", equity);
+        // P92-B: 三分小计作为独立字段返回，不混入 assets/liabilities 数组。
+        // 两个原因：① 不折叠口径要求小计行常驻，独立字段天然不受 hideZeroRows 影响；
+        //          ② 混入行数组会让前端逐行加总把小计也算进总计，重复计入。
+        // P92B-BD2 勾稽由下方内联校验兜住（小计之和 ≠ 总计则抛 IllegalStateException）。
+        result.put("currentAssets", money(currentAssets));
+        result.put("nonCurrentAssets", money(nonCurrentAssets));
+        result.put("otherAssets", money(otherAssets));
+        result.put("currentLiabilities", money(currentLiabilities));
+        result.put("nonCurrentLiabilities", money(nonCurrentLiabilities));
+        result.put("otherLiabilities", money(otherLiabilities));
         result.put("currentYearProfit", money(currentYearProfit));
         result.put("costInInventory", money(costInInventory));
         result.put("totalAssets", money(totalAssets));
@@ -153,6 +201,40 @@ public class ReportServiceImpl implements ReportService {
         bad.put("endBalance", endBalance);
         bad.put("classifiedTo", reason);
         return bad;
+    }
+
+    /**
+     * P92-B: 对已分类的资产/负债行按 account_type 求小计。
+     *
+     * <p>命中条件：行的 account_type 等于 target，或 account_type 缺失/为空且 fallback 判定为真
+     * （科目段兜底，保证迁移前数据与人工漏填时不静默丢弃，见 P92B-BD3）。
+     *
+     * <p>金额口径必须与 balanceSheet 主循环的 signed 一致：
+     * 资产(1x/5x)借方为正、负债(2x)贷方为正。因此不能直接取 end_balance（其符号依赖方向），
+     * 必须按行上的 direction 重新定向，否则小计会与总计符号相反。
+     */
+    private static BigDecimal subtotal(List<Map<String, Object>> rows, String target,
+                                       java.util.function.Predicate<String> fallback) {
+        BigDecimal sum = BigDecimal.ZERO;
+        for (Map<String, Object> row : rows) {
+            String code = String.valueOf(row.get("code"));
+            String direction = (String) row.get("direction");
+            Object at = row.get("account_type");
+            String accountType = (at == null) ? null : String.valueOf(at);
+            boolean byType = target.equals(accountType);
+            boolean byFallback = !byType && (accountType == null || accountType.isBlank()
+                    || "null".equals(accountType))
+                    && fallback.test(code);
+            if (!byType && !byFallback) {
+                continue;
+            }
+            BigDecimal endBalance = toBigDecimal(row.get("end_balance"));
+            BigDecimal signed = code.startsWith("2")
+                    ? ("credit".equals(direction) ? endBalance : endBalance.negate())
+                    : ("debit".equals(direction) ? endBalance : endBalance.negate());
+            sum = sum.add(signed);
+        }
+        return sum;
     }
 
     private static BigDecimal money(BigDecimal v) {
@@ -375,6 +457,15 @@ public class ReportServiceImpl implements ReportService {
     @Override
     public void exportBalanceSheet(String period, HttpServletResponse response) throws IOException {
         Map<String, Object> data = balanceSheet(period);
+        // P92-B: 小计年初值与前端同口径——取年初期间 balanceSheet() 的返回值，
+        // 而不是科目行 begin_balance 相加（后者含本年利润、成本在库存等口径差异，前端同样不做此计算）。
+        Map<String, Object> ysData = null;
+        String yearStart = period.substring(0, 4) + "01";
+        try {
+            ysData = balanceSheet(yearStart);
+        } catch (Exception ignore) {
+            // 年初期间无数据或尚未结账时，小计年初值留空，不影响本次导出
+        }
         String[] headers = {"项目", "行次", "期末余额", "年初余额"};
         List<List<Object>> rows = new ArrayList<>();
         @SuppressWarnings("unchecked")
@@ -382,19 +473,35 @@ public class ReportServiceImpl implements ReportService {
         for (Map<String, Object> a : assets) {
             rows.add(List.of(a.get("name"), "", a.get("end_balance"), a.get("begin_balance")));
         }
-        rows.add(List.of("资产总计", "", data.get("totalAssets"), ""));
+        // P92-B: 三分小计行，导出与前端一致（法定报送口径，不可省略）
+        rows.add(List.of("流动资产合计", "", data.get("currentAssets"),
+                ysData == null ? "" : ysData.get("currentAssets")));
+        rows.add(List.of("非流动资产合计", "", data.get("nonCurrentAssets"),
+                ysData == null ? "" : ysData.get("nonCurrentAssets")));
+        rows.add(List.of("其他资产", "", data.get("otherAssets"),
+                ysData == null ? "" : ysData.get("otherAssets")));
+        rows.add(List.of("资产总计", "", data.get("totalAssets"),
+                ysData == null ? "" : ysData.get("totalAssets")));
         @SuppressWarnings("unchecked")
         List<Map<String, Object>> liab = (List<Map<String, Object>>) data.get("liabilities");
         for (Map<String, Object> l : liab) {
             rows.add(List.of(l.get("name"), "", l.get("end_balance"), l.get("begin_balance")));
         }
+        // P92-B: 负债三分小计
+        rows.add(List.of("流动负债合计", "", data.get("currentLiabilities"),
+                ysData == null ? "" : ysData.get("currentLiabilities")));
+        rows.add(List.of("非流动负债合计", "", data.get("nonCurrentLiabilities"),
+                ysData == null ? "" : ysData.get("nonCurrentLiabilities")));
+        rows.add(List.of("其他负债", "", data.get("otherLiabilities"),
+                ysData == null ? "" : ysData.get("otherLiabilities")));
         @SuppressWarnings("unchecked")
         List<Map<String, Object>> equity = (List<Map<String, Object>>) data.get("equity");
         // P88①：权益区含"本年利润(含未结转)"显式行，与前端逐行加总口径一致
         for (Map<String, Object> e : equity) {
             rows.add(List.of(e.get("name"), "", e.get("end_balance"), e.get("begin_balance")));
         }
-        rows.add(List.of("负债+所有者权益合计", "", data.get("totalLiabEquity"), ""));
+        rows.add(List.of("负债+所有者权益合计", "", data.get("totalLiabEquity"),
+                ysData == null ? "" : ysData.get("totalLiabEquity")));
         writeExcel(response, "资产负债表", period, headers, rows);
     }
 

@@ -235,10 +235,17 @@ class ReportExportTest {
             assertEquals("行次", cellText(sheet, 2, 1));
             assertEquals("期末余额", cellText(sheet, 2, 2));
             assertEquals("年初余额", cellText(sheet, 2, 3));
-            // 第 3 行起：数据。无科目数据时，只有两行小计（行次列为空）
-            assertEquals("资产总计", cellText(sheet, 3, 0));
-            assertEquals("负债+所有者权益合计", cellText(sheet, 4, 0));
-            assertEquals(5, sheet.getLastRowNum() + 1, "无科目数据时总行数应为 5");
+            // 第 3 行起：数据。无科目数据时，仍有三分小计行（法定报送口径，不可省略）+ 两行总计。
+            // P92-B：流动资产合计 / 非流动资产合计 / 其他资产 → 资产总计 → 负债三分小计 → 负债+权益合计
+            assertEquals("流动资产合计", cellText(sheet, 3, 0));
+            assertEquals("非流动资产合计", cellText(sheet, 4, 0));
+            assertEquals("其他资产", cellText(sheet, 5, 0));
+            assertEquals("资产总计", cellText(sheet, 6, 0));
+            assertEquals("流动负债合计", cellText(sheet, 7, 0));
+            assertEquals("非流动负债合计", cellText(sheet, 8, 0));
+            assertEquals("其他负债", cellText(sheet, 9, 0));
+            assertEquals("负债+所有者权益合计", cellText(sheet, 10, 0));
+            assertEquals(11, sheet.getLastRowNum() + 1, "无科目数据时总行数应为 11（抬头2+表头1+小计6+总计2）");
         }
     }
 

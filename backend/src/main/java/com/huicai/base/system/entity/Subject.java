@@ -42,6 +42,14 @@ public class Subject {
     /** 所属会计制度编码: CAS(企业会计准则)/SME(小企业会计准则)/NPO(民间非营利)/NULL(自定义) */
     private String accountingStandard;
 
+    /**
+     * 资产/负债流动分类（P92-B 资产负债表分类小计）。
+     * CURRENT_ASSET / NON_CURRENT_ASSET / CURRENT_LIABILITY / NON_CURRENT_LIABILITY。
+     * 权益(4x)、成本(5x)、收入(6x) 不适用流动分类，为 NULL。
+     * 报表端对未分类的资产/负债科目走科目段兜底，不静默丢弃（见 ReportServiceImpl.balanceSheet）。
+     */
+    private String accountType;
+
     /** 备注 */
     private String remark;
 

@@ -30,6 +30,14 @@
             <el-tag v-else size="small">{{ auxLabel(row.auxCalcType) }}</el-tag>
           </template>
         </el-table-column>
+        <el-table-column prop="accountType" label="流动分类" width="110">
+          <template #default="{ row }">
+            <span v-if="!row.accountType">—</span>
+            <el-tag v-else size="small" :type="row.accountType.startsWith('CURRENT') ? 'primary' : 'info'">
+              {{ accountTypeLabel(row.accountType) }}
+            </el-tag>
+          </template>
+        </el-table-column>
         <el-table-column prop="isLeaf" label="末级" width="70" align="center">
           <template #default="{ row }">
             <el-tag :type="row.isLeaf ? 'success' : 'info'" size="small">{{ row.isLeaf ? '是' : '否' }}</el-tag>
@@ -75,6 +83,14 @@
           <el-select v-model="form.auxCalcType" placeholder="无" clearable style="width:100%">
             <el-option v-for="o in AUX_OPTIONS" :key="o.value" :label="o.label" :value="o.value" />
           </el-select>
+        </el-form-item>
+        <el-form-item label="流动分类">
+          <el-select v-model="form.accountType" placeholder="不适用（权益/成本/收入）" clearable style="width:100%">
+            <el-option v-for="o in ACCOUNT_TYPE_OPTIONS" :key="o.value" :label="o.label" :value="o.value" />
+          </el-select>
+          <el-text size="small" type="info" style="display:block;margin-top:2px">
+            仅资产(1x/5x)、负债(2x)适用；权益(4x)、成本(5x)、收入(6x)留空
+          </el-text>
         </el-form-item>
         <el-form-item label="是否启用">
           <el-switch v-model="form.isActive" />
@@ -159,6 +175,7 @@ const form = ref({
   parentId: null as string | null,
   direction: 'debit',
   auxCalcType: '' as string,
+  accountType: null as string | null,
   isActive: true,
   remark: '',
 })
@@ -169,6 +186,14 @@ const AUX_OPTIONS = [
   { value: 'department',label: '部门' },
   { value: 'project',   label: '项目' },
   { value: 'employee',  label: '员工' },
+]
+
+/** 资产/负债流动分类选项（P92-B）。权益(4x)、成本(5x)、收入(6x) 不适用，留空 */
+const ACCOUNT_TYPE_OPTIONS = [
+  { value: 'CURRENT_ASSET',        label: '流动资产' },
+  { value: 'NON_CURRENT_ASSET',    label: '非流动资产' },
+  { value: 'CURRENT_LIABILITY',    label: '流动负债' },
+  { value: 'NON_CURRENT_LIABILITY',label: '非流动负债' },
 ]
 
 const formRules = {
@@ -187,6 +212,15 @@ function auxLabel(type: string | null): string {
   return type ? (map[type] || type) : '—'
 }
 
+/** 资产/负债流动分类的中文标签（P92-B） */
+function accountTypeLabel(type: string | null): string {
+  const map: Record<string, string> = {
+    CURRENT_ASSET: '流动资产', NON_CURRENT_ASSET: '非流动资产',
+    CURRENT_LIABILITY: '流动负债', NON_CURRENT_LIABILITY: '非流动负债',
+  }
+  return type ? (map[type] || type) : '—'
+}
+
 async function fetchTree() {
   loading.value = true
   try {
@@ -202,7 +236,7 @@ function openCreate(parent: SubjectVO | null) {
   isEdit.value = false
   editId.value = null
   selectedParent.value = parent
-  form.value = { code: '', name: '', parentId: parent?.id ?? null, direction: 'debit', auxCalcType: '', isActive: true, remark: '' }
+  form.value = { code: '', name: '', parentId: parent?.id ?? null, direction: 'debit', auxCalcType: '', accountType: null, isActive: true, remark: '' }
   dialogVisible.value = true
 }
 
@@ -218,6 +252,7 @@ async function openEdit(row: SubjectVO) {
       parentId: detail.parentId,
       direction: detail.direction,
       auxCalcType: detail.auxCalcType ?? '',
+      accountType: detail.accountType ?? null,
       isActive: detail.isActive,
       remark: detail.remark,
     }

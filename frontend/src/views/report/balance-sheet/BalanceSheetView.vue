@@ -40,6 +40,46 @@
               </template>
             </el-table-column>
           </el-table>
+          <!-- P92-B: 三分小计行常驻，不受 hideZeroRows 影响（不折叠口径） -->
+          <div class="subtotal-row">
+            <span>流动资产合计</span>
+            <span class="sub-amount">
+              <span class="total-cell" v-if="yearStartAvailable">
+                <em>年初</em>
+                <b>{{ fmtAmount(yearStartData.currentAssets) }}</b>
+              </span>
+              <span class="total-cell">
+                <em>期末</em>
+                <b>{{ fmtAmount(result.currentAssets) }}</b>
+              </span>
+            </span>
+          </div>
+          <div class="subtotal-row">
+            <span>非流动资产合计</span>
+            <span class="sub-amount">
+              <span class="total-cell" v-if="yearStartAvailable">
+                <em>年初</em>
+                <b>{{ fmtAmount(yearStartData.nonCurrentAssets) }}</b>
+              </span>
+              <span class="total-cell">
+                <em>期末</em>
+                <b>{{ fmtAmount(result.nonCurrentAssets) }}</b>
+              </span>
+            </span>
+          </div>
+          <div class="subtotal-row">
+            <span>其他资产</span>
+            <span class="sub-amount">
+              <span class="total-cell" v-if="yearStartAvailable">
+                <em>年初</em>
+                <b>{{ fmtAmount(yearStartData.otherAssets) }}</b>
+              </span>
+              <span class="total-cell">
+                <em>期末</em>
+                <b>{{ fmtAmount(result.otherAssets) }}</b>
+              </span>
+            </span>
+          </div>
           <div class="total-row">
             <span>资产合计:</span>
             <span class="total-amount">
@@ -70,6 +110,46 @@
               </template>
             </el-table-column>
           </el-table>
+          <!-- P92-B: 三分小计行常驻，不受 hideZeroRows 影响（不折叠口径） -->
+          <div class="subtotal-row">
+            <span>流动负债合计</span>
+            <span class="sub-amount">
+              <span class="total-cell" v-if="yearStartAvailable">
+                <em>年初</em>
+                <b>{{ fmtAmount(yearStartData.currentLiabilities) }}</b>
+              </span>
+              <span class="total-cell">
+                <em>期末</em>
+                <b>{{ fmtAmount(result.currentLiabilities) }}</b>
+              </span>
+            </span>
+          </div>
+          <div class="subtotal-row">
+            <span>非流动负债合计</span>
+            <span class="sub-amount">
+              <span class="total-cell" v-if="yearStartAvailable">
+                <em>年初</em>
+                <b>{{ fmtAmount(yearStartData.nonCurrentLiabilities) }}</b>
+              </span>
+              <span class="total-cell">
+                <em>期末</em>
+                <b>{{ fmtAmount(result.nonCurrentLiabilities) }}</b>
+              </span>
+            </span>
+          </div>
+          <div class="subtotal-row">
+            <span>其他负债</span>
+            <span class="sub-amount">
+              <span class="total-cell" v-if="yearStartAvailable">
+                <em>年初</em>
+                <b>{{ fmtAmount(yearStartData.otherLiabilities) }}</b>
+              </span>
+              <span class="total-cell">
+                <em>期末</em>
+                <b>{{ fmtAmount(result.otherLiabilities) }}</b>
+              </span>
+            </span>
+          </div>
           <h3 style="margin-top: 16px">所有者权益</h3>
           <el-table :data="visibleEquity" border>
             <el-table-column prop="code" label="编码" width="100" />
@@ -177,6 +257,25 @@ onMounted(async () => {
 </script>
 
 <style scoped>
+/* P92-B: 流动分类小计行。视觉权重介于科目明细行与总计行之间；
+   不用 display:none / v-if，保证零值时也显示 0.00（法定报表金额必须可见，不折叠口径） */
+.subtotal-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 12px;
+  margin-top: 4px;
+  background: #fafafa;
+  border-top: 1px dashed #dcdfe6;
+  font-weight: 600;
+}
+.subtotal-row .sub-amount {
+  display: flex;
+  gap: 16px;
+}
+.subtotal-row .sub-amount b {
+  font-weight: 600;
+}
 .total-row {
   display: flex;
   justify-content: space-between;

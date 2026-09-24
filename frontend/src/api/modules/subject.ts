@@ -10,6 +10,8 @@ export interface SubjectVO {
   direction: string
   isLeaf: boolean
   auxCalcType: string | null
+  /** 资产/负债流动分类：CURRENT_ASSET/NON_CURRENT_ASSET/CURRENT_LIABILITY/NON_CURRENT_LIABILITY；权益(4x)、成本(5x)、收入(6x)为 null */
+  accountType: string | null
   isActive: boolean
   remark: string
   createdAt: string
@@ -23,6 +25,7 @@ export interface SubjectCreateParam {
   parentId?: string | null
   direction: string
   auxCalcType?: string | null
+  accountType?: string | null
   isActive?: boolean
   remark?: string
 }
@@ -33,6 +36,7 @@ export interface SubjectUpdateParam {
   name: string
   direction: string
   auxCalcType?: string | null
+  accountType?: string | null
   isActive?: boolean
   remark?: string
 }

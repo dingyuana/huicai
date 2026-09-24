@@ -53,7 +53,7 @@ const rows = computed(() => {
   if (!result.value) return []
   const r = result.value
   // P92-A：每行同时携带本期金额(amount)与本年累计金额(amountYtd)
-  const list = [
+  const list: { label: string; amount: any; amountYtd: any; bold: boolean; fixed?: boolean; warn?: boolean }[] = [
     { label: '一、经营活动现金流量',   amount: '', amountYtd: '', bold: true },
     { label: '  现金流入',           amount: r.operatingIn,   amountYtd: r.operatingInYtd,   bold: false },
     { label: '  现金流出',           amount: r.operatingOut,  amountYtd: r.operatingOutYtd,  bold: false },

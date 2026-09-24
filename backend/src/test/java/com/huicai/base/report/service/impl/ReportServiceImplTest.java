@@ -47,6 +47,98 @@ class ReportServiceImplTest {
     }
 
     @Test
+    void p92b_三分小计_按account_type正确归类() {
+        // P92B-BD1：显式 account_type 优先；三分之和必须等于总计（P92B-BD2 勾稽）
+        List<Map<String, Object>> b = new ArrayList<>();
+        Map<String, Object> r;
+
+        // 流动资产：货币资金 + 存货
+        r = new HashMap<>(); r.put("code","1002"); r.put("name","银行存款"); r.put("direction","debit");
+        r.put("end_balance",500000.0); r.put("account_type","CURRENT_ASSET"); b.add(r);
+        r = new HashMap<>(); r.put("code","1403"); r.put("name","库存商品"); r.put("direction","debit");
+        r.put("end_balance",420000.0); r.put("account_type","CURRENT_ASSET"); b.add(r);
+        // 非流动资产：固定资产
+        r = new HashMap<>(); r.put("code","1601"); r.put("name","固定资产"); r.put("direction","debit");
+        r.put("end_balance",300000.0); r.put("account_type","NON_CURRENT_ASSET"); b.add(r);
+        // account_type 缺失的在建工程：走科目段 fallback 归非流动（13 段）
+        r = new HashMap<>(); r.put("code","1301"); r.put("name","在建工程"); r.put("direction","debit");
+        r.put("end_balance",50000.0); r.put("account_type",null); b.add(r);
+
+        // 流动负债
+        r = new HashMap<>(); r.put("code","2202"); r.put("name","应付账款"); r.put("direction","credit");
+        r.put("end_balance",150000.0); r.put("account_type","CURRENT_LIABILITY"); b.add(r);
+        // 非流动负债
+        r = new HashMap<>(); r.put("code","2401"); r.put("name","长期借款"); r.put("direction","credit");
+        r.put("end_balance",100000.0); r.put("account_type","NON_CURRENT_LIABILITY"); b.add(r);
+        // 专项储备：按会计准则本就列示于负债项下，编号 27 段走 fallback 归非流动负债
+        r = new HashMap<>(); r.put("code","2701"); r.put("name","专项储备"); r.put("direction","credit");
+        r.put("end_balance",20000.0); r.put("account_type",null); b.add(r);
+
+        // 权益（不参与流动分类）
+        r = new HashMap<>(); r.put("code","4001"); r.put("name","实收资本"); r.put("direction","credit");
+        r.put("end_balance",1000000.0); r.put("account_type",null); b.add(r);
+
+        when(reportDataMapper.subjectBalance("202606")).thenReturn(b);
+
+        Map<String, Object> result = service.balanceSheet("202606");
+
+        // 资产三分：流动 500000+420000=920000；非流动 300000+50000=350000；其他 0，合计 1270000
+        assertEquals(new BigDecimal("920000.00"), result.get("currentAssets"));
+        assertEquals(new BigDecimal("350000.00"), result.get("nonCurrentAssets"),
+                "1601 固定资产 + 1301 在建工程（fallback）应同为非流动");
+        assertEquals(new BigDecimal("0.00"), result.get("otherAssets"));
+        assertEquals(new BigDecimal("1270000.00"), result.get("totalAssets"));
+
+        // 负债三分：流动 150000；非流动 100000+20000=120000；其他 0，合计 270000
+        assertEquals(new BigDecimal("150000.00"), result.get("currentLiabilities"));
+        assertEquals(new BigDecimal("120000.00"), result.get("nonCurrentLiabilities"),
+                "2701 专项储备按准则列于负债项下，27 段 fallback 归非流动");
+        assertEquals(new BigDecimal("0.00"), result.get("otherLiabilities"));
+        assertEquals(new BigDecimal("270000.00"), result.get("totalLiabilities"));
+
+        // 权益不受流动分类影响，仍计入负债+权益合计
+        assertEquals(new BigDecimal("1000000.00"), result.get("totalEquity"));
+        assertEquals(new BigDecimal("1270000.00"), result.get("totalLiabEquity"));
+        assertEquals(Boolean.TRUE, result.get("balanced"));
+    }
+
+    @Test
+    void p92b_accountType缺失时走科目段兜底() {
+        // P92B-BD3：迁移前数据或人工漏填 account_type 时不得静默丢弃，必须按科目段归类
+        List<Map<String, Object>> b = new ArrayList<>();
+        // 注意：不设置 account_type，全部走 fallback 科目段判定
+        Map<String, Object> r;
+
+        r = new HashMap<>(); r.put("code","1002"); r.put("name","银行存款"); r.put("direction","debit");
+        r.put("end_balance",100000.0); b.add(r);
+        r = new HashMap<>(); r.put("code","1501"); r.put("name","无形资产"); r.put("direction","debit");
+        r.put("end_balance",30000.0); b.add(r);
+        r = new HashMap<>(); r.put("code","5001"); r.put("name","生产成本"); r.put("direction","debit");
+        r.put("end_balance",80000.0); b.add(r);
+        r = new HashMap<>(); r.put("code","5301"); r.put("name","研发支出"); r.put("direction","debit");
+        r.put("end_balance",20000.0); b.add(r);
+        r = new HashMap<>(); r.put("code","2202"); r.put("name","应付账款"); r.put("direction","credit");
+        r.put("end_balance",40000.0); b.add(r);
+        r = new HashMap<>(); r.put("code","2501"); r.put("name","应付债券"); r.put("direction","credit");
+        r.put("end_balance",60000.0); b.add(r);
+
+        when(reportDataMapper.subjectBalance("202606")).thenReturn(b);
+
+        Map<String, Object> result = service.balanceSheet("202606");
+
+        // 1002(1x流动) + 5001(生产成本→流动存货) = 180000
+        assertEquals(new BigDecimal("180000.00"), result.get("currentAssets"));
+        // 1501(非流动) + 5301(研发支出→非流动) = 50000
+        assertEquals(new BigDecimal("50000.00"), result.get("nonCurrentAssets"));
+        assertEquals(new BigDecimal("0.00"), result.get("otherAssets"));
+        assertEquals(new BigDecimal("230000.00"), result.get("totalAssets"));
+
+        assertEquals(new BigDecimal("40000.00"), result.get("currentLiabilities"));
+        assertEquals(new BigDecimal("60000.00"), result.get("nonCurrentLiabilities"));
+        assertEquals(new BigDecimal("0.00"), result.get("otherLiabilities"));
+    }
+
+    @Test
     void balanceSheet_groups_3xxx_and_4xxx_by_spec() {
         // P69: 3xxx 共同类借余入资产/贷余入负债；4xxx 权益
         List<Map<String, Object>> balances = new ArrayList<>();

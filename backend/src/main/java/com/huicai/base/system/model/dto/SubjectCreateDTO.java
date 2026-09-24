@@ -30,6 +30,10 @@ public class SubjectCreateDTO {
     @Schema(description = "辅助核算类型: customer/vendor/department/project/employee")
     private String auxCalcType;
 
+    @Size(max = 32, message = "资产/负债流动分类最长32个字符")
+    @Schema(description = "资产/负债流动分类: CURRENT_ASSET/NON_CURRENT_ASSET/CURRENT_LIABILITY/NON_CURRENT_LIABILITY；权益(4x)、成本(5x)、收入(6x)为 null")
+    private String accountType;
+
     @Schema(description = "所属会计制度: CAS/SME/NPO/null")
     private String accountingStandard;
 

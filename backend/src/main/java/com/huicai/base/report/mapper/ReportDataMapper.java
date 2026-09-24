@@ -16,6 +16,7 @@ public interface ReportDataMapper {
      */
     @Select("""
         SELECT s.id, s.id AS subject_id, s.code, s.name, s.level, s.parent_id, s.direction,
+               s.account_type,
                COALESCE(sb.begin_balance, 0)   AS begin_balance,
                COALESCE(sb.debit_total, 0)     AS debit_total,
                COALESCE(sb.credit_total, 0)    AS credit_total,
