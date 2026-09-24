@@ -183,7 +183,9 @@ function removeEntry(i: number) {
 }
 
 function goBack() {
-  router.push({ name: 'BusinessDocList' })
+  // 优先 history.back，保留列表页筛选态（配合 keep-alive）；无历史则兜底回列表
+  if (window.history.length > 1) router.back()
+  else router.push({ name: 'BusinessDocList' })
 }
 
 // ─── 客户/供应商即输即建 ───

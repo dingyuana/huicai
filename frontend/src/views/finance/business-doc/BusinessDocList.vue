@@ -65,7 +65,7 @@
         </el-radio-button>
       </el-radio-group>
 
-      <el-table :data="list" v-loading="loading" border stripe @row-click="onRowClick">
+      <el-table :data="list" v-loading="loading" border stripe show-summary :summary-method="summaryMethod" @row-click="onRowClick">
         <template #empty>
           <el-empty v-if="scope === 'completed' && !dateRange" description="请先选择日期范围（快捷时段或自定义）查询已完成单据" />
         </template>
@@ -144,7 +144,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onActivated } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import {
@@ -211,6 +211,19 @@ function statusType(s: string) {
 
 function fmtAmount(v: number) {
   return v == null ? '' : Number(v).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+
+// 列索引: 0单据号 6金额 7已核销 8未核销（模板列无 prop，按 index 取）
+function summaryMethod({ columns, data }: { columns: unknown[]; data: BusinessDocVO[] }) {
+  const sumOf = (key: 'amount' | 'settledAmount' | 'unsettledAmount') =>
+    data.reduce((s, r) => s + (Number(r[key]) || 0), 0)
+  return columns.map((_, index) => {
+    if (index === 0) return data.length < total.value ? '本页合计' : '合计'
+    if (index === 6) return fmtAmount(sumOf('amount'))
+    if (index === 7) return fmtAmount(sumOf('settledAmount'))
+    if (index === 8) return fmtAmount(sumOf('unsettledAmount'))
+    return ''
+  })
 }
 
 function reconcileTagType(row: BusinessDocVO) {
@@ -310,6 +323,12 @@ async function goDetailByNo(docNo: string) {
 }
 
 onMounted(async () => {
+  await fetchCounts()
+  await fetchData()
+})
+
+// keep-alive 从详情/编辑返回时只刷数据，不重置 query/dateRange/scope 筛选态
+onActivated(async () => {
   await fetchCounts()
   await fetchData()
 })

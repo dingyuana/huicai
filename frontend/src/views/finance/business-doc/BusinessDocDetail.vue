@@ -168,7 +168,10 @@ function fmtAmount(v?: number) {
   return v == null ? '' : Number(v).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
-function goBack() { router.push({ name: 'BusinessDocList' }) }
+function goBack() {
+  if (window.history.length > 1) router.back()
+  else router.push({ name: 'BusinessDocList' })
+}
 function goEdit() { router.push({ name: 'BusinessDocEdit', query: { mode: 'edit', id: String(effectiveId.value) } }) }
 
 async function fetchData() {

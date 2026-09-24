@@ -4,7 +4,12 @@
     <div class="layout-main">
       <AppHeader />
       <main class="layout-content">
-        <router-view />
+        <router-view v-slot="{ Component, route }">
+          <keep-alive>
+            <component :is="Component" v-if="route.meta.keepAlive" :key="route.path" />
+          </keep-alive>
+          <component :is="Component" v-if="!route.meta.keepAlive" :key="route.path" />
+        </router-view>
       </main>
     </div>
   </div>
