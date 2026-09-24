@@ -23,6 +23,7 @@ import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -125,6 +126,46 @@ class ReportExportTest {
     }
 
     @Test
+    void exportSubjectBalance_direction_column_is_chinese(@TempDir Path tmp) throws IOException {
+        // 方向列曾导出原始英文 "debit/credit"，与前端显示的"借/贷"不一致。
+        // 统一为中文后需断言：列名、借方科目、贷方科目、direction 缺失时的兜底值。
+        ByteArrayOutputStream out = captureStream();
+        // 用 HashMap 而非 Map.of：Map.of 不允许 null 值，而 direction 缺失正是要测的场景
+        List<Map<String, Object>> balances = new ArrayList<>();
+        balances.add(balanceRow("1001", "库存现金", "debit", 100, 50, 0, 150));
+        balances.add(balanceRow("6001", "主营业务收入", "credit", 0, 0, 800, 800));
+        balances.add(balanceRow("1901", "无方向科目", null, 0, 0, 0, 0));
+        when(reportDataMapper.subjectBalance(PERIOD)).thenReturn(balances);
+
+        service.exportSubjectBalance(PERIOD, response);
+
+        File xlsx = tmp.resolve("科目余额表_" + PERIOD + ".xlsx").toFile();
+        try (FileOutputStream fos = new FileOutputStream(xlsx)) {
+            fos.write(out.toByteArray());
+        }
+
+        try (InputStream in = Files.newInputStream(xlsx.toPath());
+             Workbook wb = new XSSFWorkbook(in)) {
+            Sheet sheet = wb.getSheetAt(0);
+
+            // 表头：方向列改名"余额方向"（与前端列名一致）
+            assertEquals("科目编码", cellText(sheet, 2, 0));
+            assertEquals("科目名称", cellText(sheet, 2, 1));
+            assertEquals("余额方向", cellText(sheet, 2, 2));
+
+            // 数据行从第 3 行起
+            assertEquals("1001", cellText(sheet, 3, 0));
+            assertEquals("借", cellText(sheet, 3, 2), "debit 应导出为中文'借'");
+            assertEquals("6001", cellText(sheet, 4, 0));
+            assertEquals("贷", cellText(sheet, 4, 2), "credit 应导出为中文'贷'");
+            assertEquals("—", cellText(sheet, 5, 2), "direction 缺失应兜底为 '—'");
+
+            // 抬头含审核人留白
+            assertTrue(cellText(sheet, 1, 2).contains("审核人：待审核"));
+        }
+    }
+
+    @Test
     void exportAllFour_write_non_empty_content() throws IOException {
         when(reportDataMapper.subjectBalance(any())).thenReturn(new ArrayList<>());
         when(reportDataMapper.incomeStatementData(any())).thenReturn(Map.of());
@@ -181,11 +222,12 @@ class ReportExportTest {
 
             // 第 0 行：报表标题
             assertEquals("资产负债表", cellText(sheet, 0, 0));
-            // 第 1 行：期间（左） + 制表人/制表日期（右）
+            // 第 1 行：期间（左） + 制表人/制表日期/审核人（右）
             assertEquals("期间：202601", cellText(sheet, 1, 0));
             String meta = cellText(sheet, 1, 2);
             assertTrue(meta.contains("制表人："), "制表信息应含制表人，实际: " + meta);
             assertTrue(meta.contains("制表日期："), "制表信息应含制表日期，实际: " + meta);
+            assertTrue(meta.contains("审核人：待审核"), "PRD §4.2 指定审核人留白占位，实际: " + meta);
             // 制表人兜底值
             assertTrue(meta.contains("未知"), "无登录上下文时制表人应为兜底值，实际: " + meta);
             // 第 2 行：表头
@@ -198,6 +240,60 @@ class ReportExportTest {
             assertEquals("负债+所有者权益合计", cellText(sheet, 4, 0));
             assertEquals(5, sheet.getLastRowNum() + 1, "无科目数据时总行数应为 5");
         }
+    }
+
+    @Test
+    void exportCashFlow_3列时制表人行不合并且内容正确(@TempDir Path tmp) throws IOException {
+        // 现金流量表是 3 列表（项目/行次/本期金额），唯一走 cols<4 降级分支的报表。
+        // 该分支曾因 merge(2,2) 单格合并在线上抛
+        // "Merged region must contain 2 or more cells" 导致导出 500，故必须逐格断言而非只看"非空"。
+        // 注：rows 由 exportCashFlow 硬编码生成 13 行，与 mapper 返回内容无关，
+        // 所以本用例无需依赖 stub 的数据即可覆盖该分支。
+        ByteArrayOutputStream out = captureStream();
+        when(reportDataMapper.cashFlowData(PERIOD)).thenReturn(new ArrayList<>());
+        when(reportDataMapper.cashSubjectBalance(PERIOD)).thenReturn(Map.of());
+
+        service.exportCashFlow(PERIOD, response);
+
+        File xlsx = tmp.resolve("现金流量表_" + PERIOD + ".xlsx").toFile();
+        try (FileOutputStream fos = new FileOutputStream(xlsx)) {
+            fos.write(out.toByteArray());
+        }
+
+        try (InputStream in = Files.newInputStream(xlsx.toPath());
+             Workbook wb = new XSSFWorkbook(in)) {
+            Sheet sheet = wb.getSheetAt(0);
+
+            assertEquals("现金流量表", cellText(sheet, 0, 0), "第0行标题");
+            assertEquals("期间：202601", cellText(sheet, 1, 0), "第1行期间");
+            // 3 列时不合并：制表人信息落在第 2 列（索引 2），且内容完整
+            String meta = cellText(sheet, 1, 2);
+            assertTrue(meta.contains("制表人："), "制表人信息应落在第2列，实际: " + meta);
+            assertTrue(meta.contains("制表日期："), "制表日期应存在，实际: " + meta);
+            assertTrue(meta.contains("审核人：待审核"), "审核人留白占位应存在，实际: " + meta);
+
+            assertEquals("项目", cellText(sheet, 2, 0));
+            assertEquals("行次", cellText(sheet, 2, 1));
+            assertEquals("本期金额", cellText(sheet, 2, 2));
+            // 13 行硬编码数据 → 总行数 2(抬头) + 1(表头) + 13
+            assertEquals(16, sheet.getLastRowNum() + 1, "现金流量表总行数应为 16");
+            assertEquals("经营活动现金流入", cellText(sheet, 3, 0), "首个数据行");
+            assertEquals("勾稽校验", cellText(sheet, 15, 0), "末行为勾稽校验");
+        }
+    }
+
+    /** 构造科目余额行。direction 可为 null（测方向列兜底值） */
+    private static Map<String, Object> balanceRow(String code, String name, String direction,
+                                                   long begin, long debit, long credit, long end) {
+        Map<String, Object> m = new HashMap<>();
+        m.put("code", code);
+        m.put("name", name);
+        m.put("direction", direction);
+        m.put("begin_balance", begin);
+        m.put("debit_total", debit);
+        m.put("credit_total", credit);
+        m.put("end_balance", end);
+        return m;
     }
 
     private static String cellText(Sheet sheet, int rowIdx, int colIdx) {

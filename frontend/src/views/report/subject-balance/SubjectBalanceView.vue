@@ -28,6 +28,14 @@
           </template>
         </el-table-column>
         <el-table-column prop="name" label="科目名称" min-width="180" />
+        <!-- P89-A 余额方向列：科目记账方向（借=借方记增加，贷=贷方记增加） -->
+        <el-table-column label="余额方向" width="90" align="center">
+          <template #default="{ row }">
+            <span class="direction-tag" :class="row.direction === 'credit' ? 'dir-credit' : 'dir-debit'">
+              {{ directionLabel(row.direction) }}
+            </span>
+          </template>
+        </el-table-column>
         <el-table-column prop="level" label="层级" width="60" align="center" />
         <el-table-column label="期初余额" width="140" align="right">
           <template #default="{ row }">
@@ -77,6 +85,9 @@ const visibleRows = computed(() =>
 )
 
 const fmtAmount = (v: any) => formatAmount(v)
+
+// 方向标签：借/贷；空值显示"—"（direction 缺失时不能默认判成借方）
+const directionLabel = (d: any) => (d === 'credit' ? '贷' : d === 'debit' ? '借' : '—')
 
 const fetchData = async () => {
   if (!query.period) return
@@ -134,3 +145,22 @@ onMounted(async () => {
   fetchData()
 })
 </script>
+
+<style scoped>
+/* P89-A 余额方向标签 */
+.direction-tag {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 3px;
+  font-size: 12px;
+  line-height: 1.4;
+}
+.dir-debit {
+  color: #c0392b;
+  background: rgba(192, 57, 43, 0.1);
+}
+.dir-credit {
+  color: #2563eb;
+  background: rgba(37, 99, 235, 0.1);
+}
+</style>

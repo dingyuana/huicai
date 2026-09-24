@@ -286,14 +286,16 @@ public class ReportServiceImpl implements ReportService {
         } catch (Exception ignored) {
             // 未登录上下文（如后台任务/测试）不阻断导出
         }
+        // 审核人：PRD-018 §4.2 指定"留白"——报表未建立强制审核流，此处占位提示待审核，
+        // 不伪造审核人，避免导出件被误认为已审。
         writer.writeCellValue(0, 1, "期间：" + period);
         // 制表人信息合并到最后一列；现金流量表仅 3 列，merge(2,2) 是单格合并，
         // POI 会抛 "Merged region must contain 2 or more cells"，故列数 < 4 时退化为不合并
+        String metaInfo = "制表人：" + operator + "　制表日期：" + LocalDate.now() + "　审核人：待审核";
         if (cols >= 4) {
-            writer.merge(1, 1, 2, cols - 1,
-                    "制表人：" + operator + "　制表日期：" + LocalDate.now(), false);
+            writer.merge(1, 1, 2, cols - 1, metaInfo, false);
         } else {
-            writer.writeCellValue(2, 1, "制表人：" + operator + "　制表日期：" + LocalDate.now());
+            writer.writeCellValue(2, 1, metaInfo);
         }
 
         int headerRow = 2;
@@ -313,16 +315,25 @@ public class ReportServiceImpl implements ReportService {
     @Override
     public void exportSubjectBalance(String period, HttpServletResponse response) throws IOException {
         List<Map<String, Object>> data = subjectBalanceTable(period);
-        String[] headers = {"科目编码", "科目名称", "方向", "期初余额", "本期借方", "本期贷方", "期末余额"};
+        String[] headers = {"科目编码", "科目名称", "余额方向", "期初余额", "本期借方", "本期贷方", "期末余额"};
         List<List<Object>> rows = new ArrayList<>();
         for (Map<String, Object> row : data) {
             rows.add(List.of(
-                row.get("code"), row.get("name"), row.get("direction"),
+                row.get("code"), row.get("name"), directionLabel(row.get("direction")),
                 row.get("begin_balance"), row.get("debit_total"),
                 row.get("credit_total"), row.get("end_balance")
             ));
         }
         writeExcel(response, "科目余额表", period, headers, rows);
+    }
+
+    /** 科目记账方向转中文；空值返回 "—"，与前端科目余额表方向列保持一致 */
+    private static String directionLabel(Object direction) {
+        if (direction == null) return "—";
+        String d = direction.toString();
+        if ("credit".equals(d)) return "贷";
+        if ("debit".equals(d)) return "借";
+        return "—";
     }
 
     @Override
