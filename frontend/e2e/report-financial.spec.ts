@@ -21,7 +21,14 @@ test.describe('财务报表 - 三大报表', () => {
     // Mock 当前期间接口（组件 onMounted 调用 resolveDefaultPeriod）
     await page.route(url => url.toString().includes('/api/v1/enterprise/current-period'), async route => {
       await route.fulfill({ status: 200, contentType: 'application/json',
-        body: JSON.stringify({ code: 200, msg: 'ok', data: { currentPeriod: '202607', startPeriod: '202601', hasDataPeriod: '202607' } })
+        body: JSON.stringify({ code: 200, msg: 'ok', data: { currentPeriod: '202607', latestClosedPeriod: '202607', startPeriod: '202601', hasDataPeriod: '202607' } })
+      })
+    })
+    // Mock 年初科目余额接口 —— fetchData 会并发请求 subjectBalance(ys)，
+    // 该路径不含 'balance-sheet' 故不被上方 mock 命中，会漏到真实后端。
+    await page.route(url => url.toString().includes('/base/report/v1/reports/subject-balance'), async route => {
+      await route.fulfill({ status: 200, contentType: 'application/json',
+        body: JSON.stringify({ code: 200, msg: 'ok', data: [] })
       })
     })
   }
@@ -52,7 +59,7 @@ test.describe('财务报表 - 三大报表', () => {
     })
 
     await page.goto(`${BASE}/report/balance-sheet`, { waitUntil: 'networkidle', timeout: 15000 })
-    await page.waitForTimeout(500)
+    await page.waitForURL('**/report/balance-sheet', { timeout: 10000 })
 
     await expect(page.locator('.page-title')).toHaveText('资产负债表', { timeout: 10000 })
     await expect(page.getByText('资产=负债+所有者权益, 平衡')).toBeVisible()
