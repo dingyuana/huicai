@@ -53,7 +53,8 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref, computed } from 'vue'
 import { resolveLatestClosedPeriod, prevPeriod } from '@/utils/period'
-import { incomeStatement } from '@/api/modules/report'
+import { ElMessage } from 'element-plus'
+import { incomeStatement, exportIncomeStatement } from '@/api/modules/report'
 import { amountClass, formatAmount } from '@/utils/format'
 import PeriodNavigator from '@/components/finance/PeriodNavigator.vue'
 
@@ -110,8 +111,17 @@ const fetchData = async () => {
   prevAvailable.value = !!previous
 }
 
-const onExport = () => {
-  // 导出功能待实现
+const onExport = async () => {
+  if (!query.period) {
+    ElMessage.warning('请先选择期间')
+    return
+  }
+  try {
+    await exportIncomeStatement(query.period)
+    ElMessage.success('导出成功')
+  } catch (e) {
+    // request 拦截器已统一弹错，这里不重复
+  }
 }
 
 onMounted(async () => {

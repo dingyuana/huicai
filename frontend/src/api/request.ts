@@ -25,6 +25,10 @@ request.interceptors.request.use((config) => {
 // 响应拦截器：统一错误处理
 request.interceptors.response.use(
   (response) => {
+    // P89-D：文件下载（Excel 导出）直接返回 blob，不走 R 结构解析
+    if (response.config.responseType === 'blob') {
+      return response.data
+    }
     // 后端 R 结构：{ code, msg, data }
     const body = response.data as ApiResponse
     if (body.code !== 200) {

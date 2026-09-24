@@ -5,6 +5,7 @@ import cn.hutool.poi.excel.ExcelUtil;
 import cn.hutool.poi.excel.ExcelWriter;
 import com.huicai.base.report.mapper.ReportDataMapper;
 import com.huicai.base.report.service.ReportService;
+import com.huicai.base.system.util.SecurityUtils;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -14,6 +15,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -267,18 +269,41 @@ public class ReportServiceImpl implements ReportService {
         return new BigDecimal(o.toString()).setScale(2, RoundingMode.HALF_UP);
     }
 
-    private void writeExcel(HttpServletResponse response, String fileName, String[] headers, List<List<Object>> rows) throws IOException {
+    private void writeExcel(HttpServletResponse response, String title, String period, String[] headers, List<List<Object>> rows) throws IOException {
         response.setContentType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+        String fileName = title + "_" + period;
         response.setHeader("Content-Disposition", "attachment;filename=" + URLEncoder.encode(fileName, StandardCharsets.UTF_8) + ".xlsx");
         ExcelWriter writer = ExcelUtil.getWriter(true);
-        writer.addHeaderAlias("col", fileName);
-        for (int i = 0; i < headers.length; i++) {
-            writer.writeCellValue(i, 0, headers[i]);
+        writer.addHeaderAlias("col", title);
+
+        // P89-D：导出抬头（报表标题 + 期间 + 制表人 + 制表日期）
+        int cols = headers.length;
+        writer.merge(0, 0, 0, cols - 1, title, false);
+
+        String operator = "未知";
+        try {
+            operator = SecurityUtils.getCurrentUsername();
+        } catch (Exception ignored) {
+            // 未登录上下文（如后台任务/测试）不阻断导出
+        }
+        writer.writeCellValue(0, 1, "期间：" + period);
+        // 制表人信息合并到最后一列；现金流量表仅 3 列，merge(2,2) 是单格合并，
+        // POI 会抛 "Merged region must contain 2 or more cells"，故列数 < 4 时退化为不合并
+        if (cols >= 4) {
+            writer.merge(1, 1, 2, cols - 1,
+                    "制表人：" + operator + "　制表日期：" + LocalDate.now(), false);
+        } else {
+            writer.writeCellValue(2, 1, "制表人：" + operator + "　制表日期：" + LocalDate.now());
+        }
+
+        int headerRow = 2;
+        for (int i = 0; i < cols; i++) {
+            writer.writeCellValue(i, headerRow, headers[i]);
         }
         for (int i = 0; i < rows.size(); i++) {
             List<Object> row = rows.get(i);
             for (int j = 0; j < row.size(); j++) {
-                writer.writeCellValue(j, i + 1, row.get(j));
+                writer.writeCellValue(j, headerRow + 1 + i, row.get(j));
             }
         }
         writer.flush(response.getOutputStream());
@@ -297,7 +322,7 @@ public class ReportServiceImpl implements ReportService {
                 row.get("credit_total"), row.get("end_balance")
             ));
         }
-        writeExcel(response, "科目余额表_" + period, headers, rows);
+        writeExcel(response, "科目余额表", period, headers, rows);
     }
 
     @Override
@@ -323,7 +348,7 @@ public class ReportServiceImpl implements ReportService {
             rows.add(List.of(e.get("name"), "", e.get("end_balance"), e.get("begin_balance")));
         }
         rows.add(List.of("负债+所有者权益合计", "", data.get("totalLiabEquity"), ""));
-        writeExcel(response, "资产负债表_" + period, headers, rows);
+        writeExcel(response, "资产负债表", period, headers, rows);
     }
 
     @Override
@@ -339,7 +364,7 @@ public class ReportServiceImpl implements ReportService {
         rows.add(List.of("三、营业利润", "5", data.get("operatingProfit"), data.get("cumulativeOperatingProfit")));
         rows.add(List.of("减：其他支出", "6", data.get("otherExpense"), data.get("cumulativeOtherExpense")));
         rows.add(List.of("四、利润总额", "7", data.get("totalProfit"), data.get("cumulativeProfit")));
-        writeExcel(response, "利润表_" + period, headers, rows);
+        writeExcel(response, "利润表", period, headers, rows);
     }
 
     @Override
@@ -366,6 +391,6 @@ public class ReportServiceImpl implements ReportService {
             rows.add(List.of("勾稽校验", "13", "⚠ 差异 " + data.get("cashCheckDiff")
                     + "（期末现金计算值 vs 科目余额 1001+1002）"));
         }
-        writeExcel(response, "现金流量表_" + period, headers, rows);
+        writeExcel(response, "现金流量表", period, headers, rows);
     }
 }

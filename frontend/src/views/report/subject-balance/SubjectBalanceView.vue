@@ -51,7 +51,7 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { resolveLatestClosedPeriod } from '@/utils/period'
 import { ElMessage } from 'element-plus'
-import { subjectBalance } from '@/api/modules/report'
+import { subjectBalance, exportSubjectBalance } from '@/api/modules/report'
 import { amountClass, formatAmount } from '@/utils/format'
 import PeriodNavigator from '@/components/finance/PeriodNavigator.vue'
 
@@ -91,8 +91,17 @@ const summaryRow = ({ columns, data }: any) => {
   return sums
 }
 
-const onExport = () => {
-  ElMessage.info('导出功能: 复制表格内容到 Excel')
+const onExport = async () => {
+  if (!query.period) {
+    ElMessage.warning('请先选择期间')
+    return
+  }
+  try {
+    await exportSubjectBalance(query.period)
+    ElMessage.success('导出成功')
+  } catch (e) {
+    // request 拦截器已统一弹错，这里不重复
+  }
 }
 
 onMounted(async () => {
