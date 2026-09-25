@@ -171,10 +171,14 @@ function isSqlKeyword(word) {
  * 返回小写列名数组。
  */
 function extractColumnRefs(sql) {
-  // 清理：移除注释、字符串字面量、参数占位符、数字
+  // 清理：移除注释、MyBatis 动态标签、字符串字面量、参数占位符、数字
   let cleaned = sql
     .replace(/--[^\n]*/g, ' ')
     .replace(/\/\*[\s\S]*?\*\//g, ' ')
+    // @Select(""" ... """) 注解里嵌 MyBatis XML 标签（<script>/<if test="...">），
+    // 不剥离会让标签名和 test 属性里的参数名（script/test/scope/vendorId/startDate）
+    // 被当成列名误报。XML Mapper 路径走 extractXmlSql 已剥离，此处补上注解路径。
+    .replace(/<[^>]+>/g, ' ')
     .replace(/'[^']*'/g, ' ')
     .replace(/#\{[^}]+\}/g, ' ')
     .replace(/\$\{[^}]+\}/g, ' ')
@@ -217,6 +221,9 @@ function extractColumnRefs(sql) {
     for (const item of items) {
       const parts = item.trim().split(/\s+/);
       let col = parts[0];
+      // 聚合/窗口表达式（SUM(total_amount) 等）不是列引用，跳过，
+      // 否则 split 会把 "SUM(total_amount" 截成假列名
+      if (col.includes('(') || col.includes(')')) continue;
       if (col.includes('.')) col = col.split('.')[1]; // 去掉表别名前缀
       if (col && !isSqlKeyword(col) && !/^\d/.test(col)) {
         refs.add(col.toLowerCase());
@@ -231,6 +238,8 @@ function extractColumnRefs(sql) {
     const items = groupByMatch[1].split(',');
     for (const item of items) {
       let col = item.trim().split(/\s+/)[0];
+      // 同 ORDER BY：表达式不是列引用
+      if (col.includes('(') || col.includes(')')) continue;
       if (col.includes('.')) col = col.split('.')[1];
       if (col && !isSqlKeyword(col) && !/^\d/.test(col) && !selectAliases.has(col.toLowerCase())) {
         refs.add(col.toLowerCase());
@@ -262,11 +271,15 @@ function extractSelectAliases(sql) {
  */
 function extractTables(sql) {
   const tables = [];
-  // 主表：FROM 子句后的第一个 t_ 表
-  const fromMatch = sql.match(/\bFROM\s+(?:ONLY\s+)?(\w+)/i);
-  if (fromMatch) {
-    const table = fromMatch[1];
-    if (table.startsWith('t_')) tables.push(table);
+  // 主表：FROM 子句后的 t_ 表
+  // 用 matchAll 收集所有 FROM（含子查询），单次 match 只取第一个，
+  // 会漏掉 (SELECT ... FROM t_voucher_entry ...) 里的表，
+  // 导致列只归属主表而误报"表无此列"
+  const fromRe = /\bFROM\s+(?:ONLY\s+)?(\w+)/gi;
+  const fromMatches = [...sql.matchAll(fromRe)];
+  for (const fm of fromMatches) {
+    const table = fm[1];
+    if (table.startsWith('t_') && !tables.includes(table)) tables.push(table);
   }
   // UPDATE 表
   const updateMatch = sql.match(/\bUPDATE\s+(\w+)\s+SET\b/i);
