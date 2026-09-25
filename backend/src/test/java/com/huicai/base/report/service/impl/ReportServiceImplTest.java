@@ -275,7 +275,7 @@ class ReportServiceImplTest {
         // P88①：本年利润(未结转 6001 → currentYearProfit=10000) 以合成行进入权益区；
         // 但绝不应出现 6001 自身名义的行（P69 不变量仍成立）
         assertEquals(1, items(r, "equity").size(), "未结转本年利润应产生 1 行合成权益行");
-        assertEquals("本年利润(含未结转)", items(r, "equity").get(0).get("name"));
+        assertEquals("未分配利润", items(r, "equity").get(0).get("name"));
         assertEquals(new BigDecimal("10000.00"), items(r, "equity").get(0).get("end_balance"));
     }
 
@@ -488,7 +488,7 @@ class ReportServiceImplTest {
         // 本年利润 = 6603 未结转 -27（profit4103=0, currentPeriodProfit=-27）
         List<Map<String, Object>> equity = items(r, "equity");
         boolean found = equity.stream().anyMatch(e ->
-                "本年利润(含未结转)".equals(e.get("name"))
+                "未分配利润".equals(e.get("name"))
                         && new BigDecimal("-27.00").equals(e.get("end_balance")));
         assertTrue(found, "P88① 本年利润-27 必须以显式行出现在权益区（否则肉眼加总≠合计）");
         // 逐行加总 = 权益合计

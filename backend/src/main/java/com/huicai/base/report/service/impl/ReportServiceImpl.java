@@ -46,6 +46,7 @@ public class ReportServiceImpl implements ReportService {
         BigDecimal totalEquityExProfit = BigDecimal.ZERO;
         BigDecimal costInInventory = BigDecimal.ZERO;
         BigDecimal profit4103 = BigDecimal.ZERO;
+        BigDecimal profit4104 = BigDecimal.ZERO;
         BigDecimal currentPeriodProfit = BigDecimal.ZERO;
         // P92-B: 流动/非流动/其他三分小计。"其他"是合法报送分类（如 2701 专项储备按准则属权益
         // 但科目编号以 2 开头），必须参与小计，否则小计 ≠ 总计（P92B-BD2 勾稽）。
@@ -101,6 +102,8 @@ public class ReportServiceImpl implements ReportService {
                     BigDecimal signed = "credit".equals(direction) ? endBalance : endBalance.negate();
                     if (code.equals("4103")) {
                         profit4103 = signed;
+                    } else if (code.equals("4104")) {
+                        profit4104 = signed;
                     } else {
                         equity.add(row);
                         totalEquityExProfit = totalEquityExProfit.add(signed);
@@ -149,20 +152,21 @@ public class ReportServiceImpl implements ReportService {
             throw new IllegalStateException("资产负债表流动分类小计与总计不一致");
         }
 
-        BigDecimal currentYearProfit = profit4103.add(currentPeriodProfit);
+        BigDecimal currentYearProfit = profit4103.add(profit4104).add(currentPeriodProfit);
         BigDecimal totalEquity = totalEquityExProfit.add(currentYearProfit);
         BigDecimal totalLiabEquity = totalLiab.add(totalEquity);
         BigDecimal diff = totalAssets.subtract(totalLiabEquity).setScale(2, RoundingMode.HALF_UP);
         boolean balanced = diff.abs().compareTo(new BigDecimal("0.01")) < 0
                 && unbalancedItems.isEmpty();
 
-        // P88①: 本年利润(4103 余额 + 当期未结转 6xx 净额)必须以显式行出现在权益区，
-        // 否则前端逐行加总 ≠ 权益合计（旧版只算进 totalEquity，用户肉眼对不上差额）。
-        // 0 值时不追加（报表惯例：本年利润 0 不占行，避免噪音）。
+        // P88①: 未分配利润(4103 本年利润 + 4104 利润分配-未分配利润 + 当期未结转 6xx 净额)
+        // 必须以显式行出现在权益区，否则前端逐行加总 ≠ 权益合计
+        // （旧版只算进 totalEquity，用户肉眼对不上差额）。
+        // 0 值时不追加（报表惯例：未分配利润 0 不占行，避免噪音）。
         if (currentYearProfit.signum() != 0) {
             Map<String, Object> cypRow = new LinkedHashMap<>();
             cypRow.put("code", "4103");
-            cypRow.put("name", "本年利润(含未结转)");
+            cypRow.put("name", "未分配利润");
             cypRow.put("direction", currentYearProfit.signum() < 0 ? "debit" : "credit");
             cypRow.put("begin_balance", BigDecimal.ZERO);
             cypRow.put("end_balance", currentYearProfit);
@@ -461,7 +465,7 @@ public class ReportServiceImpl implements ReportService {
     public void exportBalanceSheet(String period, HttpServletResponse response) throws IOException {
         Map<String, Object> data = balanceSheet(period);
         // P92-B: 小计年初值与前端同口径——取年初期间 balanceSheet() 的返回值，
-        // 而不是科目行 begin_balance 相加（后者含本年利润、成本在库存等口径差异，前端同样不做此计算）。
+        // 而不是科目行 begin_balance 相加（后者含未分配利润、成本在库存等口径差异，前端同样不做此计算）。
         Map<String, Object> ysData = null;
         String yearStart = period.substring(0, 4) + "01";
         try {
@@ -499,7 +503,7 @@ public class ReportServiceImpl implements ReportService {
                 ysData == null ? "" : ysData.get("otherLiabilities")));
         @SuppressWarnings("unchecked")
         List<Map<String, Object>> equity = (List<Map<String, Object>>) data.get("equity");
-        // P88①：权益区含"本年利润(含未结转)"显式行，与前端逐行加总口径一致
+        // P88①：权益区含"未分配利润"显式行，与前端逐行加总口径一致
         for (Map<String, Object> e : equity) {
             rows.add(List.of(e.get("name"), "", e.get("end_balance"), e.get("begin_balance")));
         }
