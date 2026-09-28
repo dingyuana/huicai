@@ -57,6 +57,9 @@ class OpeningContinuityRealDBTest extends AbstractMapperTest {
      */
     @BeforeEach
     void alignIdentitySequences() {
+        // 本类用独立企业 ENT_ID 造数，数据权限拦截器按上下文过滤，
+        // 故上下文须与造数企业一致，否则期初/期末查询返回 0 行
+        useEnterprise(ENT_ID);
         align("t_subject_id_seq", "t_subject");
         align("t_voucher_id_seq", "t_voucher");
         align("t_voucher_entry_id_seq", "t_voucher_entry");

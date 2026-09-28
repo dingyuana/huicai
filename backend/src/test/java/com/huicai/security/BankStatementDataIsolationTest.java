@@ -393,7 +393,9 @@ public class BankStatementDataIsolationTest extends AbstractMapperTest {
     @Test
     @DisplayName("EnterpriseContextHolder未设置时，查询返回所有企业数据（超级管理员模式）")
     void interceptor_企业隔离_EnterpriseContextHolder未设置_不拦截() {
-        // 不设置 EnterpriseContextHolder
+        // 依赖「无企业上下文 → 拦截器放行全部」，基类 AbstractMapperTest 已默认
+        // 设置 enterpriseId=1，故必须显式清空上下文才能测到超级管理员语义
+        EnterpriseContextHolder.clear();
         BankStatementEntity bsA = createStatement(ENTERPRISE_A, "INCOME", new BigDecimal("1000"));
         BankStatementEntity bsB = createStatement(ENTERPRISE_B, "INCOME", new BigDecimal("2000"));
 

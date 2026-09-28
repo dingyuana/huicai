@@ -8,6 +8,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.testcontainers.containers.PostgreSQLContainer;
 
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
+import com.huicai.common.context.EnterpriseContextHolder;
 import com.huicai.sme.cash.entity.BankAccountEntity;
 import com.huicai.sme.cash.mapper.BankAccountMapper;
 
@@ -179,5 +180,58 @@ public abstract class AbstractMapperTest {
     @org.junit.jupiter.api.BeforeEach
     void resetVendorCache() {
         vendorIdCache.clear();
+    }
+
+    // ==================== 企业上下文（REQ-2026-116 / 慢测 C 类）====================
+
+    /**
+     * 测试统一使用的企业 ID。绝大多数慢测都只关心单企业场景，
+     * 且插入实体时往往不显式赋 {@code enterprise_id}。
+     */
+    protected static final Long DEFAULT_ENTERPRISE_ID = 1L;
+
+    /**
+     * 为每个测试方法设置默认企业上下文。
+     *
+     * <p><b>为什么必须在基类统一设置（慢测 C 类 90+ 项同根因）</b>：
+     * V102~V105 迁移给 60+ 张表补了 {@code enterprise_id BIGINT NOT NULL} 且
+     * <b>没有 DB 默认值</b>，而 {@code MyMetaObjectHandler.insertFill} 仅在
+     * {@code EnterpriseContextHolder.get() != null} 时才回填该列。测试环境无
+     * 登录态 → 上下文为 null → 不回填 → 报
+     * {@code null value in column "enterprise_id" ... violates not-null constraint}。
+     * 逐个测试类补 {@code setEnterpriseId()} 既重复又易漏。
+     *
+     * <p>副作用：{@code EnterpriseDataPermissionInterceptor} 会给 SELECT 注入
+     * {@code enterprise_id = 1} 条件。**确实需要「无上下文放行」语义的用例
+     * （如 {@code DataIsolationAuditTest} 的「漏洞确认」系列）必须在方法体内
+     * 显式 {@code EnterpriseContextHolder.clear()}**，本基类的默认值不适用于它们。
+     *
+     * <p>子类 {@code @BeforeEach} 在本方法之后执行，故子类仍可覆盖为企业 B 等。
+     */
+    @org.junit.jupiter.api.BeforeEach
+    void setDefaultEnterpriseContext() {
+        EnterpriseContextHolder.set(DEFAULT_ENTERPRISE_ID);
+    }
+
+    /**
+     * ThreadLocal 不随 {@code @Transactional} 回滚，必须在每个测试后清理，
+     * 否则同一线程内的后续测试会继承上一个测试的企业上下文。
+     */
+    @org.junit.jupiter.api.AfterEach
+    void clearEnterpriseContext() {
+        EnterpriseContextHolder.clear();
+    }
+
+    /**
+     * 把当前测试的企业上下文切换为指定企业。
+     *
+     * <p>供那些使用<b>独立企业 ID</b>（而非 {@link #DEFAULT_ENTERPRISE_ID}）造数的
+     * 测试类调用：数据权限拦截器按上下文过滤，若上下文与造数用的
+     * {@code enterprise_id} 不一致，查询会返回 0 行。
+     * 子类 {@code @BeforeEach} 在 {@link #setDefaultEnterpriseContext()} 之后执行，
+     * 因此调用本方法即可覆盖基类默认值。
+     */
+    protected void useEnterprise(Long enterpriseId) {
+        EnterpriseContextHolder.set(enterpriseId);
     }
 }

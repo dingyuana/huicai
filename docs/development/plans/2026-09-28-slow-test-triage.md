@@ -1,10 +1,11 @@
 # 慢测全量 128 项失败 — 分诊清单
 
 > **创建日期**：2026-09-28
-> **状态**：🟡 分诊完成；**A 类 + D 类已修复并验证**（36 项），B/C/E 待执行
+> **状态**：🟡 分诊完成；**A / D / D5(C类主体) 已修复并验证**（73 项），剩余 55 项待修
 > **数据来源**：`mvn test -DexcludedGroups=`（含 slow 组）全量运行
 > **基线**：`main @ 3ab1a606`｜快测 1733/0 failures 正常，慢测 1980 中 **16 Failures + 112 Errors**
-> **A+D 修复后**：`main`（本批）｜慢测 **1984 中 1 Failure + 91 Errors = 92 项**（修复 36 项）
+> **A+D 修复后**：慢测 **1984 中 1 Failure + 91 Errors = 92 项**
+> **D5 修复后**：慢测 **1984 中 7 Failures + 48 Errors = 55 项 / 33 类**
 > **重要前提**：本清单**不含任何代码修改**。这些缺陷此前被 Testcontainers 连接错误完全掩盖
 > （`AbstractMapperTest` 容器按类重建导致 `Connection refused`），REQ-108 修复后首次真实执行暴露。
 > **性质**：全部为**既有测试数据/断言缺陷**，非生产代码缺陷
@@ -209,7 +210,37 @@ idx_business_doc_voucher_no    idx_arap_settlement_voucher_no
 | D2 | B/C 类是否接受「测试改用随机编码 + 补种子工厂」作为统一修法 | ⭐ 接受，已在 P99 验证该范式可行 |
 | D3 | 4b 的 30 个 E2E/Integration 类是否本轮一并修 | ⭐ **单独排期**，不与 A~D 混做（E2E 前置数据量大，易掩盖其它问题） |
 | D4 | E 类 `SystemClearControllerIntegrationTest` 若确为行为差异，是否升级为新缺陷 | ⭐ 先读实现；若接口语义与断言不符，另立需求 |
-| **D5** | **剩余 92 项 C 类是否在 `AbstractMapperTest` 统一设 `EnterpriseContextHolder.set(1L)`？** 90+ 项同根因（`enterprise_id` NOT NULL），单点修复可一次性消解大半；但会同时让数据权限拦截器给**所有**慢测 SELECT 注入 `enterprise_id = 1` 条件，可能影响 `BankStatementDataIsolationTest` 等**故意切换 enterpriseId 验证隔离**的用例 | ⭐ **建议做，但必须同批回归数据隔离 3 个测试类**（它们自带 `@BeforeEach/@AfterEach` 管理上下文，理论上不受影响；需实测确认）。属测试基建语义变更，按铁律 #10 需老丁拍板 |
+| **D5** | ~~剩余 92 项 C 类是否在 `AbstractMapperTest` 统一设 `EnterpriseContextHolder.set(1L)`？~~ | ✅ **已拍板并实施**（REQ-2026-116）：92 → **55 项**，`enterprise_id` 根因消失。两处副作用已处理（详见 §〇 D5 小节） |
+
+---
+
+## 〇之二、D5 实施结果（2026-09-29 已完成，REQ-2026-116）
+
+**做法**：`AbstractMapperTest` 加 `@BeforeEach setDefaultEnterpriseContext()`（设 `DEFAULT_ENTERPRISE_ID=1`）
+与 `@AfterEach clearEnterpriseContext()`，并提供 `useEnterprise(Long)` 供子类切换。
+
+**为什么单点修复能消解 90+ 项**：`enterprise_id` 自 V102~V105 起 `NOT NULL` 且**无 DB 默认值**，
+`MyMetaObjectHandler.insertFill` 仅在 `EnterpriseContextHolder.get() != null` 时才回填该列。
+测试无登录态 → 上下文为 null → 不回填 → 整片 `null value in column "enterprise_id"`。
+
+**两处必须处理的副作用**（若忽略会直接造成回归）
+
+| 副作用 | 现象 | 处置 |
+|--------|------|------|
+| 拦截器给所有慢测 SELECT 注入 `enterprise_id = 1` | 7 个依赖「无上下文→放行全部」的用例转红 | `DataIsolationAuditTest` 6 个「漏洞确认」用例 + `BankStatementDataIsolationTest` 1 个「超级管理员」用例，方法体内显式 `EnterpriseContextHolder.clear()`，并留注释说明与基类默认值相反 |
+| 使用独立 `ENT_ID` 造数的报表/余额类数据被过滤 | 4 个类查询返回 0 行 | `IncomeStatementCaliberRealDBTest`(9904)、`AuxiliaryDetailRealDBTest`(9905)、`CashSubjectBalanceRealDBTest`(9902)、`OpeningContinuityRealDBTest`(9903) 改调 `useEnterprise(ENT_ID)` |
+
+**结果**：慢测 **92 → 55 项 / 33 类**；`enterprise_id` 从根因 Top 榜**彻底消失**；
+全量慢测**无新增红项**；快测 1733 / 0 Failures 回归通过。
+
+### 剩余 55 项的三大根因（可批量处理）
+
+| 根因 | 次数 | 涉及 |
+|------|------|------|
+| 硬编码 `vendorId=1` / `customerId=1` 悬空外键（`fk_input_invoice_vendor` / `fk_output_invoice_customer`） | 45 | `SalesFlowE2ETest`(6)、`InputFlowE2ETest`(5) 等 → 改用 `ensureVendor()` / 补 `ensureCustomer()` |
+| `t_bank_statement.tx_type` NOT NULL 未赋值 + `fk_statement_account` 悬空 | 35 | `BankStatementAuditIntegrationTest`(3) 等 → 补 `txType` + `ensureBankAccount()` |
+| `t_business_doc` 用发票状态（`PENDING_CONFIRM`/`CONFIRMED`）违反 `chk_doc_status` | 15 | 合法值：DRAFT/SUBMITTED/APPROVED/VOUCHERED/PARTIALLY_RECONCILED/FULLY_RECONCILED/CLOSED/REJECTED/REVERSED |
+| 与 Flyway 种子撞码（`uq_role_menu`/`t_subject_pkey`/`t_role_pkey`/`uq_user_role`…） | 40 | B 类 11 项，已有 `alignIdentitySequences()` 范式可复用 |
 
 ---
 
