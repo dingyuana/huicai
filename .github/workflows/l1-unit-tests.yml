@@ -15,10 +15,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up JDK 17
+      # 🔥 修改1：JDK 从 17 升级为 21，与 pom.xml 的 release 21 保持一致
+      - name: Set up JDK 21
         uses: actions/setup-java@v4
         with:
-          java-version: '17'
+          java-version: '21'
           distribution: 'temurin'
           cache: maven
 
@@ -27,7 +28,8 @@ jobs:
           cd backend
           mvn clean test jacoco:report
         env:
-          MAVEN_OPTS: "-XX:+UseCompressedOops -X2g"
+          # 🔥 修改2：修正 -X2g 拼写错误为 -Xmx2g
+          MAVEN_OPTS: "-XX:+UseCompressedOops -Xmx2g"
 
       # === 分支覆盖率检查（利用 pom.xml 中配置的 jacoco:check 门槛） ===
       - name: Check Branch Coverage (≥70%)
@@ -35,7 +37,8 @@ jobs:
           cd backend
           mvn jacoco:check
         env:
-          MAVEN_OPTS: "-XX:+UseCompressedOops -X2g"
+          # 🔥 修改2：同步修正 -X2g 拼写错误
+          MAVEN_OPTS: "-XX:+UseCompressedOops -Xmx2g"
 
       - name: Upload JaCoCo Report
         uses: actions/upload-artifact@v4
@@ -57,6 +60,8 @@ jobs:
         with:
           node-version: '20'
           cache: 'npm'
+          # 🔥 修改3：明确指定依赖锁文件在 frontend 子目录下
+          cache-dependency-path: 'frontend/package-lock.json'
 
       - name: Install Dependencies
         run: cd frontend && npm ci --prefer-offline

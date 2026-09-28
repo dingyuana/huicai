@@ -2,8 +2,12 @@ name: Nightly Full E2E Suite
 
 on:
   schedule:
-    - cron: '0 2 * * *'  # 每天北京时间 10:00
+    - cron: '35 18 * * *'  # 每天北京时间 2:35
   workflow_dispatch:
+
+# 🔥 修改1：最小权限声明
+permissions:
+  contents: read
 
 jobs:
   e2e-full:
@@ -13,28 +17,32 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup Browser Dependencies
-        run: |
-          apt-get update && apt-get install -y \
-            libgconf2 libglib2.0-0 libgtk-3-0 libnss3 libx11-6 \
-            libxcomposite1 libxdamage1 libextgrab1 libxfixes3 \
-            libxi6 libxrandr2 libxss1 libxtst6 x11-utils || true
+      # 🔥 修改2：使用 setup-node 官方 Action，替代手动 curl 安装 Node
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          # 🔥 修改3：明确指定 lock 文件位置（根据实际目录结构调整）
+          cache-dependency-path: 'e2e/package-lock.json'
 
-      - name: Install Node & Playwright
+      # 🔥 修改4：移除无效/不存在的包，改用 playwright install 自动处理系统依赖
+      - name: Install dependencies & Playwright browsers
+        working-directory: e2e
         run: |
-          curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
-          apt-get install -y nodejs
-          cd /data/disk/huicai/e2e
           npm ci --prefer-offline
-          npx playwright install --with-deps
+          npx playwright install --with-deps chromium
 
       - name: Run Full E2E Suite
-        working-directory: /data/disk/huicai/e2e
-        run: npx playwright test --reporter=line,jupyter
+        working-directory: e2e
+        timeout-minutes: 20
+        # 🔥 修改5：修正 reporter（jupyter 不存在），使用 list + html
+        run: npx playwright test --reporter=list,html
         env:
           BASE_URL: ${{ secrets.STAGING_URL }}
           AUTH_TOKEN: ${{ secrets.E2E_TEST_TOKEN }}
 
+      # 🔥 修改6：修正上传路径，使用相对仓库根目录的真实路径
       - name: Upload E2E Report
         if: always()
         uses: actions/upload-artifact@v4
@@ -42,13 +50,18 @@ jobs:
           name: e2e-full-report
           path: |
             e2e/test-results/**
-            e2e/report/**
-            e2e/videos/*
-            e2e/snapshots/*
+            e2e/playwright-report/**
+            e2e/videos/**
+            e2e/snapshots/**
           retention-days: 7
+          if-no-files-found: warn
 
+      # 🔥 修改7：让失败通知真正发出（可选：接入 Slack/DingTalk Webhook）
       - name: Notify on Failure
         if: failure()
         run: |
-          echo "🚨 Nightly E2E FAILED! Check: ${{ github.repository }}/actions/runs/${{ github.run_id }}"
-          # 此处可接入 Slack/DingTalk/邮件通知
+          echo "::error::🚨 Nightly E2E FAILED! Check: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          # 如果需要接入 Slack/DingTalk，取消下面注释并配置对应的 Secret
+          # curl -X POST -H 'Content-Type: application/json' \
+          #   -d '{"text":"🚨 Nightly E2E FAILED: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"}' \
+          #   ${{ secrets.SLACK_WEBHOOK_URL }}

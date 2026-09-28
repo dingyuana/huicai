@@ -4,16 +4,22 @@ on:
   push:
     branches: [ main, develop ]
     paths:
-      - 'docs/specs/*.md'
+      # 🔥 修改1：使用 ** 以匹配 docs/specs 下所有子目录中的 .md 文件
+      - 'docs/specs/**/*.md'
   pull_request:
     branches: [ main, develop ]
     paths:
-      - 'docs/specs/*.md'
+      - 'docs/specs/**/*.md'
+
+# 🔥 修改2：遵循最小权限原则
+permissions:
+  contents: read
 
 jobs:
   validate-spec-contracts:
     name: 校验 SPEC 契约文件
     runs-on: ubuntu-latest
+    timeout-minutes: 10   # 🔥 修改3：增加超时限制，避免卡死
     steps:
       - uses: actions/checkout@v4
 
@@ -21,9 +27,19 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+          cache: 'pip'   # 🔥 修改4：启用 pip 缓存，加速后续构建
 
       - name: 安装 PyYAML
-        run: pip install pyyaml
+        # 🔥 修改5：固定版本，避免上游不兼容更新导致 CI 突然失败
+        run: pip install pyyaml==6.0.2
+
+      - name: 检查校验脚本是否存在
+        # 🔥 修改6：提前检查脚本文件，给出明确错误提示
+        run: |
+          if [ ! -f scripts/validate_spec_contract.py ]; then
+            echo "::error::scripts/validate_spec_contract.py 文件不存在，请确认仓库结构"
+            exit 1
+          fi
 
       - name: 校验所有 SPEC 契约
         run: |

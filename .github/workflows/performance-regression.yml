@@ -16,6 +16,10 @@ on:
           - settlement
           - tax
 
+# 🔥 修改1：增加最小权限控制
+permissions:
+  contents: read
+
 jobs:
   perf-baseline:
     name: 性能基线采集 (k6)
@@ -24,11 +28,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install k6
-        run: |
-          curl -s https://k6.io/release/v1/deb/release.key | sudo apt-key add -
-          echo "deb https://k6.io/release/deb $(lsb_release -sc) main" | sudo tee /etc/apt/sources.list.d/k6.list
-          sudo apt-get update && sudo apt-get install -y k6
+      # 🔥 修改2：使用官方 Action 安装 k6，替代已废弃的 apt-key 方式
+      - name: Setup k6
+        uses: grafana/setup-k6-action@v1
 
       - name: Run k6 performance tests against staging
         working-directory: backend/scripts
@@ -45,7 +47,7 @@ jobs:
           TEST_FILE="perf-${SCENARIO}.js"
 
           if [ ! -f "$TEST_FILE" ]; then
-            echo "Test file $TEST_FILE not found, using default voucher scenario"
+            echo "::warning::Test file $TEST_FILE not found, using default voucher scenario"
             TEST_FILE="perf-voucher.js"
           fi
 
@@ -60,6 +62,7 @@ jobs:
           BASE_URL: ${{ secrets.STAGING_URL }}
           API_TOKEN: ${{ secrets.STAGING_API_TOKEN }}
 
+      # 🔥 修改3：使用 jq 健壮地解析 k6 指标，替换原来脆弱的 Python 解析逻辑
       - name: Validate performance thresholds
         working-directory: backend/scripts
         run: |
@@ -69,18 +72,24 @@ jobs:
             exit 1
           fi
 
-          # Check thresholds: any endpoint p95 > 3000ms is a failure
           THRESHOLD_MS=3000
           FAILED=0
+
+          # 使用 jq 提取所有包含 p(95) 的指标键值对
+          # k6 导出的格式为: { "metrics": { "http_req_duration": { "values": { "p(95)": 123.45 } } } }
+          METRICS=$(jq -r '.metrics | to_entries[] | select(.value.values."p(95)" != null) | "\(.key):\(.value.values."p(95)")"' metrics.json)
+
+          if [ -z "$METRICS" ]; then
+            echo "::warning::No p(95) metrics found in metrics.json"
+          fi
+
           while IFS=: read -r key value; do
-            if echo "$key" | grep -q "p95"; then
-              int_val=$(echo "$value" | grep -oE '[0-9]+' | head -1)
-              if [ -n "$int_val" ] && [ "$int_val" -gt "$THRESHOLD_MS" ]; then
-                echo "::warning file=metrics.json::$key = ${int_val}ms exceeds threshold ${THRESHOLD_MS}ms"
-                FAILED=1
-              fi
+            int_val=$(echo "$value" | grep -oE '[0-9]+' | head -1)
+            if [ -n "$int_val" ] && [ "$int_val" -gt "$THRESHOLD_MS" ]; then
+              echo "::warning file=metrics.json::$key = ${int_val}ms exceeds threshold ${THRESHOLD_MS}ms"
+              FAILED=1
             fi
-          done < <(cat metrics.json | python3 -c "import sys,json; [print(f'{k}: {v}') for k,v in json.load(sys.stdin).get('metrics',{}).items() if 'p95' in k.lower()] 2>/dev/null || cat metrics.json")
+          done <<< "$METRICS"
 
           if [ "$FAILED" -eq 1 ]; then
             echo "::error::One or more endpoints exceed performance threshold"

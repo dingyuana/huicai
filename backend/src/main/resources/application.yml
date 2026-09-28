@@ -115,6 +115,18 @@ ai:
     top-p: 0.95
     connect-timeout: 30
     read-timeout: 120
+  # AMD Radeon AI 配置 (OpenAI 兼容, 主模型 MiMo-V2.6-Flash 价格档最低且支持视觉)
+  # 列表内无 free:true 模型; api-key 只从环境变量 AMD_RADEON_API_KEY 注入，不给默认值（AGENTS §7-3）
+  amd:
+    enabled: true
+    api-key: ${AMD_RADEON_API_KEY:}
+    base-url: https://developer.amd.com.cn/radeon/api/v1
+    model: MiMo-V2.6-Flash
+    max-tokens: 8192
+    temperature: 1.00
+    top-p: 0.95
+    connect-timeout: 30
+    read-timeout: 120
 
 # P31: 发票导入后自动执行全流程 (审核发票→审核业务单→生凭证)
 # 默认 false (不影响现有流程), 开启后导入完成立即异步处理

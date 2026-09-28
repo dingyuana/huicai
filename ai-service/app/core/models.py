@@ -31,8 +31,8 @@ class LLMClient:
     LLM 调用封装。
 
     策略：
-    1. 优先走 NVIDIA API（当前主模型 minimaxai/minimax-m3）
-    2. NVIDIA 不可用时降级到环境变量配置的 fallback 模型
+    1. 优先走 AMD Radeon API（主模型 MiMo-V2.6-Flash）
+    2. AMD 不可用时降级到 NVIDIA API（minimaxai/minimax-m3）
     3. 都不可用时返回 None（调用方自行规则兜底）
     """
 
@@ -47,29 +47,43 @@ class LLMClient:
             return
         try:
             from langchain_openai import ChatOpenAI
-            from langchain.globals import set_verbose
+        except ImportError:
+            logger.warning("langchain-openai 未安装，LLM 功能不可用")
+            self._initialized = True
+            return
 
-            nvidia_base_url = getattr(settings, "nvidia_base_url", "https://integrate.api.nvidia.com/v1")
-            nvidia_api_key = getattr(settings, "nvidia_api_key", "")
-            nvidia_model = getattr(settings, "nvidia_model", "minimaxai/minimax-m3")
-
-            if nvidia_api_key:
+        try:
+            if getattr(settings, "amd_api_key", ""):
                 self._model = ChatOpenAI(
-                    model=nvidia_model,
-                    api_key=nvidia_api_key,
-                    base_url=nvidia_base_url,
+                    model=getattr(settings, "amd_model", "MiMo-V2.6-Flash"),
+                    api_key=settings.amd_api_key,
+                    base_url=getattr(settings, "amd_base_url", "https://developer.amd.com.cn/radeon/api/v1"),
                     temperature=0.1,
                     max_tokens=1024,
                 )
-                logger.info("LLM 主模型初始化: {} via NVIDIA", nvidia_model)
+                logger.info("LLM 主模型初始化: {} via AMD Radeon", settings.amd_model)
             else:
-                logger.warning("NVIDIA API key 未配置，LLM 功能不可用")
+                logger.warning("AMD API key 未配置，尝试 NVIDIA fallback")
+
+            if self._model is None and getattr(settings, "nvidia_api_key", ""):
+                self._fallback_model = ChatOpenAI(
+                    model=getattr(settings, "nvidia_model", "minimaxai/minimax-m3"),
+                    api_key=settings.nvidia_api_key,
+                    base_url=getattr(settings, "nvidia_base_url", "https://integrate.api.nvidia.com/v1"),
+                    temperature=0.1,
+                    max_tokens=1024,
+                )
+                logger.info("LLM fallback 初始化: {} via NVIDIA", settings.nvidia_model)
+            elif self._model is None:
+                logger.warning("AMD/NVIDIA API key 均未配置，LLM 功能不可用")
+
+            if self._model is None and self._fallback_model is not None:
+                self._model = self._fallback_model
 
             self._initialized = True
-        except ImportError:
-            logger.warning("langchain-openai 未安装，LLM 功能不可用")
         except Exception as e:
             logger.error("LLM 初始化失败: {}", str(e))
+            self._initialized = True
 
     async def structured_match(
         self,

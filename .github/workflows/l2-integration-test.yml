@@ -2,7 +2,7 @@ name: L2 Integration Tests (Testcontainers)
 
 on:
   pull_request:
-    branches: [ develop ]  # 仅在 develop branch 的 PR 中运行，避免 feature branch 频繁跑耗时测试
+    branches: [ develop ]
   push:
     branches: [ develop ]
   workflow_dispatch:
@@ -15,31 +15,45 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up JDK 17
+      # 🔥 修改1：JDK 从 17 升级为 21，与 L1 和 pom.xml 的 release 21 保持一致
+      - name: Set up JDK 21
         uses: actions/setup-java@v4
         with:
-          java-version: '17'
+          java-version: '21'
           distribution: 'temurin'
           cache: maven
 
+      # 🔥 修改2：预拉取测试镜像，避免 CI 中因网络超时导致 Testcontainers 启动失败
+      - name: Pre-pull Testcontainers Images
+        run: |
+          docker pull mysql:8.0.36
+          docker pull redis:7.2.4
+        # 注意：请根据你代码里实际使用的镜像版本调整，不要用 latest
+
+      # 🔥 修改3：修正 -X2g 拼写错误为 -Xmx2g，并移除 -DskipITs（否则集成测试会被跳过！）
       - name: Run Integration Tests with Testcontainers
         run: |
           cd backend
-          # 运行所有测试（包括需要 Docker 的集成测试）
-          mvn verify -DexcludedGroups="" -DskipITs
+          mvn verify -DexcludedGroups=""
         env:
-          MAVEN_OPTS: "-XX:+UseCompressedOops -X2g"
+          MAVEN_OPTS: "-XX:+UseCompressedOops -Xmx2g"
+          # 加快 CI 上的资源清理
+          TESTCONTAINERS_RYUK_DISABLED: true
 
       - name: JaCoCo Coverage Gate
         run: |
           cd backend
           mvn jacoco:check -DexcludedGroups=""
         env:
-          MAVEN_OPTS: "-XX:+UseCompressedOops -X2g"
+          # 🔥 修改3：同步修正 JVM 参数
+          MAVEN_OPTS: "-XX:+UseCompressedOops -Xmx2g"
 
+      # 🔥 修改4：修正报告路径（原路径少了 target，且集成测试报告通常在 failsafe 目录）
       - name: Upload Integration Test Results
         uses: actions/upload-artifact@v4
         with:
           name: integration-results
-          path: backend/surefire-reports/*.xml
+          path: |
+            backend/target/surefire-reports/*.xml
+            backend/target/failsafe-reports/*.xml
           retention-days: 30

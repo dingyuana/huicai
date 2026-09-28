@@ -39,6 +39,17 @@ class Settings(BaseSettings):
     embedding_dim: int = 768
     embedding_model: str = "shibing624/text2vec-base-chinese"
 
+    # LLM - AMD Radeon (OpenAI 兼容, 主模型 MiMo-V2.6-Flash)
+    # /models 列表无 free:true, 选用价格档最低 1.4e-7 且支持视觉的模型
+    amd_base_url: str = "https://developer.amd.com.cn/radeon/api/v1"
+    amd_api_key: str = ""
+    amd_model: str = "MiMo-V2.6-Flash"
+
+    # LLM - NVIDIA fallback (可选, 未配置时仅走 AMD)
+    nvidia_base_url: str = "https://integrate.api.nvidia.com/v1"
+    nvidia_api_key: str = ""
+    nvidia_model: str = "minimaxai/minimax-m3"
+
     # OCR
     ocr_engine: str = "tesseract"  # tesseract / paddle / cloud
 
