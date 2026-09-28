@@ -318,40 +318,84 @@ public class ReportServiceImpl implements ReportService {
         String yearStart = period.substring(0, 4) + "01";
         Map<String, Object> cumulative = reportDataMapper.cumulativeData(yearStart, period);
 
-        // P88②：本期各行口径——营业收入=credit 方向 6xx；成本/费用/其他支出各段独立，
-        // 严禁把费用侧发生额从营业收入里减掉（旧版 revenue-revenue_offset 把净利塞进了营收行）。
-        BigDecimal revenue = toBigDecimal(getOrNull(data, "revenue"));
-        BigDecimal cost = toBigDecimal(getOrNull(data, "cost"));
-        BigDecimal expense = toBigDecimal(getOrNull(data, "expense"));
-        BigDecimal otherExpense = toBigDecimal(getOrNull(data, "other_expense"));
-
-        BigDecimal grossProfit = revenue.subtract(cost);
-        BigDecimal operatingProfit = grossProfit.subtract(expense);
-        BigDecimal totalProfit = operatingProfit.subtract(otherExpense);
-
-        // P88②：累计各行与本期口径逐行对齐（SQL 已分列），不再用 revenue-cost 一把梭
-        BigDecimal cumRevenue = toBigDecimal(getOrNull(cumulative, "cumulative_revenue"));
-        BigDecimal cumCost = toBigDecimal(getOrNull(cumulative, "cumulative_cost"));
-        BigDecimal cumExpense = toBigDecimal(getOrNull(cumulative, "cumulative_expense"));
-        BigDecimal cumOtherExpense = toBigDecimal(getOrNull(cumulative, "cumulative_other_expense"));
-
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("period", period);
-        result.put("revenue", revenue);
-        result.put("cost", cost);
-        result.put("grossProfit", grossProfit);
-        result.put("expense", expense);
-        result.put("operatingProfit", operatingProfit);
-        result.put("otherExpense", otherExpense);
-        result.put("totalProfit", totalProfit);
-        result.put("cumulativeRevenue", cumRevenue);
-        result.put("cumulativeCost", cumCost);
-        result.put("cumulativeGrossProfit", cumRevenue.subtract(cumCost));
-        result.put("cumulativeExpense", cumExpense);
-        result.put("cumulativeOperatingProfit", cumRevenue.subtract(cumCost).subtract(cumExpense));
-        result.put("cumulativeOtherExpense", cumOtherExpense);
-        result.put("cumulativeProfit", cumRevenue.subtract(cumCost).subtract(cumExpense).subtract(cumOtherExpense));
+        // 本期与累计逐段搬运，口径完全一致：段位由 SQL 显式枚举，此处只做链式汇总
+        putSegments(result, "", data);
+        putSegments(result, "cumulative", cumulative);
+        result.put("grossProfit", n(result, "revenue").subtract(n(result, "cost")));
+        result.put("cumulativeGrossProfit", n(result, "cumulativeRevenue").subtract(n(result, "cumulativeCost")));
+        result.put("operatingProfit", operatingProfit(result, ""));
+        result.put("cumulativeOperatingProfit", operatingProfit(result, "cumulative"));
+        result.put("totalProfit", totalProfit(result, ""));
+        result.put("cumulativeProfit", totalProfit(result, "cumulative"));
+        result.put("netProfit", n(result, "totalProfit").subtract(n(result, "incomeTax")));
+        result.put("cumulativeNetProfit",
+                n(result, "cumulativeProfit").subtract(n(result, "cumulativeIncomeTax")));
         return result;
+    }
+
+    /** 段位字段清单：SQL 侧别名与此处一一对应，缺一个即漏一行报表。 */
+    private static final List<String> INCOME_SEGMENTS = List.of(
+            "revenue", "cost", "taxAndSurcharge",
+            "sellingExpense", "adminExpense", "financialExpense", "rdExpense",
+            "otherIncome", "investmentIncome", "fairValueIncome", "assetDisposalIncome",
+            "assetImpairmentLoss",
+            "nonOperatingIncome", "nonOperatingExpense", "incomeTax");
+
+    private static void putSegments(Map<String, Object> result, String prefix, Map<String, Object> row) {
+        for (String seg : INCOME_SEGMENTS) {
+            // 累计列的 camel 键与 SQL snake 键前缀不同（cumulativeRevenue ↔ cumulative_revenue），
+            // 必须由同一个 camelKey 派生，写键与读键才不会错位
+            String camelKey = key(prefix, seg);
+            result.put(camelKey, toBigDecimal(getOrNull(row, toSnake(camelKey))));
+        }
+    }
+
+    /**
+     * 营业利润 = 营业收入 − 营业成本 − 税金及附加 − 期间费用
+     *           + 其他收益 + 投资收益 + 公允价值变动收益 + 资产处置收益 − 资产减值损失。
+     * 期间费用 = 销售 + 管理 + 财务 + 研发（研发独立成行，不得再混进「其他支出」）。
+     */
+    private static BigDecimal operatingProfit(Map<String, Object> r, String p) {
+        BigDecimal periodExpense = n(r, key(p, "sellingExpense"))
+                .add(n(r, key(p, "adminExpense")))
+                .add(n(r, key(p, "financialExpense")))
+                .add(n(r, key(p, "rdExpense")));
+        r.put(key(p, "periodExpense"), periodExpense);
+        return n(r, key(p, "revenue"))
+                .subtract(n(r, key(p, "cost")))
+                .subtract(n(r, key(p, "taxAndSurcharge")))
+                .subtract(periodExpense)
+                .add(n(r, key(p, "otherIncome")))
+                .add(n(r, key(p, "investmentIncome")))
+                .add(n(r, key(p, "fairValueIncome")))
+                .add(n(r, key(p, "assetDisposalIncome")))
+                .subtract(n(r, key(p, "assetImpairmentLoss")));
+    }
+
+    /** 利润总额 = 营业利润 + 营业外收入 − 营业外支出 */
+    private static BigDecimal totalProfit(Map<String, Object> r, String p) {
+        return n(r, key(p, "operatingProfit"))
+                .add(n(r, key(p, "nonOperatingIncome")))
+                .subtract(n(r, key(p, "nonOperatingExpense")));
+    }
+
+    /**
+     * 结果键拼法：累计列为 {@code cumulativeRevenue}（驼峰），若用 {@code prefix + "revenue"} 会拼出
+     * {@code cumulativerevenue} 而读不到值——写键与读键必须走同一个函数，否则整条累计链静默归零。
+     */
+    private static String key(String prefix, String seg) {
+        return prefix.isEmpty() ? seg
+                : prefix + Character.toUpperCase(seg.charAt(0)) + seg.substring(1);
+    }
+
+    private static BigDecimal n(Map<String, Object> r, String key) {
+        return toBigDecimal(r.get(key));
+    }
+
+    private static String toSnake(String camel) {
+        return camel.replaceAll("([a-z0-9])([A-Z])", "$1_$2").toLowerCase();
     }
 
     private static Object getOrNull(Map<String, Object> map, String key) {
@@ -576,15 +620,34 @@ public class ReportServiceImpl implements ReportService {
         Map<String, Object> data = incomeStatement(period);
         String[] headers = {"项目", "行次", "本期金额", "本年累计"};
         List<List<Object>> rows = new ArrayList<>();
-        // P88②：各行本期/累计逐行对齐（不再把净利塞进营收行、不再累计列留空）
-        rows.add(List.of("一、营业收入", "1", data.get("revenue"), data.get("cumulativeRevenue")));
-        rows.add(List.of("减：营业成本", "2", data.get("cost"), data.get("cumulativeCost")));
-        rows.add(List.of("二、毛利", "3", data.get("grossProfit"), data.get("cumulativeGrossProfit")));
-        rows.add(List.of("减：期间费用", "4", data.get("expense"), data.get("cumulativeExpense")));
-        rows.add(List.of("三、营业利润", "5", data.get("operatingProfit"), data.get("cumulativeOperatingProfit")));
-        rows.add(List.of("减：其他支出", "6", data.get("otherExpense"), data.get("cumulativeOtherExpense")));
-        rows.add(List.of("四、利润总额", "7", data.get("totalProfit"), data.get("cumulativeProfit")));
+        // P97/REQ-099：按企业会计准则法定行序输出，行次连续；
+        // 各行本期/累计逐行对齐，取值一律走 incomeStatement 返回的段位键。
+        rows.add(row("一、营业收入", "1", data, "revenue"));
+        rows.add(row("减：营业成本", "2", data, "cost"));
+        rows.add(row("减：税金及附加", "3", data, "taxAndSurcharge"));
+        rows.add(row("减：销售费用", "4", data, "sellingExpense"));
+        rows.add(row("减：管理费用", "5", data, "adminExpense"));
+        rows.add(row("减：研发费用", "6", data, "rdExpense"));
+        rows.add(row("减：财务费用", "7", data, "financialExpense"));
+        rows.add(row("加：其他收益", "8", data, "otherIncome"));
+        rows.add(row("加：投资收益", "9", data, "investmentIncome"));
+        rows.add(row("加：公允价值变动收益", "10", data, "fairValueIncome"));
+        rows.add(row("加：资产处置收益", "11", data, "assetDisposalIncome"));
+        rows.add(row("减：资产减值损失", "12", data, "assetImpairmentLoss"));
+        rows.add(row("三、营业利润", "13", data, "operatingProfit"));
+        rows.add(row("加：营业外收入", "14", data, "nonOperatingIncome"));
+        rows.add(row("减：营业外支出", "15", data, "nonOperatingExpense"));
+        rows.add(row("四、利润总额", "16", data, "totalProfit"));
+        rows.add(row("减：所得税费用", "17", data, "incomeTax"));
+        rows.add(row("五、净利润", "18", data, "netProfit"));
         writeExcel(response, "利润表", period, headers, rows);
+    }
+
+    /** 导出行：本期金额 + 本年累计，缺值补空串避免 List.of 遇 null 抛 NPE */
+    private static List<Object> row(String label, String lineNo, Map<String, Object> data, String seg) {
+        return List.of(label, lineNo,
+                data.getOrDefault(seg, ""), data.getOrDefault("cumulative" + Character.toUpperCase(seg.charAt(0))
+                + seg.substring(1), ""));
     }
 
     @Override

@@ -30,17 +30,33 @@ public interface ReportDataMapper {
     List<Map<String, Object>> subjectBalance(@Param("period") String period);
 
     /**
-     * 期间借方/贷方合计(利润表)
+     * 期间各损益段取数（利润表）。
+     *
+     * <p>P97/REQ-099：段位按企业会计准则逐段显式枚举，不再用 {@code code LIKE '6%'} 一锅端。
+     * 旧口径三处错：① {@code revenue} 把贷方 6xx 全算进营业收入（营业外收入/其他收益/投资收益
+     * 都被计入营收）② 6403 税金及附加整段缺失 → 利润总额虚高 ③ 6801 所得税缺失 → 无净利润。
+     *
+     * <p>段位与本项目科目表实证的 6xx 四位段一一对应，不依赖 direction 兜底：
+     * 6001/6051 收入、6401/6402 成本、6403 税金、6601-6604 四费、6101/6111/6115/6117 收益类、
+     * 6701 减值、6301/6711 营业外、6801 所得税。6901 以前年度损益调整不进利润表。
      */
     @Select("""
         SELECT
-          SUM(CASE WHEN s.direction = 'credit' AND s.code LIKE '6%' THEN e.credit - e.debit ELSE 0 END) AS revenue,
-          SUM(CASE WHEN s.direction = 'debit'  AND s.code LIKE '6%' THEN e.debit  - e.credit ELSE 0 END) AS revenue_offset,
+          SUM(CASE WHEN s.code LIKE '6001%' OR s.code LIKE '6051%' THEN e.credit - e.debit ELSE 0 END) AS revenue,
           SUM(CASE WHEN s.code LIKE '6401%' OR s.code LIKE '6402%' THEN e.debit - e.credit ELSE 0 END) AS cost,
-          SUM(CASE WHEN s.code LIKE '6601%' OR s.code LIKE '6602%' OR s.code LIKE '6603%' THEN e.debit - e.credit ELSE 0 END) AS expense,
-          SUM(CASE WHEN s.code LIKE '6604%' OR s.code LIKE '6605%' OR s.code LIKE '6606%' OR s.code LIKE '6607%' OR s.code LIKE '6608%' OR s.code LIKE '6609%' OR s.code LIKE '6610%' OR s.code LIKE '6611%' OR s.code LIKE '6612%' OR s.code LIKE '6613%' OR s.code LIKE '6614%' OR s.code LIKE '6615%' OR s.code LIKE '6616%' OR s.code LIKE '6617%' OR s.code LIKE '6701%' OR s.code LIKE '6711%' THEN e.debit - e.credit ELSE 0 END) AS other_expense,
-          SUM(CASE WHEN s.code LIKE '6%' THEN e.credit - e.debit ELSE 0 END) AS total_revenue,
-          SUM(CASE WHEN s.code LIKE '6%' THEN e.debit - e.credit ELSE 0 END) AS total_cost_expense
+          SUM(CASE WHEN s.code LIKE '6403%' THEN e.debit - e.credit ELSE 0 END) AS tax_and_surcharge,
+          SUM(CASE WHEN s.code LIKE '6601%' THEN e.debit - e.credit ELSE 0 END) AS selling_expense,
+          SUM(CASE WHEN s.code LIKE '6602%' THEN e.debit - e.credit ELSE 0 END) AS admin_expense,
+          SUM(CASE WHEN s.code LIKE '6603%' THEN e.debit - e.credit ELSE 0 END) AS financial_expense,
+          SUM(CASE WHEN s.code LIKE '6604%' THEN e.debit - e.credit ELSE 0 END) AS rd_expense,
+          SUM(CASE WHEN s.code LIKE '6117%' THEN e.credit - e.debit ELSE 0 END) AS other_income,
+          SUM(CASE WHEN s.code LIKE '6111%' THEN e.credit - e.debit ELSE 0 END) AS investment_income,
+          SUM(CASE WHEN s.code LIKE '6101%' THEN e.credit - e.debit ELSE 0 END) AS fair_value_income,
+          SUM(CASE WHEN s.code LIKE '6115%' THEN e.credit - e.debit ELSE 0 END) AS asset_disposal_income,
+          SUM(CASE WHEN s.code LIKE '6701%' THEN e.debit - e.credit ELSE 0 END) AS asset_impairment_loss,
+          SUM(CASE WHEN s.code LIKE '6301%' THEN e.credit - e.debit ELSE 0 END) AS non_operating_income,
+          SUM(CASE WHEN s.code LIKE '6711%' THEN e.debit - e.credit ELSE 0 END) AS non_operating_expense,
+          SUM(CASE WHEN s.code LIKE '6801%' THEN e.debit - e.credit ELSE 0 END) AS income_tax
         FROM t_voucher_entry e
         INNER JOIN t_voucher v ON v.id = e.voucher_id
         INNER JOIN t_subject s ON s.id = e.subject_id
@@ -51,16 +67,26 @@ public interface ReportDataMapper {
     Map<String, Object> incomeStatementData(@Param("period") String period);
 
     /**
-     * 累计数据(从年初到本期)
-     * 口径与 incomeStatementData 对齐：revenue=credit 方向 6xx(营业收入)；
-     * cost/expense/other_expense 各段独立，避免 Java 侧漏项。
+     * 累计数据（从年初到本期），段位与 {@link #incomeStatementData} 逐段对齐。
+     * 两处若不同步演进，本期与累计列会各自漂移到不同口径。
      */
     @Select("""
         SELECT
-          SUM(CASE WHEN s.direction = 'credit' AND s.code LIKE '6%' THEN e.credit - e.debit ELSE 0 END) AS cumulative_revenue,
+          SUM(CASE WHEN s.code LIKE '6001%' OR s.code LIKE '6051%' THEN e.credit - e.debit ELSE 0 END) AS cumulative_revenue,
           SUM(CASE WHEN s.code LIKE '6401%' OR s.code LIKE '6402%' THEN e.debit - e.credit ELSE 0 END) AS cumulative_cost,
-          SUM(CASE WHEN s.code LIKE '6601%' OR s.code LIKE '6602%' OR s.code LIKE '6603%' THEN e.debit - e.credit ELSE 0 END) AS cumulative_expense,
-          SUM(CASE WHEN s.code LIKE '6604%' OR s.code LIKE '6605%' OR s.code LIKE '6606%' OR s.code LIKE '6607%' OR s.code LIKE '6608%' OR s.code LIKE '6609%' OR s.code LIKE '6610%' OR s.code LIKE '6611%' OR s.code LIKE '6612%' OR s.code LIKE '6613%' OR s.code LIKE '6614%' OR s.code LIKE '6615%' OR s.code LIKE '6616%' OR s.code LIKE '6617%' OR s.code LIKE '6701%' OR s.code LIKE '6711%' THEN e.debit - e.credit ELSE 0 END) AS cumulative_other_expense
+          SUM(CASE WHEN s.code LIKE '6403%' THEN e.debit - e.credit ELSE 0 END) AS cumulative_tax_and_surcharge,
+          SUM(CASE WHEN s.code LIKE '6601%' THEN e.debit - e.credit ELSE 0 END) AS cumulative_selling_expense,
+          SUM(CASE WHEN s.code LIKE '6602%' THEN e.debit - e.credit ELSE 0 END) AS cumulative_admin_expense,
+          SUM(CASE WHEN s.code LIKE '6603%' THEN e.debit - e.credit ELSE 0 END) AS cumulative_financial_expense,
+          SUM(CASE WHEN s.code LIKE '6604%' THEN e.debit - e.credit ELSE 0 END) AS cumulative_rd_expense,
+          SUM(CASE WHEN s.code LIKE '6117%' THEN e.credit - e.debit ELSE 0 END) AS cumulative_other_income,
+          SUM(CASE WHEN s.code LIKE '6111%' THEN e.credit - e.debit ELSE 0 END) AS cumulative_investment_income,
+          SUM(CASE WHEN s.code LIKE '6101%' THEN e.credit - e.debit ELSE 0 END) AS cumulative_fair_value_income,
+          SUM(CASE WHEN s.code LIKE '6115%' THEN e.credit - e.debit ELSE 0 END) AS cumulative_asset_disposal_income,
+          SUM(CASE WHEN s.code LIKE '6701%' THEN e.debit - e.credit ELSE 0 END) AS cumulative_asset_impairment_loss,
+          SUM(CASE WHEN s.code LIKE '6301%' THEN e.credit - e.debit ELSE 0 END) AS cumulative_non_operating_income,
+          SUM(CASE WHEN s.code LIKE '6711%' THEN e.debit - e.credit ELSE 0 END) AS cumulative_non_operating_expense,
+          SUM(CASE WHEN s.code LIKE '6801%' THEN e.debit - e.credit ELSE 0 END) AS cumulative_income_tax
         FROM t_voucher_entry e
         INNER JOIN t_voucher v ON v.id = e.voucher_id
         INNER JOIN t_subject s ON s.id = e.subject_id

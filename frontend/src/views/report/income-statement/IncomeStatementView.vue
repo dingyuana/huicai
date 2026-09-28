@@ -82,17 +82,36 @@ const rows = computed(() => {
   if (!result.value) return []
   const r = result.value
   // P88②：累计列逐行接后端字段，不再硬编码 0（旧版除首尾外全部写 0，累计数自相矛盾）
-  // 法定报表骨架——利润表每一行都是法定格式行（标准模板 7 行），
-  // 隐藏任何一行都会破坏「营业收入 − 营业成本 = 毛利」这类法定勾稽关系，
+  // 法定报表骨架——利润表每一行都是法定格式行，隐藏任何一行都会破坏勾稽关系，
   // 故统一 fixed=true，零值行也不隐藏（法定报表结构必须完整呈现）。
+  // P97/REQ-099：行序按企业会计准则展开（营收/成本/税金/四费/收益类/减值/营业利润/营业外/所得税/净利润），
+  // 取值全部来自后端段位字段——后端已按段位显式取数，前端不做任何加减重算。
+  const seg = (name: string) => [
+    { prev: prevData.value?.[name], current: r[name], cumulative: r['cumulative' + name.charAt(0).toUpperCase() + name.slice(1)] },
+  ]
+  const line = (label: string, name: string, bold: boolean) => {
+    const [v] = seg(name)
+    return { label, prev: v.prev, current: v.current, cumulative: v.cumulative, bold, fixed: true }
+  }
   return [
-    { label: '一、营业收入',    prev: prevData.value?.revenue,         current: r.revenue,         cumulative: r.cumulativeRevenue, bold: true, fixed: true },
-    { label: '减:营业成本',    prev: prevData.value?.cost,            current: r.cost,            cumulative: r.cumulativeCost, bold: false, fixed: true },
-    { label: '二、毛利',       prev: prevData.value?.grossProfit,     current: r.grossProfit,     cumulative: r.cumulativeGrossProfit, bold: true, fixed: true },
-    { label: '减:期间费用',    prev: prevData.value?.expense,         current: r.expense,         cumulative: r.cumulativeExpense, bold: false, fixed: true },
-    { label: '三、营业利润',   prev: prevData.value?.operatingProfit, current: r.operatingProfit, cumulative: r.cumulativeOperatingProfit, bold: true, fixed: true },
-    { label: '减:其他支出',    prev: prevData.value?.otherExpense,    current: r.otherExpense,    cumulative: r.cumulativeOtherExpense, bold: false, fixed: true },
-    { label: '四、利润总额',   prev: prevData.value?.totalProfit,     current: r.totalProfit,     cumulative: r.cumulativeProfit, bold: true, fixed: true },
+    line('一、营业收入', 'revenue', true),
+    line('减:营业成本', 'cost', false),
+    line('减:税金及附加', 'taxAndSurcharge', false),
+    line('减:销售费用', 'sellingExpense', false),
+    line('减:管理费用', 'adminExpense', false),
+    line('减:研发费用', 'rdExpense', false),
+    line('减:财务费用', 'financialExpense', false),
+    line('加:其他收益', 'otherIncome', false),
+    line('加:投资收益', 'investmentIncome', false),
+    line('加:公允价值变动收益', 'fairValueIncome', false),
+    line('加:资产处置收益', 'assetDisposalIncome', false),
+    line('减:资产减值损失', 'assetImpairmentLoss', false),
+    line('三、营业利润', 'operatingProfit', true),
+    line('加:营业外收入', 'nonOperatingIncome', false),
+    line('减:营业外支出', 'nonOperatingExpense', false),
+    line('四、利润总额', 'totalProfit', true),
+    line('减:所得税费用', 'incomeTax', false),
+    line('五、净利润', 'netProfit', true),
   ]
 })
 

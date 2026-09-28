@@ -8,7 +8,9 @@ import com.huicai.base.system.mapper.SubjectMapper;
 import com.huicai.base.system.service.SubjectService;
 import com.huicai.common.exception.BusinessException;
 import com.huicai.common.test.AbstractMapperTest;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
 
 import java.math.BigDecimal;
@@ -44,6 +46,27 @@ class OpeningContinuityRealDBTest extends AbstractMapperTest {
 
     @Autowired
     private SubjectMapper subjectMapper;
+
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
+
+    /**
+     * Flyway seed 用显式 id 插入，identity sequence 未被推进，而 sequence 不受事务回滚影响——
+     * 真实 DB 测试生成的 id 会与 seed 行撞主键（DuplicateKeyException: t_subject_pkey）。
+     * 故每次测试前把序列对齐到当前最大 id，使测试可重复运行。
+     */
+    @BeforeEach
+    void alignIdentitySequences() {
+        align("t_subject_id_seq", "t_subject");
+        align("t_voucher_id_seq", "t_voucher");
+        align("t_voucher_entry_id_seq", "t_voucher_entry");
+    }
+
+    private void align(String seq, String table) {
+        jdbcTemplate.execute("SELECT setval('" + seq + "', GREATEST((SELECT COALESCE(MAX(id), 1) FROM "
+                + table + "), 1))");
+    }
+
 
     @Autowired
     private SubjectService subjectService;

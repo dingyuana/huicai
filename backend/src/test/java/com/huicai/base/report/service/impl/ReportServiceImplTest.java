@@ -440,6 +440,62 @@ class ReportServiceImplTest {
         assertEquals(Boolean.TRUE, balanced.get("cashCheckOk"), "负向：无差异时不得弹 Alert");
     }
 
+    /**
+     * P97 阶段 A / REQ-099：利润表链式勾稽。
+     * 旧口径把贷方 6xx 全算进营收、漏 6403 税金与 6801 所得税 → 利润总额虚高且无净利润。
+     * 本用例钉死企业会计准则的完整链条，并断言营业外收入不进营收。
+     */
+    @Test
+    void p97_incomeStatement_利润表链式勾稽() {
+        Map<String, Object> d = new HashMap<>();
+        d.put("revenue", new BigDecimal("12000"));            // 6001+6051
+        d.put("cost", new BigDecimal("7000"));                // 6401+6402
+        d.put("tax_and_surcharge", new BigDecimal("500"));     // 6403
+        d.put("selling_expense", new BigDecimal("1000"));     // 6601
+        d.put("admin_expense", new BigDecimal("2000"));       // 6602
+        d.put("financial_expense", new BigDecimal("300"));     // 6603
+        d.put("rd_expense", new BigDecimal("4000"));          // 6604
+        d.put("other_income", new BigDecimal("300"));          // 6117
+        d.put("investment_income", new BigDecimal("200"));     // 6111
+        d.put("fair_value_income", BigDecimal.ZERO);          // 6101
+        d.put("asset_disposal_income", BigDecimal.ZERO);      // 6115
+        d.put("asset_impairment_loss", new BigDecimal("100")); // 6701
+        d.put("non_operating_income", new BigDecimal("5000"));// 6301
+        d.put("non_operating_expense", new BigDecimal("700"));// 6711
+        d.put("income_tax", new BigDecimal("2500"));          // 6801
+        when(reportDataMapper.incomeStatementData("202606")).thenReturn(d);
+        when(reportDataMapper.cumulativeData("202601", "202606")).thenReturn(new HashMap<>());
+
+        Map<String, Object> r = service.incomeStatement("202606");
+        assertEquals(new BigDecimal("12000.00"), r.get("revenue"),
+                "负向：营业收入只含 6001+6051，营业外收入 5000 不得计入（旧口径为 17000）");
+        assertEquals(new BigDecimal("7300.00"), r.get("periodExpense"), "期间费用 = 销售+管理+财务+研发");
+        // 12000 - 7000 - 500 - 7300 + 300 + 200 + 0 + 0 - 100 = -2400
+        assertEquals(new BigDecimal("-2400.00"), r.get("operatingProfit"));
+        // -2400 + 5000 - 700 = 1900
+        assertEquals(new BigDecimal("1900.00"), r.get("totalProfit"));
+        // 1900 - 2500 = -600
+        assertEquals(new BigDecimal("-600.00"), r.get("netProfit"), "净利润 = 利润总额 − 所得税");
+    }
+
+    @Test
+    void p97_incomeStatement_累计列与本期同口径() {
+        Map<String, Object> cur = new HashMap<>();
+        cur.put("revenue", new BigDecimal("1000"));
+        Map<String, Object> cum = new HashMap<>();
+        cum.put("cumulative_revenue", new BigDecimal("9000"));
+        cum.put("cumulative_income_tax", new BigDecimal("500"));
+        when(reportDataMapper.incomeStatementData("202606")).thenReturn(cur);
+        when(reportDataMapper.cumulativeData("202601", "202606")).thenReturn(cum);
+
+        Map<String, Object> r = service.incomeStatement("202606");
+
+        assertEquals(new BigDecimal("1000.00"), r.get("revenue"));
+        assertEquals(new BigDecimal("9000.00"), r.get("cumulativeRevenue"));
+        assertEquals(new BigDecimal("8500.00"), r.get("cumulativeNetProfit"),
+                "累计净利润 = 累计利润总额 − 累计所得税");
+    }
+
     private static String groupOf(Map<String, Object> block, String listKey, String code) {
         @SuppressWarnings("unchecked")
         List<Map<String, Object>> list = (List<Map<String, Object>>) block.get(listKey);
@@ -730,17 +786,16 @@ class ReportServiceImplTest {
     void p88_incomeStatement_revenueIsGrossNotNet() {
         // 营业收入=credit 方向 6xx 发生额，绝不再减费用侧（旧版把净利塞进营收行）
         Map<String, Object> periodData = new HashMap<>();
-        periodData.put("revenue", 10000.0);       // credit 6xx 毛收入
-        periodData.put("revenue_offset", 0.0);
-        periodData.put("cost", 3000.0);
-        periodData.put("expense", 2000.0);         // 6601-6603 期间费用
-        periodData.put("other_expense", 500.0);
+        periodData.put("revenue", 10000.0);            // 6001+6051 营业收入（P97 起按段位枚举，不再是 6% 一锅端）
+        periodData.put("cost", 3000.0);                // 6401+6402
+        periodData.put("selling_expense", 2000.0);     // 6601 期间费用代表项
+        periodData.put("non_operating_expense", 500.0);// 6711
         when(reportDataMapper.incomeStatementData("202607")).thenReturn(periodData);
         Map<String, Object> cum = new HashMap<>();
         cum.put("cumulative_revenue", 10000.0);
         cum.put("cumulative_cost", 3000.0);
-        cum.put("cumulative_expense", 2000.0);
-        cum.put("cumulative_other_expense", 500.0);
+        cum.put("cumulative_selling_expense", 2000.0);
+        cum.put("cumulative_non_operating_expense", 500.0);
         when(reportDataMapper.cumulativeData("202601", "202607")).thenReturn(cum);
 
         Map<String, Object> r = service.incomeStatement("202607");
