@@ -4,7 +4,7 @@
 
 ## §0 项目状态（硬数字，每次 commit 后更新）
 
-> **更新基准**：commit `78b929c` (2026-09-24) — docs(spec): 登记REQ-090~100并新增P94-P97四份SPEC草案
+> **更新基准**：commit `a5ff531` (2026-09-24) — docs(spec): P97批次4通过回写+REGISTRY 11条状态V1.16
 > **当前分支**：`main`
 > **关联文档**：[项目说明](docs/CORE-项目说明.md)、[技术方案](docs/CORE-技术方案.md)、[需求分析](docs/CORE-需求分析.md)、[需求登记册](docs/development/requirements/REQUIREMENTS_REGISTRY.md)、[文档注册表](docs/CORE-文档注册表.md)、[测试策略](docs/testing/TEST-STRATEGY.md)、[Flyway治理规范](docs/development/flyway-governance.md)
 
