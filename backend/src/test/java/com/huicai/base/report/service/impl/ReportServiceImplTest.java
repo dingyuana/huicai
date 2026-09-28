@@ -174,6 +174,76 @@ class ReportServiceImplTest {
         assertEquals(new BigDecimal("190000.00"), ta);
     }
 
+    // ==================== P93 未分配利润（4103 + 4104） ====================
+
+    @Test
+    void p93_4104计入未分配利润且不单独成行() {
+        // 回归：4104 利润分配必须并入"未分配利润"合成行，且不得在权益区单独出现一行。
+        // 若误把 4104 加进 equity loop，会出现 4104 独立行 + 未分配利润行，权益合计虚增 5000。
+        List<Map<String, Object>> b = new ArrayList<>();
+        b.add(bal("1002", "银行存款", "debit", 0, 0, 25000));
+        b.add(bal("4001", "实收资本", "credit", 0, 10000, 10000));
+        b.add(bal("4103", "本年利润", "credit", 0, 5000, 5000));
+        b.add(bal("4104", "利润分配", "credit", 0, 10000, 10000));
+        when(reportDataMapper.subjectBalance("202606")).thenReturn(b);
+
+        Map<String, Object> r = service.balanceSheet("202606");
+
+        assertEquals(new BigDecimal("25000.00"), r.get("totalEquity"), "4001(10000)+4103(5000)+4104(10000)=25000");
+        assertEquals(new BigDecimal("15000.00"), r.get("currentYearProfit"));
+        assertEquals(Boolean.TRUE, r.get("balanced"));
+        // 权益区只有 4001 一行 + 未分配利润合成行；不得出现 4104 独立行
+        List<Map<String, Object>> eq = items(r, "equity");
+        assertEquals(0, eq.stream()
+                .filter(e -> "4104".equals(e.get("code")))
+                .count(), "4104 不得作为独立行进入权益区，否则会重复计入");
+        boolean hasUndistributed = eq.stream().anyMatch(e ->
+                "未分配利润".equals(e.get("name"))
+                        && new BigDecimal("15000.00").equals(e.get("end_balance")));
+        assertTrue(hasUndistributed, "未分配利润=4103(5000)+4104(10000)=15000");
+    }
+
+    @Test
+    void p93_4104为负累计亏损时正确抵消() {
+        // 累计亏损：4103 本年盈利 20000，4104 上年累计亏损 -8000，未分配利润净 12000；
+        // 实收资本 4001 另有 8000，权益合计 = 8000 + 12000 = 20000，故资产端须取 20000 才平。
+        List<Map<String, Object>> b = new ArrayList<>();
+        b.add(bal("1002", "银行存款", "debit", 0, 0, 20000));
+        b.add(bal("4001", "实收资本", "credit", 0, 8000, 8000));
+        b.add(bal("4103", "本年利润", "credit", 0, 20000, 20000));
+        b.add(bal("4104", "利润分配", "debit", 8000, 0, 8000));
+        when(reportDataMapper.subjectBalance("202606")).thenReturn(b);
+
+        Map<String, Object> r = service.balanceSheet("202606");
+
+        assertEquals(new BigDecimal("20000.00"), r.get("totalEquity"), "8000(4001) + 20000(4103) - 8000(4104) = 20000");
+        assertEquals(new BigDecimal("12000.00"), r.get("currentYearProfit"));
+        assertEquals(Boolean.TRUE, r.get("balanced"));
+        List<Map<String, Object>> eq = items(r, "equity");
+        assertEquals(0, eq.stream().filter(e -> "4104".equals(e.get("code"))).count());
+        boolean hasUndistributed = eq.stream().anyMatch(e ->
+                "未分配利润".equals(e.get("name"))
+                        && new BigDecimal("12000.00").equals(e.get("end_balance")));
+        assertTrue(hasUndistributed);
+    }
+
+    @Test
+    void p93_4104未建科目时不影响既有口径() {
+        // 当前 DB 尚无 4104 科目。此场景验证：只有 4103 时行为与 P93 前一致（0 值不进合成行）。
+        List<Map<String, Object>> b = new ArrayList<>();
+        b.add(bal("1002", "银行存款", "debit", 0, 0, 10000));
+        b.add(bal("4001", "实收资本", "credit", 0, 10000, 10000));
+        b.add(bal("4103", "本年利润", "credit", 10000, 10000, 0));
+        when(reportDataMapper.subjectBalance("202606")).thenReturn(b);
+
+        Map<String, Object> r = service.balanceSheet("202606");
+
+        assertEquals(new BigDecimal("10000.00"), r.get("totalEquity"));
+        assertEquals(new BigDecimal("0.00"), r.get("currentYearProfit"));
+        assertEquals(Boolean.TRUE, r.get("balanced"));
+        assertEquals(1, items(r, "equity").size(), "0 值未分配利润不占行，仅有 4001");
+    }
+
     @Test
     void balanceSheet_groups_3xxx_and_4xxx_by_spec() {
         // P69: 3xxx 共同类借余入资产/贷余入负债；4xxx 权益
