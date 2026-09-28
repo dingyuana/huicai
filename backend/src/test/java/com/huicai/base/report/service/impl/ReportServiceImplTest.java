@@ -496,6 +496,68 @@ class ReportServiceImplTest {
                 "累计净利润 = 累计利润总额 − 累计所得税");
     }
 
+    /**
+     * P97 阶段 D / REQ-098：报表重分类（列报层）。
+     *
+     * <p>场景：预付账款(1123) 出现贷方余额 5000（收到退款，实质是预收）。
+     * 配银行存款 5000 使恒等式在「开/关」两种口径下都成立——
+     * 否则测试数据本身不平，balanced 断言会变成在测数据而不是测重分类。
+     */
+    private List<Map<String, Object>> reclassifyRows() {
+        List<Map<String, Object>> rows = new ArrayList<>();
+        rows.add(balB("1123", "预付账款", "debit", -5000, 0, 5000, -5000));
+        rows.add(balB("1002", "银行存款", "debit", 5000, 0, 5000, 5000));
+        return rows;
+    }
+
+    @Test
+    void p98_reclassify_默认关闭时负余额仍留资产列() {
+        when(reportDataMapper.subjectBalance("202606")).thenReturn(reclassifyRows());
+        when(reportDataMapper.subjectBalance("202601")).thenReturn(new ArrayList<>());
+
+        Map<String, Object> r = service.balanceSheet("202606");
+
+        assertEquals(Boolean.FALSE, r.get("reclassifyEnabled"), "默认必须关闭重分类");
+        assertEquals(new BigDecimal("0.00"), r.get("totalAssets"), "关闭时 1123 与 1002 在资产列相抵");
+        assertTrue(items(r, "liabilities").isEmpty(), "关闭时不得出现负债行");
+        assertTrue(items(r, "assets").stream().anyMatch(x -> "1123".equals(x.get("code"))),
+                "关闭时负余额行仍在资产列（现状口径）");
+    }
+
+    @Test
+    void p98_reclassify_开启后预付贷方重分类为负债() {
+        when(reportDataMapper.subjectBalance("202606")).thenReturn(reclassifyRows());
+        when(reportDataMapper.subjectBalance("202601")).thenReturn(new ArrayList<>());
+
+        Map<String, Object> r = service.balanceSheetWithReclassification("202606");
+
+        assertEquals(Boolean.TRUE, r.get("reclassifyEnabled"), "开启后须在结果中标记，供报表抬头显示状态");
+        assertEquals(new BigDecimal("5000.00"), r.get("totalAssets"), "重分类后资产侧只剩银行存款");
+        assertEquals(new BigDecimal("5000.00"), r.get("totalLiabilities"), "重分类后负债侧为 5000");
+        assertTrue(items(r, "assets").stream().noneMatch(x -> "1123".equals(x.get("code"))),
+                "负余额行不得留在资产列");
+        List<Map<String, Object>> liab = items(r, "liabilities");
+        assertEquals(1, liab.size());
+        assertEquals("1123", liab.get(0).get("code"));
+        assertEquals(Boolean.TRUE, liab.get(0).get("reclassified"), "须标记该行由重分类而来");
+        assertEquals(new BigDecimal("5000.00"), liab.get(0).get("end_balance"), "负债列示金额取绝对值");
+        assertEquals(Boolean.TRUE, r.get("balanced"), "重分类不破坏资产负债恒等式");
+        assertEquals(new BigDecimal("5000.00"), r.get("totalLiabEquity"));
+    }
+
+    @Test
+    void p98_reclassify_开启与关闭的权益损益完全一致() {
+        when(reportDataMapper.subjectBalance("202606")).thenReturn(reclassifyRows());
+        when(reportDataMapper.subjectBalance("202601")).thenReturn(new ArrayList<>());
+
+        Map<String, Object> off = service.balanceSheet("202606");
+        Map<String, Object> on = service.balanceSheetWithReclassification("202606");
+
+        assertEquals(off.get("currentYearProfit"), on.get("currentYearProfit"), "重分类不得影响损益");
+        assertEquals(off.get("totalEquity"), on.get("totalEquity"), "重分类不得影响权益合计");
+        // 只读铁律：本方法全程仅调用 subjectBalance 读接口，凭证/余额零写入
+    }
+
     private static String groupOf(Map<String, Object> block, String listKey, String code) {
         @SuppressWarnings("unchecked")
         List<Map<String, Object>> list = (List<Map<String, Object>>) block.get(listKey);

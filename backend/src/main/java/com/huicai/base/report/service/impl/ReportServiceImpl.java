@@ -60,8 +60,18 @@ public class ReportServiceImpl implements ReportService {
 
     @Override
     public Map<String, Object> balanceSheet(String period) {
-        Map<String, Object> result = buildBalanceSheet(period, END_BALANCE);
-        Map<String, Object> yearStart = buildBalanceSheet(yearStartOf(period), BEGIN_BALANCE);
+        return buildBalanceSheetWith(period, false);
+    }
+
+    @Override
+    public Map<String, Object> balanceSheetWithReclassification(String period) {
+        return buildBalanceSheetWith(period, true);
+    }
+
+    private Map<String, Object> buildBalanceSheetWith(String period, boolean reclassify) {
+        Map<String, Object> result = buildBalanceSheet(period, END_BALANCE, reclassify);
+        result.put("reclassifyEnabled", reclassify);
+        Map<String, Object> yearStart = buildBalanceSheet(yearStartOf(period), BEGIN_BALANCE, reclassify);
         BigDecimal yearStartDiff = toBigDecimal(yearStart.get("diff"));
         result.put("yearStart", yearStart);
         result.put("yearStartCheckDiff", yearStartDiff);
@@ -79,6 +89,10 @@ public class ReportServiceImpl implements ReportService {
      * 会出现"明细年初加总 ≠ 年初小计"，且与科目余额表期初对不上。
      */
     private Map<String, Object> buildBalanceSheet(String period, String balanceField) {
+        return buildBalanceSheet(period, balanceField, false);
+    }
+
+    private Map<String, Object> buildBalanceSheet(String period, String balanceField, boolean reclassify) {
         Map<String, Object> result = new LinkedHashMap<>();
         List<Map<String, Object>> balances = reportDataMapper.subjectBalance(period);
 
@@ -119,8 +133,15 @@ public class ReportServiceImpl implements ReportService {
             switch (top) {
                 case '1' -> {
                     BigDecimal signed = "debit".equals(direction) ? balance : balance.negate();
-                    assets.add(row);
-                    totalAssets = totalAssets.add(signed);
+                    if (reclassify && signed.signum() < 0) {
+                        // P97/REQ-098：预付/应收的贷方余额实质是预收，按准则重分类为负债列报。
+                        // 纯列报层动作：不改账、不出凭证，只改这行落在哪一列。
+                        reclassifyToLiability(row, signed, balanceField, liab);
+                        totalLiab = totalLiab.add(signed.negate());
+                    } else {
+                        assets.add(row);
+                        totalAssets = totalAssets.add(signed);
+                    }
                 }
                 case '5' -> {
                     BigDecimal signed = "debit".equals(direction) ? balance : balance.negate();
@@ -258,6 +279,19 @@ public class ReportServiceImpl implements ReportService {
         bad.put("endBalance", endBalance);
         bad.put("classifiedTo", reason);
         return bad;
+    }
+
+    /**
+     * 把资产类的负（贷方）余额行改列为负债，并把展示金额取绝对值。
+     * 同时打 reclassified 标记，前端可据此提示"该行由重分类而来"，避免看起来像数据错误。
+     */
+    private static void reclassifyToLiability(Map<String, Object> row, BigDecimal signed,
+                                              String balanceField, List<Map<String, Object>> liab) {
+        row.put(END_BALANCE, signed.negate());
+        row.put(BEGIN_BALANCE, BigDecimal.ZERO);
+        row.put(balanceField, signed.negate());
+        row.put("reclassified", Boolean.TRUE);
+        liab.add(row);
     }
 
     /** 命中判定与 subtotal() 完全一致（account_type 优先，科目段兜底），保证标记与小计同源。 */

@@ -16,10 +16,15 @@
         <el-form-item>
           <el-checkbox v-model="hideNoMovement">隐藏无发生额且无余额科目</el-checkbox>
           <el-checkbox v-model="hideStandardBlank">隐藏报表标准空白行</el-checkbox>
+          <el-checkbox v-model="reclassify">重分类列报（预付/应收贷方→负债）</el-checkbox>
         </el-form-item>
       </el-form>
 
       <el-alert v-if="result" :title="result.balanced ? '资产=负债+所有者权益, 平衡 ✓' : '⚠ 资产≠负债+所有者权益, 请检查!'" :type="result.balanced ? 'success' : 'error'" show-icon :closable="false" style="margin-bottom: 16px" />
+
+      <el-alert v-if="reclassify" type="info" show-icon :closable="false"
+        title="重分类列报已开启：资产类科目的贷方余额重分类为负债列报（仅改列报，不改账、不出凭证）"
+        style="margin-bottom: 16px" />
 
       <el-alert v-if="result && result.yearStartCheckOk === false" type="warning" show-icon :closable="false"
         :title="`⚠ 年初列资产 ≠ 负债+所有者权益，差异 ${fmtAmount(result.yearStartCheckDiff)}（仅提示，不改数）`"
@@ -193,7 +198,7 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { resolveLatestClosedPeriod, yearStartPeriod } from '@/utils/period'
 import { ElMessage } from 'element-plus'
-import { balanceSheet, subjectBalance, exportBalanceSheet } from '@/api/modules/report'
+import { balanceSheet, balanceSheetReclassified, subjectBalance, exportBalanceSheet } from '@/api/modules/report'
 import { amountClass, formatAmount } from '@/utils/format'
 import { isRowVisible, guardDanglingSubtotal, isStandardBlankRow } from '@/utils/report/rowVisibility'
 import PeriodNavigator from '@/components/finance/PeriodNavigator.vue'
@@ -207,6 +212,8 @@ const yearStartAvailable = ref(false)
 // P94 REQ-091：两个开关职责分离——开关1 管明细行，开关2 管报表标准空白行
 const hideNoMovement = ref(true)
 const hideStandardBlank = ref(false)
+// P97/REQ-098：重分类为全局单开关，默认关（关闭时与现状 diff == 0）
+const reclassify = ref(false)
 
 const yearStartLabel = computed(() => {
   const p = yearStartPeriod(query.period)
@@ -283,7 +290,7 @@ const fetchData = async () => {
   // 明细行年初值仍按科目编码取 1 月期初余额。
   const ys = yearStartPeriod(query.period)
   const [current, ysRows] = await Promise.all([
-    balanceSheet(query.period),
+    reclassify.value ? balanceSheetReclassified(query.period) : balanceSheet(query.period),
     ys ? subjectBalance(ys).catch(() => []) : Promise.resolve([]),
   ])
   result.value = current
