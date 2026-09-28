@@ -42,6 +42,9 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class SubjectBalanceServiceImpl implements SubjectBalanceService {
 
+    /** 期初连续性容差，与 P94 ReportServiceImpl#TOLERANCE 同口径；两处各自私有以免牵动已交付代码。 */
+    private static final BigDecimal OPENING_TOLERANCE = new BigDecimal("0.01");
+
     private final SubjectBalanceMapper subjectBalanceMapper;
     private final SubjectService subjectService;
     private final PeriodService periodService;
@@ -410,6 +413,135 @@ public class SubjectBalanceServiceImpl implements SubjectBalanceService {
             result.add(vo);
         }
         return result;
+    }
+
+    @Override
+    public Map<String, Object> checkOpeningContinuity(String period) {
+        if (period == null || period.length() != 6) {
+            throw BusinessException.badRequest("会计期间格式错误, 应为 YYYYMM");
+        }
+        List<SubjectBalanceEntity> current = queryByPeriod(period);
+        List<Map<String, Object>> mismatches = new ArrayList<>();
+        Map<String, Object> result = new HashMap<>();
+        result.put("period", period);
+        result.put("mismatches", mismatches);
+        if (current.isEmpty()) {
+            result.put("checked", false);
+            result.put("skipReason", "该期间无余额数据, 无法比对期初连续性");
+            result.put("comparedCount", 0);
+            result.put("skippedCount", 0);
+            result.put("mismatchCount", 0);
+            result.put("maxAbsDiff", BigDecimal.ZERO);
+            result.put("passed", true);
+            return result;
+        }
+
+        // 批量取上期期末：按回溯月逐月整期取数，查询数 = 回溯月数 + 1，与科目数无关
+        List<String> lookback = lookbackPeriods(period);
+        Map<String, Map<Long, BigDecimal>> endByPeriod = new HashMap<>();
+        for (String p : lookback) {
+            Map<Long, BigDecimal> ends = new HashMap<>();
+            for (SubjectBalanceEntity b : queryByPeriod(p)) {
+                if (b.getSubjectId() != null) {
+                    ends.put(b.getSubjectId(), b.getEndBalance() == null ? BigDecimal.ZERO : b.getEndBalance());
+                }
+            }
+            endByPeriod.put(p, ends);
+        }
+
+        // 消除 N+1：批量查科目一次，逐行取索引（与 checkTrialBalance 同款）
+        Set<Long> subjectIds = current.stream()
+                .map(SubjectBalanceEntity::getSubjectId)
+                .filter(java.util.Objects::nonNull)
+                .collect(Collectors.toSet());
+        Map<Long, Subject> subjectMap = subjectIds.isEmpty() ? Map.of()
+                : subjectService.listByIds(subjectIds).stream()
+                        .collect(Collectors.toMap(Subject::getId, s -> s, (a, b) -> a));
+
+        int compared = 0;
+        int skipped = 0;
+        BigDecimal maxAbsDiff = BigDecimal.ZERO;
+        for (SubjectBalanceEntity balance : current) {
+            Subject subject = subjectMap.get(balance.getSubjectId());
+            if (subject == null || !Boolean.TRUE.equals(subject.getIsLeaf())
+                    || (subject.getDeleted() != null && subject.getDeleted() == 1)) {
+                skipped++;
+                continue;
+            }
+            // 逐科目各自回溯：不同科目命中不同月份，与 getPreviousEndBalance 的单科目回溯一致
+            String matchedPeriod = null;
+            BigDecimal prevEnd = null;
+            for (String p : lookback) {
+                BigDecimal v = endByPeriod.get(p).get(balance.getSubjectId());
+                if (v != null) {
+                    matchedPeriod = p;
+                    prevEnd = v;
+                    break;
+                }
+            }
+            if (prevEnd == null) {
+                // 上期回溯范围内无该科目余额：新账套首期/年中启用/科目新启用，
+                // 属"无上期数据"而非"期初不连续"，不得判为不平（否则新账套永远无法结账）
+                skipped++;
+                continue;
+            }
+            compared++;
+            BigDecimal currentBegin = balance.getBeginBalance() == null
+                    ? BigDecimal.ZERO : balance.getBeginBalance();
+            BigDecimal diff = currentBegin.subtract(prevEnd);
+            if (diff.abs().compareTo(OPENING_TOLERANCE) < 0) {
+                continue;
+            }
+            Map<String, Object> issue = new HashMap<>();
+            issue.put("subjectId", subject.getId());
+            issue.put("subjectCode", subject.getCode());
+            issue.put("subjectName", subject.getName());
+            issue.put("prevPeriod", matchedPeriod);
+            issue.put("prevEnd", prevEnd);
+            issue.put("currentBegin", currentBegin);
+            issue.put("diff", diff);
+            mismatches.add(issue);
+            if (diff.abs().compareTo(maxAbsDiff) > 0) {
+                maxAbsDiff = diff.abs();
+            }
+        }
+
+        result.put("checked", compared > 0);
+        if (compared == 0) {
+            result.put("skipReason", "上期回溯范围内无余额数据, 已跳过期初连续性比对");
+        }
+        result.put("comparedCount", compared);
+        result.put("skippedCount", skipped);
+        result.put("mismatchCount", mismatches.size());
+        result.put("maxAbsDiff", maxAbsDiff);
+        result.put("passed", mismatches.isEmpty());
+        return result;
+    }
+
+    /**
+     * 上期回溯期序（由近及远），终止于上一年的 12 月（含）。
+     *
+     * <p>期数取当前月份数：1 月只回溯上一年 12 月，7 月回溯本年 1-6 月再回溯上一年 12 月。
+     * 该边界与 {@code getPreviousEndBalance} 的停止条件逐月一致——两边口径必须相同，
+     * 否则会出现"建账取到的期初"与"校验判定的期初"不是同一期数。
+     */
+    private static List<String> lookbackPeriods(String period) {
+        int year = Integer.parseInt(period.substring(0, 4));
+        int startMonth = Integer.parseInt(period.substring(4, 6));
+        int month = startMonth;
+        // 上界必须用 startMonth：month 在循环体内自减，若拿它当循环条件会提前退出
+        // （曾因此只回溯 3 期，202402/202401 从未查询，期初断层全部漏检）。
+        List<String> periods = new ArrayList<>(startMonth);
+        for (int i = 0; i < startMonth; i++) {
+            if (month == 1) {
+                year--;
+                month = 12;
+            } else {
+                month--;
+            }
+            periods.add(String.format("%04d%02d", year, month));
+        }
+        return periods;
     }
 
     @Override

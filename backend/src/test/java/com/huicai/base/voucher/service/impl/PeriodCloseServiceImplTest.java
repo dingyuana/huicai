@@ -147,6 +147,65 @@ class PeriodCloseServiceImplTest {
         assertTrue(ex.getMessage().contains("已锁定"));
     }
 
+    @Test
+    @DisplayName("P98 期初不连续时结账检查不通过")
+    void checkBeforeClose_blockedWhenOpeningDiscontinuous() {
+        stubFindPeriod(stubPeriod("open"));
+        stubCheckPasses();
+        when(subjectBalanceService.checkOpeningContinuity("202607"))
+                .thenReturn(stubOpeningDiscontinuous());
+
+        Map<String, Object> r = service.checkBeforeClose("202607");
+
+        assertFalse((Boolean) r.get("passed"), "期初不连续必须阻断结账");
+        @SuppressWarnings("unchecked")
+        List<String> issues = (List<String>) r.get("issues");
+        assertTrue(issues.stream().anyMatch(i -> i.contains("期初")),
+                "issues 应说明期初不连续, 实际=" + issues);
+        assertNotNull(r.get("openingContinuity"), "应返回期初连续性明细供前端定位");
+    }
+
+    @Test
+    @DisplayName("P98 期初连续时不新增 issue（其余检查通过则整体通过）")
+    void checkBeforeClose_passesWhenOpeningContinuous() {
+        stubFindPeriod(stubPeriod("open"));
+        stubCheckPasses();
+        when(subjectBalanceService.checkOpeningContinuity("202607"))
+                .thenReturn(stubOpeningContinuous());
+
+        Map<String, Object> r = service.checkBeforeClose("202607");
+
+        assertTrue((Boolean) r.get("passed"), "期初连续时不得新增阻断项");
+    }
+
+    private Map<String, Object> stubOpeningDiscontinuous() {
+        Map<String, Object> m = new HashMap<>();
+        m.put("checked", true);
+        m.put("passed", false);
+        m.put("comparedCount", 2);
+        m.put("skippedCount", 0);
+        m.put("mismatchCount", 1);
+        m.put("maxAbsDiff", new BigDecimal("100000.00"));
+        m.put("mismatches", List.of(Map.of(
+                "subjectCode", "4001", "subjectName", "实收资本",
+                "prevPeriod", "202401", "prevEnd", new BigDecimal("300000.00"),
+                "currentBegin", new BigDecimal("200000.00"),
+                "diff", new BigDecimal("-100000.00"))));
+        return m;
+    }
+
+    private Map<String, Object> stubOpeningContinuous() {
+        Map<String, Object> m = new HashMap<>();
+        m.put("checked", true);
+        m.put("passed", true);
+        m.put("comparedCount", 2);
+        m.put("skippedCount", 0);
+        m.put("mismatchCount", 0);
+        m.put("maxAbsDiff", BigDecimal.ZERO);
+        m.put("mismatches", List.of());
+        return m;
+    }
+
     // ==================== closePeriod ====================
 
     @Test

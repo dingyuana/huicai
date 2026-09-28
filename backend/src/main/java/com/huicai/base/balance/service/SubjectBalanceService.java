@@ -41,6 +41,21 @@ public interface SubjectBalanceService {
     Map<String, Object> checkTrialBalance(String period);
 
     /**
+     * P98 REQ-101：期初余额跨期连续性校验（只读）。
+     *
+     * <p>逐末级科目比对「本期期初」与「上期期末」，差异绝对值 ≥ 0.01 计入 mismatches。
+     * 上期口径复用 {@code getPreviousEndBalance} 的逐月回溯——只看紧邻上月会在
+     * 中间月份无余额数据时漏检（现场断层即属此类）。
+     *
+     * <p>返回：checked / skipReason / comparedCount / skippedCount /
+     * mismatches[{subjectCode, subjectName, prevPeriod, prevEnd, currentBegin, diff}] /
+     * mismatchCount / maxAbsDiff / passed。passed 供结账闸门阻断使用。
+     *
+     * <p>纯只读：不得建行、不得改数（铁律 #1）。
+     */
+    Map<String, Object> checkOpeningContinuity(String period);
+
+    /**
      * 锁定期初：校验试算平衡通过后，将 t_period.opening_status 置为 'locked'。
      * 锁定后凭证业务仍可正常过账（不影响 t_period.status）。
      */

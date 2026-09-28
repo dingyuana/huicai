@@ -96,6 +96,16 @@ public class PeriodCloseServiceImpl implements PeriodCloseService {
                     + "），请核对差异科目后再结账");
         }
 
+        // P98 REQ-101：期初跨期连续性。试算平衡与资产负债恒等式都只在期间内部成立，
+        // 跨期断层（本期期初 ≠ 上期期末）必须单独查，否则余额凭空增减可一路放行。
+        // 判据用 FALSE.equals：跳过（上期无数据）与空返回都不得误阻断。
+        Map<String, Object> openingContinuity = subjectBalanceService.checkOpeningContinuity(period);
+        if (Boolean.FALSE.equals(openingContinuity.get("passed"))) {
+            issues.add("期初余额不连续（" + openingContinuity.get("mismatchCount")
+                    + " 个科目本期期初与上期期末不符，最大差额 " + openingContinuity.get("maxAbsDiff")
+                    + "），请核对期初建账或补齐衔接凭证后再结账");
+        }
+
         Long unReversed = voucherMapper.selectCount(
                 new LambdaQueryWrapper<VoucherEntity>()
                         .eq(VoucherEntity::getPeriod, period)
@@ -109,6 +119,7 @@ public class PeriodCloseServiceImpl implements PeriodCloseService {
         result.put("passed", issues.isEmpty());
         result.put("issues", issues);
         result.put("trialBalance", trial);
+        result.put("openingContinuity", openingContinuity);
         return result;
     }
 
