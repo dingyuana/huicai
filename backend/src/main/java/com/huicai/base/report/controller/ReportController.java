@@ -23,6 +23,11 @@ public class ReportController {
     private final AnalysisService analysisService;
 
     @Operation(summary = "科目余额表")
+    @GetMapping("/subject-balance/auxiliary")
+    public R<List<Map<String, Object>>> subjectBalanceAuxiliary(@RequestParam String period) {
+        return R.ok(reportService.auxiliaryDetail(period));
+    }
+
     @GetMapping("/subject-balance")
     public R<List<Map<String, Object>>> subjectBalance(@RequestParam String period) {
         return R.ok(reportService.subjectBalanceTable(period));

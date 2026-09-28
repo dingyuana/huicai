@@ -45,6 +45,11 @@ export function exportCashFlow(period: string): Promise<void> {
   return downloadReportExcel('/base/report/v1/reports/cash-flow/export', '现金流量表', period)
 }
 
+/** P97/REQ-097 辅助核算明细：按 assist_json 值分组，键名对上游透明 */
+export function subjectBalanceAuxiliary(period: string): Promise<any[]> {
+  return request.get('/base/report/v1/reports/subject-balance/auxiliary', { params: { period } })
+}
+
 export function subjectBalance(period: string): Promise<any[]> {
   return request.get('/base/report/v1/reports/subject-balance', { params: { period } })
 }

@@ -9,6 +9,9 @@ import java.util.Map;
 public interface ReportService {
     List<Map<String, Object>> subjectBalanceTable(String period);
     Map<String, Object> balanceSheet(String period);
+
+    /** 辅助核算明细（P97/REQ-097 阶段 C-2）：按 assist_json 值分组，schema 对上游透明 */
+    List<Map<String, Object>> auxiliaryDetail(String period);
     Map<String, Object> incomeStatement(String period);
     Map<String, Object> cashFlowStatement(String period);
     List<Map<String, Object>> trend(String startPeriod, String endPeriod);

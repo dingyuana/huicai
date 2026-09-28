@@ -54,6 +54,11 @@ public class ReportServiceImpl implements ReportService {
     }
 
     @Override
+    public List<Map<String, Object>> auxiliaryDetail(String period) {
+        return reportDataMapper.auxiliaryMovement(period);
+    }
+
+    @Override
     public Map<String, Object> balanceSheet(String period) {
         Map<String, Object> result = buildBalanceSheet(period, END_BALANCE);
         Map<String, Object> yearStart = buildBalanceSheet(yearStartOf(period), BEGIN_BALANCE);

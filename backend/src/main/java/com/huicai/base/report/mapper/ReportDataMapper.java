@@ -157,6 +157,57 @@ public interface ReportDataMapper {
                                            @Param("endPeriod") String endPeriod);
 
     /**
+     * 辅助核算明细（P97/REQ-097，阶段 C-2）。
+     *
+     * <p>按 <b>整个 assist_json 值</b>分组，不按 customerName/vendorId 之类的具体键取值：
+     * 本项目 assist_json 全链路透传，代码库中无任何一处定义其 schema，按臆测键名写 SQL
+     * 会匹配不到真实数据，且上游键名一旦不同就静默返回空。jsonb 等值分组对键名透明，
+     * 原始 JSON 原样返回交前端通用渲染。
+     *
+     * <p>只收「科目配了 aux_calc_type」且「分录带 assist_json」的行：两者缺一就无法归入某个
+     * 辅助项，强行归集会造成明细之和与科目合计对不上。
+     *
+     * <p>本期发生额 = 本期间；累计发生额 = 年初至本期（年初 = period 的年份 + 01）。
+     *
+     * <p>别名一律 snake_case，与本 Mapper 其他 @Select 一致——Postgres 会把未加引号的别名
+     * 折成小写（{@code AS subjectCode} 实际得到 {@code subjectcode}），写驼峰必须加引号，易漏。
+     */
+    @Select("""
+        SELECT s.code                                   AS subject_code,
+               s.name                                   AS subject_name,
+               s.aux_calc_type                          AS aux_calc_type,
+               cur.assist_json::text                    AS assist_json,
+               COALESCE(SUM(cur.debit), 0)              AS debit_total,
+               COALESCE(SUM(cur.credit), 0)             AS credit_total,
+               COALESCE(SUM(ytd.debit), 0)              AS cumulative_debit,
+               COALESCE(SUM(ytd.credit), 0)             AS cumulative_credit
+        FROM t_voucher_entry cur
+        INNER JOIN t_voucher v  ON v.id = cur.voucher_id
+        INNER JOIN t_subject  s  ON s.id = cur.subject_id
+        LEFT JOIN LATERAL (
+            SELECT SUM(e.debit) AS debit, SUM(e.credit) AS credit
+            FROM t_voucher_entry e
+            INNER JOIN t_voucher v2 ON v2.id = e.voucher_id
+            WHERE e.subject_id = cur.subject_id
+              AND e.assist_json IS NOT NULL
+              AND e.assist_json::text = cur.assist_json::text
+              AND v2.deleted = 0 AND v2.status = 'POSTED'
+              AND v2.period >= CONCAT(LEFT(#{period}, 4), '01') AND v2.period <= #{period}
+              AND v2.voucher_no NOT LIKE 'CLOSE-%' AND v2.voucher_no NOT LIKE 'DISTRIB-%'
+        ) ytd ON TRUE
+        WHERE v.deleted = 0 AND v.status = 'POSTED'
+          AND v.period = #{period}
+          AND v.voucher_no NOT LIKE 'CLOSE-%' AND v.voucher_no NOT LIKE 'DISTRIB-%'
+          AND cur.assist_json IS NOT NULL
+          AND cur.assist_json::text <> '{}'
+          AND s.aux_calc_type IS NOT NULL
+          AND s.deleted = 0
+        GROUP BY s.code, s.name, s.aux_calc_type, cur.assist_json::text
+        ORDER BY s.code, cur.assist_json::text
+    """)
+    List<Map<String, Object>> auxiliaryMovement(@Param("period") String period);
+
+    /**
      * 趋势数据(多期)
      */
     @Select("""

@@ -42,6 +42,18 @@
         </el-table-column>
         <!-- P97：level 此前因后端不回填而恒空，现由 SubjectBalanceVO.level 提供 -->
       <el-table-column prop="level" label="层级" width="60" align="center" />
+      <!-- P97/REQ-097 阶段C-2：辅助核算明细。原样展示 assist_json 的键值对，
+           不假设 vendorName/customerId 等具体键名（该 schema 全链路透传、无处定义） -->
+      <el-table-column type="expand" width="40">
+        <template #default="{ row }">
+          <div class="aux-detail">
+            <template v-if="(auxBySubject.get(row.code) || []).length">
+              <div v-for="(item, i) in auxBySubject.get(row.code)" :key="i" class="aux-item">{{ item }}</div>
+            </template>
+            <span v-else class="aux-empty">该科目本期无辅助核算明细</span>
+          </div>
+        </template>
+      </el-table-column>
         <el-table-column label="期初余额" width="140" align="right">
           <template #default="{ row }">
             <span :class="amountClass(false, row.begin_balance)">{{ fmtAmount(row.begin_balance) }}</span>
@@ -72,10 +84,11 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { resolveLatestClosedPeriod } from '@/utils/period'
 import { ElMessage } from 'element-plus'
-import { subjectBalance, exportSubjectBalance } from '@/api/modules/report'
+import { subjectBalance, subjectBalanceAuxiliary, exportSubjectBalance } from '@/api/modules/report'
 import { amountClass, formatAmount } from '@/utils/format'
 import { isRowVisible } from '@/utils/report/rowVisibility'
 import { buildSubjectTree, TREE_PROPS } from '@/utils/report/subjectTree'
+import { groupAuxBySubject } from '@/utils/report/auxFormat'
 import PeriodNavigator from '@/components/finance/PeriodNavigator.vue'
 
 const query = reactive({ period: '' })
@@ -89,6 +102,18 @@ const hideStandardBlank = ref(false)
 
 const isZeroRow = (r: any) =>
   !isRowVisible([r.begin_balance, r.debit_total, r.credit_total, r.end_balance])
+
+const auxBySubject = ref(new Map<string, string[]>())
+
+// P97/REQ-097 阶段C-2：辅助核算明细独立取数，失败不阻断余额表主体
+const loadAux = async (period: string) => {
+  try {
+    const rows = await subjectBalanceAuxiliary(period)
+    auxBySubject.value = groupAuxBySubject(Array.isArray(rows) ? rows : [])
+  } catch {
+    auxBySubject.value = new Map()
+  }
+}
 
 // P97/REQ-097：先按零值规则过滤可见行，再对可见行组树——顺序不能反，
 // 否则被隐藏的父级会带着可见子级一起消失。
@@ -106,6 +131,8 @@ const fetchData = async () => {
   if (!query.period) return
   loading.value = true
   try {
+    // 辅助核算明细与主体并行取，互不阻塞：明细失败仅少一列展示，不影响余额表
+    loadAux(query.period)
     list.value = await subjectBalance(query.period)
   } finally {
     loading.value = false
@@ -175,5 +202,15 @@ onMounted(async () => {
 .dir-credit {
   color: #2563eb;
   background: rgba(37, 99, 235, 0.1);
+}
+.aux-detail {
+  padding: 8px 16px;
+  font-size: 13px;
+}
+.aux-item {
+  line-height: 1.8;
+}
+.aux-empty {
+  color: #909399;
 }
 </style>
