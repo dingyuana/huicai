@@ -4,14 +4,14 @@
 
 ## §0 项目状态（硬数字，每次 commit 后更新）
 
-> **更新基准**：commit `fc2c775` (2026-09-28) — feat(balance): P98期初余额跨期连续性校验接入结账闸门
+> **更新基准**：commit `e3d3bc6` (2026-09-28) — fix(report): 利润表累计列利润总额键名对齐后端cumulativeProfit
 > **当前分支**：`main`
 > **关联文档**：[项目说明](docs/CORE-项目说明.md)、[技术方案](docs/CORE-技术方案.md)、[需求分析](docs/CORE-需求分析.md)、[需求登记册](docs/development/requirements/REQUIREMENTS_REGISTRY.md)、[文档注册表](docs/CORE-文档注册表.md)、[测试策略](docs/testing/TEST-STRATEGY.md)、[Flyway治理规范](docs/development/flyway-governance.md)
 
 | 维度 | 数据 |
 |------|------|
 | 后端代码 | 480 Java 文件 |
-| 测试用例 | 1966 个 `@Test` 方法 / 228 个后端测试类 + 23 个前端测试文件（快测 1725 通过，0 Failures, 0 Errors, 5 Skipped）|
+| 测试用例 | 1972 个 `@Test` 方法 / 229 个后端测试类 + 23 个前端测试文件（快测 1727 通过，0 Failures, 0 Errors, 5 Skipped）|
 | 数据库 | PostgreSQL 16 / V1 baseline (merged V1-V146) |
 | API 端点 | 510+ 个后端端点 |
 | 核心模块 | 基础数据、总账、应收应付、现金管理、固定资产、费用报销、发票税务、预算、财务报表、存储管理 |
