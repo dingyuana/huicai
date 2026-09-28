@@ -25,6 +25,27 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class ReportServiceImpl implements ReportService {
 
+    private static final String END_BALANCE = "end_balance";
+    private static final String BEGIN_BALANCE = "begin_balance";
+    private static final BigDecimal TOLERANCE = new BigDecimal("0.01");
+
+    // 科目段兜底判定：subtotal() 求和与逐行 subtotalGroup 标记必须共用同一份，
+    // 否则前端按标记做悬空保护时会与实际小计口径不一致。
+    private static final java.util.function.Predicate<String> CURRENT_ASSET_CODE = c -> c.startsWith("1")
+            && (c.startsWith("10") || c.startsWith("11")
+            || c.startsWith("12") || c.startsWith("14"))
+            || c.startsWith("50") || c.startsWith("51")
+            || c.startsWith("52") || c.startsWith("54");
+    private static final java.util.function.Predicate<String> NON_CURRENT_ASSET_CODE = c -> c.startsWith("1")
+            && (c.startsWith("13") || c.startsWith("15")
+            || c.startsWith("16") || c.startsWith("17") || c.startsWith("18") || c.startsWith("19"))
+            || c.startsWith("53");
+    private static final java.util.function.Predicate<String> CURRENT_LIABILITY_CODE = c -> c.startsWith("2")
+            && (c.startsWith("20") || c.startsWith("21") || c.startsWith("22"));
+    private static final java.util.function.Predicate<String> NON_CURRENT_LIABILITY_CODE = c -> c.startsWith("2")
+            && (c.startsWith("24") || c.startsWith("25") || c.startsWith("27")
+            || c.startsWith("28") || c.startsWith("29"));
+
     private final ReportDataMapper reportDataMapper;
 
     @Override
@@ -34,6 +55,25 @@ public class ReportServiceImpl implements ReportService {
 
     @Override
     public Map<String, Object> balanceSheet(String period) {
+        Map<String, Object> result = buildBalanceSheet(period, END_BALANCE);
+        Map<String, Object> yearStart = buildBalanceSheet(yearStartOf(period), BEGIN_BALANCE);
+        BigDecimal yearStartDiff = toBigDecimal(yearStart.get("diff"));
+        result.put("yearStart", yearStart);
+        result.put("yearStartCheckDiff", yearStartDiff);
+        result.put("yearStartCheckOk", yearStartDiff.abs().compareTo(TOLERANCE) < 0);
+        return result;
+    }
+
+    private static String yearStartOf(String period) {
+        return period.substring(0, 4) + "01";
+    }
+
+    /**
+     * P94 REQ-090：年初列与期末列的唯一差别是聚合基数，分类逻辑必须完全共用。
+     * 年初 = 年初期间(1月)的期初余额；若小计仍按 1 月期末聚合，1 月有发生额时
+     * 会出现"明细年初加总 ≠ 年初小计"，且与科目余额表期初对不上。
+     */
+    private Map<String, Object> buildBalanceSheet(String period, String balanceField) {
         Map<String, Object> result = new LinkedHashMap<>();
         List<Map<String, Object>> balances = reportDataMapper.subjectBalance(period);
 
@@ -63,33 +103,33 @@ public class ReportServiceImpl implements ReportService {
                 continue;
             }
             String direction = (String) row.get("direction");
-            BigDecimal endBalance = toBigDecimal(row.get("end_balance"));
+            BigDecimal balance = toBigDecimal(row.get(balanceField));
             char top = code.charAt(0);
 
             if (top >= '1' && top <= '6' && (direction == null || direction.isBlank())) {
-                unbalancedItems.add(unclassified(code, row.get("name"), endBalance, "missing-direction"));
+                unbalancedItems.add(unclassified(code, row.get("name"), balance, "missing-direction"));
                 continue;
             }
 
             switch (top) {
                 case '1' -> {
-                    BigDecimal signed = "debit".equals(direction) ? endBalance : endBalance.negate();
+                    BigDecimal signed = "debit".equals(direction) ? balance : balance.negate();
                     assets.add(row);
                     totalAssets = totalAssets.add(signed);
                 }
                 case '5' -> {
-                    BigDecimal signed = "debit".equals(direction) ? endBalance : endBalance.negate();
+                    BigDecimal signed = "debit".equals(direction) ? balance : balance.negate();
                     assets.add(row);
                     totalAssets = totalAssets.add(signed);
                     costInInventory = costInInventory.add(signed);
                 }
                 case '2' -> {
-                    BigDecimal signed = "credit".equals(direction) ? endBalance : endBalance.negate();
+                    BigDecimal signed = "credit".equals(direction) ? balance : balance.negate();
                     liab.add(row);
                     totalLiab = totalLiab.add(signed);
                 }
                 case '3' -> {
-                    BigDecimal signed = "debit".equals(direction) ? endBalance : endBalance.negate();
+                    BigDecimal signed = "debit".equals(direction) ? balance : balance.negate();
                     if (signed.signum() >= 0) {
                         assets.add(row);
                         totalAssets = totalAssets.add(signed);
@@ -99,7 +139,7 @@ public class ReportServiceImpl implements ReportService {
                     }
                 }
                 case '4' -> {
-                    BigDecimal signed = "credit".equals(direction) ? endBalance : endBalance.negate();
+                    BigDecimal signed = "credit".equals(direction) ? balance : balance.negate();
                     if (code.equals("4103")) {
                         profit4103 = signed;
                     } else if (code.equals("4104")) {
@@ -110,12 +150,15 @@ public class ReportServiceImpl implements ReportService {
                     }
                 }
                 case '6' -> {
-                    BigDecimal currentNet = toBigDecimal(row.get("credit_total"))
-                            .subtract(toBigDecimal(row.get("debit_total")));
-                    currentPeriodProfit = currentPeriodProfit.add(currentNet);
+                    // 年初口径无"本期"概念：6xx 的发生额属当期损益，计入年初未分配利润会重复。
+                    if (END_BALANCE.equals(balanceField)) {
+                        BigDecimal currentNet = toBigDecimal(row.get("credit_total"))
+                                .subtract(toBigDecimal(row.get("debit_total")));
+                        currentPeriodProfit = currentPeriodProfit.add(currentNet);
+                    }
                 }
                 default -> unbalancedItems.add(
-                        unclassified(code, row.get("name"), endBalance, "unclassified"));
+                        unclassified(code, row.get("name"), balance, "unclassified"));
             }
         }
 
@@ -128,23 +171,24 @@ public class ReportServiceImpl implements ReportService {
         // 14 段整体归流动：本套科目表 1408 是"委托加工物资"（属存货），
         // 不是通用准则的"持有待售资产"。不得对 1408 单列非流动——
         // 否则 1408 会被流动(14)与非流动(1408)两个 fallback 同时匹配，重复计入小计。
-        currentAssets = subtotal(assets, "CURRENT_ASSET", c -> c.startsWith("1")
-                && (c.startsWith("10") || c.startsWith("11")
-                || c.startsWith("12") || c.startsWith("14"))
-                || c.startsWith("50") || c.startsWith("51")
-                || c.startsWith("52") || c.startsWith("54"));
-        nonCurrentAssets = subtotal(assets, "NON_CURRENT_ASSET", c -> c.startsWith("1")
-                && (c.startsWith("13") || c.startsWith("15")
-                || c.startsWith("16") || c.startsWith("17") || c.startsWith("18") || c.startsWith("19"))
-                || c.startsWith("53"));
+        currentAssets = subtotal(assets, "CURRENT_ASSET", CURRENT_ASSET_CODE, balanceField);
+        nonCurrentAssets = subtotal(assets, "NON_CURRENT_ASSET", NON_CURRENT_ASSET_CODE, balanceField);
         otherAssets = totalAssets.subtract(currentAssets).subtract(nonCurrentAssets);
 
-        currentLiabilities = subtotal(liab, "CURRENT_LIABILITY", c -> c.startsWith("2")
-                && (c.startsWith("20") || c.startsWith("21") || c.startsWith("22")));
-        nonCurrentLiabilities = subtotal(liab, "NON_CURRENT_LIABILITY", c -> c.startsWith("2")
-                && (c.startsWith("24") || c.startsWith("25") || c.startsWith("27")
-                || c.startsWith("28") || c.startsWith("29")));
+        currentLiabilities = subtotal(liab, "CURRENT_LIABILITY", CURRENT_LIABILITY_CODE, balanceField);
+        nonCurrentLiabilities = subtotal(liab, "NON_CURRENT_LIABILITY", NON_CURRENT_LIABILITY_CODE, balanceField);
         otherLiabilities = totalLiab.subtract(currentLiabilities).subtract(nonCurrentLiabilities);
+        // P94：逐行下发所属小计，前端据此做悬空保护（否则只能在前端复制一份科目段口径）
+        tagSubtotalGroup(assets, "CURRENT_ASSET", CURRENT_ASSET_CODE);
+        tagSubtotalGroup(assets, "NON_CURRENT_ASSET", NON_CURRENT_ASSET_CODE);
+        tagSubtotalGroup(liab, "CURRENT_LIABILITY", CURRENT_LIABILITY_CODE);
+        tagSubtotalGroup(liab, "NON_CURRENT_LIABILITY", NON_CURRENT_LIABILITY_CODE);
+        for (Map<String, Object> row : assets) {
+            row.putIfAbsent("subtotalGroup", "OTHER_ASSET");
+        }
+        for (Map<String, Object> row : liab) {
+            row.putIfAbsent("subtotalGroup", "OTHER_LIABILITY");
+        }
         // 勾稽（P92B-BD2）：各小计之和必须等于总计。otherAssets/otherLiabilities 由减法反推得出，
         // 因此上述等式恒成立；这里显式校验而非依赖恒等式，防止未来改动 switch 分类后小计漏项。
         if (currentAssets.add(nonCurrentAssets).add(otherAssets).compareTo(totalAssets) != 0
@@ -168,8 +212,9 @@ public class ReportServiceImpl implements ReportService {
             cypRow.put("code", "4103");
             cypRow.put("name", "未分配利润");
             cypRow.put("direction", currentYearProfit.signum() < 0 ? "debit" : "credit");
-            cypRow.put("begin_balance", BigDecimal.ZERO);
-            cypRow.put("end_balance", currentYearProfit);
+            cypRow.put(BEGIN_BALANCE, BigDecimal.ZERO);
+            cypRow.put(END_BALANCE, BigDecimal.ZERO);
+            cypRow.put(balanceField, currentYearProfit);
             cypRow.put("rowType", "currentYearProfit");
             equity.add(cypRow);
         }
@@ -210,6 +255,22 @@ public class ReportServiceImpl implements ReportService {
         return bad;
     }
 
+    /** 命中判定与 subtotal() 完全一致（account_type 优先，科目段兜底），保证标记与小计同源。 */
+    private static void tagSubtotalGroup(List<Map<String, Object>> rows, String target,
+                                          java.util.function.Predicate<String> fallback) {
+        for (Map<String, Object> row : rows) {
+            Object at = row.get("account_type");
+            String accountType = (at == null) ? null : String.valueOf(at);
+            boolean byType = target.equals(accountType);
+            boolean byFallback = !byType
+                    && (accountType == null || accountType.isBlank() || "null".equals(accountType))
+                    && fallback.test(String.valueOf(row.get("code")));
+            if (byType || byFallback) {
+                row.put("subtotalGroup", target);
+            }
+        }
+    }
+
     /**
      * P92-B: 对已分类的资产/负债行按 account_type 求小计。
      *
@@ -217,11 +278,14 @@ public class ReportServiceImpl implements ReportService {
      * （科目段兜底，保证迁移前数据与人工漏填时不静默丢弃，见 P92B-BD3）。
      *
      * <p>金额口径必须与 balanceSheet 主循环的 signed 一致：
-     * 资产(1x/5x)借方为正、负债(2x)贷方为正。因此不能直接取 end_balance（其符号依赖方向），
+     * 资产(1x/5x)借方为正、负债(2x)贷方为正。因此不能直接取余额（其符号依赖方向），
      * 必须按行上的 direction 重新定向，否则小计会与总计符号相反。
+     *
+     * <p>balanceField：P94 起小计随主循环取同一余额字段，保证同一张表内年初/期末不混口径。
      */
     private static BigDecimal subtotal(List<Map<String, Object>> rows, String target,
-                                       java.util.function.Predicate<String> fallback) {
+                                       java.util.function.Predicate<String> fallback,
+                                       String balanceField) {
         BigDecimal sum = BigDecimal.ZERO;
         for (Map<String, Object> row : rows) {
             String code = String.valueOf(row.get("code"));
@@ -235,10 +299,10 @@ public class ReportServiceImpl implements ReportService {
             if (!byType && !byFallback) {
                 continue;
             }
-            BigDecimal endBalance = toBigDecimal(row.get("end_balance"));
+            BigDecimal balance = toBigDecimal(row.get(balanceField));
             BigDecimal signed = code.startsWith("2")
-                    ? ("credit".equals(direction) ? endBalance : endBalance.negate())
-                    : ("debit".equals(direction) ? endBalance : endBalance.negate());
+                    ? ("credit".equals(direction) ? balance : balance.negate())
+                    : ("debit".equals(direction) ? balance : balance.negate());
             sum = sum.add(signed);
         }
         return sum;
@@ -464,15 +528,10 @@ public class ReportServiceImpl implements ReportService {
     @Override
     public void exportBalanceSheet(String period, HttpServletResponse response) throws IOException {
         Map<String, Object> data = balanceSheet(period);
-        // P92-B: 小计年初值与前端同口径——取年初期间 balanceSheet() 的返回值，
-        // 而不是科目行 begin_balance 相加（后者含未分配利润、成本在库存等口径差异，前端同样不做此计算）。
-        Map<String, Object> ysData = null;
-        String yearStart = period.substring(0, 4) + "01";
-        try {
-            ysData = balanceSheet(yearStart);
-        } catch (Exception ignore) {
-            // 年初期间无数据或尚未结账时，小计年初值留空，不影响本次导出
-        }
+        // P94 REQ-090：年初列小计直接取 balanceSheet 已算好的 yearStart 区块（begin 口径聚合）。
+        // 不可改回 balanceSheet(YYYY01)——那是 1 月期末口径，与明细年初值不同源。
+        @SuppressWarnings("unchecked")
+        Map<String, Object> ysData = (Map<String, Object>) data.get("yearStart");
         String[] headers = {"项目", "行次", "期末余额", "年初余额"};
         List<List<Object>> rows = new ArrayList<>();
         @SuppressWarnings("unchecked")
@@ -547,10 +606,10 @@ public class ReportServiceImpl implements ReportService {
         rows.add(List.of("加：期初现金及现金等价物余额", "11", data.get("openingCash"), data.get("openingCashYtd")));
         rows.add(List.of("六、期末现金及现金等价物余额", "12", data.get("closingCash"), data.get("closingCashYtd")));
         if (Boolean.TRUE.equals(data.get("cashCheckOk"))) {
-            rows.add(List.of("勾稽校验", "13", "期末现金 = 期初 + 净流量，与 1001+1002 期末余额一致 ✓", ""));
+            rows.add(List.of("勾稽校验", "13", "期末现金 = 期初 + 净流量，与 1001+1002+1009+1012 期末余额一致 ✓", ""));
         } else {
             rows.add(List.of("勾稽校验", "13", "⚠ 差异 " + data.get("cashCheckDiff")
-                    + "（期末现金计算值 vs 科目余额 1001+1002）", ""));
+                    + "（期末现金计算值 vs 科目余额 1001+1002+1009+1012）", ""));
         }
         writeExcel(response, "现金流量表", period, headers, rows);
     }

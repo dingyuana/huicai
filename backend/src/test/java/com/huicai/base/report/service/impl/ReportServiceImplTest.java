@@ -308,6 +308,164 @@ class ReportServiceImplTest {
 
     // ==================== P69 资产负债表恒等式 ====================
 
+    // ==================== P94 REQ-090 年初口径统一（begin 口径） ====================
+
+    /**
+     * 年初列必须取 1 月期初（begin_balance），旧实现误取 1 月期末（end_balance）。
+     * 造数让 1 月有发生额，两种口径结果必然不同，测试才有证伪力。
+     */
+    @Test
+    void p94_beginBalanceSheet_yearStartSubtotalEqualsDetailSum() {
+        List<Map<String, Object>> jan = new ArrayList<>();
+        jan.add(balB("1002", "银行存款", "debit", 80000, 20000, 0, 120000));
+        List<Map<String, Object>> jun = new ArrayList<>();
+        jun.add(balB("1002", "银行存款", "debit", 120000, 30000, 0, 150000));
+        when(reportDataMapper.subjectBalance("202601")).thenReturn(jan);
+        when(reportDataMapper.subjectBalance("202606")).thenReturn(jun);
+
+        Map<String, Object> r = service.balanceSheet("202606");
+
+        Map<String, Object> ys = yearStart(r);
+        assertEquals("202601", ys.get("period"));
+        assertEquals(new BigDecimal("80000.00"), ys.get("currentAssets"),
+                "年初流动资产 = 1月期初 80000（明细行 1002 年初值同源）");
+        assertEquals(new BigDecimal("80000.00"), ys.get("totalAssets"), "年初资产总计同口径");
+        assertNotEquals(new BigDecimal("120000.00"), ys.get("currentAssets"),
+                "负向：年初列不得等于 1 月期末 120000（旧口径必须被证伪）");
+        assertEquals(new BigDecimal("150000.00"), r.get("currentAssets"), "期末列不受年初口径改动影响");
+    }
+
+    @Test
+    void p94_yearStartIdentity_balanced_年初恒等式成立() {
+        List<Map<String, Object>> jan = new ArrayList<>();
+        jan.add(balB("1002", "银行存款", "debit", 80000, 0, 0, 80000));
+        jan.add(balB("2001", "短期借款", "credit", 30000, 0, 0, 30000));
+        jan.add(balB("4001", "实收资本", "credit", 50000, 0, 0, 50000));
+        when(reportDataMapper.subjectBalance("202601")).thenReturn(jan);
+        when(reportDataMapper.subjectBalance("202606")).thenReturn(new ArrayList<>());
+
+        Map<String, Object> r = service.balanceSheet("202606");
+
+        Map<String, Object> ys = yearStart(r);
+        assertEquals(new BigDecimal("0.00"), r.get("yearStartCheckDiff"),
+                "年初 资产80000 = 负债30000 + 权益50000，恒等式差异为 0");
+        assertEquals(Boolean.TRUE, r.get("yearStartCheckOk"));
+        assertEquals(new BigDecimal("80000.00"), ys.get("totalLiabEquity"));
+    }
+
+    @Test
+    void p94_yearStartIdentity_unbalanced_仅提示不阻断() {
+        List<Map<String, Object>> jan = new ArrayList<>();
+        jan.add(balB("1002", "银行存款", "debit", 80000, 0, 0, 80000));
+        when(reportDataMapper.subjectBalance("202601")).thenReturn(jan);
+        when(reportDataMapper.subjectBalance("202606")).thenReturn(new ArrayList<>());
+
+        Map<String, Object> r = service.balanceSheet("202606");
+
+        assertEquals(new BigDecimal("80000.00"), r.get("yearStartCheckDiff"),
+                "年初资产 80000 无对应负债权益，差异应如实暴露");
+        assertEquals(Boolean.FALSE, r.get("yearStartCheckOk"));
+        assertNotNull(r.get("yearStart"), "负向：不平只提示，年初区块仍须返回，不得抛错阻断报表");
+    }
+
+    @Test
+    void p94_yearStart_未分配利润不含当期损益发生额() {
+        // 1 月有 3 万收入：期末未分配利润含它（4103+4104+当期6xx），年初未分配利润不得含——
+        // 损益类科目在期末结转后年初余额为 0，上年留存由 4104 期初承载。
+        List<Map<String, Object>> rows = new ArrayList<>();
+        rows.add(balB("1002", "银行存款", "debit", 80000, 0, 0, 80000));
+        rows.add(balB("4001", "实收资本", "credit", 50000, 0, 0, 50000));
+        rows.add(balB("6001", "主营业务收入", "credit", 0, 0, 30000, 30000));
+        when(reportDataMapper.subjectBalance("202601")).thenReturn(rows);
+        when(reportDataMapper.subjectBalance("202606")).thenReturn(rows);
+
+        Map<String, Object> r = service.balanceSheet("202606");
+        Map<String, Object> ys = yearStart(r);
+
+        assertEquals(new BigDecimal("30000.00"), r.get("currentYearProfit"), "期末含 1 月收入 30000");
+        assertEquals(1, ((List<?>) r.get("equity")).stream()
+                        .filter(e -> "未分配利润".equals(((Map<?, ?>) e).get("name"))).count(),
+                "期末权益区应有未分配利润行");
+        assertEquals(new BigDecimal("0.00"), ys.get("currentYearProfit"), "负向：年初未分配利润不得含当期损益");
+        assertEquals(0, ((List<?>) ys.get("equity")).stream()
+                        .filter(e -> "未分配利润".equals(((Map<?, ?>) e).get("name"))).count(),
+                "负向：年初权益区不得出现未分配利润行（4001 实收资本行不受影响）");
+    }
+
+    /**
+     * 悬空保护需要知道每行属于哪个小计，但分组口径只在 subtotal() 里；
+     * 让前端自己按科目段猜会复制一份口径（P89-B 已记录前端重算必然算错）。
+     */
+    @Test
+    void p94_subtotalGroup_行标记所属小计() {
+        List<Map<String, Object>> rows = new ArrayList<>();
+        rows.add(balB("1002", "银行存款", "debit", 80000, 0, 0, 80000));
+        rows.add(balB("1601", "固定资产", "debit", 50000, 0, 0, 50000));
+        rows.add(balB("2001", "短期借款", "credit", 30000, 0, 0, 30000));
+        when(reportDataMapper.subjectBalance("202601")).thenReturn(rows);
+        when(reportDataMapper.subjectBalance("202606")).thenReturn(rows);
+
+        Map<String, Object> r = service.balanceSheet("202606");
+        Map<String, Object> ys = yearStart(r);
+
+        assertEquals("CURRENT_ASSET", groupOf(ys, "assets", "1002"));
+        assertEquals("NON_CURRENT_ASSET", groupOf(ys, "assets", "1601"));
+        assertEquals("CURRENT_LIABILITY", groupOf(ys, "liabilities", "2001"));
+        assertEquals("CURRENT_ASSET", groupOf(r, "assets", "1002"), "期末区块同样带分组标记");
+    }
+
+    /**
+     * P94 REQ-092：页面级 Alert 由 cashCheckOk 驱动，容差边界必须锁死。
+     * 判定是严格小于 0.01——恰好 0.01 视为不平（对账惯例），改成 <= 会让 Alert 在边界漏报。
+     */
+    @Test
+    void p94_cashCheck_容差边界驱动页面Alert() {
+        when(reportDataMapper.cashFlowData(anyString(), anyString())).thenReturn(new ArrayList<>());
+        Map<String, Object> cash = new HashMap<>();
+        cash.put("begin_cash", new BigDecimal("1000"));
+        cash.put("end_cash", new BigDecimal("1200"));
+        when(reportDataMapper.cashSubjectBalance(anyString())).thenReturn(cash);
+
+        Map<String, Object> unbalanced = service.cashFlowStatement("202606");
+        assertEquals(new BigDecimal("200.00"), unbalanced.get("cashCheckDiff"));
+        assertEquals(Boolean.FALSE, unbalanced.get("cashCheckOk"), "差异 200 必须判不平以触发 Alert");
+
+        cash.put("end_cash", new BigDecimal("1000.01"));
+        Map<String, Object> boundary = service.cashFlowStatement("202606");
+        assertEquals(new BigDecimal("0.01"), boundary.get("cashCheckDiff"));
+        assertEquals(Boolean.FALSE, boundary.get("cashCheckOk"), "恰好 0.01 属不平（严格小于容差）");
+
+        cash.put("end_cash", new BigDecimal("1000"));
+        Map<String, Object> balanced = service.cashFlowStatement("202606");
+        assertEquals(Boolean.TRUE, balanced.get("cashCheckOk"), "负向：无差异时不得弹 Alert");
+    }
+
+    private static String groupOf(Map<String, Object> block, String listKey, String code) {
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> list = (List<Map<String, Object>>) block.get(listKey);
+        return list.stream()
+                .filter(r -> code.equals(r.get("code")))
+                .map(r -> String.valueOf(r.get("subtotalGroup")))
+                .findFirst()
+                .orElse(null);
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> yearStart(Map<String, Object> balanceSheetResult) {
+        Object ys = balanceSheetResult.get("yearStart");
+        assertNotNull(ys, "balanceSheet 响应必须含 yearStart 区块（后端 begin 口径聚合）");
+        return (Map<String, Object>) ys;
+    }
+
+    /** 带期初余额的行；bal() 不含 begin_balance，故年初口径用例需本 helper。 */
+    private Map<String, Object> balB(String code, String name, String direction,
+                                     double beginBalance, double debitTotal,
+                                     double creditTotal, double endBalance) {
+        Map<String, Object> m = bal(code, name, direction, debitTotal, creditTotal, endBalance);
+        m.put("begin_balance", beginBalance);
+        return m;
+    }
+
     private Map<String, Object> bal(String code, String name, String direction,
                                     double debitTotal, double creditTotal, double endBalance) {
         Map<String, Object> m = new HashMap<>();

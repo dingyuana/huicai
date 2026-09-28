@@ -14,9 +14,18 @@
           <el-button @click="onExport">导出</el-button>
         </el-form-item>
         <el-form-item>
-          <el-checkbox v-model="hideZeroRows">隐藏零值行</el-checkbox>
+          <el-checkbox v-model="hideNoMovement">隐藏无发生额且无余额科目</el-checkbox>
+          <el-checkbox v-model="hideStandardBlank">隐藏报表标准空白行</el-checkbox>
         </el-form-item>
       </el-form>
+
+      <!-- P94 REQ-092：勾稽差异页面级提示（表内警示行保留；仅提示，不改数） -->
+      <el-alert v-if="result && result.cashCheckOk === false" type="warning" show-icon :closable="false"
+        :title="`⚠ 勾稽不平：期末现金计算值与科目余额（1001+1002+1009+1012）差异 ${fmtAmount(result.cashCheckDiff)}`"
+        description="按 CAS 现金流量表要求，现金及现金等价物净增加额应与期末现金余额衔接；请检查货币资金科目或跨期凭证。"
+        style="margin-bottom: 16px" />
+      <el-alert v-else-if="result && result.cashCheckOkYtd === false" type="warning" show-icon :closable="false"
+        :title="`⚠ 本年累计勾稽差异 ${fmtAmount(result.cashCheckDiffYtd)}`" style="margin-bottom: 16px" />
 
       <el-table v-if="result" :data="visibleRows" border>
         <el-table-column prop="label" label="项目" min-width="280" />
@@ -41,11 +50,14 @@ import { resolveLatestClosedPeriod } from '@/utils/period'
 import { ElMessage } from 'element-plus'
 import { cashFlowStatement, exportCashFlow } from '@/api/modules/report'
 import { amountClass, formatAmount } from '@/utils/format'
+import { isRowVisible, isStandardBlankRow } from '@/utils/report/rowVisibility'
 import PeriodNavigator from '@/components/finance/PeriodNavigator.vue'
 
 const query = reactive({ period: '' })
 const result = ref<any>(null)
-const hideZeroRows = ref(true)
+// P94 REQ-091：开关1 管明细行零值过滤，开关2 管全零骨架行
+const hideNoMovement = ref(true)
+const hideStandardBlank = ref(false)
 
 const fmtAmount = (v: any) => formatAmount(v)
 
@@ -79,12 +91,15 @@ const rows = computed(() => {
 })
 
 const visibleRows = computed(() => {
-  if (!hideZeroRows.value) return rows.value
+  if (!hideNoMovement.value && !hideStandardBlank.value) return rows.value
   // P92-A：本期或本年累计任一非零则显示该行（原先只看本期，累计有数会被误藏）
-  return rows.value.filter(r =>
-    r.fixed ||
-    r.amount === '' ||
-    (Number(r.amount) !== 0 || Number(r.amountYtd) !== 0))
+  // P94：开关2 只清理全零骨架行；勾稽提示行由 isStandardBlankRow 硬保护，永不隐藏
+  return rows.value.filter(r => {
+    if (r.amount === '' && r.amountYtd === '') return true
+    if (hideNoMovement.value && !r.fixed && !isRowVisible([r.amount, r.amountYtd])) return false
+    if (hideStandardBlank.value && isStandardBlankRow(r.label, [r.amount, r.amountYtd], !!r.fixed)) return false
+    return true
+  })
 })
 
 const fetchData = async () => {

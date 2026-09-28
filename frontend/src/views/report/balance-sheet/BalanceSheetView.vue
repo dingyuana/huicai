@@ -14,11 +14,16 @@
           <el-button @click="onExport">导出</el-button>
         </el-form-item>
         <el-form-item>
-          <el-checkbox v-model="hideZeroRows">隐藏零值行</el-checkbox>
+          <el-checkbox v-model="hideNoMovement">隐藏无发生额且无余额科目</el-checkbox>
+          <el-checkbox v-model="hideStandardBlank">隐藏报表标准空白行</el-checkbox>
         </el-form-item>
       </el-form>
 
       <el-alert v-if="result" :title="result.balanced ? '资产=负债+所有者权益, 平衡 ✓' : '⚠ 资产≠负债+所有者权益, 请检查!'" :type="result.balanced ? 'success' : 'error'" show-icon :closable="false" style="margin-bottom: 16px" />
+
+      <el-alert v-if="result && result.yearStartCheckOk === false" type="warning" show-icon :closable="false"
+        :title="`⚠ 年初列资产 ≠ 负债+所有者权益，差异 ${fmtAmount(result.yearStartCheckDiff)}（仅提示，不改数）`"
+        style="margin-bottom: 16px" />
 
       <!-- P89-B：对比列（资产负债表 = 年初数，取年初期间 1 月的期初余额） -->
       <el-alert v-if="yearStartLabel" :title="`对比列：年初数（${yearStartLabel}）`" type="info" show-icon :closable="false" style="margin-bottom: 16px" />
@@ -40,7 +45,7 @@
               </template>
             </el-table-column>
           </el-table>
-          <!-- P92-B: 三分小计行常驻，不受 hideZeroRows 影响（不折叠口径） -->
+          <!-- P92-B: 三分小计行常驻，不受零值行开关影响（不折叠口径） -->
           <div class="subtotal-row">
             <span>流动资产合计</span>
             <span class="sub-amount">
@@ -67,7 +72,7 @@
               </span>
             </span>
           </div>
-          <div class="subtotal-row">
+          <div v-if="showOtherAssets" class="subtotal-row">
             <span>其他资产</span>
             <span class="sub-amount">
               <span class="total-cell" v-if="yearStartAvailable">
@@ -110,7 +115,7 @@
               </template>
             </el-table-column>
           </el-table>
-          <!-- P92-B: 三分小计行常驻，不受 hideZeroRows 影响（不折叠口径） -->
+          <!-- P92-B: 三分小计行常驻，不受零值行开关影响（不折叠口径） -->
           <div class="subtotal-row">
             <span>流动负债合计</span>
             <span class="sub-amount">
@@ -137,7 +142,7 @@
               </span>
             </span>
           </div>
-          <div class="subtotal-row">
+          <div v-if="showOtherLiabilities" class="subtotal-row">
             <span>其他负债</span>
             <span class="sub-amount">
               <span class="total-cell" v-if="yearStartAvailable">
@@ -190,6 +195,7 @@ import { resolveLatestClosedPeriod, yearStartPeriod } from '@/utils/period'
 import { ElMessage } from 'element-plus'
 import { balanceSheet, subjectBalance, exportBalanceSheet } from '@/api/modules/report'
 import { amountClass, formatAmount } from '@/utils/format'
+import { isRowVisible, guardDanglingSubtotal, isStandardBlankRow } from '@/utils/report/rowVisibility'
 import PeriodNavigator from '@/components/finance/PeriodNavigator.vue'
 
 const query = reactive({ period: '' })
@@ -198,7 +204,9 @@ const result = ref<any>(null)
 const yearStartRows = ref<any[]>([])
 const yearStartData = ref<any>(null)
 const yearStartAvailable = ref(false)
-const hideZeroRows = ref(true)
+// P94 REQ-091：两个开关职责分离——开关1 管明细行，开关2 管报表标准空白行
+const hideNoMovement = ref(true)
+const hideStandardBlank = ref(false)
 
 const yearStartLabel = computed(() => {
   const p = yearStartPeriod(query.period)
@@ -214,27 +222,74 @@ const yearStartValue = (code: string): number => {
   return Number(row?.begin_balance || 0)
 }
 
-const isZeroRow = (r: any) => Number(r.end_balance || 0) === 0
+/** 明细行展示列：年初 + 期末。任一非零即显示（只看期末会误藏"年初有值、期末清零"的科目） */
+const displayValues = (r: any) => [yearStartValue(r.code), r.end_balance]
 
-const visibleAssets = computed(() => hideZeroRows.value ? result.value.assets.filter((r: any) => !isZeroRow(r)) : result.value.assets)
-const visibleLiabilities = computed(() => hideZeroRows.value ? result.value.liabilities.filter((r: any) => !isZeroRow(r)) : result.value.liabilities)
-const visibleEquity = computed(() => hideZeroRows.value ? result.value.equity.filter((r: any) => !isZeroRow(r)) : result.value.equity)
+const SUBTOTAL_FIELD: Record<string, string> = {
+  CURRENT_ASSET: 'currentAssets',
+  NON_CURRENT_ASSET: 'nonCurrentAssets',
+  OTHER_ASSET: 'otherAssets',
+}
+
+/** 按小计分组过滤 + 悬空保护：小计非零却无任何可见明细时，强制保留金额最大的一行 */
+const visibleInGroup = (rows: any[], group: string) => {
+  const scoped = rows.filter((r: any) => r.subtotalGroup === group)
+  const byRule = scoped.map(
+    (r: any) => !hideNoMovement.value || isRowVisible(displayValues(r)),
+  )
+  const field = SUBTOTAL_FIELD[group]
+  const subtotal = Number(result.value?.[field] ?? 0)
+  const guarded = guardDanglingSubtotal(scoped, byRule, subtotal !== 0,
+    (r: any) => Math.abs(Number(r.end_balance || 0)))
+  return scoped.filter((_, i) => guarded[i])
+}
+
+const byCode = (a: any, b: any) => String(a.code).localeCompare(String(b.code))
+
+const visibleAssets = computed(() => {
+  const rows: any[] = Array.isArray(result.value?.assets) ? result.value.assets : []
+  return [
+    ...visibleInGroup(rows, 'CURRENT_ASSET'),
+    ...visibleInGroup(rows, 'NON_CURRENT_ASSET'),
+    ...visibleInGroup(rows, 'OTHER_ASSET'),
+  ].sort(byCode)
+})
+
+const visibleLiabilities = computed(() => {
+  const rows: any[] = Array.isArray(result.value?.liabilities) ? result.value.liabilities : []
+  return [
+    ...visibleInGroup(rows, 'CURRENT_LIABILITY'),
+    ...visibleInGroup(rows, 'NON_CURRENT_LIABILITY'),
+    ...visibleInGroup(rows, 'OTHER_LIABILITY'),
+  ].sort(byCode)
+})
+
+const visibleEquity = computed(() => {
+  const rows: any[] = Array.isArray(result.value?.equity) ? result.value.equity : []
+  if (!hideNoMovement.value) return rows
+  return rows.filter((r: any) => isRowVisible(displayValues(r)))
+})
+
+/** 开关2：仅兜底分类的"其他资产/其他负债"全零时隐藏，三分小计不归本开关管 */
+const showOtherAssets = computed(() => !hideStandardBlank.value
+  || !isStandardBlankRow('其他资产', [yearStartData.value?.otherAssets, result.value?.otherAssets]))
+const showOtherLiabilities = computed(() => !hideStandardBlank.value
+  || !isStandardBlankRow('其他负债', [yearStartData.value?.otherLiabilities, result.value?.otherLiabilities]))
 
 const fetchData = async () => {
   if (!query.period) return
-  // P89-B：对比列 = 年初数。
-  // 科目行年初值取年初期间(1月)的期初余额；合计取年初期间 balanceSheet() 的返回值，
-  // 因为后端口径含本年利润、成本在库存、未分类项等特殊处理，前端重算必然算错。
+  // P94 REQ-090：小计/合计的年初值取服务端 yearStart 区块（begin 口径，与明细同源），
+  // 前端不得重算——后端口径含未分配利润、成本在库存、未分类项等处理，重算必然算错；
+  // 明细行年初值仍按科目编码取 1 月期初余额。
   const ys = yearStartPeriod(query.period)
-  const [current, ysBalance, ysRows] = await Promise.all([
+  const [current, ysRows] = await Promise.all([
     balanceSheet(query.period),
-    ys ? balanceSheet(ys).catch(() => null) : Promise.resolve(null),
     ys ? subjectBalance(ys).catch(() => []) : Promise.resolve([]),
   ])
   result.value = current
-  yearStartData.value = ysBalance
+  yearStartData.value = current?.yearStart ?? null
   yearStartRows.value = Array.isArray(ysRows) ? ysRows : []
-  yearStartAvailable.value = !!ysBalance
+  yearStartAvailable.value = !!current?.yearStart
 }
 
 const onExport = async () => {

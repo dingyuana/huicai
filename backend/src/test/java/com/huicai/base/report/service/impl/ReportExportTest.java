@@ -291,6 +291,45 @@ class ReportExportTest {
         }
     }
 
+    /**
+     * P94 REQ-090：导出件年初列与页面、科目余额表同口径。
+     * 旧实现取 1 月"期末"120000，导出的小计年初数会与页面显示的明细年初加总对不上。
+     */
+    @Test
+    void p94_exportBalanceSheet_yearStartColumn_usesBeginCaliber(@TempDir Path tmp) throws IOException {
+        List<Map<String, Object>> jan = new ArrayList<>();
+        jan.add(balanceRow("1002", "银行存款", "debit", 80000, 20000, 0, 120000));
+        List<Map<String, Object>> jun = new ArrayList<>();
+        jun.add(balanceRow("1002", "银行存款", "debit", 120000, 30000, 0, 150000));
+        when(reportDataMapper.subjectBalance("202601")).thenReturn(jan);
+        when(reportDataMapper.subjectBalance("202606")).thenReturn(jun);
+
+        ByteArrayOutputStream out = captureStream();
+        service.exportBalanceSheet("202606", response);
+
+        File xlsx = tmp.resolve("资产负债表_202606.xlsx").toFile();
+        try (FileOutputStream fos = new FileOutputStream(xlsx)) {
+            fos.write(out.toByteArray());
+        }
+        try (InputStream in = Files.newInputStream(xlsx.toPath());
+             Workbook wb = new XSSFWorkbook(in)) {
+            Row current = rowByLabel(wb.getSheetAt(0), "流动资产合计");
+            assertNotNull(current, "导出应含流动资产合计行");
+            assertEquals(150000d, current.getCell(2).getNumericCellValue(), 0.001d, "期末列 = 6 月末 150000");
+            assertEquals(80000d, current.getCell(3).getNumericCellValue(), 0.001d,
+                    "年初列必须是 1 月期初 80000；1 月期末 120000 是旧口径，必须被证伪");
+        }
+    }
+
+    private static Row rowByLabel(Sheet sheet, String label) {
+        for (int i = 0; i <= sheet.getLastRowNum(); i++) {
+            if (label.equals(cellText(sheet, i, 0))) {
+                return sheet.getRow(i);
+            }
+        }
+        return null;
+    }
+
     /** 构造科目余额行。direction 可为 null（测方向列兜底值） */
     private static Map<String, Object> balanceRow(String code, String name, String direction,
                                                    long begin, long debit, long credit, long end) {

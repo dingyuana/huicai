@@ -72,8 +72,11 @@ public interface ReportDataMapper {
                                        @Param("period") String period);
 
     /**
-     * P88③：现金及现金等价物(1001 库存现金 + 1002 银行存款) 期初/期末余额，
-     * 供现金流量表补"期初/期末现金余额"闭环 + 与净流量勾稽。
+     * P88③/P94：现金及现金等价物期初/期末余额，供现金流量表补"期初/期末现金余额"闭环 + 与净流量勾稽。
+     *
+     * <p>科目范围用白名单而非 {@code LIKE '100%'}：本项目科目表 1xxx 段实测只有
+     * 1001 库存现金 / 1002 银行存款 / 1012 其他货币资金（1009 未使用），
+     * 旧 LIKE 口径漏掉 1012 会让勾稽差异虚高。放宽到 LIKE 会把非货币资金科目误纳。
      */
     @Select("""
         SELECT COALESCE(SUM(sb.begin_balance), 0) AS begin_cash,
@@ -81,7 +84,7 @@ public interface ReportDataMapper {
         FROM t_subject_balance sb
         INNER JOIN t_subject s ON s.id = sb.subject_id
         WHERE sb.period = #{period}
-          AND s.code LIKE '100%'
+          AND s.code IN ('1001', '1002', '1009', '1012')
           AND s.deleted = 0
     """)
     Map<String, Object> cashSubjectBalance(@Param("period") String period);

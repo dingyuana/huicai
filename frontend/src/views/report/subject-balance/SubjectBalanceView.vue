@@ -14,7 +14,8 @@
           <el-button @click="onExport">导出</el-button>
         </el-form-item>
         <el-form-item>
-          <el-checkbox v-model="hideZeroRows">隐藏零值行</el-checkbox>
+          <el-checkbox v-model="hideNoMovement">隐藏无发生额且无余额科目</el-checkbox>
+          <el-checkbox v-model="hideStandardBlank" disabled>隐藏报表标准空白行（本科目表无空白骨架行）</el-checkbox>
         </el-form-item>
       </el-form>
 
@@ -69,19 +70,23 @@ import { resolveLatestClosedPeriod } from '@/utils/period'
 import { ElMessage } from 'element-plus'
 import { subjectBalance, exportSubjectBalance } from '@/api/modules/report'
 import { amountClass, formatAmount } from '@/utils/format'
+import { isRowVisible } from '@/utils/report/rowVisibility'
 import PeriodNavigator from '@/components/finance/PeriodNavigator.vue'
 
 const query = reactive({ period: '' })
 const router = useRouter()
 const list = ref<any[]>([])
 const loading = ref(false)
-const hideZeroRows = ref(true)
+// P94 REQ-091：明细行判定本就按四列（期初/借/贷/期末）执行，已合规；
+// 开关2 保留位但本页无标准空白骨架行，置 disabled。
+const hideNoMovement = ref(true)
+const hideStandardBlank = ref(false)
 
 const isZeroRow = (r: any) =>
-  [r.begin_balance, r.debit_total, r.credit_total, r.end_balance].every(v => Number(v || 0) === 0)
+  !isRowVisible([r.begin_balance, r.debit_total, r.credit_total, r.end_balance])
 
 const visibleRows = computed(() =>
-  hideZeroRows.value ? list.value.filter(r => !isZeroRow(r)) : list.value
+  hideNoMovement.value ? list.value.filter(r => !isZeroRow(r)) : list.value
 )
 
 const fmtAmount = (v: any) => formatAmount(v)
