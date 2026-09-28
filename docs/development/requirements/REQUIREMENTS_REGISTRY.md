@@ -1,6 +1,6 @@
 # 慧财财务系统 — 需求登记册
 
-> 版本：V1.24
+> 版本：V1.25
 > 日期：2026-09-28
 > 关联文档：[项目说明](../../项目说明.md)、[技术方案](../../技术方案.md)、[需求分析](../../需求分析.md)、[P0-P3 路线图](../../development/plans/P0-P3-roadmap.md)、[文档注册表](../../文档注册表.md)
 >
@@ -15,6 +15,7 @@
 
 | 版本 | 日期 | 变更人 | 变更内容 |
 |------|------|--------|----------|
+| V1.25 | 2026-09-28 | opencode | 新增 REQ-2026-103~110 共 8 条（SPC-P99，开发环境可运行性修复与构建门禁治理）。**全部为本机从零搭建环境并跑通全链路时实测触发的缺陷，非静态审查推测**：前端 `vue-tsc` 门禁失败致无 `dist`；种子账号哈希与注释口令不符致新库无法登录（e2e 与人工验收全部受阻）；ai-service 因 `pydantic==2.6.1` 与 `langchain>=0.3.0` 冲突致镜像无法构建；compose 两服务同映射 8000 致全量 `up` 必失败（附带发现 `ai.service-url` 自引用后端自身端口）；V106 之后建的 4 张租户表漏掉 RLS；慢测全量运行因共享容器+`reuseForks` 失败但逐类单跑全绿；`VoucherList.test.ts` 5 项失败；`application.yml` 明文写入 NVIDIA API Key。**批次性质为缺陷修复，不含任何新功能、不改业务口径**。SPEC 见 `docs/specs/P99-runnability-and-build-fixes.md`（V1.0，待老丁审核，含 D1-D6 拍板项）。**登记时即附实测证据**（file:line + 命令输出），避免后续重跑复现 |
 | V1.0 | 2026-07-07 | 初次建立 | 从 DESIGN.md V3.0 + 全部 SPEC 提取 54 条需求，按模块分类编号 |
 | V1.1 | 2026-07-08 | Hermes | 新增 REQ-2026-055~057：核销 Timeline/穿透点击/FIFO 自动核销 |
 | V1.2 | 2026-07-09 | Hermes | 新增 REQ-2026-058~062：AI 流水分类/审核建议/核销匹配/反馈闭环/AI 测试 |
@@ -158,6 +159,14 @@
 | REQ-2026-100 | 报表异常业务风险诊断预警 | P2 | 零收入+低费用、存量客户长期无收入、期末现金骤降等场景输出黄色诊断提示；AI/规则输出=建议仅展示，不自动调整任何财务数据（铁律 #1/#2）；关联 REQ-2026-037 异常指标告警 | SPC-P97 | 🟡 代码完成待验证（P97 V1.5） |
 | REQ-2026-101 | 期初余额跨期连续性校验（结账闸门） | P1 | 结账前检查项新增「期初连续性」：逐科目比对本期期初与上期期末（同 `getPreviousEndBalance` 回溯口径），差异 ≥0.01 汇总为 issue 并阻断结账；上期无余额数据（新账套首期/年中启用）判为 skip 而非不平；期初一致时不得误报；纯只读校验，不自动修数（铁律 #1/#2） | SPC-P98 | ✅ 已验收（P98 V1.2） |
 | REQ-2026-102 | 期初连续性诊断页面提示 | P2 | 科目余额表页展示期初连续性黄色提示条（列出不平科目 + 上期期末/本期期初/差额），使用户在录凭证阶段即发现断层而非结账才被拦；复用 P97 REQ-100 的诊断规则 id 体系与黄条样式，可并入 P97 实施 | SPC-P98 | 🟡 代码完成待验证（P97 V1.5 阶段E） |
+| REQ-2026-103 | 前端构建门禁与编译版本配置修复 | P0 | ① `PeriodList.vue` 补 `ElMessageBox` 导入（现仅导入 `ElMessage`，却在反结账处调用 `ElMessageBox.confirm`）→ 解除 `vue-tsc` TS2552 门禁，使 `npm run build` 能产出 `dist`；② 移除 `pom.xml` 中被 `maven.compiler.release=21` 覆盖的死配置 `<source>17</source><target>17</target>`，防日后误删属性导致静默退回 Java 17（AGENTS §4.4-19） | SPC-P99 | 🟡 SPEC 已写待审核（P99 V1.0，场景 103-1/103-2） |
+| REQ-2026-104 | 种子账号密码迁移修正 | P0 | 新增 Flyway migration 校正 `admin`/`accountant01`/`reviewer01`/`assistant01` 四个种子账号的密码哈希（现哈希与 `V114` 注释声明的 `admin123` **不匹配**，实测三者皆错：登录 400 + bcrypt 独立校验不通过 + 日志 `BadCredentialsException` 而非 `UsernameNotFoundException`）；新迁移仅 `UPDATE t_user.password`，不改表结构；**已知局限**：本系统无首次登录强制改密，生产部署前须另行处理 | SPC-P99 | 🟡 SPEC 已写待审核（P99 V1.0，场景 104-1/2/3） |
+| REQ-2026-105 | ai-service 依赖冲突解除 | P0 | `requirements.txt` 的 `pydantic==2.6.1` 放宽为 `>=2.7.4,<3.0.0`——langchain 0.3.0~0.3.17 全部要求 `pydantic>=2.7.4`，现 pin 导致 `docker compose build ai-service` 在第 5/6 步 `ResolutionImpossible` 失败（确定性冲突，与网络无关）；**仅放宽 pydantic 一项**，其余 17 个 pin 不动避免连带回归 | SPC-P99 | 🟡 SPEC 已写待审核（P99 V1.0，场景 105-1/105-2） |
+| REQ-2026-106 | compose 端口冲突与 AI 服务地址自引用修正 | P1 | `docker-compose.yml` 的 `ai-service` 宿主端口 8000→8001（现 `:88` 与 `:115` 同映射 8000，全量 `up` 必失败），容器内端口保持 8000 不动；同步修正 `application.yml` 的 `ai.service-url`（现为 `http://localhost:8000`，**指向后端自身端口**属自引用地雷）。已核验 `com.huicai.base.ai` 包内无任何 HTTP 客户端、当前**零调用方**，改端口无影响面 | SPC-P99 | 🟡 SPEC 已写待审核（P99 V1.0，场景 106-1/106-2） |
+| REQ-2026-107 | 租户表 RLS 补齐 | P1 | 为 V106 之后创建因而漏掉 `enterprise_policy` 的 4 张表补齐行级安全：`t_contract`(V107)、`t_agency_user_enterprise`(V112)、`t_service_progress`(V148)、`t_close_log`(V151)，四者均含 `enterprise_id`。须**同时** `ENABLE` + `FORCE ROW LEVEL SECURITY`（只 ENABLE 则表 owner 即应用用户 `huicai` 可绕过），策略谓词逐字复用 V106 原文。**V106 故意排除的 11 张表不动** | SPC-P99 | 🟡 SPEC 已写待审核（P99 V1.0，场景 107-1/2/3） |
+| REQ-2026-108 | 慢测共享容器基建修复 | P1 | `mvn test -DexcludedGroups=` 全量运行时 56 个 `extends AbstractMapperTest` 类共用静态容器 + `forkCount=1 reuseForks=true` 单 JVM 顺序执行，导致累计 131 次 `ConnectException` 与 `HikariPool - Connection is not available, request timed out`；**但逐类单跑全部通过**（P97 三个新 RealDB 测试 4/5/6 项均 BUILD SUCCESS）。优先改 surefire 配置而非重写 56 个子类；单类耗时须 ≤ 60s | SPC-P99 | 🟡 SPEC 已写待审核（P99 V1.0，场景 108-1/108-2） |
+| REQ-2026-109 | VoucherList 前端单测 5 项失败修复 | P1 | `vitest run` 中 `src/__tests__/VoucherList.test.ts` 19 项里 5 项失败（失败行 `:102`/`:114`/`:130`），致 `Test Files 1 failed \| 25 passed`、`Tests 5 failed \| 260 passed`。**根因未定位**，需先做失败剖析；**禁止**用断言弱化（`toBeTruthy` 取代具体值断言/删 await/注掉 skip）掩盖问题 | SPC-P99 | 🟡 SPEC 已写待审核（P99 V1.0，场景 109-1/109-2） |
+| REQ-2026-110 | 硬编码 API Key 清除 | P1 | `backend/src/main/resources/application.yml` 明文写入 `nvidia.api-key`（`nvapi-` 前缀），违反 AGENTS §7-3「禁止硬编码敏感信息」。改为环境变量占位并由 compose 从宿主注入。**已知局限**：该值已进入 git 历史（`main @ 33f36422`），代码改动无法消除历史暴露，**须同步吊销该 key**（对标 Supabase/RLS 官方文档与主流 SaaS「密钥按已泄露假设」原则） | SPC-P99 | 🟡 SPEC 已写待审核（P99 V1.0，场景 110-1） |
 
 ---
 

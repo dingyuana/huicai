@@ -85,7 +85,9 @@ services:
       dockerfile: Dockerfile
     container_name: huicai-ai-service
     ports:
-      - "8000:8000"
+      # 宿主端口 8001：8000 已被 backend 占用（server.port=8000），同映射会导致全量 up 失败
+      # 容器内端口仍为 8000（Dockerfile EXPOSE / uvicorn --port 8000 不变）
+      - "8001:8000"
     environment:
       HUICAI_RABBITMQ_URL: amqp://huicai:huicai123@host.docker.internal:5672/
       HUICAI_DB_HOST: postgres16
@@ -127,6 +129,8 @@ services:
       MINIO_ACCESS_KEY: huicai
       MINIO_SECRET_KEY: huicai123
       JWT_SECRET: huicai-finance-jwt-secret-key-2026-very-long-secret-string
+      # 敏感凭据从宿主环境注入，勿写入本文件（AGENTS §7-3）
+      NVIDIA_API_KEY: ${NVIDIA_API_KEY:-}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:

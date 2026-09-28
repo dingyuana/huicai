@@ -1,7 +1,15 @@
 fastapi==0.110.0
 uvicorn[standard]==0.29.0
-pydantic==2.6.1
-pydantic-settings==2.2.1
+# ---- REQ-2026-105 (P99) 依赖约束修正 ----
+# 原约束 pydantic==2.6.1 + pydantic-settings==2.2.1 + langchain>=0.3.0 三者互相矛盾，
+# 导致 `docker compose build ai-service` 在 pip 阶段 ResolutionImpossible、镜像无法构建。
+# 约束链（经 PyPI 元数据逐项核实）：
+#   langchain 0.3.x        要求 pydantic<3.0.0,>=2.7.4
+#   langchain-core 0.3.x   要求 pydantic<3.0.0,>=2.7.4
+#   langchain-community 0.3.x 要求 pydantic-settings<3.0.0,>=2.4.0
+# 因此改为区间约束并给 langchain 加上界（收窄而非放宽，避免 1.x 的大版本漂移）：
+pydantic>=2.7.4,<3.0.0
+pydantic-settings>=2.4.0,<3.0.0
 aio-pika==9.4.3
 httpx==0.27.0
 psycopg[binary,pool]==3.1.18
@@ -14,6 +22,6 @@ python-jose[cryptography]==3.3.0
 loguru==0.7.2
 pytest==8.1.1
 pytest-asyncio==0.23.6
-langchain>=0.3.0
-langchain-community>=0.3.0
+langchain>=0.3.0,<0.4.0
+langchain-community>=0.3.0,<0.4.0
 langchain-openai>=0.2.0

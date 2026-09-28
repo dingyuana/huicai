@@ -100,15 +100,20 @@ minio:
 
 # AI 服务配置
 ai:
-  service-url: http://localhost:8000
+  # AI 服务地址：宿主端口 8001（docker-compose 映射 8001:8000，容器内仍 8000）
+  # 不可写成 8000 —— 那是后端自身端口，会形成自引用
+  service-url: ${AI_SERVICE_URL:http://localhost:8001}
   enabled: true
   ocr-enabled: false
   embedding-enabled: false
   # NVIDIA API 配置 (minimaxai/minimax-m3 多模态模型)
+  # 密钥一律从环境变量注入，禁止硬编码（AGENTS §7-3）。
+  # 本地用法：export NVIDIA_API_KEY=nvapi-xxxx
+  # 留空时 nvidia.enabled 虽为 true，但任何调用都会因缺密钥而失败，属预期。
   nvidia:
     enabled: true
-    api-key: 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
-    base-url: https://integrate.api.nvidia.com/v1
+    api-key: ${NVIDIA_API_KEY:}
+    base-url: ${NVIDIA_BASE_URL:https://integrate.api.nvidia.com/v1}
     model: minimaxai/minimax-m3
     max-tokens: 8192
     temperature: 1.00
