@@ -4,14 +4,14 @@
 
 ## §0 项目状态（硬数字，每次 commit 后更新）
 
-> **更新基准**：commit `a5ff531` (2026-09-24) — docs(spec): P97批次4通过回写+REGISTRY 11条状态V1.16
+> **更新基准**：commit `a82c0b3` (2026-09-28) — feat(report): P94报表P0一致性修复（年初begin口径/零值行规则/勾稽1012）
 > **当前分支**：`main`
 > **关联文档**：[项目说明](docs/CORE-项目说明.md)、[技术方案](docs/CORE-技术方案.md)、[需求分析](docs/CORE-需求分析.md)、[需求登记册](docs/development/requirements/REQUIREMENTS_REGISTRY.md)、[文档注册表](docs/CORE-文档注册表.md)、[测试策略](docs/testing/TEST-STRATEGY.md)、[Flyway治理规范](docs/development/flyway-governance.md)
 
 | 维度 | 数据 |
 |------|------|
 | 后端代码 | 480 Java 文件 |
-| 测试用例 | 1827 个 `@Test` 方法 / 217 个测试类（快测 1658 通过，0 Failures, 0 Errors）|
+| 测试用例 | 1958 个 `@Test` 方法 / 227 个后端测试类 + 23 个前端测试文件（快测 1723 通过，0 Failures, 0 Errors, 5 Skipped）|
 | 数据库 | PostgreSQL 16 / V1 baseline (merged V1-V146) |
 | API 端点 | 510+ 个后端端点 |
 | 核心模块 | 基础数据、总账、应收应付、现金管理、固定资产、费用报销、发票税务、预算、财务报表、存储管理 |
@@ -175,7 +175,7 @@
 | 启动前端 | `cd frontend && npm run dev` |
 | 运行全部测试 | `cd backend && mvn test` |
 | 快测试（无 Docker） | `cd backend && mvn test` |
-| 完整测试（含真实 DB） | `cd backend && mvn test -Dsurefire.excludedGroups=` |
+| 完整测试（含真实 DB） | `cd backend && mvn test -DexcludedGroups=` |
 | 单个测试类 | `cd backend && mvn test -Dtest=XxxTest` |
 | 编译检查 | `cd backend && mvn compile` |
 | 打包 | `cd backend && mvn clean package -DskipTests` |

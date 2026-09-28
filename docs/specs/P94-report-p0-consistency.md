@@ -1,7 +1,7 @@
 # P94 SPEC — 报表年初口径统一、零值行规则与勾稽预警增强（P0 批次1）
 
 > **版本**：V1.0（草案） | **最后修改**：2026-09-24 | **作者**：Sisyphus
-> **状态**：✅ 已审核通过（批次1/4，老丁 2026-09-24；拍板：年初小计走后端 begin 口径聚合、悬空保护默认保留金额最大明细行、1012 按科目白名单纳入）
+> **状态**：✅ 已开发完成，待业务验收（V1.2；批次1/4 审核通过 + Plan `docs/development/plans/2026-09-24-p94-report-p0-plan.md` 审核通过后按 M0-M5 微循环实施，2026-09-28 部署核验通过）
 > **编号**：HUICAI-SPC-094 | 优先级：P0（信任级——报表年初列可信度）
 > **依据**：两轮四表深度技术评估（资产负债表期初 vs 科目余额表期初"精神分裂"、有合计无明细悬空、勾稽预警缺页面级提示）
 > **关联需求**：REQ-2026-090（年初口径统一）、REQ-2026-091（零值行规则）、REQ-2026-092（勾稽预警增强）——已登记 REQUIREMENTS_REGISTRY.md §八 V1.15
@@ -144,3 +144,4 @@
 |---|---|---|---|
 | V1.0 | 2026-09-24 | Sisyphus | 初稿：REQ-090/091/092 批次1，全部根因经 file:line 核验；纠偏两条不成立指控；委派写手故障（限流+模型路由）后按 AGENTS §4.5-16 直写 |
 | V1.1 | 2026-09-24 | Sisyphus | 批次1/4 老丁审核通过；三项拍板落定：年初小计=后端 begin 口径聚合、悬空保护=保留金额最大明细行、1012=科目白名单 |
+| V1.2 | 2026-09-28 | Sisyphus | 开发完成回写：M0-M5 全部落地。实现要点——① `buildBalanceSheet(period, balanceField)` 单一实现双口径，`balanceSheet()` 内嵌 `yearStart` 区块 + `yearStartCheckDiff/Ok`（D1 按年初恒等式实现，比逐科目对账可证伪）；② 悬空保护所需分组由后端随行下发 `subtotalGroup`，前端不复制科目段口径；③ 可见性规则抽 `utils/report/rowVisibility.ts` 纯函数，三视图共用；④ `cashSubjectBalance` 改科目白名单（实测科目表 1xxx 段仅 1001/1002/1012，1009 未使用）。新增测试：ReportServiceImplTest +5、ReportExportTest +1、CashSubjectBalanceRealDBTest +3（真实 DB，含"回退 LIKE 即变红"牙齿验证）、vitest 14 例。**口径修正说明**：年初列小计/合计与历史导出件不可比（详见 REPORT） |
