@@ -149,4 +149,35 @@ public abstract class AbstractMapperTest {
     void resetAssetCategoryCache() {
         assetCategoryIdCache.clear();
     }
+
+    /**
+     * 取一个供应商 id。迁移后 {@code t_vendor} 可能为空表，而
+     * {@code t_input_invoice.vendor_id} 带 FK 到 {@code t_vendor(id)}，
+     * 勾稽查询又按 {@code vendor_id} 过滤，故需现造。
+     */
+    @Autowired
+    protected com.huicai.base.masterdata.mapper.VendorMapper vendorMapper;
+
+    private final Map<Long, Long> vendorIdCache = new ConcurrentHashMap<>();
+
+    protected Long ensureVendor(Long enterpriseId) {
+        Long cached = vendorIdCache.get(enterpriseId);
+        if (cached != null) {
+            return cached;
+        }
+        com.huicai.base.masterdata.entity.VendorEntity vendor =
+                new com.huicai.base.masterdata.entity.VendorEntity();
+        vendor.setCode("TEST-VENDOR-" + enterpriseId);
+        vendor.setName("测试供应商-" + enterpriseId);
+        vendor.setIsActive(true);
+        vendor.setEnterpriseId(enterpriseId);
+        vendorMapper.insert(vendor);
+        vendorIdCache.put(enterpriseId, vendor.getId());
+        return vendor.getId();
+    }
+
+    @org.junit.jupiter.api.BeforeEach
+    void resetVendorCache() {
+        vendorIdCache.clear();
+    }
 }

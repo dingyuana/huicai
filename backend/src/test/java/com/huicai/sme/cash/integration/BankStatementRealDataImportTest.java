@@ -3,16 +3,22 @@ package com.huicai.sme.cash.integration;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.huicai.base.business.entity.BankStatementEntity;
 import com.huicai.base.business.mapper.BankStatementMapper;
+import com.huicai.base.system.entity.UserEntity;
+import com.huicai.common.context.EnterpriseContextHolder;
 import com.huicai.common.test.AbstractMapperTest;
 import com.huicai.common.test.SlowTest;
+import com.huicai.config.security.LoginUser;
 import com.huicai.sme.cash.entity.BankAccountEntity;
 import com.huicai.sme.cash.mapper.BankAccountMapper;
 import com.huicai.sme.cash.service.BankStatementService;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.ClassPathResource;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.context.SecurityContextHolder;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -43,9 +49,15 @@ import static org.junit.jupiter.api.Assertions.*;
 @DisplayName("银行流水 CSV 真实数据导入测试")
 class BankStatementRealDataImportTest extends AbstractMapperTest {
 
-    private static final Long ACCOUNT_ID = 999L;
     private static final String ACCOUNT_NAME = "测试基本户";
     private static final String ACCOUNT_NO = "6222021234567890";
+
+    /**
+     * 银行账户 id。t_bank_account.id 是 {@code GENERATED ALWAYS AS IDENTITY}，
+     * 禁止显式赋值（P99 D 类：cannot insert a non-DEFAULT value into column "id"），
+     * 由 DB 在 setUp() 中分配后回填。
+     */
+    private Long accountId;
 
     @Autowired
     private BankStatementService service;
@@ -58,20 +70,57 @@ class BankStatementRealDataImportTest extends AbstractMapperTest {
 
     @BeforeEach
     void setUp() {
-        // 清理测试数据
-        statementMapper.delete(new LambdaQueryWrapper<BankStatementEntity>()
-                .eq(BankStatementEntity::getAccountId, ACCOUNT_ID));
-        accountMapper.delete(new LambdaQueryWrapper<BankAccountEntity>()
-                .eq(BankAccountEntity::getId, ACCOUNT_ID));
+        // 导入服务内部构建 BankStatementEntity 时不显式赋 enterprise_id，
+        // 依赖 MyMetaObjectHandler 从上下文回填；且查询经数据权限拦截器注入
+        // enterprise_id 条件。测试需模拟真实请求上下文。
+        EnterpriseContextHolder.set(1L);
 
-        // 创建银行账户
+        // 分类引擎 ClassificationRuleServiceImpl.match() 走
+        // SecurityUtils.getCurrentEnterpriseId()，无登录态会抛「未登录」并被
+        // importFromCsv 的 catch 吞掉，导致 classification 为 null。
+        // 故需注入与真实请求等价的 SecurityContext。
+        UserEntity user = new UserEntity();
+        user.setId(1L);
+        user.setUsername("admin");
+        user.setPassword("encoded");
+        user.setUserType("ENTERPRISE");
+        user.setEnterpriseId(1L);
+        user.setAgencyId(null);
+        user.setAgencyRole("SME_ADMIN");
+        user.setStatus("ACTIVE");
+        user.setDeleted(0);
+        // 注意构造器参数顺序：第 3 个是 enterpriseId，第 4 个是 agencyId。
+        // 规则引擎按 t_classification_rule.tenant_id = 当前企业过滤，
+        // enterpriseId 传 null 会让规则全部落空并退化为方向兜底。
+        LoginUser loginUser = new LoginUser(user, List.of(), 1L, null, "ENTERPRISE", "SME_ADMIN");
+        SecurityContextHolder.getContext().setAuthentication(
+                new UsernamePasswordAuthenticationToken(loginUser, null, loginUser.getAuthorities()));
+
+        // 清理本测试上一次运行遗留的流水（按账户号定位上一轮账户）
+        BankAccountEntity previous = accountMapper.selectOne(
+                new LambdaQueryWrapper<BankAccountEntity>()
+                        .eq(BankAccountEntity::getAccountNo, ACCOUNT_NO)
+                        .last("LIMIT 1"));
+        if (previous != null && previous.getId() != null) {
+            statementMapper.delete(new LambdaQueryWrapper<BankStatementEntity>()
+                    .eq(BankStatementEntity::getAccountId, previous.getId()));
+            accountMapper.deleteById(previous.getId());
+        }
+
+        // 创建银行账户，id 由 DB 分配
         BankAccountEntity account = new BankAccountEntity();
-        account.setId(ACCOUNT_ID);
         account.setAccountName(ACCOUNT_NAME);
         account.setAccountNo(ACCOUNT_NO);
         account.setBankName("工商银行");
         account.setEnterpriseId(1L);
         accountMapper.insert(account);
+        this.accountId = account.getId();
+    }
+
+    @AfterEach
+    void tearDown() {
+        SecurityContextHolder.clearContext();
+        EnterpriseContextHolder.clear();
     }
 
     @Test
@@ -82,7 +131,7 @@ class BankStatementRealDataImportTest extends AbstractMapperTest {
         String csvContent = new String(resource.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
 
         // 导入 CSV
-        int imported = service.importFromCsv(ACCOUNT_ID, csvContent);
+        int imported = service.importFromCsv(accountId, csvContent);
 
         // 验证 1：导入行数
         assertEquals(15, imported, "应导入 15 条银行流水");
@@ -90,7 +139,7 @@ class BankStatementRealDataImportTest extends AbstractMapperTest {
         // 验证 2：查询所有记录
         List<BankStatementEntity> allStmts = statementMapper.selectList(
                 new LambdaQueryWrapper<BankStatementEntity>()
-                        .eq(BankStatementEntity::getAccountId, ACCOUNT_ID)
+                        .eq(BankStatementEntity::getAccountId, accountId)
                         .orderByAsc(BankStatementEntity::getTxDate)
         );
 
@@ -115,11 +164,12 @@ class BankStatementRealDataImportTest extends AbstractMapperTest {
             assertNotNull(stmt.getClassification(), "导入后应自动分类，当前ID=" + stmt.getId() + " 摘要=" + stmt.getSummary());
         }
 
-        // 验证 6：收入/支出分布
+        // 验证 6：收入/支出分布（CSV 实为 6 条「收」+ 9 条「付」，
+        // 含 2026-07-20 利息收入一行；原断言 5/10 与数据不符）
         long incomeCount = allStmts.stream().filter(s -> "INCOME".equals(s.getTxType())).count();
         long expenseCount = allStmts.stream().filter(s -> "EXPENSE".equals(s.getTxType())).count();
-        assertEquals(5, incomeCount, "应有 5 条收入记录");
-        assertEquals(10, expenseCount, "应有 10 条支出记录");
+        assertEquals(6, incomeCount, "应有 6 条收入记录");
+        assertEquals(9, expenseCount, "应有 9 条支出记录");
 
         // 验证 7：特定分类（工资、税费、手续费、利息）
         BankStatementEntity salary = allStmts.stream()

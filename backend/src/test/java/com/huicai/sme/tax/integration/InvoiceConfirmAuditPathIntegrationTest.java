@@ -58,9 +58,13 @@ class InvoiceConfirmAuditPathIntegrationTest extends AbstractMapperTest {
         waitForAsync(2000);
 
         // 验证 AuditLog 已写入（DB 列映射正确）
+        // 注意：AuditLogEntity.createdAt 是 @TableField(exist = false)，DB 实际列是
+        // operation_time 且实体未映射该属性，因此不能用作 lambda 排序字段
+        // （否则报 "can not find lambda cache for this property [createdAt]"）。
+        // 这里按主键 id 倒序，id 是真实持久化列且可 lambda 解析。
         List<AuditLogEntity> logs = auditLogMapper.selectList(
                 new LambdaQueryWrapper<AuditLogEntity>()
-                        .orderByDesc(AuditLogEntity::getCreatedAt)
+                        .orderByDesc(AuditLogEntity::getId)
                         .last("LIMIT 20"));
 
         assertNotNull(logs, "AuditLog 查询不应为 null");
@@ -89,18 +93,19 @@ class InvoiceConfirmAuditPathIntegrationTest extends AbstractMapperTest {
 
         List<AuditLogEntity> logs = auditLogMapper.selectList(
                 new LambdaQueryWrapper<AuditLogEntity>()
-                        .orderByDesc(AuditLogEntity::getCreatedAt)
+                        .orderByDesc(AuditLogEntity::getId)
                         .last("LIMIT 5"));
 
         assertTrue(logs.size() >= 1, "应至少生成 1 条审计日志，实际: " + logs.size());
 
         AuditLogEntity log = logs.get(0);
+        // 只断言真实持久化列；createdAt / method / status 等是 exist=false，不落库
         assertNotNull(log.getId(), "id 应不为 null");
-        assertNotNull(log.getCreatedAt(), "createdAt 应不为 null");
-        assertNotNull(log.getModule(), "module 应不为 null");
+        assertNotNull(log.getModule(), "module 应不为 null（t_audit_log.module NOT NULL）");
+        assertNotNull(log.getOperation(), "operation 应不为 null（t_audit_log.operation NOT NULL）");
 
         System.out.println("[PASS] AuditLog 全字段写入成功: id=" + log.getId() +
-                ", module=" + log.getModule());
+                ", module=" + log.getModule() + ", operation=" + log.getOperation());
     }
 
     private TaxDeclarationEntity createTaxDeclaration() {
