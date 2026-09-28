@@ -4,14 +4,14 @@
 
 ## §0 项目状态（硬数字，每次 commit 后更新）
 
-> **更新基准**：commit `adef64d` (2026-09-28) — feat(balance): P97阶段C科目余额表树状与层级字段回填
+> **更新基准**：commit `34f11c6` (2026-09-28) — feat(report): P97阶段D报表重分类列报开关（默认关，仅改列报不改账）
 > **当前分支**：`main`
 > **关联文档**：[项目说明](docs/CORE-项目说明.md)、[技术方案](docs/CORE-技术方案.md)、[需求分析](docs/CORE-需求分析.md)、[需求登记册](docs/development/requirements/REQUIREMENTS_REGISTRY.md)、[文档注册表](docs/CORE-文档注册表.md)、[测试策略](docs/testing/TEST-STRATEGY.md)、[Flyway治理规范](docs/development/flyway-governance.md)
 
 | 维度 | 数据 |
 |------|------|
 | 后端代码 | 480 Java 文件 |
-| 测试用例 | 1974 个 `@Test` 方法 / 229 个后端测试类 + 24 个前端测试文件（快测 1729 通过，0 Failures, 0 Errors, 5 Skipped）|
+| 测试用例 | 1982 个 `@Test` 方法 / 230 个后端测试类 + 25 个前端测试文件（快测 1732 通过，0 Failures, 0 Errors, 5 Skipped）|
 | 数据库 | PostgreSQL 16 / V1 baseline (merged V1-V146) |
 | API 端点 | 510+ 个后端端点 |
 | 核心模块 | 基础数据、总账、应收应付、现金管理、固定资产、费用报销、发票税务、预算、财务报表、存储管理 |
