@@ -25,6 +25,18 @@ public class SubjectBalanceVO {
     /** 借贷方向: debit-借方, credit-贷方 */
     private String direction;
 
+    /** 父科目ID：P97/REQ-097 组树用；父科目不在结果集时前端把本行提升为根，不丢行 */
+    private Long parentId;
+
+    /** 科目层级(1-一级,2-二级…)：此前前端「层级」列绑定该字段但后端从未回填，恒为空 */
+    private Integer level;
+
+    /** 是否末级科目：前端据此判断能否展开 */
+    private Boolean isLeaf;
+
+    /** 辅助核算类型(customer/vendor/department/project/employee)：辅助核算明细列据此分组 */
+    private String auxCalcType;
+
     /** 会计年度 */
     private Integer year;
 

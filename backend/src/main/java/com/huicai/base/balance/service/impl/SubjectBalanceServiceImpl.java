@@ -408,6 +408,11 @@ public class SubjectBalanceServiceImpl implements SubjectBalanceService {
             if (subject != null) {
                 vo.setSubjectCode(subject.getCode());
                 vo.setSubjectName(subject.getName());
+                // P97/REQ-097：组树与辅助核算所需字段必须一并回填，否则前端层级列恒空、无从组树
+                vo.setParentId(subject.getParentId());
+                vo.setLevel(subject.getLevel());
+                vo.setIsLeaf(subject.getIsLeaf());
+                vo.setAuxCalcType(subject.getAuxCalcType());
                 vo.setDirection(subject.getDirection());
             }
             result.add(vo);

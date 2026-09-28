@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.huicai.agency.tenant.entity.EnterpriseEntity;
 import com.huicai.agency.tenant.mapper.EnterpriseMapper;
+import com.huicai.base.balance.dto.SubjectBalanceVO;
 import com.huicai.base.balance.entity.SubjectBalanceEntity;
 import com.huicai.base.balance.mapper.SubjectBalanceMapper;
 import com.huicai.base.balance.service.SubjectBalanceService;
@@ -668,5 +669,77 @@ class SubjectBalanceServiceImplTest {
         assertEquals(true, result.get("beginBalanced"));
         assertEquals(true, result.get("movementBalanced"));
         assertEquals(true, result.get("endBalanced"));
+    }
+
+    // ==================== P97 阶段 C / REQ-097 余额表树状 ====================
+
+    /**
+     * 余额表要能组树，必须带回父级与层级；此前 VO 只有 code/name/direction，
+     * 前端「层级」列绑定 row.level 却恒为空（P97 开工前核验 F9/F10）。
+     */
+    @Test
+    void queryByPeriodWithSubject_回填父级与层级字段() {
+        Subject parent = new Subject();
+        parent.setId(1L);
+        parent.setCode("1002");
+        parent.setName("银行存款");
+        parent.setDirection("debit");
+        parent.setParentId(null);
+        parent.setLevel(1);
+        parent.setIsLeaf(true);
+        parent.setIsActive(true);
+        parent.setAuxCalcType(null);
+        parent.setDeleted(0);
+
+        SubjectBalanceEntity bal = new SubjectBalanceEntity();
+        bal.setId(10L);
+        bal.setSubjectId(1L);
+        bal.setYear(2026);
+        bal.setPeriod("202607");
+        bal.setBeginBalance(new BigDecimal("1000"));
+        bal.setDebitTotal(new BigDecimal("200"));
+        bal.setCreditTotal(BigDecimal.ZERO);
+        bal.setEndBalance(new BigDecimal("1200"));
+
+        when(subjectBalanceMapper.selectList(any())).thenReturn(List.of(bal));
+        when(subjectService.listByIds(any())).thenReturn(List.of(parent));
+
+        List<SubjectBalanceVO> rows = service.queryByPeriodWithSubject("202607");
+
+        assertEquals(1, rows.size());
+        SubjectBalanceVO vo = rows.get(0);
+        assertEquals(1, vo.getLevel(), "层级必须回填，否则前端层级列恒空");
+        assertEquals(Boolean.TRUE, vo.getIsLeaf(), "末级标记必须回填，前端据此判断是否可展开");
+        assertNull(vo.getParentId(), "顶级科目无父级");
+        assertEquals("1002", vo.getSubjectCode());
+    }
+
+    /** 负向：父科目已逻辑删除时子科目不得丢失——树组装要能把它提升为根（P92B-BD3 精神）。 */
+    @Test
+    void queryByPeriodWithSubject_父科目缺失时子科目仍返回() {
+        Subject child = new Subject();
+        child.setId(2L);
+        child.setCode("100201");
+        child.setName("银行存款-基本户");
+        child.setDirection("debit");
+        child.setParentId(999L);
+        child.setLevel(2);
+        child.setIsLeaf(true);
+        child.setDeleted(0);
+
+        SubjectBalanceEntity bal = new SubjectBalanceEntity();
+        bal.setId(11L);
+        bal.setSubjectId(2L);
+        bal.setYear(2026);
+        bal.setPeriod("202607");
+        bal.setEndBalance(new BigDecimal("500"));
+
+        when(subjectBalanceMapper.selectList(any())).thenReturn(List.of(bal));
+        when(subjectService.listByIds(any())).thenReturn(List.of(child));
+
+        List<SubjectBalanceVO> rows = service.queryByPeriodWithSubject("202607");
+
+        assertEquals(1, rows.size(), "父科目不在结果集时子科目必须照常返回（前端提升为根）");
+        assertEquals(999L, rows.get(0).getParentId(), "parentId 仍如实返回，由前端决定如何组装");
     }
 }
