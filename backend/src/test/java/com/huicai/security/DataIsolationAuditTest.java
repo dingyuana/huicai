@@ -8,6 +8,7 @@ import com.huicai.base.voucher.mapper.VoucherMapper;
 import com.huicai.base.voucher.service.VoucherService;
 import com.huicai.common.test.AbstractMapperTest;
 import com.huicai.common.test.SlowTest;
+import com.huicai.common.context.EnterpriseContextHolder;
 import com.huicai.base.business.entity.BusinessDocEntity;
 import com.huicai.base.business.mapper.BusinessDocMapper;
 import com.huicai.base.business.entity.InputInvoiceEntity;
@@ -98,16 +99,26 @@ public class DataIsolationAuditTest extends AbstractMapperTest {
         voucherB.setEnterpriseId(2L);
         voucherMapper.insert(voucherB);
 
-        // 通过自定义查询（selectVoucherPage）验证：已加 enterprise_id 过滤
-        // 注意：此查询在 VoucherServiceImpl 中传 enterprise_id=1
-        // 但 Testcontainers 没有 SecurityContext，所以需要通过 Mapper 直接调用
-        // 这里验证的是 XML 中已加 AND v.enterprise_id = #{enterpriseId} 条件
-        Page<VoucherEntity> page = new Page<>(1, 20);
-        Page<VoucherEntity> result = voucherMapper.selectVoucherPage(page, "202608", null, null, null, null, null, null, null, null, null);
-        assertTrue(result.getRecords().stream().anyMatch(v -> "AUDIT-VCH-A-001".equals(v.getVoucherNo())),
-                "企业A的凭证应该被查到");
-        assertTrue(result.getRecords().stream().noneMatch(v -> "AUDIT-VCH-B-001".equals(v.getVoucherNo())),
-                "✅ 已修复：企业B的凭证不再被查到（enterprise_id 过滤已生效）");
+        // 通过自定义查询（selectVoucherPage）验证 enterprise_id 隔离
+        //
+        // 事实澄清（原注释有误）：selectVoucherPage 的 XML 中**没有** enterprise_id 条件，
+        // 方法签名也不含该参数。隔离完全由 MyBatis 拦截器
+        // EnterpriseDataPermissionInterceptor 注入，而它读取 EnterpriseContextHolder：
+        //     Long enterpriseId = EnterpriseContextHolder.get();
+        //     if (enterpriseId == null) { return; }   // 视作超级管理员，放行全部
+        // 因此本用例必须显式设置企业上下文，否则拦截器直接放行，
+        // 测到的是「不过滤」而非「过滤」——这正是该用例长期失败的真实原因。
+        EnterpriseContextHolder.set(1L);
+        try {
+            Page<VoucherEntity> page = new Page<>(1, 20);
+            Page<VoucherEntity> result = voucherMapper.selectVoucherPage(page, "202608", null, null, null, null, null, null, null, null, null);
+            assertTrue(result.getRecords().stream().anyMatch(v -> "AUDIT-VCH-A-001".equals(v.getVoucherNo())),
+                    "企业A的凭证应该被查到");
+            assertTrue(result.getRecords().stream().noneMatch(v -> "AUDIT-VCH-B-001".equals(v.getVoucherNo())),
+                    "企业B的凭证不应被查到（enterprise_id 隔离应生效）");
+        } finally {
+            EnterpriseContextHolder.clear();
+        }
     }
 
     @Test
@@ -228,6 +239,7 @@ public class DataIsolationAuditTest extends AbstractMapperTest {
         bsA.setSummary("货款");
         bsA.setReviewStatus("PENDING");
         bsA.setEnterpriseId(1L);
+        bsA.setAccountId(ensureBankAccount(1L));
         bankStatementMapper.insert(bsA);
 
         BankStatementEntity bsB = new BankStatementEntity();
@@ -238,6 +250,7 @@ public class DataIsolationAuditTest extends AbstractMapperTest {
         bsB.setSummary("货款");
         bsB.setReviewStatus("PENDING");
         bsB.setEnterpriseId(2L);
+        bsB.setAccountId(ensureBankAccount(2L));
         bankStatementMapper.insert(bsB);
 
         List<BankStatementEntity> allBs = bankStatementMapper.selectList(null);
@@ -296,6 +309,8 @@ public class DataIsolationAuditTest extends AbstractMapperTest {
         cardA.setOriginalValue(new BigDecimal("50000.00"));
         cardA.setStatus("IN_USE");
         cardA.setAcquisitionDate(LocalDate.of(2026, 1, 1));
+        cardA.setCategoryId(ensureAssetCategory(1L)); // t_asset_card.category_id NOT NULL 外键
+        cardA.setUsefulLife(60);
         cardA.setEnterpriseId(1L);
         assetCardMapper.insert(cardA);
 
@@ -305,6 +320,8 @@ public class DataIsolationAuditTest extends AbstractMapperTest {
         cardB.setOriginalValue(new BigDecimal("3000.00"));
         cardB.setStatus("IN_USE");
         cardB.setAcquisitionDate(LocalDate.of(2026, 1, 1));
+        cardB.setCategoryId(ensureAssetCategory(2L));
+        cardB.setUsefulLife(60);
         cardB.setEnterpriseId(2L);
         assetCardMapper.insert(cardB);
 

@@ -1,10 +1,18 @@
 package com.huicai.common.test;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.transaction.annotation.Transactional;
 import org.testcontainers.containers.PostgreSQLContainer;
+
+import com.baomidou.mybatisplus.core.toolkit.Wrappers;
+import com.huicai.sme.cash.entity.BankAccountEntity;
+import com.huicai.sme.cash.mapper.BankAccountMapper;
+
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Mapper 层真实 DB 测试基类
@@ -44,6 +52,19 @@ public abstract class AbstractMapperTest {
 
     protected static final PostgreSQLContainer<?> postgres;
 
+    /**
+     * 迁移后的数据库中 {@code t_bank_account} 为空表（无任何种子数据），
+     * 而 {@code t_bank_statement.account_id} / {@code t_bank_journal.account_id}
+     * 均有外键指向它。部分测试图省事直接用 enterpriseId 充当 accountId
+     * （见 BankStatementDataIsolationTest#createStatement），必然触发
+     * {@code violates foreign key constraint "fk_statement_account"}。
+     * 子类应改用本方法取得合法账户 id。
+     */
+    @Autowired
+    protected BankAccountMapper bankAccountMapper;
+
+    private final Map<Long, Long> bankAccountIdCache = new ConcurrentHashMap<>();
+
     static {
         postgres = new PostgreSQLContainer<>("pgvector/pgvector:pg16")
                 .withDatabaseName("huicai_test")
@@ -53,8 +74,7 @@ public abstract class AbstractMapperTest {
     }
 
     @DynamicPropertySource
-    static void setProperties(DynamicPropertyRegistry registry) {
-        registry.add("spring.datasource.url", postgres::getJdbcUrl);
+    static void setProperties(DynamicPropertyRegistry registry) {        registry.add("spring.datasource.url", postgres::getJdbcUrl);
         registry.add("spring.datasource.username", postgres::getUsername);
         registry.add("spring.datasource.password", postgres::getPassword);
         registry.add("spring.datasource.driver-class-name", postgres::getDriverClassName);
@@ -62,5 +82,71 @@ public abstract class AbstractMapperTest {
         registry.add("spring.h2.console.enabled", () -> "false");
         // 确保 Flyway 自动迁移
         registry.add("spring.flyway.enabled", () -> "true");
+    }
+
+    /**
+     * 为指定企业取一个合法的银行账户 id；若尚未创建则先创建。
+     *
+     * <p>同一企业重复调用返回同一 id（进程内缓存）。注意：测试方法带
+     * {@code @Transactional}，方法级回滚会把本方法插入的账户一并回滚，
+     * 而缓存不会回滚 —— 因此缓存仅在单个测试方法内可靠；跨方法请依赖
+     * 「回滚后重新插入得到新 id，缓存指向已消失的 id」这一风险由
+     * {@link #resetBankAccountCache()} 规避。
+     */
+    protected Long ensureBankAccount(Long enterpriseId) {
+        Long cached = bankAccountIdCache.get(enterpriseId);
+        if (cached != null) {
+            return cached;
+        }
+        BankAccountEntity account = new BankAccountEntity();
+        account.setAccountNo("TEST-ACC-" + enterpriseId + "-" + System.nanoTime());
+        account.setAccountName("测试银行账户-" + enterpriseId);
+        account.setBankName("测试银行");
+        account.setEnterpriseId(enterpriseId);
+        account.setBalance(java.math.BigDecimal.ZERO);
+        account.setIsActive(true);
+        bankAccountMapper.insert(account);
+        bankAccountIdCache.put(enterpriseId, account.getId());
+        return account.getId();
+    }
+
+    /**
+     * 清空银行账户 id 缓存。测试方法回滚后账户行已消失，但缓存仍指向旧 id，
+     * 故每个测试方法开始前应调用一次。
+     */
+    @org.junit.jupiter.api.BeforeEach
+    void resetBankAccountCache() {
+        bankAccountIdCache.clear();
+    }
+
+    /**
+     * 取一个资产类别 id；迁移后 {@code t_asset_category} 为空表，而
+     * {@code t_asset_card.category_id} 为 NOT NULL 外键，故需现造。
+     */
+    @Autowired
+    protected com.huicai.sme.asset.mapper.AssetCategoryMapper assetCategoryMapper;
+
+    private final Map<Long, Long> assetCategoryIdCache = new ConcurrentHashMap<>();
+
+    protected Long ensureAssetCategory(Long enterpriseId) {
+        Long cached = assetCategoryIdCache.get(enterpriseId);
+        if (cached != null) {
+            return cached;
+        }
+        com.huicai.sme.asset.entity.AssetCategoryEntity cat = new com.huicai.sme.asset.entity.AssetCategoryEntity();
+        cat.setCode("TEST-CAT-" + enterpriseId);
+        cat.setName("测试资产类别-" + enterpriseId);
+        cat.setLevel(1);
+        cat.setEnterpriseId(enterpriseId);
+        cat.setUsefulLife(60);
+        cat.setDepreciationMethod("STRAIGHT_LINE");
+        assetCategoryMapper.insert(cat);
+        assetCategoryIdCache.put(enterpriseId, cat.getId());
+        return cat.getId();
+    }
+
+    @org.junit.jupiter.api.BeforeEach
+    void resetAssetCategoryCache() {
+        assetCategoryIdCache.clear();
     }
 }
