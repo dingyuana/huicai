@@ -86,13 +86,18 @@ const rows = computed(() => {
   // 故统一 fixed=true，零值行也不隐藏（法定报表结构必须完整呈现）。
   // P97/REQ-099：行序按企业会计准则展开（营收/成本/税金/四费/收益类/减值/营业利润/营业外/所得税/净利润），
   // 取值全部来自后端段位字段——后端已按段位显式取数，前端不做任何加减重算。
-  const seg = (name: string) => [
-    { prev: prevData.value?.[name], current: r[name], cumulative: r['cumulative' + name.charAt(0).toUpperCase() + name.slice(1)] },
-  ]
-  const line = (label: string, name: string, bold: boolean) => {
-    const [v] = seg(name)
-    return { label, prev: v.prev, current: v.current, cumulative: v.cumulative, bold, fixed: true }
-  }
+  // 累计列键默认由段位名推导，但「利润总额」是历史例外：后端键为 cumulativeProfit（不是
+  // cumulativeTotalProfit），P88 存量断言也依赖该名，故在此显式覆盖，不改后端键以免破坏兼容。
+  const CUMULATIVE_KEY_ALIAS: Record<string, string> = { totalProfit: 'cumulativeProfit' }
+  const line = (label: string, name: string, bold: boolean) => ({
+    label,
+    prev: prevData.value?.[name],
+    current: r[name],
+    cumulative: r[CUMULATIVE_KEY_ALIAS[name]
+      ?? 'cumulative' + name.charAt(0).toUpperCase() + name.slice(1)],
+    bold,
+    fixed: true,
+  })
   return [
     line('一、营业收入', 'revenue', true),
     line('减:营业成本', 'cost', false),
