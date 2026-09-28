@@ -3,6 +3,7 @@ package com.huicai.base.report.service.impl;
 import cn.hutool.core.io.IoUtil;
 import cn.hutool.poi.excel.ExcelUtil;
 import cn.hutool.poi.excel.ExcelWriter;
+import com.huicai.base.balance.service.SubjectBalanceService;
 import com.huicai.base.report.mapper.ReportDataMapper;
 import com.huicai.base.report.service.ReportService;
 import com.huicai.base.system.util.SecurityUtils;
@@ -47,10 +48,54 @@ public class ReportServiceImpl implements ReportService {
             || c.startsWith("28") || c.startsWith("29"));
 
     private final ReportDataMapper reportDataMapper;
+    private final SubjectBalanceService subjectBalanceService;
 
     @Override
     public List<Map<String, Object>> subjectBalanceTable(String period) {
         return reportDataMapper.subjectBalance(period);
+    }
+
+    /**
+     * 报表诊断规则（阶段 E）。全部复用既有查询拼装，不新增 SQL：
+     * 收入/费用取 incomeStatement 的段位，现金取 cashSubjectBalance，期初连续性复用 P98 的校验。
+     */
+    @Override
+    public List<Map<String, Object>> diagnostics(String period) {
+        List<Map<String, Object>> out = new ArrayList<>();
+        Map<String, Object> income = incomeStatement(period);
+
+        BigDecimal revenue = toBigDecimal(income.get("revenue"));
+        BigDecimal periodExpense = toBigDecimal(income.get("periodExpense"));
+        if (revenue.signum() == 0 && periodExpense.signum() > 0) {
+            out.add(diagnostic("R_REVENUE_ZERO", "本期零收入但存在费用",
+                    "本期营业收入为 0，而期间费用为 " + periodExpense
+                            + "，请确认是否漏记收入或存在挂账费用"));
+        }
+
+        Map<String, Object> cash = reportDataMapper.cashSubjectBalance(period);
+        BigDecimal beginCash = toBigDecimal(getOrNull(cash, "begin_cash"));
+        BigDecimal endCash = toBigDecimal(getOrNull(cash, "end_cash"));
+        if (beginCash.signum() > 0 && endCash.compareTo(beginCash.multiply(new BigDecimal("0.5"))) < 0) {
+            out.add(diagnostic("R_CASH_DROP", "期末现金较期初骤降",
+                    "期初现金 " + beginCash + " → 期末现金 " + endCash + "，降幅超过一半，请核对资金去向"));
+        }
+
+        Map<String, Object> continuity = subjectBalanceService.checkOpeningContinuity(period);
+        if (Boolean.FALSE.equals(continuity.get("passed"))) {
+            out.add(diagnostic("R_OPENING_DISCONTINUITY", "期初余额与上期期末不连续",
+                    continuity.get("mismatchCount") + " 个科目本期期初与上期期末不符，最大差额 "
+                            + continuity.get("maxAbsDiff") + "；结账前须核对期初建账或补齐衔接凭证"));
+        }
+        return out;
+    }
+
+    private static Map<String, Object> diagnostic(String ruleId, String title, String detail) {
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("ruleId", ruleId);
+        m.put("severity", "warning");
+        m.put("title", title);
+        m.put("detail", detail);
+        return m;
     }
 
     @Override

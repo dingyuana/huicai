@@ -34,6 +34,11 @@ public class ReportController {
     }
 
     @Operation(summary = "资产负债表")
+    @GetMapping("/diagnostics")
+    public R<List<Map<String, Object>>> diagnostics(@RequestParam String period) {
+        return R.ok(reportService.diagnostics(period));
+    }
+
     @GetMapping("/balance-sheet/reclassified")
     public R<Map<String, Object>> balanceSheetReclassified(@RequestParam String period) {
         return R.ok(reportService.balanceSheetWithReclassification(period));

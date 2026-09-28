@@ -1,5 +1,6 @@
 package com.huicai.base.report.service.impl;
 
+import com.huicai.base.balance.service.SubjectBalanceService;
 import com.huicai.base.report.mapper.ReportDataMapper;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -12,6 +13,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
@@ -20,6 +22,7 @@ import static org.mockito.Mockito.*;
 class ReportServiceImplTest {
 
     @Mock private ReportDataMapper reportDataMapper;
+    @Mock private SubjectBalanceService subjectBalanceService;
     @InjectMocks private ReportServiceImpl service;
 
     @Test
@@ -556,6 +559,126 @@ class ReportServiceImplTest {
         assertEquals(off.get("currentYearProfit"), on.get("currentYearProfit"), "重分类不得影响损益");
         assertEquals(off.get("totalEquity"), on.get("totalEquity"), "重分类不得影响权益合计");
         // 只读铁律：本方法全程仅调用 subjectBalance 读接口，凭证/余额零写入
+    }
+
+    // ==================== P97 阶段 E / REQ-100 + REQ-102 诊断黄条 ====================
+
+    private List<Map<String, Object>> diagIds(String period) {
+        return service.diagnostics(period).stream()
+                .map(d -> Map.<String, Object>of("ruleId", d.get("ruleId"), "title", d.get("title")))
+                .collect(Collectors.toList());
+    }
+
+    private boolean hasRule(String period, String ruleId) {
+        return diagIds(period).stream().anyMatch(d -> ruleId.equals(d.get("ruleId")));
+    }
+
+    @Test
+    void p100_diagnostics_零收入但有费用时提示() {
+        Map<String, Object> d = new HashMap<>();
+        d.put("revenue", BigDecimal.ZERO);
+        d.put("selling_expense", new BigDecimal("3000"));
+        d.put("cost", BigDecimal.ZERO);
+        d.put("non_operating_income", BigDecimal.ZERO);
+        d.put("non_operating_expense", BigDecimal.ZERO);
+        d.put("income_tax", BigDecimal.ZERO);
+        when(reportDataMapper.incomeStatementData("202606")).thenReturn(d);
+        when(reportDataMapper.cumulativeData("202601", "202606")).thenReturn(new HashMap<>());
+        Map<String, Object> cash = new HashMap<>();
+        cash.put("begin_cash", new BigDecimal("10000"));
+        cash.put("end_cash", new BigDecimal("10000"));
+        when(reportDataMapper.cashSubjectBalance("202606")).thenReturn(cash);
+        when(subjectBalanceService.checkOpeningContinuity("202606")).thenReturn(new HashMap<>());
+
+        assertTrue(hasRule("202606", "R_REVENUE_ZERO"), "零收入且有费用必须提示");
+    }
+
+    @Test
+    void p100_diagnostics_收入正常时不误报() {
+        Map<String, Object> d = new HashMap<>();
+        d.put("revenue", new BigDecimal("50000"));
+        d.put("selling_expense", new BigDecimal("3000"));
+        d.put("cost", new BigDecimal("1000"));
+        d.put("non_operating_income", BigDecimal.ZERO);
+        d.put("non_operating_expense", BigDecimal.ZERO);
+        d.put("income_tax", BigDecimal.ZERO);
+        when(reportDataMapper.incomeStatementData("202606")).thenReturn(d);
+        when(reportDataMapper.cumulativeData("202601", "202606")).thenReturn(new HashMap<>());
+        Map<String, Object> cash = new HashMap<>();
+        cash.put("begin_cash", new BigDecimal("10000"));
+        cash.put("end_cash", new BigDecimal("12000"));
+        when(reportDataMapper.cashSubjectBalance("202606")).thenReturn(cash);
+        when(subjectBalanceService.checkOpeningContinuity("202606")).thenReturn(new HashMap<>());
+
+        assertTrue(diagIds("202606").isEmpty(), "负向：收入正常、现金未骤降、期初连续时不得产出任何诊断");
+    }
+
+    @Test
+    void p100_diagnostics_期末现金骤降超半数提示() {
+        Map<String, Object> d = new HashMap<>();
+        d.put("revenue", new BigDecimal("50000"));
+        d.put("cost", BigDecimal.ZERO);
+        d.put("non_operating_income", BigDecimal.ZERO);
+        d.put("non_operating_expense", BigDecimal.ZERO);
+        d.put("income_tax", BigDecimal.ZERO);
+        when(reportDataMapper.incomeStatementData("202606")).thenReturn(d);
+        when(reportDataMapper.cumulativeData("202601", "202606")).thenReturn(new HashMap<>());
+        Map<String, Object> cash = new HashMap<>();
+        cash.put("begin_cash", new BigDecimal("100000"));
+        cash.put("end_cash", new BigDecimal("40000"));
+        when(reportDataMapper.cashSubjectBalance("202606")).thenReturn(cash);
+        when(subjectBalanceService.checkOpeningContinuity("202606")).thenReturn(new HashMap<>());
+
+        assertTrue(hasRule("202606", "R_CASH_DROP"), "期末现金不足期初一半必须提示");
+    }
+
+    @Test
+    void p102_diagnostics_期初不连续转为页条诊断() {
+        Map<String, Object> d = new HashMap<>();
+        d.put("revenue", new BigDecimal("50000"));
+        d.put("cost", BigDecimal.ZERO);
+        d.put("non_operating_income", BigDecimal.ZERO);
+        d.put("non_operating_expense", BigDecimal.ZERO);
+        d.put("income_tax", BigDecimal.ZERO);
+        when(reportDataMapper.incomeStatementData("202606")).thenReturn(d);
+        when(reportDataMapper.cumulativeData("202601", "202606")).thenReturn(new HashMap<>());
+        Map<String, Object> cash = new HashMap<>();
+        cash.put("begin_cash", new BigDecimal("10000"));
+        cash.put("end_cash", new BigDecimal("10000"));
+        when(reportDataMapper.cashSubjectBalance("202606")).thenReturn(cash);
+        Map<String, Object> oc = new HashMap<>();
+        oc.put("checked", true);
+        oc.put("passed", false);
+        oc.put("mismatchCount", 2);
+        oc.put("maxAbsDiff", new BigDecimal("100000.00"));
+        oc.put("mismatches", List.of(Map.of("subjectCode", "4001", "diff", new BigDecimal("-100000.00"))));
+        when(subjectBalanceService.checkOpeningContinuity("202606")).thenReturn(oc);
+
+        assertTrue(hasRule("202606", "R_OPENING_DISCONTINUITY"), "期初不连续须转为页条诊断（REQ-102）");
+    }
+
+    @Test
+    void p100_diagnostics_纯只读不改数() {
+        Map<String, Object> d = new HashMap<>();
+        d.put("revenue", BigDecimal.ZERO);
+        d.put("cost", BigDecimal.ZERO);
+        d.put("non_operating_income", BigDecimal.ZERO);
+        d.put("non_operating_expense", BigDecimal.ZERO);
+        d.put("income_tax", BigDecimal.ZERO);
+        when(reportDataMapper.incomeStatementData("202606")).thenReturn(d);
+        when(reportDataMapper.cumulativeData("202601", "202606")).thenReturn(new HashMap<>());
+        when(reportDataMapper.cashSubjectBalance("202606")).thenReturn(new HashMap<>());
+        when(subjectBalanceService.checkOpeningContinuity("202606")).thenReturn(new HashMap<>());
+
+        service.diagnostics("202606");
+
+        // 只读铁律（ReportDataMapper 是纯 @Mapper 接口无写方法，故用交互白名单断言）：
+        // 除三个只读查询外不得有任何其他调用——一旦诊断里混进写操作即失败
+        verify(reportDataMapper, times(1)).incomeStatementData("202606");
+        verify(reportDataMapper, times(1)).cumulativeData("202601", "202606");
+        verify(reportDataMapper, times(1)).cashSubjectBalance("202606");
+        verify(subjectBalanceService, times(1)).checkOpeningContinuity("202606");
+        verifyNoMoreInteractions(reportDataMapper, subjectBalanceService);
     }
 
     private static String groupOf(Map<String, Object> block, String listKey, String code) {

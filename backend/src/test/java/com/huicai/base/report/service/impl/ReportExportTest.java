@@ -1,5 +1,6 @@
 package com.huicai.base.report.service.impl;
 
+import com.huicai.base.balance.service.SubjectBalanceService;
 import com.huicai.base.report.mapper.ReportDataMapper;
 import jakarta.servlet.ServletOutputStream;
 import jakarta.servlet.WriteListener;
@@ -56,6 +57,7 @@ class ReportExportTest {
     private static final String PERIOD = "202601";
 
     @Mock private ReportDataMapper reportDataMapper;
+    @Mock private SubjectBalanceService subjectBalanceService;
 
     private ReportServiceImpl service;
     private HttpServletResponse response;
@@ -63,7 +65,8 @@ class ReportExportTest {
 
     @BeforeEach
     void setUp() {
-        service = new ReportServiceImpl(reportDataMapper);
+        // 诊断依赖 SubjectBalanceService（阶段E），显式构造器须同步新增参数
+        service = new ReportServiceImpl(reportDataMapper, subjectBalanceService);
         response = mock(HttpServletResponse.class);
     }
 

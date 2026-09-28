@@ -5,6 +5,8 @@
         <span class="page-title">利润表</span>
       </div>
 
+      <DiagnosticAlert :period="query.period" />
+
       <el-form :model="query" inline class="filter-form">
         <el-form-item label="期间">
           <PeriodNavigator v-model="query.period" @change="fetchData" />
@@ -62,6 +64,7 @@ import { ElMessage } from 'element-plus'
 import { incomeStatement, exportIncomeStatement } from '@/api/modules/report'
 import { amountClass, formatAmount } from '@/utils/format'
 import PeriodNavigator from '@/components/finance/PeriodNavigator.vue'
+import DiagnosticAlert from '@/components/report/DiagnosticAlert.vue'
 
 const query = reactive({ period: '' })
 const result = ref<any>(null)

@@ -5,6 +5,8 @@
         <span class="page-title">科目余额表</span>
       </div>
 
+      <DiagnosticAlert :period="query.period" />
+
       <el-form :model="query" inline class="filter-form">
         <el-form-item label="期间">
           <PeriodNavigator v-model="query.period" @change="fetchData" />
@@ -90,6 +92,7 @@ import { isRowVisible } from '@/utils/report/rowVisibility'
 import { buildSubjectTree, TREE_PROPS } from '@/utils/report/subjectTree'
 import { groupAuxBySubject } from '@/utils/report/auxFormat'
 import PeriodNavigator from '@/components/finance/PeriodNavigator.vue'
+import DiagnosticAlert from '@/components/report/DiagnosticAlert.vue'
 
 const query = reactive({ period: '' })
 const router = useRouter()

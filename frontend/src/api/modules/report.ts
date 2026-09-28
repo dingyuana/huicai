@@ -58,6 +58,11 @@ export function balanceSheet(period: string): Promise<any> {
   return request.get('/base/report/v1/reports/balance-sheet', { params: { period } })
 }
 
+/** P97/REQ-100 + REQ-102 报表诊断（只读建议，不改数） */
+export function reportDiagnostics(period: string): Promise<any[]> {
+  return request.get('/base/report/v1/reports/diagnostics', { params: { period } })
+}
+
 /** P97/REQ-098 重分类列报（默认关闭；开启仅改列报，不改账） */
 export function balanceSheetReclassified(period: string): Promise<any> {
   return request.get('/base/report/v1/reports/balance-sheet/reclassified', { params: { period } })
