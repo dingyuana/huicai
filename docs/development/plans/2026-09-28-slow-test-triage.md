@@ -693,7 +693,18 @@ settlement = CONFIRMED，并产出 operationType=APPROVE 的审批日志
 4. 审批前核销单为 `SUBMITTED`、`trace` 回读亦为 `SUBMITTED`；审批后为 `CONFIRMED`
 5. 对 `SUBMITTED` 提报单反核销必须抛 `BusinessException`
 
-**顺带发现 1 个真实生产缺陷（REQ-2026-125，待拍板）：** `logReconciliationLog()` 写审批日志时 `setTargetDocId(null)`，而 `reverse()` / `reject()` 用它回查单据 → `selectById(null)` 返回 null → `if (doc != null)` 整块跳过 → **金额与发票状态静默不回滚，却照常置 `CANCELLED`/`REJECTED` 并返回成功**。
+**顺带发现并已修复 1 个真实生产缺陷（REQ-2026-125）：** `t_reconciliation_log` 承载两族日志，而 `reverse()`/`reject()` 的状态门槛与回滚口径错配 ——
+
+| 日志族 | 写入方 | `targetDocId` | 状态 |
+|---|---|---|---|
+| (a) 核销提报 | `ReconciliationServiceImpl.execute()` | 真实业务单据 | 恒 `SUBMITTED` |
+| (b) 核销单生命周期 | `ArapSettlementServiceImpl.logReconciliationLog()` | **硬编码 `null`** | `CONFIRMED`/`VOUCHERED`/`REVERSED` |
+
+状态门槛（`CONFIRMED`/`EXECUTED`）只放行 (b)，回滚逻辑却按 (a) 用 `targetDocId` 回查 → `selectById(null)` 返回 null → `if (doc != null)` 整块跳过 → **金额与发票状态静默不回滚，日志却置 `CANCELLED`/`REJECTED` 并返回成功**。(a) 恒 `SUBMITTED` 永远进不了反核销，故该入口**在任何真实链路下都无法回滚**。
+
+修复：①`logReconciliationLog()` 按首条明细回填 target 维度；②`reverse()` 识别 `sourceDocType=SETTLEMENT` 即**委托红冲路径**；③缺 `targetDocId` 或单据不存在一律抛错；④`reject()` 对已生效核销单显式拒绝并指向反核销。新增 6 条回归测试（4 Mock + 2 真实 DB）。
+
+> **教训**：`if (doc != null)` 包住回滚逻辑是**静默失败**的典型反模式 —— 回查不到实体就整块 skip，但方法继续返回成功，DB 里留下「已反核销」状态而金额纹丝不动，**比直接抛异常危险得多**。凡「回滚/同步」类逻辑，回查不到实体必须抛 `BusinessException`。另：`V144` 把 `target_doc_id` 放宽为可空只为让日志能插入，但「可空」不等于「该空」—— 放宽约束只解决「插不进去」，不解决「信息缺失导致下游查不到」。
 
 ### 剩余 1 项
 
@@ -707,6 +718,7 @@ settlement = CONFIRMED，并产出 operationType=APPROVE 的审批日志
 
 | 版本 | 日期 | 作者 | 变更 |
 |---|---|---|---|
+| V1.7 | 2026-09-29 | opencode | 补记 **反核销/驳回静默回滚修复**（REQ-2026-125）：`t_reconciliation_log` 两族日志的「状态门槛」与「回滚口径」错配 —— 门槛只放行核销单生命周期日志（`targetDocId` 硬编码 `null`），回滚却按提报日志口径用 `targetDocId` 回查 → `selectById(null)` → `if (doc != null)` 整块跳过 → **金额与发票状态静默不回滚却返回成功**，且该入口在任何真实链路下都无法真正回滚。修复：`logReconciliationLog()` 回填 target 维度；`reverse()` 委托红冲路径；缺 `targetDocId`/单据不存在一律抛 `BusinessException`；`reject()` 禁已生效核销单并指向反核销。新增 6 条回归测试。慢测 1996 项仍 1 项待修，快测 1740/0/0/5 |
 | V1.6 | 2026-09-29 | opencode | 补记 **核销人审链路测试对齐**（REQ-2026-124）：**方向更正** —— 无 `review()`、无 `UNCONFIRMED`，真实链路是 `execute`(SUBMITTED 只提报) → `ArapSettlementService.approve()`(金额在此扣减) → `CONFIRMED`/`EXECUTED`；`execute()` 带 P1-fix 注释引用铁律 #1，故生产正确、测试过期。3 项改走真实审批链并新增 5 条人审铁律负向断言。慢测 **4 → 1 项**，快测 1735/0/0/5。顺带发现 `logReconciliationLog()` 的 `setTargetDocId(null)` 导致 `reverse()`/`reject()` **静默不回滚却返回成功**（REQ-2026-125，待拍板） |
 | V1.5 | 2026-09-29 | opencode | 补记 **生产缺陷修复 + 结论更正**（REQ-2026-123）：修 `MenuServiceImpl:84`（`menu`→`MENU`，用户路由恒空）、`PrepaymentServiceImpl:190,328`（`PAYABLE`/`RECEIVABLE`→`PAY`/`RECEIVE`，运行时违约）；**更正** `ReportDataMapper` 系**检查脚本误报**（`check-entity-schema.mjs` 未剥离 `::type` 转型，脚本已修）；连带修掉 `MenuServiceImplTest` 的**测试假阳性**（fixture 小写 + 断言只验非 null 双重遮蔽），断言强化为 3 项、测试 5 → 7。慢测无回归（1990 项仍 4 项待修），快测 1735/0/0/5 |
 | V1.4 | 2026-09-29 | opencode | 补记 **清理类隔离越界** 5 → **4**（REQ-122，`SystemClearControllerIntegrationTest` 3/3 绿）。`clearBusinessDocs()` 是 6 个无 `WHERE` 的 DELETE + 2 个全表解绑 UPDATE，返回行数**天然含种子数据** —— 实测 `t_business_doc` 有 **7 条 Flyway 种子行**，故 `doc=8` 而非用例造的 1 条。改为「先取 `baselineClearOps()` 基线、再断言增量」；后两例的「保留型」断言由 `assertEquals(1, 总数)` 改为 `baseline + 1`（原写法只是侥幸通过）。慢测仅余 4 项：核销单状态语义 3（待拍板）+ `BudgetFlowE2ETest` 1（功能未实现待立项） |

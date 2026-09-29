@@ -604,8 +604,20 @@ public class ArapSettlementServiceImpl implements ArapSettlementService {
             ReconciliationLogEntity logEntity = new ReconciliationLogEntity();
             logEntity.setSourceDocType("SETTLEMENT");
             logEntity.setSourceDocId(settlement.getId());
-            logEntity.setTargetDocType(voucherNo != null ? "VOUCHER" : "");
-            logEntity.setTargetDocId(null);
+            // REQ-2026-125: 原实现硬编码 targetDocId=null / targetDocType=""，导致
+            // ReconciliationServiceImpl.reverse()/reject() 按 targetDocId 回查业务单据时
+            // selectById(null) 返回 null -> 整块跳过 -> 金额静默不回滚却返回成功。
+            // V144 已把这两列放宽为可空，但「可空」不等于「该空」：核销单明细本就指向
+            // 真实业务单据，这里补写首个明细的单据类型与ID，使日志自描述、可被目标维度检索。
+            // 多明细核销单仍以首条明细代表，反核销/驳回一律走红冲路径按 settlementId 处理。
+            BusinessDocEntity targetDoc = resolveFirstTargetDoc(settlement.getId());
+            if (targetDoc != null) {
+                logEntity.setTargetDocType(targetDoc.getDocType());
+                logEntity.setTargetDocId(targetDoc.getId());
+                logEntity.setTargetBusinessDocId(targetDoc.getId());
+            } else if (voucherNo != null) {
+                logEntity.setTargetDocType("VOUCHER");
+            }
             logEntity.setAllocatedAmount(settlement.getTotalAmount());
             logEntity.setMatchScore(BigDecimal.ONE);
             logEntity.setMatchMethod("MANUAL");
@@ -619,5 +631,25 @@ public class ArapSettlementServiceImpl implements ArapSettlementService {
         } catch (Exception e) {
             log.warn("写入核销日志失败: settlementId={}, error={}", settlement.getId(), e.getMessage());
         }
+    }
+
+    /** 取核销单首条明细对应的业务单据（日志 target 维度用）；无明细或单据已不存在时返回 null。 */
+    private BusinessDocEntity resolveFirstTargetDoc(Long settlementId) {
+        if (settlementId == null) {
+            return null;
+        }
+        List<ArapSettlementEntryEntity> entries = entryMapper.selectList(
+                new LambdaQueryWrapper<ArapSettlementEntryEntity>()
+                        .eq(ArapSettlementEntryEntity::getSettlementId, settlementId)
+                        .isNotNull(ArapSettlementEntryEntity::getBusinessDocId)
+                        .orderByAsc(ArapSettlementEntryEntity::getId)
+        );
+        for (ArapSettlementEntryEntity entry : entries) {
+            BusinessDocEntity doc = businessDocMapper.selectById(entry.getBusinessDocId());
+            if (doc != null) {
+                return doc;
+            }
+        }
+        return null;
     }
 }

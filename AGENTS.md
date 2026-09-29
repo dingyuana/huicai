@@ -4,14 +4,14 @@
 
 ## §0 项目状态（硬数字，每次 commit 后更新）
 
-> **更新基准**：commit `815cb7e6` + 后续提交 (2026-09-28) — fix: P99 修复8项构建与可运行性阻断缺陷（REQ-103~111）；A/D 类修复 (2026-09-29) — 慢测 A+D 36 项转绿并修 1 个真实生产缺陷（REQ-113~115）；D5 基建修复 (2026-09-29) — 基类统一企业上下文，慢测再消解 37 项（REQ-116）；悬空外键修复 (2026-09-29) — 补 ensureCustomer 助手，慢测再消解 11 项（REQ-117）；银行流水批次修复 (2026-09-29) — 补 ensureSubject 助手，修 REQUIRES_NEW 隔离，慢测再消解 9 项（REQ-118）；P3 全链路修复 (2026-09-29) — 单据状态与幽灵列，慢测再消解 3 项（REQ-119）；B 类种子撞码修复 (2026-09-29) — 通用 identity 序列对齐 + RBAC 硬编码关联组合，慢测再消解 11 项（REQ-120）；C 类测试数据约束修复 (2026-09-29) — 补 3 个 Entity 缺失的 NOT NULL 字段 + CHECK 取值/幽灵列断言/隔离越界，慢测再消解 16 项（REQ-121）；清理类隔离越界修复 (2026-09-29) — 全表维护操作改增量断言，慢测再消解 1 项（REQ-122）；生产缺陷修复 (2026-09-29) — menu_type 大小写 + 结算类型违约 + 更正 1 处检查脚本误报（REQ-123）；核销人审链路测试对齐 (2026-09-29) — 3 项过期断言改走真实审批链，补 5 条人审铁律负向断言，另发现 reverse() 静默不回滚（REQ-124）
+> **更新基准**：commit `815cb7e6` + 后续提交 (2026-09-28) — fix: P99 修复8项构建与可运行性阻断缺陷（REQ-103~111）；A/D 类修复 (2026-09-29) — 慢测 A+D 36 项转绿并修 1 个真实生产缺陷（REQ-113~115）；D5 基建修复 (2026-09-29) — 基类统一企业上下文，慢测再消解 37 项（REQ-116）；悬空外键修复 (2026-09-29) — 补 ensureCustomer 助手，慢测再消解 11 项（REQ-117）；银行流水批次修复 (2026-09-29) — 补 ensureSubject 助手，修 REQUIRES_NEW 隔离，慢测再消解 9 项（REQ-118）；P3 全链路修复 (2026-09-29) — 单据状态与幽灵列，慢测再消解 3 项（REQ-119）；B 类种子撞码修复 (2026-09-29) — 通用 identity 序列对齐 + RBAC 硬编码关联组合，慢测再消解 11 项（REQ-120）；C 类测试数据约束修复 (2026-09-29) — 补 3 个 Entity 缺失的 NOT NULL 字段 + CHECK 取值/幽灵列断言/隔离越界，慢测再消解 16 项（REQ-121）；清理类隔离越界修复 (2026-09-29) — 全表维护操作改增量断言，慢测再消解 1 项（REQ-122）；生产缺陷修复 (2026-09-29) — menu_type 大小写 + 结算类型违约 + 更正 1 处检查脚本误报（REQ-123）；核销人审链路测试对齐 (2026-09-29) — 3 项过期断言改走真实审批链，补 5 条人审铁律负向断言，另发现 reverse() 静默不回滚（REQ-124）；反核销静默回滚修复 (2026-09-29) — 委托红冲 + 缺 targetDocId 抛错（REQ-125）
 > **当前分支**：`main`（本地领先 origin，**未 push**）
 > **关联文档**：[项目说明](docs/CORE-项目说明.md)、[技术方案](docs/CORE-技术方案.md)、[需求分析](docs/CORE-需求分析.md)、[需求登记册](docs/development/requirements/REQUIREMENTS_REGISTRY.md)、[文档注册表](docs/CORE-文档注册表.md)、[测试策略](docs/testing/TEST-STRATEGY.md)、[Flyway治理规范](docs/development/flyway-governance.md)
 
 | 维度 | 数据 |
 |------|------|
 | 后端代码 | 492 个 Java 主代码文件（另 237 个测试文件）|
-| 测试用例 | 1996 个 `@Test` 方法 / 229 个后端测试类 + 26 个前端测试文件 265 用例（**快测实测 1735 通过，0 Failures, 0 Errors, 5 Skipped**；含 slow 组全量 1990，其中 **1 项待修**（`BudgetFlowE2ETest`，功能未实现待 SPEC），A/D/C/B 类 130 项已于 2026-09-29 修复，见 REQ-2026-113~124）|
+| 测试用例 | 2002 个 `@Test` 方法 / 229 个后端测试类 + 26 个前端测试文件 265 用例（**快测实测 1740 通过，0 Failures, 0 Errors, 5 Skipped**；含 slow 组全量 1996，其中 **1 项待修**（`BudgetFlowE2ETest`，功能未实现待 SPEC），A/D/C/B 类 136 项已于 2026-09-29 修复，见 REQ-2026-113~125）|
 | 数据库 | PostgreSQL 16 / **73 个 migration，最新 V157**（注意：版本号非连续，实际为 V1-V5 + V63 + V92-V157，缺 V6-V62 与 V64-V91 共 85 个号；因 `out-of-order: true` + `validate-on-migrate: false` 不影响运行，但「V1 baseline merged V1-V146」的旧表述已失效）|
 | API 端点 | 510+ 个后端端点 |
 | 核心模块 | 基础数据、总账、应收应付、现金管理、固定资产、费用报销、发票税务、预算、财务报表、存储管理 |
@@ -187,7 +187,9 @@
     - **识别信号**：`grep` 到 `// P1-fix: ...（人审铁律：...）` 这类注释 + 状态机出现「有前置校验却无任何方法可满足前置条件」的悬空状态（如 `SUBMITTED` 是终点而 `approve()` 要求 `CONFIRMED`）。
     - **禁止做法**：为了让旧断言变绿而放宽生产状态机（如把 `reverse()` 白名单加上 `SUBMITTED`），那是在拆掉人审铁律。
     - **正确做法**：测试走完整审批链（`execute` → `approve`），并**补「审批前金额不得变动」负向断言** —— 这条断言此前完全缺失，导致重构抽空的行为无人守门。
-    - ⚠️ 顺带发现同源生产缺陷：`ArapSettlementServiceImpl.logReconciliationLog()` 写审批日志时 `setTargetDocId(null)`，而 `ReconciliationServiceImpl.reverse()` 用 `reconLog.getTargetDocId()` 回查单据 → `selectById(null)` 返回 null → **金额静默不回滚却照常返回成功**。反核销须走 `ArapSettlementServiceImpl.reverse()`（红冲对冲，铁律 #3）。
+    - ⚠️ 顺带发现同源生产缺陷（REQ-2026-125 已修）：`ArapSettlementServiceImpl.logReconciliationLog()` 写审批日志时 `setTargetDocId(null)`，而 `ReconciliationServiceImpl.reverse()` 用 `reconLog.getTargetDocId()` 回查单据 → `selectById(null)` 返回 null → **金额静默不回滚却照常返回成功**。已改：按 `sourceDocType=SETTLEMENT` 委托 `ArapSettlementServiceImpl.reverse()` 红冲，缺 `targetDocId` 或单据不存在一律抛 `BusinessException`。
+    - 🔴 **`if (doc != null)` 包住回滚逻辑 = 静默失败的典型反模式**（2026-09-29 REQ-2026-125 沉淀）：回查实体失败就整块 `skip`，但方法继续把日志置 `CANCELLED`/`REJECTED` 并返回成功 ⇒ DB 里留下「已反核销」状态而单据金额纹丝不动，**比直接抛异常危险得多**。凡「回滚/同步」类逻辑，回查不到实体**必须抛 `BusinessException`**。
+    - 🔴 **「可空列」被当成「该空」**：`V144` 把 `target_doc_id` 放宽为可空（为解决核销单生命周期日志插入报错），于是 `logReconciliationLog()` 长期硬编码 `setTargetDocId(null)`。但核销单明细本就指向真实业务单据，补写即可自描述。**DB 放宽约束只解决「插不进去」，不解决「信息缺失导致下游查不到」**。
 
 ### 4.4 技术类
 7. **Jackson LocalDateTime 序列化**：`application.yml` 的 `date-format` 对 `LocalDateTime` 无效，必须注册专用序列化器

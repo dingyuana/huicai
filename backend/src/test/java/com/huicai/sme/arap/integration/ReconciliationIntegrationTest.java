@@ -64,6 +64,9 @@ public class ReconciliationIntegrationTest extends AbstractMapperTest {
     @Autowired
     private ArapSettlementMapper arapSettlementMapper;
 
+    @Autowired
+    private com.huicai.sme.arap.mapper.ReconciliationLogMapper reconciliationLogMapper;
+
     private static final Long USER_ID = 1L;
     private Long customerId;
     private Long businessDocId;
@@ -209,16 +212,11 @@ public class ReconciliationIntegrationTest extends AbstractMapperTest {
         assertEquals(0, new BigDecimal("2000.00").compareTo(afterApprove.getSettledAmount()),
                 "审批后已结金额应为 2000");
 
-        // 负向断言：走 ReconciliationServiceImpl.reverse() 反核销「审批日志」不会真正回滚金额。
-        // 根因（生产缺陷，已登记 REQ-2026-124）：ArapSettlementServiceImpl.logReconciliationLog()
-        // 写审批日志时 setTargetDocId(null)，而 reverse() 用 reconLog.getTargetDocId() 回查业务单据
-        // -> selectById(null) 返回 null -> 金额静默不回滚，但方法照常返回「成功」。
-        BusinessDocEntity afterBadReverse = businessDocMapper.selectById(businessDocId);
-        assertEquals(0, new BigDecimal("8000.00").compareTo(afterBadReverse.getUnsettledAmount()),
-                "前置：审批后未结金额应为 8000");
-
-        // 正确的反核销路径：走核销单红冲（铁律 #3 凭证/单据不可变，只能红-蓝对冲）
-        arapSettlementService.reverse(settlement.getId());
+        // 反核销走 ReconciliationService 入口（即 Controller 的 /{id}/reverse）：
+        // 该入口按 sourceDocType=SETTLEMENT 识别为核销单生命周期日志，转委托红冲路径。
+        // REQ-2026-125 前此入口是「静默不回滚却返回成功」：logReconciliationLog 写审批日志时
+        // setTargetDocId(null) -> reverse() selectById(null)=null -> 整块跳过，金额纹丝不动。
+        reconciliationService.reverse(confirmedLog.getId(), "测试反核销");
 
         ArapSettlementEntity reversedSettlement = arapSettlementService.getById(settlement.getId());
         assertEquals("REVERSED", reversedSettlement.getStatus(), "原核销单状态应为 REVERSED");
@@ -229,6 +227,42 @@ public class ReconciliationIntegrationTest extends AbstractMapperTest {
         assertEquals(0, BigDecimal.ZERO.compareTo(restored.getSettledAmount()),
                 "反核销后已结金额应为 0");
         assertEquals("APPROVED", restored.getStatus(), "全额回滚后单据状态应恢复为 APPROVED");
+
+        ReconciliationLogEntity cancelledLog = reconciliationLogMapper.selectById(confirmedLog.getId());
+        assertEquals("CANCELLED", cancelledLog.getStatus(), "被反核销的审批日志应置 CANCELLED");
+    }
+
+    @Test
+    @DisplayName("负向: 核销单已审批生效后不可驳回, 必须走红冲")
+    void reject_afterApprove_shouldThrow_directToReverse() {
+        ExecuteRequest request = new ExecuteRequest(
+                "INVOICE_OUT", businessDocId,
+                "INVOICE_OUT", businessDocId,
+                new BigDecimal("1500.00"),
+                new BigDecimal("9.5"),
+                "MANUAL",
+                customerId, null,
+                "202607", "核销1500元-驳回负向测试");
+
+        ReconciliationLogEntity log = reconciliationService.execute(request);
+        assertEquals("SUBMITTED", log.getStatus());
+        ArapSettlementEntity settlement = findSettlementBySource(businessDocId, "INVOICE_OUT");
+        ReconciliationLogEntity confirmedLog = approveAndGetConfirmedLog(settlement);
+
+        // ArapSettlementService.reject() 只接受 SUBMITTED 且从不回滚金额，
+        // 对已生效的核销单放行会留下「已驳回」状态而金额不动。
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> reconciliationService.reject(confirmedLog.getId(), "金额有误"),
+                "已审批生效的核销单不允许驳回");
+        assertTrue(ex.getMessage().contains("反核销"), "异常应指向反核销入口，实际: " + ex.getMessage());
+
+        // 负向：驳回被拒后金额与状态都不得变动
+        BusinessDocEntity unchanged = businessDocMapper.selectById(businessDocId);
+        assertEquals(0, new BigDecimal("1500.00").compareTo(unchanged.getSettledAmount()),
+                "驳回被拒后已结金额不得变动");
+        assertEquals("PARTIALLY_RECONCILED", unchanged.getStatus(), "单据状态不得变动");
+        assertEquals("CONFIRMED", arapSettlementService.getById(settlement.getId()).getStatus(),
+                "核销单状态不得变动");
     }
 
     @Test

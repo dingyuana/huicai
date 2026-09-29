@@ -66,6 +66,13 @@ public class ReconciliationServiceImpl implements ReconciliationService {
     private static final long DEFAULT_TENANT_ID = 1L;
     private static final long DEFAULT_USER_ID = 1L;
 
+    /**
+     * 核销单生命周期日志的来源类型（与 ArapSettlementServiceImpl.logReconciliationLog 写入值一致）。
+     * 这类日志描述核销单自身状态流转，target_doc_id 按设计为空（V144 已放宽为可空），
+     * 故 reverse/reject 必须走核销单红冲路径，不能按 target_doc_id 回查业务单据。
+     */
+    private static final String SETTLEMENT_LOG_SOURCE = "SETTLEMENT";
+
     private final BankStatementMapper bankStatementMapper;
     private final BusinessDocMapper businessDocMapper;
     private final InputInvoiceMapper inputInvoiceMapper;
@@ -629,19 +636,43 @@ public class ReconciliationServiceImpl implements ReconciliationService {
             throw new BusinessException("反核销必须填写原因");
         }
 
+        // P34-fix (REQ-2026-125): 核销单生命周期日志（sourceDocType=SETTLEMENT）的
+        // target_doc_id 按设计为空（V144 已将其放宽为可空，这类日志描述的是核销单自身
+        // 的状态流转，本就无目标单据）。原实现用 targetDocId 回查业务单据 ->
+        // selectById(null) 返回 null -> if (doc != null) 整块跳过 -> 金额与发票状态
+        // 静默不回滚，却照常把日志置 CANCELLED 并返回成功。已改为委托红冲路径。
+        if (SETTLEMENT_LOG_SOURCE.equals(reconLog.getSourceDocType())) {
+            if (reconLog.getSourceDocId() == null) {
+                throw new BusinessException("核销单生命周期日志缺少核销单ID, 无法反核销: logId=" + logId);
+            }
+            settlementService.reverse(reconLog.getSourceDocId());
+            reconLog.setStatus(ArapStatus.CANCELLED);
+            reconLog.setOperationType("CANCEL");
+            reconLog.setRemark("反核销原因: " + reason);
+            logMapper.updateById(reconLog);
+            log.info("核销单红冲反核销完成: logId={}, settlementId={}, reason={}",
+                    logId, reconLog.getSourceDocId(), reason);
+            return;
+        }
+
         // P34: Restore target business doc unsettled amount
         BigDecimal amount = reconLog.getAllocatedAmount();
+        // 负向保障：回查不到目标单据必须抛错，禁止「日志置 CANCELLED 但金额没动」的静默成功
+        if (reconLog.getTargetDocId() == null) {
+            throw new BusinessException("核销记录缺少目标单据ID, 无法反核销: logId=" + logId);
+        }
         BusinessDocEntity doc = businessDocMapper.selectById(reconLog.getTargetDocId());
-        if (doc != null) {
-            BigDecimal newSettled = doc.getSettledAmount().subtract(amount);
-            doc.setSettledAmount(newSettled);
-            doc.setUnsettledAmount(doc.getAmount().subtract(newSettled));
-            if ("FULLY_RECONCILED".equals(doc.getStatus())) {
-                doc.setStatus("APPROVED");
-            }
-            if (businessDocMapper.updateById(doc) == 0) {
-                throw new OptimisticLockingFailureException("BusinessDoc反核销版本冲突, id=" + doc.getId());
-            }
+        if (doc == null) {
+            throw new BusinessException("目标业务单据不存在, 无法反核销: docId=" + reconLog.getTargetDocId());
+        }
+        BigDecimal newSettled = doc.getSettledAmount().subtract(amount);
+        doc.setSettledAmount(newSettled);
+        doc.setUnsettledAmount(doc.getAmount().subtract(newSettled));
+        if ("FULLY_RECONCILED".equals(doc.getStatus())) {
+            doc.setStatus("APPROVED");
+        }
+        if (businessDocMapper.updateById(doc) == 0) {
+            throw new OptimisticLockingFailureException("BusinessDoc反核销版本冲突, id=" + doc.getId());
         }
 
         reconLog.setStatus(ArapStatus.CANCELLED);
@@ -676,19 +707,31 @@ public class ReconciliationServiceImpl implements ReconciliationService {
         if (!ArapStatus.isConfirmed(reconLog.getStatus())) {
             throw new BusinessException("仅已确认(CONFIRMED)的核销可驳回, 当前状态: " + reconLog.getStatus());
         }
+        // P34-fix (REQ-2026-125): 已审批生效的核销单不能「驳回」，只能红冲对冲（铁律 #3）。
+        // ArapSettlementService.reject() 只接受 SUBMITTED 且从不回滚金额，若在此静默放行
+        // 会留下「已驳回」状态而单据金额纹丝不动，故显式拒绝并指向正确入口。
+        if (SETTLEMENT_LOG_SOURCE.equals(reconLog.getSourceDocType())) {
+            throw new BusinessException("核销单已审批生效, 不可驳回, 请使用反核销(红冲): logId=" + logId
+                    + " settlementId=" + reconLog.getSourceDocId());
+        }
+        // 负向保障：回查不到目标单据必须抛错，禁止「日志置 REJECTED 但金额没动」的静默成功
+        if (reconLog.getTargetDocId() == null) {
+            throw new BusinessException("核销记录缺少目标单据ID, 无法驳回: logId=" + logId);
+        }
         // P34: 恢复业务单据未结金额（同 reverse 逻辑）
         BigDecimal amount = reconLog.getAllocatedAmount();
         BusinessDocEntity doc = businessDocMapper.selectById(reconLog.getTargetDocId());
-        if (doc != null) {
-            BigDecimal newSettled = doc.getSettledAmount().subtract(amount);
-            doc.setSettledAmount(newSettled);
-            doc.setUnsettledAmount(doc.getAmount().subtract(newSettled));
-            if ("FULLY_RECONCILED".equals(doc.getStatus())) {
-                doc.setStatus("APPROVED");
-            }
-            if (businessDocMapper.updateById(doc) == 0) {
-                throw new OptimisticLockingFailureException("BusinessDoc驳回版本冲突, id=" + doc.getId());
-            }
+        if (doc == null) {
+            throw new BusinessException("目标业务单据不存在, 无法驳回: docId=" + reconLog.getTargetDocId());
+        }
+        BigDecimal newSettled = doc.getSettledAmount().subtract(amount);
+        doc.setSettledAmount(newSettled);
+        doc.setUnsettledAmount(doc.getAmount().subtract(newSettled));
+        if ("FULLY_RECONCILED".equals(doc.getStatus())) {
+            doc.setStatus("APPROVED");
+        }
+        if (businessDocMapper.updateById(doc) == 0) {
+            throw new OptimisticLockingFailureException("BusinessDoc驳回版本冲突, id=" + doc.getId());
         }
         reconLog.setStatus(ArapStatus.REJECTED);
         reconLog.setOperationType("REJECT");
