@@ -182,6 +182,41 @@ public abstract class AbstractMapperTest {
         vendorIdCache.clear();
     }
 
+    /**
+     * 取一个客户 id。迁移后 {@code t_customer} 为空表，而
+     * {@code t_output_invoice.customer_id} 带 FK 到 {@code t_customer(id)}，
+     * 故需现造（与 {@link #ensureVendor(Long)} 对称）。
+     *
+     * <p>{@code t_customer} 唯一约束为 {@code UNIQUE (code, enterprise_id)}，
+     * 同一企业只造一行并缓存；每个测试方法前清缓存，因
+     * {@code @Transactional} 回滚会使该行消失。
+     */
+    @Autowired
+    protected com.huicai.base.masterdata.mapper.CustomerMapper customerMapper;
+
+    private final Map<Long, Long> customerIdCache = new ConcurrentHashMap<>();
+
+    protected Long ensureCustomer(Long enterpriseId) {
+        Long cached = customerIdCache.get(enterpriseId);
+        if (cached != null) {
+            return cached;
+        }
+        com.huicai.base.masterdata.entity.CustomerEntity customer =
+                new com.huicai.base.masterdata.entity.CustomerEntity();
+        customer.setCode("TEST-CUSTOMER-" + enterpriseId);
+        customer.setName("测试客户-" + enterpriseId);
+        customer.setIsActive(true);
+        customer.setEnterpriseId(enterpriseId);
+        customerMapper.insert(customer);
+        customerIdCache.put(enterpriseId, customer.getId());
+        return customer.getId();
+    }
+
+    @org.junit.jupiter.api.BeforeEach
+    void resetCustomerCache() {
+        customerIdCache.clear();
+    }
+
     // ==================== 企业上下文（REQ-2026-116 / 慢测 C 类）====================
 
     /**

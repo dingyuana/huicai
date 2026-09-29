@@ -1,11 +1,12 @@
 # 慢测全量 128 项失败 — 分诊清单
 
 > **创建日期**：2026-09-28
-> **状态**：🟡 分诊完成；**A / D / D5(C类主体) 已修复并验证**（73 项），剩余 55 项待修
+> **状态**：🟡 分诊完成；**A / D / D5 / 悬空外键 已修复并验证**（84 项），剩余 44 项待修
 > **数据来源**：`mvn test -DexcludedGroups=`（含 slow 组）全量运行
 > **基线**：`main @ 3ab1a606`｜快测 1733/0 failures 正常，慢测 1980 中 **16 Failures + 112 Errors**
 > **A+D 修复后**：慢测 **1984 中 1 Failure + 91 Errors = 92 项**
 > **D5 修复后**：慢测 **1984 中 7 Failures + 48 Errors = 55 项 / 33 类**
+> **悬空外键修复后**：慢测 **1984 中 7 Failures + 37 Errors = 44 项 / 31 类**
 > **重要前提**：本清单**不含任何代码修改**。这些缺陷此前被 Testcontainers 连接错误完全掩盖
 > （`AbstractMapperTest` 容器按类重建导致 `Connection refused`），REQ-108 修复后首次真实执行暴露。
 > **性质**：全部为**既有测试数据/断言缺陷**，非生产代码缺陷
@@ -241,6 +242,39 @@ idx_business_doc_voucher_no    idx_arap_settlement_voucher_no
 | `t_bank_statement.tx_type` NOT NULL 未赋值 + `fk_statement_account` 悬空 | 35 | `BankStatementAuditIntegrationTest`(3) 等 → 补 `txType` + `ensureBankAccount()` |
 | `t_business_doc` 用发票状态（`PENDING_CONFIRM`/`CONFIRMED`）违反 `chk_doc_status` | 15 | 合法值：DRAFT/SUBMITTED/APPROVED/VOUCHERED/PARTIALLY_RECONCILED/FULLY_RECONCILED/CLOSED/REJECTED/REVERSED |
 | 与 Flyway 种子撞码（`uq_role_menu`/`t_subject_pkey`/`t_role_pkey`/`uq_user_role`…） | 40 | B 类 11 项，已有 `alignIdentitySequences()` 范式可复用 |
+
+---
+
+## 〇之三、悬空外键批次修复结果（2026-09-29 已完成，REQ-2026-117）
+
+慢测 **55 → 44 项 / 31 类**，`fk_input_invoice_vendor` / `fk_output_invoice_customer` 两个根因彻底消失。
+
+**实际范围修正**：分诊表里的「45」是**日志行计数**（同一次 FK 违约在异常栈里
+打印多行），真实受影响的是 **2 个类 11 项**。分诊统计应按「类 × 用例」而非日志行。
+
+**做法**
+
+1. 基类新增 `ensureCustomer()`，与 `ensureVendor()` 完全对称
+   （`t_customer` 唯一约束 `UNIQUE(code, enterprise_id)`，同企业造一行并缓存）。
+2. 两个 E2E 类的硬编码 `customerId/vendorId = 1 | 99` 全部改用上述助手。
+
+**连带修掉的 2 类同源缺陷**（比 FK 本身更隐蔽）
+
+| 缺陷 | 现象 | 修法 |
+|------|------|------|
+| `t_business_doc.doc_no` NOT NULL 无默认值，原代码**只读不写** | `null value in column "doc_no"` | 造单时显式赋唯一 `docNo` |
+| 单据状态写 `"CONFIRMED"` / `"SETTLED"` | `violates check constraint "chk_doc_status"` | 改 `APPROVED`（已审核待结算）/ `FULLY_RECONCILED`（已结清）。`CONFIRMED` 是**发票侧**状态，`SETTLED` 在允许集里**根本不存在** |
+
+**顺带纠正一批不可能成立的断言**
+
+原代码断言 `invoice.docNo` / `invoice.voucherNo` / `voucher.sourceDocNo` /
+`voucher.sourceDocType`，但这四个字段都标注 `@TableField(exist = false)`
+（实体注释明写「DB 无此列」）—— 经 DB 往返读回**必然为 null**，断言永远不成立。
+已改为断言真实 id 列落库（`invoice.doc_id` / `invoice.voucher_id` /
+`voucher.business_doc_id`），并补上 `voucher.businessDocId` 建立凭证→单据溯源。
+
+**注**：`t_input_invoice.audited_by/audited_at` **是**真实列，可断言；
+但 `OutputInvoiceEntity.auditedBy/auditedAt` 是 `exist=false`，不可断言。
 
 ---
 
