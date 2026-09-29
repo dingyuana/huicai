@@ -662,13 +662,44 @@ REQ-2026-121 曾依据 `node backend/scripts/check-entity-schema.mjs` 的告警�
 
 `MenuMapperTest` 另有 4 处小写 fixture 一并改正。
 
-### 剩余 4 项（不变）
+### 核销状态语义：方向更正 + 3 项修复（REQ-2026-124，慢测 4 → 1）
+
+**⚠️ 上一轮判断有误，先更正：** 问题**不是**「`review()` 是否纳入 `UNCONFIRMED`」—— 全库**没有** `review()` 方法，`ArapStatus` 常量与 `chk_reconciliation_status` CHECK 也**都没有** `UNCONFIRMED` 取值。放宽白名单的建议是伪问题。
+
+真实状态机（`execute()` 源码带 P1-fix 注释，引用铁律 #1）：
+
+```
+execute()                  → 核销单 SUBMITTED（只提报，金额不动）
+  ↓ ArapSettlementService.approve()   （人工审批：金额在此扣减 + 发票同步）
+settlement = CONFIRMED，并产出 operationType=APPROVE 的审批日志
+  ↓ ReconciliationService.approve()   → EXECUTED
+  ↓ ReconciliationService.reject()    → REJECTED（回滚金额）
+  ↓ ArapSettlementService.reverse()   → REVERSED（红冲对冲，铁律 #3）
+```
+
+**结论：生产代码正确，3 个测试断言的是重构前的旧行为。** 判据是 `execute()` 里有显式注释 `// P1-fix: 统一核销写路径 …（人审铁律：核销需人工审批才生效）`。
+
+| 类 | 修法 |
+|---|---|
+| `ReconciliationIntegrationTest.execute_shouldReduceUnsettledAmount` | 改名 `execute_thenApprove_...`，改走 `execute → approve` |
+| `ReconciliationIntegrationTest.reverse_shouldRestoreUnsettledAmount` | 改名 `approve_thenReverse_...`，反核销走 `ArapSettlementServiceImpl.reverse()` |
+| `ReconciliationWorkbenchE2ETest` | `execute` 后断言 `SUBMITTED`，审批后再断言 `CONFIRMED` |
+
+**新增 5 条人审铁律负向断言**（此前完全缺失 —— 这正是重构把行为抽空却无人守门的原因）：
+
+1. 审批前 `unsettled_amount` 不得变动
+2. 审批前 `settled_amount` 不得变动
+3. 审批前单据状态仍为 `APPROVED`
+4. 审批前核销单为 `SUBMITTED`、`trace` 回读亦为 `SUBMITTED`；审批后为 `CONFIRMED`
+5. 对 `SUBMITTED` 提报单反核销必须抛 `BusinessException`
+
+**顺带发现 1 个真实生产缺陷（REQ-2026-125，待拍板）：** `logReconciliationLog()` 写审批日志时 `setTargetDocId(null)`，而 `reverse()` / `reject()` 用它回查单据 → `selectById(null)` 返回 null → `if (doc != null)` 整块跳过 → **金额与发票状态静默不回滚，却照常置 `CANCELLED`/`REJECTED` 并返回成功**。
+
+### 剩余 1 项
 
 | 类 | 项 | 根因 | 状态 |
 |---|---|---|---|
-| `ReconciliationIntegrationTest` | 2 | 核销单状态语义 | 🟠 待老丁拍板 `review()` 是否纳入 `UNCONFIRMED` |
-| `ReconciliationWorkbenchE2ETest` | 1 | 同上 | 🟠 同上 |
-| `BudgetFlowE2ETest` | 1 | 功能未实现 | 🔴 待走 SPEC 立项 |
+| `BudgetFlowE2ETest` | 1 | 功能未实现（`t_budget_entry` 缺 4 列，`checkBudget` 会 `switch(null)` NPE） | 🔴 待走 SPEC 立项 |
 
 ---
 
@@ -676,6 +707,7 @@ REQ-2026-121 曾依据 `node backend/scripts/check-entity-schema.mjs` 的告警�
 
 | 版本 | 日期 | 作者 | 变更 |
 |---|---|---|---|
+| V1.6 | 2026-09-29 | opencode | 补记 **核销人审链路测试对齐**（REQ-2026-124）：**方向更正** —— 无 `review()`、无 `UNCONFIRMED`，真实链路是 `execute`(SUBMITTED 只提报) → `ArapSettlementService.approve()`(金额在此扣减) → `CONFIRMED`/`EXECUTED`；`execute()` 带 P1-fix 注释引用铁律 #1，故生产正确、测试过期。3 项改走真实审批链并新增 5 条人审铁律负向断言。慢测 **4 → 1 项**，快测 1735/0/0/5。顺带发现 `logReconciliationLog()` 的 `setTargetDocId(null)` 导致 `reverse()`/`reject()` **静默不回滚却返回成功**（REQ-2026-125，待拍板） |
 | V1.5 | 2026-09-29 | opencode | 补记 **生产缺陷修复 + 结论更正**（REQ-2026-123）：修 `MenuServiceImpl:84`（`menu`→`MENU`，用户路由恒空）、`PrepaymentServiceImpl:190,328`（`PAYABLE`/`RECEIVABLE`→`PAY`/`RECEIVE`，运行时违约）；**更正** `ReportDataMapper` 系**检查脚本误报**（`check-entity-schema.mjs` 未剥离 `::type` 转型，脚本已修）；连带修掉 `MenuServiceImplTest` 的**测试假阳性**（fixture 小写 + 断言只验非 null 双重遮蔽），断言强化为 3 项、测试 5 → 7。慢测无回归（1990 项仍 4 项待修），快测 1735/0/0/5 |
 | V1.4 | 2026-09-29 | opencode | 补记 **清理类隔离越界** 5 → **4**（REQ-122，`SystemClearControllerIntegrationTest` 3/3 绿）。`clearBusinessDocs()` 是 6 个无 `WHERE` 的 DELETE + 2 个全表解绑 UPDATE，返回行数**天然含种子数据** —— 实测 `t_business_doc` 有 **7 条 Flyway 种子行**，故 `doc=8` 而非用例造的 1 条。改为「先取 `baselineClearOps()` 基线、再断言增量」；后两例的「保留型」断言由 `assertEquals(1, 总数)` 改为 `baseline + 1`（原写法只是侥幸通过）。慢测仅余 4 项：核销单状态语义 3（待拍板）+ `BudgetFlowE2ETest` 1（功能未实现待立项） |
 | V1.3 | 2026-09-29 | opencode | 补记 **C 类测试数据约束** 21 → **5**（REQ-121，修 16 项，5 类根因）：补 3 个 Entity 缺失的 `NOT NULL` 字段（**2 个真实生产缺陷**：`dept_code`/`menu_code`/`budget_name`）、CHECK 允许集大小写敏感（6 项）、幽灵字段当真实列断言（4 项，`t_input_invoice` 无 `process_status`、`t_output_invoice` 无任何 jsonb 列）、隔离越界与口径错（3 项）、自动生成逻辑在 Service 覆写（1 项）、MP 乐观锁冲突返回 0 行不抛异常（1 项）。**顺带发现 3 个生产缺陷待拍板**：`MenuServiceImpl:84` 路由恒空、`PrepaymentServiceImpl:190,328` 结算类型违约、`ReportDataMapper` 引用不存在的 `assist_json` 列。`BudgetFlowE2ETest` 判定为**功能未实现**需走 SPEC |

@@ -293,7 +293,9 @@ public class ReconciliationWorkbenchE2ETest extends AbstractMapperTest {
                 testCustomerId, null, "202607", "E2E核销测试");
         ReconciliationLogEntity log = reconciliationService.execute(executeReq);
         assertNotNull(log);
-        assertEquals("CONFIRMED", log.getStatus());
+        // execute() 只提报待审批（P1-fix 统一核销写路径：金额扣减延后到 approve()），
+        // 依据铁律 #1「核销需人工审批才生效」。
+        assertEquals("SUBMITTED", log.getStatus(), "execute() 提报后状态应为 SUBMITTED");
         assertEquals("CREATE", log.getOperationType());
         assertNotNull(log.getId());
 
@@ -307,6 +309,16 @@ public class ReconciliationWorkbenchE2ETest extends AbstractMapperTest {
         assertNotNull(trace.getDownstream());
         assertFalse(trace.getOperationTrail().isEmpty(), "operationTrail 不应为空");
         assertEquals("CREATE", trace.getOperationTrail().get(0).getOperationType());
+
+        // 4.1 负向断言：审批前 trace 中的核销单仍是 SUBMITTED（未审批不生效）
+        assertEquals("SUBMITTED", trace.getSettlement().getStatus(),
+                "【负向】审批前 trace 核销单状态不应为 CONFIRMED");
+
+        // 4.2 人工审批后，trace 应回读到 CONFIRMED
+        arapSettlementService.approve(trace.getSettlement().getId());
+        var traceAfterApprove = reconciliationService.trace(log.getId());
+        assertEquals("CONFIRMED", traceAfterApprove.getSettlement().getStatus(),
+                "审批后 trace 核销单状态应为 CONFIRMED");
 
         // 5. 验证下游业务单据
         assertNotNull(trace.getDownstream().getBusinessDocs());
