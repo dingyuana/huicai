@@ -4,15 +4,15 @@
 
 ## §0 项目状态（硬数字，每次 commit 后更新）
 
-> **更新基准**：commit `815cb7e6` + 后续提交 (2026-09-28) — fix: P99 修复8项构建与可运行性阻断缺陷（REQ-103~111）；A/D 类修复 (2026-09-29) — 慢测 A+D 36 项转绿并修 1 个真实生产缺陷（REQ-113~115）；D5 基建修复 (2026-09-29) — 基类统一企业上下文，慢测再消解 37 项（REQ-116）；悬空外键修复 (2026-09-29) — 补 ensureCustomer 助手，慢测再消解 11 项（REQ-117）；银行流水批次修复 (2026-09-29) — 补 ensureSubject 助手，修 REQUIRES_NEW 隔离，慢测再消解 9 项（REQ-118）；P3 全链路修复 (2026-09-29) — 单据状态与幽灵列，慢测再消解 3 项（REQ-119）；B 类种子撞码修复 (2026-09-29) — 通用 identity 序列对齐 + RBAC 硬编码关联组合，慢测再消解 11 项（REQ-120）；C 类测试数据约束修复 (2026-09-29) — 补 3 个 Entity 缺失的 NOT NULL 字段 + CHECK 取值/幽灵列断言/隔离越界，慢测再消解 16 项（REQ-121）；清理类隔离越界修复 (2026-09-29) — 全表维护操作改增量断言，慢测再消解 1 项（REQ-122）；生产缺陷修复 (2026-09-29) — menu_type 大小写 + 结算类型违约 + 更正 1 处检查脚本误报（REQ-123）；核销人审链路测试对齐 (2026-09-29) — 3 项过期断言改走真实审批链，补 5 条人审铁律负向断言，另发现 reverse() 静默不回滚（REQ-124）；反核销静默回滚修复 (2026-09-29) — 委托红冲 + 缺 targetDocId 抛错（REQ-125）
+> **更新基准**：commit `95db0252` + 后续提交 (2026-09-29) — 预算执行控制落地 (REQ-2026-126)：Flyway V158 补 `t_budget_entry` 5 列（dept_id/project_id/period_month/control_type/used_amount）+ CHECK + `t_budget` 审批 2 列，Entity 去幽灵化（含 `updatedAt` 反向修正），`checkBudget` 消除 `switch(null)` NPE 并兼容 snake/camel Map key；**慢测 1996/0/0/5 全绿（历史首次 0 失败）**，快测 1740/0/0/5 无回归；反核销静默回滚修复 (REQ-2026-125) 等前序提交见 Registry
 > **当前分支**：`main`（本地领先 origin，**未 push**）
 > **关联文档**：[项目说明](docs/CORE-项目说明.md)、[技术方案](docs/CORE-技术方案.md)、[需求分析](docs/CORE-需求分析.md)、[需求登记册](docs/development/requirements/REQUIREMENTS_REGISTRY.md)、[文档注册表](docs/CORE-文档注册表.md)、[测试策略](docs/testing/TEST-STRATEGY.md)、[Flyway治理规范](docs/development/flyway-governance.md)
 
 | 维度 | 数据 |
 |------|------|
 | 后端代码 | 492 个 Java 主代码文件（另 237 个测试文件）|
-| 测试用例 | 2002 个 `@Test` 方法 / 229 个后端测试类 + 26 个前端测试文件 265 用例（**快测实测 1740 通过，0 Failures, 0 Errors, 5 Skipped**；含 slow 组全量 1996，其中 **1 项待修**（`BudgetFlowE2ETest`，功能未实现待 SPEC），A/D/C/B 类 136 项已于 2026-09-29 修复，见 REQ-2026-113~125）|
-| 数据库 | PostgreSQL 16 / **73 个 migration，最新 V157**（注意：版本号非连续，实际为 V1-V5 + V63 + V92-V157，缺 V6-V62 与 V64-V91 共 85 个号；因 `out-of-order: true` + `validate-on-migrate: false` 不影响运行，但「V1 baseline merged V1-V146」的旧表述已失效）|
+| 测试用例 | 2002 个 `@Test` 方法 / 229 个后端测试类 + 26 个前端测试文件 265 用例（**快测实测 1740 通过，0 Failures, 0 Errors, 5 Skipped**；**含 slow 组全量 1996 通过，0 Failures, 0 Errors, 5 Skipped —— 历史首次 0 失败**，A/D/C/B 类 136 项 + 预算执行控制 1 项已于 2026-09-29 修复，见 REQ-2026-113~126）|
+| 数据库 | PostgreSQL 16 / **74 个 migration，最新 V158**（注意：版本号非连续，实际为 V1-V5 + V63 + V92-V158，缺 V6-V62 与 V64-V91 共 85 个号；因 `out-of-order: true` + `validate-on-migrate: false` 不影响运行，但「V1 baseline merged V1-V146」的旧表述已失效）|
 | API 端点 | 510+ 个后端端点 |
 | 核心模块 | 基础数据、总账、应收应付、现金管理、固定资产、费用报销、发票税务、预算、财务报表、存储管理 |
 | 业务单据类型 | 11 种（RECEIPT/PAYMENT/EXPENSE/INVOICE_IN/INVOICE_OUT/OTHER_RECEIVABLE/OTHER_PAYABLE/TRANSFER/SALARY/PRE_RECEIVE/PRE_PAY）|
@@ -173,6 +173,18 @@
     - 用它们构造 `LambdaQueryWrapper` 条件 → `MyBatisSystemException`（MP 无法解析列）。
     - **正确写法**：正向断言真实列 + `assertNull(loaded.getGhostField())` 负向锁死。
     - **判断依据**：`@TableField` 注解只代表「作者以为」，写测试前必须用 `information_schema.columns` 确认列真实存在。
+
+16. **「反向缺口」：真实列存在但 Entity 未声明（2026-09-29 REQ-126 沉淀，与第 10/13 条同源但方向相反）**：`@TableField(exist = false)` 还有一种更隐蔽的误用 —— **DB 列真实存在，Entity 却标成不存在**：
+    - `BudgetEntryEntity.updatedAt` 标 `exist=false`，而 `t_budget_entry.updated_at` **真实存在**（与 `t_budget_adjustment` 对称）⇒ 该列从不写入、读回恒 null；
+    - `t_budget.used_amount` 是 `NOT NULL DEFAULT 0` 的真实列，**Entity 连字段都没有** ⇒ 头级使用额永不回读。
+    - **危害比幽灵字段更隐蔽**：列在 `\d` 里一眼可见，不查 `information_schema` 根本发现不了；且 MP 只映射已声明字段，故**不报错、不警告、只是永远读不到**。
+    - **预防**：`check-entity-schema.mjs` 应双向校验 —— 不仅查「Entity 引用了 DB 没有的列」，还要查「DB 有 NOT NULL/业务关键列但 Entity 未声明」。本轮靠人工发现，工具尚未覆盖。
+
+17. **Mapper 返回 `Map` 时，key 大小写必须与 Service 读法对齐（2026-09-29 REQ-126 沉淀，Mock 盲区的典型变体）**：`@Select("SELECT be.* ...")` 返回的 key 是 **snake_case**（`used_amount`/`control_type`），而 Service 按 **camelCase** 读（`entry.get("usedAmount")`）⇒ **真实 DB 恒读出 null，Mock 夹具却恰好写 camelCase 而全绿**。
+    - 在预算里这直接引发 `switch(controlType)` **NPE**（`/budget/check` 一调即崩），且 `executionAnalysis` 的 `totalUsed` 恒 0 —— 两处都靠 Mock 测不出来。
+    - **正解**（治本）：SQL 里显式别名 `be.used_amount AS "usedAmount"`。
+    - **临时兜底**（本轮采用）：Service 侧加 `pick(row, camelKey, snakeKey)` 兼容两种 key。
+    - **教训**：凡 `@Select` 返回 `Map<String,Object>` 的方法，**必须在真实 DB 上验证一次**，Mock 夹具的 key 名不能作为「SQL 会返回什么」的依据（补强第 7 条 Mock 盲区：Mock 只能证明 Service 分支逻辑，不能证明 key 名正确）。
 
 ### 4.3 测试类
 6. **测试假阳性**：测试通过 ≠ 功能完成。跨实体链路必须真实贯通，不能只测单个模块 CRUD。E2E 测试必须模拟真实用户操作路径

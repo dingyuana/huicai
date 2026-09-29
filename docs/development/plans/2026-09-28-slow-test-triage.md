@@ -706,11 +706,29 @@ settlement = CONFIRMED，并产出 operationType=APPROVE 的审批日志
 
 > **教训**：`if (doc != null)` 包住回滚逻辑是**静默失败**的典型反模式 —— 回查不到实体就整块 skip，但方法继续返回成功，DB 里留下「已反核销」状态而金额纹丝不动，**比直接抛异常危险得多**。凡「回滚/同步」类逻辑，回查不到实体必须抛 `BusinessException`。另：`V144` 把 `target_doc_id` 放宽为可空只为让日志能插入，但「可空」不等于「该空」—— 放宽约束只解决「插不进去」，不解决「信息缺失导致下游查不到」。
 
-### 剩余 1 项
+### 剩余 0 项 —— ✅ 历史首次全绿
+
+`BudgetFlowE2ETest` 已于 2026-09-29 修复（REQ-2026-126 / SPC-P16 拓展）。**全量慢测 1996/0/0/5、快测 1740/0/0/5**。
 
 | 类 | 项 | 根因 | 状态 |
 |---|---|---|---|
-| `BudgetFlowE2ETest` | 1 | 功能未实现（`t_budget_entry` 缺 4 列，`checkBudget` 会 `switch(null)` NPE） | 🔴 待走 SPEC 立项 |
+| — | 0 | — | ✅ 全部消解 |
+
+**该项的根因链（5 处生产缺陷 + 3 处测试 bug）**：
+
+| # | 缺陷 | 危害 |
+|---|---|---|
+| 1 | `t_budget_entry` 缺 `dept_id`/`project_id`/`period_month`/`control_type`/`used_amount` 5 列，Entity 全标 `exist=false` | 部门/项目维度与控制方式无法持久化 |
+| 2 | `t_budget` 缺 `approved_at`/`approved_by`，`approve()` 照常赋值 | 幽灵字段赋值无效，**审批时间永久丢失**（审计缺失，违反铁律 #5） |
+| 3 | `addUsedAmount()` 引用不存在的 `used_amount` 列 | 任何调用路径**运行必报 SQL 错** |
+| 4 | `checkBudget()` 对 null `control_type` 做 `switch` | **NPE 生产缺陷**，`GET /budget/check` 一调即崩 |
+| 5 | `executionAnalysis()` 读幽灵 `usedAmount` | `totalUsed` 恒 0，执行率报表全失真 |
+| 6 | 反向缺口：`t_budget_entry.updated_at`、`t_budget.used_amount` 是真实列但 Entity 未声明 | 该列**永不回读**，且不报错不警告 |
+| 7 | 测试传科目**编码**而非主键 id；无 `ORDER BY` 取 `get(1)`；末尾 `6602L` 字面量比较 | 3 处口径错，按注释自证应传 id |
+
+> **两条新沉淀**（已写入 AGENTS §4.2 第 16/17 条）：
+> ① **反向缺口**比幽灵字段更隐蔽 —— DB 列真实存在却标 `exist=false`，`\d` 里一眼可见却没人查，MP 只映射已声明字段 ⇒ 不报错、只永远读不到。
+> ② **Mapper 返回 `Map` 的 key 大小写**是 Mock 盲区的典型变体 —— `be.*` 返回 snake_case，Service 按 camelCase 读，只有 Mock 夹具恰好写 camelCase 才全绿。**凡 `@Select` 返回 `Map` 的方法必须在真实 DB 上验证一次**。
 
 ---
 
@@ -718,6 +736,9 @@ settlement = CONFIRMED，并产出 operationType=APPROVE 的审批日志
 
 | 版本 | 日期 | 作者 | 变更 |
 |---|---|---|---|
+| 版本 | 日期 | 变更人 | 变更内容 |
+|---|---|---|---|
+| V1.8 | 2026-09-29 | opencode | **补记 预算执行控制落地**（REQ-2026-126）：慢测 **1 → 0 项，全量 1996/0/0/5 —— 历史首次 0 失败**。`BudgetFlowE2ETest` 根因链 5 处生产缺陷（4 类幽灵字段/反向缺口 + 1 处 `switch(null)` NPE）+ 3 处测试口径错。V158 补 7 列 + CHECK + 索引 + 审批列回填；Entity 去幽灵；`checkBudget` 加 `pick()` 兼容 snake/camel key + 空值兜底 WARN。两条新教训入 AGENTS §4.2 第 16/17 条（反向缺口、Map key 大小写 Mock 盲区） |
 | V1.7 | 2026-09-29 | opencode | 补记 **反核销/驳回静默回滚修复**（REQ-2026-125）：`t_reconciliation_log` 两族日志的「状态门槛」与「回滚口径」错配 —— 门槛只放行核销单生命周期日志（`targetDocId` 硬编码 `null`），回滚却按提报日志口径用 `targetDocId` 回查 → `selectById(null)` → `if (doc != null)` 整块跳过 → **金额与发票状态静默不回滚却返回成功**，且该入口在任何真实链路下都无法真正回滚。修复：`logReconciliationLog()` 回填 target 维度；`reverse()` 委托红冲路径；缺 `targetDocId`/单据不存在一律抛 `BusinessException`；`reject()` 禁已生效核销单并指向反核销。新增 6 条回归测试。慢测 1996 项仍 1 项待修，快测 1740/0/0/5 |
 | V1.6 | 2026-09-29 | opencode | 补记 **核销人审链路测试对齐**（REQ-2026-124）：**方向更正** —— 无 `review()`、无 `UNCONFIRMED`，真实链路是 `execute`(SUBMITTED 只提报) → `ArapSettlementService.approve()`(金额在此扣减) → `CONFIRMED`/`EXECUTED`；`execute()` 带 P1-fix 注释引用铁律 #1，故生产正确、测试过期。3 项改走真实审批链并新增 5 条人审铁律负向断言。慢测 **4 → 1 项**，快测 1735/0/0/5。顺带发现 `logReconciliationLog()` 的 `setTargetDocId(null)` 导致 `reverse()`/`reject()` **静默不回滚却返回成功**（REQ-2026-125，待拍板） |
 | V1.5 | 2026-09-29 | opencode | 补记 **生产缺陷修复 + 结论更正**（REQ-2026-123）：修 `MenuServiceImpl:84`（`menu`→`MENU`，用户路由恒空）、`PrepaymentServiceImpl:190,328`（`PAYABLE`/`RECEIVABLE`→`PAY`/`RECEIVE`，运行时违约）；**更正** `ReportDataMapper` 系**检查脚本误报**（`check-entity-schema.mjs` 未剥离 `::type` 转型，脚本已修）；连带修掉 `MenuServiceImplTest` 的**测试假阳性**（fixture 小写 + 断言只验非 null 双重遮蔽），断言强化为 3 项、测试 5 → 7。慢测无回归（1990 项仍 4 项待修），快测 1735/0/0/5 |
