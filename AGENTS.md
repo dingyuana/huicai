@@ -4,14 +4,14 @@
 
 ## §0 项目状态（硬数字，每次 commit 后更新）
 
-> **更新基准**：commit `815cb7e6` + 后续提交 (2026-09-28) — fix: P99 修复8项构建与可运行性阻断缺陷（REQ-103~111）；A/D 类修复 (2026-09-29) — 慢测 A+D 36 项转绿并修 1 个真实生产缺陷（REQ-113~115）；D5 基建修复 (2026-09-29) — 基类统一企业上下文，慢测再消解 37 项（REQ-116）；悬空外键修复 (2026-09-29) — 补 ensureCustomer 助手，慢测再消解 11 项（REQ-117）；银行流水批次修复 (2026-09-29) — 补 ensureSubject 助手，修 REQUIRES_NEW 隔离，慢测再消解 9 项（REQ-118）；P3 全链路修复 (2026-09-29) — 单据状态与幽灵列，慢测再消解 3 项（REQ-119）；B 类种子撞码修复 (2026-09-29) — 通用 identity 序列对齐 + RBAC 硬编码关联组合，慢测再消解 11 项（REQ-120）；C 类测试数据约束修复 (2026-09-29) — 补 3 个 Entity 缺失的 NOT NULL 字段 + CHECK 取值/幽灵列断言/隔离越界，慢测再消解 16 项（REQ-121）
+> **更新基准**：commit `815cb7e6` + 后续提交 (2026-09-28) — fix: P99 修复8项构建与可运行性阻断缺陷（REQ-103~111）；A/D 类修复 (2026-09-29) — 慢测 A+D 36 项转绿并修 1 个真实生产缺陷（REQ-113~115）；D5 基建修复 (2026-09-29) — 基类统一企业上下文，慢测再消解 37 项（REQ-116）；悬空外键修复 (2026-09-29) — 补 ensureCustomer 助手，慢测再消解 11 项（REQ-117）；银行流水批次修复 (2026-09-29) — 补 ensureSubject 助手，修 REQUIRES_NEW 隔离，慢测再消解 9 项（REQ-118）；P3 全链路修复 (2026-09-29) — 单据状态与幽灵列，慢测再消解 3 项（REQ-119）；B 类种子撞码修复 (2026-09-29) — 通用 identity 序列对齐 + RBAC 硬编码关联组合，慢测再消解 11 项（REQ-120）；C 类测试数据约束修复 (2026-09-29) — 补 3 个 Entity 缺失的 NOT NULL 字段 + CHECK 取值/幽灵列断言/隔离越界，慢测再消解 16 项（REQ-121）；清理类隔离越界修复 (2026-09-29) — 全表维护操作改增量断言，慢测再消解 1 项（REQ-122）
 > **当前分支**：`main`（本地领先 origin，**未 push**）
 > **关联文档**：[项目说明](docs/CORE-项目说明.md)、[技术方案](docs/CORE-技术方案.md)、[需求分析](docs/CORE-需求分析.md)、[需求登记册](docs/development/requirements/REQUIREMENTS_REGISTRY.md)、[文档注册表](docs/CORE-文档注册表.md)、[测试策略](docs/testing/TEST-STRATEGY.md)、[Flyway治理规范](docs/development/flyway-governance.md)
 
 | 维度 | 数据 |
 |------|------|
 | 后端代码 | 492 个 Java 主代码文件（另 237 个测试文件）|
-| 测试用例 | 1994 个 `@Test` 方法 / 229 个后端测试类 + 26 个前端测试文件 265 用例（**快测实测 1733 通过，0 Failures, 0 Errors, 5 Skipped**；含 slow 组全量 1988，其中 **5 项待修**，A/D/C/B 类 124 项已于 2026-09-29 修复，见 REQ-2026-113~121）|
+| 测试用例 | 1994 个 `@Test` 方法 / 229 个后端测试类 + 26 个前端测试文件 265 用例（**快测实测 1733 通过，0 Failures, 0 Errors, 5 Skipped**；含 slow 组全量 1988，其中 **4 项待修**，A/D/C/B 类 125 项已于 2026-09-29 修复，见 REQ-2026-113~122）|
 | 数据库 | PostgreSQL 16 / **73 个 migration，最新 V157**（注意：版本号非连续，实际为 V1-V5 + V63 + V92-V157，缺 V6-V62 与 V64-V91 共 85 个号；因 `out-of-order: true` + `validate-on-migrate: false` 不影响运行，但「V1 baseline merged V1-V146」的旧表述已失效）|
 | API 端点 | 510+ 个后端端点 |
 | 核心模块 | 基础数据、总账、应收应付、现金管理、固定资产、费用报销、发票税务、预算、财务报表、存储管理 |
@@ -197,6 +197,7 @@
 15. **自动生成逻辑常写在 Service 而非 Mapper（2026-09-29 慢测 REQ-121 沉淀）**：`PeriodServiceImpl.save()` **覆写了 MyBatis-Plus 的 `save`**，在其中生成 `periodCode`/`startDate`/`endDate`。测试若直接 `periodMapper.insert(entity)` 就**绕过了全部生成逻辑**，断言必然失败。**教训**：断言「自动生成」类行为前，先确认该逻辑挂在哪一层（Service 覆写 / 拦截器 / MetaObjectHandler），用对入口再写断言，别想当然调 Mapper。
 
 16. **`selectCount(null)` 是全表计数 ⇒ 测试隔离越界（2026-09-29 慢测 REQ-121 沉淀）**：`selectCount(null)` 不带任何条件，会把种子数据和其它用例残留行一并计入 —— 慢测全量跑时得到 11 而非用例自己的 4 条。**修法**：每个用例造数时带唯一前缀（如 `"9999.E2E.KW.DOC."`），断言时用 `likeRight`/`eq` 收敛到自己的数据。**同类高危写法**：`SELECT count(*)` 裸查 + 断言固定总数（`SystemClearControllerIntegrationTest` 即栽在这），断言前必须先取 baseline 再做增量比较。
+    - 🔴 **全表维护操作返回的行数天然含种子数据**（REQ-122 定位）：`SystemClearController.clearBusinessDocs()` 是 6 个无 `WHERE` 的 `DELETE` + 2 个全表解绑 `UPDATE`，其 `deleted` 必然包含库中**原有行** —— 实测 `t_business_doc` 有 **7 条 Flyway 种子行**，故单据删除数是 8 而非用例造的 1 条。**这类接口的返回行数本质上无法断言绝对值**，必须「先取基线、再断言增量」（`baseline + 本用例新增行数`）。**注意区分**：`assertEquals(0, 清空后 count(*))` 是**成立**的（清空即全表语义），要改的只是操作前的行数断言；而「保留型」断言（如「银行日记账应保留」）要从 `assertEquals(1, 总数)` 改成 `baseline + 1` —— 原写法往往只是**侥幸**通过（基线恰为 0）。
 
 17. **测试可能针对「尚未建模」的功能（2026-09-29 慢测 REQ-121 沉淀）**：`BudgetFlowE2ETest` 断言部门/项目维度、逐条目使用额、控制方式（BLOCK/WARN），但 `t_budget_entry` 实际只有 10 列，`deptId`/`projectId`/`periodMonth`/`controlType`/`usedAmount` **全是幽灵字段**；于是 `checkBudget` 读到 `controlType=null` → `switch(null)` **NPE**，`addUsedAmount` 的 UPDATE 引用不存在的 `used_amount` 列。**这类不是「测试数据填错」，而是功能未实现** —— 继续改测试只会掩盖缺口。**识别信号**：Entity 里成片 `exist=false` + 生产代码直接读这些字段。**正确处置**：判为功能缺口走 SPEC 立项，测试保持失败待实现，**禁止把断言改弱来「做绿」**。
 
