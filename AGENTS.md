@@ -6,7 +6,7 @@
 
 > **更新基准**：commit `79e9eec7`（REQ-2026-126 预算执行控制，已 rebase 到 origin/main `8c56e40e` 之上）+ 本次 REQ-2026-127 提交 (2026-09-29) — **银行流水自动制证科目缺失防护**：V159 补 `1221`/`2203`/`2211`/`6603` 四个种子科目 + `requireSubject()` 把 `arAcct.getId()` NPE 换成指明科目代码的 `BusinessException`；全量 1998/0/0/5、快测 1742/0/0/5；前序（REQ-125 反核销静默回滚、REQ-126 慢测 1996 首次全绿等）见 Registry
 > **当前分支**：`main`（本地领先 origin，**未 push**）
-> **关联文档**：[项目说明](docs/CORE-项目说明.md)、[技术方案](docs/CORE-技术方案.md)、[需求分析](docs/CORE-需求分析.md)、[需求登记册](docs/development/requirements/REQUIREMENTS_REGISTRY.md)、[文档注册表](docs/CORE-文档注册表.md)、[测试策略](docs/testing/TEST-STRATEGY.md)、[Flyway治理规范](docs/development/flyway-governance.md)
+> **关联文档**：[项目说明](docs/CORE-项目说明.md)、[技术方案](docs/CORE-技术方案.md)、[需求分析](docs/CORE-需求分析.md)、[需求登记册](docs/development/requirements/REQUIREMENTS_REGISTRY.md)、[文档注册表](docs/CORE-文档注册表.md)、[测试策略](docs/testing/TEST-STRATEGY.md)、[Flyway治理规范](docs/development/standards/flyway-governance.md)、[商用化修复总纲](docs/specs/P101-commercial-gap-remediation.md)、[修复开发计划](docs/development/plans/2026-09-29-commercial-gap-remediation-plan.md)
 
 | 维度 | 数据 |
 |------|------|
