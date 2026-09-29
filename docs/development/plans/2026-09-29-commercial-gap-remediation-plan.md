@@ -25,14 +25,16 @@
 |---|---|---|---|---|
 | **M0 基线** | 立项、建分支、审计报告留档 | P101 | — | SPEC 审核通过，REQ-128 登记 |
 | **M1 门禁兜底** | main PR 跑真库套件 | P104-a | M0 | main PR 变红一次真库失败（证明门禁有效） |
-| **M2 租户隔离** | 跨租户 403、RLS 生效 | P102-a/b/c | M0 | 越权用例全拒；`rolbypassrls=false` |
+| **M1.5 存量缺陷** | 6 项 P0/P1 点状缺陷修复（可并行，最快见效） | **P107** | 无 | 6 项 AT-107 全绿 |
+| **M2 租户隔离** | 跨企业 403（三源并集）、入参封禁、RLS 生效 | P102-a/b/c | M0 | 越权用例全拒；`rolbypassrls=false`；AT-102-7 入参不生效 |
 | **M3 端点鉴权** | 8 清库端点 + 高危端点 `@PreAuthorize` | P102-d/e | M2、REQ 权限码列 | 无权限码用户 403；`PermissionCodeAuditTest` 绿 |
 | **M4 审计落地** | 快照真实落库、updateById 纳入 | P103 | M3（复用权限码） | `before_data/after_data` 非空断言通过 |
 | **M5 测试成色** | 29 个同义反复改造、覆盖矩阵 | P104-b/c | M1 | 核心模块真库覆盖 ≥60%；同义反复归零 |
 | **M6 文档地基** | REQ 唯一、SPEC 状态回写、硬数字单点 | P105 | 无 | 编号全局唯一；13 个漂移 SPEC 回写 |
 | **M7 内控深度** | 年结、制单≠审核、权限粒度 | P106 | M4 | 详见 P106（本批只锁边界，可独立排期） |
 
-> **并行策略**：M1（门禁）与 M2（租户）互不依赖，可并行。M5 依赖 M1 的门禁生效后才有意义。
+> **并行策略**：M1（门禁）、**M1.5（P107 存量缺陷）**、M6（文档）三者互不依赖，可同时开工；M5 依赖 M1 的门禁生效后才有意义。
+> **M1.5 为什么优先**：6 项中有 4 项是 P0 且**端点当前 100% 报错或静默谎报**（对账争议、批量审核、凭证删除），修完立刻消除线上可见故障，且不依赖任何基座改造。
 
 ---
 
@@ -47,16 +49,30 @@
 | 1.3 | 真库门禁**失败必须红** | 故意推一个失败断言验证门禁真会拦截 | 确认 PR 变红（**这是门禁有效的唯一证明**） |
 | 1.4 | `full-stack-test.yml` 保持 `mvn test`（L1 快测） | 两层门禁分工：L1 快、L2 慢 | 文档标注职责 |
 
+### M1.5 存量缺陷修复（P107）｜预计 2 天｜可与 M1/M2 并行
+
+| # | 任务 | 关键点 | 验证 |
+|---|---|---|---|
+| 1.5.1 | D1 对账 `DISPUTED` 违反 CHECK | `CustomerStatementServiceImpl:140`；`chk_customer_statement_status` 允许集无 `DISPUTED`。二选一：V161 补该值（保留语义）或改用合法值 | AT-107-1 真实 DB 调 `dispute()` 不报 SQL 错 |
+| 1.5.2 | D2 凭证分录物理删除 | `VoucherEntryMapper.xml:138` 改逻辑删除；3 个调用方（`VoucherServiceImpl:231,253`、`ArapSettlementServiceImpl:558`）核对「仅未过账可删」，已过账抛错走红冲 | AT-107-2/3 |
+| 1.5.3 | D3 三个空壳批量服务 | `BatchAuditServiceImpl:40`/`BatchCloseServiceImpl:30`/`BatchImportServiceImpl:34`：抛「功能未实现」或下线端点，**禁 return success** | AT-107-4 断言 `success != true` |
+| 1.5.4 | D4 银行对账确认/驳回空壳 | `BankReconciliationServiceImpl:411-424`：写 `match_status` + 记对账日志 | AT-107-5 真实 DB 状态流转 |
+| 1.5.5 | D5 金额精度 | `BankStatementExcelImportService:140` 改 `BigDecimal.valueOf(val)`；`TaxServiceImpl:878` 同 | AT-107-6/7 精度往返断言 |
+| 1.5.6 | D6 明文口令 | `application.yml:23,59` 改环境变量注入无默认值；`:90` JWT 无可用默认密钥 | AT-107-8 静态扫描 |
+
 ### M2 租户隔离（P102-a/b/c）｜预计 2 天
 
 | # | 任务 | 关键点 | 验证 |
 |---|---|---|---|
-| 2.1 | `X-Enterprise-Id` 加成员校验 | 查 `t_agency_user_enterprise` 确认用户属该企业，否则 403；**不回退** | 越权用例：企业1用户带 `X-Enterprise-Id: 2` → 403 |
-| 2.2 | RLS 让 GUC 生效 | 业务事务入口 `SET LOCAL app.enterprise_id`（`EnterpriseDataPermissionInterceptor` 或事务拦截器） | Testcontainers 查 `t_voucher` 仅本企业行 |
-| 2.3 | 应用角色 `NOBYPASSRLS` | 现 `rolsuper=t`；需新建非超级应用角色 + 授权 | `pg_roles.rolbypassrls=false`；全量真库仍绿 |
-| 2.4 | 拦截器 fail-closed | `DataPermissionInterceptor` 4 处 `catch→return null` 改抛异常 | 注入 SQL 解析异常 → 事务中止 |
+| 2.1 | `X-Enterprise-Id` 加**三源并集**校验 | `t_user.enterprise_id` ∪ `t_agency_user_enterprise` ∪ `SUPER_ADMIN`；越权 403 不回退。**注意**：只查成员表会锁死 `accountant01`/`reviewer01`/`assistant01`（其 `enterprise_id` 为 NULL 且无成员记录） | AT-102-1/1b/1c；Testcontainers 确认种子账号不被锁 |
+| 2.2 | **入参 `enterpriseId` 封禁（L1 兜底）** | `MyMetaObjectHandler:20` 改 `strictInsertFill`→**强制覆盖**为 `EnterpriseContextHolder.get()`，忽略入参值；一次堵死 48 处 Entity 直入 | AT-102-7：body 含 `{"enterpriseId":999}` → 落库为上下文企业 |
+| 2.3 | RLS 让 GUC 生效 | 业务事务入口 `SET LOCAL app.enterprise_id` | Testcontainers 查 `t_voucher` 仅本企业行 |
+| 2.4 | 应用角色 `NOBYPASSRLS` | 现 `rolsuper=t`；需新建非超级应用角色 + 授权 | `pg_roles.rolbypassrls=false`；全量真库仍绿 |
+| 2.5 | 拦截器 fail-closed | `DataPermissionInterceptor` 4 处 `catch→return null` 改抛异常 | 注入 SQL 解析异常 → 事务中止 |
+| 2.6 | SUPER_ADMIN 切换留痕 | from→to + 操作人，复用 P103 审计切面 | 审计表有切换记录 |
 
-> ⚠️ 2.2/2.3 风险最高：收紧 RLS 可能让现存超级用户查询返 0 行。**必须先在 Testcontainers 全量真库跑通再动生产角色**。
+> ⚠️ 2.3/2.4 风险最高：收紧 RLS 可能让现存超级用户查询返 0 行。**必须先在 Testcontainers 全量真库跑通再动生产角色**。
+> 📌 2.2（L1 兜底）**先做**：改动面 1 个类即可堵死 48 处越权路径；L2 的 DTO 隔离分批见 P102 §7（批1 涉资金模块优先）。
 
 ### M3 端点鉴权（P102-d/e）｜预计 2 天
 
@@ -101,6 +117,8 @@
 
 ```
 M0 ──┬─▶ M1(门禁) ──▶ M5(测试成色)
+     │
+     ├─▶ M1.5(存量缺陷 P107) ──▶ (独立可完成)
      │
      └─▶ M2(租户) ──▶ M3(端点鉴权) ──▶ M4(审计) ──▶ M7(内控深度/可独立)
      
