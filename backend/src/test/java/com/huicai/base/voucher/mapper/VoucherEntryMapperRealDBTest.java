@@ -8,6 +8,7 @@ import com.huicai.base.voucher.dto.SubjectProfitTotalRow;
 import com.huicai.base.voucher.entity.VoucherEntity;
 import com.huicai.base.voucher.entity.VoucherEntryEntity;
 import com.huicai.common.test.AbstractMapperTest;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 
@@ -260,6 +261,16 @@ class VoucherEntryMapperRealDBTest extends AbstractMapperTest {
 
     /** 造一个真实 6xx 损益科目（前缀 insertSubject 用 ZTEST_ 不匹配 LIKE '6%'，故单独造） */
     private Long insertProfitSubject(String code, String name, String direction) {
+        // REQ-2026-127: V159 已按种子补入 6603 等科目, 盲插会撞 uq_subject_code_ent。
+        // 存在即复用（同 code 同企业, 语义一致）, 不存在才插入。
+        Subject existing = subjectMapper.selectOne(new LambdaQueryWrapper<Subject>()
+                .eq(Subject::getCode, code)
+                .eq(Subject::getEnterpriseId, 1L)
+                .eq(Subject::getDeleted, 0)
+                .last("LIMIT 1"));
+        if (existing != null) {
+            return existing.getId();
+        }
         Subject s = new Subject();
         s.setCode(code);
         s.setName(name);

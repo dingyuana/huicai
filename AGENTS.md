@@ -4,15 +4,15 @@
 
 ## §0 项目状态（硬数字，每次 commit 后更新）
 
-> **更新基准**：commit `95db0252` + 后续提交 (2026-09-29) — 预算执行控制落地 (REQ-2026-126)：Flyway V158 补 `t_budget_entry` 5 列（dept_id/project_id/period_month/control_type/used_amount）+ CHECK + `t_budget` 审批 2 列，Entity 去幽灵化（含 `updatedAt` 反向修正），`checkBudget` 消除 `switch(null)` NPE 并兼容 snake/camel Map key；**慢测 1996/0/0/5 全绿（历史首次 0 失败）**，快测 1740/0/0/5 无回归；反核销静默回滚修复 (REQ-2026-125) 等前序提交见 Registry
+> **更新基准**：commit `79e9eec7`（REQ-2026-126 预算执行控制，已 rebase 到 origin/main `8c56e40e` 之上）+ 本次 REQ-2026-127 提交 (2026-09-29) — **银行流水自动制证科目缺失防护**：V159 补 `1221`/`2203`/`2211`/`6603` 四个种子科目 + `requireSubject()` 把 `arAcct.getId()` NPE 换成指明科目代码的 `BusinessException`；全量 1998/0/0/5、快测 1742/0/0/5；前序（REQ-125 反核销静默回滚、REQ-126 慢测 1996 首次全绿等）见 Registry
 > **当前分支**：`main`（本地领先 origin，**未 push**）
 > **关联文档**：[项目说明](docs/CORE-项目说明.md)、[技术方案](docs/CORE-技术方案.md)、[需求分析](docs/CORE-需求分析.md)、[需求登记册](docs/development/requirements/REQUIREMENTS_REGISTRY.md)、[文档注册表](docs/CORE-文档注册表.md)、[测试策略](docs/testing/TEST-STRATEGY.md)、[Flyway治理规范](docs/development/flyway-governance.md)
 
 | 维度 | 数据 |
 |------|------|
 | 后端代码 | 492 个 Java 主代码文件（另 237 个测试文件）|
-| 测试用例 | 2002 个 `@Test` 方法 / 229 个后端测试类 + 26 个前端测试文件 265 用例（**快测实测 1740 通过，0 Failures, 0 Errors, 5 Skipped**；**含 slow 组全量 1996 通过，0 Failures, 0 Errors, 5 Skipped —— 历史首次 0 失败**，A/D/C/B 类 136 项 + 预算执行控制 1 项已于 2026-09-29 修复，见 REQ-2026-113~126）|
-| 数据库 | PostgreSQL 16 / **74 个 migration，最新 V158**（注意：版本号非连续，实际为 V1-V5 + V63 + V92-V158，缺 V6-V62 与 V64-V91 共 85 个号；因 `out-of-order: true` + `validate-on-migrate: false` 不影响运行，但「V1 baseline merged V1-V146」的旧表述已失效）|
+| 测试用例 | **1996 个可执行测试注解**（`@Test` 1993 + `@TestFactory` 3）/ 229 个后端测试类 + 26 个前端测试文件 265 用例（**快测实测 1742 通过，0 Failures, 0 Errors, 5 Skipped**；**含 slow 组全量 1998 通过，0 Failures, 0 Errors, 5 Skipped**，A/D/C/B 类 136 项 + 预算执行控制 1 项 + 自动制证科目防护 2 项已于 2026-09-29 修复，见 REQ-2026-113~127。注：此前登记的「2002」为约数，本轮已按 `grep -P '@Test(?![A-Za-z])'` 重新核算）|
+| 数据库 | PostgreSQL 16 / **75 个 migration，最新 V159**（注意：版本号非连续，实际为 V1-V5 + V63 + V92-V159，缺 V6-V62 与 V64-V91 共 85 个号；因 `out-of-order: true` + `validate-on-migrate: false` 不影响运行，但「V1 baseline merged V1-V146」的旧表述已失效）|
 | API 端点 | 510+ 个后端端点 |
 | 核心模块 | 基础数据、总账、应收应付、现金管理、固定资产、费用报销、发票税务、预算、财务报表、存储管理 |
 | 业务单据类型 | 11 种（RECEIPT/PAYMENT/EXPENSE/INVOICE_IN/INVOICE_OUT/OTHER_RECEIVABLE/OTHER_PAYABLE/TRANSFER/SALARY/PRE_RECEIVE/PRE_PAY）|
@@ -186,6 +186,12 @@
     - **临时兜底**（本轮采用）：Service 侧加 `pick(row, camelKey, snakeKey)` 兼容两种 key。
     - **教训**：凡 `@Select` 返回 `Map<String,Object>` 的方法，**必须在真实 DB 上验证一次**，Mock 夹具的 key 名不能作为「SQL 会返回什么」的依据（补强第 7 条 Mock 盲区：Mock 只能证明 Service 分支逻辑，不能证明 key 名正确）。
 
+18. **代码按标准科目体系引用科目，但种子没种全 ⇒ 生产 NPE（2026-09-29 REQ-127 沉淀，P55 未竟项）**：`AutoGenerationService` 硬编码引用 `1002/1122/2203/1123/2202/1012/1221/2211/6603`，而 `t_subject` 实际**缺 4 个**（`2203` 预收账款、`1221` 其他应收款、`2211` 应付职工薪酬、`6603` 财务费用）。P55 只把利息/手续费科目**改指 6603** 并加了事后 null 守卫，却**从未把 6603 种进库** ⇒ 缺陷跨月潜伏。
+    - **症状**：`generateDocThenVoucher` 的 `arAcct.getId()` NPE，报错文案是 `because "arAcct" is null` —— **不含科目代码**，用户无从得知缺哪个科目。
+    - **两层修法缺一不可**：① 引用处 `requireSubject(code)` 抛 `BusinessException` 并**指明代码**（铁律 #14）；② 补种子 migration。只做①则功能仍不可用，只做②则换个科目又崩。
+    - **教训**：**改引用必须同步验种子**。凡新增/改动硬编码科目代码，先 `SELECT count(*) FROM t_subject WHERE code='XXXX'`（含 `deleted` 过滤前也要看），再决定「补种子」还是「改引用」。
+    - **审计法**：`grep -o 'findSubjectByCode("[0-9]\{4\}")' | sort -u` 提取全部代码，与库内实际 code 求差集 —— 一次性挖出全部缺失科目，比逐个崩溃再补高效。
+
 ### 4.3 测试类
 6. **测试假阳性**：测试通过 ≠ 功能完成。跨实体链路必须真实贯通，不能只测单个模块 CRUD。E2E 测试必须模拟真实用户操作路径
 7. **Mock 测试盲区**：Mock 测试发现不了 DB 约束（NOT NULL、CHECK、UNIQUE）、Flyway 不匹配、SQL 语法错误。核心 Mapper 必须跑真实 DB 测试（Testcontainers）
@@ -202,6 +208,12 @@
     - ⚠️ 顺带发现同源生产缺陷（REQ-2026-125 已修）：`ArapSettlementServiceImpl.logReconciliationLog()` 写审批日志时 `setTargetDocId(null)`，而 `ReconciliationServiceImpl.reverse()` 用 `reconLog.getTargetDocId()` 回查单据 → `selectById(null)` 返回 null → **金额静默不回滚却照常返回成功**。已改：按 `sourceDocType=SETTLEMENT` 委托 `ArapSettlementServiceImpl.reverse()` 红冲，缺 `targetDocId` 或单据不存在一律抛 `BusinessException`。
     - 🔴 **`if (doc != null)` 包住回滚逻辑 = 静默失败的典型反模式**（2026-09-29 REQ-2026-125 沉淀）：回查实体失败就整块 `skip`，但方法继续把日志置 `CANCELLED`/`REJECTED` 并返回成功 ⇒ DB 里留下「已反核销」状态而单据金额纹丝不动，**比直接抛异常危险得多**。凡「回滚/同步」类逻辑，回查不到实体**必须抛 `BusinessException`**。
     - 🔴 **「可空列」被当成「该空」**：`V144` 把 `target_doc_id` 放宽为可空（为解决核销单生命周期日志插入报错），于是 `logReconciliationLog()` 长期硬编码 `setTargetDocId(null)`。但核销单明细本就指向真实业务单据，补写即可自描述。**DB 放宽约束只解决「插不进去」，不解决「信息缺失导致下游查不到」**。
+
+11. **Mock 把「库里根本不存在的主数据」stub 成存在 ⇒ 缺陷两年不暴露**（2026-09-29 REQ-127 沉淀，补强第 9 条）：`AutoGenerationServiceTest` 对 `2203` 预收账款写了 `stubSubject("2203", 2203L)`，而**生产库根本没有 2203** —— 测试替种子「补」了一行，缺陷因此完全不可见。
+    - **两层遮蔽同时成立**：① 早期用例更粗，`subjectMapper.selectList(any())` **与 code 无关地回任何科目**（问 2203 也回 1122），连 `queryingCode` 匹配器都不用；② 后来的用例「精确」到 code，却精确地 stub 了一个**不存在的真实数据**。
+    - **识别法**：`grep` 夹具里的科目/单据代码，与 `SELECT code FROM t_subject` 求差集 —— 测试里出现而库里没有的 code，就是被 stub 出来的幻觉数据。
+    - **正确做法**：缺数据的场景要**显式留空**（不 stub → 默认空集合 → 触发防御分支）并断言异常；真实 DB 类则应真跑一次全新库迁移。
+    - 🔴 **补种子后，测试夹具会撞唯一约束**（同源副作用）：V159 种入 6603 后，`VoucherEntryMapperRealDBTest.insertProfitSubject("6603",…)` 立即报 `duplicate key ... uq_subject_code_ent`。**夹具凡插主数据一律 find-or-insert**（先 select 再决定是否 insert），否则每补一次种子就要炸一批测试。同理，正文里凡 `insertXxx(code)` 这类造数助手都该如此。
 
 ### 4.4 技术类
 7. **Jackson LocalDateTime 序列化**：`application.yml` 的 `date-format` 对 `LocalDateTime` 无效，必须注册专用序列化器
