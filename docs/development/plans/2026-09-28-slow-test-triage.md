@@ -468,9 +468,89 @@ ERROR: null value in column "menu_code" of relation "t_menu" violates not-null c
 
 ---
 
+## 〇之七、C 类测试数据约束修复结果（2026-09-29 已完成，REQ-2026-121）
+
+**结果：慢测 21 → 5 项，本轮修 16 项（① 8 + ② 3 + ④ 3 + ⑤ 2... 实为 16），目标类 44 项中 43 绿；快测 1733/0 无回归。**
+
+### 🔴 根因一：`NOT NULL` 必填列在 Entity 里**完全缺失** ⇒ 生产写入路径必挂（3 项，含 2 个真实生产缺陷）
+
+`information_schema.columns WHERE is_nullable='NO' AND column_default IS NULL` 扫出三个缺口：
+
+| 表.列 | Entity 现状 | 后果 |
+|---|---|---|
+| `t_dept.dept_code` | `DeptEntity` **无 `deptCode` 字段** | `DeptServiceImpl.create:37` `deptMapper.insert()` 报 `null value in column "dept_code"` |
+| `t_menu.menu_code` | `MenuEntity` **无 `menuCode` 字段** | `MenuServiceImpl.create:49` `menuMapper.insert()` 同上 |
+| `t_budget.budget_name` | `BudgetEntity` **无 `budgetName` 字段** | 任何预算插入必失败 |
+
+**这不是测试数据问题，是生产缺陷**（承接 REQ-2026-120 的遗留缺口）。已补 3 个 `@TableField` 字段；基类 `createMenu()` 同步从 `JdbcTemplate` 绕开改回 Mapper 路径 —— **测试侧的绕开只会掩盖生产缺陷，不能当长期方案**。
+
+### 🔴 根因二：CHECK 允许集**大小写敏感 + 同名跨表不同**（6 项）
+
+本轮 6 项失败**全部**是猜错允许集。对照表（均经 `pg_get_constraintdef` 查证）：
+
+| 约束 | 测试原值（违约） | 实际允许值 |
+|---|---|---|
+| `chk_user_status` | `enabled` | `ACTIVE`/`INACTIVE`/`LOCKED` |
+| `chk_user_type` | `employee` | `SUPER_ADMIN`/`AGENCY`/`ENTERPRISE` |
+| `chk_menu_type` | `menu`（小写） | **大写** `MENU`/`BUTTON`/`DIR` |
+| `chk_disposal_status` | `PENDING_APPROVAL` | `DRAFT`/`APPROVED`/`VOUCHERED` |
+| `chk_budget_type` | `OPERATION` | `DEPARTMENT`/`PROJECT`/`SUBJECT`/`OVERALL` |
+| `chk_direction` | `DEBIT`（大写） | **小写** `debit`/`credit` |
+
+另 `chk_output_invoice_type` **不含** `RED`（红字是查询层由 `amount < 0` 派生的伪值，非入库枚举）。
+
+### 🟡 根因三：幽灵字段当真实列断言（4 项，**永不可能通过**）
+
+- `InputInvoiceEntity.processStatus` —— `t_input_invoice` 连 `process_status` 列都没有（真实列是 `status`）
+- `OutputInvoiceEntity.aiMappingResult` —— `t_output_invoice` **无任何 jsonb 列**；`auditedBy`/`auditedAt` 同样是幽灵
+
+原用例期望「DB 往返等于写入值」（如 `assertEquals("{...json...}", found.getAiMappingResult())`）。改为**正向断言真实列 + `assertNull` 负向锁死幽灵列**。
+
+> `@TableField` 注解只代表「作者以为」。写测试前必须用 `information_schema.columns` 确认列真实存在。
+
+### 🟡 根因四：测试隔离越界 + 口径错（3 项）
+
+- `NumberingFrontendApiTest` 用 `selectCount(null)` 断言**全表** 4 条 → 慢测全量跑得 11（含种子 + 其它用例残留）。改用 `docNo` 前缀 `likeRight` 收敛到自己的数据。
+- `OutputInvoiceMapperTest.summaryByFilter` 的 `pending` 口径期望由 3 改 **2**（发票 B 是 `VOUCHERED`，属 completed 而非 pending；`pending` = status NOT IN VOUCHERED/FULLY_RECONCILED/PARTIALLY_RECONCILED/VOIDED/REVERSED）。
+- `NumberingSettlementE2ETest` 两处补 `doc_date`、`settlement_type`（**RECEIVE/PAY**，不是 `RECEIVABLE`/`PAYABLE`）；`t_voucher_type.code` 限 `varchar(20)`，原值 23 字符超限。
+
+### 🟡 根因五：方法性缺陷（2 项）
+
+- **`PeriodMapperTest` 绕过 Service**：自动生成 `periodCode`/`startDate`/`endDate` 写在 `PeriodServiceImpl.save()`（覆写 MP 的 save），直插 Mapper 全部绕过。断言「自动生成」前先确认逻辑挂在哪一层。
+- **`BusinessDocMapperTest` 乐观锁断言永假**：MP 的 `OptimisticLockerInnerInterceptor` 冲突时**不抛异常**，只把 version 塞进 WHERE 并返回 **0 行**（该拦截器确已注册于 `MyBatisPlusConfig:24`）。改为「显式构造过期 version + `assertEquals(0, mapper.updateById(stale))` + 数据未变负向断言」。
+
+### 🔴 顺带发现 3 个真实生产缺陷（**本轮未修，需老丁拍板**）
+
+1. **`MenuServiceImpl:84` 用户路由恒空** —— 比较小写 `"menu"`，而种子数据与 `chk_menu_type` 均为大写 `MENU`。
+2. **`PrepaymentServiceImpl:190,328` 预收预付流程运行时必失败** —— 写 `settlementType="PAYABLE"/"RECEIVABLE"`，而 `chk_settlement_type` 只允许 `RECEIVE`/`PAY`。
+3. **`ReportDataMapper` 的 `@Select` 运行时必报错** —— 引用 `assist_json::text`，但 `t_voucher_entry`/`t_voucher`/`t_subject` **均无该列**（既有缺陷，由 `node backend/scripts/check-entity-schema.mjs` 暴露）。
+
+### 🔴 `BudgetFlowE2ETest` 判定为**功能未实现**（非测试缺陷，已延后）
+
+`t_budget_entry` 实际只有 10 列，**无** `dept_id`/`project_id`/`period_month`/`control_type`/`used_amount`；而 `BudgetEntryEntity` 把这 5 个全标成幽灵字段，生产代码 `BudgetServiceImpl.checkBudget` 却直接读 `entry.get("controlType")`：
+
+- `findBySubjectAndPeriod` 依赖 `t_budget.period` 关联（条目自身无 period 映射）→ 匹配不到
+- `controlType` 恒为 null → `switch(null)` **NPE**
+- `addUsedAmount` 的 UPDATE 引用不存在的 `used_amount` 列 → **SQL 报错**
+
+该测试针对的是尚未建模的预算模型（部门/项目维度 + 逐条目使用额 + 控制方式）。**判为功能缺口，走 SPEC 立项；测试保持失败待实现，禁止把断言改弱来「做绿」。**
+
+### 剩余 5 项的根因分组（下一批候选）
+
+| 类 | 项 | 根因 | 处置建议 |
+|---|---|---|---|
+| `ReconciliationIntegrationTest` | 2 | 核销单状态语义：期望 `CONFIRMED` 实得 `SUBMITTED`；`reverse()` 只接受「已确认/已执行」 | 🟠 **需老丁拍板**：`review()` 是否应把 `UNCONFIRMED` 纳入白名单 |
+| `ReconciliationWorkbenchE2ETest` | 1 | 同上 | 🟠 同上 |
+| `SystemClearControllerIntegrationTest` | 1 | 断言全表固定总数（3 vs 10），未取 baseline | 🟢 可修：先取 baseline 再做增量比较（见 §4.4 第 16 条）|
+| `BudgetFlowE2ETest` | 1 | 功能未实现 | 🔴 走 SPEC 立项 |
+
+---
+
 ## 版本历史
 
 | 版本 | 日期 | 作者 | 变更 |
+|---|---|---|---|
+| V1.3 | 2026-09-29 | opencode | 补记 **C 类测试数据约束** 21 → **5**（REQ-121，修 16 项，5 类根因）：补 3 个 Entity 缺失的 `NOT NULL` 字段（**2 个真实生产缺陷**：`dept_code`/`menu_code`/`budget_name`）、CHECK 允许集大小写敏感（6 项）、幽灵字段当真实列断言（4 项，`t_input_invoice` 无 `process_status`、`t_output_invoice` 无任何 jsonb 列）、隔离越界与口径错（3 项）、自动生成逻辑在 Service 覆写（1 项）、MP 乐观锁冲突返回 0 行不抛异常（1 项）。**顺带发现 3 个生产缺陷待拍板**：`MenuServiceImpl:84` 路由恒空、`PrepaymentServiceImpl:190,328` 结算类型违约、`ReportDataMapper` 引用不存在的 `assist_json` 列。`BudgetFlowE2ETest` 判定为**功能未实现**需走 SPEC |
 |---|---|---|---|
 | V1.2 | 2026-09-29 | opencode | 补记五批实施结果（详见 §〇之二~〇之六）：**D5 基建** 55 → 44（REQ-116，基类统一企业上下文，7 项「无上下文→放行」用例显式 `clear()`）；**悬空外键** 44 → 35（REQ-117，补 `ensureCustomer`，修 `doc_no` 只读不写、单据状态误用发票状态）；**银行流水** 35 → 32 前推（REQ-118，5 类 32 项，含 `@Version` 回填陷阱与 `REQUIRES_NEW` 互斥）；**P3 全链路**（REQ-119，3 项，同名 `status` 两表允许集不同 + 幽灵列断言）；**B 类种子撞码** 32 → **21**（REQ-120，通用 identity 序列对齐 + RBAC 硬编码关联组合，发现 `MenuEntity` 缺 `menuCode` 真实缺口）。全部批次均满足：目标类全绿 + 全量慢测无新增红项 + 快测 1733/0 |
 | V1.1 | 2026-09-29 | opencode | **A 类 + D 类实施完成**：36 项转绿，全量慢测 128 → 92 项。改写 3 个 `NumberingAssociation*` 类为新模型断言（含废弃结构负向断言）；修 3 个 D 类类的 IDENTITY/悬空外键/非法枚举/无登录态问题。**纠正分诊归因**：`InvoiceConfirmAuditPathIntegrationTest` 2 项实为 C 类（`exist=false` 属性做 lambda 排序）而非 D 类。**发现并修复 1 个真实生产缺陷**（REQ-2026-115 CSV 表头「对方户名」未识别）。新增 D5 待拍板事项 |

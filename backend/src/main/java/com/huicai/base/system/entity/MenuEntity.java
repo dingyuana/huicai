@@ -14,6 +14,19 @@ public class MenuEntity {
 
     @TableField("menu_name")
     private String name;
+
+    /**
+     * 菜单编码（t_menu.menu_code，NOT NULL 无默认值）.
+     *
+     * <p>⚠️ 历史缺口（REQ-2026-121 修复）：本字段此前<b>完全不存在</b>，
+     * 而 DB 列是 NOT NULL，导致 {@code MenuMapper.insert()} 必然报
+     * {@code null value in column "menu_code"} —— 生产环境新建菜单直接失败。
+     * 本项是 AGENTS §4.2 第 8 条的<b>镜像方向</b>：不是 Entity 指向不存在的列，
+     * 而是 DB 的必填列在 Entity 里缺失。
+     */
+    @TableField("menu_code")
+    private String menuCode;
+
     @TableField("permission")
     private String permissionCode;
     @TableField("menu_type")

@@ -152,13 +152,16 @@ public class AssetFlowE2ETest extends AbstractMapperTest {
         disposal.setDisposalIncome(disposalIncome);
         disposal.setDisposalExpense(disposalExpense);
         disposal.setGainLoss(gainLoss);
-        disposal.setStatus("PENDING_APPROVAL");
+        // chk_disposal_status 允许集：DRAFT / APPROVED / VOUCHERED
+        // （原用 PENDING_APPROVAL，在 DB CHECK、生产 ServiceImpl 默认值、
+        //   AssetDisposalStateMachineService 三处均非法）
+        disposal.setStatus("DRAFT");
         disposal.setCreatedBy(1L);
         disposal.setDeleted(0);
         assetDisposalMapper.insert(disposal);
 
         assertNotNull(disposal.getId(), "处置记录创建后应有 ID");
-        assertEquals("PENDING_APPROVAL", disposal.getStatus(), "处置记录状态应为 PENDING_APPROVAL");
+        assertEquals("DRAFT", disposal.getStatus(), "处置记录状态应为 DRAFT");
 
         // 验证数据库持久化
         AssetDisposalEntity savedDisposal = assetDisposalMapper.selectById(disposal.getId());
@@ -197,7 +200,7 @@ public class AssetFlowE2ETest extends AbstractMapperTest {
         // 验证处置记录完整
         AssetDisposalEntity finalDisposal = assetDisposalMapper.selectById(disposal.getId());
         assertNotNull(finalDisposal, "处置记录应仍存在");
-        assertEquals("PENDING_APPROVAL", finalDisposal.getStatus());
+        assertEquals("DRAFT", finalDisposal.getStatus());
         assertEquals(card.getId(), finalDisposal.getAssetId());
 
         // 验证处置金额关系: 处置损益 = 处置收入 - 处置费用 - 净值

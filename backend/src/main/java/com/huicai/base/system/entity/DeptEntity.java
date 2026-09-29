@@ -14,6 +14,17 @@ public class DeptEntity {
 
     @TableField("dept_name")
     private String name;
+
+    /**
+     * 部门编码（t_dept.dept_code，NOT NULL 无默认值）.
+     *
+     * <p>⚠️ 历史缺口（REQ-2026-121 修复）：本字段此前<b>完全不存在</b>，
+     * 而 DB 列是 NOT NULL，导致 {@code DeptMapper.insert()} 必然报
+     * {@code null value in column "dept_code"} —— 生产环境新建部门直接失败。
+     */
+    @TableField("dept_code")
+    private String deptCode;
+
     private Long parentId;
     @TableField("sort_order")
     private Integer sortOrder;

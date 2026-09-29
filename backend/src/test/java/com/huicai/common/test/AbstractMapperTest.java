@@ -351,21 +351,25 @@ public abstract class AbstractMapperTest {
     /**
      * 新建一个菜单并返回其 id。
      *
-     * <p>⚠️ 这里<b>刻意绕过 {@code MenuEntity}</b> 直接用 JDBC 插入：
-     * {@code t_menu.menu_code} 是 NOT 且无默认值，但 {@code MenuEntity}
-     * <b>没有 {@code menuCode} 字段</b>（只有 name/permissionCode/type/parentId…），
-     * 故任何经 MyBatis-Plus 插入菜单的代码路径都会因缺列失败。
-     * 这是一处真实的 Entity↔DB 不一致（见 AGENTS §4.2），此处用最小侵入方式绕开。
+     * <p>此前本助手刻意绕过 {@code MenuEntity} 用 JDBC 插入，因为
+     * {@code t_menu.menu_code} 是 NOT NULL 而 {@code MenuEntity} 缺 {@code menuCode} 字段
+     * （REQ-2026-120 期间发现的 Entity↔DB 缺口）。该缺口已在
+     * <b>REQ-2026-121</b> 通过补 Entity 字段修复，故此处已切回正常的 Mapper 路径。
      */
     protected Long createMenu(String codePrefix) {
-        String code = codePrefix + "-" + System.nanoTime();
-        jdbcTemplate.update(
-                "INSERT INTO t_menu (menu_name, menu_code, sort_order, menu_type, is_active, deleted) "
-                        + "VALUES (?, ?, 1, 'MENU', true, 0)",
-                "测试菜单-" + codePrefix, code);
-        return jdbcTemplate.queryForObject(
-                "SELECT id FROM t_menu WHERE menu_code = ?", Long.class, code);
+        com.huicai.base.system.entity.MenuEntity menu = new com.huicai.base.system.entity.MenuEntity();
+        menu.setName("测试菜单-" + codePrefix);
+        menu.setMenuCode(codePrefix + "-" + System.nanoTime());
+        menu.setType("MENU");
+        menu.setSortOrder(1);
+        menu.setIsActive(true);
+        menu.setDeleted(0);
+        menuMapper.insert(menu);
+        return menu.getId();
     }
+
+    @Autowired
+    protected com.huicai.base.system.mapper.MenuMapper menuMapper;
 
     /** 新建一个用户并返回其 id。<b>不缓存</b>，理由同 {@link #createRole(String)}。 */
     protected Long createSysUser(String usernamePrefix) {

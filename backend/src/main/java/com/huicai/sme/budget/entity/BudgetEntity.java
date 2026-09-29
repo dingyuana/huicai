@@ -15,6 +15,17 @@ import java.time.LocalDateTime;
 public class BudgetEntity extends BaseEntity {
 
     private String budgetNo;
+
+    /**
+     * 预算名称（t_budget.budget_name，NOT NULL 无默认值）.
+     *
+     * <p>⚠️ 历史缺口（REQ-2026-121 修复）：本字段此前<b>完全不存在</b>，
+     * 而 DB 列是 NOT NULL，导致 {@code BudgetMapper.insert()} 必然报
+     * {@code null value in column "budget_name"}。
+     */
+    @TableField("budget_name")
+    private String budgetName;
+
     private String period;
     private String budgetType;
     private BigDecimal totalAmount;

@@ -4,14 +4,14 @@
 
 ## §0 项目状态（硬数字，每次 commit 后更新）
 
-> **更新基准**：commit `815cb7e6` + 后续提交 (2026-09-28) — fix: P99 修复8项构建与可运行性阻断缺陷（REQ-103~111）；A/D 类修复 (2026-09-29) — 慢测 A+D 36 项转绿并修 1 个真实生产缺陷（REQ-113~115）；D5 基建修复 (2026-09-29) — 基类统一企业上下文，慢测再消解 37 项（REQ-116）；悬空外键修复 (2026-09-29) — 补 ensureCustomer 助手，慢测再消解 11 项（REQ-117）；银行流水批次修复 (2026-09-29) — 补 ensureSubject 助手，修 REQUIRES_NEW 隔离，慢测再消解 9 项（REQ-118）；P3 全链路修复 (2026-09-29) — 单据状态与幽灵列，慢测再消解 3 项（REQ-119）；B 类种子撞码修复 (2026-09-29) — 通用 identity 序列对齐 + RBAC 硬编码关联组合，慢测再消解 11 项（REQ-120）
+> **更新基准**：commit `815cb7e6` + 后续提交 (2026-09-28) — fix: P99 修复8项构建与可运行性阻断缺陷（REQ-103~111）；A/D 类修复 (2026-09-29) — 慢测 A+D 36 项转绿并修 1 个真实生产缺陷（REQ-113~115）；D5 基建修复 (2026-09-29) — 基类统一企业上下文，慢测再消解 37 项（REQ-116）；悬空外键修复 (2026-09-29) — 补 ensureCustomer 助手，慢测再消解 11 项（REQ-117）；银行流水批次修复 (2026-09-29) — 补 ensureSubject 助手，修 REQUIRES_NEW 隔离，慢测再消解 9 项（REQ-118）；P3 全链路修复 (2026-09-29) — 单据状态与幽灵列，慢测再消解 3 项（REQ-119）；B 类种子撞码修复 (2026-09-29) — 通用 identity 序列对齐 + RBAC 硬编码关联组合，慢测再消解 11 项（REQ-120）；C 类测试数据约束修复 (2026-09-29) — 补 3 个 Entity 缺失的 NOT NULL 字段 + CHECK 取值/幽灵列断言/隔离越界，慢测再消解 16 项（REQ-121）
 > **当前分支**：`main`（本地领先 origin，**未 push**）
 > **关联文档**：[项目说明](docs/CORE-项目说明.md)、[技术方案](docs/CORE-技术方案.md)、[需求分析](docs/CORE-需求分析.md)、[需求登记册](docs/development/requirements/REQUIREMENTS_REGISTRY.md)、[文档注册表](docs/CORE-文档注册表.md)、[测试策略](docs/testing/TEST-STRATEGY.md)、[Flyway治理规范](docs/development/flyway-governance.md)
 
 | 维度 | 数据 |
 |------|------|
 | 后端代码 | 492 个 Java 主代码文件（另 237 个测试文件）|
-| 测试用例 | 1994 个 `@Test` 方法 / 229 个后端测试类 + 26 个前端测试文件 265 用例（**快测实测 1733 通过，0 Failures, 0 Errors, 5 Skipped**；含 slow 组全量 1988，其中 **21 项为既有测试数据缺陷待修**，A/D/C/B 类 108 项已于 2026-09-29 修复，见 REQ-2026-113~120）|
+| 测试用例 | 1994 个 `@Test` 方法 / 229 个后端测试类 + 26 个前端测试文件 265 用例（**快测实测 1733 通过，0 Failures, 0 Errors, 5 Skipped**；含 slow 组全量 1988，其中 **5 项待修**，A/D/C/B 类 124 项已于 2026-09-29 修复，见 REQ-2026-113~121）|
 | 数据库 | PostgreSQL 16 / **73 个 migration，最新 V157**（注意：版本号非连续，实际为 V1-V5 + V63 + V92-V157，缺 V6-V62 与 V64-V91 共 85 个号；因 `out-of-order: true` + `validate-on-migrate: false` 不影响运行，但「V1 baseline merged V1-V146」的旧表述已失效）|
 | API 端点 | 510+ 个后端端点 |
 | 核心模块 | 基础数据、总账、应收应付、现金管理、固定资产、费用报销、发票税务、预算、财务报表、存储管理 |
@@ -150,6 +150,29 @@
     - **为何一次就够**：PostgreSQL **序列不参与事务回滚** —— 测试方法回滚后行消失、序列不倒退，且只增不减，故一次对齐永久有效。逐类硬编码 `align()` 是治标。
     - **同类连锁**：序列落后还会伪装成**业务唯一键**撞码（`uq_role_menu`/`uq_user_role`），因为测试复用了种子 id（如 role_id=1/menu_id=1）而该组合已存在。**新造关联表数据一律用基类 `createRole()`/`createMenu()`/`createSysUser()`，禁止硬编码外键 id**；这三个助手**刻意不缓存**（唯一键要求每次全新 id，缓存会重新引入撞码）。
 
+13. **`NOT NULL` 必填列在 Entity 里**完全缺失** ⇒ 写入路径生产必挂（2026-09-29 慢测 REQ-121 沉淀，与第 8/11 条同源）**：`t_dept.dept_code`、`t_menu.menu_code`、`t_budget.budget_name` 都是 `NOT NULL` 且无默认值，但 `DeptEntity`/`MenuEntity`/`BudgetEntity` **根本没有这些字段**（不是映射写错，是压根没写）。故 `DeptServiceImpl.create`、`MenuServiceImpl.create` 等任何经 MyBatis-Plus 的 `insert` 都会报 `null value in column`。
+    - 识别法：`information_schema.columns WHERE is_nullable='NO' AND column_default IS NULL` 的列，逐一在 Entity 里找对应字段；找不到就是这类缺口。
+    - REQ-121 已补齐这 3 个字段，基类 `createMenu()` 也从 `JdbcTemplate` 绕开改回 Mapper 路径（**测试绕开只会掩盖生产缺陷，不要用它当长期方案**）。
+
+14. **CHECK 约束的允许集是**大小写敏感**的，且同名约束跨表不同（2026-09-29 慢测 REQ-121 沉淀，补强第 9 条）**：
+    | 约束 | 允许值（注意大小写） |
+    |---|---|
+    | `chk_user_status` | `ACTIVE` / `INACTIVE` / `LOCKED`（**没有** `enabled`）|
+    | `chk_user_type` | `SUPER_ADMIN` / `AGENCY` / `ENTERPRISE`（**没有** `employee`）|
+    | `chk_menu_type` | **大写** `MENU` / `BUTTON` / `DIR`（小写 `menu` 直接违约）|
+    | `chk_disposal_status` | `DRAFT` / `APPROVED` / `VOUCHERED`（**没有** `PENDING_APPROVAL`）|
+    | `chk_settlement_type` | `RECEIVE` / `PAY`（**没有** `RECEIVABLE`/`PAYABLE`）|
+    | `chk_budget_type` | `DEPARTMENT` / `PROJECT` / `SUBJECT` / `OVERALL`（**没有** `OPERATION`）|
+    | `chk_direction` | **小写** `debit` / `credit`（**没有** `DEBIT`/`CREDIT`）|
+    - `status` 方向仍见第 9 条（`t_business_doc` 无 CONFIRMED、`t_arap_settlement` 有）。
+    - 铁律：**任何常量都要 `pg_get_constraintdef` 查证后再用，禁止照抄别处的字符串或凭业务语感猜。** 本轮 6 项慢测失败全是猜错允许集。
+
+15. **「幽灵字段」比第 10 条更严重的一档：表里连列都不存在（2026-09-29 慢测 REQ-121 沉淀）**：`InputInvoiceEntity.processStatus`（`t_input_invoice` 无 `process_status`）、`OutputInvoiceEntity.aiMappingResult`（`t_output_invoice` **无任何 jsonb 列**）、`auditedBy`/`auditedAt` 全是 `exist=false`。对它们的断言**永远不可能通过**，包括：
+    - 期望「DB 往返等于写入值」（如 `assertEquals("{...json...}", found.getAiMappingResult())`）→ 必挂；
+    - 用它们构造 `LambdaQueryWrapper` 条件 → `MyBatisSystemException`（MP 无法解析列）。
+    - **正确写法**：正向断言真实列 + `assertNull(loaded.getGhostField())` 负向锁死。
+    - **判断依据**：`@TableField` 注解只代表「作者以为」，写测试前必须用 `information_schema.columns` 确认列真实存在。
+
 ### 4.3 测试类
 6. **测试假阳性**：测试通过 ≠ 功能完成。跨实体链路必须真实贯通，不能只测单个模块 CRUD。E2E 测试必须模拟真实用户操作路径
 7. **Mock 测试盲区**：Mock 测试发现不了 DB 约束（NOT NULL、CHECK、UNIQUE）、Flyway 不匹配、SQL 语法错误。核心 Mapper 必须跑真实 DB 测试（Testcontainers）
@@ -168,6 +191,14 @@
     - **同一 SqlSession 内两次 `selectById` 返回同一个对象实例**（一级缓存），且更新成功后新 version 会回写进该对象。故「拿两个实体分别代表新旧 version」的乐观锁测试是**假的**——两个其实是同一个、且 version 已被刷新。必须**显式构造**一个带过期 version 的实体来验证「过期 version 更新命中 0 行」。
 
 13. **测试基类 `@Transactional` 与 `REQUIRES_NEW` 互斥**（2026-09-29 慢测 REQ-118 沉淀）：`AbstractMapperTest` 类上带 `@Transactional`，每个测试方法结束即回滚。被测代码若内部开 `REQUIRES_NEW` 事务（如 `AutoGenerationService.autoGenerateInNewTx`），**新事务看不到外层未提交的夹具数据**，会报「记录不存在」这类看似无关的错误。修法：该测试类显式声明 `@Transactional(propagation = Propagation.NOT_SUPPORTED)` 关闭回滚，改由 `@BeforeEach` 自行清理数据（此时 `@BeforeEach` 基类设置的 `EnterpriseContextHolder` 与各类 id 缓存仍生效）。
+
+14. **MyBatis-Plus 乐观锁冲突不抛异常、只返回 0 行**（2026-09-29 慢测 REQ-121 沉淀，补强第 12 条）：`OptimisticLockerInnerInterceptor`（已注册于 `MyBatisPlusConfig:24`）的机制是「把 `version` 条件塞进 WHERE，命中 0 行即视为冲突」，**不抛任何异常**。故 `assertThrows(...)` 形式的乐观锁测试是**永假的**（永远等不到异常），必须断言 `assertEquals(0, mapper.updateById(stale))` 并补一条「数据未被改动」的负向断言。
+
+15. **自动生成逻辑常写在 Service 而非 Mapper（2026-09-29 慢测 REQ-121 沉淀）**：`PeriodServiceImpl.save()` **覆写了 MyBatis-Plus 的 `save`**，在其中生成 `periodCode`/`startDate`/`endDate`。测试若直接 `periodMapper.insert(entity)` 就**绕过了全部生成逻辑**，断言必然失败。**教训**：断言「自动生成」类行为前，先确认该逻辑挂在哪一层（Service 覆写 / 拦截器 / MetaObjectHandler），用对入口再写断言，别想当然调 Mapper。
+
+16. **`selectCount(null)` 是全表计数 ⇒ 测试隔离越界（2026-09-29 慢测 REQ-121 沉淀）**：`selectCount(null)` 不带任何条件，会把种子数据和其它用例残留行一并计入 —— 慢测全量跑时得到 11 而非用例自己的 4 条。**修法**：每个用例造数时带唯一前缀（如 `"9999.E2E.KW.DOC."`），断言时用 `likeRight`/`eq` 收敛到自己的数据。**同类高危写法**：`SELECT count(*)` 裸查 + 断言固定总数（`SystemClearControllerIntegrationTest` 即栽在这），断言前必须先取 baseline 再做增量比较。
+
+17. **测试可能针对「尚未建模」的功能（2026-09-29 慢测 REQ-121 沉淀）**：`BudgetFlowE2ETest` 断言部门/项目维度、逐条目使用额、控制方式（BLOCK/WARN），但 `t_budget_entry` 实际只有 10 列，`deptId`/`projectId`/`periodMonth`/`controlType`/`usedAmount` **全是幽灵字段**；于是 `checkBudget` 读到 `controlType=null` → `switch(null)` **NPE**，`addUsedAmount` 的 UPDATE 引用不存在的 `used_amount` 列。**这类不是「测试数据填错」，而是功能未实现** —— 继续改测试只会掩盖缺口。**识别信号**：Entity 里成片 `exist=false` + 生产代码直接读这些字段。**正确处置**：判为功能缺口走 SPEC 立项，测试保持失败待实现，**禁止把断言改弱来「做绿」**。
 
 ### 4.4 文档治理类
 12. **SPEC 漂移检测**：架构变更后（如 P33→P34），SPEC 仍描述旧架构。每次大变更后必做 SPEC vs 代码一致性审计
