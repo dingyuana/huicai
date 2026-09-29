@@ -273,6 +273,117 @@ public abstract class AbstractMapperTest {
         subjectIdCache.clear();
     }
 
+    // ==================== IDENTITY 序列对齐（REQ-2026-120 / 慢测 B 类）====================
+
+    /**
+     * 把所有 IDENTITY 序列推进到「≥ 该表当前 MAX(id)」。
+     *
+     * <h3>为什么必须做（慢测 B 类根因）</h3>
+     * Flyway 的种子 migration 普遍用<b>显式 id</b> 插入基础数据
+     * （如 {@code t_menu} 1~200、{@code t_subject} 1~102、{@code t_role}/{@code t_sys_config} 1~5），
+     * 而 <b>从未调用过 nextval</b>，故对应序列仍停在起始值。测试首次让 DB 自行分配 id 时，
+     * 拿到的正是 {@code nextval(seq) = 1}，与种子行<b>主键撞码</b>：
+     * <pre>
+     *   t_menu        MAX(id)=200  seq=1     ← 落后 199
+     *   t_subject     MAX(id)=102  seq=18    ← 落后 84
+     *   t_role        MAX(id)=5    seq=1
+     *   t_sys_config  MAX(id)=5    seq=1
+     * </pre>
+     * 业务唯一键也会随之连锁失败：测试复用种子 id（如 role_id=1/menu_id=1），
+     * 而该组合在 {@code uq_role_menu} / {@code uq_user_role} 中已存在。
+     *
+     * <h3>为何只需执行一次</h3>
+     * PostgreSQL 的序列<b>不参与事务回滚</b>：即便测试方法因
+     * {@code @Transactional} 回滚，行会消失但序列不会倒退。
+     * 故每个 JVM 执行一次即可，之后序列只增不减，永远不会与既有行撞码。
+     * 用 {@code AtomicBoolean} 保证只跑一次，避免 82 张表的 setval 反复执行。
+     *
+     * <p>注意 {@code setval(seq, n)} 的两参形式会把 {@code is_called} 置 true，
+     * 于是下一次 {@code nextval} 返回 {@code n+1}，正是期望行为。
+     */
+    @Autowired
+    protected org.springframework.jdbc.core.JdbcTemplate jdbcTemplate;
+
+    private static final java.util.concurrent.atomic.AtomicBoolean SEQUENCES_ALIGNED =
+            new java.util.concurrent.atomic.AtomicBoolean(false);
+
+    @org.junit.jupiter.api.BeforeEach
+    void alignIdentitySequencesOnce() {
+        if (!SEQUENCES_ALIGNED.compareAndSet(false, true)) {
+            return;
+        }
+        String query =
+                "SELECT s.relname AS seq, t.relname AS tbl "
+                        + "FROM pg_class s "
+                        + "JOIN pg_namespace n ON n.oid = s.relnamespace "
+                        + "JOIN pg_depend d ON d.objid = s.oid AND d.deptype = 'i' "
+                        + "JOIN pg_class t ON t.oid = d.refobjid "
+                        + "JOIN pg_attribute a ON a.attrelid = t.oid AND a.attnum = d.refobjsubid "
+                        + "WHERE n.nspname = 'public' AND a.attname = 'id' AND s.relkind = 'S'";
+        for (java.util.Map<String, Object> row : jdbcTemplate.queryForList(query)) {
+            String seq = (String) row.get("seq");
+            String tbl = (String) row.get("tbl");
+            // 表名/序列名均来自 pg_catalog，非外部输入
+            jdbcTemplate.execute("SELECT setval('" + seq
+                    + "', GREATEST((SELECT COALESCE(MAX(id), 1) FROM \"" + tbl + "\"), 1))");
+        }
+    }
+
+    // ==================== RBAC 关联表造数（REQ-2026-120）====================
+
+    /**
+     * 新建一个角色并返回其 id。<b>不缓存</b> —— 关联表唯一键
+     * （如 {@code uq_role_menu}）要求每次拿到全新 id 才能保证组合不与种子数据撞码。
+     */
+    @Autowired
+    protected com.huicai.base.system.mapper.RoleMapper roleMapper;
+
+    protected Long createRole(String codePrefix) {
+        com.huicai.base.system.entity.RoleEntity role = new com.huicai.base.system.entity.RoleEntity();
+        role.setCode(codePrefix + "-" + System.nanoTime());
+        role.setName("测试角色-" + codePrefix);
+        role.setStatus("ACTIVE");
+        role.setDeleted(0);
+        roleMapper.insert(role);
+        return role.getId();
+    }
+
+    /**
+     * 新建一个菜单并返回其 id。
+     *
+     * <p>⚠️ 这里<b>刻意绕过 {@code MenuEntity}</b> 直接用 JDBC 插入：
+     * {@code t_menu.menu_code} 是 NOT 且无默认值，但 {@code MenuEntity}
+     * <b>没有 {@code menuCode} 字段</b>（只有 name/permissionCode/type/parentId…），
+     * 故任何经 MyBatis-Plus 插入菜单的代码路径都会因缺列失败。
+     * 这是一处真实的 Entity↔DB 不一致（见 AGENTS §4.2），此处用最小侵入方式绕开。
+     */
+    protected Long createMenu(String codePrefix) {
+        String code = codePrefix + "-" + System.nanoTime();
+        jdbcTemplate.update(
+                "INSERT INTO t_menu (menu_name, menu_code, sort_order, menu_type, is_active, deleted) "
+                        + "VALUES (?, ?, 1, 'MENU', true, 0)",
+                "测试菜单-" + codePrefix, code);
+        return jdbcTemplate.queryForObject(
+                "SELECT id FROM t_menu WHERE menu_code = ?", Long.class, code);
+    }
+
+    /** 新建一个用户并返回其 id。<b>不缓存</b>，理由同 {@link #createRole(String)}。 */
+    protected Long createSysUser(String usernamePrefix) {
+        com.huicai.base.system.entity.UserEntity user = new com.huicai.base.system.entity.UserEntity();
+        user.setUsername(usernamePrefix + "-" + System.nanoTime());
+        user.setPassword("encoded");
+        user.setRealName("测试用户");
+        user.setStatus("ACTIVE");     // chk_user_status
+        user.setUserType("ENTERPRISE"); // chk_user_type
+        user.setEnterpriseId(DEFAULT_ENTERPRISE_ID);
+        user.setDeleted(0);
+        userMapper.insert(user);
+        return user.getId();
+    }
+
+    @Autowired
+    protected com.huicai.base.system.mapper.UserMapper userMapper;
+
     // ==================== 企业上下文（REQ-2026-116 / 慢测 C 类）====================
 
     /**

@@ -376,9 +376,102 @@ idx_business_doc_voucher_no    idx_arap_settlement_voucher_no
 
 ---
 
+## 〇之六、B 类种子撞码修复结果（2026-09-29 已完成，REQ-2026-120）
+
+**结果：慢测 32 → 21 项，消解 11 项。** 8 个类 24 个用例全绿。
+
+### 根因一：identity 序列落后于种子数据（7 项主键撞码）
+
+**先量化**（REQ-120 定位过程）：
+
+| 表 | MAX(id) | 当前 seq | 落后 |
+|---|---|---|---|
+| `t_menu` | 200 | 1 | **199** |
+| `t_subject` | 102 | 18 | **84** |
+| `t_role` | 5 | 1 | 4 |
+| `t_sys_config` | 5 | 1 | 4 |
+| `t_user` | 4 | 4 | 0 |
+| `t_dept` | 0 | 1 | 0 |
+
+种子 migration 用**显式 id** 插基础数据却**从未 `nextval`**，
+故序列停在起始值；测试首次让 DB 自行分配 id 时拿到的正是 `nextval(seq)=1`，正撞种子行：
+
+```
+duplicate key value violates unique constraint "t_menu_pkey"
+duplicate key value violates unique constraint "t_subject_pkey"
+duplicate key value violates unique constraint "t_role_pkey"
+duplicate key value violates unique constraint "t_sys_config_pkey"
+```
+
+**根治**（而非逐类 `align()`）：在 `AbstractMapperTest` 用目录表通用查出**全部 82 个**
+identity 序列并统一推进：
+
+```java
+// 每 JVM 只跑一次
+SELECT s.relname, t.relname
+FROM pg_class s
+JOIN pg_namespace n ON n.oid = s.relnamespace
+JOIN pg_depend d ON d.objid = s.oid AND d.deptype = 'i'
+JOIN pg_class t ON t.oid = d.refobjid
+JOIN pg_attribute a ON a.attrelid = t.oid AND a.attnum = d.refobjsubid
+WHERE n.nspname = 'public' AND a.attname = 'id' AND s.relkind = 'S'
+-- → setval(seq, GREATEST(COALESCE(MAX(id),1), 1))
+```
+
+**为何一次就够**：PostgreSQL **序列不参与事务回滚**。测试方法因基类
+`@Transactional` 回滚后，行消失但序列不倒退，且只增不减 ⇒ 一次对齐永久有效。
+
+### 根因二：RBAC 测试硬编码关联组合（5 项业务唯一键撞码）
+
+序列对齐后，这 5 项**换了个错误**继续失败 —— 暴露第二层根因。
+
+| 测试 | 原硬编码 | 撞码约束 | 种子已有 |
+|---|---|---|---|
+| `RoleMenuMapperTest`(2) | `(1,1)` / `(2,5)` | `uq_role_menu` | role1×menu1~5 |
+| `RoleMenuMapperRealDBTest`(1) | `(1,1)` | `uq_role_menu` | 同上 |
+| `UserRoleMapperTest`(1) | `(1,1)` | `uq_user_role` | (1,1) |
+| `UserRoleMapperRealDBTest`(1) | `(1,1)` | `uq_user_role` | 同上 |
+
+这类撞码与序列**无关** —— 即便序列对齐，硬编码的种子 id 组合依然会撞。
+`RoleMenuMapperTest.selectById_shouldReturnRelation` 用的 `(2,5)` 也已存在。
+
+修法：基类新增 `createRole()` / `createMenu()` / `createSysUser()` 现造行。
+**三者刻意不做缓存** —— 唯一键要求每次拿到全新 id，缓存会重新引入撞码。
+（对比：`ensureVendor`/`ensureCustomer` 可缓存，因为无唯一键约束。）
+
+### 🔴 顺带发现真实 Entity-DB 缺口（待修）
+
+`t_menu.menu_code` 是 `NOT NULL` 且**无默认值**，但 `MenuEntity` **没有 `menuCode` 字段**。
+故**任何经 MyBatis-Plus 插入菜单的代码路径都会因缺列失败**：
+
+```
+ERROR: null value in column "menu_code" of relation "t_menu" violates not-null constraint
+```
+
+这是 AGENTS §4.2 第 8 条的**镜像方向**（不是 Entity 指向不存在的列，
+而是 DB 必填列在 Entity 里缺失）。`createMenu()` 暂用 `JdbcTemplate` 绕开，
+已登记待补 Entity 字段。
+
+另确认 `t_menu` **无 `enterprise_id` 列**（首次插入时误加该列报
+`column "enterprise_id" does not exist`），别想当然按多租户表处理。
+
+### 剩余 21 项的根因分组（下一批候选）
+
+| 组 | 数量 | 根因 |
+|---|---|---|
+| ① NOT NULL 未填 | 8 | `dept_code`/`period_code`/`menu_code`/`budget_name`/`doc_date`/`category_id`/`account_id`/`tx_type` |
+| ② CHECK 允许集 | 3 | `chk_user_status`、`chk_output_invoice_type`、`chk_disposal_status` |
+| ③ 状态机语义 | 3 | 核销单期望 `CONFIRMED` 实得 `SUBMITTED`（`review()` 白名单不含 `UNCONFIRMED`，属**产品语义待拍板**） |
+| ④ 断言/数据隔离口径 | 4 | 清理类断言 3 vs 10、关键词搜索 4 vs 15、`t_output_invoice` JSONB 读回 null |
+| ⑤ 幽灵列断言 | 2 | `input/output_invoice.voucherNo` —— 又是 `exist=false` 幽灵列 |
+| ⑥ 乐观锁 | 1 | `updateById` 期望抛异常但未抛（版本号未变） |
+
+---
+
 ## 版本历史
 
 | 版本 | 日期 | 作者 | 变更 |
 |---|---|---|---|
+| V1.2 | 2026-09-29 | opencode | 补记五批实施结果（详见 §〇之二~〇之六）：**D5 基建** 55 → 44（REQ-116，基类统一企业上下文，7 项「无上下文→放行」用例显式 `clear()`）；**悬空外键** 44 → 35（REQ-117，补 `ensureCustomer`，修 `doc_no` 只读不写、单据状态误用发票状态）；**银行流水** 35 → 32 前推（REQ-118，5 类 32 项，含 `@Version` 回填陷阱与 `REQUIRES_NEW` 互斥）；**P3 全链路**（REQ-119，3 项，同名 `status` 两表允许集不同 + 幽灵列断言）；**B 类种子撞码** 32 → **21**（REQ-120，通用 identity 序列对齐 + RBAC 硬编码关联组合，发现 `MenuEntity` 缺 `menuCode` 真实缺口）。全部批次均满足：目标类全绿 + 全量慢测无新增红项 + 快测 1733/0 |
 | V1.1 | 2026-09-29 | opencode | **A 类 + D 类实施完成**：36 项转绿，全量慢测 128 → 92 项。改写 3 个 `NumberingAssociation*` 类为新模型断言（含废弃结构负向断言）；修 3 个 D 类类的 IDENTITY/悬空外键/非法枚举/无登录态问题。**纠正分诊归因**：`InvoiceConfirmAuditPathIntegrationTest` 2 项实为 C 类（`exist=false` 属性做 lambda 排序）而非 D 类。**发现并修复 1 个真实生产缺陷**（REQ-2026-115 CSV 表头「对方户名」未识别）。新增 D5 待拍板事项 |
 | V1.0 | 2026-09-28 | opencode | 初稿：128 项 / 44 类分诊完成，按 A~E 五类归档，每类附实测证据与处置建议；D1-D4 待老丁确认。**未修改任何代码** |
