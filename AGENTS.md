@@ -4,14 +4,14 @@
 
 ## §0 项目状态（硬数字，每次 commit 后更新）
 
-> **更新基准**：commit `815cb7e6` + 后续提交 (2026-09-28) — fix: P99 修复8项构建与可运行性阻断缺陷（REQ-103~111）；A/D 类修复 (2026-09-29) — 慢测 A+D 36 项转绿并修 1 个真实生产缺陷（REQ-113~115）；D5 基建修复 (2026-09-29) — 基类统一企业上下文，慢测再消解 37 项（REQ-116）；悬空外键修复 (2026-09-29) — 补 ensureCustomer 助手，慢测再消解 11 项（REQ-117）；银行流水批次修复 (2026-09-29) — 补 ensureSubject 助手，修 REQUIRES_NEW 隔离，慢测再消解 9 项（REQ-118）；P3 全链路修复 (2026-09-29) — 单据状态与幽灵列，慢测再消解 3 项（REQ-119）；B 类种子撞码修复 (2026-09-29) — 通用 identity 序列对齐 + RBAC 硬编码关联组合，慢测再消解 11 项（REQ-120）；C 类测试数据约束修复 (2026-09-29) — 补 3 个 Entity 缺失的 NOT NULL 字段 + CHECK 取值/幽灵列断言/隔离越界，慢测再消解 16 项（REQ-121）；清理类隔离越界修复 (2026-09-29) — 全表维护操作改增量断言，慢测再消解 1 项（REQ-122）
+> **更新基准**：commit `815cb7e6` + 后续提交 (2026-09-28) — fix: P99 修复8项构建与可运行性阻断缺陷（REQ-103~111）；A/D 类修复 (2026-09-29) — 慢测 A+D 36 项转绿并修 1 个真实生产缺陷（REQ-113~115）；D5 基建修复 (2026-09-29) — 基类统一企业上下文，慢测再消解 37 项（REQ-116）；悬空外键修复 (2026-09-29) — 补 ensureCustomer 助手，慢测再消解 11 项（REQ-117）；银行流水批次修复 (2026-09-29) — 补 ensureSubject 助手，修 REQUIRES_NEW 隔离，慢测再消解 9 项（REQ-118）；P3 全链路修复 (2026-09-29) — 单据状态与幽灵列，慢测再消解 3 项（REQ-119）；B 类种子撞码修复 (2026-09-29) — 通用 identity 序列对齐 + RBAC 硬编码关联组合，慢测再消解 11 项（REQ-120）；C 类测试数据约束修复 (2026-09-29) — 补 3 个 Entity 缺失的 NOT NULL 字段 + CHECK 取值/幽灵列断言/隔离越界，慢测再消解 16 项（REQ-121）；清理类隔离越界修复 (2026-09-29) — 全表维护操作改增量断言，慢测再消解 1 项（REQ-122）；生产缺陷修复 (2026-09-29) — menu_type 大小写 + 结算类型违约 + 更正 1 处检查脚本误报（REQ-123）
 > **当前分支**：`main`（本地领先 origin，**未 push**）
 > **关联文档**：[项目说明](docs/CORE-项目说明.md)、[技术方案](docs/CORE-技术方案.md)、[需求分析](docs/CORE-需求分析.md)、[需求登记册](docs/development/requirements/REQUIREMENTS_REGISTRY.md)、[文档注册表](docs/CORE-文档注册表.md)、[测试策略](docs/testing/TEST-STRATEGY.md)、[Flyway治理规范](docs/development/flyway-governance.md)
 
 | 维度 | 数据 |
 |------|------|
 | 后端代码 | 492 个 Java 主代码文件（另 237 个测试文件）|
-| 测试用例 | 1994 个 `@Test` 方法 / 229 个后端测试类 + 26 个前端测试文件 265 用例（**快测实测 1733 通过，0 Failures, 0 Errors, 5 Skipped**；含 slow 组全量 1988，其中 **4 项待修**，A/D/C/B 类 125 项已于 2026-09-29 修复，见 REQ-2026-113~122）|
+| 测试用例 | 1996 个 `@Test` 方法 / 229 个后端测试类 + 26 个前端测试文件 265 用例（**快测实测 1735 通过，0 Failures, 0 Errors, 5 Skipped**；含 slow 组全量 1990，其中 **4 项待修**，A/D/C/B 类 127 项已于 2026-09-29 修复，见 REQ-2026-113~123）|
 | 数据库 | PostgreSQL 16 / **73 个 migration，最新 V157**（注意：版本号非连续，实际为 V1-V5 + V63 + V92-V157，缺 V6-V62 与 V64-V91 共 85 个号；因 `out-of-order: true` + `validate-on-migrate: false` 不影响运行，但「V1 baseline merged V1-V146」的旧表述已失效）|
 | API 端点 | 510+ 个后端端点 |
 | 核心模块 | 基础数据、总账、应收应付、现金管理、固定资产、费用报销、发票税务、预算、财务报表、存储管理 |
@@ -123,6 +123,7 @@
    - **根源**：Entity 按"未来完整 schema"写，但 DB 是另一个版本。注释写"Vxx 列已添加"但 migration 从未执行。
    - **预防**：统一用 `node backend/scripts/check-entity-schema.mjs` 在编译时检查字段映射一致性。后续每次改 Entity 都要跑这个检查。
    - **H-17 已集成 pre-commit hook**（2026-07-23）：提交涉及 `*Entity.java` 的变更时自动运行检查脚本。docker postgres 未运行时自动降级跳过列检查，仅做 typeHandler 警告。首次克隆仓库后执行 `bash backend/scripts/install-hooks.sh` 安装。
+   - ⚠️ **工具告警 ≠ 缺陷**（2026-09-29 REQ-123 修正）：该脚本曾把 `cur.assist_json::text` 整体当成列名，误报「`assist_json` 列不存在」，而该列**真实存在**（`t_voucher_entry.assist_json jsonb`），SQL 实测可执行。根因是 `extractColumnRefs()` 的 `cleaned` 链未剥离 PostgreSQL `::type` 转型（已修）。**看到「引用了不存在的列」必须先在真实 DB 上把 SQL 跑一遍再下结论**，否则会把工具缺陷写进缺陷台账。
 
 9. **同名字段在两张表的 CHECK 允许集不同（2026-09-29 慢测 REQ-119 沉淀）**：`status` 这个名字在三处允许集互不相同，**按「实体类型」猜合法值必然踩坑**：
 
@@ -177,6 +178,10 @@
 6. **测试假阳性**：测试通过 ≠ 功能完成。跨实体链路必须真实贯通，不能只测单个模块 CRUD。E2E 测试必须模拟真实用户操作路径
 7. **Mock 测试盲区**：Mock 测试发现不了 DB 约束（NOT NULL、CHECK、UNIQUE）、Flyway 不匹配、SQL 语法错误。核心 Mapper 必须跑真实 DB 测试（Testcontainers）
 8. **Service 签名变更同步**：扩展现有方法签名时，所有调用点（Controller、Service 实现、所有测试文件）必须同步更新
+9. **双重遮蔽型测试假阳性：`assertNotNull` + fixture 镜像缺陷值**（2026-09-29 REQ-123 沉淀）：`MenuServiceImpl.getRoutesByUserId` 因 `"menu"`（小写）永远过滤不掉任何菜单，**用户路由恒空** —— 而这个缺陷从未被任何测试发现，靠的是两层遮蔽同时成立：
+    - **断言只验「非 null」**：`assertNotNull(result)` 对「正确的非空树」和「错误的空列表」**同样通过**。凡是返回集合的接口，断言必须落到**内容**（`size()` + 关键字段）；
+    - **fixture 值与缺陷值一模一样**：测试 `stubEntity()` 也写 `setType("menu")`，于是「生产写错、测试也写错」互相印证，看起来自洽。**fixture 必须用 DB 真实取值**（大写 `MENU`），否则测试是在给 bug 背书。
+    - **正确做法**：正向断言内容 + 负向断言「不该做的没做」（BUTTON/DIR 必须被过滤、小写值不匹配）—— 这正是铁律「负向断言强制」的应用场景。
 
 ### 4.4 技术类
 7. **Jackson LocalDateTime 序列化**：`application.yml` 的 `date-format` 对 `LocalDateTime` 无效，必须注册专用序列化器

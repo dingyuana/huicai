@@ -187,7 +187,9 @@ public class PrepaymentServiceImpl implements PrepaymentService {
         String effectiveSummary = summary != null ? summary : "预付冲应付";
 
         ArapSettlementEntity settlement = new ArapSettlementEntity();
-        settlement.setSettlementType("PAYABLE");
+        // 预付冲应付 = 付款方向。chk_settlement_type 仅允许 RECEIVE/PAY，
+        // 原写 "PAYABLE" 会在 insert 时违约，流程运行时必失败。
+        settlement.setSettlementType("PAY");
         settlement.setSettlementDate(LocalDate.now());
         settlement.setPeriod(effectivePeriod);
         settlement.setPartyId(prepay.getVendorId());
@@ -325,7 +327,9 @@ public class PrepaymentServiceImpl implements PrepaymentService {
         String effectiveSummary = summary != null ? summary : "预收冲应收";
 
         ArapSettlementEntity settlement = new ArapSettlementEntity();
-        settlement.setSettlementType("RECEIVABLE");
+        // 预收冲应收 = 收款方向。chk_settlement_type 仅允许 RECEIVE/PAY，
+        // 原写 "RECEIVABLE" 会在 insert 时违约，流程运行时必失败。
+        settlement.setSettlementType("RECEIVE");
         settlement.setSettlementDate(LocalDate.now());
         settlement.setPeriod(effectivePeriod);
         settlement.setPartyId(prepay.getCustomerId());
