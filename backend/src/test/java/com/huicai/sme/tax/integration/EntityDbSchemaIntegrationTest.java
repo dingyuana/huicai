@@ -104,8 +104,11 @@ class EntityDbSchemaIntegrationTest extends AbstractMapperTest {
     void bankStatement_reviewStatus_can_update_to_voucher_generated() {
         BankStatementEntity stmt = new BankStatementEntity();
         stmt.setEnterpriseId(1L);
-        stmt.setAccountId(1L);
+        // account_id 有 FK 到 t_bank_account（迁移后为空表），须用真实主键；
+        // tx_type 为 NOT NULL 且有 CHECK 约束
+        stmt.setAccountId(ensureBankAccount(1L));
         stmt.setTxDate(LocalDate.now());
+        stmt.setTxType("INCOME");
         stmt.setAmount(BigDecimal.valueOf(100));
         stmt.setSummary("Schema test");
         stmt.setDirection("in");

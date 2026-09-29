@@ -1,12 +1,13 @@
 # 慢测全量 128 项失败 — 分诊清单
 
 > **创建日期**：2026-09-28
-> **状态**：🟡 分诊完成；**A / D / D5 / 悬空外键 已修复并验证**（84 项），剩余 44 项待修
+> **状态**：🟡 分诊完成；**A / D / D5 / 悬空外键 / 银行流水 已修复并验证**（93 项），剩余 35 项待修
 > **数据来源**：`mvn test -DexcludedGroups=`（含 slow 组）全量运行
 > **基线**：`main @ 3ab1a606`｜快测 1733/0 failures 正常，慢测 1980 中 **16 Failures + 112 Errors**
 > **A+D 修复后**：慢测 **1984 中 1 Failure + 91 Errors = 92 项**
 > **D5 修复后**：慢测 **1984 中 7 Failures + 48 Errors = 55 项 / 33 类**
 > **悬空外键修复后**：慢测 **1984 中 7 Failures + 37 Errors = 44 项 / 31 类**
+> **银行流水修复后**：慢测 **1988 中 7 Failures + 28 Errors = 35 项**
 > **重要前提**：本清单**不含任何代码修改**。这些缺陷此前被 Testcontainers 连接错误完全掩盖
 > （`AbstractMapperTest` 容器按类重建导致 `Connection refused`），REQ-108 修复后首次真实执行暴露。
 > **性质**：全部为**既有测试数据/断言缺陷**，非生产代码缺陷
@@ -275,6 +276,72 @@ idx_business_doc_voucher_no    idx_arap_settlement_voucher_no
 
 **注**：`t_input_invoice.audited_by/audited_at` **是**真实列，可断言；
 但 `OutputInvoiceEntity.auditedBy/auditedAt` 是 `exist=false`，不可断言。
+
+---
+
+## 〇之四、银行流水批次修复结果（2026-09-29 已完成，REQ-2026-118）
+
+慢测 **44 → 35 项**。5 个类 9 项表层错误（`tx_type` NOT NULL、`account_id` 空值、
+`fk_statement_account`、`t_asset_card.category_id`/`useful_life`）修完后，
+暴露出**4 层更深的缺陷** —— 这些比表层错误更值得关注：
+
+### 🔴 1. 约束用例「因错误的原因通过」
+
+`BankStatementMapperTest` 有 5 个 `assertThrows` 用例
+（NOT NULL / CHECK 约束校验）。在 `accountId=1` 悬空 FK 存在期间，
+**每一次插入都先撞 FK 异常**，而 FK 异常同样满足 `assertThrows` ——
+于是这些用例**从未真正验证过目标约束**（`chk_stmt_type`、
+`chk_stmt_match_status`、`chk_stmt_review_status`）。
+
+> **教训**：断言「应当失败」时，必须先确认**失败原因**就是目标约束。
+> 否则插入层的任意异常都会顶替它，形成假绿。
+
+### 🔴 2. 守护了一条不存在的约束
+
+`insert_shouldEnforceChkDirection` 断言非法 `direction` 会插入失败。
+但 `BankStatementEntity.direction` 是 `@TableField(exist = false)`
+（DB 无此列，仅内存缓存），**根本不存在 `chk_direction` 约束** ——
+该用例**永远无法通过**。已改为断言该字段确实不落库（读回为 null）。
+
+### 🟡 3. `@Version` 乐观锁的两个陷阱
+
+原断言「初始版本号应为 0」与 DB 默认值 **1** 矛盾。修正过程中又暴露两点，
+已沉淀进 `AGENTS §4.4` 第 12 条：
+
+- MyBatis-Plus **不把 `@Version` 列的 DB 默认值回填到插入时的内存对象**。
+  拿插入时的原对象去 `updateById`，`version` 仍为 null，
+  `OptimisticLockerInnerInterceptor` 遇 null 会**同时跳过版本条件与递增**
+  —— 既不校验并发，也不 bump。正确用法：插入后**重新 `selectById`** 再更新。
+- **同一 SqlSession 内两次 `selectById` 返回同一个对象实例**（一级缓存），
+  且更新成功后新 version 会回写进该对象。故「拿两个实体分别代表新旧 version」
+  的乐观锁测试是**假的**——两个其实是同一个、且 version 已被刷新。
+  必须**显式构造**一个带过期 version 的实体。
+
+### 🔴 4. `REQUIRES_NEW` 看不到外层未提交数据
+
+`BankStatementAuditIntegrationTest` 的 `audit()` 内部走
+`AutoGenerationService.autoGenerateInNewTx`（**`REQUIRES_NEW`**）。
+基类 `AbstractMapperTest` 类上带 `@Transactional`，夹具数据处于**未提交**状态，
+新事务根本看不到它 → 必抛「银行流水不存在 5」这类看似无关的错误。
+
+修法：该类显式 `@Transactional(propagation = NOT_SUPPORTED)` 关闭回滚，
+改由 `@BeforeEach` 自行清理；并补登录态（自动制证走 `SecurityUtils`）与
+1002/2203/1122 三个科目。已沉淀进 `AGENTS §4.4` 第 13 条。
+
+### 另修正：跨测试方法的隐式依赖
+
+`BankFlowE2ETest.step2` 通过 `System.getProperty` 读取 step1 写入的流水 id。
+但基类每个方法结束即回滚，**该行早已消失**；且 JVM 级 `System` property
+会跨方法泄漏，单独跑时又会静默 `return`（假绿）。已改为自建数据。
+
+### 状态机边界：未改业务规则
+
+`service.review()` 的可复审白名单为
+`null / PENDING / classified / manual_pending / reclassified`，**不含 `UNCONFIRMED`**；
+而测试先写 `UNCONFIRMED` 再调 `review()` 必然抛「无法复审」。
+本次**按已实现的状态机**修正断言，**未改动业务规则** ——
+`UNCONFIRMED`（待确认）是否应可复审属产品语义问题，
+按铁律 #1（人是唯一审核主体）/#4（状态机严格转换）需老丁单独拍板。
 
 ---
 

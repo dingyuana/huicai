@@ -12,6 +12,7 @@ import com.huicai.common.context.EnterpriseContextHolder;
 import com.huicai.sme.cash.entity.BankAccountEntity;
 import com.huicai.sme.cash.mapper.BankAccountMapper;
 
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -215,6 +216,61 @@ public abstract class AbstractMapperTest {
     @org.junit.jupiter.api.BeforeEach
     void resetCustomerCache() {
         customerIdCache.clear();
+    }
+
+    /**
+     * 取一个会计科目 id，不存在则创建。
+     *
+     * <p>{@code t_subject} 唯一约束为 {@code UNIQUE (code, enterprise_id)}，故按
+     * {@code (code, enterprise_id)} 先查后建，重复调用返回同一 id。自动制证
+     * （{@code AutoGenerationService}）按科目<b>编码</b>取科目，如
+     * {@code 1002} 银行存款、{@code 2203}/{@code 1122} 应收/预收，
+     * 缺失会 NPE，故需要这些科目的测试必须先建。
+     *
+     * @param enterpriseId 企业 ID
+     * @param code         科目编码，如 {@code "1002"}
+     * @param name         科目名称
+     * @param direction    {@code debit} / {@code credit}
+     * @return 科目 id
+     */
+    @Autowired
+    protected com.huicai.base.system.mapper.SubjectMapper subjectMapper;
+
+    private final Map<String, Long> subjectIdCache = new ConcurrentHashMap<>();
+
+    protected Long ensureSubject(Long enterpriseId, String code, String name, String direction) {
+        String key = enterpriseId + ":" + code;
+        Long cached = subjectIdCache.get(key);
+        if (cached != null) {
+            return cached;
+        }
+        // 跨测试方法复用（关闭事务回滚的测试类会多次执行），故先查后建
+        List<com.huicai.base.system.entity.Subject> existing = subjectMapper.selectList(
+                new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<com.huicai.base.system.entity.Subject>()
+                        .eq(com.huicai.base.system.entity.Subject::getCode, code)
+                        .eq(com.huicai.base.system.entity.Subject::getEnterpriseId, enterpriseId)
+                        .last("LIMIT 1"));
+        if (!existing.isEmpty()) {
+            subjectIdCache.put(key, existing.get(0).getId());
+            return existing.get(0).getId();
+        }
+        com.huicai.base.system.entity.Subject subject = new com.huicai.base.system.entity.Subject();
+        subject.setCode(code);
+        subject.setName(name);
+        subject.setLevel(1);
+        subject.setDirection(direction);
+        subject.setIsLeaf(true);
+        subject.setIsActive(true);
+        subject.setEnterpriseId(enterpriseId);
+        subject.setDeleted(0);
+        subjectMapper.insert(subject);
+        subjectIdCache.put(key, subject.getId());
+        return subject.getId();
+    }
+
+    @org.junit.jupiter.api.BeforeEach
+    void resetSubjectCache() {
+        subjectIdCache.clear();
     }
 
     // ==================== 企业上下文（REQ-2026-116 / 慢测 C 类）====================

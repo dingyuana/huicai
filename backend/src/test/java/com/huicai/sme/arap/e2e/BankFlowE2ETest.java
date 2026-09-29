@@ -34,7 +34,8 @@ public class BankFlowE2ETest extends AbstractMapperTest {
     @Test
     void step1_importBankStatement_shouldBePending() {
         BankStatementEntity stmt = new BankStatementEntity();
-        stmt.setAccountId(1L);
+        // account_id 有 FK 到 t_bank_account（迁移后为空表），必须用真实主键
+        stmt.setAccountId(ensureBankAccount(DEFAULT_ENTERPRISE_ID));
         stmt.setTxDate(LocalDate.of(2026, 7, 1));
         stmt.setTxType("INCOME");
         stmt.setAmount(new BigDecimal("10000.00"));
@@ -49,17 +50,25 @@ public class BankFlowE2ETest extends AbstractMapperTest {
         assertEquals(1, rows);
         assertNotNull(stmt.getId());
         assertEquals("PENDING", stmt.getReviewStatus());
-
-        // 保存ID供后续步骤使用
-        System.setProperty("test.statement.id", String.valueOf(stmt.getId()));
     }
 
     @Test
     void step2_classifyAndConfirm_shouldUpdateStatus() {
-        String idStr = System.getProperty("test.statement.id");
-        if (idStr == null) return; // 跳过，独立运行
-        BankStatementEntity stmt = bankStatementMapper.selectById(Long.parseLong(idStr));
-        assertNotNull(stmt);
+        // 本用例必须自建数据：基类 @Transactional 会在每个方法结束后回滚，
+        // step1 通过 System.setProperty 传递的 id 指向的行早已消失，
+        // 且 JVM 级 System property 会跨方法泄漏，单独跑时又会静默 return。
+        BankStatementEntity stmt = new BankStatementEntity();
+        stmt.setAccountId(ensureBankAccount(DEFAULT_ENTERPRISE_ID));
+        stmt.setTxDate(LocalDate.of(2026, 7, 1));
+        stmt.setTxType("INCOME");
+        stmt.setAmount(new BigDecimal("10000.00"));
+        stmt.setDirection("in");
+        stmt.setSummary("货款-测试客户");
+        stmt.setCounterAccount("测试客户");
+        stmt.setClassification("business_receipt");
+        stmt.setMatchStatus("UNMATCHED");
+        stmt.setReviewStatus("PENDING");
+        bankStatementMapper.insert(stmt);
 
         stmt.setReviewStatus("CONFIRMED");
         stmt.setReviewedBy(1L);
@@ -68,6 +77,7 @@ public class BankFlowE2ETest extends AbstractMapperTest {
         assertEquals(1, rows);
 
         BankStatementEntity confirmed = bankStatementMapper.selectById(stmt.getId());
+        assertNotNull(confirmed);
         assertEquals("CONFIRMED", confirmed.getReviewStatus());
     }
 

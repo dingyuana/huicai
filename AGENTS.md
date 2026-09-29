@@ -4,14 +4,14 @@
 
 ## §0 项目状态（硬数字，每次 commit 后更新）
 
-> **更新基准**：commit `815cb7e6` + 后续提交 (2026-09-28) — fix: P99 修复8项构建与可运行性阻断缺陷（REQ-103~111）；A/D 类修复 (2026-09-29) — 慢测 A+D 36 项转绿并修 1 个真实生产缺陷（REQ-113~115）；D5 基建修复 (2026-09-29) — 基类统一企业上下文，慢测再消解 37 项（REQ-116）；悬空外键修复 (2026-09-29) — 补 ensureCustomer 助手，慢测再消解 11 项（REQ-117）
+> **更新基准**：commit `815cb7e6` + 后续提交 (2026-09-28) — fix: P99 修复8项构建与可运行性阻断缺陷（REQ-103~111）；A/D 类修复 (2026-09-29) — 慢测 A+D 36 项转绿并修 1 个真实生产缺陷（REQ-113~115）；D5 基建修复 (2026-09-29) — 基类统一企业上下文，慢测再消解 37 项（REQ-116）；悬空外键修复 (2026-09-29) — 补 ensureCustomer 助手，慢测再消解 11 项（REQ-117）；银行流水批次修复 (2026-09-29) — 补 ensureSubject 助手，修 REQUIRES_NEW 隔离，慢测再消解 9 项（REQ-118）
 > **当前分支**：`main`（本地领先 origin，**未 push**）
 > **关联文档**：[项目说明](docs/CORE-项目说明.md)、[技术方案](docs/CORE-技术方案.md)、[需求分析](docs/CORE-需求分析.md)、[需求登记册](docs/development/requirements/REQUIREMENTS_REGISTRY.md)、[文档注册表](docs/CORE-文档注册表.md)、[测试策略](docs/testing/TEST-STRATEGY.md)、[Flyway治理规范](docs/development/flyway-governance.md)
 
 | 维度 | 数据 |
 |------|------|
 | 后端代码 | 492 个 Java 主代码文件（另 237 个测试文件）|
-| 测试用例 | 1991 个 `@Test` 方法 / 229 个后端测试类 + 26 个前端测试文件 265 用例（**快测实测 1733 通过，0 Failures, 0 Errors, 5 Skipped**；含 slow 组全量 1984，其中 **44 项为既有测试数据缺陷待修**，A/D/C 类 84 项已于 2026-09-29 修复，见 REQ-2026-113~117）|
+| 测试用例 | 1994 个 `@Test` 方法 / 229 个后端测试类 + 26 个前端测试文件 265 用例（**快测实测 1733 通过，0 Failures, 0 Errors, 5 Skipped**；含 slow 组全量 1988，其中 **35 项为既有测试数据缺陷待修**，A/D/C 类 93 项已于 2026-09-29 修复，见 REQ-2026-113~118）|
 | 数据库 | PostgreSQL 16 / **73 个 migration，最新 V157**（注意：版本号非连续，实际为 V1-V5 + V63 + V92-V157，缺 V6-V62 与 V64-V91 共 85 个号；因 `out-of-order: true` + `validate-on-migrate: false` 不影响运行，但「V1 baseline merged V1-V146」的旧表述已失效）|
 | API 端点 | 510+ 个后端端点 |
 | 核心模块 | 基础数据、总账、应收应付、现金管理、固定资产、费用报销、发票税务、预算、财务报表、存储管理 |
@@ -136,6 +136,12 @@
 10. **Flyway 重复版本**：新建迁移时版本号不得与已有文件冲突（V130 与 V140 各出现两份）。重命名后 `validate-on-migrate: false` 临时绕过校验，因 V130 修改导致后续校验链全部失效
 11. **三方对照审计**：任何 schema 变更必须 `PG ↔ Entity ↔ 业务代码` 三方对齐，禁止只改一端
 11. **MyBatis-Plus `updateById` 忽略 null 字段 → UpdateWrapper 双保险**（2026-09-11 反核销幽灵凭证修复，连续踩坑三次沉淀）：`updateById` 默认 NOT_NULL 策略，**实体字段置 null 不会更新对应 DB 列**（该列保持旧值）。凡需把某列更新为 NULL，必须：`①实体字段 setXxx(null)`（防止后续 `updateById` 把内存旧值回写覆盖）＋`②mapper.update(null, new UpdateWrapper<>().eq("id",id).set("col", null))`（显式清列）。两者缺一不可——只做 ① 列不清空，只做 ② 被 ① 的 updateById 回写。实例：`ArapSettlementServiceImpl.reverse()` 清 `voucher_id`、`restoreUnsettledAmount()` 清 `voucher_id`/`voucher_no`。**预防**：代码评审见到「需要置空某列」必须双查这两点；新增同类逻辑参考 SPC-111。
+
+12. **`@Version` 乐观锁的两个陷阱**（2026-09-29 慢测 REQ-118 沉淀）：
+    - **MyBatis-Plus 不把 `@Version` 列的 DB 默认值回填到插入时的内存对象**。若实体用 DB 默认值（如 `version DEFAULT 1`）而测试插入后直接拿原对象 `updateById`，`version` 仍为 null，`OptimisticLockerInnerInterceptor` 遇 null 会**同时跳过版本条件与递增**（既不校验并发也不 bump）。正确用法：插入后**重新 `selectById` 拿到实体**再更新。
+    - **同一 SqlSession 内两次 `selectById` 返回同一个对象实例**（一级缓存），且更新成功后新 version 会回写进该对象。故「拿两个实体分别代表新旧 version」的乐观锁测试是**假的**——两个其实是同一个、且 version 已被刷新。必须**显式构造**一个带过期 version 的实体来验证「过期 version 更新命中 0 行」。
+
+13. **测试基类 `@Transactional` 与 `REQUIRES_NEW` 互斥**（2026-09-29 慢测 REQ-118 沉淀）：`AbstractMapperTest` 类上带 `@Transactional`，每个测试方法结束即回滚。被测代码若内部开 `REQUIRES_NEW` 事务（如 `AutoGenerationService.autoGenerateInNewTx`），**新事务看不到外层未提交的夹具数据**，会报「记录不存在」这类看似无关的错误。修法：该测试类显式声明 `@Transactional(propagation = Propagation.NOT_SUPPORTED)` 关闭回滚，改由 `@BeforeEach` 自行清理数据（此时 `@BeforeEach` 基类设置的 `EnterpriseContextHolder` 与各类 id 缓存仍生效）。
 
 ### 4.4 文档治理类
 12. **SPEC 漂移检测**：架构变更后（如 P33→P34），SPEC 仍描述旧架构。每次大变更后必做 SPEC vs 代码一致性审计

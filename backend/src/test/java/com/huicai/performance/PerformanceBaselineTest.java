@@ -166,6 +166,8 @@ public class PerformanceBaselineTest extends AbstractMapperTest {
     @DisplayName("BankStatement - INSERT + SELECT 性能 (≤500ms)")
     void bankStatement_performance() {
         BankStatementEntity bs = new BankStatementEntity();
+        // account_id 为 NOT NULL 且有 FK 到 t_bank_account（迁移后为空表）
+        bs.setAccountId(ensureBankAccount(1L));
         bs.setTxDate(LocalDate.of(2026, 8, 1));
         bs.setTxType("INCOME");
         bs.setAmount(new BigDecimal("50000.00"));
@@ -192,6 +194,10 @@ public class PerformanceBaselineTest extends AbstractMapperTest {
         card.setOriginalValue(new BigDecimal("50000.00"));
         card.setStatus("IN_USE");
         card.setAcquisitionDate(LocalDate.of(2026, 1, 1));
+        // category_id 为 NOT NULL 外键，迁移后 t_asset_category 为空表，须现造
+        card.setCategoryId(ensureAssetCategory(1L));
+        // useful_life 为 NOT NULL 无默认值（折旧年限）
+        card.setUsefulLife(60);
         card.setEnterpriseId(1L);
 
         long insertElapsed = measure(() -> assetCardMapper.insert(card));

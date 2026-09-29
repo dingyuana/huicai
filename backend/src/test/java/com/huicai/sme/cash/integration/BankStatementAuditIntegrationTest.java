@@ -4,16 +4,24 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.huicai.base.business.constant.StatementStatus;
 import com.huicai.base.business.entity.BankStatementEntity;
 import com.huicai.base.business.mapper.BankStatementMapper;
+import com.huicai.base.system.entity.UserEntity;
 import com.huicai.common.test.AbstractMapperTest;
+import com.huicai.config.security.LoginUser;
 import com.huicai.sme.cash.service.BankStatementService;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -26,12 +34,21 @@ import static org.junit.jupiter.api.Assertions.*;
  *   <li>audit() 重复调用不重复生成单据（幂等守卫验证）</li>
  * </ul>
  *
- * <p>基于 {@link AbstractMapperTest}，启动真实 PostgreSQL 16 + Flyway 迁移，
- * 自动执行 V001–V120 全部 migration（含 V120 CHECK 约束扩展）。
+ * <p>基于 {@link AbstractMapperTest}，启动真实 PostgreSQL 16 + Flyway 迁移。
  * 每条测试方法独立事务，执行后自动回滚，互不影响。
+ *
+ * <h3>为何本类必须关闭事务回滚（REQ-2026-118）</h3>
+ * {@code audit()} 内部走 {@code AutoGenerationService.autoGenerateInNewTx}，
+ * 该方法是 {@code REQUIRES_NEW} —— <b>新事务看不到外层未提交的数据</b>。
+ * 基类默认 {@code @Transactional} 会把本类造的流水夹在未提交事务里，
+ * 于是 REQUIRES_NEW 内查不到该流水，抛「银行流水不存在」，
+ * 导致 audit/review 链路根本无法被测试。
+ * 故本类显式声明 {@code NOT_SUPPORTED} 关闭回滚，数据落库后由
+ * {@link #clearStatements()} 在每个方法前清理。
  *
  * @SlowTest — 需要 Docker + Testcontainers
  */
+@Transactional(propagation = Propagation.NOT_SUPPORTED)
 class BankStatementAuditIntegrationTest extends AbstractMapperTest {
 
     private static final Long ENTERPRISE_ID = 1L;
@@ -45,22 +62,51 @@ class BankStatementAuditIntegrationTest extends AbstractMapperTest {
 
     @BeforeEach
     void clearStatements() {
+        // 自动制证内部走 SecurityUtils（取操作人/企业），无登录态会抛「未登录」
+        UserEntity user = new UserEntity();
+        user.setId(USER_ID);
+        user.setUsername("admin");
+        user.setPassword("encoded");
+        user.setUserType("ENTERPRISE");
+        user.setEnterpriseId(ENTERPRISE_ID);
+        user.setAgencyRole("SME_ADMIN");
+        user.setStatus("ACTIVE");
+        user.setDeleted(0);
+        // 构造器第 3 参才是 enterpriseId（第 4 参是 agencyId）
+        LoginUser loginUser = new LoginUser(user, List.of(), ENTERPRISE_ID, null, "ENTERPRISE", "SME_ADMIN");
+        SecurityContextHolder.getContext().setAuthentication(
+                new UsernamePasswordAuthenticationToken(loginUser, null, loginUser.getAuthorities()));
+
+        // 自动制证按科目编码取科目（1002 银行存款 / 2203 预收账款 / 1122 应收账款），
+        // 迁移后 t_subject 无这些种子行，缺失会直接 NPE，故先确保存在
+        ensureSubject(ENTERPRISE_ID, "1002", "银行存款", "debit");
+        ensureSubject(ENTERPRISE_ID, "2203", "预收账款", "credit");
+        ensureSubject(ENTERPRISE_ID, "1122", "应收账款", "debit");
+
         mapper.delete(new LambdaQueryWrapper<BankStatementEntity>()
                 .eq(BankStatementEntity::getEnterpriseId, ENTERPRISE_ID));
     }
 
+    @AfterEach
+    void clearSecurityContext() {
+        SecurityContextHolder.clearContext();
+    }
+
     /**
-     * 审计状态流转：PENDING → UNCONFIRMED → CLASSIFIED → CONFIRMED → voucher_generated
+     * 审计状态流转：PENDING → classified → CONFIRMED → voucher_generated
+     *
+     * <p>注：{@code service.review()} 的可复审状态白名单为
+     * {@code null / PENDING / classified / manual_pending / reclassified}，
+     * <b>不含 {@code UNCONFIRMED}</b>。本测试此前先写入 UNCONFIRMED 再调 review()，
+     * 必然抛「当前状态 UNCONFIRMED 无法复审」。此处按<b>已实现的状态机</b>断言，
+     * 不改动业务规则（铁律 #1/#4：状态转换须经人工拍板）。
      */
     @Test
     @DisplayName("audit: 状态从 CONFIRMED 推进到 voucher_generated")
     void audit_must_advance_review_status_from_confirmed_to_voucher_generated() {
         BankStatementEntity stmt = createClassifiedStatement();
 
-        stmt.setReviewStatus(StatementStatus.UNCONFIRMED);
-        mapper.updateById(stmt);
-
-        // review 模拟出纳确认
+        // review 模拟出纳确认：classified 是 review() 的合法前置状态
         BankStatementEntity confirmed = service.review(stmt.getId(), USER_ID);
         assertEquals(StatementStatus.CONFIRMED, confirmed.getReviewStatus(),
                 "review() 后状态应为 CONFIRMED");
@@ -87,8 +133,6 @@ class BankStatementAuditIntegrationTest extends AbstractMapperTest {
     @DisplayName("audit: 重复调用返回原状态，不重复生成")
     void audit_idempotent_double_call_returns_same_status() {
         BankStatementEntity stmt = createClassifiedStatement();
-        stmt.setReviewStatus(StatementStatus.UNCONFIRMED);
-        mapper.updateById(stmt);
 
         service.review(stmt.getId(), USER_ID);
         service.audit(stmt.getId(), USER_ID);
@@ -125,8 +169,11 @@ class BankStatementAuditIntegrationTest extends AbstractMapperTest {
     private BankStatementEntity createClassifiedStatement() {
         BankStatementEntity stmt = new BankStatementEntity();
         stmt.setEnterpriseId(ENTERPRISE_ID);
-        stmt.setAccountId(1L);
+        // account_id 有 FK 到 t_bank_account，必须用真实存在的主键；
+        // tx_type 为 NOT NULL 且有 CHECK 约束（INCOME/EXPENSE/TRANSFER_IN/TRANSFER_OUT）
+        stmt.setAccountId(ensureBankAccount(ENTERPRISE_ID));
         stmt.setTxDate(LocalDate.now());
+        stmt.setTxType("INCOME");
         stmt.setAmount(BigDecimal.valueOf(10000));
         stmt.setSummary("测试银行流水");
         stmt.setDirection("in");
