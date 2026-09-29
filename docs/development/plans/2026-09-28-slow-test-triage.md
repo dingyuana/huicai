@@ -1,13 +1,14 @@
 # 慢测全量 128 项失败 — 分诊清单
 
 > **创建日期**：2026-09-28
-> **状态**：🟡 分诊完成；**A / D / D5 / 悬空外键 / 银行流水 已修复并验证**（93 项），剩余 35 项待修
+> **状态**：🟡 分诊完成；**A / D / D5 / 悬空外键 / 银行流水 / P3全链路 已修复并验证**（96 项），剩余 32 项待修
 > **数据来源**：`mvn test -DexcludedGroups=`（含 slow 组）全量运行
 > **基线**：`main @ 3ab1a606`｜快测 1733/0 failures 正常，慢测 1980 中 **16 Failures + 112 Errors**
 > **A+D 修复后**：慢测 **1984 中 1 Failure + 91 Errors = 92 项**
 > **D5 修复后**：慢测 **1984 中 7 Failures + 48 Errors = 55 项 / 33 类**
 > **悬空外键修复后**：慢测 **1984 中 7 Failures + 37 Errors = 44 项 / 31 类**
 > **银行流水修复后**：慢测 **1988 中 7 Failures + 28 Errors = 35 项**
+> **P3 全链路修复后**：慢测 **1988 中 7 Failures + 25 Errors = 32 项**
 > **重要前提**：本清单**不含任何代码修改**。这些缺陷此前被 Testcontainers 连接错误完全掩盖
 > （`AbstractMapperTest` 容器按类重建导致 `Connection refused`），REQ-108 修复后首次真实执行暴露。
 > **性质**：全部为**既有测试数据/断言缺陷**，非生产代码缺陷
@@ -342,6 +343,36 @@ idx_business_doc_voucher_no    idx_arap_settlement_voucher_no
 本次**按已实现的状态机**修正断言，**未改动业务规则** ——
 `UNCONFIRMED`（待确认）是否应可复审属产品语义问题，
 按铁律 #1（人是唯一审核主体）/#4（状态机严格转换）需老丁单独拍板。
+
+---
+
+## 〇之五、P3 全链路修复结果（2026-09-29 已完成，REQ-2026-119）
+
+慢测 **35 → 32 项**，`NumberingFullChainE2ETest` **3/3 全绿**。
+
+**根因 4 类**（除表层的 `chk_doc_status` 外，其余 3 类与 A/D 类同源）
+
+| # | 缺陷 | 说明 |
+|---|---|---|
+| 1 | 单据状态误用发票状态 | `doc.setStatus("CONFIRMED")`，`t_business_doc.chk_doc_status` **不含** CONFIRMED |
+| 2 | 断言幽灵编号列 | `invoice.docNo` / `invoice.voucherNo` / `settlement.voucherNo` 均 `exist=false`，DB 往返必为 null |
+| 3 | 凭证溯源用已废弃字段 | `voucher.sourceDocId/No/Type` 亦 `exist=false`；真实列是 `t_voucher.business_doc_id` |
+| 4 | 幽灵字段赋值属误导性代码 | `invoice.setDocNo/setVoucherNo` 对 INSERT/UPDATE 完全无效 |
+
+**⚠️ 本次最值得记住的坑：同名字段，两表允许集不同**
+
+| 表 | 约束 | 是否含 `CONFIRMED` |
+|---|---|---|
+| `t_business_doc` | `chk_doc_status` | ❌ **不含**（用 `APPROVED`/`VOUCHERED`） |
+| `t_arap_settlement` | `chk_settlement_status` | ✅ **含** |
+| `t_input_invoice`/`t_output_invoice` | `chk_input_invoice_status`/`chk_output_invoice_status` | ✅ **含** |
+
+本测试**同时**操作三张表的 `status`，前两处单据写 `CONFIRMED` 报错、
+核销单写 `DRAFT` 却合法 —— 极易误判成「CHECK 约束有 bug」。
+已沉淀为 `AGENTS §4.2` 第 9 条。
+
+**顺带补齐**：原代码只设 `doc.invoiceNo` 而未设 `doc.invoiceId`，
+双向关联实际是半通的，已补齐并加入断言。
 
 ---
 

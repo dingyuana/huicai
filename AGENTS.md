@@ -4,14 +4,14 @@
 
 ## §0 项目状态（硬数字，每次 commit 后更新）
 
-> **更新基准**：commit `815cb7e6` + 后续提交 (2026-09-28) — fix: P99 修复8项构建与可运行性阻断缺陷（REQ-103~111）；A/D 类修复 (2026-09-29) — 慢测 A+D 36 项转绿并修 1 个真实生产缺陷（REQ-113~115）；D5 基建修复 (2026-09-29) — 基类统一企业上下文，慢测再消解 37 项（REQ-116）；悬空外键修复 (2026-09-29) — 补 ensureCustomer 助手，慢测再消解 11 项（REQ-117）；银行流水批次修复 (2026-09-29) — 补 ensureSubject 助手，修 REQUIRES_NEW 隔离，慢测再消解 9 项（REQ-118）
+> **更新基准**：commit `815cb7e6` + 后续提交 (2026-09-28) — fix: P99 修复8项构建与可运行性阻断缺陷（REQ-103~111）；A/D 类修复 (2026-09-29) — 慢测 A+D 36 项转绿并修 1 个真实生产缺陷（REQ-113~115）；D5 基建修复 (2026-09-29) — 基类统一企业上下文，慢测再消解 37 项（REQ-116）；悬空外键修复 (2026-09-29) — 补 ensureCustomer 助手，慢测再消解 11 项（REQ-117）；银行流水批次修复 (2026-09-29) — 补 ensureSubject 助手，修 REQUIRES_NEW 隔离，慢测再消解 9 项（REQ-118）；P3 全链路修复 (2026-09-29) — 单据状态与幽灵列，慢测再消解 3 项（REQ-119）
 > **当前分支**：`main`（本地领先 origin，**未 push**）
 > **关联文档**：[项目说明](docs/CORE-项目说明.md)、[技术方案](docs/CORE-技术方案.md)、[需求分析](docs/CORE-需求分析.md)、[需求登记册](docs/development/requirements/REQUIREMENTS_REGISTRY.md)、[文档注册表](docs/CORE-文档注册表.md)、[测试策略](docs/testing/TEST-STRATEGY.md)、[Flyway治理规范](docs/development/flyway-governance.md)
 
 | 维度 | 数据 |
 |------|------|
 | 后端代码 | 492 个 Java 主代码文件（另 237 个测试文件）|
-| 测试用例 | 1994 个 `@Test` 方法 / 229 个后端测试类 + 26 个前端测试文件 265 用例（**快测实测 1733 通过，0 Failures, 0 Errors, 5 Skipped**；含 slow 组全量 1988，其中 **35 项为既有测试数据缺陷待修**，A/D/C 类 93 项已于 2026-09-29 修复，见 REQ-2026-113~118）|
+| 测试用例 | 1994 个 `@Test` 方法 / 229 个后端测试类 + 26 个前端测试文件 265 用例（**快测实测 1733 通过，0 Failures, 0 Errors, 5 Skipped**；含 slow 组全量 1988，其中 **32 项为既有测试数据缺陷待修**，A/D/C 类 96 项已于 2026-09-29 修复，见 REQ-2026-113~119）|
 | 数据库 | PostgreSQL 16 / **73 个 migration，最新 V157**（注意：版本号非连续，实际为 V1-V5 + V63 + V92-V157，缺 V6-V62 与 V64-V91 共 85 个号；因 `out-of-order: true` + `validate-on-migrate: false` 不影响运行，但「V1 baseline merged V1-V146」的旧表述已失效）|
 | API 端点 | 510+ 个后端端点 |
 | 核心模块 | 基础数据、总账、应收应付、现金管理、固定资产、费用报销、发票税务、预算、财务报表、存储管理 |
@@ -123,6 +123,24 @@
    - **根源**：Entity 按"未来完整 schema"写，但 DB 是另一个版本。注释写"Vxx 列已添加"但 migration 从未执行。
    - **预防**：统一用 `node backend/scripts/check-entity-schema.mjs` 在编译时检查字段映射一致性。后续每次改 Entity 都要跑这个检查。
    - **H-17 已集成 pre-commit hook**（2026-07-23）：提交涉及 `*Entity.java` 的变更时自动运行检查脚本。docker postgres 未运行时自动降级跳过列检查，仅做 typeHandler 警告。首次克隆仓库后执行 `bash backend/scripts/install-hooks.sh` 安装。
+
+9. **同名字段在两张表的 CHECK 允许集不同（2026-09-29 慢测 REQ-119 沉淀）**：`status` 这个名字在三处允许集互不相同，**按「实体类型」猜合法值必然踩坑**：
+
+   | 表 | 约束 | 允许值 |
+   |---|---|---|
+   | `t_business_doc` | `chk_doc_status` | DRAFT / SUBMITTED / **APPROVED** / VOUCHERED / PARTIALLY_RECONCILED / FULLY_RECONCILED / CLOSED / REJECTED / REVERSED |
+   | `t_arap_settlement` | `chk_settlement_status` | DRAFT / SUBMITTED / **CONFIRMED** / REJECTED / VOUCHERED / REVERSED / CANCELLED |
+   | `t_input_invoice` / `t_output_invoice` | `chk_input_invoice_status` / `chk_output_invoice_status` | PENDING_CONFIRM / PENDING_REVIEW / **CONFIRMED** / VOUCHERED / … |
+
+   - `CONFIRMED` 对发票合法、对**业务单据非法**；`t_business_doc` 用 `APPROVED`/`VOUCHERED` 表达「已审核/已制证」。
+   - 教训：写任何 Entity 前先查该表**自己的** CHECK 定义（`pg_get_constraintdef`），不要跨表沿用状态值。
+
+10. **`exist = false` 字段是「幽灵字段」，赋值无效且不可断言（2026-09-29 慢测 REQ-117/119 沉淀）**：`@TableField(exist = false)` 的字段**完全不参与 SQL**，因此
+    - 对它 `setXxx()` 后 `updateById` 不会落库 —— 代码里出现这类赋值属**误导性代码**；
+    - 从 DB 读回**必然为 null** —— 任何 `assertEquals("xxx", loaded.getDocNo())` 都**永远不可能通过**。
+    - 已确认的幽灵字段（注释均明写「DB 无此列」）：发票侧 `docNo`/`voucherNo`、`OutputInvoiceEntity.auditedBy/auditedAt`、凭证侧 `sourceDocId/sourceDocNo/sourceDocType`、`t_arap_settlement.voucherNo`、`BankStatementEntity.direction`、`AuditLogEntity.createdAt`。
+    - **替代写法**：断言真实 id 列（`doc_id`/`voucher_id`/`business_doc_id`），并加 `assertNull(loaded.getGhostField())` 作为「该列确已废弃」的负向断言。
+    - ⚠️ `t_input_invoice.audited_by/audited_at` **是**真实列（与 Output 侧不对称），别照搬。
 
 ### 4.3 测试类
 6. **测试假阳性**：测试通过 ≠ 功能完成。跨实体链路必须真实贯通，不能只测单个模块 CRUD。E2E 测试必须模拟真实用户操作路径
