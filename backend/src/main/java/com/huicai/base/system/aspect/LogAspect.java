@@ -104,7 +104,7 @@ public class LogAspect {
             auditLog.setStatus(status);
             auditLog.setModule(module);
 
-            auditLogService.saveAsync(auditLog);
+            auditLogService.save(auditLog);
         }
     }
 }

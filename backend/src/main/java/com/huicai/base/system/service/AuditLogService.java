@@ -6,7 +6,7 @@ import com.huicai.base.system.entity.AuditLogEntity;
 public interface AuditLogService {
     IPage<AuditLogEntity> pageLog(long page, long size, String module, String status, String startDate, String endDate);
     AuditLogEntity getById(Long id);
-    void saveAsync(AuditLogEntity auditLog);
+    void save(AuditLogEntity auditLog);
 
     /**
      * 记录状态变更审计日志（同步写入，与业务同事务）.
