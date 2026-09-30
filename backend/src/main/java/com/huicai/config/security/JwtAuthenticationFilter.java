@@ -2,13 +2,15 @@ package com.huicai.config.security;
 
 import com.huicai.common.context.EnterpriseContextHolder;
 import com.huicai.common.response.R;
+import com.huicai.base.system.service.EnterpriseSwitchAuditService;
+import com.huicai.common.security.EnterpriseMembershipChecker;
 import com.huicai.base.system.service.impl.UserDetailsServiceImpl;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -22,14 +24,34 @@ import java.io.IOException;
 
 @Slf4j
 @Component
-@RequiredArgsConstructor
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private final JwtProvider jwtProvider;
     private final UserDetailsServiceImpl userDetailsService;
     private final StringRedisTemplate redisTemplate;
-    private final com.huicai.common.security.EnterpriseMembershipChecker enterpriseMembershipChecker;
-    private final com.huicai.base.system.service.EnterpriseSwitchAuditService auditService;
+
+    /**
+     * P102 新增的两个依赖用 {@code @Lazy} 延迟解析：
+     * {@code @WebMvcTest} 切片会把 {@code Filter} 类型 Bean 实例化，却不扫描
+     * {@code @Component/@Service}，若构造期强制解析会导致 12 个契约测试类
+     * 上下文加载失败（NoSuchBeanDefinitionException）。切片本身
+     * {@code addFilters = false}，过滤器不会执行，故永不触发解析。
+     * 生产上下文中二者必然存在，且缺失时表现为异常而非静默跳过（fail-closed）。
+     */
+    private final EnterpriseMembershipChecker enterpriseMembershipChecker;
+    private final EnterpriseSwitchAuditService auditService;
+
+    public JwtAuthenticationFilter(JwtProvider jwtProvider,
+                                   UserDetailsServiceImpl userDetailsService,
+                                   StringRedisTemplate redisTemplate,
+                                   @Lazy EnterpriseMembershipChecker enterpriseMembershipChecker,
+                                   @Lazy EnterpriseSwitchAuditService auditService) {
+        this.jwtProvider = jwtProvider;
+        this.userDetailsService = userDetailsService;
+        this.redisTemplate = redisTemplate;
+        this.enterpriseMembershipChecker = enterpriseMembershipChecker;
+        this.auditService = auditService;
+    }
 
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response,
