@@ -20,6 +20,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.security.test.context.support.WithMockUser;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -36,6 +37,12 @@ import static org.junit.jupiter.api.Assertions.*;
  * business_doc_id，最后删除业务单据本身。修复前存在核销明细引用时抛
  * DataIntegrityViolationException（fk_settle_entry_doc），HTTP 500。
  *
+ * <p>全部用例带 {@code @WithMockUser(authorities = "system:clear")}：
+ * P102 起清库端点已加 {@code @PreAuthorize}（权限码种子见 V163），
+ * 本类走生产 SecurityConfig（未激活 contract-test profile），
+ * 无权限时方法级鉴权会抛 AccessDeniedException。
+ * 本类验证的是 FK 链清理逻辑，故显式授予该权限而非放宽生产鉴权。
+ *
  * <p>@SlowTest — 需要 Docker + Testcontainers
  *
  * <h3>为什么全部断言都是「相对基线」而不是固定绝对值</h3>
@@ -48,6 +55,7 @@ import static org.junit.jupiter.api.Assertions.*;
  * （AGENTS §4.4 第 16 条）。
  */
 @SlowTest
+@WithMockUser(authorities = "system:clear")
 @DisplayName("数据维护 - 清空业务单据 FK 链集成测试")
 public class SystemClearControllerIntegrationTest extends AbstractMapperTest {
 
