@@ -27,6 +27,21 @@ jobs:
     # 真库套件需拉起 Testcontainers(PostgreSQL) 并串行执行约 250 个真库测试类，
     # 20 分钟不足（历史慢测缺陷修复后的全量实测量级为 1998 用例）
     timeout-minutes: 45
+    # Redis 服务：VoucherNoServiceImpl.generateNextNo:38 用 RedisTemplate.hasKey()
+    # 生成连续凭证号，VoucherIntegrationTest / LedgerChainRealDBTest /
+    # BankStatementAuditIntegrationTest 均经该路径。CI 上没有 Redis 时这 11 个用例
+    # 全部报 RedisConnectionFailure（localhost:6379 Connection refused）。
+    # PostgreSQL 不走 services —— 它由 Testcontainers 动态端口注入（见 pre-pull）。
+    services:
+      redis:
+        image: redis:7.2.4
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     steps:
       - uses: actions/checkout@v4
 

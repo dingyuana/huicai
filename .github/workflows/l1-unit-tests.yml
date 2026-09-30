@@ -31,14 +31,11 @@ jobs:
           # 🔥 修改2：修正 -X2g 拼写错误为 -Xmx2g
           MAVEN_OPTS: "-XX:+UseCompressedOops -Xmx2g"
 
-      # === 分支覆盖率检查（利用 pom.xml 中配置的 jacoco:check 门槛） ===
-      - name: Check Branch Coverage (≥70%)
-        run: |
-          cd backend
-          mvn jacoco:check
-        env:
-          # 🔥 修改2：同步修正 -X2g 拼写错误
-          MAVEN_OPTS: "-XX:+UseCompressedOops -Xmx2g"
+      # 覆盖率门禁（INSTRUCTION/BRANCH/METHOD 各 70%）已绑定在 pom.xml 的
+      # jacoco-check execution（phase=test），随上面的 mvn test 一起执行。
+      # 不要再单独跑 mvn jacoco:check —— 命令行调用走 default-cli execution，
+      # 拿不到 pom 里的 <rules>，必然报
+      # "The parameters 'rules' for goal ...:check are missing or invalid" 而假失败。
 
       - name: Upload JaCoCo Report
         uses: actions/upload-artifact@v4
