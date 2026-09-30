@@ -6,6 +6,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -33,6 +34,7 @@ public class SystemClearController {
 
     @Operation(summary = "清空银行流水")
     @PostMapping("/clear-bank-statements")
+    @PreAuthorize("hasAuthority('system:clear')")
     @Transactional(rollbackFor = Exception.class)
     public R<Map<String, Object>> clearBankStatements() {
         int deleted = jdbcTemplate.update("DELETE FROM t_bank_statement");
@@ -42,6 +44,7 @@ public class SystemClearController {
 
     @Operation(summary = "清空发票记录")
     @PostMapping("/clear-invoice-records")
+    @PreAuthorize("hasAuthority('system:clear')")
     @Transactional(rollbackFor = Exception.class)
     public R<Map<String, Object>> clearInvoiceRecords() {
         int d1 = jdbcTemplate.update("DELETE FROM t_input_invoice");
@@ -53,6 +56,7 @@ public class SystemClearController {
 
     @Operation(summary = "清空所有凭证")
     @PostMapping("/clear-vouchers")
+    @PreAuthorize("hasAuthority('system:clear')")
     @Transactional(rollbackFor = Exception.class)
     public R<Map<String, Object>> clearVouchers() {
         int d1 = jdbcTemplate.update("DELETE FROM t_voucher_entry");
@@ -66,6 +70,7 @@ public class SystemClearController {
 
     @Operation(summary = "清空报表数据")
     @PostMapping("/clear-report-data")
+    @PreAuthorize("hasAuthority('system:clear')")
     @Transactional(rollbackFor = Exception.class)
     public R<Map<String, Object>> clearReportData() {
         int d1 = jdbcTemplate.update("DELETE FROM t_subject_balance");
@@ -89,6 +94,7 @@ public class SystemClearController {
 
     @Operation(summary = "清空业务单据")
     @PostMapping("/clear-business-docs")
+    @PreAuthorize("hasAuthority('system:clear')")
     @Transactional(rollbackFor = Exception.class)
     public R<Map<String, Object>> clearBusinessDocs() {
         // 先清理引用业务单据的外键行（fk_settle_entry_doc / fk_aging_alert_doc 无级联删除）
@@ -109,6 +115,7 @@ public class SystemClearController {
 
     @Operation(summary = "清空应收相关数据（业务单据+票据+核销）")
     @PostMapping("/clear-receivables")
+    @PreAuthorize("hasAuthority('system:clear')")
     @Transactional(rollbackFor = Exception.class)
     public R<Map<String, Object>> clearReceivables() {
         int d1 = jdbcTemplate.update("DELETE FROM t_arap_settlement_entry");
@@ -125,6 +132,7 @@ public class SystemClearController {
 
     @Operation(summary = "清空应付相关数据（业务单据+核销）")
     @PostMapping("/clear-payables")
+    @PreAuthorize("hasAuthority('system:clear')")
     @Transactional(rollbackFor = Exception.class)
     public R<Map<String, Object>> clearPayables() {
         int d1 = jdbcTemplate.update("DELETE FROM t_arap_settlement_entry");
@@ -140,6 +148,7 @@ public class SystemClearController {
 
     @Operation(summary = "清空核销数据")
     @PostMapping("/clear-settlements")
+    @PreAuthorize("hasAuthority('system:clear')")
     @Transactional(rollbackFor = Exception.class)
     public R<Map<String, Object>> clearSettlements() {
         int d1 = jdbcTemplate.update("DELETE FROM t_arap_settlement_entry");
@@ -155,6 +164,7 @@ public class SystemClearController {
 
     @Operation(summary = "清空全部数据")
     @PostMapping("/clear-all")
+    @PreAuthorize("hasAuthority('system:clear')")
     @Transactional(rollbackFor = Exception.class)
     public R<Map<String, Object>> clearAll() {
         int total = 0;

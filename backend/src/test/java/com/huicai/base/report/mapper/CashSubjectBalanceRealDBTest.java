@@ -21,13 +21,21 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
  * Mockito 只能证明参数透传，证明不了"1012 有没有被这条 SQL 选中"——旧 LIKE '100%' 会漏掉它，
  * 而这种错误在页面上表现为"勾稽差异莫名不为 0"，极难定位。
  *
- * 断言策略：seed 数据与本次插入混在同一期间（测试环境无租户过滤），
- * 故一律用「插入前后差值」断言，不用绝对值。与 CashFlowPeriodRangeRealDBTest 同策略。
+ * 断言策略：seed 数据与本次插入混在同一期间，故一律用「插入前后差值」断言，不用绝对值。
+ * 与 CashFlowPeriodRangeRealDBTest 同策略。
+ *
+ * <p>注：基类 AbstractMapperTest 现已默认设置企业上下文，数据权限拦截器会按
+ * {@code enterprise_id} 过滤，故本类须把上下文切到自己的 {@link #ENT_ID}。
  */
 class CashSubjectBalanceRealDBTest extends AbstractMapperTest {
 
     /** 独立 enterpriseId，避免与 Flyway seed 的 (code, enterprise_id) 唯一约束冲突。 */
     private static final long ENT_ID = 9902L;
+
+    @org.junit.jupiter.api.BeforeEach
+    void useOwnEnterprise() {
+        useEnterprise(ENT_ID);
+    }
     private static final String PERIOD = "202401";
 
     @Autowired

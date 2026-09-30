@@ -182,6 +182,9 @@ function extractColumnRefs(sql) {
     .replace(/'[^']*'/g, ' ')
     .replace(/#\{[^}]+\}/g, ' ')
     .replace(/\$\{[^}]+\}/g, ' ')
+    // 剥离 PostgreSQL 类型转型 `expr::type`，否则 `cur.assist_json::text` 会被整体
+    // 当成列名 "assist_json::text" 而误报「列不存在」（该列其实是真实存在的 jsonb 列）。
+    .replace(/::\s*\w+/g, ' ')
     .replace(/\b\d+(\.\d+)?\b/g, ' ')
     .replace(/\s+/g, ' ');
 

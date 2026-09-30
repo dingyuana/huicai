@@ -20,6 +20,18 @@ import java.time.LocalDate;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+/**
+ * 编号关联 - 核销链路端到端测试.
+ *
+ * <h3>历史说明（REQ-2026-121）</h3>
+ * 两处业务单据夹具均有两个缺陷：
+ * <ol>
+ *   <li>{@code t_business_doc.doc_date} 是 NOT NULL，原夹具未赋值；</li>
+ *   <li>{@code doc.setStatus("CONFIRMED")} —— 而 {@code t_business_doc.chk_doc_status}
+ *       允许集<b>不含</b> CONFIRMED（那是发票侧状态；{@code t_arap_settlement} 才含）。
+ *       已改为 APPROVED。</li>
+ * </ol>
+ */
 @DisplayName("编号关联 - 核销链路端到端测试")
 public class NumberingSettlementE2ETest extends AbstractMapperTest {
 
@@ -53,15 +65,18 @@ public class NumberingSettlementE2ETest extends AbstractMapperTest {
         doc.setDocNo(docNo);
         doc.setDocType("INVOICE_OUT");
         doc.setPeriod("202606");
+        doc.setDocDate(LocalDate.of(2026, 6, 28));
         doc.setAmount(new BigDecimal("11300.00"));
         doc.setInvoiceNo(invoiceNo);
-        doc.setStatus("CONFIRMED");
+        doc.setStatus("APPROVED");
         doc.setCustomerId(1L);
         doc.setUnsettledAmount(new BigDecimal("11300.00"));
         businessDocMapper.insert(doc);
 
         ArapSettlementEntity settlement = new ArapSettlementEntity();
         settlement.setSettlementNo(settlementNo);
+        // chk_settlement_type 允许集仅 RECEIVE / PAY（应收核销 = RECEIVE）
+        settlement.setSettlementType("RECEIVE");
         settlement.setSettlementDate(LocalDate.of(2026, 6, 29));
         settlement.setPeriod("202606");
         settlement.setPartyId(1L);
@@ -110,15 +125,18 @@ public class NumberingSettlementE2ETest extends AbstractMapperTest {
         doc.setDocNo(docNo);
         doc.setDocType("INVOICE_IN");
         doc.setPeriod("202606");
+        doc.setDocDate(LocalDate.of(2026, 6, 28));
         doc.setAmount(new BigDecimal("11300.00"));
         doc.setInvoiceNo(invoiceNo);
-        doc.setStatus("CONFIRMED");
+        doc.setStatus("APPROVED");
         doc.setSupplierId(1L);
         doc.setUnsettledAmount(new BigDecimal("11300.00"));
         businessDocMapper.insert(doc);
 
         ArapSettlementEntity settlement = new ArapSettlementEntity();
         settlement.setSettlementNo(settlementNo);
+        // chk_settlement_type 允许集仅 RECEIVE / PAY（应付核销 = PAY）
+        settlement.setSettlementType("PAY");
         settlement.setSettlementDate(LocalDate.of(2026, 6, 29));
         settlement.setPeriod("202606");
         settlement.setPartyId(1L);

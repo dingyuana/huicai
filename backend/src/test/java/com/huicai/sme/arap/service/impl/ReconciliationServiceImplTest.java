@@ -428,6 +428,101 @@ class ReconciliationServiceImplTest {
         assertTrue(ex.getMessage().contains("原因"));
     }
 
+    // ==================== REQ-2026-125 反核销/驳回静默不回滚回归 ====================
+    // 背景：ArapSettlementServiceImpl.logReconciliationLog() 曾硬编码 targetDocId=null，
+    // 而 reverse()/reject() 用 targetDocId 回查业务单据 -> selectById(null)=null
+    // -> if (doc != null) 整块跳过 -> 金额与发票状态静默不回滚，却照常返回成功。
+
+    @Test
+    void reverse_目标单据ID为null_throw_不再静默成功() {
+        ReconciliationLogEntity log = new ReconciliationLogEntity();
+        log.setId(1L);
+        log.setStatus("CONFIRMED");
+        log.setSourceDocType("receipt");
+        log.setSourceDocId(9L);
+        log.setTargetDocType("INVOICE_OUT");
+        log.setTargetDocId(null); // 脏数据/历史数据：缺目标单据
+        log.setAllocatedAmount(new BigDecimal("200"));
+        when(logMapper.selectById(1L)).thenReturn(log);
+
+        BusinessException ex = assertThrows(BusinessException.class, () -> service.reverse(1L, "操作失误"));
+        assertTrue(ex.getMessage().contains("缺少目标单据ID"), "实际: " + ex.getMessage());
+        // 负向：不得静默把日志置 CANCELLED
+        verify(logMapper, never()).updateById(any(ReconciliationLogEntity.class));
+    }
+
+    @Test
+    void reverse_目标单据不存在_throw_不再静默成功() {
+        ReconciliationLogEntity log = new ReconciliationLogEntity();
+        log.setId(1L);
+        log.setStatus("CONFIRMED");
+        log.setSourceDocType("receipt");
+        log.setSourceDocId(9L);
+        log.setTargetDocId(404L);
+        log.setAllocatedAmount(new BigDecimal("200"));
+        when(logMapper.selectById(1L)).thenReturn(log);
+        when(businessDocMapper.selectById(404L)).thenReturn(null);
+
+        BusinessException ex = assertThrows(BusinessException.class, () -> service.reverse(1L, "操作失误"));
+        assertTrue(ex.getMessage().contains("不存在"), "实际: " + ex.getMessage());
+        verify(logMapper, never()).updateById(any(ReconciliationLogEntity.class));
+    }
+
+    @Test
+    void reverse_核销单生命周期日志_委托核销单红冲() {
+        ReconciliationLogEntity log = new ReconciliationLogEntity();
+        log.setId(1L);
+        log.setStatus("CONFIRMED");
+        log.setSourceDocType("SETTLEMENT");
+        log.setSourceDocId(77L); // 指向核销单
+        log.setTargetDocId(null);
+        log.setAllocatedAmount(new BigDecimal("200"));
+        when(logMapper.selectById(1L)).thenReturn(log);
+        when(logMapper.updateById(any(ReconciliationLogEntity.class))).thenReturn(1);
+
+        service.reverse(1L, "操作失误");
+
+        // 正向：必须走红冲路径（铁律 #3），由核销单负责回滚明细与来源单据金额
+        verify(settlementService).reverse(77L);
+        // 负向：不得再走 targetDocId 回查业务单据的老路
+        verify(businessDocMapper, never()).selectById(any());
+        verify(businessDocMapper, never()).updateById(any(BusinessDocEntity.class));
+        assertEquals("CANCELLED", log.getStatus());
+    }
+
+    @Test
+    void reject_目标单据ID为null_throw_不再静默成功() {
+        ReconciliationLogEntity log = new ReconciliationLogEntity();
+        log.setId(1L);
+        log.setStatus("CONFIRMED");
+        log.setSourceDocType("receipt");
+        log.setSourceDocId(9L);
+        log.setTargetDocId(null);
+        log.setAllocatedAmount(new BigDecimal("200"));
+        when(logMapper.selectById(1L)).thenReturn(log);
+
+        BusinessException ex = assertThrows(BusinessException.class, () -> service.reject(1L, "金额有误"));
+        assertTrue(ex.getMessage().contains("缺少目标单据ID"), "实际: " + ex.getMessage());
+        verify(logMapper, never()).updateById(any(ReconciliationLogEntity.class));
+    }
+
+    @Test
+    void reject_核销单已审批生效_throw_应改走红冲() {
+        // 核销单已 CONFIRMED，ArapSettlementService.reject() 只接受 SUBMITTED 且从不回滚金额，
+        // 若放行会留下「已驳回」状态而金额不动，故必须显式拒绝并指向反核销入口。
+        ReconciliationLogEntity log = new ReconciliationLogEntity();
+        log.setId(1L);
+        log.setStatus("CONFIRMED");
+        log.setSourceDocType("SETTLEMENT");
+        log.setSourceDocId(77L);
+        when(logMapper.selectById(1L)).thenReturn(log);
+
+        BusinessException ex = assertThrows(BusinessException.class, () -> service.reject(1L, "金额有误"));
+        assertTrue(ex.getMessage().contains("反核销"), "实际: " + ex.getMessage());
+        verify(settlementService, never()).reject(anyLong(), any());
+        verify(logMapper, never()).updateById(any(ReconciliationLogEntity.class));
+    }
+
     // ==================== batchExecute ====================
 
     @Test

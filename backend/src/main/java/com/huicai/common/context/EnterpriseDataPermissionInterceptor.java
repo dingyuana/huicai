@@ -65,7 +65,11 @@ public class EnterpriseDataPermissionInterceptor implements InnerInterceptor {
 
         Long enterpriseId = EnterpriseContextHolder.get();
         if (enterpriseId == null) {
-            return; // 超级管理员，不拦截
+            // 无上下文 = 不做数据范围隔离（定时任务、系统初始化、漏洞确认用例）。
+            // 注意：这**不是**「超级管理员」判断 —— 超管身份由 P102 的
+            // EnterpriseMembershipChecker 在入口处解决；此处 null 只表示
+            // 当前线程没有业务租户上下文，是刻意放行的少数场景。
+            return;
         }
 
         String sql = boundSql.getSql();
@@ -78,7 +82,13 @@ public class EnterpriseDataPermissionInterceptor implements InnerInterceptor {
                 sqlField.set(boundSql, newSql);
             }
         } catch (Exception e) {
-            log.debug("EnterpriseDataPermissionInterceptor: skip SQL injection for: {}", sql);
+            // P102 / AT-102-5a：租户隔离属安全组件，必须 fail-closed。
+            // 原实现 log.debug 后放过，等于「注入失败就不注入」⇒ 查询返回全表数据。
+            // 解析失败通常源于业务表结构变更或 SQL 方言差异，是可预期事件，
+            // 静默放行会把一次报错升级成一次跨租户数据泄露。
+            log.error("企业数据权限注入失败，已中止查询以免泄露全表数据: sql={}", sql, e);
+            throw new com.huicai.common.exception.BusinessException(
+                    "数据权限过滤失败，已拒绝本次查询，请联系管理员");
         } finally {
             RECURSIVE_GUARD.remove();
         }

@@ -20,6 +20,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.security.test.context.support.WithMockUser;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -36,9 +37,25 @@ import static org.junit.jupiter.api.Assertions.*;
  * business_doc_id，最后删除业务单据本身。修复前存在核销明细引用时抛
  * DataIntegrityViolationException（fk_settle_entry_doc），HTTP 500。
  *
+ * <p>全部用例带 {@code @WithMockUser(authorities = "system:clear")}：
+ * P102 起清库端点已加 {@code @PreAuthorize}（权限码种子见 V163），
+ * 本类走生产 SecurityConfig（未激活 contract-test profile），
+ * 无权限时方法级鉴权会抛 AccessDeniedException。
+ * 本类验证的是 FK 链清理逻辑，故显式授予该权限而非放宽生产鉴权。
+ *
  * <p>@SlowTest — 需要 Docker + Testcontainers
+ *
+ * <h3>为什么全部断言都是「相对基线」而不是固定绝对值</h3>
+ * {@code clearBusinessDocs()} 是<b>全表维护操作</b>（无 WHERE 的 DELETE / 全表 UPDATE），
+ * 其返回的 {@code deleted} 等于 {@link SystemClearController#clearBusinessDocs()} 里
+ * 8 个 DML 的受影响行数之和 —— 其中包含 DB 里<b>本来就存在</b>的种子数据与
+ * 其它 {@code @Transactional(NOT_SUPPORTED)} 测试已提交的行。
+ * 因此断言固定值（如 {@code assertEquals(3, deleted)}）在本用例单独跑时成立、
+ * 慢测全量跑时必然失败（实测得 10）。本类一律**先取基线、再断言增量**
+ * （AGENTS §4.4 第 16 条）。
  */
 @SlowTest
+@WithMockUser(authorities = "system:clear")
 @DisplayName("数据维护 - 清空业务单据 FK 链集成测试")
 public class SystemClearControllerIntegrationTest extends AbstractMapperTest {
 
@@ -123,9 +140,32 @@ public class SystemClearControllerIntegrationTest extends AbstractMapperTest {
         return account;
     }
 
+    /** 单表行数。 */
+    private int count(String sql) {
+        return jdbcTemplate.queryForObject(sql, Integer.class);
+    }
+
+    /**
+     * {@code clearBusinessDocs()} 在调用前已存在的行数合计 —— 与被测方法里 8 个 DML
+     * 一一对应（6 个 DELETE + 2 个「解绑 business_doc_id」的 UPDATE）。
+     * 被测方法返回的 {@code deleted} 应当等于「本基线 + 本用例新建的行数」。
+     */
+    private int baselineClearOps() {
+        return count("SELECT count(*) FROM t_arap_settlement_entry")
+                + count("SELECT count(*) FROM t_arap_settlement")
+                + count("SELECT count(*) FROM t_reconciliation_log")
+                + count("SELECT count(*) FROM t_aging_alert")
+                + count("SELECT count(*) FROM t_bank_journal WHERE business_doc_id IS NOT NULL")
+                + count("SELECT count(*) FROM t_voucher WHERE business_doc_id IS NOT NULL")
+                + count("SELECT count(*) FROM t_business_doc_entry")
+                + count("SELECT count(*) FROM t_business_doc");
+    }
+
     @Test
     @DisplayName("回归: 存在核销明细引用时清空业务单据应成功而非 500")
     void clearBusinessDocs_withSettlementEntry_shouldSucceed() {
+        int baseline = baselineClearOps();
+
         BusinessDocEntity doc = createBusinessDoc("STL");
         ArapSettlementEntity settlement = createSettlement("STL");
         createSettlementEntry(settlement.getId(), doc.getId());
@@ -136,22 +176,21 @@ public class SystemClearControllerIntegrationTest extends AbstractMapperTest {
         assertEquals(200, result.getCode(), "清空业务单据应返回 code=200");
         Integer deleted = (Integer) result.getData().get("deleted");
         assertNotNull(deleted, "deleted 统计不应为 null");
-        assertEquals(3, deleted.intValue(), "应清理 1 条核销明细 + 1 条核销单 + 1 条业务单据");
+        // 增量断言：本用例新增 1 条核销明细 + 1 条核销单 + 1 条业务单据
+        assertEquals(baseline + 3, deleted.intValue(),
+                "应清理基线 " + baseline + " 条 + 本用例 1 条核销明细/1 条核销单/1 条业务单据");
 
-        Integer entryCount = jdbcTemplate.queryForObject(
-                "SELECT count(*) FROM t_arap_settlement_entry", Integer.class);
-        Integer settlementCount = jdbcTemplate.queryForObject(
-                "SELECT count(*) FROM t_arap_settlement", Integer.class);
-        Integer docCount = jdbcTemplate.queryForObject(
-                "SELECT count(*) FROM t_business_doc", Integer.class);
-        assertEquals(0, entryCount, "核销明细应被全部清理");
-        assertEquals(0, settlementCount, "核销单应被全部清理");
-        assertEquals(0, docCount, "业务单据应被全部清理");
+        assertEquals(0, count("SELECT count(*) FROM t_arap_settlement_entry"), "核销明细应被全部清理");
+        assertEquals(0, count("SELECT count(*) FROM t_arap_settlement"), "核销单应被全部清理");
+        assertEquals(0, count("SELECT count(*) FROM t_business_doc"), "业务单据应被全部清理");
     }
 
     @Test
     @DisplayName("保留银行日记账: 清空业务单据后 journal 存在且 business_doc_id 置空")
     void clearBusinessDocs_shouldUnlinkBankJournalNotDelete() {
+        int baseline = baselineClearOps();
+        int journalBaseline = count("SELECT count(*) FROM t_bank_journal");
+
         BusinessDocEntity doc = createBusinessDoc("JNL");
         BankAccountEntity account = createBankAccount("JNL");
 
@@ -169,20 +208,23 @@ public class SystemClearControllerIntegrationTest extends AbstractMapperTest {
         R<Map<String, Object>> result = clearController.clearBusinessDocs();
 
         assertEquals(200, result.getCode(), "清空业务单据应返回 code=200");
-        Integer journalCount = jdbcTemplate.queryForObject(
-                "SELECT count(*) FROM t_bank_journal", Integer.class);
-        assertEquals(1, journalCount, "银行日记账应保留");
-        Integer unlinked = jdbcTemplate.queryForObject(
-                "SELECT count(*) FROM t_bank_journal WHERE business_doc_id IS NOT NULL", Integer.class);
-        assertEquals(0, unlinked, "银行日记账的 business_doc_id 应被置空");
-        Integer docCount = jdbcTemplate.queryForObject(
-                "SELECT count(*) FROM t_business_doc", Integer.class);
-        assertEquals(0, docCount, "业务单据应被全部清理");
+        // 增量断言：本用例新增 1 条业务单据（删除）+ 1 条 journal 解绑（UPDATE）
+        Integer deleted = (Integer) result.getData().get("deleted");
+        assertEquals(baseline + 2, deleted.intValue(),
+                "应清理基线 " + baseline + " 条 + 本用例 1 条业务单据/1 条 journal 解绑");
+        assertEquals(journalBaseline + 1, count("SELECT count(*) FROM t_bank_journal"),
+                "银行日记账应保留（本用例 1 条 + 基线 " + journalBaseline + " 条）");
+        assertEquals(0, count("SELECT count(*) FROM t_bank_journal WHERE business_doc_id IS NOT NULL"),
+                "银行日记账的 business_doc_id 应被置空");
+        assertEquals(0, count("SELECT count(*) FROM t_business_doc"), "业务单据应被全部清理");
     }
 
     @Test
     @DisplayName("保留凭证: 清空业务单据后凭证存在且 business_doc_id 置空")
     void clearBusinessDocs_shouldUnlinkVoucherNotDelete() {
+        int baseline = baselineClearOps();
+        int voucherBaseline = count("SELECT count(*) FROM t_voucher");
+
         BusinessDocEntity doc = createBusinessDoc("VCH");
 
         VoucherEntity voucher = new VoucherEntity();
@@ -202,14 +244,14 @@ public class SystemClearControllerIntegrationTest extends AbstractMapperTest {
         R<Map<String, Object>> result = clearController.clearBusinessDocs();
 
         assertEquals(200, result.getCode(), "清空业务单据应返回 code=200");
-        Integer voucherCount = jdbcTemplate.queryForObject(
-                "SELECT count(*) FROM t_voucher", Integer.class);
-        assertEquals(1, voucherCount, "凭证应保留");
-        Integer unlinked = jdbcTemplate.queryForObject(
-                "SELECT count(*) FROM t_voucher WHERE business_doc_id IS NOT NULL", Integer.class);
-        assertEquals(0, unlinked, "凭证的 business_doc_id 应被置空");
-        Integer docCount = jdbcTemplate.queryForObject(
-                "SELECT count(*) FROM t_business_doc", Integer.class);
-        assertEquals(0, docCount, "业务单据应被全部清理");
+        // 增量断言：本用例新增 1 条业务单据（删除）+ 1 张凭证解绑（UPDATE）
+        Integer deleted = (Integer) result.getData().get("deleted");
+        assertEquals(baseline + 2, deleted.intValue(),
+                "应清理基线 " + baseline + " 条 + 本用例 1 条业务单据/1 张凭证解绑");
+        assertEquals(voucherBaseline + 1, count("SELECT count(*) FROM t_voucher"),
+                "凭证应保留（本用例 1 张 + 基线 " + voucherBaseline + " 张）");
+        assertEquals(0, count("SELECT count(*) FROM t_voucher WHERE business_doc_id IS NOT NULL"),
+                "凭证的 business_doc_id 应被置空");
+        assertEquals(0, count("SELECT count(*) FROM t_business_doc"), "业务单据应被全部清理");
     }
 }

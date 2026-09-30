@@ -23,31 +23,34 @@ FRONTEND_DIR = PROJECT_ROOT / "frontend"
 
 
 def extract_routes():
-    """提取前端路由表中的所有路由定义."""
-    route_file = FRONTEND_DIR / "src" / "router" / "routes" / "base.ts"
-    if not route_file.exists():
-        print(f"❌ 路由文件不存在: {route_file}")
-        return []
+    """提取前端路由表中的所有路由定义.
 
-    content = route_file.read_text(encoding="utf-8")
+    路由按业务域拆成了多个文件（agency / base / lab / sme-asset / sme-base /
+    sme-business / sme-report / sme-tax），必须全部扫描。
+    旧实现只读 base.ts（96 条路由里只认出 23 条），导致 75 个组件被误判为
+    「路由未定义」，门禁恒红。
+    """
+    route_dir = FRONTEND_DIR / "src" / "router" / "routes"
+    if not route_dir.exists():
+        print(f"❌ 路由目录不存在: {route_dir}")
+        return []
 
     routes = []
     # 匹配路由定义: { path: 'xxx', name: 'Yyy', component: () => import('...') }
-    # 使用更宽松的正则来捕获
     route_pattern = re.compile(
         r'\{\s*path:\s*[\'"]([^\'"]+)[\'"]\s*,\s*name:\s*[\'"]([^\'"]+)[\'"]\s*,\s*component:\s*\(\)\s*=>\s*import\([\'"]([^\'"]+)[\'"]\)',
         re.MULTILINE
     )
 
-    for m in route_pattern.finditer(content):
-        path = m.group(1)
-        name = m.group(2)
-        component = m.group(3)
-        routes.append({
-            "path": path,
-            "name": name,
-            "component": component,
-        })
+    for route_file in sorted(route_dir.glob("*.ts")):
+        content = route_file.read_text(encoding="utf-8")
+        for m in route_pattern.finditer(content):
+            routes.append({
+                "path": m.group(1),
+                "name": m.group(2),
+                "component": m.group(3),
+                "source": route_file.name,
+            })
 
     return routes
 
@@ -127,12 +130,19 @@ def check_coverage():
             print(f"  ❌ 路由 {item['route']} (path: {item['path']}) → 组件不存在: {item['expected_component']}")
 
     if orphan_components:
-        print(f"\n--- 路由定义缺失 (组件存在但路由未定义) ---")
+        print(f"\n--- 路由定义缺失 (组件存在但未被路由直接引用) ---")
         for item in orphan_components:
-            print(f"  ⚠️ 组件 {item['component']} ({item['path']}) → 路由未定义")
+            print(f"  ⚠️ 组件 {item['component']} ({item['path']}) → 未被路由直接引用")
 
-    # CI 退出码: 存在不匹配时返回非零
-    if missing_components or orphan_components:
+    print(f"\n判定说明:")
+    print(f"  - 组件文件缺失（路由指向不存在的文件）= 真断裂，判失败")
+    print(f"  - 组件未被路由引用 = 提示信息，不判失败：views/ 下大量文件是")
+    print(f"    子面板/弹窗等非页面组件（如 ReconLogPanel、SettlementPanel），")
+    print(f"    另有历史重复页面，机械规则无法区分「死页面」与「正常子组件」")
+    print(f"    —— 需要页面/组件分目录约定才能判定，故仅作提示。")
+
+    # CI 退出码: 仅在「路由指向不存在的组件」时判失败
+    if missing_components:
         return 1
     return 0
 

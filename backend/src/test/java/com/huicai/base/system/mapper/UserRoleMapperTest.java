@@ -2,13 +2,19 @@ package com.huicai.base.system.mapper;
 
 import com.huicai.base.system.entity.UserRoleEntity;
 import com.huicai.common.test.AbstractMapperTest;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * UserRole Mapper 真实 DB 测试.
+ * UserRole Mapper 真实 DB 测试。
+ *
+ * <h3>历史说明（REQ-2026-120 / 慢测 B 类）</h3>
+ * 原硬编码 {@code userId=1, roleId=1}（及 {@code 2,3}），而 {@code (1,1)}
+ * 已存在于 Flyway 种子 {@code t_user_role} 中，触发 {@code uq_user_role} 撞码。
+ * 改用基类 {@code createSysUser()} / {@code createRole()} 现造行。
  */
 class UserRoleMapperTest extends AbstractMapperTest {
 
@@ -16,10 +22,11 @@ class UserRoleMapperTest extends AbstractMapperTest {
     private UserRoleMapper userRoleMapper;
 
     @Test
+    @DisplayName("插入用户角色关联应返回主键")
     void insert_shouldReturnId() {
         UserRoleEntity entity = new UserRoleEntity();
-        entity.setUserId(1L);
-        entity.setRoleId(1L);
+        entity.setUserId(createSysUser("TEST-USER"));
+        entity.setRoleId(createRole("TEST-ROLE"));
 
         int rows = userRoleMapper.insert(entity);
 
@@ -28,15 +35,19 @@ class UserRoleMapperTest extends AbstractMapperTest {
     }
 
     @Test
+    @DisplayName("按主键回查应返回正确的用户与角色")
     void selectById_shouldReturnRelation() {
+        Long userId = createSysUser("TEST-USER");
+        Long roleId = createRole("TEST-ROLE");
+
         UserRoleEntity entity = new UserRoleEntity();
-        entity.setUserId(2L);
-        entity.setRoleId(3L);
+        entity.setUserId(userId);
+        entity.setRoleId(roleId);
         userRoleMapper.insert(entity);
 
         UserRoleEntity found = userRoleMapper.selectById(entity.getId());
         assertNotNull(found);
-        assertEquals(2L, found.getUserId());
-        assertEquals(3L, found.getRoleId());
+        assertEquals(userId, found.getUserId());
+        assertEquals(roleId, found.getRoleId());
     }
 }

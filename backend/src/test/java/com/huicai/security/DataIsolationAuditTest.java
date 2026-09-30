@@ -8,6 +8,7 @@ import com.huicai.base.voucher.mapper.VoucherMapper;
 import com.huicai.base.voucher.service.VoucherService;
 import com.huicai.common.test.AbstractMapperTest;
 import com.huicai.common.test.SlowTest;
+import com.huicai.common.context.EnterpriseContextHolder;
 import com.huicai.base.business.entity.BusinessDocEntity;
 import com.huicai.base.business.mapper.BusinessDocMapper;
 import com.huicai.base.business.entity.InputInvoiceEntity;
@@ -96,18 +97,30 @@ public class DataIsolationAuditTest extends AbstractMapperTest {
         voucherB.setTotalDebit(new BigDecimal("2000.00"));
         voucherB.setTotalCredit(new BigDecimal("2000.00"));
         voucherB.setEnterpriseId(2L);
-        voucherMapper.insert(voucherB);
+        // P102 起 insertFill 无条件覆盖 enterpriseId，跨租户造数须显式走
+        // withoutEnterpriseContext 出口（见 AbstractMapperTest 该方法注释）
+        withoutEnterpriseContext(() -> voucherMapper.insert(voucherB));
 
-        // 通过自定义查询（selectVoucherPage）验证：已加 enterprise_id 过滤
-        // 注意：此查询在 VoucherServiceImpl 中传 enterprise_id=1
-        // 但 Testcontainers 没有 SecurityContext，所以需要通过 Mapper 直接调用
-        // 这里验证的是 XML 中已加 AND v.enterprise_id = #{enterpriseId} 条件
-        Page<VoucherEntity> page = new Page<>(1, 20);
-        Page<VoucherEntity> result = voucherMapper.selectVoucherPage(page, "202608", null, null, null, null, null, null, null, null, null);
-        assertTrue(result.getRecords().stream().anyMatch(v -> "AUDIT-VCH-A-001".equals(v.getVoucherNo())),
-                "企业A的凭证应该被查到");
-        assertTrue(result.getRecords().stream().noneMatch(v -> "AUDIT-VCH-B-001".equals(v.getVoucherNo())),
-                "✅ 已修复：企业B的凭证不再被查到（enterprise_id 过滤已生效）");
+        // 通过自定义查询（selectVoucherPage）验证 enterprise_id 隔离
+        //
+        // 事实澄清（原注释有误）：selectVoucherPage 的 XML 中**没有** enterprise_id 条件，
+        // 方法签名也不含该参数。隔离完全由 MyBatis 拦截器
+        // EnterpriseDataPermissionInterceptor 注入，而它读取 EnterpriseContextHolder：
+        //     Long enterpriseId = EnterpriseContextHolder.get();
+        //     if (enterpriseId == null) { return; }   // 视作超级管理员，放行全部
+        // 因此本用例必须显式设置企业上下文，否则拦截器直接放行，
+        // 测到的是「不过滤」而非「过滤」——这正是该用例长期失败的真实原因。
+        EnterpriseContextHolder.set(1L);
+        try {
+            Page<VoucherEntity> page = new Page<>(1, 20);
+            Page<VoucherEntity> result = voucherMapper.selectVoucherPage(page, "202608", null, null, null, null, null, null, null, null, null);
+            assertTrue(result.getRecords().stream().anyMatch(v -> "AUDIT-VCH-A-001".equals(v.getVoucherNo())),
+                    "企业A的凭证应该被查到");
+            assertTrue(result.getRecords().stream().noneMatch(v -> "AUDIT-VCH-B-001".equals(v.getVoucherNo())),
+                    "企业B的凭证不应被查到（enterprise_id 隔离应生效）");
+        } finally {
+            EnterpriseContextHolder.clear();
+        }
     }
 
     @Test
@@ -115,6 +128,11 @@ public class DataIsolationAuditTest extends AbstractMapperTest {
     void baseMapperSelectList_rawData() {
         // 验证 BaseMapper 的 selectList 仍返回所有数据（不自动过滤 enterprise_id）
         // 这是预期的——MyBatis-Plus 不自动加租户过滤，依赖 Service 层自定义查询
+        //
+        // ⚠️ 本用例依赖「无企业上下文 → 拦截器放行全部」这一前提。
+        // 基类 AbstractMapperTest 已默认设置 enterpriseId=1，故必须显式清空上下文，
+        // 否则拦截器会注入 enterprise_id=1 而过滤掉企业 B 的数据，用例失去意义。
+        EnterpriseContextHolder.clear();
         VoucherEntity voucherA = new VoucherEntity();
         voucherA.setVoucherNo("AUDIT-BASE-A-001");
         voucherA.setPeriod("202608");
@@ -150,6 +168,8 @@ public class DataIsolationAuditTest extends AbstractMapperTest {
     @Test
     @DisplayName("[漏洞确认] BusinessDocMapper.selectList 未过滤 enterprise_id")
     void businessDocQuery_missingEnterpriseIdFilter() {
+        // 依赖「无企业上下文 → 拦截器放行全部」，基类默认上下文需显式清空
+        EnterpriseContextHolder.clear();
         // 创建企业 A 的业务单据
         BusinessDocEntity docA = new BusinessDocEntity();
         docA.setDocNo("AUDIT-DOC-A-001");
@@ -183,6 +203,8 @@ public class DataIsolationAuditTest extends AbstractMapperTest {
     @Test
     @DisplayName("[漏洞确认] InputInvoiceMapper.selectList 未过滤 enterprise_id")
     void inputInvoiceQuery_missingEnterpriseIdFilter() {
+        // 依赖「无企业上下文 → 拦截器放行全部」，基类默认上下文需显式清空
+        EnterpriseContextHolder.clear();
         InputInvoiceEntity invA = new InputInvoiceEntity();
         invA.setInvoiceNo("AUDIT-INV-A-001");
         invA.setInvoiceDate(LocalDate.of(2026, 8, 1));
@@ -220,6 +242,8 @@ public class DataIsolationAuditTest extends AbstractMapperTest {
     @Test
     @DisplayName("[漏洞确认] BankStatementMapper.selectList 未过滤 enterprise_id")
     void bankStatementQuery_missingEnterpriseIdFilter() {
+        // 依赖「无企业上下文 → 拦截器放行全部」，基类默认上下文需显式清空
+        EnterpriseContextHolder.clear();
         BankStatementEntity bsA = new BankStatementEntity();
         bsA.setTxDate(LocalDate.of(2026, 8, 1));
         bsA.setTxType("INCOME");
@@ -228,6 +252,7 @@ public class DataIsolationAuditTest extends AbstractMapperTest {
         bsA.setSummary("货款");
         bsA.setReviewStatus("PENDING");
         bsA.setEnterpriseId(1L);
+        bsA.setAccountId(ensureBankAccount(1L));
         bankStatementMapper.insert(bsA);
 
         BankStatementEntity bsB = new BankStatementEntity();
@@ -238,6 +263,7 @@ public class DataIsolationAuditTest extends AbstractMapperTest {
         bsB.setSummary("货款");
         bsB.setReviewStatus("PENDING");
         bsB.setEnterpriseId(2L);
+        bsB.setAccountId(ensureBankAccount(2L));
         bankStatementMapper.insert(bsB);
 
         List<BankStatementEntity> allBs = bankStatementMapper.selectList(null);
@@ -251,6 +277,8 @@ public class DataIsolationAuditTest extends AbstractMapperTest {
     @Test
     @DisplayName("[漏洞确认] OutputInvoiceMapper.selectList 未过滤 enterprise_id")
     void outputInvoiceQuery_missingEnterpriseIdFilter() {
+        // 依赖「无企业上下文 → 拦截器放行全部」，基类默认上下文需显式清空
+        EnterpriseContextHolder.clear();
         OutputInvoiceEntity invA = new OutputInvoiceEntity();
         invA.setInvoiceNo("AUDIT-OUT-A-001");
         invA.setInvoiceDate(LocalDate.of(2026, 8, 1));
@@ -290,12 +318,16 @@ public class DataIsolationAuditTest extends AbstractMapperTest {
     @Test
     @DisplayName("[漏洞确认] AssetCardMapper.selectList 未过滤 enterprise_id")
     void assetCardQuery_missingEnterpriseIdFilter() {
+        // 依赖「无企业上下文 → 拦截器放行全部」，基类默认上下文需显式清空
+        EnterpriseContextHolder.clear();
         AssetCardEntity cardA = new AssetCardEntity();
         cardA.setAssetCode("AUDIT-ASSET-A-001");
         cardA.setAssetName("企业A服务器");
         cardA.setOriginalValue(new BigDecimal("50000.00"));
         cardA.setStatus("IN_USE");
         cardA.setAcquisitionDate(LocalDate.of(2026, 1, 1));
+        cardA.setCategoryId(ensureAssetCategory(1L)); // t_asset_card.category_id NOT NULL 外键
+        cardA.setUsefulLife(60);
         cardA.setEnterpriseId(1L);
         assetCardMapper.insert(cardA);
 
@@ -305,6 +337,8 @@ public class DataIsolationAuditTest extends AbstractMapperTest {
         cardB.setOriginalValue(new BigDecimal("3000.00"));
         cardB.setStatus("IN_USE");
         cardB.setAcquisitionDate(LocalDate.of(2026, 1, 1));
+        cardB.setCategoryId(ensureAssetCategory(2L));
+        cardB.setUsefulLife(60);
         cardB.setEnterpriseId(2L);
         assetCardMapper.insert(cardB);
 

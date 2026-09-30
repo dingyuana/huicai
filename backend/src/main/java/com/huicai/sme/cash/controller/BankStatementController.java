@@ -247,7 +247,7 @@ public class BankStatementController {
         return R.ok(result);
     }
 
-    @Operation(summary = "主管审核（CONFIRMED → AUDITED）")
+    @Operation(summary = "主管审核并制证（CONFIRMED → voucher_generated / payment_created）")
     @PostMapping("/{id}/audit")
     public R<BankStatementEntity> audit(@PathVariable Long id) {
         return R.ok(service.audit(id, SecurityUtils.getCurrentUserId()));
@@ -261,7 +261,7 @@ public class BankStatementController {
         return R.ok(result);
     }
 
-    @Operation(summary = "审核通过后生成凭证（仅允许 AUDITED 状态执行）")
+    @Operation(summary = "生成凭证/单据（audit() 失败后的恢复重试，仅 CONFIRMED 可达）")
     @PostMapping("/{id}/generate")
     public R<BankStatementEntity> generate(@PathVariable Long id) {
         return R.ok(service.generateVoucher(id, SecurityUtils.getCurrentUserId()));

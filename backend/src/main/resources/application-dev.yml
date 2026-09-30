@@ -6,7 +6,7 @@ spring:
   datasource:
     url: jdbc:postgresql://localhost:5432/huicai
     username: huicai
-    password: huicai123
+    password: ${DB_PASSWORD:huicai123}
     driver-class-name: org.postgresql.Driver
 
   data:
@@ -28,7 +28,7 @@ spring:
     host: localhost
     port: 5672
     username: huicai
-    password: huicai123
+    password: ${RABBITMQ_PASSWORD:huicai123}
 
   servlet:
     multipart:

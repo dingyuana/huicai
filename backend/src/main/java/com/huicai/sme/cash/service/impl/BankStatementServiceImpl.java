@@ -568,7 +568,7 @@ public class BankStatementServiceImpl implements BankStatementService {
         if (stmt == null) {
             throw BusinessException.notFound("对账单记录不存在");
         }
-        // 允许 CONFIRMED（重试场景）或 AUDITED（旧数据过渡兼容）
+        // 重试场景允许 CONFIRMED；AUDITED 为遗留兼容分支（chk_stmt_review_status 不含该值，实际不可达）
         String curStatus = stmt.getReviewStatus();
         if (!"AUDITED".equals(curStatus) && !StatementStatus.CONFIRMED.equals(curStatus)) {
             throw BusinessException.badRequest(

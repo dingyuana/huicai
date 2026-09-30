@@ -43,9 +43,12 @@ public class NumberingFrontendApiTest extends AbstractMapperTest {
     class OutputInvoicePageFillTest {
 
         @Test
-        @DisplayName("销项发票 Entity 应包含 docNo 和 voucherNo 字段并能持久化")
+        @DisplayName("销项发票 docNo/voucherNo 是幽灵字段(exist=false)，不落库且不可用于查询")
         void output_invoice_entity_should_persist_numbers() {
-            // 验证：直接插入带编号的销项发票，能正确持久化和查询
+            // 历史说明（REQ-2026-121）：原用例用 LambdaQueryWrapper.eq(getDocNo/getVoucherNo, ...)
+            // 查询销项发票，但 OutputInvoiceEntity.docNo/voucherNo 均为 @TableField(exist = false)
+            // （DB 无 doc_no/voucher_no 列），MP 无法解析 → MyBatisSystemException。
+            // 改为：真实列断言 + 幽灵列负向断言。
             OutputInvoiceEntity invoice = new OutputInvoiceEntity();
             invoice.setInvoiceNo("9999.E2E.API.OUT.001");
             invoice.setInvoiceDate(LocalDate.of(2026, 6, 28));
@@ -56,24 +59,22 @@ public class NumberingFrontendApiTest extends AbstractMapperTest {
             invoice.setInvoiceType("SPECIAL");
             invoice.setTaxRate(new BigDecimal("0.13"));
             invoice.setStatus("VOUCHERED");
+            // 对幽灵字段赋值：内存里有值，但 SQL 层完全不参与
             invoice.setDocNo("9999.E2E.API.DOC.001");
             invoice.setVoucherNo("9999.E2E.API.VCH.001");
             invoice.setDeleted(0);
             outputInvoiceMapper.insert(invoice);
 
-            // 2. 验证：能按 docNo 和 voucherNo 查询到
-            OutputInvoiceEntity foundByDoc = outputInvoiceMapper.selectOne(
+            // 真实列（invoice_no）可正常回读
+            OutputInvoiceEntity found = outputInvoiceMapper.selectOne(
                     new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<OutputInvoiceEntity>()
-                            .eq(OutputInvoiceEntity::getDocNo, "9999.E2E.API.DOC.001")
+                            .eq(OutputInvoiceEntity::getInvoiceNo, "9999.E2E.API.OUT.001")
             );
-            assertNotNull(foundByDoc, "通过 docNo 应能查到销项发票");
-            assertEquals("9999.E2E.API.OUT.001", foundByDoc.getInvoiceNo());
+            assertNotNull(found, "通过 invoiceNo 应能查到销项发票");
 
-            OutputInvoiceEntity foundByVoucher = outputInvoiceMapper.selectOne(
-                    new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<OutputInvoiceEntity>()
-                            .eq(OutputInvoiceEntity::getVoucherNo, "9999.E2E.API.VCH.001")
-            );
-            assertNotNull(foundByVoucher, "通过 voucherNo 应能查到销项发票");
+            // 负向断言：幽灵字段 DB 无此列，回读必为 null
+            assertNull(found.getDocNo(), "docNo 是 exist=false 幽灵字段，回读应为 null");
+            assertNull(found.getVoucherNo(), "voucherNo 是 exist=false 幽灵字段，回读应为 null");
         }
     }
 
@@ -84,9 +85,12 @@ public class NumberingFrontendApiTest extends AbstractMapperTest {
     class InputInvoicePageFillTest {
 
         @Test
-        @DisplayName("进项发票 Entity 应包含 voucherNo 字段并能持久化")
+        @DisplayName("进项发票 voucherNo 是幽灵字段(exist=false)，不落库且不可用于查询")
         void input_invoice_entity_should_persist_voucherNo() {
-            // 验证：直接插入带 voucherNo 的进项发票，能正确持久化和查询
+            // 历史说明（REQ-2026-121）：本用例原用 LambdaQueryWrapper.eq(getVoucherNo, ...)
+            // 查询进项发票，但 InputInvoiceEntity.voucherNo 标注 @TableField(exist = false)
+            // （DB 无 voucher_no 列），MP 无法解析该列 → MyBatisSystemException。
+            // 正确写法是断言「幽灵字段确实不落库」，而不是依赖它做查询条件。
             InputInvoiceEntity invoice = new InputInvoiceEntity();
             invoice.setInvoiceNo("9999.E2E.API.INP.001");
             invoice.setInvoiceDate(LocalDate.of(2026, 6, 28));
@@ -97,17 +101,20 @@ public class NumberingFrontendApiTest extends AbstractMapperTest {
             invoice.setInvoiceType("SPECIAL");
             invoice.setTaxRate(new BigDecimal("0.13"));
             invoice.setCertificationStatus("CERTIFIED");
+            // 对幽灵字段赋值：内存里有值，但 SQL 层完全不参与
             invoice.setVoucherNo("9999.E2E.API.VCH.002");
             invoice.setDeleted(0);
             inputInvoiceMapper.insert(invoice);
 
-            // 2. 验证：能通过 voucherNo 查询到
+            // 真实列（invoice_no）可正常回读
             InputInvoiceEntity found = inputInvoiceMapper.selectOne(
                     new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<InputInvoiceEntity>()
-                            .eq(InputInvoiceEntity::getVoucherNo, "9999.E2E.API.VCH.002")
+                            .eq(InputInvoiceEntity::getInvoiceNo, "9999.E2E.API.INP.001")
             );
-            assertNotNull(found, "通过 voucherNo 应能查到进项发票");
-            assertEquals("9999.E2E.API.INP.001", found.getInvoiceNo());
+            assertNotNull(found, "通过 invoiceNo 应能查到进项发票");
+
+            // 负向断言：幽灵字段 DB 无此列，回读必为 null
+            assertNull(found.getVoucherNo(), "voucherNo 是 exist=false 幽灵字段，回读应为 null");
         }
     }
 
@@ -204,8 +211,14 @@ public class NumberingFrontendApiTest extends AbstractMapperTest {
             doc4.setDeleted(0);
             businessDocMapper.insert(doc4);
 
-            // 2. 验证：数据库中存在这些记录
-            assertEquals(4, businessDocMapper.selectCount(null), "应有 4 条记录");
+            // 2. 验证：数据库中只统计本用例插入的记录
+            //    注意：不能 selectCount(null) —— 那会统计到全表（含种子/其它数据），
+            //    本用例用 docNo 前缀 "9999.E2E.KW.DOC." 作为隔离标记。
+            long ownCount = businessDocMapper.selectCount(
+                    new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<BusinessDocEntity>()
+                            .likeRight(BusinessDocEntity::getDocNo, "9999.E2E.KW.DOC.")
+            );
+            assertEquals(4, ownCount, "本用例应有 4 条记录");
 
             // 3. 按 voucherNo 搜索
             long countByVoucherNo = businessDocMapper.selectCount(

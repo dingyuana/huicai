@@ -1,11 +1,14 @@
 package com.huicai.sme.cash.service.impl;
 
 import cn.hutool.json.JSONUtil;
+import com.huicai.common.exception.BusinessException;
 import com.huicai.sme.cash.entity.BankAccountEntity;
 import com.huicai.sme.cash.entity.BankJournalEntity;
+import com.huicai.sme.cash.entity.BankReconciliationLogEntity;
 import com.huicai.base.business.entity.BankStatementEntity;
 import com.huicai.sme.cash.mapper.BankAccountMapper;
 import com.huicai.sme.cash.mapper.BankJournalMapper;
+import com.huicai.sme.cash.mapper.BankReconciliationLogMapper;
 import com.huicai.base.business.mapper.BankStatementMapper;
 import com.huicai.sme.cash.service.BankReconciliationService.ScoreResult;
 import org.junit.jupiter.api.Test;
@@ -34,6 +37,7 @@ class BankReconciliationServiceImplTest {
     @Mock private BankAccountMapper accountMapper;
     @Mock private BankJournalMapper journalMapper;
     @Mock private BankStatementMapper statementMapper;
+    @Mock private BankReconciliationLogMapper reconLogMapper;
     @Mock private RedisTemplate<String, Object> redisTemplate;
     @Mock private ValueOperations<String, Object> valueOps;
 
@@ -330,22 +334,55 @@ class BankReconciliationServiceImplTest {
     }
 
     // ==================== P14-1: 人工确认 / 驳回 ====================
+    // D4（REQ-2026-134 / P107）：确认不再只返回状态，必须落库 + 写对账日志。
+    // 人工确认为 MANUAL_MATCHED（与自动 MATCHED 区分），并回写关联日记账。
 
     @Test
-    void confirmMatch_returns_MATCHED_status() {
+    void confirmMatch_returns_MANUAL_MATCHED_and_persists() {
+        BankStatementEntity stmt = stubStmt(1L, "INCOME", new BigDecimal("100"), LocalDate.now());
+        stmt.setMatchStatus("UNMATCHED");
+        stmt.setEnterpriseId(1L);
+        BankJournalEntity journal = new BankJournalEntity();
+        journal.setId(100L);
+        journal.setIsReconciled(false);
+        when(statementMapper.selectById(1L)).thenReturn(stmt);
+        when(journalMapper.selectById(100L)).thenReturn(journal);
+
         var r = service.confirmMatch(1L, 100L, "zhangsan");
         assertEquals(1L, r.statementId());
         assertEquals(100L, r.journalId());
-        assertEquals("MATCHED", r.newStatus());
+        assertEquals("MANUAL_MATCHED", r.newStatus());
         assertEquals("zhangsan", r.operator());
+        // 必须落库：流水状态 + 日记账已对账 + 审计日志
+        verify(statementMapper).updateMatch(1L, 100L, "MANUAL_MATCHED");
+        verify(journalMapper).updateReconciled(100L, true);
     }
 
     @Test
-    void rejectMatch_returns_UNMATCHED_status() {
+    void rejectMatch_returns_UNMATCHED_and_persists() {
+        BankStatementEntity stmt = stubStmt(1L, "INCOME", new BigDecimal("100"), LocalDate.now());
+        stmt.setMatchStatus("MANUAL_MATCHED");
+        stmt.setMatchedJournalId(100L);
+        stmt.setEnterpriseId(1L);
+        BankJournalEntity journal = new BankJournalEntity();
+        journal.setId(100L);
+        journal.setIsReconciled(true);
+        when(statementMapper.selectById(1L)).thenReturn(stmt);
+        when(journalMapper.selectById(100L)).thenReturn(journal);
+
         var r = service.rejectMatch(1L, 100L, "lisi");
         assertEquals(1L, r.statementId());
         assertEquals(100L, r.journalId());
         assertEquals("UNMATCHED", r.newStatus());
         assertEquals("lisi", r.operator());
+        // 必须释放：流水回 UNMATCHED + 日记账未对账
+        verify(statementMapper).updateMatch(1L, null, "UNMATCHED");
+        verify(journalMapper).updateReconciled(100L, false);
+    }
+
+    @Test
+    void confirmMatch_流水不存在_应报错() {
+        when(statementMapper.selectById(1L)).thenReturn(null);
+        assertThrows(BusinessException.class, () -> service.confirmMatch(1L, 100L, "zhangsan"));
     }
 }

@@ -73,7 +73,7 @@ public class BankStatementDataIsolationTest extends AbstractMapperTest {
     private BankStatementEntity createStatement(Long enterpriseId, String txType, BigDecimal amount,
                                                  String classification, String reviewStatus) {
         BankStatementEntity entity = new BankStatementEntity();
-        entity.setAccountId(enterpriseId); // 用企业 ID 作为 accountId 方便区分
+        entity.setAccountId(ensureBankAccount(enterpriseId)); // 必须用真实存在的 t_bank_account 主键，否则违反 fk_statement_account
         entity.setTxDate(LocalDate.of(2026, 8, 1));
         entity.setTxType(txType);
         entity.setAmount(amount);
@@ -82,7 +82,10 @@ public class BankStatementDataIsolationTest extends AbstractMapperTest {
         entity.setClassification(classification);
         entity.setReviewStatus(reviewStatus);
         entity.setEnterpriseId(enterpriseId);
-        bankStatementMapper.insert(entity);
+        // 本方法显式声明目标企业，故不受环境上下文影响 —— P102 起 insertFill 会
+        // 无条件覆盖 enterpriseId，不绕过的话「企业B 的流水」会被静默写成企业A，
+        // 隔离用例的前提崩塌（详见 AbstractMapperTest#withoutEnterpriseContext）
+        withoutEnterpriseContext(() -> bankStatementMapper.insert(entity));
         return entity;
     }
 
@@ -324,9 +327,10 @@ public class BankStatementDataIsolationTest extends AbstractMapperTest {
     void importFromCsv_企业隔离_导入数据enterpriseId正确() {
         String csv = "交易日期,金额,摘要\n2026-08-01,1000,货款\n2026-08-02,2000,服务费";
 
-        // 企业 A 导入
+        // 企业 A 导入（accountId 必须是真实存在的 t_bank_account 主键，
+        // 生产入口 BankStatementController#importCsv 传的就是账户 id 而非 enterpriseId）
         EnterpriseContextHolder.set(ENTERPRISE_A);
-        int count = bankStatementService.importFromCsv(ENTERPRISE_A, csv);
+        int count = bankStatementService.importFromCsv(ensureBankAccount(ENTERPRISE_A), csv);
         assertEquals(2, count, "应导入2条记录");
 
         // 验证导入的数据 enterprise_id 全部为企业 A
@@ -339,10 +343,10 @@ public class BankStatementDataIsolationTest extends AbstractMapperTest {
     @DisplayName("importFromCsv: 不同企业导入不互相影响")
     void importFromCsv_企业隔离_不同企业导入不互相影响() {
         EnterpriseContextHolder.set(ENTERPRISE_A);
-        bankStatementService.importFromCsv(ENTERPRISE_A, "交易日期,金额,摘要\n2026-08-01,1000,货款A");
+        bankStatementService.importFromCsv(ensureBankAccount(ENTERPRISE_A), "交易日期,金额,摘要\n2026-08-01,1000,货款A");
 
         EnterpriseContextHolder.set(ENTERPRISE_B);
-        bankStatementService.importFromCsv(ENTERPRISE_B, "交易日期,金额,摘要\n2026-08-01,2000,货款B");
+        bankStatementService.importFromCsv(ensureBankAccount(ENTERPRISE_B), "交易日期,金额,摘要\n2026-08-01,2000,货款B");
 
         // 验证企业 A 的数据只属于企业 A
         EnterpriseContextHolder.set(ENTERPRISE_A);
@@ -392,7 +396,9 @@ public class BankStatementDataIsolationTest extends AbstractMapperTest {
     @Test
     @DisplayName("EnterpriseContextHolder未设置时，查询返回所有企业数据（超级管理员模式）")
     void interceptor_企业隔离_EnterpriseContextHolder未设置_不拦截() {
-        // 不设置 EnterpriseContextHolder
+        // 依赖「无企业上下文 → 拦截器放行全部」，基类 AbstractMapperTest 已默认
+        // 设置 enterpriseId=1，故必须显式清空上下文才能测到超级管理员语义
+        EnterpriseContextHolder.clear();
         BankStatementEntity bsA = createStatement(ENTERPRISE_A, "INCOME", new BigDecimal("1000"));
         BankStatementEntity bsB = createStatement(ENTERPRISE_B, "INCOME", new BigDecimal("2000"));
 
@@ -439,8 +445,9 @@ public class BankStatementDataIsolationTest extends AbstractMapperTest {
         bankStatementMapper.updateById(bsB);
 
         // 企业 A 通过自定义查询（selectByAccountAndStatus）查询
+        // 第一个入参是 accountId，必须用真实账户主键，不能沿用「accountId == enterpriseId」的旧假设
         EnterpriseContextHolder.set(ENTERPRISE_A);
-        List<BankStatementEntity> results = bankStatementMapper.selectByAccountAndStatus(ENTERPRISE_A, "UNMATCHED");
+        List<BankStatementEntity> results = bankStatementMapper.selectByAccountAndStatus(bsA.getAccountId(), "UNMATCHED");
 
         // 验证结果中仅包含企业 A 的数据
         // 注意：selectByAccountAndStatus 使用 accountId 过滤，不直接由拦截器注入 enterprise_id

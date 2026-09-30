@@ -125,12 +125,20 @@ public class BudgetServiceImpl implements BudgetService {
         }
         Map<String, Object> entry = entries.get(0);
         BigDecimal budget = toBigDecimal(entry.get("amount"));
-        BigDecimal used = toBigDecimal(entry.get("usedAmount"));
+        // findBySubjectAndPeriod 用 be.* 返回 Map，真实 DB 的 key 是 snake_case
+        // (used_amount/control_type)，而 Mock 夹具写的是 camelCase —— 两种都要读，
+        // 否则真实 DB 上 controlType 读出 null 走 default 分支、usedAmount 恒 0。
+        BigDecimal used = toBigDecimal(pick(entry, "usedAmount", "used_amount"));
         BigDecimal newUsed = used.add(amount);
         BigDecimal ratio = budget.compareTo(BigDecimal.ZERO) > 0
                 ? newUsed.multiply(BigDecimal.valueOf(100)).divide(budget, 2, RoundingMode.HALF_UP)
                 : BigDecimal.ZERO;
-        String controlType = (String) entry.get("controlType");
+        // 空 controlType 兜底为 WARN：历史数据/手工 SQL 可能为 null，
+        // switch(null) 会直接 NPE，把整张单据校验打成 500。DB 侧 chk_ 默认 WARN。
+        String controlType = pick(entry, "controlType", "control_type");
+        if (StrUtil.isBlank(controlType)) {
+            controlType = "WARN";
+        }
         boolean pass = true;
         String action = "WARN";
         switch (controlType) {
@@ -243,5 +251,23 @@ public class BudgetServiceImpl implements BudgetService {
     private BigDecimal toBigDecimal(Object o) {
         if (o == null) return BigDecimal.ZERO;
         return new BigDecimal(o.toString());
+    }
+
+    /**
+     * 从 Mapper 返回的 Map 里取第一个非 null 的 key 值.
+     *
+     * <p>背景：{@code BudgetEntryMapper.findBySubjectAndPeriod} 的 SELECT 用
+     * {@code be.*}，PostgreSQL 返回的列名是 snake_case（{@code used_amount} /
+     * {@code control_type}），而本方法原先按 camelCase（{@code usedAmount} /
+     * {@code controlType}）读取 —— 只有 Mock 夹具恰好写 camelCase 才让单测变绿，
+     * 真实 DB 上必然读出 null（AGENTS §4.3.7 Mock 盲区）。这里按
+     * {@code camelCase 优先、snake_case 兜底} 的顺序取值，两种来源都能用。
+     */
+    private String pick(Map<String, Object> row, String camelKey, String snakeKey) {
+        Object v = row.get(camelKey);
+        if (v == null) {
+            v = row.get(snakeKey);
+        }
+        return v == null ? null : v.toString();
     }
 }

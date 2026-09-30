@@ -22,6 +22,15 @@ import static org.junit.jupiter.api.Assertions.*;
  * <p>
  * 模拟: 预算编制(DRAFT) → 提交(SUBMITTED) → 审批(APPROVED) → 激活(ACTIVE) → 执行检查
  * 一个 @Test 方法完成完整流程，使用 @Transactional 自动回滚清理数据.
+ *
+ * <h3>历史说明（REQ-2026-121）</h3>
+ * 夹具有两处与 DB 约束不符：
+ * <ul>
+ *   <li>{@code budget_type="OPERATION"} 不在 {@code chk_budget_type}
+ *       （DEPARTMENT/PROJECT/SUBJECT/OVERALL）内 → 改 OVERALL；</li>
+ *   <li>{@code t_budget.budget_name} 是 NOT NULL 而原夹具未赋值（且 {@code BudgetEntity}
+ *       原先根本没有 budgetName 字段）→ REQ-2026-121 已补齐 Entity 字段。</li>
+ * </ul>
  */
 public class BudgetFlowE2ETest extends AbstractMapperTest {
 
@@ -39,16 +48,22 @@ public class BudgetFlowE2ETest extends AbstractMapperTest {
         // ==================== Step 1: 创建预算 (DRAFT) ====================
         BudgetEntity budget = new BudgetEntity();
         budget.setBudgetNo("BUD-E2E-" + System.currentTimeMillis());
+        budget.setBudgetName("E2E预算全流程测试");
         budget.setPeriod("202607");
-        budget.setBudgetType("OPERATION");
+        // chk_budget_type 允许集：DEPARTMENT / PROJECT / SUBJECT / OVERALL
+        budget.setBudgetType("OVERALL");
         budget.setStatus(BudgetStatus.BUDGET_DRAFT);
         budget.setRemark("E2E预算全流程测试");
         budget.setCreatedBy(1L);
         budget.setUpdatedBy(1L);
 
         // 预算条目1：科目 6601，部门 101，预算 80000，控制方式 WARN
+        // 注意：BudgetEntryEntity.subjectId 是 t_subject 的**主键 id**，不是科目编码。
+        // fk_budget_entry_subject 要求真实存在；原夹具硬编码 6601/6602 当作 id，
+        // 而 6601 根本不存在（6602 的 id 也并非 6602）→ 用 ensureSubject 取得真实 id。
+        Long subjectId1 = ensureSubject(DEFAULT_ENTERPRISE_ID, "6601", "销售费用", "debit");
         BudgetEntryEntity entry1 = new BudgetEntryEntity();
-        entry1.setSubjectId(6601L);
+        entry1.setSubjectId(subjectId1);
         entry1.setDeptId(101L);
         entry1.setPeriodMonth(7);
         entry1.setAmount(new BigDecimal("80000.00"));
@@ -56,8 +71,9 @@ public class BudgetFlowE2ETest extends AbstractMapperTest {
         entry1.setUsedAmount(BigDecimal.ZERO);
 
         // 预算条目2：科目 6602，部门 102，预算 20000，控制方式 BLOCK
+        Long subjectId2 = ensureSubject(DEFAULT_ENTERPRISE_ID, "6602", "管理费用", "debit");
         BudgetEntryEntity entry2 = new BudgetEntryEntity();
-        entry2.setSubjectId(6602L);
+        entry2.setSubjectId(subjectId2);
         entry2.setDeptId(102L);
         entry2.setPeriodMonth(7);
         entry2.setAmount(new BigDecimal("20000.00"));
@@ -112,7 +128,10 @@ public class BudgetFlowE2ETest extends AbstractMapperTest {
 
         // ==================== Step 5: 预算检查 - 未超预算 (WARN 模式) ====================
         // 科目 6601 申请 30000，在预算 80000 范围内，通过
-        Map<String, Object> checkResult = budgetService.checkBudget(6601L, "202607", new BigDecimal("30000.00"));
+        // ⚠️ REQ-2026-126：原代码传 6601L（科目**编码**），而
+        // findBySubjectAndPeriod 按 be.subject_id（**主键 id**）匹配，
+        // ensureSubject 返回的是自增 id 而非编码 → 必然查不到预算。
+        Map<String, Object> checkResult = budgetService.checkBudget(subjectId1, "202607", new BigDecimal("30000.00"));
         assertNotNull(checkResult, "预算检查应返回结果");
         assertTrue((Boolean) checkResult.get("pass"), "未超预算时应通过检查");
         assertEquals("WARN", checkResult.get("controlType"), "控制方式应为 WARN");
@@ -123,10 +142,16 @@ public class BudgetFlowE2ETest extends AbstractMapperTest {
 
         // ==================== Step 6: 预算检查 - 超预算 (BLOCK 模式) ====================
         // 科目 6602 预算 20000，先模拟使用 15000，再申请 10000，累计 25000 > 20000，应被阻止
-        Long entry2Id = savedEntries.get(1).getId();
-        budgetEntryMapper.addUsedAmount(entry2Id, new BigDecimal("15000.00"));
+        // ⚠️ REQ-2026-126：原代码用 savedEntries.get(1) 定位条目2，而 selectList
+        // 无 ORDER BY，返回顺序无保证 → 改为按 subject_id 精确定位。
+        BudgetEntryEntity entry2Row = budgetEntryMapper.selectOne(
+                new QueryWrapper<BudgetEntryEntity>()
+                        .eq("budget_id", created.getId())
+                        .eq("subject_id", subjectId2));
+        assertNotNull(entry2Row, "应能按 subject_id 精确定位到科目 6602 的预算条目");
+        budgetEntryMapper.addUsedAmount(entry2Row.getId(), new BigDecimal("15000.00"));
 
-        Map<String, Object> overResult = budgetService.checkBudget(6602L, "202607", new BigDecimal("10000.00"));
+        Map<String, Object> overResult = budgetService.checkBudget(subjectId2, "202607", new BigDecimal("10000.00"));
         assertNotNull(overResult, "超预算检查应返回结果");
         assertFalse((Boolean) overResult.get("pass"), "BLOCK 模式超预算时应不通过");
         assertEquals("BLOCK", overResult.get("action"), "超预算时 action 应为 BLOCK");
@@ -159,13 +184,36 @@ public class BudgetFlowE2ETest extends AbstractMapperTest {
 
         // 验证条目 used_amount 已更新
         for (BudgetEntryEntity e : finalEntries) {
-            if (e.getSubjectId().equals(6602L)) {
+            if (e.getSubjectId().equals(subjectId2)) {
                 assertEquals(0, new BigDecimal("15000.00").compareTo(e.getUsedAmount()),
                         "科目6602 已使用金额应为 15000");
-            } else {
+            } else if (e.getSubjectId().equals(subjectId1)) {
                 assertEquals(0, BigDecimal.ZERO.compareTo(e.getUsedAmount()),
                         "科目6601 已使用金额应为 0");
+            } else {
+                fail("出现预期外科目 " + e.getSubjectId());
             }
         }
+
+        // ==================== REQ-2026-126 新增：维度列与控制方式真落库 ====================
+        // 这 5 个字段此前全是 exist=false 幽灵字段（DB 无列），setXxx() 对 SQL 无效，
+        // 读回必为 null。这里正向断言「DB 往返等于写入值」，锁死 V158 的列映射。
+        BudgetEntryEntity reloadedEntry1 = budgetEntryMapper.selectById(entry1.getId());
+        assertNotNull(reloadedEntry1, "条目1 应可按主键回查");
+        assertEquals(101L, reloadedEntry1.getDeptId().longValue(), "部门维度应落库");
+        assertEquals(7, reloadedEntry1.getPeriodMonth().intValue(), "月份维度应落库");
+        assertEquals("WARN", reloadedEntry1.getControlType(), "控制方式应落库");
+        assertEquals(0, BigDecimal.ZERO.compareTo(reloadedEntry1.getUsedAmount()), "已用额应落库且为 0");
+        assertNotNull(reloadedEntry1.getUpdatedAt(), "updated_at 是真实列，应被 MetaObjectHandler 填充");
+
+        BudgetEntryEntity reloadedEntry2 = budgetEntryMapper.selectById(entry2Row.getId());
+        assertNotNull(reloadedEntry2, "条目2 应可按主键回查");
+        assertEquals(102L, reloadedEntry2.getDeptId().longValue(), "部门维度应落库");
+        assertEquals(7, reloadedEntry2.getPeriodMonth().intValue(), "月份维度应落库");
+        assertEquals("BLOCK", reloadedEntry2.getControlType(), "控制方式应落库");
+
+        // 审批审计：approved_at 此前为幽灵字段，DB 往返恒 null（E2E 首个失败点）
+        BudgetEntity reloadedApproved = budgetMapper.selectById(created.getId());
+        assertNotNull(reloadedApproved.getApprovedAt(), "审批时间应真落库");
     }
 }

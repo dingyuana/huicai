@@ -16,20 +16,31 @@ import static org.junit.jupiter.api.Assertions.*;
  * ✅ 正向：自动生成 period_code / start_date / end_date
  * ✅ 负向：NOT NULL 约束校验
  * ✅ 约束：period_code UNIQUE、month CHECK
+ *
+ * <h3>历史说明（REQ-2026-121）</h3>
+ * {@code save_shouldAutoGenerateAllFields} 原先直调 {@code periodMapper.insert()}，
+ * 但<b>自动生成逻辑在 {@code PeriodServiceImpl.save()} 里</b>（它覆盖了
+ * MyBatis-Plus 的 {@code save()}，见 PeriodServiceImpl:20-40）。
+ * Mapper 层直插不会触发任何自动生成，于是 {@code t_period.period_code}（NOT NULL）
+ * 直接违约。已改为走 Service 层，测试意图与实现位置对齐。
  */
 class PeriodMapperTest extends AbstractMapperTest {
 
     @Autowired
     private PeriodMapper periodMapper;
 
+    @Autowired
+    private com.huicai.base.system.service.PeriodService periodService;
+
     @Test
     void save_shouldAutoGenerateAllFields() {
         PeriodEntity entity = new PeriodEntity();
         entity.setYear(2026);
         entity.setMonth(7);
-        // 故意不设 period_code / start_date / end_date，验证自动生成
+        // 故意不设 period_code / start_date / end_date，验证 Service 层自动生成
         entity.setStatus("open");
-        periodMapper.insert(entity);
+        // 自动生成属 Service 职责，Mapper 直插不会生成，故必须走 periodService.save()
+        periodService.save(entity);
 
         assertNotNull(entity.getId());
         assertEquals("202607", entity.getPeriodCode(), "period_code 应从 year+month 自动生成");

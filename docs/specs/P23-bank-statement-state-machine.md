@@ -100,7 +100,6 @@ public final class StatementStatus {
         return CONFIRMED.equals(status);
     }
 
-    /** 是否可以制证（generateVoucher，恢复/重试场景：接受 CONFIRMED 和新旧过渡期的 AUDITED） */
     public static boolean isGeneratable(String status) {
         return CONFIRMED.equals(status) || "AUDITED".equals(status);
     }
@@ -166,7 +165,7 @@ approved / voucher_generated / payment_created → （暂无撤回，需 P24 补
 |---|------|----------|----------|--------|
 | 1 | `review()` | null/PENDING/classified/manual_pending/RECLASSIFIED | CONFIRMED | 设置 reviewedBy/reviewedAt |
 | 2 | `audit()` | CONFIRMED | voucher_generated / payment_created | 调 autoGenerationService.autoGenerateInNewTx()，生成凭证+单据（均为草稿） |
-| 3 | `generateVoucher()` | CONFIRMED / AUDITED（旧数据） | voucher_generated / payment_created | 调 autoGenerationService.autoGenerateInNewTx()，恢复/重试场景 |
+| 3 | `generateVoucher()` | CONFIRMED | voucher_generated / payment_created | 调 autoGenerationService.autoGenerateInNewTx()，生成失败后的恢复/重试场景 |
 | 4 | `approve()` | voucher_generated / payment_created | approved | 无 |
 | 5 | `processManual(A)` | manual_pending | voucher_generated | 调 autoGenerationService.autoGenerateInNewTx() |
 | 6 | `processManual(B)` | manual_pending | payment_created | 调 autoGenerationService.autoGenerateInNewTx() |
@@ -204,7 +203,7 @@ approved / voucher_generated / payment_created → （暂无撤回，需 P24 补
 
 ```
 前置: stmt != null
-前置: reviewStatus = CONFIRMED（新流程重试）或 AUDITED（旧数据过渡）
+前置: reviewStatus = CONFIRMED
 后置: reviewStatus = voucher_generated (A类) / payment_created (B类)
 后置: autoGenerationService.autoGenerateInNewTx() 被调用
 说明: 主流程已合并至 audit()，此方法仅用于生成失败后的恢复重试场景
@@ -257,8 +256,11 @@ approved / voucher_generated / payment_created → （暂无撤回，需 P24 补
 
 一个端到端测试覆盖完整正向链路：
 ```
-null → review() → CONFIRMED → audit() → AUDITED → generateVoucher() → voucher_generated → approve() → approved
+null → review() → CONFIRMED → audit() → voucher_generated | payment_created → approve() → approved
 ```
+
+> `generateVoucher()` 是独立端点，仅用于 `audit()` 生成失败后的恢复/重试（前置同样为 CONFIRMED），
+> 不处在主链上。DB 约束 `chk_stmt_review_status` 不含 `AUDITED`，故历史上不存在 `audit() → AUDITED` 这一步。
 
 ---
 
@@ -271,11 +273,11 @@ null → review() → CONFIRMED → audit() → AUDITED → generateVoucher() �
 **修复**：
 - `review()` 只改状态为 CONFIRMED，不触发生单
 - `generateVoucher()` 独立端点，由主管审核后触发
-- `audit()` 新增状态 AUDITED 作为制证前置守卫
+- `audit()` 内联完成制证（CONFIRMED → voucher_generated/payment_created），不引入新状态
 
 **防护**：
 - `audit()` 前置守卫不为 CONFIRMED 则拒
-- `generateVoucher()` 前置守卫不为 AUDITED 则拒
+- `generateVoucher()` 前置守卫不为 CONFIRMED 则拒（代码另保留 AUDITED 兼容分支，但该值不在 `chk_stmt_review_status` 允许集内，不可达）
 - 测试中 `verify(autoGenerationService, never()).autoGenerateInNewTx()`
 
 ---
@@ -373,11 +375,11 @@ transitions:
     test_ref: audit_positive
 
   - id: T-03
-    from: [CONFIRMED, AUDITED]
+    from: CONFIRMED
     to: [VOUCHER_GENERATED, PAYMENT_CREATED]
     trigger: generateVoucher
     method: BankStatementServiceImpl.generateVoucher()
-    precondition: "reviewStatus == CONFIRMED（新流程重试）或 AUDITED（旧数据过渡）"
+    precondition: "reviewStatus == CONFIRMED"
     postcondition: "reviewStatus == voucher_generated / payment_created"
     side_effects:
       - "调用 autoGenerationService.autoGenerateInNewTx()"
@@ -428,11 +430,11 @@ transitions:
 
   - id: T-08
     from: "*"
-    to: DELETED
+    to: (soft_delete)
     trigger: deleteStatement
     method: BankStatementServiceImpl.deleteStatement()
-    precondition: "reviewStatus 非锁定状态"
-    postcondition: "记录被删除"
+    precondition: "记录存在"
+    postcondition: "deleted = 1（逻辑删除，review_status 不变）"
     side_effects: []
     test_ref: delete_statement_positive
 
@@ -461,7 +463,7 @@ acceptance_tests:
     status: covered
 
   - id: AT-003
-    description: "generateVoucher() — CONFIRMED/AUDITED → voucher_generated/payment_created"
+    description: "generateVoucher() — CONFIRMED → voucher_generated/payment_created"
     method: generate_voucher_positive
     assertion: "reviewStatus == voucher_generated / payment_created"
     status: covered

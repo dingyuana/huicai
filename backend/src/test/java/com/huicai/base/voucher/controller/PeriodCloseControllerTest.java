@@ -44,7 +44,10 @@ class PeriodCloseControllerTest {
         user.setPassword("test123");
         user.setEnterpriseId(1L);
         user.setUserType("ENTERPRISE");
-        LoginUser loginUser = new LoginUser(user, List.of(new SimpleGrantedAuthority("ROLE_USER")));
+        // period:reopen 为 P102 起 /reopen 端点的 @PreAuthorize 权限码（种子见 V163）
+        LoginUser loginUser = new LoginUser(user, List.of(
+                new SimpleGrantedAuthority("ROLE_USER"),
+                new SimpleGrantedAuthority("period:reopen")));
         SecurityContextHolder.getContext().setAuthentication(
                 new UsernamePasswordAuthenticationToken(loginUser, null, loginUser.getAuthorities()));
     }

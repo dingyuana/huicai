@@ -81,7 +81,9 @@ public class MenuServiceImpl implements MenuService {
         }
 
         List<MenuEntity> allMenus = menuMapper.selectBatchIds(menuIds).stream()
-                .filter(m -> "menu".equals(m.getType()) && m.getIsActive())
+                // menu_type 是大写：DB 种子数据与 CHECK 约束 chk_menu_type 都只允许
+                // MENU / BUTTON / DIR。原先写小写 "menu" 永远匹配不上，导致用户路由恒为空。
+                .filter(m -> "MENU".equals(m.getType()) && m.getIsActive())
                 .collect(Collectors.toList());
 
         return buildTree(allMenus, null);

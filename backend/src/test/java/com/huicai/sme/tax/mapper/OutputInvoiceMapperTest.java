@@ -276,11 +276,18 @@ public class OutputInvoiceMapperTest extends AbstractMapperTest {
     }
 
     /**
-     * 场景 6：Entity-DB 字段对齐测试（修复 P40 两个 bug 的回归保护）
+     * 场景 6：Entity-DB 字段对齐回归保护（修复 P40 两个 bug）
      *
-     * 验证：
-     * - auditedBy/auditedAt 有 @TableField(exist = false)，SELECT 不报 "column does not exist"
-     * - aiMappingResult 有 typeHandler = JsonbTypeHandler.class，UPDATE 不报 JSONB 类型不匹配
+     * <h3>为什么断言是「读回为 null」而不是「读回等于写入值」</h3>
+     * 原用例断言 aiMappingResult 能 <b>JSONB 原样读回</b>，但这是错误的：
+     * <ul>
+     *   <li>{@code t_output_invoice} <b>根本没有</b> {@code ai_mapping_result} 列（该表无任何 jsonb 列），
+     *       故 {@code OutputInvoiceEntity.aiMappingResult} 被标注 {@code @TableField(exist = false)}；</li>
+     *   <li>同理 {@code auditedBy}/{@code auditedAt} 也是 {@code exist = false} 的幽灵字段（AGENTS §4.2 第 10 条）。</li>
+     * </ul>
+     * 幽灵字段不参与 SQL：写入被丢弃、读回必为 null。因此正确断言是
+     * <b>正向验证真实列（status）可往返、负向验证幽灵字段必为 null</b>，
+     * 而不是期望幽灵字段「有 typeHandler 所以能读回」。
      */
     @Test
     void entityDbAlignment_shouldNotThrowColumnErrors() {
@@ -305,19 +312,21 @@ public class OutputInvoiceMapperTest extends AbstractMapperTest {
 
         OutputInvoiceEntity found = outputInvoiceMapper.selectById(e.getId());
         assertNotNull(found);
+        // 真实列：status 可往返
         assertEquals("PENDING_CONFIRM", found.getStatus());
+        // 幽灵列：写入不落库，读回必为 null
+        assertNull(found.getAiMappingResult(), "ai_mapping_result 非真实列，读回应为 null");
+        assertNull(found.getAuditedBy(), "audited_by 非真实列，读回应为 null");
+        assertNull(found.getAuditedAt(), "audited_at 非真实列，读回应为 null");
 
+        // 含幽灵字段的实体走 UPDATE 也不应抛 "column does not exist"
         e.setStatus("PENDING_REVIEW");
-        assertDoesNotThrow(() -> outputInvoiceMapper.updateById(e));
-
-        OutputInvoiceEntity updated = outputInvoiceMapper.selectById(e.getId());
-        assertEquals("PENDING_REVIEW", updated.getStatus());
-
         e.setAiMappingResult("{\"account_code\":\"6001\",\"confidence\":0.88}");
         assertDoesNotThrow(() -> outputInvoiceMapper.updateById(e));
 
-        OutputInvoiceEntity finalCheck = outputInvoiceMapper.selectById(e.getId());
-        assertEquals("{\"account_code\":\"6001\",\"confidence\":0.88}", finalCheck.getAiMappingResult());
+        OutputInvoiceEntity updated = outputInvoiceMapper.selectById(e.getId());
+        assertEquals("PENDING_REVIEW", updated.getStatus(), "status 真实列应已更新");
+        assertNull(updated.getAiMappingResult(), "幽灵列更新同样不落库");
     }
 
     private OutputInvoiceEntity insertInvoice(String invoiceNo, LocalDate date, String period, String customerName,
@@ -360,8 +369,11 @@ public class OutputInvoiceMapperTest extends AbstractMapperTest {
         insertInvoice("INV-SBF-001", LocalDate.of(2026, 6, 10), "202606", "测试客户", "10000.00", "SPECIAL", "CONFIRMED");
         // B: 202606 测试客户 SPECIAL +20000 VOUCHERED（已完成终态）
         insertInvoice("INV-SBF-002", LocalDate.of(2026, 6, 15), "202606", "测试客户", "20000.00", "SPECIAL", "VOUCHERED");
-        // C: 202606 测试客户 RED -500（红字，未完成）
-        insertInvoice("INV-SBF-003", LocalDate.of(2026, 6, 20), "202606", "测试客户", "-500.00", "RED", "PENDING_CONFIRM");
+        // C: 202606 测试客户 PLAIN -500 PENDING_CONFIRM（红字，未完成）
+        // 红字**不是**靠 invoice_type='RED' 表达的：chk_output_invoice_type 只允许
+        // SPECIAL/PLAIN/CUSTOMS；'RED' 是查询层的伪过滤值，由 OutputInvoiceMapper
+        // 按 amount<0 派生的 redCount/redAmount（见 OutputInvoiceMapper#summaryByFilter 注释）
+        insertInvoice("INV-SBF-003", LocalDate.of(2026, 6, 20), "202606", "测试客户", "-500.00", "PLAIN", "PENDING_CONFIRM");
         // D: 202607 其他客户 PLAIN +3000 REVERSED（已完成，已冲销）
         insertInvoice("INV-SBF-004", LocalDate.of(2026, 7, 5), "202607", "其他客户", "3000.00", "PLAIN", "REVERSED");
 
@@ -385,10 +397,11 @@ public class OutputInvoiceMapperTest extends AbstractMapperTest {
                 null, "202606", null, null, "pending", null, null);
         assertNumber("totalCount", 2, pendingPeriod);
 
-        // 4. pending + customerName 模糊：仅 A、B、C（"测试客户" 匹配，D 为"其他客户"）
+        // 4. pending + customerName 模糊：仅 A、C（"测试客户" 匹配；B 是 VOUCHERED 属 completed，
+        //    D 是"其他客户"且 REVERSED 也属 completed）。原注释写"仅 A、B、C 共 3 条"是错的。
         Map<String, Object> pendingCustomer = outputInvoiceMapper.summaryByFilter(
                 "测试", null, null, null, "pending", null, null);
-        assertNumber("totalCount", 3, pendingCustomer);
+        assertNumber("totalCount", 2, pendingCustomer);
 
         // 5. pending + invoiceType=RED：仅 C
         Map<String, Object> red = outputInvoiceMapper.summaryByFilter(

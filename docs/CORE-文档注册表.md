@@ -1,8 +1,9 @@
 # 慧财财务系统 — 文档注册表
 
-> **版本**：V4.12 | **日期**：2026-09-24 | **维护人**：Hermes
+> **版本**：V4.13 | **日期**：2026-09-30 | **维护人**：Hermes
 > **说明**：本文档是所有项目文档的权威索引，编号格式 `HUICAI-{分类}-{序号}`
 > **编号规则**：MAIN=主文档, DES=设计, ARC=架构, PRD=产品需求, SPC=规格, DEV=开发, TST=测试
+> **V4.13 变更**：登记 audit/《五维审计报告》(2026-09-30，HUICAI-AUDIT-2026-0930) —— ① 竞品对标 ② spec/plan ③ 代码实现度 ④ 测试覆盖 ⑤ CI/CD 五维，**排除 AI 范围**；P0 四项（RLS 失效/跨租户越权/审计留痕失效/8 清库端点）、P1 十二项（SPEC 契约覆盖率 4.4%、29 个 Mock 同义反复含 145 @Test、4 模块零真库、76 份无版本历史、登记册重号等）、P2 三项；**本轮已修**：SPEC 门禁 5 层缺陷、L1/L2/FullStack 三处 CI 根因、surefire argLine 致覆盖率门禁假绿（实测 32%/13%/56% 标定棘轮 30/12/55），四门禁首次 4/4 全绿；数量对齐（audit 3 份、specs md 113 份）
 > **V4.12 变更**：P92-B SPEC V1.0 落地（资产负债表流动/非流动/其他三分小计，口径三分/B2 科目表加列/不折叠，V153 迁移 + 6 独立小计字段 + 勾稽校验，report 模块 56/56 通过）；P92-A SPEC 升 V1.0（已实现，commit 29a7e13，后端 37/37 + RealDB 3/3）；PRD-019 §2.3 三问题已拍板，DSN-018 P92 状态翻 ✅。数量与实际对齐（prd 22、dsn 18、specs md 98）
 > **V4.11 变更**：P92 SPEC V0.1 契约草案落地（现金流本年累计，零迁移，定稿"改 mapper 为期间范围参数不复制 SQL"方案）；PRD-019 §1.1/§1.2 按 SPEC 修正"照抄 trendData"的错误表述；DSN-018 同步；P89 SPEC 升 V1.4 补全量回归结果（1719 tests / 18 errors 均非本轮模块）。数量与实际对齐（prd 22、dsn 18、specs md 97）
 > **V4.10 变更**：登记 PRD-019《报表法定结构增强》V0.1 草案 + R-145 立项（P92-A 现金流本年累计 / P92-B 资产分类小计，口径待老丁拍板）；DSN-018 升 V1.1 补 P92 数据模型与端点设计。三层追溯链 PRD-019↔DSN-018↔P92 已闭合；数量与实际对齐（prd 22、dsn 18、specs md 96）
@@ -44,7 +45,7 @@ docs/
 │   ├── guides/                  ← 操作指南（2份）
 │   ├── workflows/               ← 工作流（2份）
 │   ├── incidents/               ← 事故报告（1份）
-│   ├── audit/                   ← 审计报告（2份）
+│   ├── audit/                   ← 审计报告（3份）
 │   └── scripts/                 ← 开发脚本
 │
 ├── testing/                    ← 测试文档（21份 = 17 md + 4 模板）
@@ -197,7 +198,7 @@ docs/
 | HUICAI-DEV-011 | tasks/（30份） | 任务书/日报/验证报告 |
 | HUICAI-DEV-012 | lessons/（4份） | 经验教训 |
 | HUICAI-DEV-013 | incidents/（1份） | 事故报告（销项发票 auditedBy 列缺失） |
-| HUICAI-DEV-014 | audit/（2份） | 项目设计文档综合审核报告（2026-07-23）、账簿查询功能评估报告（2026-08-31） |
+| HUICAI-DEV-014 | audit/（3份） | 项目设计文档综合审核报告（2026-07-23）、账簿查询功能评估报告（2026-08-31）、**五维审计报告（2026-09-30，HUICAI-AUDIT-2026-0930）** |
 | HUICAI-DEV-015 | scripts/check-spec-compliance.sh | SPEC 合规性检查脚本 |
 | HUICAI-DEV-016 | scripts/check-spec-drift.sh | SPEC 漂移检测脚本 |
 | HUICAI-DEV-017 | [frontend-design-system.md](./development/frontend-design-system.md) | 前端设计系统（FDS v0.1 草案，REQ-2026-081） |

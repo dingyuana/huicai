@@ -32,7 +32,9 @@ class InputInvoiceMapperTest extends AbstractMapperTest {
         e.setTotalAmount(new BigDecimal("5650.00"));
         e.setInvoiceType("SPECIAL");
         e.setVendorName("测试供应商");
-        e.setProcessStatus("PENDING");
+        // status 是真实列（chk_input_invoice_status）；process_status 在 DB 中不存在，
+        // 对应 InputInvoiceEntity.processStatus 标注了 @TableField(exist = false)（幽灵字段）。
+        e.setStatus("PENDING_CONFIRM");
         return e;
     }
 
@@ -43,8 +45,10 @@ class InputInvoiceMapperTest extends AbstractMapperTest {
         assertNotNull(e.getId());
 
         InputInvoiceEntity found = mapper.selectById(e.getId());
-        assertEquals("PENDING", found.getProcessStatus());
+        assertEquals("PENDING_CONFIRM", found.getStatus());
         assertEquals(0, found.getAmount().compareTo(new BigDecimal("5000.00")));
+        // 幽灵字段负向断言：processStatus 不落库、读回必为 null（AGENTS §4.2 第 10 条）
+        assertNull(found.getProcessStatus(), "process_status 非真实列，读回应为 null");
     }
 
     @Test

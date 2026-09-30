@@ -74,7 +74,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import type { FormInstance } from 'element-plus'
 import { getPeriodPage, createPeriod, updatePeriod, deletePeriod, closePeriod, unlockPeriod } from '@/api/modules/period'
 import type { PeriodVO, PeriodCreateParam } from '@/api/modules/period'

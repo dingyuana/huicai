@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { shallowMount } from '@vue/test-utils'
+import { shallowMount, flushPromises } from '@vue/test-utils'
 import { createRouter, createWebHistory } from 'vue-router'
 import { nextTick } from 'vue'
 import VoucherList from '@/views/finance/voucher/VoucherList.vue'
@@ -27,10 +27,46 @@ vi.mock('@/api/modules/voucher', () => ({
   ],
 }))
 
-// Mock 默认会计期间工具（P57）— 固定返回 202609，避免依赖真实日期/企业接口
-vi.mock('@/utils/period', () => ({
-  resolveDefaultPeriod: vi.fn().mockResolvedValue('202609'),
-}))
+// Mock 会计期间 API —— 组件 onMounted 后的期间合法性校验会调用 getAllPeriods()，
+// 未 mock 时会发出真实请求（happy-dom fetch → ECONNRESET）。
+// 返回列表必须包含用例中用到的期间（202607 / 202609），否则组件只弹 warning 不查询数据。
+vi.mock('@/api/modules/period', async (importOriginal) => {
+  const actual: any = await importOriginal()
+  return {
+    ...actual,
+    getAllPeriods: vi.fn().mockResolvedValue([
+      { id: 1, year: 2026, month: 7, periodCode: '202607', startDate: '2026-07-01', endDate: '2026-07-31', status: 'CLOSED', createdAt: '2026-07-01' },
+      { id: 2, year: 2026, month: 9, periodCode: '202609', startDate: '2026-09-01', endDate: '2026-09-30', status: 'OPEN', createdAt: '2026-09-01' },
+    ]),
+  }
+})
+
+// Mock 代理/企业模块 —— 仅为阻断 @/utils/period 的间接网络依赖。
+// utils/period.ts 会 import { getCurrentPeriod } from '@/api/modules/agency'，
+// 若不拦截，vi.mock('@/utils/period', importOriginal) 会连带加载真实 agency 模块并发出真实请求。
+vi.mock('@/api/modules/agency', async (importOriginal) => {
+  const actual: any = await importOriginal()
+  return {
+    ...actual,
+    getCurrentPeriod: vi.fn().mockResolvedValue({
+      currentPeriod: '202609',
+      earliestUnclosedPeriod: '202609',
+    }),
+  }
+})
+
+// Mock 会计期间工具（P57）— 固定返回 202609，避免依赖真实日期/企业接口
+// 必须用 importOriginal 做部分 mock：本模块还导出 prevPeriod / yearStartPeriod /
+// resolveLatestClosedPeriod，若整体替换会缺导出，组件 onMounted 里的
+// `await resolveEarliestUnclosedPeriod()` 会抛错并中断数据加载。
+vi.mock('@/utils/period', async (importOriginal) => {
+  const actual: any = await importOriginal()
+  return {
+    ...actual,
+    resolveDefaultPeriod: vi.fn().mockResolvedValue('202609'),
+    resolveEarliestUnclosedPeriod: vi.fn().mockResolvedValue('202609'),
+  }
+})
 
 // Mock element-plus ElMessage / ElMessageBox（P67 批量记账需二次确认）
 vi.mock('element-plus', async (importOriginal) => {
@@ -96,22 +132,24 @@ describe('VoucherList — 凭证列表组件', () => {
     vi.mocked(getVoucherPage).mockResolvedValue(mockPageResponse([], 0))
 
     shallowMount(VoucherList, { global: { plugins: [router] } })
-    await nextTick()
+    await flushPromises()
     await nextTick()
 
     expect(getVoucherPage).toHaveBeenCalled()
   })
 
-  it('onMounted 默认查询当前会计期间（P57）', async () => {
+  it('onMounted 查询最早未结账会计期间（P57/P67）', async () => {
     const { getVoucherPage } = await import('@/api/modules/voucher')
-    const { resolveDefaultPeriod } = await import('@/utils/period')
+    const { resolveEarliestUnclosedPeriod } = await import('@/utils/period')
     vi.mocked(getVoucherPage).mockResolvedValue(mockPageResponse([], 0))
 
     shallowMount(VoucherList, { global: { plugins: [router] } })
-    await nextTick()
+    await flushPromises()
     await nextTick()
 
-    expect(resolveDefaultPeriod).toHaveBeenCalled()
+    // 组件 onMounted 实际调用的是 resolveEarliestUnclosedPeriod（最早未结账期间），
+    // 早期用 resolveDefaultPeriod 的断言已随 P67 批量记账改造失效
+    expect(resolveEarliestUnclosedPeriod).toHaveBeenCalled()
     expect(getVoucherPage).toHaveBeenCalledWith(expect.objectContaining({
       period: '202609',
       current: 1,
@@ -124,7 +162,7 @@ describe('VoucherList — 凭证列表组件', () => {
     vi.mocked(getVoucherPage).mockResolvedValue(mockPageResponse([], 0))
 
     shallowMount(VoucherList, { global: { plugins: [router] } })
-    await nextTick()
+    await flushPromises()
     await nextTick()
 
     expect(getVoucherPage).toHaveBeenCalledWith(expect.objectContaining({
@@ -145,7 +183,7 @@ describe('VoucherList — 凭证列表组件', () => {
     vi.mocked(getVoucherPage).mockResolvedValue(mockPageResponse(mockRecords, 4))
 
     const wrapper = shallowMount(VoucherList, { global: { plugins: [router] } })
-    await nextTick()
+    await flushPromises()
     await nextTick()
 
     // Verify vm has the data loaded
@@ -160,7 +198,7 @@ describe('VoucherList — 凭证列表组件', () => {
     vi.mocked(submitVoucher).mockResolvedValue(undefined)
 
     const wrapper = shallowMount(VoucherList, { global: { plugins: [router] } })
-    await nextTick()
+    await flushPromises()
     await nextTick()
 
     const callCountBefore = vi.mocked(getVoucherPage).mock.calls.length
@@ -179,7 +217,7 @@ describe('VoucherList — 凭证列表组件', () => {
     vi.mocked(auditVoucher).mockResolvedValue(undefined)
 
     const wrapper = shallowMount(VoucherList, { global: { plugins: [router] } })
-    await nextTick()
+    await flushPromises()
     await nextTick()
 
     await (wrapper.vm as any).onAudit(mockVoucher(2, 'SUBMITTED'))
@@ -195,7 +233,7 @@ describe('VoucherList — 凭证列表组件', () => {
     vi.mocked(postVoucher).mockResolvedValue(undefined)
 
     const wrapper = shallowMount(VoucherList, { global: { plugins: [router] } })
-    await nextTick()
+    await flushPromises()
     await nextTick()
 
     await (wrapper.vm as any).onPost(mockVoucher(3, 'AUDITED'))
@@ -211,7 +249,7 @@ describe('VoucherList — 凭证列表组件', () => {
     vi.mocked(deleteVoucher).mockResolvedValue(undefined)
 
     const wrapper = shallowMount(VoucherList, { global: { plugins: [router] } })
-    await nextTick()
+    await flushPromises()
     await nextTick()
 
     await (wrapper.vm as any).onDelete(mockVoucher(1, 'DRAFT'))
@@ -227,7 +265,7 @@ describe('VoucherList — 凭证列表组件', () => {
     vi.mocked(unpostVoucher).mockResolvedValue(undefined)
 
     const wrapper = shallowMount(VoucherList, { global: { plugins: [router] } })
-    await nextTick()
+    await flushPromises()
     await nextTick()
 
     await (wrapper.vm as any).onUnpost(mockVoucher(4, 'POSTED'))
@@ -245,7 +283,7 @@ describe('VoucherList — 凭证列表组件', () => {
     } as any)
 
     const wrapper = shallowMount(VoucherList, { global: { plugins: [router] } })
-    await nextTick()
+    await flushPromises()
     await nextTick()
 
     await (wrapper.vm as any).onReverse(mockVoucher(4, 'POSTED'))
@@ -334,7 +372,7 @@ describe('VoucherList — 凭证列表组件', () => {
 
     ;(wrapper.vm as any).tabType = 'DRAFT'
     ;(wrapper.vm as any).onTabChange()
-    await nextTick()
+    await flushPromises()
 
     expect(getVoucherPage).toHaveBeenCalledWith(expect.objectContaining({
       status: 'DRAFT',
@@ -353,7 +391,7 @@ describe('VoucherList — 凭证列表组件', () => {
     // Change query and search
     ;(wrapper.vm as any).query.period = '202607'
     ;(wrapper.vm as any).onSearch()
-    await nextTick()
+    await flushPromises()
 
     expect(getVoucherPage).toHaveBeenCalledWith(expect.objectContaining({
       period: '202607',

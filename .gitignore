@@ -42,6 +42,8 @@ temp/
 test-results/
 playwright-report/
 .playwright-mcp/
+# 前端测试覆盖率输出（vitest --coverage 生成，见 l1-unit-tests.yml）
+frontend/coverage/
 *.png
 bank-requests.txt
 frontend/test.txt

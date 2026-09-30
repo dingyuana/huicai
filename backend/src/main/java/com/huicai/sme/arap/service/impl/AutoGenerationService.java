@@ -513,7 +513,7 @@ public class AutoGenerationService {
 
         // 3. 降级: 硬编码
         log.warn("流水分类 {} 无激活模板, 回退硬编码", stmt.getClassification());
-        Subject bankAcct = findSubjectByCode("1002");
+        Subject bankAcct = requireSubject("1002");
 
         VoucherEntity voucher = createVoucher(stmt, period, amount, userId);
         String entrySummary = buildEntrySummary(stmt);
@@ -525,7 +525,7 @@ public class AutoGenerationService {
                 Long customerId = doc.getCustomerId();
                 boolean hasOpenReceivables = customerId != null
                         && reconciliationService.hasOpenInvoices("INVOICE_OUT", customerId);
-                Subject arAcct = findSubjectByCode(hasOpenReceivables ? "1122" : "2203");
+                Subject arAcct = requireSubject(hasOpenReceivables ? "1122" : "2203");
                 addVoucherEntry(voucher.getId(), bankAcct.getId(), amount, BigDecimal.ZERO, entrySummary, sort++);
                 addVoucherEntry(voucher.getId(), arAcct.getId(), BigDecimal.ZERO, amount, entrySummary, sort++);
                 break;
@@ -535,20 +535,21 @@ public class AutoGenerationService {
                 Long supplierId = doc.getSupplierId();
                 boolean hasOpenPayables = supplierId != null
                         && reconciliationService.hasOpenInvoices("INVOICE_IN", supplierId);
-                Subject apAcct = findSubjectByCode(hasOpenPayables ? "2202" : "1123");
+                Subject apAcct = requireSubject(hasOpenPayables ? "2202" : "1123");
                 addVoucherEntry(voucher.getId(), apAcct.getId(), amount, BigDecimal.ZERO, entrySummary, sort++);
                 addVoucherEntry(voucher.getId(), bankAcct.getId(), BigDecimal.ZERO, amount, entrySummary, sort++);
                 break;
             }
             case BankClassification.INTERNAL_TRANSFER: {
+                // REQ-2026-127: 1012 缺失时回退 1221, 两者皆缺须抛业务异常
                 Subject otherAcct = findSubjectByCode("1012");
-                if (otherAcct == null) otherAcct = findSubjectByCode("1221");
+                if (otherAcct == null) otherAcct = requireSubject("1221");
                 addVoucherEntry(voucher.getId(), otherAcct.getId(), amount, BigDecimal.ZERO, entrySummary, sort++);
                 addVoucherEntry(voucher.getId(), bankAcct.getId(), BigDecimal.ZERO, amount, entrySummary, sort++);
                 break;
             }
             case BankClassification.SALARY_SOCIAL: {
-                Subject salaryAcct = findSubjectByCode("2211");
+                Subject salaryAcct = requireSubject("2211");
                 addVoucherEntry(voucher.getId(), salaryAcct.getId(), amount, BigDecimal.ZERO, entrySummary, sort++);
                 addVoucherEntry(voucher.getId(), bankAcct.getId(), BigDecimal.ZERO, amount, entrySummary, sort++);
                 break;
@@ -687,6 +688,21 @@ public class AutoGenerationService {
         List<Subject> list = subjectMapper.selectList(
                 new LambdaQueryWrapper<Subject>().eq(Subject::getCode, code).last("LIMIT 1"));
         return list.isEmpty() ? null : list.get(0);
+    }
+
+    /**
+     * 按代码取科目, 缺失即抛业务异常（REQ-2026-127）。
+     * <p>
+     * 开发库缺 2203 预收账款时, generateDocThenVoucher 的 arAcct.getId() 直接 NPE,
+     * 100/99/98/95/94 号流水提交审核整条链路崩溃。宁可显式失败并指明缺失科目,
+     * 也不得让 NPE 穿透到前端（铁律 #14: 禁止原生 RuntimeException）。
+     */
+    private Subject requireSubject(String code) {
+        Subject subject = findSubjectByCode(code);
+        if (subject == null) {
+            throw new BusinessException(500, "缺少科目 " + code + ", 无法生成凭证, 请先在基础数据-会计科目中维护该科目");
+        }
+        return subject;
     }
 
     private String generateDocNo(String classification, String period) {

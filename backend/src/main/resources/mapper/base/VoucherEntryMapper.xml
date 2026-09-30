@@ -3,9 +3,11 @@
 <mapper namespace="com.huicai.base.voucher.mapper.VoucherEntryMapper">
 
     <select id="selectByVoucherId" resultType="com.huicai.base.voucher.entity.VoucherEntryEntity">
-        SELECT * FROM t_voucher_entry
-        WHERE voucher_id = #{voucherId}
-        ORDER BY sort_order ASC
+        SELECT e.* FROM t_voucher_entry e
+        INNER JOIN t_voucher v ON v.id = e.voucher_id AND v.deleted = 0
+        WHERE e.voucher_id = #{voucherId}
+          AND e.deleted = 0
+        ORDER BY e.sort_order ASC
     </select>
 
     <select id="selectBySubjectIdAndPeriod" resultType="com.huicai.base.voucher.entity.VoucherEntryEntity">
@@ -65,14 +67,14 @@
                COALESCE(SUM(t.credit), 0) AS creditTotal
         FROM (
             SELECT e.subject_id, e.debit, e.credit,
-                   e.assist_json -&gt;&gt; #{dimensionField} AS dim_value
+                   jsonb_extract_path_text(e.assist_json, #{dimensionField}) AS dim_value
             FROM t_voucher_entry e
             INNER JOIN t_voucher v ON v.id = e.voucher_id AND v.deleted = 0
             WHERE e.deleted = 0
               AND v.period = #{period}
               AND jsonb_exists(e.assist_json, #{dimensionField})
             <if test="dimensionValue != null">
-              AND e.assist_json -&gt;&gt; #{dimensionField} = CAST(#{dimensionValue} AS TEXT)
+              AND jsonb_extract_path_text(e.assist_json, #{dimensionField}) = CAST(#{dimensionValue} AS TEXT)
             </if>
         ) t
         GROUP BY t.subject_id, t.dim_value
@@ -86,14 +88,14 @@
                COALESCE(SUM(t.credit), 0) AS creditTotal
         FROM (
             SELECT e.subject_id, e.debit, e.credit,
-                   e.assist_json -&gt;&gt; #{dimensionField} AS dim_value
+                   jsonb_extract_path_text(e.assist_json, #{dimensionField}) AS dim_value
             FROM t_voucher_entry e
             INNER JOIN t_voucher v ON v.id = e.voucher_id AND v.deleted = 0
             WHERE e.deleted = 0
               AND v.period &lt; #{period}
               AND jsonb_exists(e.assist_json, #{dimensionField})
             <if test="dimensionValue != null">
-              AND e.assist_json -&gt;&gt; #{dimensionField} = CAST(#{dimensionValue} AS TEXT)
+              AND jsonb_extract_path_text(e.assist_json, #{dimensionField}) = CAST(#{dimensionValue} AS TEXT)
             </if>
         ) t
         GROUP BY t.subject_id, t.dim_value
@@ -134,8 +136,8 @@
         </foreach>
     </insert>
 
-    <delete id="deleteByVoucherId">
-        DELETE FROM t_voucher_entry WHERE voucher_id = #{voucherId}
-    </delete>
+    <update id="deleteByVoucherId">
+        UPDATE t_voucher_entry SET deleted = 1 WHERE voucher_id = #{voucherId} AND deleted = 0
+    </update>
 
 </mapper>

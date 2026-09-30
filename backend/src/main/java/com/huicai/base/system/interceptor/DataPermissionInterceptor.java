@@ -110,8 +110,11 @@ public class DataPermissionInterceptor implements InnerInterceptor {
         try {
             modifiedSql = injectDataFilter(originalSql, perm);
         } catch (Exception e) {
-            log.warn("数据权限SQL注入失败, 跳过过滤: sql={}, error={}", originalSql, e.getMessage());
-            return;
+            // P102 / AT-102-6：安全组件必须 fail-closed。原实现 log.warn 后 return，
+            // 等于「注入失败就不注入」⇒ 直接放行全表，与数据权限的方向完全相反。
+            log.error("数据权限SQL注入失败，已中止查询以免泄露全表数据: sql={}, error={}",
+                    originalSql, e.getMessage(), e);
+            throw new BusinessException("数据权限过滤失败，已拒绝本次查询，请联系管理员");
         }
 
         if (modifiedSql == null || modifiedSql.equals(originalSql)) {
@@ -123,7 +126,9 @@ public class DataPermissionInterceptor implements InnerInterceptor {
             log.debug("数据权限: userId={}, scope={}, deptId={}, rows filtered",
                     loginUser.getUserId(), perm.dataScope, perm.deptId);
         } catch (Exception e) {
-            log.warn("无法修改BoundSql, 跳过数据权限过滤: {}", e.getMessage());
+            // 同上：写不回 BoundSql 意味着过滤条件根本没生效，必须中止而非放行
+            log.error("数据权限过滤结果写回失败，已中止查询: error={}", e.getMessage(), e);
+            throw new BusinessException("数据权限过滤结果写回失败，已拒绝本次查询，请联系管理员");
         }
     }
 
@@ -271,8 +276,11 @@ public class DataPermissionInterceptor implements InnerInterceptor {
             PERMISSION_CACHE.set(p);
             return p;
         } catch (Exception e) {
-            log.warn("查询用户数据权限失败(可能因递归查询), userId={}, error={}", userId, e.getMessage());
-            return null;
+            // P102 / AT-102-6c：查不到权限时返回 null，而 null 在 beforeQuery 里
+            // 等于「不加过滤」，是最隐蔽的 fail-open —— 改为直接中止。
+            log.error("查询用户数据权限失败，已中止查询以免泄露全表数据: userId={}, error={}",
+                    userId, e.getMessage(), e);
+            throw new BusinessException("数据权限查询失败，已拒绝本次查询，请联系管理员");
         }
     }
 

@@ -5,9 +5,9 @@ import com.huicai.base.voucher.dto.AuxiliarySummaryRow;
 import com.huicai.base.voucher.dto.LedgerEntryRowDTO;
 import com.huicai.base.voucher.dto.SubjectProfitTotalRow;
 import com.huicai.base.voucher.entity.VoucherEntryEntity;
-import org.apache.ibatis.annotations.Delete;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
+import org.apache.ibatis.annotations.Update;
 
 import java.util.List;
 
@@ -85,13 +85,20 @@ public interface VoucherEntryMapper extends BaseMapper<VoucherEntryEntity> {
     int batchInsert(@Param("list") List<VoucherEntryEntity> entries);
 
     /**
-     * 删除凭证下所有分录
+     * 删除凭证下所有分录（逻辑删除，铁律 #12：财务分录禁止物理删除，审计痕迹须保留）
      */
     int deleteByVoucherId(@Param("voucherId") Long voucherId);
 
-    @Delete("DELETE FROM t_voucher_entry WHERE voucher_id IN (SELECT id FROM t_voucher WHERE source = #{source})")
+    /**
+     * 按凭证来源删除分录（逻辑删除，铁律 #12）。当前无生产调用方。
+     */
+    @Update("UPDATE t_voucher_entry SET deleted = 1 "
+            + "WHERE voucher_id IN (SELECT id FROM t_voucher WHERE source = #{source}) AND deleted = 0")
     int deleteByVoucherSource(@Param("source") String source);
 
-    @Delete("DELETE FROM t_voucher_entry")
+    /**
+     * 清空全部分录（逻辑删除，铁律 #12）。当前无生产调用方，保留供数据修复/测试隔离使用。
+     */
+    @Update("UPDATE t_voucher_entry SET deleted = 1 WHERE deleted = 0")
     int deleteAll();
 }

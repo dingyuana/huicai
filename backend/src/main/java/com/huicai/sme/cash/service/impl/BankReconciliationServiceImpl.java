@@ -2,11 +2,14 @@ package com.huicai.sme.cash.service.impl;
 
 import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.huicai.common.exception.BusinessException;
 import com.huicai.sme.cash.entity.BankAccountEntity;
 import com.huicai.sme.cash.entity.BankJournalEntity;
+import com.huicai.sme.cash.entity.BankReconciliationLogEntity;
 import com.huicai.base.business.entity.BankStatementEntity;
 import com.huicai.sme.cash.mapper.BankAccountMapper;
 import com.huicai.sme.cash.mapper.BankJournalMapper;
+import com.huicai.sme.cash.mapper.BankReconciliationLogMapper;
 import com.huicai.base.business.mapper.BankStatementMapper;
 import com.huicai.sme.cash.service.BankReconciliationService;
 import lombok.RequiredArgsConstructor;
@@ -42,6 +45,7 @@ public class BankReconciliationServiceImpl implements BankReconciliationService 
     private final BankAccountMapper accountMapper;
     private final BankJournalMapper journalMapper;
     private final BankStatementMapper statementMapper;
+    private final BankReconciliationLogMapper reconLogMapper;
     private final RedisTemplate<String, Object> redisTemplate;
 
     // ─── Existing ───
@@ -407,19 +411,91 @@ public class BankReconciliationServiceImpl implements BankReconciliationService 
 
     // ─── P14-1: 人工确认 / 驳回 ───
 
+    /**
+     * 人工确认匹配：把流水落为 MANUAL_MATCHED（与自动匹配的 MATCHED 区分，
+     * 呼应对账语义：人工确认必须可分辨），回写关联日记账并记为已对账，
+     * 且写 t_bank_reconciliation_log 审计日志（铁律 #5）。
+     */
     @Override
+    @org.springframework.transaction.annotation.Transactional(rollbackFor = Exception.class)
     public ConfirmResult confirmMatch(Long statementId, Long journalId, String operator) {
-        log.info("P14-1 确认匹配: statementId={}, journalId={}, operator={}",
-                statementId, journalId, operator);
-        // 实际生产: 更新 t_bank_statement.match_status = MATCHED, 记录 t_bank_reconciliation_log
-        // 当前: 仅返回结果
-        return new ConfirmResult(statementId, journalId, "MATCHED", operator);
+        BankStatementEntity stmt = statementMapper.selectById(statementId);
+        if (stmt == null) {
+            throw BusinessException.notFound("银行流水不存在: statementId=" + statementId);
+        }
+        BankJournalEntity journal = journalMapper.selectById(journalId);
+        if (journal == null) {
+            throw BusinessException.notFound("银行日记账不存在: journalId=" + journalId);
+        }
+        if ("IGNORED".equals(stmt.getMatchStatus())) {
+            throw BusinessException.conflict("该流水已被忽略，不能人工确认匹配: statementId=" + statementId);
+        }
+        if (journalId.equals(stmt.getMatchedJournalId())
+                && "MANUAL_MATCHED".equals(stmt.getMatchStatus())
+                && Boolean.TRUE.equals(journal.getIsReconciled())) {
+            // 幂等：已是同一对账关系，直接返回当前状态
+            return new ConfirmResult(statementId, journalId, "MANUAL_MATCHED", operator);
+        }
+
+        String before = stmt.getMatchStatus();
+        statementMapper.updateMatch(statementId, journalId, "MANUAL_MATCHED");
+        journalMapper.updateReconciled(journalId, true);
+
+        BankReconciliationLogEntity log = new BankReconciliationLogEntity();
+        log.setStatementId(statementId);
+        log.setJournalId(journalId);
+        log.setAction("CONFIRM");
+        log.setStatusBefore(before);
+        log.setStatusAfter("MANUAL_MATCHED");
+        log.setOperator(operator);
+        log.setRemark("人工确认匹配");
+        log.setEnterpriseId(stmt.getEnterpriseId());
+        reconLogMapper.insert(log);
+
+        return new ConfirmResult(statementId, journalId, "MANUAL_MATCHED", operator);
     }
 
+    /**
+     * 人工驳回匹配：流水回落 UNMATCHED、释放关联日记账与已对账标记，写对账日志。
+     */
     @Override
+    @org.springframework.transaction.annotation.Transactional(rollbackFor = Exception.class)
     public ConfirmResult rejectMatch(Long statementId, Long journalId, String operator) {
-        log.info("P14-1 驳回匹配: statementId={}, journalId={}, operator={}",
-                statementId, journalId, operator);
+        BankStatementEntity stmt = statementMapper.selectById(statementId);
+        if (stmt == null) {
+            throw BusinessException.notFound("银行流水不存在: statementId=" + statementId);
+        }
+        BankJournalEntity journal = journalMapper.selectById(journalId);
+        if (journal == null) {
+            throw BusinessException.notFound("银行日记账不存在: journalId=" + journalId);
+        }
+        String before = stmt.getMatchStatus();
+        boolean wasManualMatched = "MANUAL_MATCHED".equals(stmt.getMatchStatus());
+        if (!wasManualMatched && !"PENDING_CONFIRM".equals(stmt.getMatchStatus())) {
+            // 仅允许驳回「人工确认」(MANUAL_MATCHED) 或「待人工决策」(PENDING_CONFIRM)；
+            // 自动匹配 (MATCHED) 需在智能匹配中解除，IGNORED 已忽略，均不在本操作面
+            if ("MATCHED".equals(stmt.getMatchStatus())) {
+                throw BusinessException.conflict(
+                        "该流水为自动匹配（MATCHED），请先在智能匹配中解除，不得在人工驳回操作面处理: statementId=" + statementId);
+            }
+            throw BusinessException.conflict("当前流水状态不可驳回: statementId=" + statementId
+                    + ", matchStatus=" + stmt.getMatchStatus());
+        }
+
+        statementMapper.updateMatch(statementId, null, "UNMATCHED");
+        journalMapper.updateReconciled(journalId, false);
+
+        BankReconciliationLogEntity log = new BankReconciliationLogEntity();
+        log.setStatementId(statementId);
+        log.setJournalId(journalId);
+        log.setAction("REJECT");
+        log.setStatusBefore(before);
+        log.setStatusAfter("UNMATCHED");
+        log.setOperator(operator);
+        log.setRemark("人工驳回匹配");
+        log.setEnterpriseId(stmt.getEnterpriseId());
+        reconLogMapper.insert(log);
+
         return new ConfirmResult(statementId, journalId, "UNMATCHED", operator);
     }
 }

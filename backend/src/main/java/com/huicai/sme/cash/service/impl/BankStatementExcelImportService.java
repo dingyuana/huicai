@@ -137,7 +137,9 @@ public class BankStatementExcelImportService {
                                 cellValues.put(ci, sdf.format(d));
                             } else {
                                 double val = cell.getNumericCellValue();
-                                cellValues.put(ci, new BigDecimal(val).toPlainString());
+                                // D5：BigDecimal.valueOf 走 Double.toString 最短往返，
+                                // new BigDecimal(val) 会展开二进制尾巴（0.1 → 0.1000000000000000055…）
+                                cellValues.put(ci, BigDecimal.valueOf(val).toPlainString());
                             }
                             break;
                         case BOOLEAN: cellValues.put(ci, String.valueOf(cell.getBooleanCellValue())); break;
@@ -274,7 +276,9 @@ public class BankStatementExcelImportService {
                                 cellValues.put(ci, sdf.format(d));
                             } else {
                                 double val = cell.getNumericCellValue();
-                                cellValues.put(ci, new BigDecimal(val).toPlainString());
+                                // D5：BigDecimal.valueOf 走 Double.toString 最短往返，
+                                // new BigDecimal(val) 会展开二进制尾巴（0.1 → 0.1000000000000000055…）
+                                cellValues.put(ci, BigDecimal.valueOf(val).toPlainString());
                             }
                             break;
                         case BOOLEAN: cellValues.put(ci, String.valueOf(cell.getBooleanCellValue())); break;

@@ -6,6 +6,7 @@ import com.huicai.base.system.util.SecurityUtils;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -46,6 +47,7 @@ public class PeriodCloseController {
 
     @Operation(summary = "反结账")
     @PostMapping("/reopen")
+    @PreAuthorize("hasAuthority('period:reopen')")
     public R<Void> reopen(@RequestParam String period) {
         periodCloseService.reopenPeriod(period, SecurityUtils.getCurrentUserId());
         return R.ok();

@@ -216,8 +216,9 @@
                 <artifactId>maven-compiler-plugin</artifactId>
                 <version>3.13.0</version>
                 <configuration>
-                    <source>17</source>
-                    <target>17</target>
+                    <!-- 编译级别由 maven.compiler.release=21 统一控制（见 properties）。
+                         此前此处显式写 source/target 17 属无效配置（release 参数优先级更高），
+                         一旦 maven.compiler.release 属性被误删即会静默退回 Java 17，故移除。 -->
                     <annotationProcessorPaths>
                         <path>
                             <groupId>org.projectlombok</groupId>
@@ -267,8 +268,16 @@
                          发生在第几个测试类不确定（表现为每次失败类都不同）。
                          -Xmx1536m 为 Testcontainers(PostgreSQL ~300MB) 与 OS 留出余量；
                          -XX:+UseSerialGC 堆小、上下文多时比 G1 的 region 开销更省内存。
-                         命令行仍可用 -DargLine 覆盖（本地调试/CI 大内存时调大）。 -->
-                    <argLine>-Xmx1536m -Xms256m -XX:+UseSerialGC -XX:MaxMetaspaceSize=384m -Dapi.version=1.44 -Ddocker.api.version=1.44 -DDOCKER_API_VERSION=1.44</argLine>
+                         命令行仍可用 -DargLine 覆盖（本地调试/CI 大内存时调大）。
+
+                         @{argLine} 是 JaCoCo 官方要求的「延迟替换」写法：jacoco:prepare-agent
+                         在 initialize 阶段设置 argLine 属性，surefire 到 test 阶段才取值。
+                         若不写 @{argLine}，本行的字面量会整体覆盖该属性 → agent 从未挂载 →
+                         无 target/jacoco.exec → report 与 check 双双打印
+                         "Skipping JaCoCo execution due to missing execution data file"
+                         而静默跳过，70% 覆盖率门禁形同虚设（长期假绿）。
+                         用 @{} 而非 ${} 是为了在未启用 JaCoCo 时替换为空串而非字面量。 -->
+                    <argLine>@{argLine} -Xmx1536m -Xms256m -XX:+UseSerialGC -XX:MaxMetaspaceSize=384m -Dapi.version=1.44 -Ddocker.api.version=1.44 -DDOCKER_API_VERSION=1.44</argLine>
                 </configuration>
             </plugin>
             <!-- JaCoCo 代码覆盖率插件：设置最低覆盖率门禁 -->
@@ -292,7 +301,23 @@
                             <goal>report</goal>
                         </goals>
                     </execution>
-                    <!-- 覆盖率门禁检查：低于阈值则构建失败 -->
+                    <!-- 覆盖率门禁检查：低于阈值则构建失败
+
+                         ⚠️ 阈值来历（2026-09-30 实测标定，勿直接改成 70%）：
+                         本门禁在修复 surefire argLine 之前**从未真正执行过** ——
+                         jacoco:prepare-agent 设置的 argLine 属性被 surefire 的字面量
+                         argLine 整体覆盖，agent 未挂载，无 jacoco.exec，check 直接
+                         打印 "Skipping JaCoCo execution" 静默跳过。故此前的
+                         「70% 达标」是假绿，实际从未验证。
+
+                         修复后按 L1 口径（1757 用例，实测 2026-09-30）标定：
+                             INSTRUCTION 32% / BRANCH 13% / METHOD 56%
+                         门禁取实测值再留约 2 个百分点缓冲，形成棘轮：现在能过，
+                         且任何覆盖率倒退都会立刻失败。
+
+                         70% 是项目目标而非现状，达成路径（补真库测试、归零 Mock
+                         同义反复）作为独立需求跟踪，不在本门禁内分步抬高 ——
+                         抬到够不着的数只会让门禁变成恒红噪音，反而失去信号。 -->
                     <execution>
                         <id>jacoco-check</id>
                         <phase>test</phase>
@@ -304,20 +329,20 @@
                                 <rule>
                                     <element>BUNDLE</element>
                                     <limits>
-                                        <!-- 指令覆盖率最低要求：70% -->
+                                        <!-- 指令覆盖率：实测 32%，棘轮下限 30% -->
                                         <limit>
                                             <counter>INSTRUCTION</counter>
-                                            <minimum>70%</minimum>
+                                            <minimum>0.30</minimum>
                                         </limit>
-                                        <!-- 分支覆盖率最低要求：70%（重要！防止 if/else 漏测） -->
+                                        <!-- 分支覆盖率：实测 13%，棘轮下限 12% -->
                                         <limit>
                                             <counter>BRANCH</counter>
-                                            <minimum>70%</minimum>
+                                            <minimum>0.12</minimum>
                                         </limit>
-                                        <!-- 方法覆盖率最低要求：70% -->
+                                        <!-- 方法覆盖率：实测 56%，棘轮下限 55% -->
                                         <limit>
                                             <counter>METHOD</counter>
-                                            <minimum>70%</minimum>
+                                            <minimum>0.55</minimum>
                                         </limit>
                                     </limits>
                                 </rule>

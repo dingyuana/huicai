@@ -620,6 +620,50 @@ class AutoGenerationServiceTest {
         verify(prepaymentMapper, never()).insert(any(PrepaymentEntity.class));
     }
 
+    // ==================== REQ-2026-127: 科目缺失必须抛业务异常, 不得 NPE ====================
+
+    @Test
+    void testAutoGenerate_receipt_缺2203科目_抛业务异常而非空指针() {
+        // 服务器手工测试实锤: 开发库无 2203 预收账款, 100/99/98/95/94 号流水
+        // 提交审核时 generateDocThenVoucher L528 arAcct.getId() 直接 NPE。
+        // 既有用例把 2203 一并 stub 了, 该盲区使缺陷从未暴露。
+        BankStatementEntity stmt = newStmt("business_receipt", "in");
+        stmt.setCounterAccount("客户X");
+        when(statementMapper.selectById(1L)).thenReturn(stmt);
+        when(customerMapper.selectList(any())).thenReturn(List.of(new CustomerEntity() {{
+            setId(90L); setName("客户X");
+        }}));
+        when(reconciliationService.hasOpenInvoices(eq("INVOICE_OUT"), eq(90L))).thenReturn(false);
+        stubSubject("1002", 10L);
+        stubSubject("1122", 20L);
+        // 关键: 不 stub 2203, 复现生产库中该科目缺失
+        when(voucherNoService.generateNextNo(anyString(), anyLong())).thenReturn("REC-202606-011");
+
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> service.autoGenerate(1L, 1L),
+                "科目缺失必须抛 BusinessException, 不得抛 NPE");
+        assertTrue(ex.getMessage().contains("2203"),
+                "异常信息须指明缺失科目代码, 实际: " + ex.getMessage());
+    }
+
+    @Test
+    void testAutoGenerate_receipt_缺2203科目_不得生成任何凭证分录() {
+        // 负向断言: 缺科目时宁可整体失败, 也不得留下半截凭证/分录（铁律 #11 事务红线）
+        BankStatementEntity stmt = newStmt("business_receipt", "in");
+        stmt.setCounterAccount("客户X");
+        when(statementMapper.selectById(1L)).thenReturn(stmt);
+        when(customerMapper.selectList(any())).thenReturn(List.of(new CustomerEntity() {{
+            setId(90L); setName("客户X");
+        }}));
+        when(reconciliationService.hasOpenInvoices(eq("INVOICE_OUT"), eq(90L))).thenReturn(false);
+        stubSubject("1002", 10L);
+        stubSubject("1122", 20L);
+        when(voucherNoService.generateNextNo(anyString(), anyLong())).thenReturn("REC-202606-012");
+
+        assertThrows(BusinessException.class, () -> service.autoGenerate(1L, 1L));
+        verify(voucherEntryMapper, never()).insert(any(VoucherEntryEntity.class));
+    }
+
     // ==================== P11-3: 银行流水 → 员工匹配 ====================
 
     @Test

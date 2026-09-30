@@ -20,7 +20,7 @@ spring:
   datasource:
     url: jdbc:postgresql://localhost:5432/huicai
     username: huicai
-    password: huicai123
+    password: ${DB_PASSWORD:huicai123}
     driver-class-name: org.postgresql.Driver
     type: com.zaxxer.hikari.HikariDataSource
     hikari:
@@ -56,7 +56,7 @@ spring:
     host: localhost
     port: 5672
     username: huicai
-    password: huicai123
+    password: ${RABBITMQ_PASSWORD:huicai123}
     virtual-host: /
 
 mybatis-plus:
@@ -85,9 +85,14 @@ knife4j:
     language: zh_cn
 
 # JWT 配置
-# secret 优先读取环境变量 JWT_SECRET，开发环境可使用默认值
+# secret 必须由环境变量 JWT_SECRET 注入，**无默认值**：
+# 可预测的默认密钥等于无密钥（任何人可据此伪造任意用户 token）。
+# 缺变量时应用启动即失败（fail-fast），由 JwtProvider 的 @Value 解析触发。
+# 本地开发：export JWT_SECRET=$(openssl rand -base64 48)
+# 长度要求 ≥32 字节（HMAC-SHA256），否则 Keys.hmacShaKeyFor 抛 WeakKeyException。
+# 测试环境：src/test/resources/application.yml 自带独立测试密钥，不依赖此处。
 jwt:
-  secret: ${JWT_SECRET:huicai-finance-jwt-secret-key-2026-very-long-secret-string}
+  secret: ${JWT_SECRET}
   access-token-expiration: 86400000
   refresh-token-expiration: 604800000
 
@@ -95,20 +100,25 @@ jwt:
 minio:
   endpoint: http://localhost:9000
   access-key: huicai
-  secret-key: huicai123
+  secret-key: ${MINIO_ROOT_PASSWORD:huicai123}
   bucket: huicai-files
 
 # AI 服务配置
 ai:
-  service-url: http://localhost:8000
+  # AI 服务地址：宿主端口 8001（docker-compose 映射 8001:8000，容器内仍 8000）
+  # 不可写成 8000 —— 那是后端自身端口，会形成自引用
+  service-url: ${AI_SERVICE_URL:http://localhost:8001}
   enabled: true
   ocr-enabled: false
   embedding-enabled: false
   # NVIDIA API 配置 (minimaxai/minimax-m3 多模态模型)
+  # 密钥一律从环境变量注入，禁止硬编码（AGENTS §7-3）。
+  # 本地用法：export NVIDIA_API_KEY=nvapi-xxxx
+  # 留空时 nvidia.enabled 虽为 true，但任何调用都会因缺密钥而失败，属预期。
   nvidia:
     enabled: true
-    api-key: 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
-    base-url: https://integrate.api.nvidia.com/v1
+    api-key: ${NVIDIA_API_KEY:}
+    base-url: ${NVIDIA_BASE_URL:https://integrate.api.nvidia.com/v1}
     model: minimaxai/minimax-m3
     max-tokens: 8192
     temperature: 1.00

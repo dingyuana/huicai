@@ -49,7 +49,8 @@ public interface BankStatementService {
     BatchResult batchReview(List<Long> statementIds, Long userId);
 
     /**
-     * 主管审核：CONFIRMED → AUDITED（审核后才能生成凭证）
+     * 主管审核并制证：CONFIRMED → voucher_generated / payment_created
+     * （审核与生成单据/凭证在同一调用内完成，生成失败可由 generateVoucher() 重试）
      */
     BankStatementEntity audit(Long statementId, Long userId);
 
@@ -59,8 +60,9 @@ public interface BankStatementService {
     BatchResult batchAudit(List<Long> statementIds, Long userId);
 
     /**
-     * 审核通过后生成凭证/单据（独立于审核，审核→生成两步骤分离）
-     * 状态守卫：仅允许 AUDITED 状态执行
+     * 生成凭证/单据 —— audit() 失败后的恢复/重试入口（主流程已在 audit() 内联完成）
+     * 状态守卫：仅 CONFIRMED 可达；代码另保留 AUDITED 兼容分支，但该值不在
+     * chk_stmt_review_status 允许集内，实际不可达
      */
     BankStatementEntity generateVoucher(Long statementId, Long userId);
 

@@ -70,17 +70,48 @@ public class CustomerStatementServiceImpl implements CustomerStatementService {
             CustomerStatementEntity entity = new CustomerStatementEntity();
             entity.setCustomerId(customerId);
             entity.setCustomerName(null); // 由前端或后续查询补全
+            entity.setStatementNo(generateStatementNo(customerId, period));
             entity.setPeriod(period);
+            // REQ-2026-134: period_start/period_end 为 DB NOT NULL 列，
+            // 此前 Entity 无对应字段导致纯 MP insert 必撞 NOT NULL 违约。
+            // period 形如 yyyyMM，由会计日历推导为当月起止。
+            entity.setPeriodStart(resolvePeriodStart(period));
+            entity.setPeriodEnd(resolvePeriodEnd(period));
             entity.setStatementDate(today);
             entity.setTotalOriginal(totalOriginal);
             entity.setTotalSettled(totalSettled);
             entity.setTotalUnsettled(totalUnsettled);
+            // 真实列是 opening_balance / closing_balance；totalOriginal/totalUnsettled
+            // 是同义别名（exist=false 不落库），须显式映射否则金额永不落库。
+            entity.setOpeningBalance(totalOriginal);
+            entity.setClosingBalance(totalUnsettled);
             entity.setStatus("DRAFT");
             statementMapper.insert(entity);
             result.add(entity);
         }
 
         return result;
+    }
+
+    /** 对账单编号：CST-{customerId}-{period}，同客户同期唯一 */
+    private String generateStatementNo(Long customerId, String period) {
+        return "CST-" + customerId + "-" + period;
+    }
+
+    /** 会计期间(yyyyMM)起始日：当月 1 号 */
+    private LocalDate resolvePeriodStart(String period) {
+        return java.time.YearMonth.of(
+                Integer.parseInt(period.substring(0, 4)),
+                Integer.parseInt(period.substring(4, 6))
+        ).atDay(1);
+    }
+
+    /** 会计期间(yyyyMM)结束日：当月最后一天 */
+    private LocalDate resolvePeriodEnd(String period) {
+        return java.time.YearMonth.of(
+                Integer.parseInt(period.substring(0, 4)),
+                Integer.parseInt(period.substring(4, 6))
+        ).atEndOfMonth();
     }
 
     @Override

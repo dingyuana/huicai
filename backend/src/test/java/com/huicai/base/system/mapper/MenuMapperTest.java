@@ -19,7 +19,7 @@ public class MenuMapperTest {
 
         // 设置必要字段
         entity.setName("测试菜单");
-        entity.setType("menu");
+        entity.setType("MENU");
         entity.setParentId(null);
         entity.setPath("/test");
         entity.setComponent("test/TestPage");
@@ -44,7 +44,7 @@ public class MenuMapperTest {
         MenuMapper mapper = Mockito.mock(MenuMapper.class);
         MenuEntity entity = new MenuEntity();
         entity.setName("测试菜单");
-        entity.setType("menu");
+        entity.setType("MENU");
         entity.setParentId(null);
         entity.setPath("/test");
         entity.setComponent("test/TestPage");
@@ -68,7 +68,7 @@ public class MenuMapperTest {
         MenuMapper mapper = Mockito.mock(MenuMapper.class);
         MenuEntity entity = new MenuEntity();
         entity.setName("测试菜单");
-        entity.setType("menu");
+        entity.setType("MENU");
         entity.setParentId(null);
         entity.setPath("/test");
         entity.setComponent("test/TestPage");
@@ -106,7 +106,7 @@ public class MenuMapperTest {
         // 验证所有常用方法存在
         MenuEntity e = new MenuEntity();
         e.setName("测试菜单");
-        e.setType("menu");
+        e.setType("MENU");
         e.setParentId(null);
         e.setPath("/test");
         e.setComponent("test/TestPage");
