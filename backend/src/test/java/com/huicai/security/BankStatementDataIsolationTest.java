@@ -82,7 +82,10 @@ public class BankStatementDataIsolationTest extends AbstractMapperTest {
         entity.setClassification(classification);
         entity.setReviewStatus(reviewStatus);
         entity.setEnterpriseId(enterpriseId);
-        bankStatementMapper.insert(entity);
+        // 本方法显式声明目标企业，故不受环境上下文影响 —— P102 起 insertFill 会
+        // 无条件覆盖 enterpriseId，不绕过的话「企业B 的流水」会被静默写成企业A，
+        // 隔离用例的前提崩塌（详见 AbstractMapperTest#withoutEnterpriseContext）
+        withoutEnterpriseContext(() -> bankStatementMapper.insert(entity));
         return entity;
     }
 

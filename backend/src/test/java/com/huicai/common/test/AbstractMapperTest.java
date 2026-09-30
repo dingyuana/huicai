@@ -440,4 +440,34 @@ public abstract class AbstractMapperTest {
     protected void useEnterprise(Long enterpriseId) {
         EnterpriseContextHolder.set(enterpriseId);
     }
+
+    /**
+     * 在<b>无企业上下文</b>的状态下执行造数，用于测试跨租户隔离。
+     *
+     * <p><b>为何需要这个出口</b>：P102 / AT-102-7 起，
+     * {@code MyMetaObjectHandler.insertFill} 对 {@code enterpriseId} 改为
+     * <b>无条件覆盖</b>为上下文值（原先用 {@code strictInsertFill}，只在字段为
+     * null 时才填，故请求体传 {@code {"enterpriseId": 999}} 即可直写他人租户）。
+     * 于是 {@code entity.setEnterpriseId(2L)} + {@code mapper.insert(entity)}
+     * 在上下文为企业 1 时<b>不再写 2</b>，跨租户隔离用例的前提会被静默改写。
+     *
+     * <p>该出口的实现正是生产代码里 {@code enterpriseId == null} 的那条分支
+     * （无上下文 ⇒ 不干预入参值）。生产中任何 HTTP 写入路径都必经
+     * {@code JwtAuthenticationFilter} 设置上下文，故该分支不可被外部请求触达；
+     * 这一点由 {@code EnterpriseIdInjectionTest} 的两条前提守卫测试锁死。
+     *
+     * <p><b>使用约束</b>：仅限隔离/越权类测试造数，不得用于普通业务夹具 ——
+     * 普通夹具本就该落在当前企业。
+     */
+    protected void withoutEnterpriseContext(Runnable action) {
+        Long previous = EnterpriseContextHolder.get();
+        EnterpriseContextHolder.clear();
+        try {
+            action.run();
+        } finally {
+            if (previous != null) {
+                EnterpriseContextHolder.set(previous);
+            }
+        }
+    }
 }

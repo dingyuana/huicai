@@ -97,7 +97,9 @@ public class DataIsolationAuditTest extends AbstractMapperTest {
         voucherB.setTotalDebit(new BigDecimal("2000.00"));
         voucherB.setTotalCredit(new BigDecimal("2000.00"));
         voucherB.setEnterpriseId(2L);
-        voucherMapper.insert(voucherB);
+        // P102 起 insertFill 无条件覆盖 enterpriseId，跨租户造数须显式走
+        // withoutEnterpriseContext 出口（见 AbstractMapperTest 该方法注释）
+        withoutEnterpriseContext(() -> voucherMapper.insert(voucherB));
 
         // 通过自定义查询（selectVoucherPage）验证 enterprise_id 隔离
         //
