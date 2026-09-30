@@ -8,6 +8,7 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -19,6 +20,7 @@ import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
 
+@Slf4j
 @Component
 @RequiredArgsConstructor
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
@@ -26,6 +28,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private final JwtProvider jwtProvider;
     private final UserDetailsServiceImpl userDetailsService;
     private final StringRedisTemplate redisTemplate;
+    private final com.huicai.common.security.EnterpriseMembershipChecker enterpriseMembershipChecker;
+    private final com.huicai.base.system.service.EnterpriseSwitchAuditService auditService;
 
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response,
@@ -46,17 +50,43 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 Long agencyId = jwtProvider.getAgencyIdFromToken(token);
                 String userType = jwtProvider.getUserTypeFromToken(token);
 
+                UserDetails userDetails = userDetailsService.loadUserByUsername(username);
+
                 // S-26: 前端 X-Enterprise-Id 覆盖 JWT 中的 enterpriseId
                 // 切换企业后 JWT 未更新，由前端 header 传递当前选中企业
+                //
+                // P102 / AT-102-1：原实现无条件信任该头，任意登录用户改一个头即可
+                // 切换到任意企业。现按 EnterpriseMembershipChecker 的三源并集校验
+                // （直属企业 ∪ 代理成员授权 ∪ SUPER_ADMIN），不通过即 403。
+                // 失败时不区分「企业不存在」与「无权限」，避免泄露企业存在性。
                 String xEnterpriseId = request.getHeader("X-Enterprise-Id");
                 if (xEnterpriseId != null) {
+                    Long requested;
                     try {
-                        enterpriseId = Long.parseLong(xEnterpriseId);
-                    } catch (NumberFormatException ignored) {
+                        requested = Long.parseLong(xEnterpriseId);
+                    } catch (NumberFormatException e) {
+                        requested = null;
+                    }
+                    if (requested != null && !requested.equals(enterpriseId)) {
+                        LoginUser loginUser = (LoginUser) userDetails;
+                        boolean allowed = enterpriseMembershipChecker.isMember(
+                                loginUser.getUserId(), loginUser.getEnterpriseId(),
+                                loginUser.getUserType(), requested);
+                        if (!allowed) {
+                            log.warn("越权切换企业被拒: user={}, target={}", username, requested);
+                            response.setStatus(HttpServletResponse.SC_FORBIDDEN);
+                            response.setContentType("application/json;charset=UTF-8");
+                            response.getWriter().write(
+                                    "{\"code\":403,\"msg\":\"无权访问该企业\",\"data\":null}");
+                            return;
+                        }
+                        auditService.recordEnterpriseSwitch(loginUser.getUserId(),
+                                enterpriseId, requested);
+                    }
+                    if (requested != null) {
+                        enterpriseId = requested;
                     }
                 }
-
-                UserDetails userDetails = userDetailsService.loadUserByUsername(username);
 
                 UsernamePasswordAuthenticationToken authentication =
                         new UsernamePasswordAuthenticationToken(userDetails, null, userDetails.getAuthorities());
