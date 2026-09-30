@@ -25,7 +25,7 @@
 |---|---|---|---|---|
 | **M0 基线** | 立项、建分支、审计报告留档 | P101 | — | SPEC 审核通过，REQ-128 登记 |
 | **M1 门禁兜底** | main PR 跑真库套件 | P104-a | M0 | main PR 变红一次真库失败（证明门禁有效） |
-| **M1.5 存量缺陷** | 6 项 P0/P1 点状缺陷修复（可并行，最快见效） | **P107** | 无 | 6 项 AT-107 全绿 |
+| **M1.5 存量缺陷** | 6 项 P0/P1 点状缺陷修复（可并行，最快见效） | **P107** | 无 | 6 项 AT-107 全绿 → ✅ **2026-09-30 完成 D1~D6+D8，定向 83/83** |
 | **M2 租户隔离** | 跨企业 403（三源并集）、入参封禁、RLS 生效 | P102-a/b/c | M0 | 越权用例全拒；`rolbypassrls=false`；AT-102-7 入参不生效 |
 | **M3 端点鉴权** | 8 清库端点 + 高危端点 `@PreAuthorize` | P102-d/e | M2、REQ 权限码列 | 无权限码用户 403；`PermissionCodeAuditTest` 绿 |
 | **M4 审计落地** | 快照真实落库、updateById 纳入 | P103 | M3（复用权限码） | `before_data/after_data` 非空断言通过 |
@@ -51,14 +51,17 @@
 
 ### M1.5 存量缺陷修复（P107）｜预计 2 天｜可与 M1/M2 并行
 
-| # | 任务 | 关键点 | 验证 |
-|---|---|---|---|
-| 1.5.1 | D1 对账 `DISPUTED` 违反 CHECK | `CustomerStatementServiceImpl:140`；`chk_customer_statement_status` 允许集无 `DISPUTED`。二选一：V161 补该值（保留语义）或改用合法值 | AT-107-1 真实 DB 调 `dispute()` 不报 SQL 错 |
-| 1.5.2 | D2 凭证分录物理删除 | `VoucherEntryMapper.xml:138` 改逻辑删除；3 个调用方（`VoucherServiceImpl:231,253`、`ArapSettlementServiceImpl:558`）核对「仅未过账可删」，已过账抛错走红冲 | AT-107-2/3 |
-| 1.5.3 | D3 三个空壳批量服务 | `BatchAuditServiceImpl:40`/`BatchCloseServiceImpl:30`/`BatchImportServiceImpl:34`：抛「功能未实现」或下线端点，**禁 return success** | AT-107-4 断言 `success != true` |
-| 1.5.4 | D4 银行对账确认/驳回空壳 | `BankReconciliationServiceImpl:411-424`：写 `match_status` + 记对账日志 | AT-107-5 真实 DB 状态流转 |
-| 1.5.5 | D5 金额精度 | `BankStatementExcelImportService:140` 改 `BigDecimal.valueOf(val)`；`TaxServiceImpl:878` 同 | AT-107-6/7 精度往返断言 |
-| 1.5.6 | D6 明文口令 | `application.yml:23,59` 改环境变量注入无默认值；`:90` JWT 无可用默认密钥 | AT-107-8 静态扫描 |
+| # | 任务 | 关键点 | 验证 | 状态 |
+|---|---|---|---|---|
+| 1.5.1 | D1 对账 `DISPUTED` 违反 CHECK | **V160** 补 `DISPUTED`（DROP+ADD 幂等） | AT-107-1 真实 DB 调 `dispute()` 不报 SQL 错 | ✅ 2/2 |
+| 1.5.2 | D2 凭证分录物理删除 | `deleteByVoucherId` 改 `UPDATE deleted=1`；`selectByVoucherId` 补 `e.deleted=0` + **JOIN 父表 `v.deleted=0`**；另 4 个零调用方物理 DELETE 一并转软删。**注意**：`BaseEntity:43` 已带 `@TableLogic deleted`，MP 逻辑删除本已生效，无需改 Entity | AT-107-2/3（3/3 绿，红灯反证 `expected 1 but was 0`） | ✅ 3/3 |
+| 1.5.3 | D3 三个空壳批量服务 | 三处抛 `BusinessException(501, "功能未实现")`，**禁 return success** | AT-107-4 断言 `success != true` | ✅ 6/6 |
+| 1.5.4 | D4 银行对账确认/驳回空壳 | **V161** 建 `t_bank_reconciliation_log`；confirm 落 `MANUAL_MATCHED`（非 `MATCHED`）+ 回写日记账 + 记日志；reject 回落 `UNMATCHED` + 释放日记账 | AT-107-5 真实 DB 状态流转 | ✅ 真库 6/6 + Mock 21/21 |
+| 1.5.5 | D5 金额精度 | `BankStatementExcelImportService:140,277`（**P107 漏记第 3 处**）+ `TaxServiceImpl:878` 改 `BigDecimal.valueOf` | AT-107-6/7 精度往返断言 | ✅ 2/2 + 52/52 |
+| 1.5.6 | D6 明文口令 | 口令改 `${ENV:默认}`；**JWT 去默认**（`${JWT_SECRET}` 缺值即启动失败）；compose 9 处 + 新增 `.env.example` | AT-107-8 静态扫描 | ✅ 5/5 |
+| 1.5.7 | **D8（实施中新发现）** 流水 `PENDING_CONFIRM` 违反 CHECK | `BankReconciliationServiceImpl:332` 写该值而 `chk_stmt_match_status` 允许集无它 ⇒ 自动匹配落 60-84 分档必崩。**V162** 补该值；`rejectMatch` 一并放行该中间态（否则 auto-match 产物无法人工驳回，违人审铁律 #1） | 红灯反证 `violates chk_stmt_match_status`（2/6 红）→ 6/6 绿 | ✅ 6/6 |
+
+> **M1.5 汇总（2026-09-30 完成）**：D1~D6 + **D8** 共 7 项全部 TDD 红→绿（含红→绿反证），定向回归 **83/83** 全绿（8 个受影响测试类）。**全量回归留夜间自动跑**（用户明确要求不做耗时全局测试）。新增 3 个 Flyway 迁移 `V160`/`V161`/`V162`。
 
 ### M2 租户隔离（P102-a/b/c）｜预计 2 天
 

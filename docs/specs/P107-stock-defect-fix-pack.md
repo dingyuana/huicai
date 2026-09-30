@@ -17,7 +17,27 @@
 | D3 | 代理端批量服务空壳却报成功 | `BatchAuditServiceImpl:40`、`BatchCloseServiceImpl:30`、`BatchImportServiceImpl:34` 均 `// TODO` + `item.setSuccess(true)` | 一个对象都没改，API 却返回 `success=N, failed=0` ⇒ 比抛异常更危险（代理会向客户确认已结账） | P0 |
 | D4 | 银行对账确认/驳回空壳 | `BankReconciliationServiceImpl:411-424` | `confirmMatch`/`rejectMatch` 只 `return new ConfirmResult(...,"MATCHED")`，**不写 `t_bank_statement.match_status`、不记对账日志** ⇒ UI 显示已匹配，DB 恒 `UNMATCHED`，对账永不收敛 | P0 |
 | D5 | 金额精度 `new BigDecimal(double)` | `BankStatementExcelImportService:140`（`new BigDecimal(cell.getNumericCellValue())`）、`TaxServiceImpl:878`（`new BigDecimal(((Number)v).doubleValue())`） | 二进制浮点直转，`12345678.9` 可产出 `12345678.899999999`，**直接落财务表**；违反铁律 #1 | P1 |
-| D6 | 明文口令入库 | `application.yml:23,59` `password: huicai123`（DB/RabbitMQ）、`:90` `secret: ${JWT_SECRET:huicai-finance-jwt-secret-key-...}`（默认值即真实可用密钥且已入 git） | 违反 §7.3 | P1 |
+| D7 | —— | —— | —— | —— |
+| D8 | 银行流水「待人工确认」态违反 CHECK | `BankReconciliationServiceImpl:332` `updateMatch(..., "PENDING_CONFIRM")` | `chk_stmt_match_status` 允许集为 `('UNMATCHED','MATCHED','MANUAL_MATCHED','IGNORED')`，**无 `PENDING_CONFIRM`** ⇒ 自动匹配落到 60-84 分档必抛 SQL 错；该态被 `summarize`/`unmatchedItems`/Controller/Service 注释全链路引用，属**设计意图而非笔误**（D4 修复时暴露） | P0 |
+
+## 5.5 实施结果（2026-09-30，D1~D6 + D8 全部完成）
+
+| 缺陷 | 处置 | 迁移 | 红→绿验证 | 定向回归 |
+|---|---|---|---|---|
+| D1 | CHECK 补 `DISPUTED`（DROP+ADD 幂等） | `V160__add_disputed_to_customer_statement_status.sql` | 撤 V160（src+target/classes 同时移除）→ `violates chk_customer_statement_status` 红；恢复 2/2 绿 | 2/2 |
+| D2 | `deleteByVoucherId` 物理 DELETE → `UPDATE deleted=1`；`selectByVoucherId` 补 `e.deleted=0` **且 JOIN 父表 `v.deleted=0`**；另 4 个零调用方物理 DELETE（`VoucherMapper.deleteBySource/deleteAll`、`VoucherEntryMapper.deleteByVoucherSource/deleteAll`）一并转软删（铁律 #12） | 无（列已存在） | 回退 XML → 3/3 红（`expected 1 but was 0`，分录被物理抹除）；恢复 3/3 绿 | 83/83（含 `VoucherEntryMapperRealDBTest`、`ArapSettlementServiceImplTest` 走 `deleteByVoucherId` 路径） |
+| D3 | 三个 Impl 抛 `BusinessException(501, "功能未实现")`，删 `setSuccess(true)` | 无 | 红灯时 "nothing was thrown" 实锤假成功 | 6/6 |
+| D4 | `confirmMatch`/`rejectMatch` 落库 + 回写日记账 + 写 `t_bank_reconciliation_log`；人工确认落 `MANUAL_MATCHED`（与自动 `MATCHED` 区分）；存在性/状态门禁 | `V161__bank_reconciliation_log.sql` | `expected <MANUAL_MATCHED> but was <MATCHED>` + 驳回落 `MATCHED` 红；4/4 绿 | 真库 6/6 + Mock 21/21 |
+| D5 | `TaxServiceImpl.toBigDecimalSafe` 按整型/浮点分治；Excel 两处改 `BigDecimal.valueOf(val).toPlainString()` | 无 | 3 处真缺陷（P107 只登记 2 处） | Excel 2/2 + Tax 52/52 |
+| D6 | 口令改 `${ENV:默认值}`；**JWT 去默认**（缺变量启动失败）；compose 9 处 + 新增 `.env.example` | 无 | 无 `JWT_SECRET` 时 compose/后端双 fail-fast；注入后 `Started HuicaiApplication` | 治理测试 5/5 |
+| D8 | CHECK 补 `PENDING_CONFIRM`；`rejectMatch` 放行该中间态（否则 auto-match 产物无法人工驳回，违反人审铁律 #1） | `V162__d8_allow_pending_confirm.sql` | 撤 V162 + 回退约束 → 2/6 红（`violates chk_stmt_match_status`）；恢复 6/6 绿 | 6/6 |
+
+**D2 调查中的重大修正**：`BaseEntity` 第 43-44 行**已带 `@TableLogic private Integer deleted`**，Voucher/VoucherEntry 继承之 ⇒ MP 逻辑删除**本已生效**，此前"Entity 缺 deleted 字段导致物理删"的判断有误（只 grep 实体类体、漏看父类，属 AGENTS §4.2-16 同族）。故 B2 方案中「Entity 补字段」部分**不需要做**，且父凭证删除本就是软删、不存在 CASCADE 抹审计问题；真实缺口仅 `VoucherEntryMapper.xml` 三处。
+
+**新增沉淀（AGENTS §4.2）**：
+- **第 19 条 · 「允许集缺设计态」比「写错值」更隐蔽**：功能设计（Controller/Service 注释/summarize 统计）完整依赖 `PENDING_CONFIRM`，而 CHECK 从未允许它 ⇒ 只要分数落 60-84 就 100% 崩。**判据：凡代码写入某状态值，先 `pg_get_constraintdef` 确认它在允许集内；再确认它不是「设计意图里的中间态被 CHECK 漏掉」。**
+- **第 20 条 · 判 Entity 字段前必须看父类**：`VoucherEntryMapperRealDBTest` 早就在调 `e.setDeleted(0)`（能编译 ⇒ 父类必有该字段），而我 grep 实体类体未命中就误判「字段缺失」。**判据：任何"Entity 没某字段"的结论，必须同时 grep 父类 `BaseEntity` 与既有测试的 setter 调用。**
+
 
 ## 1. 输入契约
 
@@ -97,3 +117,4 @@ D6: 口令 ──明文──▶ ${ENV_VAR} 注入 (无默认值或空串)
 | 版本 | 日期 | 变更人 | 变更内容 |
 |---|---|---|---|
 | V1.0 | 2026-09-29 | opencode | 初稿：承接 2026-09-29 代码审计，6 项 P0/P1 点状缺陷（D1 CHECK 违约 / D2 凭证物理删 / D3 批量空壳 / D4 对账空壳 / D5 金额精度 / D6 明文口令），与架构级 P102~P105 分离 |
+| V1.1 | 2026-09-30 | opencode | 实施结果回写：新增 §5.5 实施结果表（D1~D6 + D8，含红→绿反证与定向回归数字）；**新增 D8**（`chk_stmt_match_status` 缺 `PENDING_CONFIRM` 设计态，D4 实施时暴露）；D2 结论修正（`BaseEntity` 已带 `@TableLogic`，MP 逻辑删除本已生效，缺口仅 XML 三处 + 4 个零调用方物理 DELETE）；D4 人工确认落 `MANUAL_MATCHED` 而非 `MATCHED`；D5 实测 3 处缺陷（P107 登记 2 处） |

@@ -2,13 +2,12 @@ package com.huicai.agency.batch.service.impl;
 
 import com.huicai.agency.batch.dto.BatchResultVO;
 import com.huicai.agency.batch.service.BatchImportService;
-import com.huicai.common.context.EnterpriseContextHolder;
+import com.huicai.common.exception.BusinessException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.util.ArrayList;
 import java.util.List;
 
 @Slf4j
@@ -16,38 +15,14 @@ import java.util.List;
 @RequiredArgsConstructor
 public class BatchImportServiceImpl implements BatchImportService {
 
+    /** D3：原实现对每个文件无条件回报「导入成功」但未解析任何文件（假成功）。 */
+    private static final String NOT_IMPLEMENTED =
+            "批量发票导入功能尚未实现：该端点原会回报「导入成功」但未执行任何导入，"
+                    + "已改为显式报错以避免假成功（REQ-2026-134 / P107 D3）。"
+                    + "单文件导入请使用发票导入端点";
+
     @Override
     public BatchResultVO importInvoices(List<MultipartFile> files, Long enterpriseId) {
-        BatchResultVO result = new BatchResultVO();
-        result.setTotal(files.size());
-        List<BatchResultVO.BatchItemResult> details = new ArrayList<>();
-
-        // 设置企业上下文
-        EnterpriseContextHolder.set(enterpriseId);
-        try {
-            for (int i = 0; i < files.size(); i++) {
-                MultipartFile file = files.get(i);
-                BatchResultVO.BatchItemResult item = new BatchResultVO.BatchItemResult();
-                item.setId((long) i);
-                try {
-                    log.info("BatchImport: processing file {} for enterprise {}", file.getOriginalFilename(), enterpriseId);
-                    // TODO: 调用 SME 发票导入服务
-                    item.setSuccess(true);
-                    item.setMessage("导入成功");
-                } catch (Exception e) {
-                    item.setSuccess(false);
-                    item.setMessage("导入失败: " + e.getMessage());
-                }
-                details.add(item);
-            }
-        } finally {
-            EnterpriseContextHolder.clear();
-        }
-
-        long success = details.stream().filter(BatchResultVO.BatchItemResult::isSuccess).count();
-        result.setSuccess((int) success);
-        result.setFailed(details.size() - (int) success);
-        result.setDetails(details);
-        return result;
+        throw new BusinessException(501, NOT_IMPLEMENTED);
     }
 }

@@ -16,7 +16,7 @@ services:
       - "5432:5432"
     environment:
       POSTGRES_USER: huicai
-      POSTGRES_PASSWORD: huicai123
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-huicai123}
       POSTGRES_DB: huicai
     volumes:
       - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
@@ -50,7 +50,7 @@ services:
       - "9001:9001"
     environment:
       MINIO_ROOT_USER: huicai
-      MINIO_ROOT_PASSWORD: huicai123
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-huicai123}
     command: server /data --console-address ":9001"
     volumes:
       - minio-data:/data
@@ -70,7 +70,7 @@ services:
       - "15672:15672"
     environment:
       RABBITMQ_DEFAULT_USER: huicai
-      RABBITMQ_DEFAULT_PASS: huicai123
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-huicai123}
     networks:
       - huicai-net
     healthcheck:
@@ -89,15 +89,15 @@ services:
       # 容器内端口仍为 8000（Dockerfile EXPOSE / uvicorn --port 8000 不变）
       - "8001:8000"
     environment:
-      HUICAI_RABBITMQ_URL: amqp://huicai:huicai123@host.docker.internal:5672/
+      HUICAI_RABBITMQ_URL: amqp://${RABBITMQ_USER:-huicai}:${RABBITMQ_PASSWORD:-huicai123}@host.docker.internal:5672/
       HUICAI_DB_HOST: postgres16
       HUICAI_DB_PORT: 5432
       HUICAI_DB_USER: huicai
-      HUICAI_DB_PASSWORD: huicai123
+      HUICAI_DB_PASSWORD: ${POSTGRES_PASSWORD:-huicai123}
       HUICAI_DB_NAME: huicai
       HUICAI_MINIO_ENDPOINT: http://minio:9000
       HUICAI_MINIO_ACCESS_KEY: huicai
-      HUICAI_MINIO_SECRET_KEY: huicai123
+      HUICAI_MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-huicai123}
       HUICAI_OCR_ENGINE: tesseract
     extra_hosts:
       - "host.docker.internal:host-gateway"
@@ -118,17 +118,17 @@ services:
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres16:5432/huicai
       SPRING_DATASOURCE_USERNAME: huicai
-      SPRING_DATASOURCE_PASSWORD: huicai123
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-huicai123}
       SPRING_RABBITMQ_HOST: host.docker.internal
       SPRING_RABBITMQ_PORT: 5672
       SPRING_RABBITMQ_USERNAME: huicai
-      SPRING_RABBITMQ_PASSWORD: huicai123
+      SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-huicai123}
       SPRING_DATA_REDIS_HOST: redis7
       SPRING_DATA_REDIS_PORT: 6379
       MINIO_ENDPOINT: http://minio:9000
       MINIO_ACCESS_KEY: huicai
-      MINIO_SECRET_KEY: huicai123
-      JWT_SECRET: huicai-finance-jwt-secret-key-2026-very-long-secret-string
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-huicai123}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set in .env - see .env.example}
       # 敏感凭据从宿主环境注入，勿写入本文件（AGENTS §7-3）
       NVIDIA_API_KEY: ${NVIDIA_API_KEY:-}
     extra_hosts:

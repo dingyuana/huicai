@@ -872,10 +872,19 @@ public class TaxServiceImpl implements TaxService {
         return Long.parseLong(v.toString());
     }
 
-    private BigDecimal toBigDecimalSafe(Object v) {
+    /** 包私有：精度边界（拒绝 double 二进制展开尾巴）需同包直测，见 D5。 */
+    BigDecimal toBigDecimalSafe(Object v) {
         if (v == null) return BigDecimal.ZERO;
         if (v instanceof BigDecimal) return (BigDecimal) v;
-        if (v instanceof Number) return new BigDecimal(((Number) v).doubleValue());
+        // 整型走字符串：new BigDecimal(double) 会在 2^53 以上丢精度
+        if (v instanceof java.math.BigInteger || v instanceof Long || v instanceof Integer
+                || v instanceof Short || v instanceof Byte) {
+            return new BigDecimal(v.toString());
+        }
+        // 浮点走 BigDecimal.valueOf：内部用 Double.toString 最短往返表示，
+        // 而 new BigDecimal(double) 会展开成二进制精确值
+        // （0.1 → 0.1000000000000000055511151231257827021181583404541015625）
+        if (v instanceof Number) return BigDecimal.valueOf(((Number) v).doubleValue());
         try {
             return new BigDecimal(v.toString());
         } catch (NumberFormatException e) {

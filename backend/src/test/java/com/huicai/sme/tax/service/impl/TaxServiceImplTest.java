@@ -826,4 +826,24 @@ class TaxServiceImplTest {
         assertTrue(sql.contains(">="), "应含 startDate 下界: " + sql);
         assertTrue(sql.contains("<="), "应含 endDate 上界: " + sql);
     }
+
+    // ===== D5 金额精度：拒绝 new BigDecimal(double) 的二进制展开尾巴 =====
+
+    @Test
+    void toBigDecimalSafe_传入Double不得引入浮点尾巴() {
+        // 双精度 0.1 / 1234.56 不可精确表示，new BigDecimal(double) 会带出
+        // 0.1000000000000000055511151231257827… 这类长尾，致附表 I/II 金额与
+        // 申报数偏差。修复：走 Double.toString 最短往返（BigDecimal.valueOf /
+        // new BigDecimal(String)）。
+        assertEquals(0, service.toBigDecimalSafe(0.1d).compareTo(new BigDecimal("0.1")),
+                "0.1 不得产生浮点尾巴，实际: " + service.toBigDecimalSafe(0.1d));
+        assertEquals(0, service.toBigDecimalSafe(1234.56d).compareTo(new BigDecimal("1234.56")),
+                "1234.56 不得产生浮点尾巴，实际: " + service.toBigDecimalSafe(1234.56d));
+        // 非 double 的 Number 不得回归（Integer 走字符串应精确）
+        assertEquals(0, service.toBigDecimalSafe(100).compareTo(new BigDecimal("100")),
+                "Integer 应精确，实际: " + service.toBigDecimalSafe(100));
+        // 非法值仍需兜底返回 0，不抛异常
+        assertEquals(0, service.toBigDecimalSafe("abc").compareTo(BigDecimal.ZERO));
+        assertEquals(0, service.toBigDecimalSafe(null).compareTo(BigDecimal.ZERO));
+    }
 }

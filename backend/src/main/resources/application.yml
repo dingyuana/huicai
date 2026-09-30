@@ -20,7 +20,7 @@ spring:
   datasource:
     url: jdbc:postgresql://localhost:5432/huicai
     username: huicai
-    password: huicai123
+    password: ${DB_PASSWORD:huicai123}
     driver-class-name: org.postgresql.Driver
     type: com.zaxxer.hikari.HikariDataSource
     hikari:
@@ -56,7 +56,7 @@ spring:
     host: localhost
     port: 5672
     username: huicai
-    password: huicai123
+    password: ${RABBITMQ_PASSWORD:huicai123}
     virtual-host: /
 
 mybatis-plus:
@@ -85,9 +85,14 @@ knife4j:
     language: zh_cn
 
 # JWT 配置
-# secret 优先读取环境变量 JWT_SECRET，开发环境可使用默认值
+# secret 必须由环境变量 JWT_SECRET 注入，**无默认值**：
+# 可预测的默认密钥等于无密钥（任何人可据此伪造任意用户 token）。
+# 缺变量时应用启动即失败（fail-fast），由 JwtProvider 的 @Value 解析触发。
+# 本地开发：export JWT_SECRET=$(openssl rand -base64 48)
+# 长度要求 ≥32 字节（HMAC-SHA256），否则 Keys.hmacShaKeyFor 抛 WeakKeyException。
+# 测试环境：src/test/resources/application.yml 自带独立测试密钥，不依赖此处。
 jwt:
-  secret: ${JWT_SECRET:huicai-finance-jwt-secret-key-2026-very-long-secret-string}
+  secret: ${JWT_SECRET}
   access-token-expiration: 86400000
   refresh-token-expiration: 604800000
 
@@ -95,7 +100,7 @@ jwt:
 minio:
   endpoint: http://localhost:9000
   access-key: huicai
-  secret-key: huicai123
+  secret-key: ${MINIO_ROOT_PASSWORD:huicai123}
   bucket: huicai-files
 
 # AI 服务配置

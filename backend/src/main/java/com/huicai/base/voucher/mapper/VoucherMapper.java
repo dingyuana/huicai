@@ -4,7 +4,6 @@ import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.huicai.base.voucher.entity.VoucherEntity;
-import org.apache.ibatis.annotations.Delete;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
@@ -67,10 +66,17 @@ public interface VoucherMapper extends BaseMapper<VoucherEntity> {
                           @Param("userId") Long userId,
                           @Param("version") Integer version);
 
-    @Delete("DELETE FROM t_voucher WHERE source = #{source}")
+    /**
+     * 按来源删除凭证（逻辑删除，铁律 #12：财务表禁止物理删除）。
+     * 注意：分录不随之删除，需调用方另行处理或由 t_bank_statement 式 JOIN 过滤。
+     */
+    @Update("UPDATE t_voucher SET deleted = 1 WHERE source = #{source} AND deleted = 0")
     int deleteBySource(@Param("source") String source);
 
-    @Delete("DELETE FROM t_voucher")
+    /**
+     * 清空全部凭证（逻辑删除，铁律 #12）。当前无生产调用方，保留供数据修复/测试隔离使用。
+     */
+    @Update("UPDATE t_voucher SET deleted = 1 WHERE deleted = 0")
     int deleteAll();
 
     @Update("UPDATE t_voucher SET business_doc_id = NULL WHERE business_doc_id IS NOT NULL")

@@ -4,15 +4,15 @@
 
 ## §0 项目状态（硬数字，每次 commit 后更新）
 
-> **更新基准**：commit `79e9eec7`（REQ-2026-126 预算执行控制，已 rebase 到 origin/main `8c56e40e` 之上）+ 本次 REQ-2026-127 提交 (2026-09-29) — **银行流水自动制证科目缺失防护**：V159 补 `1221`/`2203`/`2211`/`6603` 四个种子科目 + `requireSubject()` 把 `arAcct.getId()` NPE 换成指明科目代码的 `BusinessException`；全量 1998/0/0/5、快测 1742/0/0/5；前序（REQ-125 反核销静默回滚、REQ-126 慢测 1996 首次全绿等）见 Registry
-> **当前分支**：`main`（本地领先 origin，**未 push**）
+> **更新基准**：commit `79e9eec7`（REQ-2026-126 预算执行控制）+ REQ-2026-127（银行流水制证科目防护）+ **本次 REQ-2026-134（P107 存量缺陷修复包 D1~D6 + D8）** — D1 对账 DISPUTED 补 CHECK(V160)、D2 凭证分录物理删→软删、D3 批量空壳抛 501、D4 对账确认/驳回落库+审计表(V161)、D5 金额精度 3 处、D6 明文口令环境变量化、**D8 银行流水 PENDING_CONFIRM 补 CHECK(V162)**；全部 TDD 红→绿含反证，定向回归 83/83（**全量回归留夜间自动跑**）
+> **当前分支**：`develop`（本地领先 origin，**未 push**）
 > **关联文档**：[项目说明](docs/CORE-项目说明.md)、[技术方案](docs/CORE-技术方案.md)、[需求分析](docs/CORE-需求分析.md)、[需求登记册](docs/development/requirements/REQUIREMENTS_REGISTRY.md)、[文档注册表](docs/CORE-文档注册表.md)、[测试策略](docs/testing/TEST-STRATEGY.md)、[Flyway治理规范](docs/development/standards/flyway-governance.md)、[商用化修复总纲](docs/specs/P101-commercial-gap-remediation.md)、[修复开发计划](docs/development/plans/2026-09-29-commercial-gap-remediation-plan.md)、[存量缺陷包](docs/specs/P107-stock-defect-fix-pack.md)
 
 | 维度 | 数据 |
 |------|------|
 | 后端代码 | 492 个 Java 主代码文件（另 237 个测试文件）|
-| 测试用例 | **1996 个可执行测试注解**（`@Test` 1993 + `@TestFactory` 3）/ 229 个后端测试类 + 26 个前端测试文件 265 用例（**快测实测 1742 通过，0 Failures, 0 Errors, 5 Skipped**；**含 slow 组全量 1998 通过，0 Failures, 0 Errors, 5 Skipped**，A/D/C/B 类 136 项 + 预算执行控制 1 项 + 自动制证科目防护 2 项已于 2026-09-29 修复，见 REQ-2026-113~127。注：此前登记的「2002」为约数，本轮已按 `grep -P '@Test(?![A-Za-z])'` 重新核算）|
-| 数据库 | PostgreSQL 16 / **75 个 migration，最新 V159**（注意：版本号非连续，实际为 V1-V5 + V63 + V92-V159，缺 V6-V62 与 V64-V91 共 85 个号；因 `out-of-order: true` + `validate-on-migrate: false` 不影响运行，但「V1 baseline merged V1-V146」的旧表述已失效）|
+| 测试用例 | **2023 个可执行测试注解**（`@Test` 2020 + `@TestFactory` 3）/ 236 个后端测试类 + 26 个前端测试文件 265 用例（最近一次**全量实测 1998 通过，0 Failures, 0 Errors, 5 Skipped**，为 REQ-2026-127 时的基线；本轮 REQ-2026-134 新增 7 个测试类 25 个用例：**定向回归 83/83 全绿**，全量回归留夜间自动跑。注：此前登记的「2002」为约数，按 `grep -P '@Test(?![A-Za-z])'` 重新核算）|
+| 数据库 | PostgreSQL 16 / **78 个 migration，最新 V162**（注意：版本号非连续，实际为 V1-V5 + V63 + V92-V162，缺 V6-V62 与 V64-V91 共 85 个号；因 `out-of-order: true` + `validate-on-migrate: false` 不影响运行，但「V1 baseline merged V1-V146」的旧表述已失效）|
 | API 端点 | 510+ 个后端端点 |
 | 核心模块 | 基础数据、总账、应收应付、现金管理、固定资产、费用报销、发票税务、预算、财务报表、存储管理 |
 | 业务单据类型 | 11 种（RECEIPT/PAYMENT/EXPENSE/INVOICE_IN/INVOICE_OUT/OTHER_RECEIVABLE/OTHER_PAYABLE/TRANSFER/SALARY/PRE_RECEIVE/PRE_PAY）|
@@ -191,6 +191,17 @@
     - **两层修法缺一不可**：① 引用处 `requireSubject(code)` 抛 `BusinessException` 并**指明代码**（铁律 #14）；② 补种子 migration。只做①则功能仍不可用，只做②则换个科目又崩。
     - **教训**：**改引用必须同步验种子**。凡新增/改动硬编码科目代码，先 `SELECT count(*) FROM t_subject WHERE code='XXXX'`（含 `deleted` 过滤前也要看），再决定「补种子」还是「改引用」。
     - **审计法**：`grep -o 'findSubjectByCode("[0-9]\{4\}")' | sort -u` 提取全部代码，与库内实际 code 求差集 —— 一次性挖出全部缺失科目，比逐个崩溃再补高效。
+
+19. **「CHECK 允许集漏掉设计态」比「写错值」更隐蔽（2026-09-30 D8 沉淀，与第 9/14 条同源但更难发现）**：`chk_stmt_match_status` 允许集为 `('UNMATCHED','MATCHED','MANUAL_MATCHED','IGNORED')`，**不含 `PENDING_CONFIRM`**，而 `BankReconciliationServiceImpl:332` 在自动匹配 60-84 分档写它 ⇒ 该分档**必然抛 SQL 错**。
+    - **为什么比第 9 条难**：该值**不是照抄别处的错值，而是整个功能的设计意图** —— `summarize()` 按它统计待确认数、`unmatchedItems()` 按它归入未达账项、Controller `@Operation` 文档写明「60-84 PENDING_CONFIRM」、Service 注释三处描述它。**所有这些都自洽地"证明"它合法**，唯独 DB 不认。
+    - **判据**：凡代码写入某状态值，除了 `pg_get_constraintdef` 查证，还要问一句「**这个值是不是某个状态机的合法中间态**」——若是，说明**约束漏了它**（补约束），而不是代码该改（改代码会连带推翻 summarize/Controller 语义）。
+    - **衍生铁律**：D4 落地时若把 `rejectMatch` 门禁只放行 `MANUAL_MATCHED`，auto-match 产出的 `PENDING_CONFIRM` 行就**永远无法人工驳回** ⇒ 违反人审铁律 #1。**任何"待人工决策"态都必须同时是 confirm 和 reject 的合法输入。**
+    - 🔴 **反证时 Flyway 会把回退"补"回来**：为证明红，先 `psql` 回退约束会被下次 `mvn test` 启动的 Flyway 再次应用 `V162` 抹平（假绿）⇒ 必须 **src + target/classes 双删迁移文件**（与 §4.5 target/classes 坑同源）才能拿到真红。
+
+20. **判「Entity 缺某字段」前必须看父类（2026-09-30 D2 调查修正，直接推翻原判断）**：`VoucherEntity`/`VoucherEntryEntity` 类体里 grep 不到 `deleted`，我据此判定「MP 逻辑删除未生效、`deleteById` 是物理删」，并据此向用户提了两个方案（B1 仅分录 / B2 含父表）。**实际 `BaseEntity:43-44` 就有 `@TableLogic private Integer deleted;`**，两实体继承之 ⇒ **MP 逻辑删除本已生效**，方案 B2 的「Entity 补字段」根本不需要做，父表也不存在 CASCADE 抹审计问题。
+    - **本可被两条线索当场否掉**：① 既有测试 `VoucherEntryMapperRealDBTest:49,76` 早在调 `s.setDeleted(0)`/`e.setDeleted(0)` —— **能编译就证明字段存在**；② 全局 `application.yml:69-70` 已配 `logic-delete-field: deleted`，MP 只对**声明了该字段**的实体生效，两者矛盾时该先怀疑自己看漏了。
+    - **铁律**：任何「Entity 没有 X」的结论，必须同时 grep ① 父类 `BaseEntity` ② 既有测试的 `setXxx` 调用 ③ MP 全局逻辑删除配置。三者任一命中即证伪。
+    - **同源提醒**：`@TableField(exist = false)` 有三种误用方向（第 8 条"指向不存在的列"、第 10 条"幽灵字段"、第 16 条"真实列被标不存在"），本条是第四种 —— **"父类已声明却以为自己没声明"**。
 
 ### 4.3 测试类
 6. **测试假阳性**：测试通过 ≠ 功能完成。跨实体链路必须真实贯通，不能只测单个模块 CRUD。E2E 测试必须模拟真实用户操作路径
