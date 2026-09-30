@@ -155,7 +155,7 @@ public class DataIsolationAuditTest extends AbstractMapperTest {
         voucherB.setTotalDebit(new BigDecimal("2000.00"));
         voucherB.setTotalCredit(new BigDecimal("2000.00"));
         voucherB.setEnterpriseId(2L);
-        voucherMapper.insert(voucherB);
+        withoutEnterpriseContext(() -> voucherMapper.insert(voucherB));
 
         // BaseMapper 不自动过滤，但可以通过 where 条件手动过滤
         List<VoucherEntity> all = voucherMapper.selectList(null);
@@ -190,7 +190,7 @@ public class DataIsolationAuditTest extends AbstractMapperTest {
         docB.setStatus("DRAFT");
         docB.setDocDate(LocalDate.of(2026, 8, 1));
         docB.setEnterpriseId(2L);
-        businessDocMapper.insert(docB);
+        withoutEnterpriseContext(() -> businessDocMapper.insert(docB));
 
         List<BusinessDocEntity> allDocs = businessDocMapper.selectList(null);
 
@@ -229,7 +229,7 @@ public class DataIsolationAuditTest extends AbstractMapperTest {
         invB.setInvoiceType("SPECIAL");
         invB.setCertificationStatus("UNCERTIFIED");
         invB.setEnterpriseId(2L);
-        inputInvoiceMapper.insert(invB);
+        withoutEnterpriseContext(() -> inputInvoiceMapper.insert(invB));
 
         List<InputInvoiceEntity> allInvs = inputInvoiceMapper.selectList(null);
 
@@ -264,7 +264,7 @@ public class DataIsolationAuditTest extends AbstractMapperTest {
         bsB.setReviewStatus("PENDING");
         bsB.setEnterpriseId(2L);
         bsB.setAccountId(ensureBankAccount(2L));
-        bankStatementMapper.insert(bsB);
+        withoutEnterpriseContext(() -> bankStatementMapper.insert(bsB));
 
         List<BankStatementEntity> allBs = bankStatementMapper.selectList(null);
 
@@ -305,7 +305,7 @@ public class DataIsolationAuditTest extends AbstractMapperTest {
         invB.setInvoiceType("SPECIAL");
         invB.setStatus("PENDING_CONFIRM");
         invB.setEnterpriseId(2L);
-        outputInvoiceMapper.insert(invB);
+        withoutEnterpriseContext(() -> outputInvoiceMapper.insert(invB));
 
         List<OutputInvoiceEntity> allInvs = outputInvoiceMapper.selectList(null);
 
@@ -340,7 +340,7 @@ public class DataIsolationAuditTest extends AbstractMapperTest {
         cardB.setCategoryId(ensureAssetCategory(2L));
         cardB.setUsefulLife(60);
         cardB.setEnterpriseId(2L);
-        assetCardMapper.insert(cardB);
+        withoutEnterpriseContext(() -> assetCardMapper.insert(cardB));
 
         List<AssetCardEntity> allCards = assetCardMapper.selectList(null);
 

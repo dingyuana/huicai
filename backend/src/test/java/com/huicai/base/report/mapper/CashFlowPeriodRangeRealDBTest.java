@@ -44,6 +44,21 @@ class CashFlowPeriodRangeRealDBTest extends AbstractMapperTest {
 
     private static final long ENT_ID = 9901L;
 
+    /**
+     * 与 4 个兄弟真库测试（OpeningContinuity / AuxiliaryDetail / CashSubjectBalance /
+     * IncomeStatementCaliber）保持一致：<b>把上下文切到 ENT_ID</b>。
+     *
+     * <p>P102-M2 起 {@code MyMetaObjectHandler.insertFill} 会无条件覆盖
+     * {@code enterpriseId} 为上下文值，本类此前只在实体上设 {@code ENT_ID} 而未切上下文，
+     * 于是科目被改写成 enterprise_id=1，直接撞上种子里 enterprise 1 的 1002/1601/6602
+     * （uq_subject_code_ent），首次插入即失败。设上下文比逐个包裹
+     * {@code withoutEnterpriseContext} 更一致，且让读路径同样按 ENT_ID 过滤。
+     */
+    @org.junit.jupiter.api.BeforeEach
+    void switchToIsolatedEnterprise() {
+        useEnterprise(ENT_ID);
+    }
+
     private Long insertSubject(String code, String name) {
         Subject s = new Subject();
         s.setCode(code);
@@ -54,11 +69,10 @@ class CashFlowPeriodRangeRealDBTest extends AbstractMapperTest {
         s.setIsActive(true);
         // Flyway seed 已含 1002/1601 等常用科目，(code, enterprise_id) 唯一约束会冲突，
         // 故用独立 enterpriseId。不能用 code 前缀——会破坏 SQL 里 LIKE '1002%' 与 '15%'~'19%' 的判定。
-        // ⚠️ P102-M2 起 insertFill 会无条件覆盖 enterpriseId 为上下文值，
-        // 若不绕过上下文，这里会写成 enterprise_id=1 并直接撞上种子科目（uq_subject_code_ent）。
+        // 上下文已在 @BeforeEach 切到 ENT_ID，故此处设值与上下文一致，不受 P102-M2 强制覆盖影响。
         s.setEnterpriseId(ENT_ID);
         s.setDeleted(0);
-        withoutEnterpriseContext(() -> assertEquals(1, subjectMapper.insert(s)));
+        assertEquals(1, subjectMapper.insert(s));
         return s.getId();
     }
 
