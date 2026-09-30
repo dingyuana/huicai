@@ -67,14 +67,14 @@
                COALESCE(SUM(t.credit), 0) AS creditTotal
         FROM (
             SELECT e.subject_id, e.debit, e.credit,
-                   e.assist_json -&gt;&gt; #{dimensionField} AS dim_value
+                   jsonb_extract_path_text(e.assist_json, #{dimensionField}) AS dim_value
             FROM t_voucher_entry e
             INNER JOIN t_voucher v ON v.id = e.voucher_id AND v.deleted = 0
             WHERE e.deleted = 0
               AND v.period = #{period}
               AND jsonb_exists(e.assist_json, #{dimensionField})
             <if test="dimensionValue != null">
-              AND e.assist_json -&gt;&gt; #{dimensionField} = CAST(#{dimensionValue} AS TEXT)
+              AND jsonb_extract_path_text(e.assist_json, #{dimensionField}) = CAST(#{dimensionValue} AS TEXT)
             </if>
         ) t
         GROUP BY t.subject_id, t.dim_value
@@ -88,14 +88,14 @@
                COALESCE(SUM(t.credit), 0) AS creditTotal
         FROM (
             SELECT e.subject_id, e.debit, e.credit,
-                   e.assist_json -&gt;&gt; #{dimensionField} AS dim_value
+                   jsonb_extract_path_text(e.assist_json, #{dimensionField}) AS dim_value
             FROM t_voucher_entry e
             INNER JOIN t_voucher v ON v.id = e.voucher_id AND v.deleted = 0
             WHERE e.deleted = 0
               AND v.period &lt; #{period}
               AND jsonb_exists(e.assist_json, #{dimensionField})
             <if test="dimensionValue != null">
-              AND e.assist_json -&gt;&gt; #{dimensionField} = CAST(#{dimensionValue} AS TEXT)
+              AND jsonb_extract_path_text(e.assist_json, #{dimensionField}) = CAST(#{dimensionValue} AS TEXT)
             </if>
         ) t
         GROUP BY t.subject_id, t.dim_value

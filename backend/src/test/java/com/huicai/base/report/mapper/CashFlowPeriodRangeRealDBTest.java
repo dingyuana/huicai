@@ -54,9 +54,11 @@ class CashFlowPeriodRangeRealDBTest extends AbstractMapperTest {
         s.setIsActive(true);
         // Flyway seed 已含 1002/1601 等常用科目，(code, enterprise_id) 唯一约束会冲突，
         // 故用独立 enterpriseId。不能用 code 前缀——会破坏 SQL 里 LIKE '1002%' 与 '15%'~'19%' 的判定。
+        // ⚠️ P102-M2 起 insertFill 会无条件覆盖 enterpriseId 为上下文值，
+        // 若不绕过上下文，这里会写成 enterprise_id=1 并直接撞上种子科目（uq_subject_code_ent）。
         s.setEnterpriseId(ENT_ID);
         s.setDeleted(0);
-        assertEquals(1, subjectMapper.insert(s));
+        withoutEnterpriseContext(() -> assertEquals(1, subjectMapper.insert(s)));
         return s.getId();
     }
 
