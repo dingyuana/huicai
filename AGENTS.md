@@ -261,6 +261,27 @@
 18. **`execute_code` 工具返回空**：沙箱内 `terminal()`/`read_file()` 可能返回空，改用 `subprocess.run()` 直接调系统命令
 19. **Maven JDK 21 编译**：`maven-compiler-plugin` 必须 ≥ 3.12.0，否则 `--release 21` 报错
 
+20. 🔴 **surefire `<argLine>` 覆盖 ⇒ JaCoCo 门禁永久静默跳过（假绿，2026-09-30 P104 收口实证）**：`jacoco:prepare-agent` 在 `initialize` 阶段**设置 `argLine` 属性**，surefire 到 `test` 阶段才取值。若 `pom.xml` 的 surefire 写了**字面量** `<argLine>-Xmx...</argLine>`（不含 `@{argLine}`），该字面量会**整体覆盖**属性 → agent 从未挂载 → 无 `target/jacoco.exec` → `report` 与 `check` 双双打印 `Skipping JaCoCo execution due to missing execution data file` → **构建照样 SUCCESS**。
+    - **危害等级高于普通缺陷**：门禁「看起来在管」，实则零信号。本项目 `70%` 覆盖率门禁因此**从未执行过一次**，此前所有「测试全过 ⇒ 覆盖率达标」的结论全是假绿。
+    - **正解**：`<argLine>@{argLine} -Xmx...</argLine>`。用 `@{}`（延迟替换）而非 `${}`（立即展开），未启用 JaCoCo 时替换为空串而非字面量。
+    - **反证判据**（下次遇到先查这两条，别信绿灯）：① `grep -c 'Skipping JaCoCo execution' <ci.log>` 必须为 0；② 必须出现 `All coverage checks have been met` 或 `Rule violated` 之一（两者皆无 = 门禁没跑）。
+    - 🔴 **删冗余 `mvn jacoco:check` 步骤反而是对的**：命令行 `jacoco:check` 走 `default-cli` execution，**拿不到 pom 绑定 execution 里的 `<rules>`**，必然报 `The parameters 'rules' ... are missing or invalid` 而假失败。覆盖率门禁随 `mvn test` 即可生效（`<phase>test</phase>`），**不要重复调**。
+
+21. 🔴 **「绿灯」不等于「通过」：门禁自身的执行也必须验证**（2026-09-30 四门禁连查，同日四个 workflow 在 main/develop/feature 上**历史上 100% 全红**）
+    | 门禁 | 表面 | 实际真相 |
+    |------|------|---------|
+    | SPEC 契约 | 红 | **真红**：96 份 SPEC 中 91 份无机器可读契约 + 校验器 5 层缺陷（崩溃/围栏提取/类型未分派/ID 格式强压/缺契约判失败） |
+    | L1 前端 | 红 | **真红**：`npm test -- --coverage` 但 `@vitest/coverage-v8` 从未安装 |
+    | L1 Java | 红 | **假红**：1757 用例全过，挂在冗余 `mvn jacoco:check`（见第 20 条）|
+    | L1 覆盖率 | 绿 | **假绿**：静默跳过，从未执行（见第 20 条）|
+    | L2 真库 | 红 | **真红**：workflow **从无 `services:` 块**，Redis 只被 `docker pull` 从未启动 → 11 个 `RedisConnectionFailure` |
+    | Full Stack 路由 | 红 | **假红**：`check_route_coverage.py` 只解析 `routes/base.ts`（96 条路由只认出 23 条）→ 75 个组件被误判孤儿 |
+    - **教训**：判断门禁有效性**必须看它自己的输出**，不能看它的退出码或颜色。四类失效模式：① 恒红（阈值/规则不可达成）② 恒绿（规则根本没执行）③ 假红（工具自身缺陷）④ 输入不全（只读了一部分数据源）。
+    - **判「恒红」通用解法**：把不可达成的硬失败**降级为警告 + 留强制开关**。SPEC 门禁用 `--require-contract`、覆盖率用实测值做**棘轮**、路由检查只对「路由指向不存在组件」判失败 —— 原则一致：**门禁必须可执行且能变红，否则等于没有**。
+
+22. **多文件配置只读其一 ⇒ 误报成批**（2026-09-30）：`check_route_coverage.py` 硬编码单文件 `base.ts`，而路由实际拆在 8 个文件（`agency/base/lab/sme-asset/sme-base/sme-business/sme-report/sme-tax`），96 条只认出 23 条。同类：validator 用 glob `P*-*.md` 却假设单一 schema。**教训：解析多份配置必须 `glob` 全部，且改完立刻跑一遍看「认出的条数」是否与实际数量级相符**（23 vs 96 这种量级差一眼可见）。
+
+
 ### 4.6 工作流执行类
 20. **起步跳过三步闭环**：收到"开发/继续开发/写代码"指令时，Hermes 必须先走 SPEC→审核门→再执行，禁止直接写 SPEC 文档或代码。**三次纠正沉淀：** 2026-07-09 ai-evolution-v2 起步时直接写计划文档+commit，跳过老丁审核（违反铁律 #10）。修正：收到任何开发指令，第一条输出必须是 SPEC 草案或要求确认需求，不是代码/计划文档。
 21. **`git add -A` 导致 doc 漂移**：写完文档后用了 `git add -A` 而非指定文件路径，导致关联 issue 修复。修正：commit 前先 `git status --short` 确认只有目标文件被跟踪。
