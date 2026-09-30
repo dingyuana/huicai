@@ -1,7 +1,7 @@
 # P102 SPEC — 安全与权限基座加固（租户隔离 + 端点鉴权 + DTO 隔离）
 
-> **版本**：V1.2（实施回写：修正 5 处与实现不符的前提，补 M1~M5a 落地结果） | **最后修改**：2026-09-30 | **作者**：opencode
-> **编号**：HUICAI-SPC-P102 | 优先级：**P0（商用门槛）** | 状态：🚧 部分实施（M1~M5a 已交付，M5b 待做）
+> **版本**：V1.3（M5b 实施回写：RLS 机制已交付，角色降权待人工执行） | **最后修改**：2026-10-01 | **作者**：opencode
+> **编号**：HUICAI-SPC-P102 | 优先级：**P0（商用门槛）** | 状态：🚧 机制已交付（仅剩角色降权待人工执行）
 > **来源**：P101 总纲 M2/M3；四路审计交叉最严重项
 > **关联需求**：REQ-2026-129 | **前置**：无 | **test_ref**：`TenantIsolationSecurityTest`、`TenantIsolationHttpTest`、`SystemClearAuthorizationTest`、`EnterpriseIdInjectionTest`、`DataPermissionFailClosedTest`、`EnterpriseDataPermissionFailClosedTest`
 > **排除**：AI 功能（老丁 2026-09-29 指示）
@@ -115,7 +115,7 @@ member(user, E) =
 | AT-102-1b | `accountant01`（`enterprise_id=NULL`）持合法 JWT | 带 `X-Enterprise-Id: 1` 请求 | **放行**（三源并集经代理成员表判定） | 集成 | ✅ `agencySeedAccountsNotLockedOut`（真实种子数据） |
 | AT-102-1c | `admin`（SUPER_ADMIN） | 带 `X-Enterprise-Id: 2` | 放行，且审计留痕 from→to | 集成 | ✅ `superAdminAllowedEverywhere` + `EnterpriseSwitchAuditService` |
 | AT-102-1d | 目标企业为 null | 请求 | 不因缺头失败 | 单测 | ✅ `nullTargetIsAllowed` |
-| AT-102-2 | 应用角色已 `NOBYPASSRLS` + 事务内已 `SET LOCAL` | 业务事务查 `t_voucher` | 仅本企业行 | 真实 DB | ⏳ **M5b 未做** |
+| AT-102-2 | 应用角色已 `NOBYPASSRLS` + 事务内已 `SET LOCAL` | 业务事务查 `t_voucher` | 仅本企业行 | 真实 DB | 🟡 **M5b 机制已就绪并验证**：`TenantRlsInitializer` + `V166` 已落地，策略经探针角色实测生效（44→1）；**角色降权待人工执行**（见 M5b 手册） |
 | AT-102-3 | 任意登录用户无 `system:clear` | `POST /clear-vouchers` | 403；`t_voucher` 行数不变（负向） | 集成 | ✅ 反射断言注解 + 权限码存在性（`SystemClearAuthorizationTest`） |
 | AT-102-4 | 用户无 `period:reopen` | `POST /period/{id}/reopen` | 403（反结账受保护） | 集成 | ✅ `periodReopenIsProtected` |
 | AT-102-5a | `SystemClearController` 破坏性端点数为 **9** | 源码反射 | 数量变化即红（防新增端点漏保护） | 单测 | ✅ `clearEndpointsCountIsNine` |
@@ -163,13 +163,15 @@ member(user, E) =
 - **L1 强制覆盖会改写跨租户造数**（测试与系统任务）→ 已提供 `AbstractMapperTest#withoutEnterpriseContext` 显式出口；生产无上下文路径不可被外部触达，由 AT-102-7e 守卫。
 - **RLS 收紧**可能使现存超级用户查询返 0 行 → 先 Testcontainers 全量验证，单独 commit 便于回滚。**V1.2 补充**：RLS 失效有**三重**原因，不止 SPEC 原列的两项 ——
   ① `rolsuper=t`（超级用户绕过）；② `rolbypassrls=t`（BYPASSRLS 属性绕过）；③ **83/83 张表的 owner 都是 `huicai`，而表属主默认也绕过 RLS**，故前两项改掉仍不生效，还需 `FORCE ROW LEVEL SECURITY`。
-  已实测：70 张表启用 RLS 且**都有策略**（无「启用了却无策略」的漏网表），70 条策略全部依赖 `current_setting('app.enterprise_id', true)`；未设置时策略返 **0 行**，设为 1 时可见 44 行 ⇒ 方案可行，但 `SET LOCAL` 一旦漏设即全站返 0 行，故列为 M5b 独立里程碑。
+  **M5b 实测（2026-10-01）**：「只加 FORCE 而不降权」**完全无效** —— 设 `app.enterprise_id` 为 1 与为 2 返回**同样的 44 行**；改用 `NOSUPERUSER NOBYPASSRLS` 探针角色后同一查询 **44 行 → 1 行**，证明策略谓词本身有效，缺的只是角色降权。已交付：`TenantRlsInitializer`（事务内 `SET LOCAL`）+ `V166`（70 张表 FORCE，**对现有应用零影响**）。**角色降权刻意不写成迁移**，改为 `docs/development/plans/2026-10-01-M5b-role-downgrade-runbook.md`（不可逆、失败模式静默、需与发布节奏对齐），**待人工在预发验证后于维护窗口执行**。
+- 🔴 **必须用 `SET LOCAL` 而非 `SET`**：后者是**会话级**，连接池复用会把上一个请求的企业带到下一个请求，造成**跨租户串数据**；`SET LOCAL` 随事务结束自动失效。
 - **不在范围**：数据级（部门/个人）权限粒度 → 归 P106；AI 功能排除；点状缺陷 → 归 P107。
 
 ## 版本历史
 
 | 版本 | 日期 | 变更人 | 变更内容 |
 |---|---|---|---|
+| **V1.3** | 2026-10-01 | opencode | **M5b 实施回写**：交付 `TenantRlsInitializer`（事务内 `SET LOCAL app.enterprise_id`）+ `V166`（70 张表 `FORCE ROW LEVEL SECURITY`，**对现有应用零影响**）+ 降权操作手册。**实测推翻一个想当然的结论**：「只加 FORCE 而不降权」**完全无效** —— 设 `app.enterprise_id` 为 1 与为 2 返回**同样的 44 行**；只有用 `NOSUPERUSER NOBYPASSRLS` 探针角色才降到 **1 行**，即原 SPEC 只列两项失效原因时，漏了「属主也绕过」这一项且它单独无法解决。另补记两条硬约束：① 必须 `SET LOCAL` 而非 `SET`（会话级会被连接池带到下个请求，造成**跨租户串数据**）；② 角色降权**刻意不写成迁移**（不可逆 + 失败模式静默 + 需与发布节奏对齐），留 `2026-10-01-M5b-role-downgrade-runbook.md` 待人工执行。AT-102-2 状态由「未做」改为「机制已就绪并验证，降权待人工」 |
 | **V1.2** | 2026-09-30 | opencode | **实施回写（M1~M5a 已交付）**：5 处与实现不符的前提经实测推翻并订正 —— ①权限列名是 `t_menu.permission`（非 `permission_code`），43/43 行早已回填，**不需加列**；②V160 已被 P107 D1 占用，权限码种子改用 **V163**；③三源并集源 2 **必须两跳**（`agency_user_id` 指向 `t_agency_user.id`），该表现成 `countByUserId`/`selectByUserId` 语义错误不得使用；④修正后**仍锁死 `reviewer01`**，由 **V165** 补种子；⑤清库端点**是 9 个不是 8 个**。另新增：§4 补 4 处 fail-open 的实际位置（`EnterpriseDataPermissionInterceptor` 1 处 + `DataPermissionInterceptor` 3 处，与原 SPEC 所述「4 处」分布不同）；§5 BDD 表替换为实施后实际落地的 22 条用例编号与状态；§8 补 RLS 三重失效原因与实测结论；`AuditLogEntity` 缺 `before_data`/`after_data` 属性（**P103 的失效本体**）这一实现障碍 |
 | V1.1 | 2026-09-29 | opencode | **审核修订**：①成员校验改三源并集（`t_user.enterprise_id` ∪ `t_agency_user_enterprise` ∪ SUPER_ADMIN），修正「只查成员表会锁死 accountant01/reviewer01/assistant01」的设计缺陷；②新增 §2.2 入参 `enterpriseId` 封禁（L1 强制覆盖 + L2 DTO 分批），补上比 header 更直接的越权路径；③新增 AT-102-1b/1c/7/8 四条 BDD；④新增 §7 DTO 隔离三批计划 |
 | V1.0 | 2026-09-29 | opencode | 初稿：租户隔离 + 端点鉴权，P101-M2/M3，RLS/越权/清库端点/权限码补列 |
