@@ -1,9 +1,9 @@
 # P103 SPEC — 审计追踪真实落地（快照落库 + updateById 覆盖）
 
-> **版本**：V1.0（草案，待老丁审核） | **最后修改**：2026-09-29 | **作者**：opencode
-> **编号**：HUICAI-SPC-P103 | 优先级：**P0（商用门槛）** | 状态：📋 待审核
+> **版本**：V1.1（实施回写：补两层原 SPEC 未预见的根因 + 设计判断与遗留） | **最后修改**：2026-10-01 | **作者**：opencode
+> **编号**：HUICAI-SPC-P103 | 优先级：**P0（商用门槛）** | 状态：✅ 已实施（2026-10-01，AT-103-1~5 全绿）
 > **来源**：P101 总纲 M4；审计代理 C 实测「铁律 #5 实质失效，0% 合规」
-> **关联需求**：REQ-2026-130 | **前置**：P102（权限码就位，越权/敏感操作复用） | **test_ref**：`AuditSnapshotRealDBTest`、`AuditTrackingAspectTest`
+> **前置**：P102（权限码就位，越权/敏感操作复用）
 > **排除**：AI 功能
 
 ---
@@ -80,8 +80,15 @@
 - **切面覆盖 `updateById` 性能** → 快照只取变更字段，非全表 dump。
 - **不在范围**：审计报表 UI、归档策略、AI 功能。
 
+### V1.1 实施期新增风险与遗留
+
+- 🔴 **审计失败不 fail-closed（有意为之，勿当缺陷改）**：审计是**可用性敏感旁路**，不是租户隔离那类**安全组件**（后者必须 fail-closed，见 `EnterpriseDataPermissionInterceptor`）。若审计写失败就让记账请求整体 500，等于「审计表抖动 = 业务停摆」—— 实测该耦合会把 H2 空库的 **11 个 Controller 用例**全部打成 500。故捕获异常 + ERROR 告警，业务继续。**代价**：极端情况下存在「有变更但无留痕」，需靠 ERROR 日志巡检补账。
+- **去掉 `@Async` + `REQUIRES_NEW`**：原实现的独立事务提交意味着**业务回滚后审计行仍然留存**，声称「发生过」而实际没发生；且 fire-and-forget 崩溃即丢、测试无法确定性断言（实测失败集合在 2~3 条间漂移）。现随业务事务同步写入（REQUIRED），业务回滚则审计一并回滚。**方法名 `saveAsync` 已改为 `save`**。
+- **仍遗留**：① `method` / `requestParams` / `responseResult` / `status` / `executionTimeMs` / `userAgent` / `createdAt` 仍是 `@TableField(exist = false)` 幽灵字段（DB 无对应列），`LogAspect` 仍在用其中 3 个 —— 本轮为**纯增量**未动，避免扩大回归面；彻底清理需连带改 `LogAspect`，归后续需求。② 快照目前取**全量**实体 JSON（`serializeEntity`），与 §7「只存变更字段」的原始设想有出入；字段级 diff 归后续。
+
 ## 版本历史
 
 | 版本 | 日期 | 变更人 | 变更内容 |
 |---|---|---|---|
+| **V1.1** | 2026-10-01 | opencode | **实施回写**：初稿列出的 5 个缺陷已全部修复并 TDD 验证，但实施期实测发现**两层更深的根因，原 SPEC 未预见**：①**序列化时机** —— 原实现在 `proceed()` **之前**序列化，而 id 由数据库自增回填 ⇒ 即使补齐字段，审计行的 `entity_id` 与快照里的 `id` 仍全为 NULL（补了字段也「关联不回业务对象」，`idx_audit_log_entity` 依旧形同虚设）；②**`getIdValue` 只查本类字段** —— `@TableId` 声明在父类 `BaseEntity` 上，`getDeclaredFields()` 永远返回 null（与 AGENTS §4.2 第 20 条同源）。另记录开发库基线证据：189 行审计中 `before_data`/`after_data`/`entity_type`/`operator_id` 非空计数**全为 0**。§7 补「审计失败不 fail-closed」的设计判断及其代价，并标注两项遗留（幽灵字段清理需连带改 `LogAspect`；快照取全量而非字段级 diff） |
 | V1.0 | 2026-09-29 | opencode | 初稿：修复铁律 #5 实质失效（exist=false 快照 / updateById 缺审计 / status 死列 / 非 JSON 拼串） |
