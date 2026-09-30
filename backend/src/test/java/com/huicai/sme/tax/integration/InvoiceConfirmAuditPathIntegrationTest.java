@@ -22,7 +22,7 @@ import static org.junit.jupiter.api.Assertions.*;
  *
  * <p>验证：对任何含 {@code @StatusChangeable} 注解的 Entity 调用
  * {@code Mapper.updateById()} 时，Aspect 拦截会异步触发
- * {@code AuditLogService.saveAsync()} 写入审计日志。
+ * {@code AuditLogService.save()} 写入审计日志。
  *
  * <p>这正是之前发票 500 错误的根因路径：
  * 发票 confirm() → updateById() → StatusChangeAspect →

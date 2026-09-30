@@ -106,7 +106,7 @@ public class AuditTrackingAspect {
                 auditLog.setStatus(status);
                 auditLog.setModule(module);
 
-                auditLogService.saveAsync(auditLog);
+                auditLogService.save(auditLog);
             }
         } finally {
             AUDITING.set(false);
@@ -127,25 +127,165 @@ public class AuditTrackingAspect {
         AUDITING.set(true);
         try {
             String module = extractModuleFromEntity(entity);
-            String newSnapshot = serializeEntity(entity);
 
             Object result = pjp.proceed();
 
+            // P103：必须在 proceed() **之后**取 id 与序列化快照。
+            // id 由数据库自增回填，proceed() 前 entity 里还是 null ——
+            // 若在 proceed() 前序列化，审计行的 entity_id 与快照里的 id 全为 null，
+            // idx_audit_log_entity 索引依然形同虚设（「有行但关联不回业务对象」）。
+            Long entityId = toLongId(getIdValueQuietly(entity));
+            String afterSnapshot = serializeEntity(entity);
+
             AuditLogEntity auditLog = new AuditLogEntity();
             auditLog.setUsername(getCurrentUsername());
+            auditLog.setUserId(getCurrentUserId());
             auditLog.setOperation("CREATE");
             auditLog.setMethod("insert");
-            auditLog.setRequestParams(newSnapshot);
-            auditLog.setNewSnapshot(newSnapshot);
             auditLog.setStatus("success");
             auditLog.setModule(module);
+            auditLog.setEntityType(extractEntityType(entity));
+            auditLog.setEntityId(entityId);
+            auditLog.setEntityNo(extractEntityNo(entity));
+            auditLog.setAfterData(afterSnapshot);
+            auditLog.setRequestParams(afterSnapshot);
+            auditLog.setNewSnapshot(afterSnapshot);
 
-            auditLogService.saveAsync(auditLog);
+            auditLogService.save(auditLog);
 
             return result;
         } finally {
             AUDITING.set(false);
         }
+    }
+
+    /**
+     * P103 补齐：{@code updateById} 此前<b>完全没有审计</b>，
+     * 而「谁在什么时候把什么改成什么」恰恰是审计的核心诉求
+     * （原实现只拦 insert 与 deleteById，见 SPEC 缺陷 2）。
+     *
+     * <p>必须在 {@code proceed()} <b>之前</b>读旧值，否则拿到的已是新数据，
+     * before/after 会相同 —— 那正是本类 AT-103-3 要防的假通过。
+     */
+    @Around("execution(* com.baomidou.mybatisplus.core.mapper.BaseMapper.updateById(..)) && args(entity) && !args(com.huicai.base.system.entity.AuditLogEntity)")
+    public Object aroundUpdateById(ProceedingJoinPoint pjp, Object entity) throws Throwable {
+        if (AUDITING.get()) {
+            return pjp.proceed();
+        }
+
+        String entityClassName = entity.getClass().getName();
+        if (!isBusinessModuleEntity(entityClassName)) {
+            return pjp.proceed();
+        }
+
+        AUDITING.set(true);
+        try {
+            Object idValue = getIdValueQuietly(entity);
+            String beforeSnapshot = serializeEntity(selectOldEntity(entity, idValue));
+            String module = extractModuleFromEntity(entity);
+
+            Object result = pjp.proceed();
+
+            // after 快照同样要在 proceed() 之后取（MP 的乐观锁/自动填充可能改写实体）
+            String afterSnapshot = serializeEntity(entity);
+
+            AuditLogEntity auditLog = new AuditLogEntity();
+            auditLog.setUsername(getCurrentUsername());
+            auditLog.setUserId(getCurrentUserId());
+            auditLog.setOperation("UPDATE");
+            auditLog.setMethod("updateById");
+            auditLog.setStatus("success");
+            auditLog.setModule(module);
+            auditLog.setEntityType(extractEntityType(entity));
+            auditLog.setEntityId(toLongId(idValue));
+            auditLog.setEntityNo(extractEntityNo(entity));
+            auditLog.setBeforeData(beforeSnapshot);
+            auditLog.setAfterData(afterSnapshot);
+            auditLogService.save(auditLog);
+
+            return result;
+        } catch (Throwable throwable) {
+            try {
+                AuditLogEntity failLog = new AuditLogEntity();
+                failLog.setUsername(getCurrentUsername());
+                failLog.setUserId(getCurrentUserId());
+                failLog.setOperation("UPDATE");
+                failLog.setMethod("updateById");
+                failLog.setStatus("fail");
+                failLog.setResponseResult(throwable.getMessage());
+                failLog.setModule(extractModuleFromEntity(entity));
+                failLog.setEntityType(extractEntityType(entity));
+                failLogService(failLog);
+            } catch (Exception ignored) {
+                log.warn("记录 UPDATE 失败审计时自身异常", ignored);
+            }
+            throw throwable;
+        } finally {
+            AUDITING.set(false);
+        }
+    }
+
+    private void failLogService(AuditLogEntity entity) {
+        auditLogService.save(entity);
+    }
+
+    private Object getIdValueQuietly(Object entity) {
+        try {
+            return getIdValue(entity);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private Long toLongId(Object id) {
+        if (id instanceof Number n) {
+            return n.longValue();
+        }
+        if (id == null) {
+            return null;
+        }
+        try {
+            return Long.parseLong(id.toString());
+        } catch (NumberFormatException e) {
+            return null;
+        }
+    }
+
+    /** 实体名去掉 Entity 后缀，如 VoucherEntity → Voucher */
+    private String extractEntityType(Object entity) {
+        String simple = entity.getClass().getSimpleName();
+        return simple.endsWith("Entity") ? simple.substring(0, simple.length() - 6) : simple;
+    }
+
+    private String extractEntityTypeFromMapper(ProceedingJoinPoint pjp) {
+        try {
+            String mapperName = pjp.getTarget().getClass().getSimpleName();
+            // XxxMapper -> Xxx（与实体名一致，便于按 entity_type 关联回溯）
+            return mapperName.endsWith("Mapper")
+                    ? mapperName.substring(0, mapperName.length() - 6)
+                    : mapperName;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /** 取业务编号字段（凭证号/单据号等），用于人工按编号检索审计 */
+    private String extractEntityNo(Object entity) {
+        for (String candidate : new String[]{"voucherNo", "docNo", "statementNo", "code", "number"}) {
+            try {
+                java.lang.reflect.Field f = entity.getClass().getDeclaredField(candidate);
+                f.setAccessible(true);
+                Object v = f.get(entity);
+                if (v != null) {
+                    return String.valueOf(v);
+                }
+            } catch (NoSuchFieldException ignored) {
+                // 换下一个候选
+            } catch (Exception ignored) {
+                return null;
+            }
+        }
+        return null;
     }
 
     @Around("execution(* com.baomidou.mybatisplus.core.mapper.BaseMapper.deleteById(..)) && args(id)")
@@ -165,20 +305,25 @@ public class AuditTrackingAspect {
 
             AuditLogEntity auditLog = new AuditLogEntity();
             auditLog.setUsername(getCurrentUsername());
+            auditLog.setUserId(getCurrentUserId());
             auditLog.setOperation("DELETE");
             auditLog.setMethod("deleteById");
             auditLog.setRequestParams("{\"id\":" + id + "}");
             auditLog.setStatus("success");
             auditLog.setModule(module);
+            // P103：写入真实列，使 idx_audit_log_entity 可用（此前恒为 NULL，索引形同虚设）
+            auditLog.setEntityId(toLongId(id));
+            auditLog.setEntityType(extractEntityTypeFromMapper(pjp));
+            auditLog.setBeforeData("{\"id\":" + id + "}");
 
             try {
                 Object result = pjp.proceed();
-                auditLogService.saveAsync(auditLog);
+                auditLogService.save(auditLog);
                 return result;
             } catch (Throwable throwable) {
                 auditLog.setStatus("fail");
                 auditLog.setResponseResult(throwable.getMessage());
-                auditLogService.saveAsync(auditLog);
+                auditLogService.save(auditLog);
                 throw throwable;
             }
         } finally {
@@ -237,19 +382,38 @@ public class AuditTrackingAspect {
     }
 
     private Object getIdValue(Object entity) throws Exception {
-        for (Field f : entity.getClass().getDeclaredFields()) {
-            if (f.isAnnotationPresent(com.baomidou.mybatisplus.annotation.TableId.class)) {
-                f.setAccessible(true);
-                return f.get(entity);
+        // ⚠️ 必须沿类继承链向上找：`@TableId` 通常声明在父类 BaseEntity 上，
+        // 而 getDeclaredFields() 只返回本类声明的字段 —— 只查本类会永远返回 null，
+        // 导致审计行的 entity_id 恒为 NULL（与 AGENTS §4.2 第 20 条同源）。
+        Class<?> clazz = entity.getClass();
+        while (clazz != null && clazz != Object.class) {
+            for (Field f : clazz.getDeclaredFields()) {
+                if (f.isAnnotationPresent(com.baomidou.mybatisplus.annotation.TableId.class)) {
+                    f.setAccessible(true);
+                    Object v = f.get(entity);
+                    if (v != null) {
+                        return v;
+                    }
+                }
             }
+            clazz = clazz.getSuperclass();
         }
-        try {
-            Field idField = entity.getClass().getDeclaredField("id");
-            idField.setAccessible(true);
-            return idField.get(entity);
-        } catch (NoSuchFieldException e) {
-            return null;
+        // 兜底：按字段名找
+        clazz = entity.getClass();
+        while (clazz != null && clazz != Object.class) {
+            try {
+                Field idField = clazz.getDeclaredField("id");
+                idField.setAccessible(true);
+                Object v = idField.get(entity);
+                if (v != null) {
+                    return v;
+                }
+            } catch (NoSuchFieldException ignored) {
+                // 继续向父类找
+            }
+            clazz = clazz.getSuperclass();
         }
+        return null;
     }
 
     @SuppressWarnings({"rawtypes", "unchecked"})
