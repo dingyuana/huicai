@@ -1,5 +1,6 @@
 package com.huicai.sme.tax.controller;
 
+import com.huicai.sme.tax.dto.TaxDeclarationCreateDTO;
 import com.huicai.sme.tax.dto.OutputInvoiceCreateDTO;
 import java.util.HashMap;
 import com.baomidou.mybatisplus.core.metadata.IPage;
@@ -198,16 +199,21 @@ class TaxControllerTest {
     @Test
     @DisplayName("新增申报_RequestBody正确解析")
     void createDeclaration_requestBody_parsedCorrectly() throws Exception {
-        TaxDeclarationEntity entity = new TaxDeclarationEntity();
-        entity.setPeriod("202601");
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("declarationNo", "TAX-DECL-001");
+        payload.put("period", "202601");
+        payload.put("taxType", "VAT");
+        payload.put("declaredDate", "2026-01-15");
+        payload.put("payableAmount", new BigDecimal("1000.00"));
 
         TaxDeclarationEntity created = new TaxDeclarationEntity();
         created.setId(1L);
-        when(taxService.createDeclaration(any())).thenReturn(created);
+        when(taxService.createDeclaration(
+                org.mockito.ArgumentMatchers.any(TaxDeclarationCreateDTO.class))).thenReturn(created);
 
         mvc.perform(post("/api/sme/tax/v1/tax/declarations")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(om.writeValueAsString(entity)))
+                        .content(om.writeValueAsString(payload)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.id").value(1));
     }

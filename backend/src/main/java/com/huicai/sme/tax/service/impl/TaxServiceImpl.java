@@ -1,5 +1,6 @@
 package com.huicai.sme.tax.service.impl;
 
+import com.huicai.sme.tax.dto.TaxDeclarationCreateDTO;
 import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
@@ -932,8 +933,26 @@ public class TaxServiceImpl implements TaxService {
     }
 
     @Override
+    public TaxDeclarationEntity createDeclaration(TaxDeclarationCreateDTO dto) {
+        TaxDeclarationEntity entity = new TaxDeclarationEntity();
+        entity.setDeclarationNo(dto.getDeclarationNo());
+        entity.setPeriod(dto.getPeriod());
+        entity.setTaxType(dto.getTaxType());
+        entity.setDeclaredDate(dto.getDeclaredDate());
+        entity.setPayableAmount(dto.getPayableAmount());
+        entity.setRemark(dto.getRemark());
+        return createDeclaration(entity);
+    }
+
+    @Override
     public TaxDeclarationEntity createDeclaration(TaxDeclarationEntity entity) {
-        if (entity.getStatus() == null) entity.setStatus("DRAFT");
+        // P0-fix: 原为 `if (entity.getStatus() == null) setStatus("DRAFT")` —— 与修复前的
+        // createOutput() 同一个写法。只在 null 时兜底 ⇒ **客户端显式传 status 会被照单全收**。
+        // chk_declaration_status 允许 DRAFT/SUBMITTED/APPROVED/REJECTED，
+        // 故 POST status=APPROVED 可**一步跳过** submitDeclaration() + approveDeclaration()
+        // 两次人工动作（违反铁律 #1：人是唯一审核主体）；REJECTED 是终态，更不该由客户端指定。
+        // 改为**无条件**强制 DRAFT —— 创建态是唯一的合法起点。
+        entity.setStatus("DRAFT");
         declarationMapper.insert(entity);
         return entity;
     }

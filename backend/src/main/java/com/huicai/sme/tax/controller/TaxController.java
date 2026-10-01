@@ -1,5 +1,6 @@
 package com.huicai.sme.tax.controller;
 
+import com.huicai.sme.tax.dto.TaxDeclarationCreateDTO;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.huicai.common.response.R;
 import com.huicai.base.business.entity.InputInvoiceEntity;
@@ -330,8 +331,8 @@ public class TaxController {
 
     @Operation(summary = "创建申报")
     @PostMapping("/declarations")
-    public R<TaxDeclarationEntity> createDeclaration(@RequestBody TaxDeclarationEntity entity) {
-        return R.ok(service.createDeclaration(entity));
+    public R<TaxDeclarationEntity> createDeclaration(@Valid @RequestBody TaxDeclarationCreateDTO dto) {
+        return R.ok(service.createDeclaration(dto));
     }
 
     @Operation(summary = "提交申报")

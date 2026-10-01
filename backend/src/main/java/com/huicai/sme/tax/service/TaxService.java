@@ -1,5 +1,6 @@
 package com.huicai.sme.tax.service;
 
+import com.huicai.sme.tax.dto.TaxDeclarationCreateDTO;
 import com.huicai.sme.tax.dto.OutputInvoiceCreateDTO;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.huicai.base.business.entity.InputInvoiceEntity;
@@ -70,6 +71,10 @@ public interface TaxService {
 
     // 申报
     IPage<TaxDeclarationEntity> pageQueryDeclaration(String status, Integer current, Integer size);
+    /** P102 DTO 隔离：对外入口用 DTO（不含 status，杜绝越权直落 APPROVED/REJECTED）；
+     *  Entity 重载保留给内部链路，服务层同样无条件强制 DRAFT。 */
+    TaxDeclarationEntity createDeclaration(TaxDeclarationCreateDTO dto);
+
     TaxDeclarationEntity createDeclaration(TaxDeclarationEntity entity);
     TaxDeclarationEntity submitDeclaration(Long id);
     /** P18-1: 审批通过 (SUBMITTED → APPROVED) */
