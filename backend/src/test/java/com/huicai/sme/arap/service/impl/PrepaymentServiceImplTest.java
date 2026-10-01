@@ -225,7 +225,11 @@ class PrepaymentServiceImplTest {
         // 验证：应付单状态更新
         ArgumentCaptor<BusinessDocEntity> docCaptor = ArgumentCaptor.forClass(BusinessDocEntity.class);
         verify(businessDocMapper, atLeastOnce()).updateById(docCaptor.capture());
-        assertEquals("SETTLED", docCaptor.getValue().getStatus());
+        // P0-fix: 原断言 "SETTLED" —— 那是 chk_doc_status **不允许**的值，真库跑必抛 23514。
+        // 本测试是纯 Mockito（无 Spring、无 DB），且 mock 的单据状态是 CONFIRMED
+        // （真库不可能出现该值），于是「永不触发」的死分支在 mock 下看起来一切正常
+        // —— 测试亲手把缺陷写成了期望值。真实复现见 BadDebtWriteOffStatusRealDBTest。
+        assertEquals("FULLY_RECONCILED", docCaptor.getValue().getStatus());
 
         // 验证：创建了核销单
         verify(settlementMapper, atLeastOnce()).insert(any(ArapSettlementEntity.class));
