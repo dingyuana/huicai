@@ -197,9 +197,18 @@ class CustomerMapperTest {
 | 项 | 数值 |
 |----|------|
 | 原规模 | 29 个类 / **145 个 `@Test`**（占全量 7.2%） |
-| 已归零 | 1 个（`CustomerMapperTest` → `CustomerMapperRealDBTest`，5 假 → 7 真） |
-| 剩余 | **28 个类 / 140 个 `@Test`** |
+| 已归零 | **7 个**（`CustomerMapper` 5 假→7 真、`MenuMapper` 5 假→5 真、`UserMapper` 5 假→6 真、`DeptMapper` 5 假→5 真、`RoleMapper` 5 假→5 真、`SysConfigMapper` 5 假→4 真、`VoucherTypeMapper` 5 假→4 真） |
+| 剩余 | **22 个类 / 110 个 `@Test`** |
 | 机械检查 | `grep -rl 'Mockito.mock' --include='*MapperTest.java'` 应逐批收敛 |
+
+> 第 3 批（`base/system`）归零时顺带修掉一处真实缺陷：`UserEntity.deleted`
+> **缺少 `@TableLogic`**，而 `t_user` 有 `deleted` 列 ⇒ `deleteById` 执行**物理删除**。
+> 用户是审计主体（`t_audit_log.operator_id` 指向它），物理删除后历史操作无法回溯到「谁」。
+> 已确认全仓无生产代码调用 `userMapper.deleteById`，改逻辑删除零风险。
+>
+> 同类普查（沿继承链判断，正确版）：真正缺 `@TableLogic` 的实体共 **4 个** ——
+> `UserEntity`（已修）、`AuditLogEntity`、`AgencyUserEnterpriseEntity`、
+> `AccountMappingRuleEntity`（审计日志是否该允许物理删除需另行评估，留后续）。
 
 剩余 28 个按模块分组。**处置分两类**（V1.2.1 实测复核后修正）：
 
