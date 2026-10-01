@@ -7,6 +7,8 @@
  */
 package com.huicai.api.rest;
 
+import com.huicai.base.business.entity.OutputInvoiceEntity;
+import com.huicai.sme.tax.dto.OutputInvoiceCreateDTO;
 import com.huicai.common.exception.BusinessException;
 import com.huicai.base.system.entity.UserEntity;
 import com.huicai.config.security.LoginUser;
@@ -69,8 +71,9 @@ class TaxRestContractTest {
 
     @Test @DisplayName("POST /output-invoices — 缺少必填字段返回 400")
     void createOutputInvoice_missingFields_returns400() throws Exception {
-        doThrow(new BusinessException(400, "缺少必填字段")).when(taxService).createOutput(any());
-        String payload = "{\"invoiceNo\":\"REST-ASSURED-TEST-INV\",\"amount\":1000.00,\"taxRate\":13}";
+        doThrow(new BusinessException(400, "缺少必填字段")).when(taxService).createOutput(org.mockito.ArgumentMatchers.any(OutputInvoiceCreateDTO.class));
+        String payload = "{\"invoiceNo\":\"REST-ASSURED-TEST-INV\",\"amount\":1000.00,\"taxRate\":13,"
+                + "\"invoiceType\":\"SPECIAL\",\"invoiceDate\":\"2026-01-15\"}";
         mvc.perform(post("/api/sme/tax/v1/tax/output-invoices")
                 .contentType(MediaType.APPLICATION_JSON).content(payload))
                 .andExpect(status().isOk())

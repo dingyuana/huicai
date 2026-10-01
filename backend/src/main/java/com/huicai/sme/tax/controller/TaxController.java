@@ -5,6 +5,7 @@ import com.huicai.common.response.R;
 import com.huicai.base.business.entity.InputInvoiceEntity;
 import com.huicai.base.business.entity.OutputInvoiceEntity;
 import com.huicai.sme.tax.dto.BatchOperationResult;
+import com.huicai.sme.tax.dto.OutputInvoiceCreateDTO;
 import com.huicai.sme.tax.dto.vo.AppendixIResponse;
 import com.huicai.sme.tax.dto.vo.AppendixIIResponse;
 import com.huicai.sme.tax.dto.vo.TaxBurdenVO;
@@ -185,10 +186,10 @@ public class TaxController {
         return R.ok(service.getOutputById(id));
     }
 
-    @Operation(summary = "创建销项发票")
+    @Operation(summary = "创建销项发票（入参 DTO，不接受 status —— 人工审核链不可跳过）")
     @PostMapping("/output-invoices")
-    public R<OutputInvoiceEntity> createOutput(@RequestBody OutputInvoiceEntity entity) {
-        return R.ok(service.createOutput(entity));
+    public R<OutputInvoiceEntity> createOutput(@Valid @RequestBody OutputInvoiceCreateDTO dto) {
+        return R.ok(service.createOutput(dto));
     }
 
     @Operation(summary = "删除销项发票（逻辑删除）")

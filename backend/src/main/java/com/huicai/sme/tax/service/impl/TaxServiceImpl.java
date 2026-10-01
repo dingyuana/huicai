@@ -14,6 +14,7 @@ import com.huicai.base.voucher.service.VoucherNoService;
 import com.huicai.base.system.entity.Subject;
 import com.huicai.base.system.mapper.SubjectMapper;
 import com.huicai.sme.tax.constant.InvoiceStatus;
+import com.huicai.sme.tax.dto.OutputInvoiceCreateDTO;
 import com.huicai.base.business.entity.InputInvoiceEntity;
 import com.huicai.base.business.entity.OutputInvoiceEntity;
 import com.huicai.base.business.entity.BusinessDocEntity;
@@ -447,7 +448,26 @@ public class TaxServiceImpl implements TaxService {
     }
 
     @Override
+    public OutputInvoiceEntity createOutput(OutputInvoiceCreateDTO dto) {
+        OutputInvoiceEntity entity = new OutputInvoiceEntity();
+        entity.setInvoiceDate(dto.getInvoiceDate());
+        entity.setAmount(dto.getAmount());
+        entity.setTaxRate(dto.getTaxRate());
+        entity.setInvoiceType(dto.getInvoiceType());
+        entity.setInvoiceNo(dto.getInvoiceNo());
+        entity.setPeriod(dto.getPeriod());
+        entity.setCustomerId(dto.getCustomerId());
+        entity.setCustomerName(dto.getCustomerName());
+        entity.setRemark(dto.getRemark());
+        return doCreateOutput(entity);
+    }
+
+    @Override
     public OutputInvoiceEntity createOutput(OutputInvoiceEntity entity) {
+        return doCreateOutput(entity);
+    }
+
+    private OutputInvoiceEntity doCreateOutput(OutputInvoiceEntity entity) {
         if (entity.getAmount() == null || entity.getTaxRate() == null) {
             throw new BusinessException("金额和税率不能为空");
         }
@@ -459,14 +479,13 @@ public class TaxServiceImpl implements TaxService {
         if (entity.getTotalAmount() == null) {
             entity.setTotalAmount(entity.getAmount().add(entity.getTaxAmount()));
         }
-        if (entity.getStatus() == null) {
-            // P0-fix: 原为 setStatus("DRAFT")，但 chk_output_invoice_status 的允许集是
-            // PENDING_CONFIRM/PENDING_REVIEW/CONFIRMED/VOUCHERED/PARTIALLY_RECONCILED/
-            // FULLY_RECONCILED/VOIDED/REVERSED —— **不含 DRAFT** ⇒ 紧随的 insert 必抛 23514，
-            // 任何未显式传 status 的调用方直接 500（前端目前不调本端点，故长期潜伏）。
-            // 对齐同类 createInput 的约定（InvoiceStatus.PENDING_CONFIRM），并用常量不用字面量。
-            entity.setStatus(InvoiceStatus.PENDING_CONFIRM);
-        }
+        // P0-fix（原 P0-3）：原为 `if (entity.getStatus() == null) setStatus("DRAFT")`。
+// ① "DRAFT" 不在 chk_output_invoice_status 允许集内 ⇒ 未传 status 的调用方必抛 23514；
+// ② 更严重：只在 null 时兜底 ⇒ **客户端显式传 status=VOUCHERED 会被照单全收**，
+//    可直接创建「已制证」发票，绕过 PENDING_CONFIRM→PENDING_REVIEW→CONFIRMED 的
+//    人工审核链（违反铁律 #1：人是唯一审核主体）。
+// 故改为**无条件**强制 PENDING_CONFIRM —— 与同类 createInput 的既有做法一致。
+        entity.setStatus(InvoiceStatus.PENDING_CONFIRM);
         if (entity.getPeriod() == null) {
             entity.setPeriod(String.format("%04d%02d",
                     entity.getInvoiceDate().getYear(),
