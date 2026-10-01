@@ -77,6 +77,21 @@ class OutputInvoiceCreateStatusRealDBTest extends AbstractMapperTest {
     }
 
     @Test
+    @DisplayName("负向：客户端传 status=VOUCHERED 必须被忽略，强制 PENDING_CONFIRM（铁律 #1 人审）")
+    void clientSuppliedStatusIsIgnored() {
+        OutputInvoiceEntity e = draft();
+        e.setStatus("VOUCHERED");   // 越权尝试：直接跳到「已制证」，绕过人工审核
+
+        OutputInvoiceEntity saved = taxService.createOutput(e);
+
+        OutputInvoiceEntity db = outputInvoiceMapper.selectById(saved.getId());
+        assertNotNull(db, "回读不到");
+        assertEquals("PENDING_CONFIRM", db.getStatus(),
+                "客户端传入的 status 必须被忽略 —— 否则可直接创建「已制证」发票，"
+                        + "绕过 PENDING_CONFIRM→PENDING_REVIEW→CONFIRMED 的人工审核链（铁律 #1）");
+    }
+
+    @Test
     @DisplayName("负向：金额为空必须抛 BusinessException（铁律 #14）")
     void missingAmountIsRejected() {
         OutputInvoiceEntity e = draft();

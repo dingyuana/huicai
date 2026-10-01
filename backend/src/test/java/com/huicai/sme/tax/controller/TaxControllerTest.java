@@ -1,5 +1,7 @@
 package com.huicai.sme.tax.controller;
 
+import com.huicai.sme.tax.dto.OutputInvoiceCreateDTO;
+import java.util.HashMap;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -151,11 +153,11 @@ class TaxControllerTest {
         entity.setCustomerName("测试客户");
         entity.setAmount(BigDecimal.valueOf(10000));
 
-        when(taxService.createOutput(any())).thenReturn(entity);
+        when(taxService.createOutput(org.mockito.ArgumentMatchers.any(OutputInvoiceCreateDTO.class))).thenReturn(entity);
 
         mvc.perform(post("/api/sme/tax/v1/tax/output-invoices")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(om.writeValueAsString(entity)))
+                        .content(om.writeValueAsString(createPayload())))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(200));
     }
@@ -221,5 +223,24 @@ class TaxControllerTest {
         mvc.perform(post("/api/sme/tax/v1/tax/declarations/1/submit"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.status").value("SUBMITTED"));
+    }
+
+    /**
+     * 合法的创建入参。
+     *
+     * <p>P102：原夹具直接序列化 Entity，只带 amount/taxRate，**缺 invoiceDate 与
+     * invoiceType** —— 而这两列在 {@code t_output_invoice} 是 NOT NULL 且无默认值，
+     * 这样的请求打真库必报 23502。契约测试却断言 200，等于用幻觉数据给接口背书
+     * （AGENTS §4.3 第 11 条）。补齐必填字段后，夹具才与真实 schema 一致。
+     */
+    private Map<String, Object> createPayload() {
+        Map<String, Object> m = new HashMap<>();
+        m.put("customerName", "测试客户");
+        m.put("amount", new BigDecimal("10000.00"));
+        m.put("taxRate", new BigDecimal("13"));
+        m.put("invoiceType", "SPECIAL");
+        m.put("invoiceDate", "2026-01-15");
+        m.put("invoiceNo", "TAX-TEST-001");
+        return m;
     }
 }

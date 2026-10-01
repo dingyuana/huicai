@@ -1,5 +1,6 @@
 package com.huicai.sme.tax.service;
 
+import com.huicai.sme.tax.dto.OutputInvoiceCreateDTO;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.huicai.base.business.entity.InputInvoiceEntity;
 import com.huicai.base.business.entity.OutputInvoiceEntity;
@@ -41,6 +42,10 @@ public interface TaxService {
                                                String scope, java.time.LocalDate startDate, java.time.LocalDate endDate,
                                                Integer current, Integer size);
     OutputInvoiceEntity getOutputById(Long id);
+    /** P102 DTO 隔离：对外入口用 DTO（不含 status，杜绝越权直落终态）；
+     *  Entity 重载保留给导入等内部链路，服务层同样无条件强制 PENDING_CONFIRM。 */
+    OutputInvoiceEntity createOutput(OutputInvoiceCreateDTO dto);
+
     OutputInvoiceEntity createOutput(OutputInvoiceEntity entity);
     void deleteOutput(Long id);
     /** CONFIRMED → 生成凭证(含科目分录) → VOUCHERED */

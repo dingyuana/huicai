@@ -5,6 +5,7 @@
  */
 package com.huicai.api.controller;
 
+import com.huicai.sme.tax.dto.OutputInvoiceCreateDTO;
 import static org.hamcrest.Matchers.*;
 import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
@@ -79,8 +80,9 @@ class TaxApiContractTest {
         OutputInvoiceEntity created = new OutputInvoiceEntity();
         created.setId(1L);
         created.setCustomerName("测试客户");
-        when(taxService.createOutput(any())).thenReturn(created);
-        String json = "{\"customerName\":\"测试客户\",\"invoiceNo\":\"TEST-001\",\"amount\":1000.00,\"taxRate\":13}";
+        when(taxService.createOutput(org.mockito.ArgumentMatchers.any(OutputInvoiceCreateDTO.class))).thenReturn(created);
+        String json = "{\"customerName\":\"测试客户\",\"invoiceNo\":\"TEST-001\",\"amount\":1000.00,"
+                + "\"taxRate\":13,\"invoiceType\":\"SPECIAL\",\"invoiceDate\":\"2026-01-15\"}";
         mvc.perform(post("/api/sme/tax/v1/tax/output-invoices")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(json))
