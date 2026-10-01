@@ -152,6 +152,8 @@ docs/
 |---------|---------|
 | 凭证管理 | P22-voucher-state-machine、P37-voucher-type-rules、S-17-期末自动化结转、S-17-1-profit-distribution、S-18-结账控制、P59-opening-balance-single-entry、P60-auxiliary-ledger-query、P62-subsidiary-date-range-and-trial-empty、P63-ledger-p1-alignment、P64-ledger-perf-and-vo、P65-ledger-frontend、P68-period-close-ordering |
 | 应收应付核销 | P30、P30-P1-unified-settlement-path、P36、P42、P43-bad-debt、P43-reconciliation-log-settlement-state-machine、P44-settlement-list-display-fix、P45-reconciliation-upstream-trace-fix、P51、P52、P53、S-28-反核销制证凭证联动作废、P10、P73-bank-statement-settlement-ux、P74-settlement-voucher-template-fix |
+| 应收应付核销 | P30、P30-P1-unified-settlement-path、P36、P42、P43-bad-debt、P43-reconciliation-log-settlement-state-machine、P44-settlement-list-display-fix、P45-reconciliation-upstream-trace-fix、P51、P52、P53、S-28-反核销制证凭证联动作废、P10、P73-bank-statement-settlement-ux、P74-settlement-voucher-template-fix |
+| 应收应付核销 | P30、P30-P1-unified-settlement-path、P36、P42、P43-bad-debt、P43-reconciliation-log-settlement-state-machine、P44-settlement-list-display-fix、P45-reconciliation-upstream-trace-fix、P51、P52、P53、S-28-反核销制证凭证联动作废、P10、P73-bank-statement-settlement-ux、P74-settlement-voucher-template-fix |
 | 发票税务 | P40-input-invoice、P41-invoice-driven-finance、P13-tax-declaration、P36-1-red-flush-voucher、P57-declare-status-split、P57-enterprise-start-period→**已重编号 P71**、P58-invoice-payment-reconcile、P58-opening-balance-entry-audit→**已重编号 P72**、P61-vat-appendix-and-burden |
 | 资金管理 | P1-bank-import、P14-bank-reconciliation、P23-bank-statement、P55-bank-statement-subject-and-batch-fix、S-29-数据导入模块详细规格 |
 | 固定资产 | S-23 |

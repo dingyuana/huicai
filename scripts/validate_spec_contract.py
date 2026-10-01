@@ -460,11 +460,49 @@ def check_code_implementation(contract: dict, project_root: str, result: Validat
     if not impl_file.exists():
         impl_file = impl_pattern / f"{entity.replace('Entity', 'ServiceImpl')}.java"
 
-    if not impl_file.exists():
-        result.add_warning(f"Implementation file not found, searched: {impl_file}")
-        return
+    # Fallback 2: 包结构猜不中时（全仓按类名定位）。
+    # 原实现只按 module 拼 com/huicai/module/<module>/service/impl/ 单一路径，
+    # 而本仓库实际布局是 com/huicai/<domain>/<module>/service/impl/
+    # （例：VoucherServiceImpl 在 base/voucher 而非 module/finance）
+    # 候选类名收集（**不再因猜不中而 return**，后面还有契约内显式 implementation 兜底）
+    java_root = Path(project_root) / "backend" / "src" / "main" / "java"
+    # entity 声明方式有两种，候选名需都覆盖：
+    #   ArapSettlementEntity → ArapSettlementServiceImpl（replace('Entity','ServiceImpl') 有效）
+    #   ArapSettlement       → ArapSettlementServiceImpl（**replace 是空操作**，原实现在此失效）
+    base = entity[:-6] if entity.endswith('Entity') else entity
+    cand_names = [f"{service_name}Impl.java", f"{base}ServiceImpl.java"]
+    impl_files = []
+    for cand_name in cand_names:
+        impl_files.extend(list(java_root.rglob(cand_name)) if java_root.exists() else [])
+    if impl_file.exists() and impl_file not in impl_files:
+        impl_files.insert(0, impl_file)
 
-    impl_content = impl_file.read_text(encoding="utf-8")
+    # 优先使用契约里显式声明的 implementation 类名（transition 级 implementation 字段
+    # 形如 "ArapSettlementServiceImpl.approve()"，取其类名部分）。
+    # 原实现只靠 entity 名猜类名，而 entity 声明方式有两种：
+    #   ArapSettlementEntity → ArapSettlementServiceImpl   （replace('Entity','ServiceImpl') 有效）
+    #   ArapSettlement       → ArapSettlementServiceImpl   （**replace 是空操作**，原实现失效）
+    declared = set()
+    for t in transitions:
+        raw = t.get('implementation', '')
+        if not isinstance(raw, str):
+            continue
+        first = raw.strip().split('(')[0].split('.')[0].strip()
+        if first and first[0].isupper():
+            declared.add(f"{first}.java")
+    if declared:
+        java_root = Path(project_root) / "backend" / "src" / "main" / "java"
+        for cand_name in sorted(declared):
+            hits = list(java_root.rglob(cand_name)) if java_root.exists() else []
+            if hits:
+                impl_files.append(hits[0])
+        if impl_files:
+            result.add_info("Implementation resolved from contract 'implementation' field: "
+                            + ", ".join(f.name for f in impl_files))
+
+    impl_content = "\n".join(f.read_text(encoding="utf-8") for f in impl_files)
+    if not impl_files:
+        result.add_info("No implementation file resolved; trigger verification skipped")
 
     # Check each trigger method exists
     for t in transitions:
@@ -548,7 +586,13 @@ def main():
     parser.add_argument("--strict", action="store_true", help="Fail on warnings too")
     parser.add_argument("--require-contract", action="store_true",
                         help="Fail when a SPEC has no machine-readable contract (strict coverage mode)")
-    parser.add_argument("--project-root", default="/root/data/disk/huicai", help="Project root directory")
+    # 项目根默认由本文件位置推导（scripts/ 的上一级），不再硬编码绝对路径。
+    # 原默认 "/root/data/disk/huicai" 是他人机器的残留，在任何其它 checkout 上
+    # --check-implementation 都会直接 PermissionError 崩溃 —— 门禁因环境而崩，
+    # 比不跑更糟（AGENTS §4.5 第 21 条：门禁必须可执行且能变红）。
+    _default_root = Path(__file__).resolve().parent.parent
+    parser.add_argument("--project-root", default=str(_default_root),
+                        help="Project root directory (default: 仓库根目录，由本脚本位置推导)")
 
     args = parser.parse_args()
 

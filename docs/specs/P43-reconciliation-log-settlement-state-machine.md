@@ -224,38 +224,169 @@ if (!ArapStatus.canTransition(from, to)) {
 
 ---
 
-## 6. MACHINE-READABLE CONTRACT
+# MACHINE-READABLE CONTRACT
+
+> **P105 核对修正**：本节原为 `## 6. MACHINE-READABLE CONTRACT` + `contracts:` 列表，
+> 校验器既认不出这个标题形态（只找 `# MACHINE-READABLE CONTRACT`），也读不懂 `contracts`
+> 字段（只认 `states`/`transitions`/`rules`）⇒ **该节从未被校验过，属于恒绿假象**。
+> 且原约束写的 `DRAFT→CONFIRMED→VOUCHERED→POSTED/CANCELLED` 与代码不符：
+> ① `POSTED` 是凭证状态，`chk_settlement_status` 里**没有**；② `DRAFT→CONFIRMED` 不合法，
+> 必须经 `SUBMITTED`。已按 `ArapStatus.canTransition()` 重写。
 
 ```yaml
 contract_version: "1.0"
-module: arap
+spec_file: "P43-reconciliation-log-settlement-state-machine.md"
+spec_id: P43
 entity: ArapSettlement
-acronym: P43
-contracts:
-  - id: P43-C1
-    description: "核销日志 tab 切换后加载数据"
-    type: ui
-    expected: "tab-click → fetchReconLogs() → records.length > 0"
-  - id: P43-C2
-    description: "清空核销数据 API"
-    type: api
-    endpoint: POST /api/v1/clear-data/settlements
-    expected: "200"
-  - id: P43-C3
-    description: "核销单状态机校验"
-    type: unit_test
-    target: ArapSettlementServiceImplTest
-    assertion: "每个状态转换方法前置校验当前状态合法性"
-  - id: P43-C4
-    description: "核销单状态转换 DRAFT→CONFIRMED"
-    type: api
-    endpoint: POST /api/v1/arap-settlements/{id}/confirm
-    expected: "200 + status == CONFIRMED"
+module: arap
+table: t_arap_settlement
+last_updated: "2026-10-01"
+implementation_status: implemented
+
+# 权威来源：ArapStatus.canTransition()（ArapStatus.java）与 chk_settlement_status
+check_allowed_set:
+  - DRAFT
+  - SUBMITTED
+  - CONFIRMED
+  - REJECTED
+  - VOUCHERED
+  - REVERSED
+  - CANCELLED
+
+states:
+  DRAFT:
+    description: "草稿，仅草稿可修改（ArapStatus.isModifiable）"
+    initial: true
+    terminal: false
+  SUBMITTED:
+    description: "已提交待审批"
+    terminal: false
+  CONFIRMED:
+    description: "已确认/已审批，可生成凭证"
+    terminal: false
+  REJECTED:
+    description: "已驳回，终态"
+    terminal: true
+  VOUCHERED:
+    description: "已生成凭证，可反核销"
+    terminal: false
+  REVERSED:
+    description: "已反核销，终态"
+    terminal: true
+  CANCELLED:
+    description: "已取消，终态"
+    terminal: true
+
+transitions:
+  - id: submit
+    from: DRAFT
+    to: SUBMITTED
+    trigger: submit
+    precondition: "status == DRAFT（ArapStatus.isSubmitable）"
+    implementation: ArapSettlementServiceImpl.submit()
+    test_ref: submit_positive
+
+  - id: cancel
+    from: [DRAFT, SUBMITTED]
+    to: CANCELLED
+    trigger: cancel
+    precondition: "status ∈ {DRAFT, SUBMITTED}（ArapStatus.isCancellable）"
+    implementation: ArapSettlementServiceImpl.cancel()
+    test_ref: cancel_positive
+
+  - id: approve
+    from: SUBMITTED
+    to: CONFIRMED
+    trigger: approve
+    precondition: "status == SUBMITTED（ArapStatus.isApprovable）。**DRAFT 不可直接确认**"
+    implementation: ArapSettlementServiceImpl.approve()
+    test_ref: approve_positive
+    note: "原 BDD 场景 1 写「DRAFT → confirm → CONFIRMED」，与 isApprovable 只认 SUBMITTED 矛盾，已修正"
+
+  - id: reject
+    from: SUBMITTED
+    to: REJECTED
+    trigger: reject
+    precondition: "status == SUBMITTED（ArapStatus.isRejectable）"
+    implementation: ArapSettlementServiceImpl.reject()
+    test_ref: reject_positive
+
+  - id: voucher
+    from: CONFIRMED
+    to: VOUCHERED
+    trigger: generateVoucher
+    precondition: "status == CONFIRMED（ArapStatus.canTransition(CONFIRMED, VOUCHERED)）"
+    implementation: ArapSettlementServiceImpl.generateVoucher()
+    test_ref: generateVoucher_positive
+
+  - id: reverse
+    from: [CONFIRMED, VOUCHERED]
+    to: REVERSED
+    trigger: reverse
+    precondition: "status ∈ {CONFIRMED, VOUCHERED}（ArapStatus.isSettlementReversible）"
+    implementation: ArapSettlementServiceImpl.reverse()
+    test_ref: reverse_positive
+    note: >-
+      ⚠️ 守卫与 canTransition 不一致：isSettlementReversible 放行 CONFIRMED，
+      但 canTransition 只承认 VOUCHERED → REVERSED。即 CONFIRMED 态可调 reverse
+      却不在状态机图内。本契约按**实际守卫**记录此入边，该分歧已列为待修。
+
+deviations:
+  - "P105: 原约束 DRAFT→CONFIRMED→VOUCHERED→POSTED/CANCELLED 有两处错误 —— POSTED 非本表状态；DRAFT→CONFIRMED 缺 SUBMITTED 中间态"
+  - "P105: 原节标题形态导致校验器从未解析，属恒绿假象"
+
 constraints:
   - id: C-P43-1
+    type: database
+    rule: "chk_settlement_status 允许集恰为 DRAFT/SUBMITTED/CONFIRMED/REJECTED/VOUCHERED/REVERSED/CANCELLED"
+    enforcement: "PostgreSQL CHECK"
+
+  - id: C-P43-2
     type: state_machine
-    rule: "核销单状态必须按 DRAFT→CONFIRMED→VOUCHERED→POSTED/CANCELLED 顺序转换"
-    enforcement: "ArapStatus.canTransition() 前置校验"
+    rule: "状态必须按 canTransition() 图转换： DRAFT→{SUBMITTED,CANCELLED}; SUBMITTED→{CONFIRMED,REJECTED,CANCELLED}; CONFIRMED→VOUCHERED; VOUCHERED→REVERSED"
+    enforcement: "ArapStatus.canTransition() + 各 Service 前置校验"
+
+acceptance_tests:
+  - id: AT-S01
+    description: "DRAFT → SUBMITTED"
+    method: submit_positive
+    assertion: "status == SUBMITTED"
+    status: covered
+  - id: AT-S02
+    description: "SUBMITTED → CONFIRMED"
+    method: approve_positive
+    assertion: "status == CONFIRMED"
+    status: covered
+  - id: AT-S03
+    description: "SUBMITTED → REJECTED（终态）"
+    method: reject_positive
+    assertion: "status == REJECTED"
+    status: covered
+  - id: AT-S04
+    description: "DRAFT/SUBMITTED → CANCELLED（终态）"
+    method: cancel_positive
+    assertion: "status == CANCELLED"
+    status: covered
+  - id: AT-S05
+    description: "CONFIRMED → VOUCHERED"
+    method: generateVoucher_positive
+    assertion: "status == VOUCHERED"
+    status: covered
+  - id: AT-S06
+    description: "VOUCHERED → REVERSED（终态）"
+    method: reverse_positive
+    assertion: "status == REVERSED"
+    status: covered
+  - id: AT-S07
+    description: "DRAFT 不可直接 approve（守卫只认 SUBMITTED）"
+    method: approve_from_draft_throws
+    assertion: "BusinessException"
+    status: covered
+
+notes:
+  - "P43-C1 核销日志 tab 切换后加载数据 —— UI 契约，校验器不消费"
+  - "P43-C2 清空核销数据 API POST /api/v1/clear-data/settlements —— 维护接口，注意其为无 WHERE 全表 DELETE，返回行数含种子数据，断言须取基线后比增量"
+```
 
 ---
 
