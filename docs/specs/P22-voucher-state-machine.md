@@ -363,16 +363,19 @@ deviation_score: 10%
 # P22 偏差说明：
 # - VoucherStateMachineService 仅为状态检查（assert 方法），不含状态变更
 # - 状态变更方法在 VoucherServiceImpl 中实现
-# - 红冲方法名从 generateReversalVoucher 改为 reverse
-# - 红冲路由从 /reversal 改为 /reverse（SPEC §7 已同步修正）
-# - 红字凭证状态为 POSTED（非 DRAFT）
+# - 红冲方法名从 generateReversalVoucher 改为 reverse（路由 /reverse）
+# - 红冲凭证的初始状态是 DRAFT（VoucherServiceImpl:439），红冲后需再走 submit→audit→post
+# - 红冲的 from 允许 POSTED 或 AUDITED（:416），并非仅 POSTED
+# - unpost 是 POSTED → AUDITED（:321-325），不是 AUDITED → SUBMITTED
 # - rejectedReason/reverseReason 字段存在（V47 migration 已落地）
 # - CLOSED 状态及 close 方法已在代码中完整实现（2026-07-09），SPEC 已同步更新
+# - chk_voucher_status 允许 REVERSED，但全仓无写入点（允许未用值），故 states 不列
 
 deviations:
   - "§4.1: VoucherStateMachineService 接口仅有 assert 方法，无 submit/audit/post/unpost/reverse"
   - "§4.2: 实现骨架位置错误，方法在 VoucherServiceImpl 而非 VoucherStateMachineService"
-  - "reverse() 不返回 Long，红字凭证直接 POSTED（非 DRAFT）"
+  - "reverse() 不返回 Long；红冲凭证以 DRAFT 落库而非直接 POSTED"
+  - "P105 核对修正：T-05 原写 from=POSTED / 红冲凭证=POSTED，T-06 原写 AUDITED→SUBMITTED，三处均与代码不符"
 
 states:
   DRAFT:
@@ -438,26 +441,34 @@ transitions:
     test_ref: post_positive
 
   - id: T-05
-    from: POSTED
+    from: [POSTED, AUDITED]
     to: POSTED
-    trigger: generateReversalVoucher
-    precondition: "status == POSTED"
-    postcondition: "new reversal voucher created (POSTED); original voucher stays POSTED"
+    trigger: reverse
+    precondition: "status ∈ {POSTED, AUDITED}；期间未结账；尚未被红冲（无 reversed_from 指向本凭证的子凭证）"
+    postcondition: "原凭证 status 不变；新建红冲凭证 status=DRAFT、source=REVERSAL、reversed_from=原 id，借贷金额取反"
     side_effects:
       - entity: VoucherEntity
         action: create_reversal
-        status: POSTED
-    test_ref: generateReversalVoucher_positive
-    note: "This is a creation transition, not a state change. The original voucher remains POSTED."
+        status: DRAFT
+      - entity: InputInvoiceEntity / BusinessDocEntity
+        action: cascade_mark_reversed
+        status: REVERSED
+    test_ref: reverse_positive
+    note: >-
+      创建型转移：原凭证状态不变，其「已红冲」身份由 reversed_from 字段表达，
+      不是由 status 表达。VoucherStatus 常量类无 REVERSED；chk_voucher_status
+      虽允许 REVERSED，但全仓无任何写入点（cascade 的 REVERSED 落在发票/业务单据表），
+      故 states 中不列 REVERSED。
 
   - id: T-06
-    from: AUDITED
-    to: SUBMITTED
+    from: POSTED
+    to: AUDITED
     trigger: unpost
-    precondition: "status == AUDITED"
-    postcondition: "status == SUBMITTED"
+    precondition: "status == POSTED；期间未结账"
+    postcondition: "status == AUDITED"
     side_effects: []
     test_ref: unpost_positive
+    note: "仅纠错用。守卫为 !\"POSTED\".equals(status) ⇒ AUDITED 及更早状态一律拒绝。"
 
   - id: T-07
     from: POSTED
@@ -516,11 +527,25 @@ acceptance_tests:
     status: covered
 
   - id: AT-006
-    description: "红冲生成新凭证 (POSTED)"
+    description: "红冲生成新凭证 (DRAFT)，原凭证状态不变"
     method: reverse_positive
-    assertion: "original status stays POSTED + reversedFrom set; new voucher created with POSTED status"
+    assertion: "original status 不变 + reversedFrom set；新凭证 status=DRAFT、source=REVERSAL"
     status: covered
-    deviation: "SPEC 原写 DRAFT，实际红字凭证直接 POSTED。方法名从 generateReversalVoucher 改为 reverse。" 
+    deviation: "P105 核对修正：原契约写『红字凭证直接 POSTED』，代码 VoucherServiceImpl:439 实为 DRAFT。方法名为 reverse（非 generateReversalVoucher）。"
+
+  - id: AT-008
+    description: "反过账 POSTED → AUDITED（仅纠错）"
+    method: unpost_positive
+    assertion: "status == AUDITED"
+    status: covered
+    deviation: "P105 核对修正：原契约 T-06 写 AUDITED→SUBMITTED，代码 :321-325 实为 POSTED→AUDITED。"
+
+  - id: AT-009
+    description: "红冲的 from 允许 AUDITED（不限于 POSTED）"
+    method: reverse_from_audited_positive
+    assertion: "AUDITED 凭证可红冲并生成 DRAFT 红冲凭证"
+    status: missing
+    deviation: "守卫 :416 为 `!POSTED && !AUDITED` 才拒绝，原契约漏掉 AUDITED 这条入边。P105 记录为待补。" 
 
   - id: AT-007
     description: "POSTED → CLOSED (结账)"
