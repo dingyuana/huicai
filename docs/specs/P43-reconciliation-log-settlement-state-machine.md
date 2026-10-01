@@ -327,9 +327,14 @@ transitions:
     implementation: ArapSettlementServiceImpl.reverse()
     test_ref: reverse_positive
     note: >-
-      ⚠️ 守卫与 canTransition 不一致：isSettlementReversible 放行 CONFIRMED，
-      但 canTransition 只承认 VOUCHERED → REVERSED。即 CONFIRMED 态可调 reverse
-      却不在状态机图内。本契约按**实际守卫**记录此入边，该分歧已列为待修。
+      ✅ 已收敛（2026-10-01）。此前守卫 isSettlementReversible（CONFIRMED 或 VOUCHERED）
+      与 canTransition 图分裂：图里只有 VOUCHERED→REVERSED，而 reverse() 从不调 canTransition，
+      故生产中真的会发生 CONFIRMED→REVERSED，声明的图却不承认。
+      判定为**图不完整**（非守卫过宽 —— 反核销「已确认未制证」的核销单本属合法业务，
+      异常文案亦明写「仅已确认或已记账的核销单可反核销」）。
+      已补 canTransition 的 CONFIRMED→REVERSED 边，并把 reverse() 的守卫改为
+      **直接用状态机图**，消除第二个判定源。
+      两者一致性由 ArapStatusCanTransitionTest.guardPredicateAgreesWithGraph 锁定。
 
 deviations:
   - "P105: 原约束 DRAFT→CONFIRMED→VOUCHERED→POSTED/CANCELLED 有两处错误 —— POSTED 非本表状态；DRAFT→CONFIRMED 缺 SUBMITTED 中间态"

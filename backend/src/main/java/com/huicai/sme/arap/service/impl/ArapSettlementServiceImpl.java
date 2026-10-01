@@ -434,7 +434,10 @@ public class ArapSettlementServiceImpl implements ArapSettlementService {
     @Transactional(rollbackFor = Exception.class)
     public void reverse(Long id) {
         ArapSettlementEntity entity = getById(id);
-        if (!ArapStatus.isSettlementReversible(entity.getStatus())) {
+        // P105-fix: 原守卫是 isSettlementReversible()（独立实现的第二个判定源），
+        // 与 canTransition 图各自演化，曾出现「守卫放行 CONFIRMED、图却判非法」的分裂。
+        // 改用状态机图作为**唯一判定源**，行为等价（两者对 CONFIRMED/VOUCHERED 的判定本就相同）。
+        if (!ArapStatus.canTransition(entity.getStatus(), ArapStatus.REVERSED)) {
             throw new BusinessException("仅已确认或已记账的核销单可反核销, 当前: " + entity.getStatus());
         }
         // P0-fix: 制证后反核销 — 联动作废 DRAFT 制证凭证，避免幽灵凭证残留挂在 REVERSED 核销单上
