@@ -1,7 +1,8 @@
 # 测试策略与规范
 
 > **编号**：HUICAI-TEST-001
-> **版本**：V1.2 | **日期**：2026-10-01 | **作者**：opencode
+> **版本**：V1.2.1 | **日期**：2026-10-01 | **作者**：opencode
+> **V1.2.1 变更**：订正 Mock 台账「28 个 Mapper 均无真库测试」的错误断言 —— 实测其中 6 个已有薄真库测试，处置改为「补充后删」
 > **V1.2 变更**：**全文硬数字按实测重写**（V1.1 的 5 处数字均已失真，见下方「修订说明」）；补 CI 真实拓扑、覆盖率实测值与棘轮阈值、Mock 同义反复台账
 > **关联文档**：[项目说明](../CORE-项目说明.md)、[技术方案](../CORE-技术方案.md)、[P104 测试门禁与成色整改](../specs/P104-test-gate-quality.md)
 > **关联 Skill**：`dy-测试方法`（分层策略、pitfall 库）、`dy-测试门禁`（完成前验证）
@@ -200,7 +201,7 @@ class CustomerMapperTest {
 | 剩余 | **28 个类 / 140 个 `@Test`** |
 | 机械检查 | `grep -rl 'Mockito.mock' --include='*MapperTest.java'` 应逐批收敛 |
 
-剩余 28 个按模块分组（无对应的 `*RealDBTest`，即完全无真库覆盖）：
+剩余 28 个按模块分组。**处置分两类**（V1.2.1 实测复核后修正）：
 
 | 模块 | 类 |
 |------|---|
@@ -216,6 +217,25 @@ class CustomerMapperTest {
 
 > 建议批次：`base/system` + `base/masterdata`（权限与客商，直接关系越权与应收应付）→
 > `sme/cash` + `sme/arap`（资金）→ 其余。每批一个 PR，改完跑 L2。
+
+#### ⚠️ V1.2.1 订正：处置分类（实测复核后修正）
+
+初稿曾断言「这 28 个 Mapper 均无对应的 `*RealDBTest`」—— **该断言错误**。
+实测复核发现其中 **6 个已有真库测试**，只是很薄（1~3 个用例）。正确处置是
+**补充真库断言后删除 mock 版**，而非直接删除：
+
+| 分类 | 处置 | 类（括号内为现有真库用例数） |
+|------|------|------|
+| **已有薄真库测试** | **补充真库断言**（唯一约束 / 软删除 / 租户隔离 / CHECK 约束）后删 mock 版 | `UserMapper`(3) `DeptMapper`(2) `RoleMapper`(2) `MenuMapper`(1) `SysConfigMapper`(1) `VoucherTypeMapper`(1) |
+| **完全没有真库测试** | **新建** `*RealDBTest`，或直接删 mock 版 | 其余 22 个 |
+
+> 另注：`base/system` 下 `AuditLogMapper`、`UserRoleMapper`、`RoleMenuMapper`、
+> `SummaryLibMapper` 也同时存在 mock 版与真库版，均属第一类。
+
+**教训**：写台账时确实用 `find -name "${m}RealDBTest.java" | wc -l` 逐个核对过，
+但命令输出被 `head` 截断，只看到前 17 行就下了「全部为 0」的结论。
+**统计类结论必须先确认样本完整** —— 被截断的输出与「实测为 0」在屏幕上无法区分。
+这与「用 `assertNotNull` 断言集合非空」是同一类错误：断言通过不等于验证了目标。
 
 ### 3.5 避免测试假阳性
 
