@@ -18,6 +18,7 @@ import com.huicai.sme.arap.mapper.BadDebtProvisionSchemeMapper;
 import com.huicai.sme.arap.mapper.BadDebtProvisionSchemeItemMapper;
 import com.huicai.base.business.mapper.BusinessDocMapper;
 import com.huicai.sme.arap.mapper.PrepaymentMapper;
+import com.huicai.base.voucher.constant.BusinessDocStatus;
 import com.huicai.sme.arap.service.BadDebtService;
 import com.huicai.sme.arap.service.CustomerStatementService;
 import com.huicai.base.voucher.dto.VoucherCreateDTO;
@@ -428,7 +429,13 @@ public class BadDebtServiceImpl implements BadDebtService {
                 doc.setUnsettledAmount(doc.getUnsettledAmount().subtract(amount));
                 doc.setSettledAmount(doc.getSettledAmount() == null ? amount : doc.getSettledAmount().add(amount));
                 if (doc.getUnsettledAmount().compareTo(BigDecimal.ZERO) == 0) {
-                    doc.setStatus(ArapStatus.SETTLED);
+                    // P0-fix: 原写 ArapStatus.SETTLED，但 chk_doc_status 不含该值 ⇒
+                    // 随后的 updateById 必抛 23514（坏账全额核销这条最常见终局路径是坏的）。
+                    // t_business_doc 表达「全额核销」的合法态是 FULLY_RECONCILED，
+                    // ArapSettlementServiceImpl:213 对完全相同条件用的也是它。
+                    // 不给 CHECK 补 SETTLED：那会造出第二种合法拼写，
+                    // 下游 status='FULLY_RECONCILED' 的查询将静默漏掉坏账核销单据。
+                    doc.setStatus(BusinessDocStatus.FULLY_RECONCILED);
                 }
                 doc.setUpdatedBy(userId);
                 businessDocMapper.updateById(doc);

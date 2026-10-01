@@ -16,6 +16,7 @@ import com.huicai.sme.arap.mapper.PrepaymentMapper;
 import com.huicai.sme.arap.service.ArapSettlementService;
 import com.huicai.sme.arap.service.PrepaymentService;
 import com.huicai.base.voucher.constant.VoucherType;
+import com.huicai.base.voucher.constant.BusinessDocStatus;
 import com.huicai.base.business.entity.BusinessDocEntity;
 import com.huicai.base.voucher.entity.VoucherEntity;
 import com.huicai.base.voucher.entity.VoucherEntryEntity;
@@ -175,9 +176,13 @@ public class PrepaymentServiceImpl implements PrepaymentService {
         BigDecimal payNewSettled = payable.getSettledAmount().add(finalApply);
         payable.setSettledAmount(payNewSettled);
         payable.setUnsettledAmount(payable.getAmount().subtract(payNewSettled));
-        if (payable.getUnsettledAmount().compareTo(BigDecimal.ZERO) == 0
-                && ArapStatus.isConfirmed(payable.getStatus())) {
-            payable.setStatus(ArapStatus.SETTLED);
+        if (payable.getUnsettledAmount().compareTo(BigDecimal.ZERO) == 0) {
+            // P0-fix: 原守卫 ArapStatus.isConfirmed() 即 "CONFIRMED".equals(status)，
+            // 而 CONFIRMED 不在 chk_doc_status 允许集内 ⇒ 该分支<b>永远不可达</b>，
+            // 预付款全额核销后单据静默停留在 APPROVED 而 unsettled=0，
+            // 下游 status='FULLY_RECONCILED' 的查询漏掉它。
+            // SETTLED 同样是 ArapStatus 串台到 t_business_doc 的非法值。
+            payable.setStatus(BusinessDocStatus.FULLY_RECONCILED);
         }
         businessDocMapper.updateById(payable);
 
@@ -316,9 +321,9 @@ public class PrepaymentServiceImpl implements PrepaymentService {
         BigDecimal recNewSettled = receivable.getSettledAmount().add(finalApply);
         receivable.setSettledAmount(recNewSettled);
         receivable.setUnsettledAmount(receivable.getAmount().subtract(recNewSettled));
-        if (receivable.getUnsettledAmount().compareTo(BigDecimal.ZERO) == 0
-                && ArapStatus.isConfirmed(receivable.getStatus())) {
-            receivable.setStatus(ArapStatus.SETTLED);
+        if (receivable.getUnsettledAmount().compareTo(BigDecimal.ZERO) == 0) {
+            // P0-fix: 同上 —— isConfirmed 守卫对 t_business_doc 恒为 false，SETTLED 非法
+            receivable.setStatus(BusinessDocStatus.FULLY_RECONCILED);
         }
         businessDocMapper.updateById(receivable);
 
