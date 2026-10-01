@@ -49,7 +49,12 @@ public class AssetInventoryServiceImpl implements AssetInventoryService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public AssetInventoryEntity create(AssetInventoryEntity entity, List<AssetInventoryEntryEntity> entries) {
-        if (entity.getStatus() == null) entity.setStatus("DRAFT");
+        // P0-fix: 原为 `if (entity.getStatus() == null) entity.setStatus("DRAFT")`。
+        // AssetInventoryController#create 虽用 CreateRequest 包装，但内层仍是 Entity，
+        // 其 status 字段照样可被客户端绑定（只多加一层包装，不构成隔离）。
+        // 与 TaxServiceImpl.createOutput / createDeclaration / AssetDisposalServiceImpl.create
+        // 同一写法（全仓指纹扫描命中第 4 处）。改为无条件强制 DRAFT。
+        entity.setStatus("DRAFT");
         if (entity.getTotalCount() == null) entity.setTotalCount(entries == null ? 0 : entries.size());
         mapper.insert(entity);
         if (entries != null) {
@@ -97,7 +102,18 @@ public class AssetInventoryServiceImpl implements AssetInventoryService {
                 entryMapper.insert(entry);
             }
         }
-        entity.setStatus("COMPLETED");
+        // P0-fix: 原为 setStatus("COMPLETED")，但 chk_inv_status 的允许集只有
+        // DRAFT / IN_PROGRESS / CONFIRMED / VOUCHERED —— **不含 COMPLETED**
+        // ⇒ 紧随其后的 update 必抛 23514，「完成盘点」这个动作**必然 500**。
+        // 证据链：①本类 AssetInventoryStateMachineService 的类注释明写
+        // 「封装资产盘点 3 状态 (IN_PROGRESS/CONFIRMED/VOUCHERED) 的状态流转检查」
+        // —— CONFIRMED 正是设计中的「盘点完成态」；②全仓**无任何代码**给本表写 CONFIRMED
+        // （该合法值一直空置）；③库内 t_asset_inventory **0 行** —— 与
+        // 「完成盘点一调就崩，故从未产生过数据」完全吻合。
+        // 故判为**代码写错值**，改用既有的合法态 CONFIRMED；
+        // **不**给 CHECK 补 COMPLETED —— 那会造出「盘点完成」的第二种合法拼写，
+        // 下游 status='CONFIRMED' 的查询将静默漏掉它们（AGENTS §4.2 第 19 条）。
+        entity.setStatus("CONFIRMED");
         entity.setProfitCount(profit);
         entity.setLossCount(loss);
         mapper.updateById(entity);
