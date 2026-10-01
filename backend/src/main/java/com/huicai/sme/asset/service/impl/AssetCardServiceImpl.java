@@ -66,7 +66,16 @@ public class AssetCardServiceImpl implements AssetCardService {
     @Override
     public AssetCardEntity create(AssetCardEntity entity) {
         validateCode(entity.getAssetCode(), null);
-        if (entity.getStatus() == null) entity.setStatus(AssetStatus.ASSET_CARD_IN_USE);
+        // P0-fix: 原为 `if (entity.getStatus() == null) entity.setStatus(IN_USE)`。
+        // AssetCardController 直收 @RequestBody AssetCardEntity（违反铁律 #13），
+        // 只在 null 时兜底 ⇒ 客户端可指定任意 status。
+        // chk_asset_status 允许 DRAFT/IN_USE/IDLE/DISPOSED/SCRAPPED，
+        // 故可 POST status=DISPOSED / SCRAPPED **直接创建一张「已处置/已报废」的资产卡**，
+        // 绕过资产生命周期（铁律 #1 + #4）。
+        // 全仓指纹扫描（if getStatus()==null → setStatus）命中的第 5 处。
+        // 此处**只关闭客户端指定**，不改变默认值本身 ——
+        // 新建卡默认 IN_USE 是否合理（是否应为 DRAFT 待转固）属设计问题，另行评估。
+        entity.setStatus(AssetStatus.ASSET_CARD_IN_USE);
         if (entity.getAccumulatedDepreciation() == null) {
             entity.setAccumulatedDepreciation(BigDecimal.ZERO);
         }
