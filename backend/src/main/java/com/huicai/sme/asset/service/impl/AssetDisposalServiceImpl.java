@@ -65,7 +65,14 @@ public class AssetDisposalServiceImpl implements AssetDisposalService {
         BigDecimal expense = entity.getDisposalExpense() == null ? BigDecimal.ZERO : entity.getDisposalExpense();
         BigDecimal gainLoss = income.subtract(entity.getNetValue()).subtract(expense);
         entity.setGainLoss(gainLoss);
-        if (entity.getStatus() == null) entity.setStatus("DRAFT");
+        // P0-fix: 原为 `if (entity.getStatus() == null) entity.setStatus("DRAFT")`。
+        // AssetDisposalController#create 直接接 @RequestBody AssetDisposalEntity（违反铁律 #13），
+        // 只在 null 时兜底 ⇒ 客户端显式传 status 会被照单全收。
+        // chk_disposal_status 允许 DRAFT/APPROVED/VOUCHERED，故 POST status=APPROVED 可
+        // **一步跳过** approve() 这次人工审批（违反铁律 #1：人是唯一审核主体）。
+        // 与 TaxServiceImpl.createOutput / createDeclaration 同一写法，属第 3 处。
+        // 改为**无条件**强制 DRAFT —— 创建态是唯一合法起点。
+        entity.setStatus("DRAFT");
         mapper.insert(entity);
         return entity;
     }
