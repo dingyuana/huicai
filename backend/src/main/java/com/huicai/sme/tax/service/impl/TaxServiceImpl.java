@@ -460,7 +460,12 @@ public class TaxServiceImpl implements TaxService {
             entity.setTotalAmount(entity.getAmount().add(entity.getTaxAmount()));
         }
         if (entity.getStatus() == null) {
-            entity.setStatus("DRAFT");
+            // P0-fix: 原为 setStatus("DRAFT")，但 chk_output_invoice_status 的允许集是
+            // PENDING_CONFIRM/PENDING_REVIEW/CONFIRMED/VOUCHERED/PARTIALLY_RECONCILED/
+            // FULLY_RECONCILED/VOIDED/REVERSED —— **不含 DRAFT** ⇒ 紧随的 insert 必抛 23514，
+            // 任何未显式传 status 的调用方直接 500（前端目前不调本端点，故长期潜伏）。
+            // 对齐同类 createInput 的约定（InvoiceStatus.PENDING_CONFIRM），并用常量不用字面量。
+            entity.setStatus(InvoiceStatus.PENDING_CONFIRM);
         }
         if (entity.getPeriod() == null) {
             entity.setPeriod(String.format("%04d%02d",
