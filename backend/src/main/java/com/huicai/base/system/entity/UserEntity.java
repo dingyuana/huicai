@@ -3,6 +3,7 @@ package com.huicai.base.system.entity;
 import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
+import com.baomidou.mybatisplus.annotation.TableLogic;
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Data;
@@ -32,6 +33,19 @@ public class UserEntity {
     private Long updatedBy;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
+
+    /**
+     * P104 第 3 批补齐：原先<b>缺少 {@code @TableLogic}</b>，而 {@code t_user}
+     * 确实有 {@code deleted} 列 ⇒ {@code deleteById} 执行的是<b>物理删除</b>。
+     *
+     * <p>危害：用户是审计主体（P103 的 {@code t_audit_log.operator_id} 指向它），
+     * 物理删除后其历史操作记录无法回溯到「谁」，铁律 #12 的逻辑删除要求被绕过。
+     * 本仓其余同批实体（{@code DeptEntity} / {@code RoleEntity} / {@code MenuEntity}
+     * 等）均已声明，故属遗漏而非有意设计。
+     *
+     * <p>已确认全仓无生产代码调用 {@code userMapper.deleteById}，改为逻辑删除零风险。
+     */
+    @TableLogic
     private Integer deleted;
 
     // S-26: 多租户字段
