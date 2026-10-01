@@ -95,7 +95,8 @@ public final class ArapStatus {
         return SUBMITTED.equals(status);
     }
 
-    /** 是否可反核销（仅已确认或已记账） */
+    /** 是否可反核销（已确认或已记账）。与 canTransition(from, REVERSED) 等价，
+     *  由 ArapStatusCanTransitionTest.guardPredicateAgreesWithGraph 锁定两者不得分歧。 */
     public static boolean isSettlementReversible(String status) {
         return CONFIRMED.equals(status) || VOUCHERED.equals(status);
     }
@@ -116,7 +117,13 @@ public final class ArapStatus {
         return switch (from) {
             case DRAFT -> SUBMITTED.equals(to) || CANCELLED.equals(to);
             case SUBMITTED -> CONFIRMED.equals(to) || REJECTED.equals(to) || CANCELLED.equals(to);
-            case CONFIRMED -> VOUCHERED.equals(to);
+            case CONFIRMED -> VOUCHERED.equals(to) || REVERSED.equals(to);
+            // P105-fix: 补 CONFIRMED -> REVERSED 这条边。
+            // reverse() 的守卫是 isSettlementReversible()（CONFIRMED 或 VOUCHERED）且**从不**
+            // 调 canTransition，故生产里一直真的会发生 CONFIRMED -> REVERSED，
+            // 而本图此前把它判为非法 —— 图与实际行为不符（声明的图不完整，而非守卫过宽：
+            // 反核销一张「已确认未制证」的核销单本就是合法业务，异常文案也明写
+            // 「仅已确认或已记账的核销单可反核销」）。
             case VOUCHERED -> REVERSED.equals(to);
             default -> false;
         };

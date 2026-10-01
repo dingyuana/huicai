@@ -46,9 +46,12 @@
 
 ## 5. 已知缺陷（待修）
 
-- **`ArapStatus.isSettled()` / `isReversible()` 引用了本表不允许的 `SETTLED`**。
-  已修写入点（`04932ece`），但常量类的这两个方法本身仍指向非法值，
-  后续若有代码拿它们判断 `t_business_doc.status` 会恒为 false。
+- **`ArapStatus.SETTLED` 不是缺陷，但对本表是陷阱**。核实结论（2026-10-01）：
+  该常量是 **`t_prepayment`（预付款）的合法状态值** —— 该表**没有** status CHECK 约束
+  （`BadDebtServiceImpl:457`、`PrepaymentServiceImpl` 均在用），故那些写入点合法。
+  真正的问题只是：`ArapStatus.isSettled()` / `isReversible()` 语义上会被误用来判断
+  `t_business_doc.status` —— 本表的「已结清」是 `FULLY_RECONCILED`，用 SETTLED 判会**恒为 false**。
+  已修本表的全部写入点（`04932ece`）。写本表状态请一律用 `BusinessDocStatus`。
 
 ---
 
