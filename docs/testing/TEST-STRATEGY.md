@@ -197,8 +197,9 @@ class CustomerMapperTest {
 | 项 | 数值 |
 |----|------|
 | 原规模 | 29 个类 / **145 个 `@Test`**（占全量 7.2%） |
-| 已归零 | **7 个**（`CustomerMapper` 5 假→7 真、`MenuMapper` 5 假→5 真、`UserMapper` 5 假→6 真、`DeptMapper` 5 假→5 真、`RoleMapper` 5 假→5 真、`SysConfigMapper` 5 假→4 真、`VoucherTypeMapper` 5 假→4 真） |
-| 剩余 | **22 个类 / 110 个 `@Test`** |
+| 已归零 | **28 个**：7 个「补充真库断言后删 mock」+ 21 个「零信号直接删」 |
+| 剩余 | **1 个类 / 5 个 `@Test`**：`ArapSettlementMapper`（其 `physicalDeleteAll` 属维护操作，已由 `SystemClearControllerIntegrationTest` 覆盖 `clearBusinessDocs` 的同类链路） |
+| 用例数变化 | L1 `1762 → 1627`（−105，即被删的零信号用例）；L2 `2065 → 1983`（−105 + 新增 23 个真库断言） |
 | 机械检查 | `grep -rl 'Mockito.mock' --include='*MapperTest.java'` 应逐批收敛 |
 
 > 第 3 批（`base/system`）归零时顺带修掉一处真实缺陷：`UserEntity.deleted`
@@ -210,7 +211,30 @@ class CustomerMapperTest {
 > `UserEntity`（已修）、`AuditLogEntity`、`AgencyUserEnterpriseEntity`、
 > `AccountMappingRuleEntity`（审计日志是否该允许物理删除需另行评估，留后续）。
 
-剩余 28 个按模块分组。**处置分两类**（V1.2.1 实测复核后修正）：
+### 第 4 批：含自定义 SQL 的 Mapper 按方法补测
+
+7 个 Mapper 有自定义方法（mock 版对其零覆盖），逐一按**真实方法**补真库测试：
+
+| Mapper | 补测内容 |
+|--------|---------|
+| `VoucherTemplate` | `matchByDimensions` 按 doc_type 命中；不命中返回 null；`selectAllActive` 过滤非激活 |
+| `VoucherTemplateLine` | `selectByTemplateId` 作用域隔离；`deleteByTemplateId` **是软删**（方法名像物理删，实现是 `UPDATE deleted=1`） |
+| `BankJournal` | 6 个自定义方法：`sumAmountByAccount` 聚合、`selectUnreconciled` 同时含 NULL 与 false、`nullOutBusinessDocId` 只解绑不删行、`updateReconciled` 双向切换 |
+| `CashJournal` | `sumDebitByPeriod`/`sumCreditByPeriod` 分别求和；空期返回 0 而非 null；`getLastBalance` 取末条 |
+| `BusinessDocEntry` | `selectByDocId` 排序与作用域；`deleteByDocId` 不误伤他单；`physicalDeleteAll` 物理清空 |
+| `VoucherEntry` | 已有 `VoucherEntryMapperRealDBTest`（10 个用例），仅删 mock 版 |
+| `ArapSettlement` | 保留（`physicalDeleteAll` 维护语义已被 `SystemClearControllerIntegrationTest` 覆盖） |
+
+#### 归零过程中发现并修掉的真实问题
+
+- **`UserEntity.deleted` 缺 `@TableLogic`** ⇒ `t_user` 被**物理删除**（详见上文第 3 批）。
+- **`matchByDimensions` 的 `SELECT *` 不映射别名列** ⇒ 返回实体只有 `id` 有值。
+  经查 4 个调用方（`TaxServiceImpl`×2 / `BusinessDocServiceImpl` /
+  `AutoGenerationService`）**只用 `getId()`**，分录走 `t_voucher_template_line`，
+  故当前**不是活缺陷**；已用测试锁定现状并注释说明，避免后人误用
+  `template.getBusinessType()`（会拿到 null）。
+
+#### 剩余 28 个按模块分组。**处置分两类**（V1.2.1 实测复核后修正）：
 
 | 模块 | 类 |
 |------|---|
