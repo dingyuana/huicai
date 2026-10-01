@@ -1,70 +1,68 @@
 # 测试策略与规范
 
 > **编号**：HUICAI-TEST-001
-> **版本**：V1.1 | **日期**：2026-09-13 | **作者**：Hermes
-> **V1.1 变更**：测试硬数字回写（后端 1776 @Test/210 类；前端 17 个 Vitest 测试文件；E2E 19 个 Playwright 测试文件）
-> **关联文档**：[项目说明](../CORE-项目说明.md)、[技术方案](../CORE-技术方案.md)
+> **版本**：V1.2 | **日期**：2026-10-01 | **作者**：opencode
+> **V1.2 变更**：**全文硬数字按实测重写**（V1.1 的 5 处数字均已失真，见下方「修订说明」）；补 CI 真实拓扑、覆盖率实测值与棘轮阈值、Mock 同义反复台账
+> **关联文档**：[项目说明](../CORE-项目说明.md)、[技术方案](../CORE-技术方案.md)、[P104 测试门禁与成色整改](../specs/P104-test-gate-quality.md)
 > **关联 Skill**：`dy-测试方法`（分层策略、pitfall 库）、`dy-测试门禁`（完成前验证）
 
 ---
 
-## 0. 当前测试状态
+## 0. 当前测试状态（2026-10-01 实测）
 
-| 维度 | 数据 |
-|------|------|
-| 后端测试 | 1776 个 `@Test` 方法 / 210 个测试类，0 Failures，0 Errors |
-| 测试框架 | JUnit 5 + Mockito + Testcontainers |
-| 前端测试 | 17 个 Vitest 测试文件（frontend/src/__tests__） |
-| E2E 测试 | Playwright 19 个测试文件（e2e/tests/），无持续 CI 运行 |
-| 覆盖率门禁 | JaCoCo 配置就绪，branch ≥ 70% |
-| CI | 无自动 CI（本地 `mvn test` 前置） |
+| 维度 | 数据 | 口径 |
+|------|------|------|
+| 后端可执行用例 | **2067** = `@Test` 2064 + `@TestFactory` 3 | `grep -oE '@Test\b'`（排除 `@Testcontainers`/`@TestPropertySource` 等误匹配） |
+| 后端测试类 | **243** | `find -name '*Test.java'` |
+| 其中真库测试类 | **66**（继承 `AbstractMapperTest`） | 真库 = 真实 PostgreSQL 16 + Flyway |
+| 前端单测 | **27** 个 Vitest 文件 | `frontend/**/*.test.*` |
+| 前端 E2E | **32** 个 Playwright spec | `frontend/**/*.spec.ts` |
+| 覆盖率实测 | **INSTRUCTION 32% / BRANCH 13% / METHOD 56%** | JaCoCo 首次真实执行（此前从未执行过，见下） |
+| 覆盖率门禁 | 棘轮 **30% / 12% / 55%** | 按实测值留约 2 个百分点缓冲 |
+| CI 门禁 | **4 个 workflow，全部真实生效** | L1 / L2 / Full Stack / SPEC |
+| CI 实测 | L1 `1767/0/0/5`、L2 `2065/0/0/5` | `Failures/Errors/Skipped` |
+
+### V1.2 修订说明：V1.1 的 5 处数字均已失真
+
+| V1.1 的声称 | 实测 | 错在哪 |
+|---|---|---|
+| 后端 1776 @Test / 210 类 | **2067 / 243** | 未随新增测试回写 |
+| 前端 17 个 Vitest 文件 | **27** | 同上 |
+| E2E 19 个 Playwright 文件 | **32** | 同上 |
+| 「无自动 CI（本地 `mvn test` 前置）」 | **有 4 个 workflow**，且 PR 上强制 | 该结论早已过期，误导新人以为可跳过 CI |
+| 「JaCoCo 配置就绪，branch ≥ 70%」 | 配置就绪但**门禁从未执行过**；且 branch 实测仅 **13%** | 双重失真：既不知道门禁是假绿，也不知道真实值离 70% 差多远 |
+
+> **教训**：`branch ≥ 70%` 这类**未经实测的门槛**比没有门槛更危险 ——
+> 它让人以为覆盖率已达标。本项目 `surefire <argLine>` 未含 `@{argLine}`，
+> 覆盖了 `jacoco:prepare-agent` 设置的属性，导致 agent 从未挂载、无 `jacoco.exec`、
+> `report` 与 `check` 双双打印 `Skipping JaCoCo execution` 静默跳过。
+> **凡写覆盖率门槛，必须先实测一次再定值，并按棘轮逐步抬高。**
 
 ---
 
 ## 1. 测试分层（L1-L5）
 
-```
-L5: Full E2E (nightly)                 ← 全量 Playwright，耗时 ~15min
-L4: E2E Smoke (PR)                     ← 核心流程验证，@smoke 标签，~8min
-L3: API Contract (MockMvc/RestAssured)  ← 控制器层契约，正向+边界+认证，~3min
-L2: Integration (Testcontainers)       ← DB/Redis 交互，真实数据，~5min
-L1: Unit Test (JUnit 5)                ← 每 commit 触发，纯逻辑，<2min
-```
+### 1.1 L1 单元测试 — 每个 PR 强制
 
-### 1.1 L1 单元测试 — 每 commit 强制执行
-
-| 规则 | 说明 |
-|------|------|
-| 范围 | Service、Mapper、Util 纯逻辑 |
-| 工具 | JUnit 5 + Mockito |
-| 覆盖 | 每个公共方法 ≥ 1 条正向 + 1 条负向断言 |
-| 命名 | `<method>_<scenario>_<expected>()`，例 `approve_selfReview_throws()` |
-| 门禁 | `mvn test` 0 fail 方可提交 |
-
-**不可 mock 的测试：** MyBatis-Plus Mapper 查询（用 Testcontainers）。
-**必须 mock 的测试：** 外部依赖（Redis、第三方 API）。
+- 触发：`pull_request` / `push` 到 `main`、`develop`
+- 命令：`mvn test -DexcludedGroups=slow -DfailIfNoTests=false`
+- 范围：不碰真库的测试（Mockito 单测、契约切片、纯函数）
+- **必须真实执行覆盖率门禁**（随 `mvn test` 同批生效，勿重复调 `jacoco:check`）
 
 ### 1.2 L2 集成测试 — 涉及 DB/Redis 写入
 
-| 规则 | 说明 |
-|------|------|
-| 范围 | Mapper 查询、Service 事务、Flyway 迁移 |
-| 工具 | Testcontainers（PostgreSQL 16） |
-| 触发 | 修改 SQL/Entity/Service 事务逻辑时 |
-| 数据 | 每个测试用唯一前缀，`afterAll` 按前缀清理 |
+- 触发：同 L1
+- 命令：`mvn test -DexcludedGroups="" -DfailIfNoTests=false`
+- 范围：`@SlowTest`（真库 Testcontainers `pgvector/pgvector:pg16` + Redis 服务）
+- **性能阈值在此环境放宽**：`-Dperf.query.threshold.ms=2000 -Dperf.page.threshold.ms=3000`
+  （共享 runner 负载不可控，硬编码 500ms 会抖动；本地仍用默认 500ms 以便及早发现退化）
+- ⚠️ **涉及租户隔离、事务、RLS、真实 SQL 方言的改动，合并前必须本地跑一次 L2** ——
+  本地 L1 全绿不代表安全：曾出现 L2 连续三轮红而 L1 全绿的案例，
+  其中 `assist_json ->> ?` 在真实库里意味着**辅助核算账一直返回跨租户数据**
 
 ### 1.3 L3 API 契约测试 — 控制器层
 
-Track A（轻量，推荐）：`@WebMvcTest` + MockMvc
-Track B（真实 HTTP）：`@SpringBootTest(webEnvironment=RANDOM_PORT)` + RestAssured
-
-| 规则 | 说明 |
-|------|------|
-| 范围 | 每个 REST 端点正向 + 边界 + 非法状态 + 认证 |
-| 状态机端点 | 每个状态转换必须覆盖成功 + 非法状态两个场景 |
-| `@WebMvcTest` 适用 | 构造函数依赖 ≤ 5 个，无自定义 `@Component` 过滤器 |
-| `@SpringBootTest` 适用 | 依赖 ≥ 6 个，或复杂安全过滤器 |
-| 响应断言 | 断言 `code`（业务码），不是 HTTP 状态码 |
+见 §2.3。
 
 ### 1.4 L4-L5 E2E 测试 — 前端
 
@@ -157,6 +155,67 @@ doAnswer(inv -> {
     return 1;
 }).when(docMapper).insert(any(BusinessDocEntity.class));
 ```
+
+### 3.4.1 🔴 禁止 Mock「被测对象本身」（Mock 同义反复）
+
+**反模式**（真实存在于本仓库 28 个类 / 140 个 `@Test`）：
+
+```java
+class CustomerMapperTest {
+    @Test void insert_shouldAcceptValidParams() {
+        CustomerMapper mapper = Mockito.mock(CustomerMapper.class);   // mock 被测对象本身
+        Mockito.when(mapper.insert(entity)).thenReturn(1);            // stub 成期望值
+        assertEquals(1, mapper.insert(entity));                      // 断言拿到该值
+        Mockito.verify(mapper).insert(entity);                       // 断言 mock 被调用（恒真）
+    }
+}
+```
+
+**为什么零信号**：mock 的返回值由测试自己设定，断言只是确认「我写的桩被返回了」。
+它**永远通过**，既不校验 SQL、也不校验约束、也不校验字段映射。实测危害：
+`AutoGenerationServiceTest` 替**生产库根本不存在**的科目 `2203` 打桩，
+导致该缺陷跨月潜伏，直到 REQ-127 服务器手工测试才暴露。
+
+**判定规则**：若一个测试类 mock 的类型**就是它名字里的那类**（`XxxMapperTest` mock `XxxMapper`），
+即为同义反复。处置二选一：
+
+| 处置 | 适用 | 做法 |
+|------|------|------|
+| **改真库** | 该 Mapper 有实际业务价值 | 继承 `AbstractMapperTest`，断言 DB 真实行为 |
+| **删除** | 纯 CRUD 样板，无业务规则 | 直接删；覆盖率数字会下降，但那是**真实**下降 |
+
+真库版能断言 mock 版做不到的事（以 `CustomerMapperRealDBTest` 为例）：
+
+- 插入后 id 由数据库生成、`created_at` 有值
+- `uq_customer_code_enterprise` 唯一约束**真实生效**（重复 code 必失败）
+- `deleteById` 是**软删除** —— 行仍在但 `deleted=1`，默认查询查不到（铁律 #12）
+- 租户过滤真实生效 —— 企业 B 上下文看不到企业 A 的数据
+
+#### Mock 同义反复台账（2026-10-01 实测）
+
+| 项 | 数值 |
+|----|------|
+| 原规模 | 29 个类 / **145 个 `@Test`**（占全量 7.2%） |
+| 已归零 | 1 个（`CustomerMapperTest` → `CustomerMapperRealDBTest`，5 假 → 7 真） |
+| 剩余 | **28 个类 / 140 个 `@Test`** |
+| 机械检查 | `grep -rl 'Mockito.mock' --include='*MapperTest.java'` 应逐批收敛 |
+
+剩余 28 个按模块分组（无对应的 `*RealDBTest`，即完全无真库覆盖）：
+
+| 模块 | 类 |
+|------|---|
+| `base/system` | `UserMapper` `RoleMapper` `MenuMapper` `DeptMapper` `SysConfigMapper` `VoucherTypeMapper` |
+| `base/voucher` | `VoucherEntryMapper` `VoucherTemplateMapper` `VoucherTemplateLineMapper` |
+| `base/masterdata` | `EmployeeMapper` `VendorMapper`（`CustomerMapper` 已归零） |
+| `base/ai` / `base/report` | `AiTaskMapper` `ReportTemplateMapper` |
+| `sme/arap` | `ArapSettlementMapper` `BusinessDocEntryMapper` `PrepaymentMapper` `ExpenseReimbursementMapper` `BadDebtProvisionMapper` |
+| `sme/asset` | `AssetCategoryMapper` `AssetDepreciationMapper` `AssetDisposalMapper` |
+| `sme/budget` | `BudgetMapper` `BudgetAdjustmentMapper` |
+| `sme/cash` | `BankAccountMapper` `BankJournalMapper` `CashJournalMapper` `ClassificationRuleMapper` |
+| `sme/tax` | `TaxDeclarationMapper` |
+
+> 建议批次：`base/system` + `base/masterdata`（权限与客商，直接关系越权与应收应付）→
+> `sme/cash` + `sme/arap`（资金）→ 其余。每批一个 PR，改完跑 L2。
 
 ### 3.5 避免测试假阳性
 
