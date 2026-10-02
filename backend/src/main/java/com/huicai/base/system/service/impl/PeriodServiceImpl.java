@@ -49,8 +49,14 @@ public class PeriodServiceImpl extends ServiceImpl<PeriodMapper, PeriodEntity> i
             throw BusinessException.conflict("期间编码已存在: " + entity.getPeriodCode());
         }
 
-        if (entity.getStatus() == null) entity.setStatus("open");
-        if (entity.getDeleted() == null) entity.setDeleted(0);
+        // P0-fix: 原为两处条件兜底，而 PeriodController#create 直收 @RequestBody PeriodEntity
+        // （违反铁律 #13）⇒ 客户端可指定 status 与 deleted。
+        // ①chk_period_status 用**小写** open/closed/locked（注意与其它表的 OPEN/CLOSED 大写不同），
+        //   POST status=locked 会创建出**已锁定的会计期间**，阻断该期间全部记账；
+        // ②deleted 是服务端托管的逻辑删除标记，接受客户端传值等于交出「创建即隐藏」的越权面。
+        // 均改为无条件强制。
+        entity.setStatus("open");
+        entity.setDeleted(0);
         return super.save(entity);
     }
 

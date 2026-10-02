@@ -117,6 +117,12 @@ public class ArapSettlementServiceImpl implements ArapSettlementService {
             String prefix = "RECEIVE".equals(entity.getSettlementType()) ? "JS" : "FS";
             entity.setSettlementNo(prefix + "-" + entity.getPeriod() + "-" + IdUtil.fastSimpleUUID().substring(0, 6).toUpperCase());
         }
+        // ⚠️ 保持条件兜底，**不可**改为无条件强制（2026-10-01 实证教训）：
+        // `ReconciliationServiceImpl#execute()`（人工「提报待审批」）会**直接以 SUBMITTED 创建**核销单，
+        // 依赖本方法不覆盖已有状态。若强制 DRAFT，会把 execute() 刚提报的 SUBMITTED 抹成 DRAFT，
+        // 导致随后 approve() 抛「核销单状态不允许审批: DRAFT」，4 个核销集成/E2E 用例全红。
+        // 越权面本身不存在：实测**无任何 Controller 直收 ArapSettlementEntity**，仅内部调用方创建，
+        // 故门禁对本条的定位是「加固」而非「救火」—— 而加固反被内部调用方证伪，故撤回。
         if (entity.getStatus() == null) entity.setStatus(ArapStatus.DRAFT);
         if (entity.getDiscountAmount() == null) entity.setDiscountAmount(BigDecimal.ZERO);
         BigDecimal total = BigDecimal.ZERO;
