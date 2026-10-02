@@ -59,7 +59,13 @@ public class BudgetServiceImpl implements BudgetService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public BudgetEntity create(BudgetEntity entity, List<BudgetEntryEntity> entries) {
-        if (entity.getStatus() == null) entity.setStatus(BudgetStatus.BUDGET_DRAFT);
+        // P0-fix: 原为 `if (entity.getStatus() == null) entity.setStatus(BUDGET_DRAFT)`。
+        // BudgetController#create(@RequestBody CreateRequest) 内层仍是 BudgetEntity ——
+        // 只包一层 request **不构成隔离**（与 AssetInventory 同型），其 status 可被客户端绑定。
+        // chk_budget_status 允许 DRAFT/SUBMITTED/APPROVED/ACTIVE/CLOSED/REJECTED/FROZEN，
+        // 故 POST status=APPROVED / ACTIVE 可**一步跳过**提交与审批（铁律 #1）。
+        // 门禁 check_entity_status_massassignment.py 存量项，改为无条件强制 DRAFT。
+        entity.setStatus(BudgetStatus.BUDGET_DRAFT);
         BigDecimal total = BigDecimal.ZERO;
         if (entries != null) {
             for (BudgetEntryEntity e : entries) {

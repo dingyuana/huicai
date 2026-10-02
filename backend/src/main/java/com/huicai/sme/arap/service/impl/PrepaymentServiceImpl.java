@@ -98,7 +98,15 @@ public class PrepaymentServiceImpl implements PrepaymentService {
     @Transactional(rollbackFor = Exception.class)
     public PrepaymentEntity create(PrepaymentEntity entity) {
         if (entity.getTenantId() == null) entity.setTenantId(DEFAULT_TENANT_ID);
-        if (entity.getStatus() == null) entity.setStatus(ArapStatus.DRAFT);
+        // P0-fix: 原为 `if (entity.getStatus() == null) entity.setStatus(ArapStatus.DRAFT)`。
+        // PrepaymentController#create 直收 @RequestBody PrepaymentEntity（违反铁律 #13），
+        // 只在 null 时兜底 ⇒ 客户端可指定任意 status。
+        // 比本轮已修的 5 处更危险：t_prepayment **没有任何 status CHECK 约束**（实测 CHECK 数为 0）
+        // ⇒ ①DB 层零兜底，连 "__GARBAGE__" 这种乱码都能落库（已由测试实证）；
+        // ②客户端可 POST status=APPLIED / SETTLED **一步跳过** confirm()（DRAFT→CONFIRMED）
+        // 这次人工确认（铁律 #1）。
+        // 改为无条件强制 DRAFT —— 创建态是唯一合法起点。
+        entity.setStatus(ArapStatus.DRAFT);
         if (entity.getSettledAmount() == null) entity.setSettledAmount(BigDecimal.ZERO);
         if (entity.getUnsettledAmount() == null) entity.setUnsettledAmount(entity.getAmount());
         if (entity.getTxDate() == null) entity.setTxDate(LocalDate.now());
