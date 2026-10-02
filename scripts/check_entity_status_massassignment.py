@@ -34,6 +34,18 @@ def strip_comments(text: str) -> str:
     return LINE_COMMENT.sub(blank, BLOCK_COMMENT.sub(blank, text))
 
 
+# 已人工判定的「非可利用」例外。规则 1 只看写法、不看可达性，故需在此显式登记，
+# 且每条都必须写明理由 —— 白名单是「要求人负责」而非「绕过检查」。
+# key = 源码相对路径，value = 豁免理由。
+ALLOWLIST = {
+    "com/huicai/sme/arap/service/impl/ArapSettlementServiceImpl.java":
+        "create() 无任何 Controller 直收 ArapSettlementEntity（实测无 REST 路径可达），"
+        "越权面不存在；且 ReconciliationServiceImpl#execute()（人工提报）**依赖**本方法"
+        "不覆盖已有状态 —— 它直接以 SUBMITTED 建单。2026-10-01 强制 DRAFT 曾致 4 个"
+        "核销用例全红（approve 抛「核销单状态不允许审批: DRAFT」）后撤回。"
+        "复查条件：若将来新增直收 ArapSettlementEntity 的端点，须立即删除本豁免并加固。",
+}
+
 # 行首锚定：只匹配真正的代码行（允许缩进），排除注释与字符串里的写法
 COND_GUARD = re.compile(r"^\s*if\s*\([^)]*get\w*[Ss]tatus\(\)\s*==\s*null\s*\)")
 REQUEST_BODY_ENTITY = re.compile(r"@RequestBody\s+(?:@Valid\s+)?(\w*Entity)\b")
@@ -44,7 +56,9 @@ def main() -> int:
     ap.add_argument("--dir", default="backend/src/main/java")
     ap.add_argument("--quiet", action="store_true")
     ap.add_argument("--strict", action="store_true",
-                    help="发现风险即以退出码 1 阻断（默认只报告、不阻断）")
+                        help="P2 结构性发现也判失败（默认只报告）")
+    ap.add_argument("--max-p0", type=int, default=0,
+                    help="P0「条件兜底」允许的最大处数，超出即判失败（默认 0）")
     args = ap.parse_args()
 
     root = pathlib.Path(args.dir)
@@ -60,6 +74,9 @@ def main() -> int:
         code = strip_comments(raw)
         for i, line in enumerate(code.splitlines(), 1):
             if COND_GUARD.search(line):
+                rel = str(f.relative_to(root)).replace("\\", "/")
+                if rel in ALLOWLIST:
+                    continue          # 已人工判定不可经 REST 触达，理由见 ALLOWLIST
                 findings.append(
                     (f, i, "条件兜底",
                      "getStatus()==null 才设默认状态 ⇒ 客户端可指定状态（历史 5 处 P0 的同一写法）",
@@ -105,13 +122,24 @@ def main() -> int:
         print(f"  {f}:{i}  {src}")
     print("\n处置：引入 DTO（不含 status）让越权值无法绑定；"
           "或服务端改为无条件强制初始状态。见 REQ-2026-129。")
-    # 默认只报告不阻断 —— 存量 7 处尚未清理，硬失败会让门禁恒红。
-    # 恒红与恒绿同样有害（AGENTS §4.5 第 21 条）：恒红会让人习惯性忽略门禁。
-    # 存量清零后改用 --strict 转为强制。
-    if args.strict:
-        print("\n--strict：判失败。")
+
+    # ---- P0 阈值：本次已把可达的条件兜底全部清零，故 P0 可以立即转为强制门禁 ----
+    # P2（Entity 直收）是结构性问题，存量 18 处属铁律 #13 的清理项，
+    # 一并阻断会让门禁恒红（恒红与恒绿同样有害，AGENTS §4.5 第 21 条）。
+    # 故：P0 超阈值 → 失败；P2 仅报告，除非显式 --strict。
+    if exploitable and len(exploitable) > args.max_p0:
+        print(f"\n❌ P0 违规 {len(exploitable)} 处 > 阈值 {args.max_p0}：判失败。")
         return 1
-    print("\n（默认只报告。存量清零后加 --strict 转为强制门禁。）")
+
+    if exploitable:
+        print(f"\n✅ P0 违规 {len(exploitable)} 处（阈值 {args.max_p0}，未超）。")
+    else:
+        print(f"\n✅ P0 违规 0 处（阈值 {args.max_p0}）。")
+
+    if args.strict and structural:
+        print(f"--strict：P2 结构性问题 {len(structural)} 处 → 判失败。")
+        return 1
+    print(f"ℹ️ P2 结构性 {len(structural)} 处仅报告（存量清理中；--strict 可转为强制）。")
     return 0
 
 
