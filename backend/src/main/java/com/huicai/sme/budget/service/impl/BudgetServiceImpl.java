@@ -227,7 +227,10 @@ public class BudgetServiceImpl implements BudgetService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public BudgetAdjustmentEntity createAdjustment(BudgetAdjustmentEntity entity) {
-        if (entity.getStatus() == null) entity.setStatus(BudgetStatus.ADJUSTMENT_PENDING);
+        // P0-fix: 原为条件兜底，BudgetController#createAdjustment 直收 @RequestBody
+        // BudgetAdjustmentEntity（违反铁律 #13）。t_budget_adjustment **没有任何 status CHECK**
+        // ⇒ DB 层零兜底，客户端传 "__GARBAGE__" 也会原样入库。改为无条件强制。
+        entity.setStatus(BudgetStatus.ADJUSTMENT_PENDING);
         if (entity.getAdjustmentDate() == null) entity.setAdjustmentDate(LocalDate.now());
         adjustmentMapper.insert(entity);
         return entity;

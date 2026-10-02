@@ -84,11 +84,14 @@ class DepreciationVoucherRealDBTest extends AbstractMapperTest {
         p.setPeriodCode(periodCode);
         p.setStartDate(LocalDate.of(2026, Integer.parseInt(periodCode.substring(4)), 1));
         p.setEndDate(LocalDate.of(2026, Integer.parseInt(periodCode.substring(4)), 31));
-        p.setStatus(status);
         p.setEnterpriseId(ENTERPRISE_ID);
-        p.setDeleted(0);
-        periodService.save(p);
+        periodService.save(p);          // 服务层无条件强制 status=open（不接受客户端指定）
         assertNotNull(p.getId(), "期间插入后应有 ID");
+        // 「已结账」是**状态机的结果**而非入参 —— 生产侧已改为拒绝客户端指定 status，
+        // 故这里走真实状态机 openPeriod → closePeriod，而不是塞一个 status="closed"。
+        if ("closed".equals(status)) {
+            periodService.closePeriod(p.getId());
+        }
     }
 
     private void insertDepreciation(Long assetId, String amount) {
