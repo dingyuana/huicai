@@ -199,12 +199,15 @@ public class TaxServiceImpl implements TaxService {
         if (entity.getTotalAmount() == null) {
             entity.setTotalAmount(entity.getAmount().add(entity.getTaxAmount()));
         }
-        if (entity.getCertificationStatus() == null) {
-            entity.setCertificationStatus("UNCERTIFIED");
-        }
-        if (entity.getStatus() == null) {
-            entity.setStatus(InvoiceStatus.PENDING_CONFIRM);
-        }
+        // P0-fix: 认证状态（certification_status）与审核状态（status）是**两个不同的列**，
+        // 两处都只在 null 时兜底 ⇒ 客户端可分别指定，**都必须无条件强制**。
+        // ①certification_status：chk_cert_status 允许 UNCERTIFIED/CERTIFIED/INVALID/CANCELLED，
+        //   POST CERTIFIED 可一步把进项发票标成「已认证」—— 认证是**税务合规动作**（铁律 #1）。
+        entity.setCertificationStatus("UNCERTIFIED");
+        // ②status：chk_input_invoice_status 允许 .../VOUCHERED/...，
+        //   POST VOUCHERED 可一步跳过 PENDING_CONFIRM→PENDING_REVIEW→CONFIRMED 审核链
+        //   （铁律 #1），与已修的 createOutput（销项）同构。
+        entity.setStatus(InvoiceStatus.PENDING_CONFIRM);
         if (entity.getPeriod() == null) {
             entity.setPeriod(String.format("%04d%02d",
                     entity.getInvoiceDate().getYear(),
