@@ -46,6 +46,21 @@ jobs:
         # 🔥 修改1：防止因未对接接口过多导致退出码为1从而阻断整个流水线
         continue-on-error: true 
 
+  entity-status-massassignment-check:
+    name: 实体入参状态越权检测
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 设置 Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: 运行实体入参状态越权检测
+        run: python scripts/check_entity_status_massassignment.py
+        # 🔥 同上：默认报告模式。存量清理完毕后改为 --strict 阻断。
+
   route-coverage-check:
     name: 路由覆盖检测
     runs-on: ubuntu-latest
