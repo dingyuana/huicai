@@ -32,7 +32,7 @@
 
 | 输出 | 验收标准 | 实测状态（2026-10-03） |
 |---|---|---|
-| 门禁 | main PR 上真库套件（`-DexcludedGroups=`）必跑，**失败即红**（推一次故意失败验证） | 🚧 触发分支已含 `main`/`develop`、Redis service 已加、pgvector 镜像已改；**AT-104-3「故意失败反证」从未执行** ⇒ 「会红」仍无证据 |
+| 门禁 | main PR 上真库套件（`-DexcludedGroups=`）必跑，**失败即红**（推一次故意失败验证） | 🚧 触发分支已含 `main`/`develop`、Redis service 已加、pgvector 镜像已改；**AT-104-3「整条流水线会在真库失败时变红」仍未验证**（静态门禁与覆盖率门禁已各自反证，见 AT-104-3 行） |
 | 成色 | 同义反复 `*MapperTest` 归零；核心模块真库覆盖 ≥60% | 🚧 归零 28/29（剩 `VoucherTemplateMapperTest`）；**60% 未达标**，L1 实测 INSTRUCTION 32%/BRANCH 13%/METHOD 56%，棘轮门禁 30%/12%/55% |
 | 夹具 | 无违反 CHECK/外键的夹具 | ✅ 归零过程中修正（含 `BudgetMapperTest` 的 `OPERATION`、`EntityDbSchemaIntegrationTest` 类幻觉夹具） |
 | 文档 | `TEST-STRATEGY.md` 与实际一致（分层/覆盖/门禁/硬数字） | ✅ 已按实测重写（登记册 V1.45） |
@@ -60,7 +60,7 @@ L1 拦 Mock 回归，L2 拦真库缺陷（历史上 136 项慢测缺陷均由真
 |---|---|---|---|---|
 | AT-104-1 | main 分支 PR | CI 触发 | L2 真库 job 执行（不再只在 develop） | CI |
 | AT-104-2 | L2 job | 执行 | 预拉 `pgvector/pgvector:pg16` 成功 | CI 日志 |
-| AT-104-3 | 真库套件有失败 | 提交 | PR 变红（门禁有效的唯一证明） | CI | ❌ **未执行**（登记册与本 SPEC 均列为遗留） |
+| AT-104-3 | 真库套件有失败 | 提交 | PR 变红（门禁有效的唯一证明） | CI | 🟡 **部分反证（2026-10-03）**：静态门禁 `check_tenant_fixture.py` 已完成红→绿反证（删 `useEnterprise(...)` 行 ⇒ exit 1 并指到 3 处 `setEnterpriseId(ENT_ID)`；恢复 ⇒ exit 0），并已挂成阻断式 CI 门禁；覆盖率门禁已实测打印 `All coverage checks have been met`（非 `Skipping…`）。**仍未做**：在真实 PR 上制造一次真库失败以证明整条流水线会红 |
 | AT-104-4 | 29 个同义反复类 | 改造 | 均 `extends AbstractMapperTest` 或删除，真实执行 SQL | 计数 | 🚧 28/29（仅 `VoucherTemplateMapperTest` 待改） |
 | AT-104-5 | `BudgetMapperTest` | 改造 | 无 `OPERATION` 违规夹具，预算 CHECK 被真库验证 | 真实 DB |
 | AT-104-6 | 新增核心模块测试 | 评审 | 含负向断言（assertFalse/assertNull） | 抽检 |
@@ -85,4 +85,4 @@ L1 拦 Mock 回归，L2 拦真库缺陷（历史上 136 项慢测缺陷均由真
 | 版本 | 日期 | 变更人 | 变更内容 |
 |---|---|---|---|
 | V1.0 | 2026-09-29 | opencode | 初稿：main 真库门禁 + 29 个同义反复归零 + 夹具合规 + 负向断言规范 |
-| V1.1 | 2026-10-03 | opencode | **实施回写**：①头部状态由「📋 待审核」改为「🚧 部分实施」——门禁子项（`d56e9d82` 起 4/4 全绿、覆盖率门禁假绿修复、状态越权门禁转 P0 强制）早已交付，状态却从未翻过；②§2 输出契约**新增「实测状态」列**，逐条给出达成证据而非只写验收标准；③**§0 缺陷 3 的计数更正**：29 个同义反复已归零到 **1 个**（实测 13 个 `*MapperTest` 中 12 个已 `extends AbstractMapperTest`），原「复核计数 29」若继续引用会让人重复劳动；④AT-104-3 标注 ❌ 未执行 —— **门禁「会红」这件事至今无任何证据**（AGENTS §4.5 第 21 条：恒绿与恒红同样有害，必须反证） |
+| V1.1 | 2026-10-03 | opencode | **实施回写**：①头部状态由「📋 待审核」改为「🚧 部分实施」——门禁子项（`d56e9d82` 起 4/4 全绿、覆盖率门禁假绿修复、状态越权门禁转 P0 强制）早已交付，状态却从未翻过；②§2 输出契约**新增「实测状态」列**，逐条给出达成证据而非只写验收标准；③**§0 缺陷 3 的计数更正**：29 个同义反复已归零到 **1 个**（实测 13 个 `*MapperTest` 中 12 个已 `extends AbstractMapperTest`），原「复核计数 29」若继续引用会让人重复劳动；④AT-104-3 状态由 ❌ 改为 🟡 部分反证 —— `check_tenant_fixture.py` 已完成红→绿反证并挂成阻断式门禁（`full-stack-test.yml` 新 job `tenant-fixture-check`），但**整条流水线在真库失败时是否变红仍未验证**（AGENTS §4.5 第 21 条：恒绿与恒红同样有害，必须反证） |

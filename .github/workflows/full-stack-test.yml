@@ -61,6 +61,24 @@ jobs:
         run: python scripts/check_entity_status_massassignment.py
         # 🔥 同上：默认报告模式。存量清理完毕后改为 --strict 阻断。
 
+  tenant-fixture-check:
+    name: 租户夹具一致性检测
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 设置 Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      # P102-M2 把 enterpriseId 改为无条件覆盖后，「只给实体设 enterpriseId 而不切
+      # 上下文」的夹具会被静默改写，且报错伪装成「唯一键冲突 / 隔离失效」（DIR-001）。
+      # 本检测已反证可红：删掉某测试类的 useEnterprise(...) 后 exit=1，
+      # 真实仓库 exit=0。故不加 continue-on-error —— 存量已清零，门禁必须能变红。
+      - name: 运行租户夹具一致性检测
+        run: python scripts/check_tenant_fixture.py
+
   route-coverage-check:
     name: 路由覆盖检测
     runs-on: ubuntu-latest

@@ -18,6 +18,16 @@ IncomeStatementCaliber 已如此）：**把上下文切到目标企业** `useEnt
 
 用法：python3 scripts/check_tenant_fixture.py [src/test/java]
 退出码 0 = 通过；1 = 存在可疑夹具。
+
+已知盲区（DIR-002，待评估）：本检测把「文件内出现 useEnterprise( 或
+withoutEnterpriseContext(」当作合规判据，因此绕过这两个 API 的第三种写法
+（如直接 EnterpriseContextHolder.set(9901L)）会被漏判。实测反证时更明显：
+把 useEnterprise( 纯文本替换成 withoutEnterpriseContext( 即可判绿，尽管两者
+语义相反（前者切上下文、后者清上下文）。这是「检查工具自身也可能假绿」，
+故本检测只作为机械提醒，不可当作唯一保障。
+
+反证记录（2026-10-03）：真实仓库 exit=0；把 CashFlowPeriodRangeRealDBTest
+的 useEnterprise(...) 行删掉后 exit=1 并精确指出 3 处 setEnterpriseId(ENT_ID)。
 """
 import re
 import sys
