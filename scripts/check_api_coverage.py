@@ -3,24 +3,37 @@
 接口覆盖检测脚本 — 检测前端 API 调用与后端端点的匹配关系.
 
 用法:
-  python scripts/check_api_coverage.py
+  python scripts/check_api_coverage.py                     # 棘轮模式（CI 用，会阻断）
+  python scripts/check_api_coverage.py --report-only       # 只报告恒绿（摸底用）
+  python scripts/check_api_coverage.py --max-uncovered 200 # 显式指定上限
 
 输出:
   - 匹配成功数
   - 后端有前端无 (后端端点未被前端调用)
   - 前端有后端无 (前端调用找不到对应后端端点)
 
-CI 集成: 返回非零退出码当存在不匹配时.
+关于退出码（2026-10-03 改为棘轮，勿退回「有差异就红」）:
+  改造前只要存在任一不匹配就 exit 1，而当时基线是**后端 280 个端点前端未接**。
+  该门禁因此被 workflow 用 `continue-on-error: true` 挂起 —— 也就是**恒绿**，
+  恒绿与恒红同样有害（AGENTS §4.5 第 21 条）：真出问题时也没人看。
+  但直接去掉 continue-on-error 会变成**恒红**，280 条存量会让所有人习惯性忽略门禁。
+  故改为与 JaCoCo 覆盖率同款的**棘轮**：以当前实测值为上限，只在**倒退**时红。
+  ⚠️ 每修掉一批端点接入，必须回来下调 `--max-uncovered`，否则棘轮退化成固定上限
+  （同 AGENTS §4.5 第 25 条）。
 """
 
+import argparse
 import re
 import sys
-import json
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 BACKEND_DIR = PROJECT_ROOT / "backend"
 FRONTEND_DIR = PROJECT_ROOT / "frontend"
+
+# 棘轮基线：2026-10-03 实测（后端 425 端点 / 前端 148 调用 / 匹配 145 / 未接 280 / 孤儿 0）
+DEFAULT_MAX_UNCOVERED = 280
+DEFAULT_MAX_ORPHAN = 0
 
 
 def extract_backend_endpoints():
@@ -91,8 +104,10 @@ def normalize(path):
     return "/" + p
 
 
-def check_coverage():
-    """执行接口覆盖检测."""
+def check_coverage(max_uncovered: int = DEFAULT_MAX_UNCOVERED,
+                   max_orphan: int = DEFAULT_MAX_ORPHAN,
+                   report_only: bool = False) -> int:
+    """执行接口覆盖检测。"""
     backend_endpoints = extract_backend_endpoints()
     frontend_calls = extract_frontend_api_calls()
 
@@ -141,11 +156,36 @@ def check_coverage():
         for fn, fp in frontend_orphan:
             print(f"  ⚠️ {fp}")
 
-    # CI 退出码: 存在不匹配时返回非零
-    if backend_not_covered or frontend_orphan:
+    # 棘轮判定：只在**倒退**（超过上限）时红。存量未接端点是清理项，不是门禁失败。
+    n_uncovered = len(backend_not_covered)
+    n_orphan = len(frontend_orphan)
+    over_uncovered = n_uncovered - max_uncovered
+    over_orphan = n_orphan - max_orphan
+    print(f"\n棘轮上限: 后端未接 ≤ {max_uncovered}（当前 {n_uncovered}，余量 {max_uncovered - n_uncovered}）"
+          f" / 前端孤儿 ≤ {max_orphan}（当前 {n_orphan}，余量 {max_orphan - n_orphan}）")
+
+    if report_only:
+        print("[报告模式] 不阻断（仅摸底用，CI 不应使用该模式）")
+        return 0
+    if over_uncovered > 0 or over_orphan > 0:
+        print(f"\n[FAIL] 接口覆盖较棘轮基线倒退："
+              f"后端未接 +{over_uncovered}，前端孤儿 +{over_orphan}")
+        if n_orphan > max_orphan:
+            print("  前端孤儿 = 前端调了不存在的后端端点，属真断裂，必须立即修")
+        print("  若是新增端点未接前端，请把它接入前端或登记为「内部/暂不暴露」，"
+              "不要靠放宽上限过关")
         return 1
+    print("[OK] 接口覆盖未倒退")
     return 0
 
 
 if __name__ == "__main__":
-    sys.exit(check_coverage())
+    ap = argparse.ArgumentParser(description="接口覆盖检测（棘轮模式）")
+    ap.add_argument("--max-uncovered", type=int, default=DEFAULT_MAX_UNCOVERED,
+                    help=f"后端未接端点上限（默认 {DEFAULT_MAX_UNCOVERED}）")
+    ap.add_argument("--max-orphan", type=int, default=DEFAULT_MAX_ORPHAN,
+                    help=f"前端孤儿调用上限（默认 {DEFAULT_MAX_ORPHAN}）")
+    ap.add_argument("--report-only", action="store_true",
+                    help="只报告不阻断（摸底用，勿在 CI 使用）")
+    args = ap.parse_args()
+    sys.exit(check_coverage(args.max_uncovered, args.max_orphan, args.report_only))

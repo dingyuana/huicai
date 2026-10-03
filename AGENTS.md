@@ -4,23 +4,25 @@
 
 ## §0 项目状态（硬数字，每次 commit 后更新）
 
-> **更新基准**：commit `79e9eec7`（REQ-2026-126 预算执行控制）+ REQ-2026-127（银行流水制证科目防护）+ **本次 REQ-2026-134（P107 存量缺陷修复包 D1~D6 + D8）** — D1 对账 DISPUTED 补 CHECK(V160)、D2 凭证分录物理删→软删、D3 批量空壳抛 501、D4 对账确认/驳回落库+审计表(V161)、D5 金额精度 3 处、D6 明文口令环境变量化、**D8 银行流水 PENDING_CONFIRM 补 CHECK(V162)**；全部 TDD 红→绿含反证，定向回归 83/83（**全量回归留夜间自动跑**）
-> **当前分支**：`develop`（本地领先 origin，**未 push**）
+> **更新基准**：commit `45c4f2ed`（P105 文档治理落地 + **6 处 P0 状态越权修复** + 状态越权门禁转 P0 强制）— 状态越权 6 处：销项发票 `VOUCHERED`、纳税申报 `APPROVED`、资产卡片 `DISPOSED/SCRAPPED`、资产盘点「完成盘点必然 500」、预算/预付、进项发票 `VOUCHERED`+`CERTIFIED`；全部真库负向用例红→绿。**本次（2026-10-03）**：①**补齐 2026-09-30 以来缺失的全量回归证据**（此前只跑定向回归）—— L1 `1634/0/0/5`、L2 真库 `2023/0/0/5`，两次均 `All coverage checks have been met`；②`feature/req-131-test-gate` 与 `develop` 归位（`main` 早已经 14 个 PR 含全部功能 commit，是 `develop` 落后 24 个提交）；③P101/P104/P105/P107 四份 SPEC 与开发计划状态批量回写
+> **当前分支**：`develop`（与 `origin/develop` 同步；**`main` 已含 `feature/req-131-test-gate` 全部 commit —— 经 PR #25 合入，该 PR 在真实 CI 上 10/10 job 全绿**）。⚠️ **若 `develop` 与 `main` 再次出现分叉，以 `main` 为基线**（历史上 `main` 经 PR 收口、`develop` 长期停在 `9b76c55a`，落后 24 个提交）
 > **关联文档**：[项目说明](docs/CORE-项目说明.md)、[技术方案](docs/CORE-技术方案.md)、[需求分析](docs/CORE-需求分析.md)、[需求登记册](docs/development/requirements/REQUIREMENTS_REGISTRY.md)、[文档注册表](docs/CORE-文档注册表.md)、[测试策略](docs/testing/TEST-STRATEGY.md)、[Flyway治理规范](docs/development/standards/flyway-governance.md)、[商用化修复总纲](docs/specs/P101-commercial-gap-remediation.md)、[修复开发计划](docs/development/plans/2026-09-29-commercial-gap-remediation-plan.md)、[存量缺陷包](docs/specs/P107-stock-defect-fix-pack.md)
 
 | 维度 | 数据 |
 |------|------|
-| 后端代码 | 492 个 Java 主代码文件（另 237 个测试文件）|
-| 测试用例 | **2023 个可执行测试注解**（`@Test` 2020 + `@TestFactory` 3）/ 236 个后端测试类 + 26 个前端测试文件 265 用例（最近一次**全量实测 1998 通过，0 Failures, 0 Errors, 5 Skipped**，为 REQ-2026-127 时的基线；本轮 REQ-2026-134 新增 7 个测试类 25 个用例：**定向回归 83/83 全绿**，全量回归留夜间自动跑。注：此前登记的「2002」为约数，按 `grep -P '@Test(?![A-Za-z])'` 重新核算）|
-| 数据库 | PostgreSQL 16 / **78 个 migration，最新 V162**（注意：版本号非连续，实际为 V1-V5 + V63 + V92-V162，缺 V6-V62 与 V64-V91 共 85 个号；因 `out-of-order: true` + `validate-on-migrate: false` 不影响运行，但「V1 baseline merged V1-V146」的旧表述已失效）|
+| 后端代码 | 499 个 Java 主代码文件（另 244 个测试类文件）|
+| 测试用例 | **2023 个可执行测试注解**（`@Test` 2020 + `@TestFactory` 3）/ 244 个后端测试类 + 26 个前端测试文件 265 用例。**2026-10-03 全量实测：L1 `mvn test` = 1634 通过 / 0 Failures / 0 Errors / 5 Skipped（2 分 50 秒）；L2 真库 `mvn test -DexcludedGroups=` = 2023 通过 / 0 Failures / 0 Errors / 5 Skipped（3 分 25 秒）**，两次均打印 `All coverage checks have been met`（覆盖率门禁真执行，非静默跳过）。⚠️ **本地跑 L2 必须先 `docker start huicai-redis`**，否则 11 个用例报 `RedisConnectionFailure`（环境型红，非代码回归，见 §4.5 第 24 条）|
+| 覆盖率 | 棘轮门禁 **INSTRUCTION ≥30% / BRANCH ≥12% / METHOD ≥54%**（`backend/pom.xml` jacoco-check）。2026-10-03 按 **clean 口径**实测重标定：L1 真实值 **32.3% / 13.9% / 55.1%**（443 类），缓冲 2.3/1.9/1.1 点。已实测该门禁会红（阈值抬到 0.99 ⇒ `Rule violated` + `BUILD FAILURE`）。🔴 **标定必须 `mvn clean test`**：不带 clean 时 `target/jacoco.exec` 跨调用累积，实测虚高到 38.9/17.9/61.8（≈+6 点），据此标定会让真实 CI 全红 |
+| 数据库 | PostgreSQL 16 / **82 个 migration，最新 V166**（V160=D1 补 `DISPUTED`、V161=对账审计表、V162=D8 补 `PENDING_CONFIRM`、V163=权限码种子、V164=治愈 identity 序列落后、V165=补代理用户企业种子、V166=FORCE RLS；注意：版本号非连续，缺 V6-V62 与 V64-V91 共 85 个号；因 `out-of-order: true` + `validate-on-migrate: false` 不影响运行）|
 | API 端点 | 510+ 个后端端点 |
 | 核心模块 | 基础数据、总账、应收应付、现金管理、固定资产、费用报销、发票税务、预算、财务报表、存储管理 |
 | 业务单据类型 | 11 种（RECEIPT/PAYMENT/EXPENSE/INVOICE_IN/INVOICE_OUT/OTHER_RECEIVABLE/OTHER_PAYABLE/TRANSFER/SALARY/PRE_RECEIVE/PRE_PAY）|
 | AI 服务 | Python FastAPI 5 端点（health/anomaly/embedding/match/ocr）|
 | 技术栈 | Spring Boot 3.x + MyBatis-Plus + Redis 7 + MinIO + RabbitMQ |
 | 开发流程 | 大闭环 + 内循环（three-phase-loop v3.0）|
-| P0-P2 阶段 | ✅ 100% 完成（基础体系 + 缺陷修复 + AI 辅助能力）|
+| P0-P2 阶段 | 🟡 **功能模块**基本完成（基础体系 + 缺陷修复 + AI 辅助能力），但**基座与内控未收口**：M5b 角色降权待人工执行、DTO 隔离三批（约 25 Controller）未做、P106 内控深度（年结/制单≠审核/多账套）**未立项**、门禁「故意失败反证」未做（详见 P101 §2 实测状态列）|
 | P3 远期 | ⏳ 0%（经营分析/预算预测/风控/工资薪酬）|
+| CI 门禁 | 6 个 workflow：L1 单测 / L2 真库 / Full Stack / SPEC 契约 / 夜间 E2E / 性能基线。Full Stack 内 4 个静态检测**全部阻断式**：接口覆盖（**棘轮** `--max-uncovered 280`，只在倒退时红）/ 实体入参状态越权（P0 强制）/ 租户夹具一致性（A/B 两类判定）/ 路由覆盖。**2026-10-03 PR #25 真实 CI 10/10 全绿**；此前 PR #25 曾因覆盖率阈值标定口径错误被两个 L1 job 拉红（见登记册 V1.66）⇒ **门禁「绿得起来也红得掉」已获真实证据** |
 
 ---
 
@@ -278,8 +280,35 @@
     | Full Stack 路由 | 红 | **假红**：`check_route_coverage.py` 只解析 `routes/base.ts`（96 条路由只认出 23 条）→ 75 个组件被误判孤儿 |
     - **教训**：判断门禁有效性**必须看它自己的输出**，不能看它的退出码或颜色。四类失效模式：① 恒红（阈值/规则不可达成）② 恒绿（规则根本没执行）③ 假红（工具自身缺陷）④ 输入不全（只读了一部分数据源）。
     - **判「恒红」通用解法**：把不可达成的硬失败**降级为警告 + 留强制开关**。SPEC 门禁用 `--require-contract`、覆盖率用实测值做**棘轮**、路由检查只对「路由指向不存在组件」判失败 —— 原则一致：**门禁必须可执行且能变红，否则等于没有**。
+    - **判「恒绿」通用解法（2026-10-03 补第三例）**：先量出真实存量，再把上限设成实测值做**棘轮**，然后**删掉 `continue-on-error`**。已用三次：SPEC 契约覆盖率、覆盖率阈值、接口覆盖 `--max-uncovered 280`（基线：后端 425 端点、前端 148 调用、匹配 145、未接 **280**、孤儿 0）。**要点**：上限必须写在 CI 命令行里（可审计），且每次清掉一批存量就要下调 —— 否则棘轮又变成固定上限（见第 25 条）。
 
 22. **多文件配置只读其一 ⇒ 误报成批**（2026-09-30）：`check_route_coverage.py` 硬编码单文件 `base.ts`，而路由实际拆在 8 个文件（`agency/base/lab/sme-asset/sme-base/sme-business/sme-report/sme-tax`），96 条只认出 23 条。同类：validator 用 glob `P*-*.md` 却假设单一 schema。**教训：解析多份配置必须 `glob` 全部，且改完立刻跑一遍看「认出的条数」是否与实际数量级相符**（23 vs 96 这种量级差一眼可见）。
+
+23. **安全加固会静默改写测试造数，症状伪装成「隔离失效」**（2026-09-30，源自 DIR-001，REQ-2026-129/P102-M2）：把 `MyMetaObjectHandler.insertFill` 的 `enterpriseId` 从 `strictInsertFill` 改为**无条件覆盖**（正确修复，堵死 48 处 Entity 直入越权）后，所有「只给实体硬设 `enterpriseId` 而未切上下文」的夹具被静默改写。实测 3 处回归，报错信息与真实原因**完全无关**：科目冲突报「唯一键冲突」、隔离用例报「企业 B 的数据不应被查到」—— 后者极易被误判为*隔离机制失效*，进而反向把生产逻辑改松。
+    - **正确范式**（项目内已有范例：`OpeningContinuityRealDBTest` / `AuxiliaryDetailRealDBTest` / `CashSubjectBalanceRealDBTest` / `IncomeStatementCaliberRealDBTest`）：切**上下文** `useEnterprise(ENT_ID)`，不在实体上硬设；确需跨租户造数用 `AbstractMapperTest#withoutEnterpriseContext` 显式出口并在注释说明意图。
+    - **机械守卫**：`scripts/check_tenant_fixture.py` 已写好并反证过（注入两处违规 exit 1、真实仓库 exit 0），**2026-10-03 已挂进 `full-stack-test.yml` 的阻断式门禁** `tenant-fixture-check`（不加 `continue-on-error`）。反证手法可复用：把某测试类的 `useEnterprise(...)` 行删掉再跑脚本，应 exit 1 并精确指出行号。
+    - ⚠️ **守卫自身也有盲区（DIR-002，2026-10-03 已处理主要项）**：早期版本把「文件内出现 `useEnterprise(` 或 `withoutEnterpriseContext(`」当合规 ⇒ 既漏「上下文=A 而实体=B」的**静默错配**（代码正常编译、跑绿、无报错，症状是别的用例断言莫名失败），也会被纯文本替换骗过。已升级为 **A/B 两类判定**：A = 设了非默认企业号却没管上下文；B = `useEnterprise(X)` 与 `setEnterpriseId(Y)` 的 Y 不一致。**残留盲区 3 条**（求值不了的变量、默认值不参与 B 比对、`EnterpriseContextHolder.set()` 第三种写法）已写在脚本 docstring 里 —— **机械守卫只能挡住不自觉的违规，不能当唯一保障。**
+    - **配套教训**：加固类改动必须先问「谁在依赖被改掉的旧行为」，且**守卫脚本不接 CI 等于没有**（本条从「已写好」到「已挂门禁」隔了 3 天）。
+    - ⚠️ **判断「是不是默认值」必须求值、不能看常量名**：`private static final Long ENTERPRISE_ID = 1L;` 名字像非默认、值其实是默认；按名字判断会产生成片误报（本轮实测 21 处 / 4 个文件）。
+
+24. **本地跑 L2 有两个隐含前置，漏一个就会把环境问题误判为代码回归**（2026-10-03，DIR-003 实证）：`mvn test -DexcludedGroups=` 本机实测 **5 分钟**跑完 2023 个用例（并不需要"留夜间"），但两个前置没满足时报错**与真缺陷无法区分**：
+    - **Redis 必须先起**：`docker start huicai-redis`（`application.yml:9-11` 指向 `localhost:6379`）。未起时 `LedgerChainRealDBTest` / `VoucherIntegrationTest` / `BankStatementAuditIntegrationTest` 共 **11 个用例报 `RedisConnectionFailure`** —— 而 CI 侧 `l2-integration-test.yml` 有 `services.redis`，故**只在本地出现**。起 Redis 后同 3 类 **12/12 全绿**，证明非代码回归。
+    - **Testcontainers 需 Docker 守护可用**：否则表现为 `ConnectException` / `HikariPool - Connection is not available`。
+    - **判据**：报错里出现 `RedisConnectionFailure` / `ConnectException` 且**栈顶不在业务断言**时，先查环境再查代码。**「本地全绿 ⇒ 安全」不成立，「本地 L2 红 ⇒ 代码坏」同样不成立。**
+
+25. 🔴 **阈值标定后不重抬 ⇒ 棘轮退化为固定下限（2026-10-03 实测发现）**：覆盖率门禁 2026-09-30 按实测 32%/13%/56% 标定为 30%/12%/55%，三天后实测已升到 **38.9%/17.9%/61.8%**，而**阈值一步未抬** ⇒ 留了 8.9/5.9/6.8 个百分点的**静默回退空间**：覆盖率可以从 38.9% 一路跌到 30% 全程无人红。**「门禁会红」与「门禁卡得住」是两件事** —— 前者只需阈值不等于实测值（已实测会红），后者要求阈值紧贴实测值。
+    - **铁律**：**每次因补测试而提升覆盖率后，必须回来重抬阈值**；否则「棘轮」只是个名字。同类形态：任何「按当时实测值标定的下限」都会随代码演进而失效（阈值、扫描器存量、白名单都是快照）。
+    - **正确做法**：阈值写在**注释里连同实测值与标定日期**一起维护（`backend/pom.xml` 的 jacoco-check 注释块已按此重写，含口径说明：约束项是 L1，L2 更高）；标定依据用 `target/site/jacoco/jacoco.csv` 按包聚合，不要抄构建日志里的四舍五入值。
+    - 🔴 **但标定必须 `mvn clean test`，否则实测值虚高约 6 个百分点**（2026-10-03 实测踩坑）：`target/jacoco.exec` **跨 Maven 调用累积** —— 前一次 L2（`-DexcludedGroups=`，2023 用例）写入的覆盖数据不会自动清掉，与后一次 L1（1634 用例）叠加，于是 `jacoco.csv` 读到 38.9/17.9/61.8，而 clean 口径真值只有 **32.3/13.9/55.1**。据此把阈值抬到 36/16/58 后，**真实 CI 两个 L1 job 直接 BUILD FAILURE**（`Rule violated ... 0.32/0.13/0.55`）。**CI 每次都是全新 checkout（无 `target/`），故 CI 报出的值才是真值。**
+    - **顺带**：反证阈值本身也别忘 —— 把阈值临时抬到 0.99 跑一次，若不报 `Rule violated` 说明门禁根本没执行（呼应第 20 条的假绿形态），反证完记得 `git checkout --` 还原。
+
+26. 🔴 **XML 注释里不能用非 BMP 字符（emoji），否则 Maven 直接读不了 POM**（2026-10-03 实测）：给 `pom.xml` 的注释加 🔺（U+1F53A）后，`mvn test` 在 **Scanning for projects 阶段**就炸：
+    ```
+    Non-parseable POM ... Illegal character 0xd83d found in comment
+    ```
+    原因是 Java 的 XML 解析器按 UTF-16 处理，非 BMP 字符是**代理对**（高字节 `0xd83d`）⇒ 注释里出现即致命，且**报错位置指向 `END_TAG seen`**，与真正的出错字符相隔很远，肉眼很难定位。
+    - **判据**：改 `pom.xml`（或其它 XML）注释后，若报 `Non-parseable POM` / `Illegal character 0x???? found in comment`，先找注释里的 **emoji 与其它非 BMP 字符**（🔺🔴⚡️ 类，U+1F000 以上），BMP 内的 `⚠ ✅ ❌ → ⇒` 没问题。
+    - **同源提醒**：Markdown 文档（`AGENTS.md` / SPEC）里可以用 emoji，**XML 里不行** —— 同一段文字复制到两处时容易只改一半。
 
 
 ### 4.6 工作流执行类

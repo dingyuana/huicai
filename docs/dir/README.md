@@ -16,9 +16,9 @@ DIR-{序号}: {一句话问题描述}
 
 | DIR | 描述 | 类型 | 关联 | 状态 |
 |-----|------|------|------|------|
-| DIR-001 | **安全加固会静默改写测试造数，且症状伪装成「隔离失效」** | 规范缺失 | REQ-2026-129 / P102 | 🔴 待回写 AGENTS §4 |
-| DIR-002 | 静态检查若依赖调用方自觉遵守排除清单，其自身会成为新的假绿来源 | 流程错误 | REQ-2026-131 / P104 | 🟡 待评估 |
-| DIR-003 | 慢测（L2）只在夜间 CI 跑，本地无等价入口，导致「本地全绿 ⇒ 安全」不成立 | 流程错误 | REQ-2026-131 / P104 | 🟡 待评估 |
+| DIR-001 | **安全加固会静默改写测试造数，且症状伪装成「隔离失效」** | 规范缺失 | REQ-2026-129 / P102 | ✅ **已闭环**（2026-10-03）：已回写 AGENTS §4.5 第 23 条，且 `check_tenant_fixture.py` 已挂进 `full-stack-test.yml` 阻断式门禁 |
+| DIR-002 | 静态检查若依赖调用方自觉遵守排除清单，其自身会成为新的假绿来源 | 流程错误 | REQ-2026-131 / P104 | ✅ **主要盲区已消除**（2026-10-03 检测器升级为 A/B 两类判定，见下）；残留盲区 3 条已在脚本 docstring 明示 |
+| DIR-003 | 慢测（L2）只在夜间 CI 跑，本地无等价入口，导致「本地全绿 ⇒ 安全」不成立 | 流程错误 | REQ-2026-131 / P104 | ✅ **已回写** AGENTS §4.5 第 24 条（2026-10-03，实测 L2 本地 5 分钟可跑完） |
 
 ---
 
@@ -44,6 +44,21 @@ DIR-{序号}: {一句话问题描述}
 
 **待评估**：是否需要把判定升级为解析 `EnterpriseContextHolder` 的所有调用形式；或明确接受该盲区并在脚本文档中写明「仅覆盖两种范式」。
 
+**2026-10-03 反证时已实证该盲区，且比预想更严重**：反证过程中把 `CashFlowPeriodRangeRealDBTest` 的 `useEnterprise(` **纯文本替换**成 `withoutEnterpriseContext(`，检测器立刻判绿 —— 但这两者语义**相反**（前者切上下文、后者清上下文），替换后的夹具实际上必然失效。已把该盲区写进脚本 docstring（「检查工具自身也可能假绿」），并保留在 CI 阻断门禁中（净收益仍为正：能挡住绝大多数不自觉的违规）。
+**新增待办选项**：③ 检测器改为校验「`useEnterprise(常量)` 的实参与 `setEnterpriseId(常量)` 一致」，而不是只看 API 是否出现 —— 这能同时消掉「替换即骗过」与「传错企业号」两类漏判。
+
+**2026-10-03 已实施（选项 ③）**，检测器从「只判 API 是否出现」升级为两类判定：
+
+| 类 | 判什么 | 为什么重要 |
+|---|---|---|
+| **A** | 设了非默认企业号，却既无 `useEnterprise(` 也无 `withoutEnterpriseContext(` | 原判定，保持不变 |
+| **B** | **有 `useEnterprise(X)` 但与 `setEnterpriseId(Y)` 的 Y 不一致** | **此前完全不被检查，而它才是真正危险的形态**：上下文=A、实体=B 时 M2 的无条件覆盖会把实体静默改写成 A ⇒ 数据落到 A 而测试以为落在 B。**该代码能正常编译、正常跑绿、无任何报错**，症状是「另一个用例的断言莫名失败」，只能靠静态比对发现 |
+
+**同时纠正上条记录里的一个说法**：`useEnterprise(` → `withoutEnterpriseContext(` 的纯文本替换确实能骗过**检测器**，但替换后的 Java **根本无法编译**（`withoutEnterpriseContext(Runnable)` 不接受 `long` 实参）⇒ 该手法无法悄悄穿过 CI（编译阶段就会红）。所以真正值得补的是 **B 类**（编译正常、行为静默错误），现已覆盖。
+**三条残留盲区**（接受，已写进脚本 docstring）：① 目标企业写成变量/字段时无法静态求值（如 `setEnterpriseId(enterpriseId)`）→ 跳过；② `setEnterpriseId(1L)` 这类默认值不参与 B 类比对，故「上下文=2L + 实体=1L」的反向错配不报；③ 直接 `EnterpriseContextHolder.set(...)` 第三种写法不识别（但若同时有非默认 `setEnterpriseId` 且无两个 API，仍会被 A 类抓到）。
+**反证记录（4 项全绿）**：真实仓库 `exit=0`；`useEnterprise(ENT_ID)` 改成 `useEnterprise(9999L)` ⇒ B 类 `exit=1` 并指到 3 处；整行删掉 `useEnterprise(...)` ⇒ A 类 `exit=1` 并指到 3 处；合法的 `DataIsolationAuditTest`（`withoutEnterpriseContext` 跨租户隔离夹具）单独跑 ⇒ `exit=0`（无误报）。
+**实施中踩到的坑（已写成脚本注释）**：判断「是不是默认企业」必须**求值**而不是看常量名 —— `private static final Long ENTERPRISE_ID = 1L;` 这种「名字听着像非默认、值其实是默认」的写法，早期按常量名判断会产生 **21 处误报（4 个文件）**。
+
 ---
 
 ## DIR-003
@@ -53,3 +68,9 @@ DIR-{序号}: {一句话问题描述}
 - **关联**：REQ-2026-131 / P104
 
 **待评估**：涉及租户隔离、事务、RLS、真实 SQL 方言的改动，是否应约定「合并前必须本地跑一次 L2」；或在提交信息里强制标注该改动是否 L2-clean。
+
+**2026-10-03 实测结论（部分解答）**：`mvn test -DexcludedGroups=` 在本机 **5 分 00 秒**跑完 2023 个用例，**不需要留夜间** —— 「本地无等价入口」的前提已不成立。但取数时踩到该条描述的**第二重风险**（不是「跑得慢」，而是「跑出来的红不是代码红」）：
+- 首跑 `2023 / 0 Failures / 11 Errors / 5 Skipped`，11 个 Error **全部**是 `RedisConnectionFailure`（`LedgerChainRealDBTest` 4 + `VoucherIntegrationTest` 5 + `BankStatementAuditIntegrationTest` 2）。
+- 根因是本地 Redis 未起（`application.yml:9-11` 指向 `localhost:6379`，容器 `huicai-redis` 处于 Exited）；而 CI 的 `l2-integration-test.yml` 有 `services.redis` ⇒ **该失败模式只在本地出现**。
+- `docker start huicai-redis` 后重跑同 3 类：**12/12 全绿**，证明与代码无关。
+- **已沉淀**：AGENTS §4.5 第 24 条。**待办仍未关闭**：CI 无法验证「本地等价」，故合并前是否强制本地 L2 仍无机制保障 —— 建议要么在提交信息标注 L2-clean，要么把 Redis 也纳入 Testcontainers/Compose 的测试前置。
