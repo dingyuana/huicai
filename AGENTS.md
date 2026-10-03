@@ -4,8 +4,8 @@
 
 ## §0 项目状态（硬数字，每次 commit 后更新）
 
-> **更新基准**：commit `45c4f2ed`（P105 文档治理落地 + **6 处 P0 状态越权修复** + 状态越权门禁转 P0 强制）— 状态越权 6 处：销项发票 `VOUCHERED`、纳税申报 `APPROVED`、资产卡片 `DISPOSED/SCRAPPED`、资产盘点「完成盘点必然 500」、预算/预付、进项发票 `VOUCHERED`+`CERTIFIED`；全部真库负向用例红→绿。**本次（2026-10-03）**：①**补齐 2026-09-30 以来缺失的全量回归证据**（此前只跑定向回归）—— L1 `1634/0/0/5`、L2 真库 `2023/0/0/5`，两次均 `All coverage checks have been met`；②`feature/req-131-test-gate` 40 个 commit 快进合入 `develop`/`main`；③P101/P104/P105/P107 四份 SPEC 与开发计划状态批量回写
-> **当前分支**：`develop`（与 `main` 同步；`feature/req-131-test-gate` 已合入，40 commits）
+> **更新基准**：commit `45c4f2ed`（P105 文档治理落地 + **6 处 P0 状态越权修复** + 状态越权门禁转 P0 强制）— 状态越权 6 处：销项发票 `VOUCHERED`、纳税申报 `APPROVED`、资产卡片 `DISPOSED/SCRAPPED`、资产盘点「完成盘点必然 500」、预算/预付、进项发票 `VOUCHERED`+`CERTIFIED`；全部真库负向用例红→绿。**本次（2026-10-03）**：①**补齐 2026-09-30 以来缺失的全量回归证据**（此前只跑定向回归）—— L1 `1634/0/0/5`、L2 真库 `2023/0/0/5`，两次均 `All coverage checks have been met`；②`feature/req-131-test-gate` 与 `develop` 归位（`main` 早已经 14 个 PR 含全部功能 commit，是 `develop` 落后 24 个提交）；③P101/P104/P105/P107 四份 SPEC 与开发计划状态批量回写
+> **当前分支**：`develop`（已含 `feature/req-131-test-gate` 全部 commit）。⚠️ **`develop` 与 `main` 不同步**：`main` 经 14 个 PR（#10~#24）已含全部功能 commit，而 `develop` 此前长期停在 `9b76c55a`，落后 24 个提交 —— 判断基线时**以 `main` 为准**
 > **关联文档**：[项目说明](docs/CORE-项目说明.md)、[技术方案](docs/CORE-技术方案.md)、[需求分析](docs/CORE-需求分析.md)、[需求登记册](docs/development/requirements/REQUIREMENTS_REGISTRY.md)、[文档注册表](docs/CORE-文档注册表.md)、[测试策略](docs/testing/TEST-STRATEGY.md)、[Flyway治理规范](docs/development/standards/flyway-governance.md)、[商用化修复总纲](docs/specs/P101-commercial-gap-remediation.md)、[修复开发计划](docs/development/plans/2026-09-29-commercial-gap-remediation-plan.md)、[存量缺陷包](docs/specs/P107-stock-defect-fix-pack.md)
 
 | 维度 | 数据 |

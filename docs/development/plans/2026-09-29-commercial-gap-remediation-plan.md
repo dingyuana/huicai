@@ -4,7 +4,7 @@
 > **关联**：`docs/specs/P101-commercial-gap-remediation.md`（总纲）、子 SPEC P102~P107
 > **基线**：commit `ab2f7e02`（分支 `develop`）；全量 1998/0/0/5 绿
 > **范围**：排除 AI 功能（老丁 2026-09-29 指示）
-> **当前实施分支**：`feature/req-131-test-gate`（领先 `develop` 40 commits，2026-10-03 尚未合入）
+> **当前实施分支**：`feature/req-131-test-gate`（2026-10-03：其 40 个 commit 早已由 14 个 PR #10~#24 合入 `main`；落后的是 `develop`，本轮已快进归位）
 
 ---
 
