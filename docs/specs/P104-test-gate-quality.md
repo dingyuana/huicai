@@ -32,7 +32,7 @@
 
 | 输出 | 验收标准 | 实测状态（2026-10-03） |
 |---|---|---|
-| 门禁 | main PR 上真库套件（`-DexcludedGroups=`）必跑，**失败即红**（推一次故意失败验证） | 🚧 触发分支已含 `main`/`develop`、Redis service 已加、pgvector 镜像已改；**AT-104-3「整条流水线会在真库失败时变红」仍未验证**（静态门禁与覆盖率门禁已各自反证，见 AT-104-3 行） |
+| 门禁 | main PR 上真库套件（`-DexcludedGroups=`）必跑，**失败即红**（推一次故意失败验证） | 🚧 触发分支已含 `main`/`develop`、Redis service 已加、pgvector 镜像已改；Full Stack 内 4 个静态检测 2026-10-03 全部转为阻断式（接口覆盖改棘轮 `--max-uncovered 280` 并删 `continue-on-error`；状态越权 P0 强制；租户夹具 A/B 两类新增；路由覆盖解掉无效 `needs`）。**AT-104-3「整条流水线会在真库失败时变红」仍未验证**（各静态门禁与覆盖率门禁已各自反证） |
 | 成色 | 同义反复 `*MapperTest` 归零；核心模块真库覆盖 ≥60% | 🚧 归零 28/29（剩 `VoucherTemplateMapperTest`）；**60% 未达标**。⚠️ **2026-10-03 实测 L1 覆盖率 38.9%/17.9%/61.8%（443 类）已超原棘轮 30/12/55 约 6~7 个百分点，阈值当轮即重抬为 36/16/58**（`pom.xml` jacoco-check），缓冲 2.9/1.9/3.8 点；已实测该门禁会红（阈值抬到 0.99 ⇒ `Rule violated` + `BUILD FAILURE`）。**痛点已沉淀为 AGENTS §4.5 第 25 条：阈值不随覆盖率上涨重抬 ⇒ 棘轮退化为固定下限** |
 | 夹具 | 无违反 CHECK/外键的夹具 | ✅ 归零过程中修正（含 `BudgetMapperTest` 的 `OPERATION`、`EntityDbSchemaIntegrationTest` 类幻觉夹具） |
 | 文档 | `TEST-STRATEGY.md` 与实际一致（分层/覆盖/门禁/硬数字） | ✅ 已按实测重写（登记册 V1.45） |

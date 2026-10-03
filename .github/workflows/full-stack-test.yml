@@ -41,10 +41,14 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: 运行接口覆盖检测
-        run: python scripts/check_api_coverage.py
-        # 🔥 修改1：防止因未对接接口过多导致退出码为1从而阻断整个流水线
-        continue-on-error: true 
+      # 2026-10-03：由「恒绿」改为「棘轮」。
+      # 此前本 job 带 continue-on-error: true，等于恒绿（真出事也没人看）；但直接
+      # 去掉又会恒红 —— 基线是「后端 280 个端点前端未接」，280 条存量会让人习惯性
+      # 忽略门禁（AGENTS §4.5 第 21 条：恒绿与恒红同样有害）。
+      # 故改为与 JaCoCo 同款的棘轮：上限写死为实测值，只在**倒退**时红。
+      # ⚠️ 每修掉一批端点接入，必须回来下调 --max-uncovered（否则棘轮变固定上限）。
+      - name: 运行接口覆盖检测（棘轮模式）
+        run: python scripts/check_api_coverage.py --max-uncovered 280 --max-orphan 0 
 
   entity-status-massassignment-check:
     name: 实体入参状态越权检测
@@ -82,7 +86,9 @@ jobs:
   route-coverage-check:
     name: 路由覆盖检测
     runs-on: ubuntu-latest
-    needs: api-coverage-check
+    # 2026-10-03：删除 needs: api-coverage-check。
+    # 原依赖毫无意义 —— 被依赖的 job 带 continue-on-error 恒不阻断，
+    # 于是「A 完成后跑 B」退化成纯粹的时间串行；两者本无因果关系。
     steps:
       - uses: actions/checkout@v4
 
