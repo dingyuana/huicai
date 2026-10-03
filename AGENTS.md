@@ -12,7 +12,7 @@
 |------|------|
 | 后端代码 | 499 个 Java 主代码文件（另 244 个测试类文件）|
 | 测试用例 | **2023 个可执行测试注解**（`@Test` 2020 + `@TestFactory` 3）/ 244 个后端测试类 + 26 个前端测试文件 265 用例。**2026-10-03 全量实测：L1 `mvn test` = 1634 通过 / 0 Failures / 0 Errors / 5 Skipped（2 分 50 秒）；L2 真库 `mvn test -DexcludedGroups=` = 2023 通过 / 0 Failures / 0 Errors / 5 Skipped（3 分 25 秒）**，两次均打印 `All coverage checks have been met`（覆盖率门禁真执行，非静默跳过）。⚠️ **本地跑 L2 必须先 `docker start huicai-redis`**，否则 11 个用例报 `RedisConnectionFailure`（环境型红，非代码回归，见 §4.5 第 24 条）|
-| 覆盖率 | 棘轮门禁 INSTRUCTION ≥30% / BRANCH ≥12% / METHOD ≥55%（按 2026-09-30 L1 实测 32%/13%/56% 标定；70% 是目标非现状，`pom.xml:332-346`）|
+| 覆盖率 | 棘轮门禁 INSTRUCTION ≥30% / BRANCH ≥12% / METHOD ≥55%（`pom.xml:332-346`）。⚠️ **2026-10-03 实测 L1 真实值已升至 38.9% / 17.9% / 61.8%（443 类，jacoco.csv）而阈值一步未抬 ⇒ 留 8.9/5.9/6.8 个百分点静默回退空间，棘轮实为固定下限，待老丁拍板是否抬高**。已实测该门禁会红（阈值抬到 0.99 ⇒ `Rule violated` + `BUILD FAILURE`）|
 | 数据库 | PostgreSQL 16 / **82 个 migration，最新 V166**（V160=D1 补 `DISPUTED`、V161=对账审计表、V162=D8 补 `PENDING_CONFIRM`、V163=权限码种子、V164=治愈 identity 序列落后、V165=补代理用户企业种子、V166=FORCE RLS；注意：版本号非连续，缺 V6-V62 与 V64-V91 共 85 个号；因 `out-of-order: true` + `validate-on-migrate: false` 不影响运行）|
 | API 端点 | 510+ 个后端端点 |
 | 核心模块 | 基础数据、总账、应收应付、现金管理、固定资产、费用报销、发票税务、预算、财务报表、存储管理 |

@@ -33,7 +33,7 @@
 | 输出 | 验收标准 | 实测状态（2026-10-03） |
 |---|---|---|
 | 门禁 | main PR 上真库套件（`-DexcludedGroups=`）必跑，**失败即红**（推一次故意失败验证） | 🚧 触发分支已含 `main`/`develop`、Redis service 已加、pgvector 镜像已改；**AT-104-3「整条流水线会在真库失败时变红」仍未验证**（静态门禁与覆盖率门禁已各自反证，见 AT-104-3 行） |
-| 成色 | 同义反复 `*MapperTest` 归零；核心模块真库覆盖 ≥60% | 🚧 归零 28/29（剩 `VoucherTemplateMapperTest`）；**60% 未达标**，L1 实测 INSTRUCTION 32%/BRANCH 13%/METHOD 56%，棘轮门禁 30%/12%/55% |
+| 成色 | 同义反复 `*MapperTest` 归零；核心模块真库覆盖 ≥60% | 🚧 归零 28/29（剩 `VoucherTemplateMapperTest`）；**60% 未达标**。⚠️ **2026-10-03 实测 L1 真实覆盖率已升至 INSTRUCTION 38.9% / BRANCH 17.9% / METHOD 61.8%**（443 个类），而棘轮仍是 30%/12%/55%（按 2026-09-30 的 32%/13%/56% 标定）⇒ **棘轮未随覆盖率上涨而抬高，留有 8.9/5.9/6.8 个百分点的回退空间无人看守** |
 | 夹具 | 无违反 CHECK/外键的夹具 | ✅ 归零过程中修正（含 `BudgetMapperTest` 的 `OPERATION`、`EntityDbSchemaIntegrationTest` 类幻觉夹具） |
 | 文档 | `TEST-STRATEGY.md` 与实际一致（分层/覆盖/门禁/硬数字） | ✅ 已按实测重写（登记册 V1.45） |
 
@@ -60,7 +60,7 @@ L1 拦 Mock 回归，L2 拦真库缺陷（历史上 136 项慢测缺陷均由真
 |---|---|---|---|---|
 | AT-104-1 | main 分支 PR | CI 触发 | L2 真库 job 执行（不再只在 develop） | CI |
 | AT-104-2 | L2 job | 执行 | 预拉 `pgvector/pgvector:pg16` 成功 | CI 日志 |
-| AT-104-3 | 真库套件有失败 | 提交 | PR 变红（门禁有效的唯一证明） | CI | 🟡 **部分反证（2026-10-03）**：静态门禁 `check_tenant_fixture.py` 已完成红→绿反证（删 `useEnterprise(...)` 行 ⇒ exit 1 并指到 3 处 `setEnterpriseId(ENT_ID)`；恢复 ⇒ exit 0），并已挂成阻断式 CI 门禁；覆盖率门禁已实测打印 `All coverage checks have been met`（非 `Skipping…`）。**仍未做**：在真实 PR 上制造一次真库失败以证明整条流水线会红 |
+| AT-104-3 | 真库套件有失败 | 提交 | PR 变红（门禁有效的唯一证明） | CI | 🟡 **部分反证（2026-10-03）**：静态门禁 `check_tenant_fixture.py` 已完成红→绿反证（删 `useEnterprise(...)` 行 ⇒ `exit=1` 并指到 3 处 `setEnterpriseId(ENT_ID)`；恢复 ⇒ `exit=0`），已挂成阻断式 CI 门禁；覆盖率门禁亦已实测会红（临时把 `INSTRUCTION` 阈值抬到 `0.99` ⇒ `Rule violated … ratio is 0.38, but expected minimum is 0.99` + `BUILD FAILURE`，随后已还原 `pom.xml`）。**仍未做**：在真实 PR 上制造一次真库失败以证明整条流水线会红 |
 | AT-104-4 | 29 个同义反复类 | 改造 | 均 `extends AbstractMapperTest` 或删除，真实执行 SQL | 计数 | 🚧 28/29（仅 `VoucherTemplateMapperTest` 待改） |
 | AT-104-5 | `BudgetMapperTest` | 改造 | 无 `OPERATION` 违规夹具，预算 CHECK 被真库验证 | 真实 DB |
 | AT-104-6 | 新增核心模块测试 | 评审 | 含负向断言（assertFalse/assertNull） | 抽检 |
