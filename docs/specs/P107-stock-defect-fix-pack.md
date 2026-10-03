@@ -1,9 +1,9 @@
 # P107 SPEC — 审计发现的存量缺陷修复包（6 项 P0/P1）
 
-> **版本**：V1.0（草案，待老丁审核） | **最后修改**：2026-09-29 | **作者**：opencode
-> **编号**：HUICAI-SPC-P107 | 优先级：**P0** | 状态：📋 待审核
+> **版本**：V1.2（实施回写） | **最后修改**：2026-10-03 | **作者**：opencode
+> **编号**：HUICAI-SPC-P107 | 优先级：**P0** | 状态：✅ **已实施（2026-09-30，D1~D6 + D8）**
 > **来源**：2026-09-29 代码功能审计（代理 C）发现的 6 项「读代码即可确认、修复路径明确」的存量缺陷
-> **关联需求**：REQ-2026-133 | **前置**：无（可与 P102~P105 并行） | **test_ref**：`CustomerStatementRealDBTest`、`VoucherImmutabilityRealDBTest`、`BankReconciliationRealDBTest`、`AgentBatchServiceTest`
+> **关联需求**：REQ-2026-134（⚠️ V1.0 原写 REQ-2026-133 有误 —— 133 归 P106 内控深度，且该编号从未登记）| **前置**：无（可与 P102~P105 并行） | **test_ref**：`CustomerStatementRealDBTest`、`VoucherImmutabilityRealDBTest`、`BankReconciliationRealDBTest`、`AgentBatchServiceTest`
 > **与 P102~P105 的分工**：P102~P105 是**架构级基座改造**（安全基座/审计/门禁/文档）；本 SPEC 是**点状缺陷修复**，混入会拖慢基座进度，故独立立项
 
 ---
@@ -17,7 +17,7 @@
 | D3 | 代理端批量服务空壳却报成功 | `BatchAuditServiceImpl:40`、`BatchCloseServiceImpl:30`、`BatchImportServiceImpl:34` 均 `// TODO` + `item.setSuccess(true)` | 一个对象都没改，API 却返回 `success=N, failed=0` ⇒ 比抛异常更危险（代理会向客户确认已结账） | P0 |
 | D4 | 银行对账确认/驳回空壳 | `BankReconciliationServiceImpl:411-424` | `confirmMatch`/`rejectMatch` 只 `return new ConfirmResult(...,"MATCHED")`，**不写 `t_bank_statement.match_status`、不记对账日志** ⇒ UI 显示已匹配，DB 恒 `UNMATCHED`，对账永不收敛 | P0 |
 | D5 | 金额精度 `new BigDecimal(double)` | `BankStatementExcelImportService:140`（`new BigDecimal(cell.getNumericCellValue())`）、`TaxServiceImpl:878`（`new BigDecimal(((Number)v).doubleValue())`） | 二进制浮点直转，`12345678.9` 可产出 `12345678.899999999`，**直接落财务表**；违反铁律 #1 | P1 |
-| D7 | —— | —— | —— | —— |
+| ~~D7~~ | **编号预留空位，从未定义** | —— | 初稿为对齐 D1~D8 编号留的空行，无对应缺陷、无位置、无症状、无优先级。**全库 `docs/` 内不存在 D9/D10** | —— |
 | D8 | 银行流水「待人工确认」态违反 CHECK | `BankReconciliationServiceImpl:332` `updateMatch(..., "PENDING_CONFIRM")` | `chk_stmt_match_status` 允许集为 `('UNMATCHED','MATCHED','MANUAL_MATCHED','IGNORED')`，**无 `PENDING_CONFIRM`** ⇒ 自动匹配落到 60-84 分档必抛 SQL 错；该态被 `summarize`/`unmatchedItems`/Controller/Service 注释全链路引用，属**设计意图而非笔误**（D4 修复时暴露） | P0 |
 
 ## 5.5 实施结果（2026-09-30，D1~D6 + D8 全部完成）
@@ -118,3 +118,4 @@ D6: 口令 ──明文──▶ ${ENV_VAR} 注入 (无默认值或空串)
 |---|---|---|---|
 | V1.0 | 2026-09-29 | opencode | 初稿：承接 2026-09-29 代码审计，6 项 P0/P1 点状缺陷（D1 CHECK 违约 / D2 凭证物理删 / D3 批量空壳 / D4 对账空壳 / D5 金额精度 / D6 明文口令），与架构级 P102~P105 分离 |
 | V1.1 | 2026-09-30 | opencode | 实施结果回写：新增 §5.5 实施结果表（D1~D6 + D8，含红→绿反证与定向回归数字）；**新增 D8**（`chk_stmt_match_status` 缺 `PENDING_CONFIRM` 设计态，D4 实施时暴露）；D2 结论修正（`BaseEntity` 已带 `@TableLogic`，MP 逻辑删除本已生效，缺口仅 XML 三处 + 4 个零调用方物理 DELETE）；D4 人工确认落 `MANUAL_MATCHED` 而非 `MATCHED`；D5 实测 3 处缺陷（P107 登记 2 处） |
+| V1.2 | 2026-10-03 | opencode | **文档一致性回写**：①头部状态由「📋 待审核」改为「✅ 已实施（2026-09-30）」—— 实施早在 V1.1 完成，状态却从未翻过，与代码实况矛盾；②**关联需求 REQ-2026-133 更正为 REQ-2026-134**（133 归 P106 内控深度且从未登记，134 才是本 SPEC 在登记册的编号）；③**D7 空占位行**由「全字段 `——`」改为显式说明「编号预留、从未定义」，并核实 **D9/D10 在全库 `docs/` 内不存在**，杜绝后续把空位误读为「两项未修缺陷」 |

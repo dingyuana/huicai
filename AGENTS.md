@@ -4,23 +4,25 @@
 
 ## §0 项目状态（硬数字，每次 commit 后更新）
 
-> **更新基准**：commit `79e9eec7`（REQ-2026-126 预算执行控制）+ REQ-2026-127（银行流水制证科目防护）+ **本次 REQ-2026-134（P107 存量缺陷修复包 D1~D6 + D8）** — D1 对账 DISPUTED 补 CHECK(V160)、D2 凭证分录物理删→软删、D3 批量空壳抛 501、D4 对账确认/驳回落库+审计表(V161)、D5 金额精度 3 处、D6 明文口令环境变量化、**D8 银行流水 PENDING_CONFIRM 补 CHECK(V162)**；全部 TDD 红→绿含反证，定向回归 83/83（**全量回归留夜间自动跑**）
-> **当前分支**：`develop`（本地领先 origin，**未 push**）
+> **更新基准**：commit `45c4f2ed`（P105 文档治理落地 + **6 处 P0 状态越权修复** + 状态越权门禁转 P0 强制）— 状态越权 6 处：销项发票 `VOUCHERED`、纳税申报 `APPROVED`、资产卡片 `DISPOSED/SCRAPPED`、资产盘点「完成盘点必然 500」、预算/预付、进项发票 `VOUCHERED`+`CERTIFIED`；全部真库负向用例红→绿。**本次（2026-10-03）**：①**补齐 2026-09-30 以来缺失的全量回归证据**（此前只跑定向回归）—— L1 `1634/0/0/5`、L2 真库 `2023/0/0/5`，两次均 `All coverage checks have been met`；②`feature/req-131-test-gate` 40 个 commit 快进合入 `develop`/`main`；③P101/P104/P105/P107 四份 SPEC 与开发计划状态批量回写
+> **当前分支**：`develop`（与 `main` 同步；`feature/req-131-test-gate` 已合入，40 commits）
 > **关联文档**：[项目说明](docs/CORE-项目说明.md)、[技术方案](docs/CORE-技术方案.md)、[需求分析](docs/CORE-需求分析.md)、[需求登记册](docs/development/requirements/REQUIREMENTS_REGISTRY.md)、[文档注册表](docs/CORE-文档注册表.md)、[测试策略](docs/testing/TEST-STRATEGY.md)、[Flyway治理规范](docs/development/standards/flyway-governance.md)、[商用化修复总纲](docs/specs/P101-commercial-gap-remediation.md)、[修复开发计划](docs/development/plans/2026-09-29-commercial-gap-remediation-plan.md)、[存量缺陷包](docs/specs/P107-stock-defect-fix-pack.md)
 
 | 维度 | 数据 |
 |------|------|
-| 后端代码 | 492 个 Java 主代码文件（另 237 个测试文件）|
-| 测试用例 | **2023 个可执行测试注解**（`@Test` 2020 + `@TestFactory` 3）/ 236 个后端测试类 + 26 个前端测试文件 265 用例（最近一次**全量实测 1998 通过，0 Failures, 0 Errors, 5 Skipped**，为 REQ-2026-127 时的基线；本轮 REQ-2026-134 新增 7 个测试类 25 个用例：**定向回归 83/83 全绿**，全量回归留夜间自动跑。注：此前登记的「2002」为约数，按 `grep -P '@Test(?![A-Za-z])'` 重新核算）|
-| 数据库 | PostgreSQL 16 / **78 个 migration，最新 V162**（注意：版本号非连续，实际为 V1-V5 + V63 + V92-V162，缺 V6-V62 与 V64-V91 共 85 个号；因 `out-of-order: true` + `validate-on-migrate: false` 不影响运行，但「V1 baseline merged V1-V146」的旧表述已失效）|
+| 后端代码 | 499 个 Java 主代码文件（另 244 个测试类文件）|
+| 测试用例 | **2023 个可执行测试注解**（`@Test` 2020 + `@TestFactory` 3）/ 244 个后端测试类 + 26 个前端测试文件 265 用例。**2026-10-03 全量实测：L1 `mvn test` = 1634 通过 / 0 Failures / 0 Errors / 5 Skipped（2 分 50 秒）；L2 真库 `mvn test -DexcludedGroups=` = 2023 通过 / 0 Failures / 0 Errors / 5 Skipped（3 分 25 秒）**，两次均打印 `All coverage checks have been met`（覆盖率门禁真执行，非静默跳过）。⚠️ **本地跑 L2 必须先 `docker start huicai-redis`**，否则 11 个用例报 `RedisConnectionFailure`（环境型红，非代码回归，见 §4.5 第 24 条）|
+| 覆盖率 | 棘轮门禁 INSTRUCTION ≥30% / BRANCH ≥12% / METHOD ≥55%（按 2026-09-30 L1 实测 32%/13%/56% 标定；70% 是目标非现状，`pom.xml:332-346`）|
+| 数据库 | PostgreSQL 16 / **82 个 migration，最新 V166**（V160=D1 补 `DISPUTED`、V161=对账审计表、V162=D8 补 `PENDING_CONFIRM`、V163=权限码种子、V164=治愈 identity 序列落后、V165=补代理用户企业种子、V166=FORCE RLS；注意：版本号非连续，缺 V6-V62 与 V64-V91 共 85 个号；因 `out-of-order: true` + `validate-on-migrate: false` 不影响运行）|
 | API 端点 | 510+ 个后端端点 |
 | 核心模块 | 基础数据、总账、应收应付、现金管理、固定资产、费用报销、发票税务、预算、财务报表、存储管理 |
 | 业务单据类型 | 11 种（RECEIPT/PAYMENT/EXPENSE/INVOICE_IN/INVOICE_OUT/OTHER_RECEIVABLE/OTHER_PAYABLE/TRANSFER/SALARY/PRE_RECEIVE/PRE_PAY）|
 | AI 服务 | Python FastAPI 5 端点（health/anomaly/embedding/match/ocr）|
 | 技术栈 | Spring Boot 3.x + MyBatis-Plus + Redis 7 + MinIO + RabbitMQ |
 | 开发流程 | 大闭环 + 内循环（three-phase-loop v3.0）|
-| P0-P2 阶段 | ✅ 100% 完成（基础体系 + 缺陷修复 + AI 辅助能力）|
+| P0-P2 阶段 | 🟡 **功能模块**基本完成（基础体系 + 缺陷修复 + AI 辅助能力），但**基座与内控未收口**：M5b 角色降权待人工执行、DTO 隔离三批（约 25 Controller）未做、P106 内控深度（年结/制单≠审核/多账套）**未立项**、门禁「故意失败反证」未做（详见 P101 §2 实测状态列）|
 | P3 远期 | ⏳ 0%（经营分析/预算预测/风控/工资薪酬）|
+| CI 门禁 | 6 个 workflow：L1 单测 / L2 真库 / Full Stack / SPEC 契约 / 夜间 E2E / 性能基线。⚠️ 已知缺口：`check_api_coverage.py` 带 `continue-on-error`（不阻断）、`scripts/check_tenant_fixture.py` **未挂任何 workflow** |
 
 ---
 
@@ -280,6 +282,15 @@
     - **判「恒红」通用解法**：把不可达成的硬失败**降级为警告 + 留强制开关**。SPEC 门禁用 `--require-contract`、覆盖率用实测值做**棘轮**、路由检查只对「路由指向不存在组件」判失败 —— 原则一致：**门禁必须可执行且能变红，否则等于没有**。
 
 22. **多文件配置只读其一 ⇒ 误报成批**（2026-09-30）：`check_route_coverage.py` 硬编码单文件 `base.ts`，而路由实际拆在 8 个文件（`agency/base/lab/sme-asset/sme-base/sme-business/sme-report/sme-tax`），96 条只认出 23 条。同类：validator 用 glob `P*-*.md` 却假设单一 schema。**教训：解析多份配置必须 `glob` 全部，且改完立刻跑一遍看「认出的条数」是否与实际数量级相符**（23 vs 96 这种量级差一眼可见）。
+
+23. **安全加固会静默改写测试造数，症状伪装成「隔离失效」**（2026-09-30，源自 DIR-001，REQ-2026-129/P102-M2）：把 `MyMetaObjectHandler.insertFill` 的 `enterpriseId` 从 `strictInsertFill` 改为**无条件覆盖**（正确修复，堵死 48 处 Entity 直入越权）后，所有「只给实体硬设 `enterpriseId` 而未切上下文」的夹具被静默改写。实测 3 处回归，报错信息与真实原因**完全无关**：科目冲突报「唯一键冲突」、隔离用例报「企业 B 的数据不应被查到」—— 后者极易被误判为*隔离机制失效*，进而反向把生产逻辑改松。
+    - **正确范式**（项目内已有范例：`OpeningContinuityRealDBTest` / `AuxiliaryDetailRealDBTest` / `CashSubjectBalanceRealDBTest` / `IncomeStatementCaliberRealDBTest`）：切**上下文** `useEnterprise(ENT_ID)`，不在实体上硬设；确需跨租户造数用 `AbstractMapperTest#withoutEnterpriseContext` 显式出口并在注释说明意图。
+    - **机械守卫**：`scripts/check_tenant_fixture.py` 已写好并反证过（注入两处违规 exit 1、真实仓库 exit 0），**但截至 2026-10-03 仍未挂进任何 workflow** ⇒ 同类夹具仍可混入。**教训：加固类改动必须先问「谁在依赖被改掉的旧行为」，且守卫脚本不接 CI 等于没有。**
+
+24. **本地跑 L2 有两个隐含前置，漏一个就会把环境问题误判为代码回归**（2026-10-03，DIR-003 实证）：`mvn test -DexcludedGroups=` 本机实测 **5 分钟**跑完 2023 个用例（并不需要"留夜间"），但两个前置没满足时报错**与真缺陷无法区分**：
+    - **Redis 必须先起**：`docker start huicai-redis`（`application.yml:9-11` 指向 `localhost:6379`）。未起时 `LedgerChainRealDBTest` / `VoucherIntegrationTest` / `BankStatementAuditIntegrationTest` 共 **11 个用例报 `RedisConnectionFailure`** —— 而 CI 侧 `l2-integration-test.yml` 有 `services.redis`，故**只在本地出现**。起 Redis 后同 3 类 **12/12 全绿**，证明非代码回归。
+    - **Testcontainers 需 Docker 守护可用**：否则表现为 `ConnectException` / `HikariPool - Connection is not available`。
+    - **判据**：报错里出现 `RedisConnectionFailure` / `ConnectException` 且**栈顶不在业务断言**时，先查环境再查代码。**「本地全绿 ⇒ 安全」不成立，「本地 L2 红 ⇒ 代码坏」同样不成立。**
 
 
 ### 4.6 工作流执行类
