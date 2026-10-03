@@ -33,7 +33,7 @@
 | 输出 | 验收标准 | 实测状态（2026-10-03） |
 |---|---|---|
 | 门禁 | main PR 上真库套件（`-DexcludedGroups=`）必跑，**失败即红**（推一次故意失败验证） | 🚧 触发分支已含 `main`/`develop`、Redis service 已加、pgvector 镜像已改；Full Stack 内 4 个静态检测 2026-10-03 全部转为阻断式（接口覆盖改棘轮 `--max-uncovered 280` 并删 `continue-on-error`；状态越权 P0 强制；租户夹具 A/B 两类新增；路由覆盖解掉无效 `needs`）。**AT-104-3「整条流水线会在真库失败时变红」仍未验证**（各静态门禁与覆盖率门禁已各自反证） |
-| 成色 | 同义反复 `*MapperTest` 归零；核心模块真库覆盖 ≥60% | 🚧 归零 28/29（剩 `VoucherTemplateMapperTest`）；**60% 未达标**。⚠️ **2026-10-03 实测 L1 覆盖率 38.9%/17.9%/61.8%（443 类）已超原棘轮 30/12/55 约 6~7 个百分点，阈值当轮即重抬为 36/16/58**（`pom.xml` jacoco-check），缓冲 2.9/1.9/3.8 点；已实测该门禁会红（阈值抬到 0.99 ⇒ `Rule violated` + `BUILD FAILURE`）。**痛点已沉淀为 AGENTS §4.5 第 25 条：阈值不随覆盖率上涨重抬 ⇒ 棘轮退化为固定下限** |
+| 成色 | 同义反复 `*MapperTest` 归零；核心模块真库覆盖 ≥60% | 🚧 归零 28/29（剩 `VoucherTemplateMapperTest`）；**60% 未达标**。⚠️ **2026-10-03 按 clean 口径实测 L1 = 32.3% / 13.9% / 55.1%**（443 类），棘轮定为 **30/12/54**。**踩坑记录**：先用不带 `clean` 的 `mvn test` 读 `jacoco.csv` 得 38.9/17.9/61.8 并据此抬到 36/16/58，**真实 CI 立刻 BUILD FAILURE** ⇒ `target/jacoco.exec` 跨 Maven 调用累积（被上一次 L2 的 2023 用例污染），虚高约 6 个百分点。**教训已沉淀为 AGENTS §4.5 第 25 条：标定必须 `mvn clean test`；CI 是全新 checkout，CI 报出的值才是真值** |
 | 夹具 | 无违反 CHECK/外键的夹具 | ✅ 归零过程中修正（含 `BudgetMapperTest` 的 `OPERATION`、`EntityDbSchemaIntegrationTest` 类幻觉夹具） |
 | 文档 | `TEST-STRATEGY.md` 与实际一致（分层/覆盖/门禁/硬数字） | ✅ 已按实测重写（登记册 V1.45） |
 
@@ -60,7 +60,7 @@ L1 拦 Mock 回归，L2 拦真库缺陷（历史上 136 项慢测缺陷均由真
 |---|---|---|---|---|
 | AT-104-1 | main 分支 PR | CI 触发 | L2 真库 job 执行（不再只在 develop） | CI |
 | AT-104-2 | L2 job | 执行 | 预拉 `pgvector/pgvector:pg16` 成功 | CI 日志 |
-| AT-104-3 | 真库套件有失败 | 提交 | PR 变红（门禁有效的唯一证明） | CI | 🟡 **部分反证（2026-10-03）**：静态门禁 `check_tenant_fixture.py` 已完成 A/B 两类红→绿反证（A：删 `useEnterprise(...)` ⇒ `exit=1`；B：`useEnterprise(9999L)` 对 `setEnterpriseId(9901L)` ⇒ `exit=1`；合法 `withoutEnterpriseContext` 夹具 ⇒ `exit=0` 无误报），并已挂成阻断式 CI 门禁；覆盖率门禁亦已实测会红（阈值抬到 `0.99` ⇒ `Rule violated … ratio is 0.38` + `BUILD FAILURE`，已还原 `pom.xml`）。**仍未做**：在真实 PR 上制造一次真库失败以证明整条流水线会红 |
+| AT-104-3 | 真库套件有失败 | 提交 | PR 变红（门禁有效的唯一证明） | CI | 🟡 **真实 CI 已实证一次（2026-10-03，PR #25）**：两个 L1 job 被覆盖率门禁拉红（`Tests run: 1634, Failures: 0` 后 `Rule violated … 0.32/0.13/0.55` + `BUILD FAILURE`）—— 非故意制造，但性质相同：**门禁确实会在真实 CI 上拦住提交**。静态门禁（租户夹具 A/B 两类）与覆盖率门禁均另有本地红→绿反证。**仍未做**：故意制造一次真库（slow 组）失败以证明 L2 job 的红→绿 |
 | AT-104-4 | 29 个同义反复类 | 改造 | 均 `extends AbstractMapperTest` 或删除，真实执行 SQL | 计数 | 🚧 28/29（仅 `VoucherTemplateMapperTest` 待改） |
 | AT-104-5 | `BudgetMapperTest` | 改造 | 无 `OPERATION` 违规夹具，预算 CHECK 被真库验证 | 真实 DB |
 | AT-104-6 | 新增核心模块测试 | 评审 | 含负向断言（assertFalse/assertNull） | 抽检 |
