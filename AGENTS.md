@@ -12,7 +12,7 @@
 |------|------|
 | 后端代码 | 499 个 Java 主代码文件（另 244 个测试类文件）|
 | 测试用例 | **2023 个可执行测试注解**（`@Test` 2020 + `@TestFactory` 3）/ 244 个后端测试类 + 26 个前端测试文件 265 用例。**2026-10-03 全量实测：L1 `mvn test` = 1634 通过 / 0 Failures / 0 Errors / 5 Skipped（2 分 50 秒）；L2 真库 `mvn test -DexcludedGroups=` = 2023 通过 / 0 Failures / 0 Errors / 5 Skipped（3 分 25 秒）**，两次均打印 `All coverage checks have been met`（覆盖率门禁真执行，非静默跳过）。⚠️ **本地跑 L2 必须先 `docker start huicai-redis`**，否则 11 个用例报 `RedisConnectionFailure`（环境型红，非代码回归，见 §4.5 第 24 条）|
-| 覆盖率 | 棘轮门禁 INSTRUCTION ≥30% / BRANCH ≥12% / METHOD ≥55%（`pom.xml:332-346`）。⚠️ **2026-10-03 实测 L1 真实值已升至 38.9% / 17.9% / 61.8%（443 类，jacoco.csv）而阈值一步未抬 ⇒ 留 8.9/5.9/6.8 个百分点静默回退空间，棘轮实为固定下限，待老丁拍板是否抬高**。已实测该门禁会红（阈值抬到 0.99 ⇒ `Rule violated` + `BUILD FAILURE`）|
+| 覆盖率 | 棘轮门禁 **INSTRUCTION ≥36% / BRANCH ≥16% / METHOD ≥58%**（`backend/pom.xml` jacoco-check）。2026-10-03 按实测重抬（原 30/12/55 已名存实亡）：L1 真实值 **38.9% / 17.9% / 61.8%**（443 类，jacoco.csv），缓冲 2.9/1.9/3.8 点。已实测该门禁会红（阈值抬到 0.99 ⇒ `Rule violated` + `BUILD FAILURE`）。⚠️ **每次补测试提升覆盖率后必须回来重抬阈值**，否则棘轮退化为固定下限 |
 | 数据库 | PostgreSQL 16 / **82 个 migration，最新 V166**（V160=D1 补 `DISPUTED`、V161=对账审计表、V162=D8 补 `PENDING_CONFIRM`、V163=权限码种子、V164=治愈 identity 序列落后、V165=补代理用户企业种子、V166=FORCE RLS；注意：版本号非连续，缺 V6-V62 与 V64-V91 共 85 个号；因 `out-of-order: true` + `validate-on-migrate: false` 不影响运行）|
 | API 端点 | 510+ 个后端端点 |
 | 核心模块 | 基础数据、总账、应收应付、现金管理、固定资产、费用报销、发票税务、预算、财务报表、存储管理 |
@@ -293,6 +293,19 @@
     - **Redis 必须先起**：`docker start huicai-redis`（`application.yml:9-11` 指向 `localhost:6379`）。未起时 `LedgerChainRealDBTest` / `VoucherIntegrationTest` / `BankStatementAuditIntegrationTest` 共 **11 个用例报 `RedisConnectionFailure`** —— 而 CI 侧 `l2-integration-test.yml` 有 `services.redis`，故**只在本地出现**。起 Redis 后同 3 类 **12/12 全绿**，证明非代码回归。
     - **Testcontainers 需 Docker 守护可用**：否则表现为 `ConnectException` / `HikariPool - Connection is not available`。
     - **判据**：报错里出现 `RedisConnectionFailure` / `ConnectException` 且**栈顶不在业务断言**时，先查环境再查代码。**「本地全绿 ⇒ 安全」不成立，「本地 L2 红 ⇒ 代码坏」同样不成立。**
+
+25. 🔴 **阈值标定后不重抬 ⇒ 棘轮退化为固定下限（2026-10-03 实测发现）**：覆盖率门禁 2026-09-30 按实测 32%/13%/56% 标定为 30%/12%/55%，三天后实测已升到 **38.9%/17.9%/61.8%**，而**阈值一步未抬** ⇒ 留了 8.9/5.9/6.8 个百分点的**静默回退空间**：覆盖率可以从 38.9% 一路跌到 30% 全程无人红。**「门禁会红」与「门禁卡得住」是两件事** —— 前者只需阈值不等于实测值（已实测会红），后者要求阈值紧贴实测值。
+    - **铁律**：**每次因补测试而提升覆盖率后，必须回来重抬阈值**；否则「棘轮」只是个名字。同类形态：任何「按当时实测值标定的下限」都会随代码演进而失效（阈值、扫描器存量、白名单都是快照）。
+    - **正确做法**：阈值写在**注释里连同实测值与标定日期**一起维护（`backend/pom.xml` 的 jacoco-check 注释块已按此重写，含口径说明：约束项是 L1，L2 更高）；标定依据用 `target/site/jacoco/jacoco.csv` 按包聚合，不要抄构建日志里的四舍五入值。
+    - **顺带**：反证阈值本身也别忘 —— 把阈值临时抬到 0.99 跑一次，若不报 `Rule violated` 说明门禁根本没执行（呼应第 20 条的假绿形态），反证完记得 `git checkout --` 还原。
+
+26. 🔴 **XML 注释里不能用非 BMP 字符（emoji），否则 Maven 直接读不了 POM**（2026-10-03 实测）：给 `pom.xml` 的注释加 🔺（U+1F53A）后，`mvn test` 在 **Scanning for projects 阶段**就炸：
+    ```
+    Non-parseable POM ... Illegal character 0xd83d found in comment
+    ```
+    原因是 Java 的 XML 解析器按 UTF-16 处理，非 BMP 字符是**代理对**（高字节 `0xd83d`）⇒ 注释里出现即致命，且**报错位置指向 `END_TAG seen`**，与真正的出错字符相隔很远，肉眼很难定位。
+    - **判据**：改 `pom.xml`（或其它 XML）注释后，若报 `Non-parseable POM` / `Illegal character 0x???? found in comment`，先找注释里的 **emoji 与其它非 BMP 字符**（🔺🔴⚡️ 类，U+1F000 以上），BMP 内的 `⚠ ✅ ❌ → ⇒` 没问题。
+    - **同源提醒**：Markdown 文档（`AGENTS.md` / SPEC）里可以用 emoji，**XML 里不行** —— 同一段文字复制到两处时容易只改一半。
 
 
 ### 4.6 工作流执行类
