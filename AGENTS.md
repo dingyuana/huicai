@@ -286,8 +286,9 @@
 23. **安全加固会静默改写测试造数，症状伪装成「隔离失效」**（2026-09-30，源自 DIR-001，REQ-2026-129/P102-M2）：把 `MyMetaObjectHandler.insertFill` 的 `enterpriseId` 从 `strictInsertFill` 改为**无条件覆盖**（正确修复，堵死 48 处 Entity 直入越权）后，所有「只给实体硬设 `enterpriseId` 而未切上下文」的夹具被静默改写。实测 3 处回归，报错信息与真实原因**完全无关**：科目冲突报「唯一键冲突」、隔离用例报「企业 B 的数据不应被查到」—— 后者极易被误判为*隔离机制失效*，进而反向把生产逻辑改松。
     - **正确范式**（项目内已有范例：`OpeningContinuityRealDBTest` / `AuxiliaryDetailRealDBTest` / `CashSubjectBalanceRealDBTest` / `IncomeStatementCaliberRealDBTest`）：切**上下文** `useEnterprise(ENT_ID)`，不在实体上硬设；确需跨租户造数用 `AbstractMapperTest#withoutEnterpriseContext` 显式出口并在注释说明意图。
     - **机械守卫**：`scripts/check_tenant_fixture.py` 已写好并反证过（注入两处违规 exit 1、真实仓库 exit 0），**2026-10-03 已挂进 `full-stack-test.yml` 的阻断式门禁** `tenant-fixture-check`（不加 `continue-on-error`）。反证手法可复用：把某测试类的 `useEnterprise(...)` 行删掉再跑脚本，应 exit 1 并精确指出行号。
-    - ⚠️ **守卫自身也有盲区（DIR-002）**：它把「文件内出现 `useEnterprise(` 或 `withoutEnterpriseContext(`」当合规 ⇒ 纯文本把 `useEnterprise(` 替换成 `withoutEnterpriseContext(` 即可骗过（两者语义相反）。**机械守卫只能挡住不自觉的违规，不能当唯一保障。**
+    - ⚠️ **守卫自身也有盲区（DIR-002，2026-10-03 已处理主要项）**：早期版本把「文件内出现 `useEnterprise(` 或 `withoutEnterpriseContext(`」当合规 ⇒ 既漏「上下文=A 而实体=B」的**静默错配**（代码正常编译、跑绿、无报错，症状是别的用例断言莫名失败），也会被纯文本替换骗过。已升级为 **A/B 两类判定**：A = 设了非默认企业号却没管上下文；B = `useEnterprise(X)` 与 `setEnterpriseId(Y)` 的 Y 不一致。**残留盲区 3 条**（求值不了的变量、默认值不参与 B 比对、`EnterpriseContextHolder.set()` 第三种写法）已写在脚本 docstring 里 —— **机械守卫只能挡住不自觉的违规，不能当唯一保障。**
     - **配套教训**：加固类改动必须先问「谁在依赖被改掉的旧行为」，且**守卫脚本不接 CI 等于没有**（本条从「已写好」到「已挂门禁」隔了 3 天）。
+    - ⚠️ **判断「是不是默认值」必须求值、不能看常量名**：`private static final Long ENTERPRISE_ID = 1L;` 名字像非默认、值其实是默认；按名字判断会产生成片误报（本轮实测 21 处 / 4 个文件）。
 
 24. **本地跑 L2 有两个隐含前置，漏一个就会把环境问题误判为代码回归**（2026-10-03，DIR-003 实证）：`mvn test -DexcludedGroups=` 本机实测 **5 分钟**跑完 2023 个用例（并不需要"留夜间"），但两个前置没满足时报错**与真缺陷无法区分**：
     - **Redis 必须先起**：`docker start huicai-redis`（`application.yml:9-11` 指向 `localhost:6379`）。未起时 `LedgerChainRealDBTest` / `VoucherIntegrationTest` / `BankStatementAuditIntegrationTest` 共 **11 个用例报 `RedisConnectionFailure`** —— 而 CI 侧 `l2-integration-test.yml` 有 `services.redis`，故**只在本地出现**。起 Redis 后同 3 类 **12/12 全绿**，证明非代码回归。

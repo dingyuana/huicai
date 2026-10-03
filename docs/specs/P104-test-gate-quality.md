@@ -60,7 +60,7 @@ L1 拦 Mock 回归，L2 拦真库缺陷（历史上 136 项慢测缺陷均由真
 |---|---|---|---|---|
 | AT-104-1 | main 分支 PR | CI 触发 | L2 真库 job 执行（不再只在 develop） | CI |
 | AT-104-2 | L2 job | 执行 | 预拉 `pgvector/pgvector:pg16` 成功 | CI 日志 |
-| AT-104-3 | 真库套件有失败 | 提交 | PR 变红（门禁有效的唯一证明） | CI | 🟡 **部分反证（2026-10-03）**：静态门禁 `check_tenant_fixture.py` 已完成红→绿反证（删 `useEnterprise(...)` 行 ⇒ `exit=1` 并指到 3 处 `setEnterpriseId(ENT_ID)`；恢复 ⇒ `exit=0`），已挂成阻断式 CI 门禁；覆盖率门禁亦已实测会红（临时把 `INSTRUCTION` 阈值抬到 `0.99` ⇒ `Rule violated … ratio is 0.38, but expected minimum is 0.99` + `BUILD FAILURE`，随后已还原 `pom.xml`）。**仍未做**：在真实 PR 上制造一次真库失败以证明整条流水线会红 |
+| AT-104-3 | 真库套件有失败 | 提交 | PR 变红（门禁有效的唯一证明） | CI | 🟡 **部分反证（2026-10-03）**：静态门禁 `check_tenant_fixture.py` 已完成 A/B 两类红→绿反证（A：删 `useEnterprise(...)` ⇒ `exit=1`；B：`useEnterprise(9999L)` 对 `setEnterpriseId(9901L)` ⇒ `exit=1`；合法 `withoutEnterpriseContext` 夹具 ⇒ `exit=0` 无误报），并已挂成阻断式 CI 门禁；覆盖率门禁亦已实测会红（阈值抬到 `0.99` ⇒ `Rule violated … ratio is 0.38` + `BUILD FAILURE`，已还原 `pom.xml`）。**仍未做**：在真实 PR 上制造一次真库失败以证明整条流水线会红 |
 | AT-104-4 | 29 个同义反复类 | 改造 | 均 `extends AbstractMapperTest` 或删除，真实执行 SQL | 计数 | 🚧 28/29（仅 `VoucherTemplateMapperTest` 待改） |
 | AT-104-5 | `BudgetMapperTest` | 改造 | 无 `OPERATION` 违规夹具，预算 CHECK 被真库验证 | 真实 DB |
 | AT-104-6 | 新增核心模块测试 | 评审 | 含负向断言（assertFalse/assertNull） | 抽检 |
