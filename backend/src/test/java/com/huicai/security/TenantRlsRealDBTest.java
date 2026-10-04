@@ -90,6 +90,72 @@ class TenantRlsRealDBTest extends AbstractMapperTest {
                 "切到无数据企业仍查到 " + rows.size() + " 行 ⇒ RLS 未生效");
     }
 
+    /**
+     * AT-108-1：GUC 处于「空串」形态（曾执行过 SET LOCAL 的事务结束、连接被复用）
+     * 时查租户表，必须**返 0 行**而不是抛 SQL 错。
+     *
+     * <p>V167 之前谓词是 {@code current_setting('app.enterprise_id', true)::bigint}，
+     * 空串 {@code ::bigint} 会抛 {@code invalid input syntax for type bigint: ""}
+     * ⇒ 定时任务 / 系统初始化等无企业上下文的路径复用该连接时直接 500。
+     * V167 改为 {@code NULLIF(current_setting(...), '')::bigint} 后落到 fail-closed。
+     *
+     * <p>Superuser 走不到谓词（绕过 RLS），故必须显式 {@code SET ROLE} 到探针角色。
+     */
+    @Test
+    @DisplayName("AT-108-1：GUC 为空串时查租户表返 0 行，而非抛 invalid input syntax")
+    @org.springframework.transaction.annotation.Transactional(propagation = org.springframework.transaction.annotation.Propagation.NOT_SUPPORTED)
+    void emptyGucReturnsZeroRowsInsteadOfError() {
+        forceRlsOnVoucher();
+        jdbcTemplate.execute("DROP ROLE IF EXISTS rls_empty_probe");
+        jdbcTemplate.execute("CREATE ROLE rls_empty_probe NOSUPERUSER NOBYPASSRLS");
+        jdbcTemplate.execute("GRANT SELECT ON t_voucher TO rls_empty_probe");
+        VoucherEntity probe = newVoucher("P108.EMPTY.GUC", RLS_TABLE_ENTERPRISE);
+        withoutEnterpriseContext(() -> voucherMapper.insert(probe));
+        try {
+            // 先在一个真实事务里 SET LOCAL 并提交 —— 该连接随后处于「GUC 空串」形态
+            jdbcTemplate.execute((org.springframework.jdbc.core.ConnectionCallback<Void>) con -> {
+                boolean prev = con.getAutoCommit();
+                con.setAutoCommit(false);
+                try (java.sql.Statement st = con.createStatement()) {
+                    st.execute("SET LOCAL ROLE rls_empty_probe");
+                    st.execute("SELECT set_config('app.enterprise_id', '"
+                            + RLS_TABLE_ENTERPRISE + "', true)");
+                    st.executeQuery("SELECT count(*) FROM t_voucher").close();
+                } finally {
+                    con.rollback();
+                    con.setAutoCommit(prev);
+                }
+                return null;
+            });
+            jdbcTemplate.execute("RESET app.enterprise_id");
+
+            Integer rows = jdbcTemplate.execute((org.springframework.jdbc.core.ConnectionCallback<Integer>) con -> {
+                boolean prev = con.getAutoCommit();
+                try (java.sql.Statement st = con.createStatement()) {
+                    st.execute("SET ROLE rls_empty_probe");
+                    try (java.sql.ResultSet rs = st.executeQuery(
+                            "SELECT count(*) FROM t_voucher WHERE voucher_no = 'P108.EMPTY.GUC'")) {
+                        rs.next();
+                        return rs.getInt(1);
+                    }
+                } finally {
+                    try (java.sql.Statement st = con.createStatement()) {
+                        st.execute("RESET ROLE");
+                    }
+                    con.setAutoCommit(prev);
+                }
+            });
+
+            assertEquals(0, rows,
+                    "GUC 为空串时应 fail-closed 返 0 行；能查到数据说明谓词被绕过或残留脏值");
+        } finally {
+            jdbcTemplate.execute("RESET app.enterprise_id");
+            jdbcTemplate.update("DELETE FROM t_voucher WHERE voucher_no = ?", "P108.EMPTY.GUC");
+            jdbcTemplate.execute("DROP OWNED BY rls_empty_probe");
+            jdbcTemplate.execute("DROP ROLE IF EXISTS rls_empty_probe");
+        }
+    }
+
     @Test
     @DisplayName("AT-102-2d 反证：策略谓词本身有效（绕开 MyBatis，直连 SQL 对比行数）")
     @org.springframework.transaction.annotation.Transactional(propagation = org.springframework.transaction.annotation.Propagation.NOT_SUPPORTED)

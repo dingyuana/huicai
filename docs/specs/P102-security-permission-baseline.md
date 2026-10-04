@@ -165,6 +165,7 @@ member(user, E) =
   ① `rolsuper=t`（超级用户绕过）；② `rolbypassrls=t`（BYPASSRLS 属性绕过）；③ **83/83 张表的 owner 都是 `huicai`，而表属主默认也绕过 RLS**，故前两项改掉仍不生效，还需 `FORCE ROW LEVEL SECURITY`。
   **M5b 实测（2026-10-01）**：「只加 FORCE 而不降权」**完全无效** —— 设 `app.enterprise_id` 为 1 与为 2 返回**同样的 44 行**；改用 `NOSUPERUSER NOBYPASSRLS` 探针角色后同一查询 **44 行 → 1 行**，证明策略谓词本身有效，缺的只是角色降权。已交付：`TenantRlsInitializer`（事务内 `SET LOCAL`）+ `V166`（70 张表 FORCE，**对现有应用零影响**）。**角色降权刻意不写成迁移**，改为 `docs/development/plans/2026-10-01-M5b-role-downgrade-runbook.md`（不可逆、失败模式静默、需与发布节奏对齐），**待人工在预发验证后于维护窗口执行**。
   **M5b 执行实测（2026-10-03）：原方案不可行。** ①`ALTER ROLE huicai NOSUPERUSER NOBYPASSRLS` 被数据库拒绝：`permission denied to alter role` / `The bootstrap user must have the SUPERUSER attribute` —— **PostgreSQL 保护 bootstrap 超级用户，不允许摘掉其超级用户属性**；对**非自己**的角色执行同一语句成功 ⇒ 属数据库内置保护而非权限问题。②`NOBYPASSRLS` 可单独执行（`rolbypassrls=f` 已生效），但**超级用户本身就绕过 RLS**，探针实测三种 GUC 仍全返回 37 行 ⇒ RLS 依旧不生效。③新建 `NOSUPERUSER NOBYPASSRLS` 探针角色（只授 SELECT）后 RLS **立刻生效**：无 GUC=0、GUC=1=37、GUC=2=0。④**结论与替代方案**：不动 `huicai`，改为新建非超级应用角色 + `REASSIGN OWNED` + 配置改用户名（手册 §V2，**待老丁审核**）。开发库已由 Flyway 补齐到 **V166**（此前停在 V160）。
+  **收尾（V1.6 / REQ-2026-137）**：第三层机制的两个根因已修（切面/事务顺序 + 缺失事务），应用正式以 `huicai_app` 连接；谓词的「空串抛错」由 **`V167`** 硬化为 `NULLIF(current_setting(...), '')::bigint`（见 `P108`）。至此 RLS 三层在**最低权限主体下**全部经实测验证。
 - 🔴 **必须用 `SET LOCAL` 而非 `SET`**：后者是**会话级**，连接池复用会把上一个请求的企业带到下一个请求，造成**跨租户串数据**；`SET LOCAL` 随事务结束自动失效。
 - **不在范围**：数据级（部门/个人）权限粒度 → 归 P106；AI 功能排除；点状缺陷 → 归 P107。
 
