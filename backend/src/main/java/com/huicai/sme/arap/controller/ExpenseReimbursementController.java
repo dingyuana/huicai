@@ -2,7 +2,9 @@ package com.huicai.sme.arap.controller;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.huicai.common.response.R;
+import com.huicai.sme.arap.dto.ExpenseReimbursementDTO;
 import com.huicai.sme.arap.dto.ExpenseReimbursementVO;
+import jakarta.validation.Valid;
 import com.huicai.sme.arap.service.ExpenseReimbursementService;
 import com.huicai.sme.arap.service.ExpenseSummaryReportService;
 import com.huicai.sme.arap.service.ExpenseSummaryReportService.ExpenseSummaryVO;
@@ -52,13 +54,15 @@ public class ExpenseReimbursementController {
 
     @Operation(summary = "创建草稿")
     @PostMapping
-    public R<ExpenseReimbursementVO> create(@RequestBody ExpenseReimbursementEntity entity) {
-        return R.ok(service.createDraft(entity));
+    public R<ExpenseReimbursementVO> create(@Valid @RequestBody ExpenseReimbursementDTO dto) {
+        return R.ok(service.createDraft(dto.toEntity()));
     }
 
     @Operation(summary = "修改草稿")
     @PutMapping("/{id}")
-    public R<ExpenseReimbursementVO> update(@PathVariable Long id, @RequestBody ExpenseReimbursementEntity entity) {
+    public R<ExpenseReimbursementVO> update(@PathVariable Long id,
+                                            @Valid @RequestBody ExpenseReimbursementDTO dto) {
+        ExpenseReimbursementEntity entity = dto.toEntity();
         entity.setId(id);
         return R.ok(service.updateDraft(entity));
     }

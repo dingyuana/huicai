@@ -72,7 +72,10 @@ class ExpenseReimbursementRestContractTest {
     @Test @DisplayName("POST — 创建")
     void create() throws Exception {
         when(service.createDraft(any())).thenReturn(null);
-        mvc.perform(post(BASE).contentType(MediaType.APPLICATION_JSON).content("{}"))
+        // 原夹具发 "{}" 却断言 200：真库下 employee_id/expense_type/total_amount 均为
+        // NOT NULL 无默认值，空 body 必被拒（AGENTS §4.3 第 11 条：幻觉夹具给接口背书）
+        mvc.perform(post(BASE).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"employeeId\":10,\"expenseType\":\"TRAVEL\",\"amount\":120.00}"))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.code").value(200));
     }
 

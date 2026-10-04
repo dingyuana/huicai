@@ -2,9 +2,11 @@ package com.huicai.sme.cash.controller;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.huicai.common.response.R;
+import com.huicai.sme.cash.dto.TicketDTO;
 import com.huicai.sme.cash.entity.TicketEntity;
 import com.huicai.sme.cash.entity.TicketTransactionEntity;
 import com.huicai.sme.cash.service.TicketService;
+import jakarta.validation.Valid;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import com.huicai.base.system.util.SecurityUtils;
@@ -43,14 +45,14 @@ public class TicketController {
 
     @Operation(summary = "新增票据")
     @PostMapping
-    public R<TicketEntity> create(@RequestBody TicketEntity entity) {
-        return R.ok(ticketService.create(entity, SecurityUtils.getCurrentUserId()));
+    public R<TicketEntity> create(@Valid @RequestBody TicketDTO dto) {
+        return R.ok(ticketService.create(dto.toEntity(), SecurityUtils.getCurrentUserId()));
     }
 
     @Operation(summary = "修改票据")
     @PutMapping("/{id}")
-    public R<TicketEntity> update(@PathVariable Long id, @RequestBody TicketEntity entity) {
-        return R.ok(ticketService.update(id, entity));
+    public R<TicketEntity> update(@PathVariable Long id, @Valid @RequestBody TicketDTO dto) {
+        return R.ok(ticketService.update(id, dto.toEntity()));
     }
 
     @Operation(summary = "删除票据")
