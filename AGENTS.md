@@ -11,16 +11,16 @@
 | 维度 | 数据 |
 |------|------|
 | 后端代码 | 499 个 Java 主代码文件（另 244 个测试类文件）|
-| 测试用例 | **2023 个可执行测试注解**（`@Test` 2020 + `@TestFactory` 3）/ 244 个后端测试类 + 26 个前端测试文件 265 用例。**2026-10-03 全量实测：L1 `mvn test` = 1634 通过 / 0 Failures / 0 Errors / 5 Skipped（2 分 50 秒）；L2 真库 `mvn test -DexcludedGroups=` = 2023 通过 / 0 Failures / 0 Errors / 5 Skipped（3 分 25 秒）**，两次均打印 `All coverage checks have been met`（覆盖率门禁真执行，非静默跳过）。⚠️ **本地跑 L2 必须先 `docker start huicai-redis`**，否则 11 个用例报 `RedisConnectionFailure`（环境型红，非代码回归，见 §4.5 第 24 条）|
+| 测试用例 | **2027 个可执行测试注解**（`@Test` 2024 + `@TestFactory` 3）/ 238 个后端测试类 + 26 个前端测试文件 265 用例。**2026-10-03 全量实测：L1 `mvn test` = 1634 通过 / 0 Failures / 0 Errors / 5 Skipped；L2 真库 `mvn test -DexcludedGroups=` = 2027 通过 / 0 Failures / 0 Errors / 5 Skipped**，两次均打印 `All coverage checks have been met`（覆盖率门禁真执行，非静默跳过）。⚠️ **本地跑 L2 必须先 `docker start huicai-redis`**，否则 11 个用例报 `RedisConnectionFailure`（环境型红，非代码回归，见 §4.5 第 24 条）|
 | 覆盖率 | 棘轮门禁 **INSTRUCTION ≥30% / BRANCH ≥12% / METHOD ≥54%**（`backend/pom.xml` jacoco-check）。2026-10-03 按 **clean 口径**实测重标定：L1 真实值 **32.3% / 13.9% / 55.1%**（443 类），缓冲 2.3/1.9/1.1 点。已实测该门禁会红（阈值抬到 0.99 ⇒ `Rule violated` + `BUILD FAILURE`）。🔴 **标定必须 `mvn clean test`**：不带 clean 时 `target/jacoco.exec` 跨调用累积，实测虚高到 38.9/17.9/61.8（≈+6 点），据此标定会让真实 CI 全红 |
-| 数据库 | PostgreSQL 16 / **82 个 migration，最新 V166**（V160=D1 补 `DISPUTED`、V161=对账审计表、V162=D8 补 `PENDING_CONFIRM`、V163=权限码种子、V164=治愈 identity 序列落后、V165=补代理用户企业种子、V166=FORCE RLS；注意：版本号非连续，缺 V6-V62 与 V64-V91 共 85 个号；因 `out-of-order: true` + `validate-on-migrate: false` 不影响运行）|
+| 数据库 | PostgreSQL 16 / **83 个 migration，最新 V167**（V160=D1 补 `DISPUTED`、V161=对账审计表、V162=D8 补 `PENDING_CONFIRM`、V163=权限码种子、V164=治愈 identity 序列落后、V165=补代理用户企业种子、V166=FORCE RLS、**V167=RLS 谓词空串硬化 `NULLIF(current_setting(...), '')`**；注意：版本号非连续，缺 V6-V62 与 V64-V91 共 85 个号；因 `out-of-order: true` + `validate-on-migrate: false` 不影响运行）|
 | API 端点 | 510+ 个后端端点 |
 | 核心模块 | 基础数据、总账、应收应付、现金管理、固定资产、费用报销、发票税务、预算、财务报表、存储管理 |
 | 业务单据类型 | 11 种（RECEIPT/PAYMENT/EXPENSE/INVOICE_IN/INVOICE_OUT/OTHER_RECEIVABLE/OTHER_PAYABLE/TRANSFER/SALARY/PRE_RECEIVE/PRE_PAY）|
 | AI 服务 | Python FastAPI 5 端点（health/anomaly/embedding/match/ocr）|
 | 技术栈 | Spring Boot 3.x + MyBatis-Plus + Redis 7 + MinIO + RabbitMQ |
 | 开发流程 | 大闭环 + 内循环（three-phase-loop v3.0）|
-| P0-P2 阶段 | 🟡 **功能模块**基本完成（基础体系 + 缺陷修复 + AI 辅助能力），但**基座与内控未收口**：M5b-V2 非超级角色已落地、**RLS 三层防线已修好并在最低权限主体下验证**（跨租户读 0 行 / 写被拒）；剩余：策略谓词空串抛错待迁移、DTO 隔离三批（约 25 Controller）未做、P106 内控深度**未立项** |
+| P0-P2 阶段 | 🟡 **功能模块**基本完成（基础体系 + 缺陷修复 + AI 辅助能力），但**基座与内控未收口**：M5b-V2 非超级角色已落地、**RLS 三层防线已修好并在最低权限主体下验证**（跨租户读 0 行 / 写被拒 / 谓词空串已由 V167 硬化）；剩余：**DTO 隔离三批**（约 25 Controller 未做）、P106 内控深度**未立项** |
 | P3 远期 | ⏳ 0%（经营分析/预算预测/风控/工资薪酬）|
 | CI 门禁 | 6 个 workflow：L1 单测 / L2 真库 / Full Stack / SPEC 契约 / 夜间 E2E / 性能基线。Full Stack 内 4 个静态检测**全部阻断式**：接口覆盖（**棘轮** `--max-uncovered 280`，只在倒退时红）/ 实体入参状态越权（P0 强制）/ 租户夹具一致性（A/B 两类判定）/ 路由覆盖。**2026-10-03 PR #25 真实 CI 10/10 全绿**；此前 PR #25 曾因覆盖率阈值标定口径错误被两个 L1 job 拉红（见登记册 V1.66）⇒ **门禁「绿得起来也红得掉」已获真实证据** |
 
@@ -320,9 +320,10 @@
       - **反模式**：用「探针角色跑 SQL 有效」代替「应用跑业务有效」—— 前者只证明**策略谓词**正确，后者才证明**机制**接通；本次两者结论相反。
     - ⚠️ **两条并列的「静默失效」都被这次降权一次性挖出**（都属「看起来在工作、实际从未工作」）：①**切面与事务 advice 顺序不确定** —— 二者默认同为 `Ordered.LOWEST_PRECEDENCE`，`SET LOCAL` 落在事务外的自动提交连接上会被立刻丢弃 ⇒ 治法是**显式**给事务 advice order（`@EnableTransactionManagement(order = 0)`），并且**加了这个 `@Configuration` 后必须补回 `proxyTargetClass = true`**，否则 Boot 自动配置退让导致代理失效、变成另一个假绿；②**方法/类根本没有事务** —— 全库 75 个 `*ServiceImpl` 里 29 个一个 `@Transactional` 都没有，读路径切面压根不触发。**教训：「有注解」不等于「会生效」，注解只在一批「没写注解的方法」之外生效，而没人统计过那批。**
 
-28. 🔴 **`SET LOCAL` 结束后的「空串」会让 `::bigint` 谓词抛 SQL 错**（2026-10-03 实测）：PostgreSQL 在「曾执行过 `SET LOCAL` 的事务」结束后，`current_setting('app.enterprise_id', true)` 读回的是**空串**（全新会话才是 NULL）。若策略谓词写成 `current_setting(...)::bigint`，则**复用该连接、且当前事务没有企业上下文**（定时任务 / 初始化）的查询会抛 `invalid input syntax for type bigint: ""`，而不是返 0 行 —— 即「fail-closed」变成了「fail-500」。
-    - **正解**：谓词改 `NULLIF(current_setting('app.enterprise_id', true), '')::bigint`，空串归 NULL ⇒ 返 0 行（需迁移）。
-    - **判据**：写任何 `current_setting(...)::type` 谓词前，先在**同一会话**里跑一遍「BEGIN; SET LOCAL …; COMMIT; 再查」确认取值形态，别只在全新会话里验一次。
+28. ✅ **【已修复，V167】** **`SET LOCAL` 结束后的「空串」会让 `::bigint` 谓词抛 SQL 错**（2026-10-03 实测并修复）：PostgreSQL 在「曾执行过 `SET LOCAL` 的事务」结束后，`current_setting('app.enterprise_id', true)` 读回的是**空串**（全新会话才是 NULL）。原谓词 `current_setting(...)::bigint` 因此会让**无企业上下文的事务**（定时任务 / 初始化 / 批处理）复用该连接时抛 `invalid input syntax for type bigint: ""`，即把 fail-closed 变成 **fail-500**。
+    - **修法**（V167 + `P108-rls-predicate-empty-string-hardening.md`）：谓词改 `NULLIF(current_setting('app.enterprise_id', true), '')::bigint` —— 空串归 NULL ⇒ 返 0 行。**70 张表重写完毕，红→绿反证已做**（移除 V167 ⇒ 用例报 `invalid input syntax` 变红）。
+    - **判据（写谓词前必做）**：任何 `current_setting(...)::type` 谓词，都要为**三种取值形态**设计 —— 具体值 / `''`（曾 `SET LOCAL` 过）/ NULL（全新会话），且必须在**同一会话**里跑一遍「BEGIN; SET LOCAL …; COMMIT; 再查」确认，别只在全新会话里验一次。
+    - **为什么此前没人发现**：超级用户绕过 RLS，**根本执行不到谓词** —— 与第 27 条同源。
 
 29. 🔴 **会话级 `set_config(..., false)` 会把脏值留在连接池连接上 ⇒ 跨用例污染，且「本地绿、CI 红」**（2026-10-03 实测，PR #26）：`TenantRlsRealDBTest` 用 `set_config('app.enterprise_id', '987654', false)`（第三参 `false` = **会话级**，不是事务级）在自动提交下执行，值**永久留在连接上**；随后运行的 `TenantRlsGucRealDBTest` 读到 `987654` ⇒ **CI 上 2 条用例红，而本地全绿**（本地只是连接复用顺序不同）。
     - **两个都要做**：① **污染源**改为事务级（`is_local=true`），非事务场景必须在 `finally` 里 `RESET app.enterprise_id`；② **受害用例**在断言前主动 `RESET`，使断言**与执行顺序无关** —— 只修①是靠运气，只修②是掩盖污染源。
