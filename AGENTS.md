@@ -11,7 +11,7 @@
 | 维度 | 数据 |
 |------|------|
 | 后端代码 | 499 个 Java 主代码文件（另 244 个测试类文件）|
-| 测试用例 | **2027 个可执行测试注解**（`@Test` 2024 + `@TestFactory` 3）/ 238 个后端测试类 + 26 个前端测试文件 265 用例。**2026-10-03 全量实测：L1 `mvn test` = 1634 通过 / 0 Failures / 0 Errors / 5 Skipped；L2 真库 `mvn test -DexcludedGroups=` = 2027 通过 / 0 Failures / 0 Errors / 5 Skipped**，两次均打印 `All coverage checks have been met`（覆盖率门禁真执行，非静默跳过）。⚠️ **本地跑 L2 必须先 `docker start huicai-redis`**，否则 11 个用例报 `RedisConnectionFailure`（环境型红，非代码回归，见 §4.5 第 24 条）|
+| 测试用例 | **2030 个可执行测试注解**（`@Test` 2027 + `@TestFactory` 3）/ 239 个后端测试类 + 26 个前端测试文件 265 用例。**2026-10-03 全量实测：L1 `mvn clean test` = 1637 通过 / 0 Failures / 0 Errors / 5 Skipped；L2 真库 `mvn test -DexcludedGroups=` = 2030 通过 / 0 Failures / 0 Errors / 5 Skipped**，两次均打印 `All coverage checks have been met`（覆盖率门禁真执行，非静默跳过）。⚠️ **本地跑 L2 必须先 `docker start huicai-redis`**，否则 11 个用例报 `RedisConnectionFailure`（环境型红，非代码回归，见 §4.5 第 24 条）|
 | 覆盖率 | 棘轮门禁 **INSTRUCTION ≥30% / BRANCH ≥12% / METHOD ≥54%**（`backend/pom.xml` jacoco-check）。2026-10-03 按 **clean 口径**实测重标定：L1 真实值 **32.3% / 13.9% / 55.1%**（443 类），缓冲 2.3/1.9/1.1 点。已实测该门禁会红（阈值抬到 0.99 ⇒ `Rule violated` + `BUILD FAILURE`）。🔴 **标定必须 `mvn clean test`**：不带 clean 时 `target/jacoco.exec` 跨调用累积，实测虚高到 38.9/17.9/61.8（≈+6 点），据此标定会让真实 CI 全红 |
 | 数据库 | PostgreSQL 16 / **83 个 migration，最新 V167**（V160=D1 补 `DISPUTED`、V161=对账审计表、V162=D8 补 `PENDING_CONFIRM`、V163=权限码种子、V164=治愈 identity 序列落后、V165=补代理用户企业种子、V166=FORCE RLS、**V167=RLS 谓词空串硬化 `NULLIF(current_setting(...), '')`**；注意：版本号非连续，缺 V6-V62 与 V64-V91 共 85 个号；因 `out-of-order: true` + `validate-on-migrate: false` 不影响运行）|
 | API 端点 | 510+ 个后端端点 |
@@ -20,9 +20,9 @@
 | AI 服务 | Python FastAPI 5 端点（health/anomaly/embedding/match/ocr）|
 | 技术栈 | Spring Boot 3.x + MyBatis-Plus + Redis 7 + MinIO + RabbitMQ |
 | 开发流程 | 大闭环 + 内循环（three-phase-loop v3.0）|
-| P0-P2 阶段 | 🟡 **功能模块**基本完成（基础体系 + 缺陷修复 + AI 辅助能力），但**基座与内控未收口**：M5b-V2 非超级角色已落地、**RLS 三层防线已修好并在最低权限主体下验证**（跨租户读 0 行 / 写被拒 / 谓词空串已由 V167 硬化）；剩余：**DTO 隔离三批**（约 25 Controller 未做）、P106 内控深度**未立项** |
+| P0-P2 阶段 | 🟡 **功能模块**基本完成（基础体系 + 缺陷修复 + AI 辅助能力），但**基座与内控未收口**：M5b-V2 非超级角色已落地、**RLS 三层防线已修好并在最低权限主体下验证**（跨租户读 0 行 / 写被拒 / 谓词空串已由 V167 硬化）；**DTO 隔离批次①（资金模块）已完成**，门禁 P2 结构性存量 18 → **12**；剩余：批次②③（`base/system` 与 `asset/budget` 共 12 处）、P106 内控深度**未立项** |
 | P3 远期 | ⏳ 0%（经营分析/预算预测/风控/工资薪酬）|
-| CI 门禁 | 6 个 workflow：L1 单测 / L2 真库 / Full Stack / SPEC 契约 / 夜间 E2E / 性能基线。Full Stack 内 4 个静态检测**全部阻断式**：接口覆盖（**棘轮** `--max-uncovered 280`，只在倒退时红）/ 实体入参状态越权（P0 强制）/ 租户夹具一致性（A/B 两类判定）/ 路由覆盖。**2026-10-03 PR #25 真实 CI 10/10 全绿**；此前 PR #25 曾因覆盖率阈值标定口径错误被两个 L1 job 拉红（见登记册 V1.66）⇒ **门禁「绿得起来也红得掉」已获真实证据** |
+| CI 门禁 | 6 个 workflow：L1 单测 / L2 真库 / Full Stack / SPEC 契约 / 夜间 E2E / 性能基线。Full Stack 内 4 个静态检测**全部阻断式**：接口覆盖（**棘轮** `--max-uncovered 280`，只在倒退时红）/ 实体入参状态越权（P0 强制 + P2 结构性存量）/ 租户夹具一致性（A/B 两类判定）/ 路由覆盖。**2026-10-03 PR #25 真实 CI 10/10 全绿**；此前 PR #25 曾因覆盖率阈值标定口径错误被两个 L1 job 拉红（见登记册 V1.66）⇒ **门禁「绿得起来也红得掉」已获真实证据** |
 
 ---
 

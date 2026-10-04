@@ -1,6 +1,6 @@
 # P102 SPEC — 安全与权限基座加固（租户隔离 + 端点鉴权 + DTO 隔离）
 
-> **版本**：V1.6（第三层机制缺陷已定位并修复，非超级角色已启用） | **最后修改**：2026-10-03 | **作者**：opencode
+> **版本**：V1.7（DTO 隔离批1完成） | **最后修改**：2026-10-03 | **作者**：opencode
 > **编号**：HUICAI-SPC-P102 | 优先级：**P0（商用门槛）** | 状态：✅ 三层均已交付并**在最低权限主体下验证**（应用以 `huicai_app` 连接，租户表读正常、跨租户读返 0、跨租户写被拒）
 > **来源**：P101 总纲 M2/M3；四路审计交叉最严重项
 > **关联需求**：REQ-2026-129 | **前置**：无 | **test_ref**：`TenantIsolationSecurityTest`、`TenantIsolationHttpTest`、`SystemClearAuthorizationTest`、`EnterpriseIdInjectionTest`、`DataPermissionFailClosedTest`、`EnterpriseDataPermissionFailClosedTest`
@@ -147,14 +147,15 @@ member(user, E) =
 
 ## 7. DTO 隔离分批计划（铁律 #13，L2）
 
-| 批次 | 范围 | Controller 数 | 备注 |
-|---|---|---|---|
-| 批1（最高危） | 涉资金模块 `cash` / `tax` / `arap` / `voucher` | ~10 | 优先，金额与凭证相关 |
-| 批2 | 基础数据 `masterdata`（`Customer`/`Vendor`/`Employee` 等） | ~8 | 客商归属影响应收应付 |
-| 批3 | 其余 `base` / `sme` | ~7 | 收尾 |
+| 批次 | 范围 | Controller 数 | 备注 | 状态（2026-10-03） |
+|---|---|---|---|---|
+| 批1（最高危） | 涉资金模块 `cash` / `tax` / `arap` / `voucher` | ~10 | 优先，金额与凭证相关 | ✅ **本轮完成 6 个端点**：`Tax#createInput`、`Prepayment#create`、`ExpenseReimbursement#create+update`、`Ticket#create+update`；新增 4 个 DTO + 结构性回归锁 `TenantDtoIsolationStructureTest` 3/3 |
+| 批2 | 基础数据 `masterdata`（`Customer`/`Vendor`/`Employee` 等） | ~8 | 客商归属影响应收应付 | ✅ 已完成（前几轮已 DTO 化） |
+| 批3 | 其余 `base` / `sme` | ~7 | 收尾 | ⏳ **剩 12 处**：`UserController`×2、`RoleController`×2、`PeriodController`×2、`DeptController`×2、`Budget#createAdjustment`、`AssetCardController`×2、`AssetDisposal#create` |
 
 - 每批：新建 `dto/*Req.java` → Controller 改签名 → 加 `EnterpriseIdInjectionTest` 负向用例 → 跑真库回归。
 - **先做 L1 兜底**（一次堵死 48 处），再分批治本。
+- **批1 实测记录（三条可复用经验）**：①DTO 顺手清掉一批**幽灵字段入参**（Entity 有、DB 无列：`amountExTax`/`aiRiskTag`/`processStatus`/`aiMappingResult`/`docNo`/`voucherNo`）—— 收进 DTO 等于凭空扩大入参面（§4.2 第 8/15 条）；②**禁用字段清单本身也要有 DB/流程依据**：初版把 `declaredDate` 误列为禁用字段，被 `TaxDeclarationCreateDTO` 报红后查证 `t_tax_declaration.declared_date` 是业务输入（NOT NULL 无默认值）⇒ 不能凭字段名相似度归类（同 §4.2 第 9 条）；③连带暴露 **3 处幻觉夹具**（`ExpenseReimbursementRestContractTest` 发 `{}` 却断言 200，另两处缺 `period`/`amount`）—— DTO 加 `@Valid` 后它们从「假绿」变 400，是**好事**（§4.3 第 11 条）。
 
 ## 8. 风险与不在范围
 
@@ -173,6 +174,7 @@ member(user, E) =
 
 | 版本 | 日期 | 变更人 | 变更内容 |
 |---|---|---|---|
+| **V1.7** | 2026-10-03 | opencode | **DTO 隔离批1（涉资金模块）完成**：6 个端点改用新建 DTO（`InputInvoiceCreateDTO` / `PrepaymentCreateDTO` / `ExpenseReimbursementDTO` / `TicketDTO`），门禁 P2 结构性存量 **18 → 12**。新增结构性回归锁 `TenantDtoIsolationStructureTest`（反射断言 6 个 DTO 不声明 27 类服务端托管字段，并含**反向自检**防止守卫本身假绿）；该用例当场校正了禁用清单里把 `declaredDate` 误归类的错误假设。连带修正 3 处幻觉夹具。L1 `1637/0/0/5`、L2 `2030/0/0/5` |
 | **V1.6** | 2026-10-03 | opencode | **第三层机制缺陷已修复，非超级角色正式启用。** 根因**两个**（此前只列出「待判别」）：①**切面与事务 advice 顺序不确定** —— 二者默认同为 `Ordered.LOWEST_PRECEDENCE`，`SET LOCAL` 落在事务外的自动提交连接上即被丢弃（真库用例 Red：`expected: not <null>`）；②**大量路径根本没有事务** —— 全库 75 个 `*ServiceImpl` 中 **29 个一个 `@Transactional` 都没有**，另 17 个类的读方法无注解（`SubjectServiceImpl#getTree`、`VoucherServiceImpl#pageQuery`、`ReportServiceImpl`、`LedgerServiceImpl`、`PeriodServiceImpl`…）。修法：新增 `TransactionAdviceOrderConfig`（`@EnableTransactionManagement(order = 0, proxyTargetClass = true)`；⚠️ 该类会让 Boot 自动配置退让，**必须补回 `proxyTargetClass = true`**，否则 CGLIB 代理失效、`@Transactional` 静默不生效）+ 全部非 AI `*ServiceImpl` 加**类级** `@Transactional`（72 文件，方法级优先级更高不受影响）。新增真库回归 `TenantRlsGucRealDBTest` 3/3（事务内可见 / 事务外不残留 / 无上下文不设假值）；**修掉一个假红**：初版用例在事务里直接调 mapper，mapper 既不经事务也不经切面 ⇒ 改为调用被代理的 service 方法。**端到端**：默认配置启动（`pg_stat_activity` 显示应用 5 个会话全为 `huicai_app`）→ `/subjects/tree` **21 个节点**、`/vouchers/page` **total 37**，跨租户读 0 行、跨租户写被拒。**新登记待办**：`SET LOCAL` 事务结束后该 GUC 读回**空串**（非 NULL），而策略谓词是 `current_setting(...)::bigint` ⇒ 无上下文事务复用该连接会抛 `invalid input syntax for type bigint: ""`；建议用 `NULLIF(..., '')::bigint` 硬化（需迁移，未做）。L1 `1634/0/0/5`、L2 `2026/0/0/5` 均绿且覆盖率门禁 met |
 | **V1.5** | 2026-10-03 | opencode | **M5b V2 已执行 —— 第三层防线被实测判定「从未真正工作」，降权把它变成了 P0 故障。** 角色与授权侧全部成功：`huicai_app`（`rolsuper=f`/`rolbypassrls=f`）、属主逐对象转移（**`REASSIGN OWNED` 走不通**：扩展对象 `required by the database system`，且 identity 序列不可单独改属主，最终 84 表 + 409 对象）、探针 0/37/0、跨租户 `UPDATE` 被 `WITH CHECK` 拒绝、Flyway `info` BUILD SUCCESS、应用以该角色启动成功且 health/login 均 200。**但业务读路径全部返回 0 行**（科目树 0、凭证分页 0/total 0，库里实有 37 条），`pg_stat_activity` 实测后端会话 `app.enterprise_id=NULL` ⇒ `TenantRlsInitializer` 的 `SET LOCAL` 从未生效。两个候选根因（切面与事务 advice 顺序不确定 / 读路径无 `@Transactional`）均表现为 GUC=NULL。**处置**：配置回滚 `huicai` 保持环境可用，角色与属主保留，机制修复列为独立任务（需真库用例，普通单测断言不了 GUC 是否设进去）。AT-102-2 由 🟡 改 🔴 |
 | **V1.4** | 2026-10-03 | opencode | **M5b 执行实测：原降权方案被数据库推翻。** ①`ALTER ROLE huicai NOSUPERUSER NOBYPASSRLS` 报 `permission denied to alter role` / `DETAIL: The bootstrap user must have the SUPERUSER attribute.` —— **PostgreSQL 不允许摘掉 bootstrap 超级用户的超级用户属性**；用同一语句改**别的**角色则成功 ⇒ 是数据库内置保护，不是权限/配置问题。②`NOBYPASSRLS` 单独执行成功（`rolbypassrls=f`），但**超级用户必然绕过 RLS**，探针实测「无 GUC / GUC=1 / GUC=2」仍全为 37 行 ⇒ RLS 依旧不生效。③新建 `NOSUPERUSER NOBYPASSRLS` 探针角色（只授 SELECT）后 RLS 立刻生效：**0 / 37 / 0**。④**替代方案 V2**（新建非超级应用角色 + `REASSIGN OWNED BY huicai TO huicai_app` + 配置改 `DB_USERNAME`）写入 M5b 手册 §V2，**待审核**；V1 步骤保留供追溯并标注失败。⑤顺带记录两处现状：开发库此前停在 V160，已由 Flyway 补到 **V166**；`t_user` 与 `t_agency_enterprise` 两张带 `enterprise_id` 的表**仍无 RLS**（70 张有策略 / 12 张无）。AT-102-2 状态改「降权原方案已被推翻，替代方案待审核」 |

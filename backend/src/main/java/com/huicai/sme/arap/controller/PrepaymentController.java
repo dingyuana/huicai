@@ -3,9 +3,11 @@ package com.huicai.sme.arap.controller;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.huicai.common.response.R;
 import com.huicai.sme.arap.entity.PrepaymentEntity;
+import com.huicai.sme.arap.dto.PrepaymentCreateDTO;
 import com.huicai.sme.arap.service.PrepaymentBalanceReportService;
 import com.huicai.sme.arap.service.PrepaymentBalanceReportService.PrepaymentBalanceSummaryVO;
 import com.huicai.sme.arap.service.PrepaymentService;
+import jakarta.validation.Valid;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
@@ -46,8 +48,8 @@ public class PrepaymentController {
 
     @Operation(summary = "新增预付款 (DRAFT)")
     @PostMapping
-    public R<PrepaymentEntity> create(@RequestBody PrepaymentEntity entity) {
-        return R.ok(prepaymentService.create(entity));
+    public R<PrepaymentEntity> create(@Valid @RequestBody PrepaymentCreateDTO dto) {
+        return R.ok(prepaymentService.create(dto.toEntity()));
     }
 
     @Operation(summary = "确认预付款 (DRAFT → CONFIRMED)")

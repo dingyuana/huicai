@@ -15,6 +15,7 @@ import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 import static org.mockito.ArgumentMatchers.*;
@@ -129,6 +130,8 @@ class ExpenseReimbursementControllerTest {
         ExpenseReimbursementEntity entity = new ExpenseReimbursementEntity();
         entity.setEmployeeId(10L);
         entity.setExpenseType("TRAVEL");
+        // t_expense_reimbursement.total_amount 为 NOT NULL 且无默认值 ⇒ DTO 必填
+        entity.setAmount(new BigDecimal("120.00"));
 
         // when & then
         mvc.perform(post("/api/sme/arap/v1/expense-reimbursements")
@@ -153,8 +156,10 @@ class ExpenseReimbursementControllerTest {
         when(service.updateDraft(any())).thenReturn(vo);
 
         ExpenseReimbursementEntity entity = new ExpenseReimbursementEntity();
-        entity.setId(123L); // body 中的 ID 应该被 PathVariable 覆盖
+        entity.setId(123L); // body 中的 ID 应被 PathVariable 覆盖（DTO 已不接收 id）
         entity.setEmployeeId(10L);
+        entity.setExpenseType("TRAVEL");
+        entity.setAmount(new BigDecimal("120.00"));
 
         // when & then
         mvc.perform(put("/api/sme/arap/v1/expense-reimbursements/999")

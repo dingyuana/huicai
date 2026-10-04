@@ -83,6 +83,8 @@ class PrepaymentControllerTest {
         PrepaymentEntity entity = new PrepaymentEntity();
         entity.setVendorId(10L);
         entity.setAmount(new BigDecimal("3000.00"));
+        // t_prepayment.period 为 NOT NULL 且无默认值 ⇒ DTO 必填
+        entity.setPeriod("202610");
 
         PrepaymentEntity created = new PrepaymentEntity();
         created.setId(1L);
