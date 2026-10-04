@@ -2,7 +2,9 @@ package com.huicai.base.system.controller;
 
 import com.huicai.common.response.R;
 import com.huicai.base.system.aspect.Log;
+import com.huicai.base.system.dto.RoleSaveDTO;
 import com.huicai.base.system.entity.RoleEntity;
+import jakarta.validation.Valid;
 import com.huicai.base.system.service.MenuService;
 import com.huicai.base.system.service.RoleService;
 import lombok.RequiredArgsConstructor;
@@ -46,14 +48,16 @@ public class RoleController {
 
     @PostMapping
     @Log(value = "新增角色", module = "system")
-    public R<RoleEntity> create(@RequestBody RoleEntity role) {
+    public R<RoleEntity> create(@Valid @RequestBody RoleSaveDTO dto) {
+        RoleEntity role = dto.toEntity();
         roleService.create(role);
         return R.ok(role);
     }
 
     @PutMapping("/{id}")
     @Log(value = "修改角色", module = "system")
-    public R<?> update(@PathVariable Long id, @RequestBody RoleEntity role) {
+    public R<?> update(@PathVariable Long id, @Valid @RequestBody RoleSaveDTO dto) {
+        RoleEntity role = dto.toEntity();
         role.setId(id);
         roleService.update(role);
         return R.ok();

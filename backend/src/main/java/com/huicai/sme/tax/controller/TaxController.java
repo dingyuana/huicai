@@ -12,6 +12,7 @@ import com.huicai.sme.tax.dto.vo.AppendixIResponse;
 import com.huicai.sme.tax.dto.vo.AppendixIIResponse;
 import com.huicai.sme.tax.dto.vo.TaxBurdenVO;
 import com.huicai.sme.tax.dto.OutputInvoiceBatchDTO;
+import com.huicai.sme.tax.dto.TaxTypeSaveDTO;
 import com.huicai.sme.tax.entity.TaxDeclarationEntity;
 import com.huicai.sme.tax.entity.TaxTypeEntity;
 import com.huicai.sme.tax.service.InputInvoiceStateMachineService;
@@ -56,13 +57,14 @@ public class TaxController {
 
     @Operation(summary = "创建税种")
     @PostMapping("/types")
-    public R<TaxTypeEntity> createTaxType(@RequestBody TaxTypeEntity entity) {
-        return R.ok(service.createTaxType(entity));
+    public R<TaxTypeEntity> createTaxType(@Valid @RequestBody TaxTypeSaveDTO dto) {
+        return R.ok(service.createTaxType(dto.toEntity()));
     }
 
     @Operation(summary = "更新税种")
     @PutMapping("/types/{id}")
-    public R<TaxTypeEntity> updateTaxType(@PathVariable Long id, @RequestBody TaxTypeEntity entity) {
+    public R<TaxTypeEntity> updateTaxType(@PathVariable Long id, @Valid @RequestBody TaxTypeSaveDTO dto) {
+        TaxTypeEntity entity = dto.toEntity();
         entity.setId(id);
         return R.ok(service.updateTaxType(entity));
     }

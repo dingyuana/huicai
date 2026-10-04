@@ -2,7 +2,9 @@ package com.huicai.sme.asset.controller;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.huicai.common.response.R;
+import com.huicai.sme.asset.dto.AssetDisposalCreateDTO;
 import com.huicai.sme.asset.entity.AssetDisposalEntity;
+import jakarta.validation.Valid;
 import com.huicai.sme.asset.service.AssetDisposalService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -34,8 +36,8 @@ public class AssetDisposalController {
 
     @Operation(summary = "创建")
     @PostMapping
-    public R<AssetDisposalEntity> create(@RequestBody AssetDisposalEntity entity) {
-        return R.ok(service.create(entity));
+    public R<AssetDisposalEntity> create(@Valid @RequestBody AssetDisposalCreateDTO dto) {
+        return R.ok(service.create(dto.toEntity()));
     }
 
     @Operation(summary = "审批")

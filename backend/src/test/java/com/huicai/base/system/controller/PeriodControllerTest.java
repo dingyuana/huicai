@@ -141,7 +141,9 @@ class PeriodControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(200));
 
-        verify(periodService).save(argThat(p -> "202401".equals(p.getPeriodCode())));
+        // P102-DTO：periodCode 已从入参剔除（服务端按 year/month 生成），
+        // 故此处只能断言业务输入被正确绑定，断言 periodCode 会永假
+        verify(periodService).save(argThat(p -> p.getYear() == 2024 && p.getMonth() == 1));
     }
 
     @Test
@@ -160,7 +162,9 @@ class PeriodControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(200));
 
-        verify(periodService).updateById(argThat(p -> p.getId() == 1L && "202402".equals(p.getPeriodCode())));
+        // P102-DTO：同上，periodCode 服务端生成
+        verify(periodService).updateById(argThat(p -> p.getId() == 1L
+                && p.getYear() == 2024 && p.getMonth() == 2));
     }
 
     @Test

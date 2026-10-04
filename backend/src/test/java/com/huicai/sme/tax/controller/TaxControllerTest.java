@@ -65,6 +65,7 @@ class TaxControllerTest {
     @DisplayName("新增税率_RequestBody正确解析")
     void createTaxType_requestBody_parsedCorrectly() throws Exception {
         TaxTypeEntity entity = new TaxTypeEntity();
+        entity.setCode("VAT");
         entity.setName("增值税");
         entity.setRate(new BigDecimal("13"));
 

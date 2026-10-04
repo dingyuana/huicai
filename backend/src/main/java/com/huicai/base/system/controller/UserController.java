@@ -2,7 +2,9 @@ package com.huicai.base.system.controller;
 
 import com.huicai.common.response.R;
 import com.huicai.base.system.aspect.Log;
+import com.huicai.base.system.dto.UserSaveDTO;
 import com.huicai.base.system.entity.UserEntity;
+import jakarta.validation.Valid;
 import com.huicai.base.system.service.RoleService;
 import com.huicai.base.system.service.UserService;
 import lombok.Data;
@@ -36,14 +38,16 @@ public class UserController {
 
     @PostMapping
     @Log(value = "新增用户", module = "system")
-    public R<Long> create(@RequestBody UserEntity user) {
+    public R<Long> create(@Valid @RequestBody UserSaveDTO dto) {
+        UserEntity user = dto.toEntity();
         userService.create(user);
         return R.ok(user.getId());
     }
 
     @PutMapping("/{id}")
     @Log(value = "修改用户", module = "system")
-    public R<?> update(@PathVariable Long id, @RequestBody UserEntity user) {
+    public R<?> update(@PathVariable Long id, @Valid @RequestBody UserSaveDTO dto) {
+        UserEntity user = dto.toEntity();
         user.setId(id);
         userService.update(user);
         return R.ok();

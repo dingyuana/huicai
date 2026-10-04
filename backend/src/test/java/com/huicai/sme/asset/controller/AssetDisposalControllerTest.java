@@ -57,6 +57,11 @@ class AssetDisposalControllerTest {
     @DisplayName("新增资产处置_RequestBody正确解析")
     void create_requestBody_parsedCorrectly() throws Exception {
         AssetDisposalEntity input = new AssetDisposalEntity();
+        // t_asset_disposal 上 disposal_no/asset_id/disposal_type/disposal_date 均 NOT NULL 无默认值
+        input.setDisposalNo("CZ-001");
+        input.setAssetId(1L);
+        input.setDisposalType("SCRAP");
+        input.setDisposalDate(java.time.LocalDate.of(2026, 1, 1));
         AssetDisposalEntity created = new AssetDisposalEntity();
         created.setId(1L);
         when(service.create(any(AssetDisposalEntity.class))).thenReturn(created);

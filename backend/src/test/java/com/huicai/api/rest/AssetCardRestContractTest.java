@@ -73,8 +73,20 @@ class AssetCardRestContractTest {
     @Test @DisplayName("POST — 创建")
     void create() throws Exception {
         when(service.create(any())).thenReturn(null);
-        mvc.perform(post(BASE).contentType(MediaType.APPLICATION_JSON).content("{}"))
+        // 原夹具发 "{}" 却断言 200：t_asset_card 有 5 个 NOT NULL 无默认值列，
+        // 真库下不可能插入成功 —— 属「幻觉夹具」（AGENTS §4.3 第 11 条），已改为最小合法体
+        mvc.perform(post(BASE).contentType(MediaType.APPLICATION_JSON).content(
+                        "{\"assetCode\":\"ZC-900\",\"assetName\":\"笔记本\","
+                                + "\"categoryId\":1,\"acquisitionDate\":\"2026-01-01\","
+                                + "\"originalValue\":8000.00,\"usefulLife\":5}"))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.code").value(200));
+    }
+
+    @Test @DisplayName("POST — 创建：缺必填字段必须 400（负向断言）")
+    void create_missingRequiredFields_is400() throws Exception {
+        mvc.perform(post(BASE).contentType(MediaType.APPLICATION_JSON).content("{}"))
+                .andExpect(status().isBadRequest());
+        verify(service, never()).create(any());
     }
 
     @Test @DisplayName("DELETE /{id} — 删除")
