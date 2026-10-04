@@ -35,6 +35,17 @@ import java.sql.Statement;
  * <p><b>上下文为 null 时不设置</b>：定时任务/系统初始化等无登录态路径本就不属于
  * 任何企业；此时若也去设一个假值反而会写错租户。RLS 在未设置时返 0 行，
  * 是策略的 fail-closed 默认行为，属预期。
+ *
+ * <p><b>顺序：必须在事务内执行（2026-10-03 实测教训）</b>：本切面与事务 advice
+ * 若同为默认 order（{@code Ordered.LOWEST_PRECEDENCE}），谁在外层并不确定；
+ * 实测落在事务外时 {@code SET LOCAL} 立刻失效（{@code pg_stat_activity} 里
+ * {@code app.enterprise_id} 恒为 NULL），切到非超级用户后全部租户表读 0 行。
+ * 现由 {@code TransactionAdviceOrderConfig} 把事务 advice 设为最外层来保证。
+ *
+ * <p><b>另一类漏设：方法根本没有 {@code @Transactional}</b>：实测
+ * {@code SubjectServiceImpl#getTree}、{@code VoucherServiceImpl#pageQuery} 均无事务
+ * （全库 75 个 {@code *ServiceImpl} 中 29 个一个 {@code @Transactional} 都没有），
+ * 此时切面不触发。凡走租户表的读写路径都必须有事务。
  */
 @Slf4j
 @Aspect

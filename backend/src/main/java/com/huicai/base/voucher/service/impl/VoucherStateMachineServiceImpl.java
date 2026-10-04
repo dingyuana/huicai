@@ -1,5 +1,6 @@
 package com.huicai.base.voucher.service.impl;
 
+import org.springframework.transaction.annotation.Transactional;
 import com.huicai.common.exception.BusinessException;
 import com.huicai.base.voucher.constant.VoucherStatus;
 import com.huicai.base.voucher.entity.VoucherEntity;
@@ -11,6 +12,11 @@ import org.springframework.stereotype.Service;
  * 2026-06-22 P22 创建
  */
 @Service
+/**
+ * 类级事务：P102/M5b —— 走租户表的读写路径必须有事务，否则切面不触发、
+ * app.enterprise_id 设不进去，非超级用户下 RLS 会把本企业数据也过滤掉（读 0 行）。
+ */
+@Transactional
 public class VoucherStateMachineServiceImpl implements VoucherStateMachineService {
 
     @Override

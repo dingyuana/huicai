@@ -9,8 +9,9 @@ RABBITMQ_QUEUE = os.getenv("RABBITMQ_QUEUE", "ai_task_queue")
 RABBITMQ_RESULT_QUEUE = os.getenv("RABBITMQ_RESULT_QUEUE", "ai_result_queue")
 
 # DB (read-only access for AI)
+# 与后端一致使用非超级用户角色：超级用户会绕过 RLS（见 M5b 手册 §V2）。
 DB_URL = os.getenv("DB_URL", "jdbc:postgresql://localhost:5432/huicai")
-DB_USER = os.getenv("DB_USER", "huicai")
+DB_USER = os.getenv("DB_USER", "huicai_app")
 DB_PASS = os.getenv("DB_PASS", "huicai123")
 
 # MinIO

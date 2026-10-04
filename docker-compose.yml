@@ -117,8 +117,10 @@ services:
       - "8000:8000"
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres16:5432/huicai
-      SPRING_DATASOURCE_USERNAME: huicai
-      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-huicai123}
+      # 非超级应用角色（P101-M5b/V2）：超级用户会绕过 RLS，故应用不得用 huicai。
+      # 角色由 M5b 手册 §V2 创建并接管对象属主；口令与 postgres 容器口令分开注入。
+      SPRING_DATASOURCE_USERNAME: ${DB_USERNAME:-huicai_app}
+      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD:-huicai123}
       SPRING_RABBITMQ_HOST: host.docker.internal
       SPRING_RABBITMQ_PORT: 5672
       SPRING_RABBITMQ_USERNAME: huicai

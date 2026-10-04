@@ -17,6 +17,13 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
+/**
+ * 类级事务（P102/M5b，2026-10-03）：走租户表的路径必须有事务，否则
+ * TenantRlsInitializer 切面不触发、app.enterprise_id 设不进去，
+ * 应用以非超级用户连接时 RLS 会把本企业数据也过滤掉（读 0 行）。
+ * 方法级 @Transactional 优先级更高，不受此影响。
+ */
+@Transactional
 public class EnterpriseServiceImpl implements EnterpriseService {
 
     private final EnterpriseMapper enterpriseMapper;
