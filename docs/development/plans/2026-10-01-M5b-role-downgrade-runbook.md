@@ -1,8 +1,42 @@
 # M5b 操作手册 —— 应用角色降权（让 RLS 真正生效）
 
-> 状态：**🚧 V2 已执行、机制缺陷已暴露**（2026-10-03）。角色与授权全部落地且**实测证明 RLS 开始过滤**，但**切到非超级用户后应用读不到租户表** —— P102 交付的 `TenantRlsInitializer` 实测**从未让 `app.enterprise_id` 生效**。应用配置已回滚到 `huicai` 保持可用，机制修复前不得启用 `huicai_app`
+> 状态：**✅ 2026-10-03 已修复并端到端验证**。机制缺陷（`TenantRlsInitializer` 从未生效）已定位为**两个根因**并修复：① 切面与事务 advice 顺序不确定（`SET LOCAL` 落在事务外即失效）；② **29 个 `*ServiceImpl` 一个 `@Transactional` 都没有**，读路径切面根本不触发。修复后应用以非超级用户 `huicai_app` 连接，`/subjects/tree` **21 个节点**、`/vouchers/page` **total 37**，跨租户读返 0 行
 > 前置：V166 已落地（70 张表 FORCE）；`TenantRlsInitializer` 已在每次事务设置 `app.enterprise_id`
 > 关联：REQ-2026-129 / P102 / SPEC §8
+
+---
+
+## 0.2 机制缺陷修复（2026-10-03，Red → Green → 端到端绿）
+
+### 根因（两个，缺一不可）
+
+| # | 根因 | 证据 | 修法 |
+|---|---|---|---|
+| **A** | **切面与事务 advice 顺序不确定**：二者默认都是 `Ordered.LOWEST_PRECEDENCE`，`SET LOCAL app.enterprise_id` 落在**事务外**的自动提交连接上，语句结束即被数据库丢弃 | 抓 `pg_stat_activity`：调用 `@Transactional(readOnly = true)` 的 `/asset-reports/category-summary` 时 GUC 仍为 **NULL**；真库用例 `TenantRlsGucRealDBTest#gucIsVisibleInsideTransaction` 红（`expected: not <null>`） | 新增 `TransactionAdviceOrderConfig`：`@EnableTransactionManagement(order = 0, proxyTargetClass = true)` ⇒ 事务 advice 在最外层、切面在其内。⚠️ **加了该类会让 Boot 的 `TransactionAutoConfiguration` 退让，必须补回 `proxyTargetClass = true`**，否则 CGLIB 代理失效、`@Transactional` 静默不生效（又是一个假绿） |
+| **B** | **方法/类根本没有事务**：全库 75 个 `*ServiceImpl` 中 **29 个一个 `@Transactional` 都没有**；另有 17 个类的读方法无注解（`SubjectServiceImpl#getTree`、`VoucherServiceImpl#pageQuery`、`ReportServiceImpl` 12 个方法、`LedgerServiceImpl`、`PeriodServiceImpl`…）⇒ 切面不触发 | 代码审计 + 冒烟：这三条读路径修复前全部返回 0 行 | 给**全部非 AI 的 `*ServiceImpl`** 加**类级** `@Transactional`（方法级注解优先级更高，不受影响），共 **72 个文件**；AI 模块按本轮范围排除 |
+
+### 回归锁（真库，Red → Green）
+
+`backend/src/test/java/com/huicai/security/TenantRlsGucRealDBTest`（3/3）：
+
+| 用例 | 锁什么 |
+|---|---|
+| `AT-102-8` | 事务内 `current_setting('app.enterprise_id')` 能读到上下文企业 —— **advice 顺序错则红** |
+| `AT-102-9` | 事务外读不到该值 ⇒ 必须是 `SET LOCAL` 而非 `SET`（否则连接池复用跨租户串数据） |
+| `AT-102-10` | 无企业上下文（定时任务/初始化）时**不设**假值，仍为 NULL |
+
+**测试设计上的一个坑（已修）**：初版用例在事务里直接调 `subjectMapper.selectList(null)` —— mapper 既不经 Spring 事务也不经切面，用例会**假红**（测的不是被修的东西）。改为调用**被代理的 `@Transactional` service 方法** `subjectService.getTree()` 才是真红 ⇒ 这类「测不到机制」的用例比没有用例更危险。
+
+### 端到端验证（应用以 `huicai_app` 非超级用户连接）
+
+| 检查 | 修复前 | 修复后 |
+|---|---|---|
+| `GET /api/v1/subjects/tree` | 0 个科目 | **21 个节点** |
+| `POST /api/base/voucher/v1/vouchers/page` | 0 条 / total 0 | **3 条 / total 37** |
+| 会话层 `GUC=999`（跨租户） | — | **0 行** |
+| 会话层 `GUC=1`（本企业） | — | **37 行** |
+
+---
 
 ---
 
@@ -141,14 +175,32 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public
 - 12 张无 RLS 的表在 `huicai_app` 下同样无策略保护（RLS 只对有策略的表生效）。
 - **`REASSIGN OWNED` 走不通**（扩展对象不可转移），已改为逐对象 `ALTER ... OWNER TO` 并跳过 identity 序列与扩展成员；新环境部署时**必须**用这一版脚本，不能直接用 `REASSIGN`。
 
-## V3 待办（机制修复后才能启用）
+### 🔴 顺带发现：`SET LOCAL` 结束后的空串会让策略抛 SQL 错（待办）
 
-| # | 事项 | 说明 |
+PostgreSQL 在「曾执行过 `SET LOCAL` 的事务」结束后，该变量读回来是**空串**而非 NULL：
+
+```
+begin; set local app.enterprise_id='1'; commit;
+select current_setting('app.enterprise_id', true);            --> ''（空串）
+select count(*) from t_voucher;                               --> ERROR: invalid input syntax for type bigint: ""
+```
+
+而 70 张表的策略谓词是 `enterprise_id = current_setting('app.enterprise_id', true)::bigint` ⇒ **凡复用「曾经处理过请求」的连接、又处于无企业上下文的事务（定时任务 / 初始化），查租户表会抛 SQL 错而不是返 0 行**。全新会话（从未 set 过）读回 NULL，`NULL::bigint` 安全。
+
+- **建议修法**（**未做**，属 schema 变更，需 SPEC + 迁移）：把谓词改成
+  `enterprise_id = NULLIF(current_setting('app.enterprise_id', true), '')::bigint`
+  —— 空串归 NULL ⇒ 返 0 行（fail-closed 且不报错）。
+- 本轮已把测试断言改成「NULL 或空串都算未设置」，并在断言消息里写明该现象。
+
+## V3 待办
+
+| # | 事项 | 状态 |
 |---|---|---|
-| 1 | 判定根因 A（切面/事务顺序）或 B（读路径无 `@Transactional`） | 两种假设都表现为 GUC=NULL，需分别验证 |
-| 2 | 修复后必须补**真库**用例：以非超级角色连接，设 GUC 后断言跨租户读不到、写被拒 | 单测断言不了「GUC 是否设进去了」 |
-| 3 | 把 `huicai_app` 启用写回 3 处配置 + `.env.example` | 一行默认值的事，但必须与机制修复同一个提交 |
-| 4 | 冒烟：`/system/health` + 登录 + 科目树/凭证分页**必须非空** | 本次就是靠这一步才发现 0 行 |
+| 1 | 判定根因 A（切面/事务顺序）或 B（读路径无 `@Transactional`） | ✅ 已判定：两者都存在，均已修（见 §0.2） |
+| 2 | 修好后必须补**真库**用例 | ✅ `TenantRlsGucRealDBTest` 3/3 |
+| 3 | 把 `huicai_app` 启用写回 3 处配置 + `.env.example` | ✅ 已启用（`application.yml` / `application-dev.yml` / `docker-compose.yml` 默认值 + `.env.example` + `ai/app/config.py`） |
+| 4 | 冒烟：`/system/health` + 登录 + 科目树/凭证分页**必须非空** | ✅ 21 个科目节点 / total 37 条凭证 |
+| 5 | **策略谓词空串抛错**（见上） | ⏳ **未做**，需迁移 |
 
 ## V1 执行步骤（已实测失败，保留供追溯）
 

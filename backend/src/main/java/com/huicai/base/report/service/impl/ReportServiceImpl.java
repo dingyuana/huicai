@@ -1,5 +1,6 @@
 package com.huicai.base.report.service.impl;
 
+import org.springframework.transaction.annotation.Transactional;
 import cn.hutool.core.io.IoUtil;
 import cn.hutool.poi.excel.ExcelUtil;
 import cn.hutool.poi.excel.ExcelWriter;
@@ -24,6 +25,11 @@ import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
+/**
+ * 类级事务：P102/M5b —— 走租户表的读写路径必须有事务，否则切面不触发、
+ * app.enterprise_id 设不进去，非超级用户下 RLS 会把本企业数据也过滤掉（读 0 行）。
+ */
+@Transactional
 public class ReportServiceImpl implements ReportService {
 
     private static final String END_BALANCE = "end_balance";

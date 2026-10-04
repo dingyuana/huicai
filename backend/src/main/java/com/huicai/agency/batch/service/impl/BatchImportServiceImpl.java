@@ -1,5 +1,6 @@
 package com.huicai.agency.batch.service.impl;
 
+import org.springframework.transaction.annotation.Transactional;
 import com.huicai.agency.batch.dto.BatchResultVO;
 import com.huicai.agency.batch.service.BatchImportService;
 import com.huicai.common.exception.BusinessException;
@@ -13,6 +14,11 @@ import java.util.List;
 @Slf4j
 @Service
 @RequiredArgsConstructor
+/**
+ * 类级事务：P102/M5b —— 走租户表的读写路径必须有事务，否则切面不触发、
+ * app.enterprise_id 设不进去，非超级用户下 RLS 会把本企业数据也过滤掉（读 0 行）。
+ */
+@Transactional
 public class BatchImportServiceImpl implements BatchImportService {
 
     /** D3：原实现对每个文件无条件回报「导入成功」但未解析任何文件（假成功）。 */

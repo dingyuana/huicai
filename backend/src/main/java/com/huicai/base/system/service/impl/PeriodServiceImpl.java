@@ -1,5 +1,6 @@
 package com.huicai.base.system.service.impl;
 
+import org.springframework.transaction.annotation.Transactional;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.huicai.base.system.entity.PeriodEntity;
@@ -13,6 +14,11 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 @Service
+/**
+ * 类级事务：P102/M5b —— 走租户表的读写路径必须有事务，否则切面不触发、
+ * app.enterprise_id 设不进去，非超级用户下 RLS 会把本企业数据也过滤掉（读 0 行）。
+ */
+@Transactional
 public class PeriodServiceImpl extends ServiceImpl<PeriodMapper, PeriodEntity> implements PeriodService {
 
     @Override
