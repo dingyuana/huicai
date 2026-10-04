@@ -9,6 +9,8 @@ RABBITMQ_QUEUE = os.getenv("RABBITMQ_QUEUE", "ai_task_queue")
 RABBITMQ_RESULT_QUEUE = os.getenv("RABBITMQ_RESULT_QUEUE", "ai_result_queue")
 
 # DB (read-only access for AI)
+# 目标态同后端：使用非超级用户角色（超级用户会绕过 RLS）。
+# huicai_app 已建好但暂不启用 —— TenantRlsInitializer 未生效前切过去读不到租户表。
 DB_URL = os.getenv("DB_URL", "jdbc:postgresql://localhost:5432/huicai")
 DB_USER = os.getenv("DB_USER", "huicai")
 DB_PASS = os.getenv("DB_PASS", "huicai123")

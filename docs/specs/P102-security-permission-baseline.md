@@ -1,7 +1,7 @@
 # P102 SPEC — 安全与权限基座加固（租户隔离 + 端点鉴权 + DTO 隔离）
 
-> **版本**：V1.4（M5b 实测：原降权方案不可行，替代方案待审核） | **最后修改**：2026-10-03 | **作者**：opencode
-> **编号**：HUICAI-SPC-P102 | 优先级：**P0（商用门槛）** | 状态：🚧 机制已交付（**角色降权原方案已被实测推翻，替代方案 V2 待审核**）
+> **版本**：V1.5（M5b V2 已执行：RLS 确实生效，但暴露第三层从未工作的 P0 缺陷） | **最后修改**：2026-10-03 | **作者**：opencode
+> **编号**：HUICAI-SPC-P102 | 优先级：**P0（商用门槛）** | 状态：🚧 前两层已交付；**第三层（RLS）机制实测从未生效，降权后暴露为 P0 缺陷，修复前应用仍用超级用户**
 > **来源**：P101 总纲 M2/M3；四路审计交叉最严重项
 > **关联需求**：REQ-2026-129 | **前置**：无 | **test_ref**：`TenantIsolationSecurityTest`、`TenantIsolationHttpTest`、`SystemClearAuthorizationTest`、`EnterpriseIdInjectionTest`、`DataPermissionFailClosedTest`、`EnterpriseDataPermissionFailClosedTest`
 > **排除**：AI 功能（老丁 2026-09-29 指示）
@@ -115,7 +115,7 @@ member(user, E) =
 | AT-102-1b | `accountant01`（`enterprise_id=NULL`）持合法 JWT | 带 `X-Enterprise-Id: 1` 请求 | **放行**（三源并集经代理成员表判定） | 集成 | ✅ `agencySeedAccountsNotLockedOut`（真实种子数据） |
 | AT-102-1c | `admin`（SUPER_ADMIN） | 带 `X-Enterprise-Id: 2` | 放行，且审计留痕 from→to | 集成 | ✅ `superAdminAllowedEverywhere` + `EnterpriseSwitchAuditService` |
 | AT-102-1d | 目标企业为 null | 请求 | 不因缺头失败 | 单测 | ✅ `nullTargetIsAllowed` |
-| AT-102-2 | 应用角色已 `NOBYPASSRLS` + 事务内已 `SET LOCAL` | 业务事务查 `t_voucher` | 仅本企业行 | 真实 DB | 🟡 **机制已就绪并验证；降权原方案已被推翻**：`TenantRlsInitializer` + `V166` 已落地；2026-10-03 实测 `ALTER ROLE huicai NOSUPERUSER` **被 PostgreSQL 拒绝**（bootstrap 超级用户保护），改用 `NOSUPERUSER NOBYPASSRLS` **探针角色则立刻生效**（0 / 37 / 0）⇒ 唯一可行路径是**新建非超级应用角色**，方案 V2 待审核（见 M5b 手册 §V2） |
+| AT-102-2 | 应用角色已 `NOBYPASSRLS` + 事务内已 `SET LOCAL` | 业务事务查 `t_voucher` | 仅本企业行 | 真实 DB | 🔴 **降权后实测失败（P0）**：角色侧已全部到位（`huicai_app` `rolsuper=f`/`rolbypassrls=f`，探针 0/37/0，跨租户 `UPDATE` 被策略拒绝，Flyway DDL 正常，应用能启动），**但应用层 `TenantRlsInitializer` 从未把 `app.enterprise_id` 设进事务**（`pg_stat_activity` 实测 GUC=NULL）⇒ 切到非超级用户后 `/subjects/tree` 与 `/vouchers/page` **全为 0 行**。根因待判别（切面/事务顺序 或 读路径无 `@Transactional`），配置已回滚 `huicai`，机制修复前不得启用 |
 | AT-102-3 | 任意登录用户无 `system:clear` | `POST /clear-vouchers` | 403；`t_voucher` 行数不变（负向） | 集成 | ✅ 反射断言注解 + 权限码存在性（`SystemClearAuthorizationTest`） |
 | AT-102-4 | 用户无 `period:reopen` | `POST /period/{id}/reopen` | 403（反结账受保护） | 集成 | ✅ `periodReopenIsProtected` |
 | AT-102-5a | `SystemClearController` 破坏性端点数为 **9** | 源码反射 | 数量变化即红（防新增端点漏保护） | 单测 | ✅ `clearEndpointsCountIsNine` |
@@ -172,6 +172,7 @@ member(user, E) =
 
 | 版本 | 日期 | 变更人 | 变更内容 |
 |---|---|---|---|
+| **V1.5** | 2026-10-03 | opencode | **M5b V2 已执行 —— 第三层防线被实测判定「从未真正工作」，降权把它变成了 P0 故障。** 角色与授权侧全部成功：`huicai_app`（`rolsuper=f`/`rolbypassrls=f`）、属主逐对象转移（**`REASSIGN OWNED` 走不通**：扩展对象 `required by the database system`，且 identity 序列不可单独改属主，最终 84 表 + 409 对象）、探针 0/37/0、跨租户 `UPDATE` 被 `WITH CHECK` 拒绝、Flyway `info` BUILD SUCCESS、应用以该角色启动成功且 health/login 均 200。**但业务读路径全部返回 0 行**（科目树 0、凭证分页 0/total 0，库里实有 37 条），`pg_stat_activity` 实测后端会话 `app.enterprise_id=NULL` ⇒ `TenantRlsInitializer` 的 `SET LOCAL` 从未生效。两个候选根因（切面与事务 advice 顺序不确定 / 读路径无 `@Transactional`）均表现为 GUC=NULL。**处置**：配置回滚 `huicai` 保持环境可用，角色与属主保留，机制修复列为独立任务（需真库用例，普通单测断言不了 GUC 是否设进去）。AT-102-2 由 🟡 改 🔴 |
 | **V1.4** | 2026-10-03 | opencode | **M5b 执行实测：原降权方案被数据库推翻。** ①`ALTER ROLE huicai NOSUPERUSER NOBYPASSRLS` 报 `permission denied to alter role` / `DETAIL: The bootstrap user must have the SUPERUSER attribute.` —— **PostgreSQL 不允许摘掉 bootstrap 超级用户的超级用户属性**；用同一语句改**别的**角色则成功 ⇒ 是数据库内置保护，不是权限/配置问题。②`NOBYPASSRLS` 单独执行成功（`rolbypassrls=f`），但**超级用户必然绕过 RLS**，探针实测「无 GUC / GUC=1 / GUC=2」仍全为 37 行 ⇒ RLS 依旧不生效。③新建 `NOSUPERUSER NOBYPASSRLS` 探针角色（只授 SELECT）后 RLS 立刻生效：**0 / 37 / 0**。④**替代方案 V2**（新建非超级应用角色 + `REASSIGN OWNED BY huicai TO huicai_app` + 配置改 `DB_USERNAME`）写入 M5b 手册 §V2，**待审核**；V1 步骤保留供追溯并标注失败。⑤顺带记录两处现状：开发库此前停在 V160，已由 Flyway 补到 **V166**；`t_user` 与 `t_agency_enterprise` 两张带 `enterprise_id` 的表**仍无 RLS**（70 张有策略 / 12 张无）。AT-102-2 状态改「降权原方案已被推翻，替代方案待审核」 |
 | **V1.3** | 2026-10-01 | opencode | **M5b 实施回写**：交付 `TenantRlsInitializer`（事务内 `SET LOCAL app.enterprise_id`）+ `V166`（70 张表 `FORCE ROW LEVEL SECURITY`，**对现有应用零影响**）+ 降权操作手册。**实测推翻一个想当然的结论**：「只加 FORCE 而不降权」**完全无效** —— 设 `app.enterprise_id` 为 1 与为 2 返回**同样的 44 行**；只有用 `NOSUPERUSER NOBYPASSRLS` 探针角色才降到 **1 行**，即原 SPEC 只列两项失效原因时，漏了「属主也绕过」这一项且它单独无法解决。另补记两条硬约束：① 必须 `SET LOCAL` 而非 `SET`（会话级会被连接池带到下个请求，造成**跨租户串数据**）；② 角色降权**刻意不写成迁移**（不可逆 + 失败模式静默 + 需与发布节奏对齐），留 `2026-10-01-M5b-role-downgrade-runbook.md` 待人工执行。AT-102-2 状态由「未做」改为「机制已就绪并验证，降权待人工」 |
 | **V1.2** | 2026-09-30 | opencode | **实施回写（M1~M5a 已交付）**：5 处与实现不符的前提经实测推翻并订正 —— ①权限列名是 `t_menu.permission`（非 `permission_code`），43/43 行早已回填，**不需加列**；②V160 已被 P107 D1 占用，权限码种子改用 **V163**；③三源并集源 2 **必须两跳**（`agency_user_id` 指向 `t_agency_user.id`），该表现成 `countByUserId`/`selectByUserId` 语义错误不得使用；④修正后**仍锁死 `reviewer01`**，由 **V165** 补种子；⑤清库端点**是 9 个不是 8 个**。另新增：§4 补 4 处 fail-open 的实际位置（`EnterpriseDataPermissionInterceptor` 1 处 + `DataPermissionInterceptor` 3 处，与原 SPEC 所述「4 处」分布不同）；§5 BDD 表替换为实施后实际落地的 22 条用例编号与状态；§8 补 RLS 三重失效原因与实测结论；`AuditLogEntity` 缺 `before_data`/`after_data` 属性（**P103 的失效本体**）这一实现障碍 |

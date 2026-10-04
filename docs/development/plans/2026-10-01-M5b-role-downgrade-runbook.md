@@ -1,8 +1,47 @@
 # M5b 操作手册 —— 应用角色降权（让 RLS 真正生效）
 
-> 状态：**🚧 原方案已被实测推翻**（2026-10-03）。V1 的「`ALTER ROLE huicai NOSUPERUSER`」**被 PostgreSQL 拒绝**；已部分执行（`NOBYPASSRLS` 生效），RLS 仍未生效；替代方案见 §V2，**待老丁审核**
+> 状态：**🚧 V2 已执行、机制缺陷已暴露**（2026-10-03）。角色与授权全部落地且**实测证明 RLS 开始过滤**，但**切到非超级用户后应用读不到租户表** —— P102 交付的 `TenantRlsInitializer` 实测**从未让 `app.enterprise_id` 生效**。应用配置已回滚到 `huicai` 保持可用，机制修复前不得启用 `huicai_app`
 > 前置：V166 已落地（70 张表 FORCE）；`TenantRlsInitializer` 已在每次事务设置 `app.enterprise_id`
 > 关联：REQ-2026-129 / P102 / SPEC §8
+
+---
+
+## 0.1 2026-10-03 V2 执行结果与**新发现的 P0 缺陷**
+
+### 已完成（全部实测通过）
+
+| # | 项 | 结果 |
+|---|---|---|
+| 1 | 开发库 Flyway 补齐 | V160 → **V166**（V161~V166 一次性应用成功） |
+| 2 | 建角色 | `huicai_app`：`rolsuper=**f**`、`rolbypassrls=**f**`、`login=t` |
+| 3 | 接管属主 | `REASSIGN OWNED` 因**扩展对象不可转移**而失败（`cannot reassign ownership ... required by the database system`）⇒ 改为逐对象 `ALTER ... OWNER TO`，并跳过两类对象：**identity 序列**（与表绑定，改表属主时自动跟随）与**扩展成员**（`vector` / `_vector` 等）。最终 **84 张表 + 409 个对象**属主变为 `huicai_app`，`flyway_schema_history` 82 行完好 |
+| 4 | 授权 | `CONNECT` / `USAGE,CREATE ON SCHEMA` / `ALL TABLES` / `ALL SEQUENCES` / `ALL FUNCTIONS` + 两组 `ALTER DEFAULT PRIVILEGES` |
+| 5 | **RLS 真的生效了** | 以 `huicai_app` 探针：无 GUC=**0**、GUC=1=**37**、GUC=2=**0**；对照超级用户 `huicai` 三种取值全是 **37** |
+| 6 | 写入侧防护 | 事务内把某行 `UPDATE ... SET enterprise_id=2` 被数据库拒绝：`new row violates row-level security policy for table "t_voucher"` ⇒ 策略带 `WITH CHECK`，**跨租户写也被拦**（比只读过滤更强） |
+| 7 | DDL 能力 | `ALTER TABLE ... ADD COLUMN` 成功（属主身份 OK）⇒ Flyway 以 `huicai_app` 跑 `flyway:info` **BUILD SUCCESS**，82 个迁移校验通过 |
+| 8 | 应用能启动 | `mvn spring-boot:run` 以 `huicai_app` 启动成功：`HikariPool-1 Start completed` / Flyway 连上 / `Started HuicaiApplication in 7.754 seconds`；`/api/v1/system/health` 200、`POST /api/v1/auth/login` 200 拿到 token |
+
+### 🔴 P0 缺陷：租户表全部读 0 行（**降权才暴露出来**）
+
+| 请求 | 结果 | 说明 |
+|---|---|---|
+| `GET /api/v1/system/menu/tree` | 200，**7 项** | 平台表无 RLS ⇒ 正常 |
+| `GET /api/v1/system/menu/routes` | 200，**7 项** | 同上 |
+| `GET /api/v1/subjects/tree` | 200，**0 个科目** | `t_subject` 有 RLS ⇒ **读不到** |
+| `POST /api/base/voucher/v1/vouchers/page` | 200，**0 条 / total 0** | `t_voucher` 有 RLS ⇒ **读不到**（库里实有 37 条） |
+
+**直接证据（抓应用会话的 GUC 值）**：请求期间 `pg_stat_activity` 显示后端连接的 `app.enterprise_id` 为 **NULL**，最后执行的语句是 `SELECT COUNT(*) AS total FROM t_voucher ...` ⇒ **`TenantRlsInitializer` 从未把值设进去**。
+
+**两个待判别的候选根因**（都指向「机制从未真正生效」，而非本次降权操作）：
+
+| # | 候选 | 判别依据 |
+|---|---|---|
+| A | **切面与事务 advice 顺序不确定** —— `@Around` 在事务**外**执行，`SET LOCAL` 落在自动提交语句里，语句结束即失效（全库无 `@EnableTransactionManagement`，两侧 order 都是 `LOWEST_PRECEDENCE`） | 在事务外执行 `SET LOCAL` 同样表现为 GUC=NULL，与实测一致 |
+| B | **该读路径的方法根本没有 `@Transactional`** ⇒ 切面不触发（全库 `@Transactional` 237 处，但并非每个读路径都有） | 该路径的 Service 方法无 `@Transactional` 即可解释 |
+
+**处置**：应用配置已回滚到 `huicai`（`application.yml` / `application-dev.yml` / `docker-compose.yml` 三处默认值），开发环境恢复可用；`huicai_app` 角色与属主**保留**，机制修好后一行配置即可启用。**机制修复属独立开发任务（需 SPEC + TDD）**，未擅自改代码。
+
+**这条缺陷的价值**：它证明 P102 的「三层防线」里，第三层（数据库 RLS）此前**只是文档上的存在** —— 全绿的业务流程掩盖了「兜底层从未真正工作」。与 AGENTS §4.5 第 27 条同源：**对最高权限主体有效的结论，对降权后的真实主体未必成立**。
 
 ---
 
@@ -95,9 +134,21 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public
 
 ### V2.4 风险与遗留
 
+⚠️ **2026-10-03 更新：V2 已执行，但触发了 P0 缺陷（见 §0.1）** —— 角色/授权/属主全部到位且 RLS 确实开始过滤，**但应用层 `TenantRlsInitializer` 从未生效，导致租户表读 0 行**；配置已回滚到 `huicai`，角色保留待机制修复后启用。
+
 - **`t_user` / `t_agency_enterprise` 两张带 `enterprise_id` 的表仍无 RLS**（2026-10-03 实测：70 张有策略、12 张无 RLS，其中这两张带租户列）。属既有设计选择，非本次引入；若要补需单独评估（`t_user` 的跨租户读由 `EnterpriseMembershipChecker` 三源并集覆盖）。
 - `huicai` 超级用户**保留**（运维/迁移用），因此「应用不再用超级用户」依赖**配置正确**而非数据库强制 —— 真正的强制手段是把 bootstrap 超级用户的口令也改为环境变量注入（当前 `.env` 已有 `JWT_SECRET` 同类实践）。
 - 12 张无 RLS 的表在 `huicai_app` 下同样无策略保护（RLS 只对有策略的表生效）。
+- **`REASSIGN OWNED` 走不通**（扩展对象不可转移），已改为逐对象 `ALTER ... OWNER TO` 并跳过 identity 序列与扩展成员；新环境部署时**必须**用这一版脚本，不能直接用 `REASSIGN`。
+
+## V3 待办（机制修复后才能启用）
+
+| # | 事项 | 说明 |
+|---|---|---|
+| 1 | 判定根因 A（切面/事务顺序）或 B（读路径无 `@Transactional`） | 两种假设都表现为 GUC=NULL，需分别验证 |
+| 2 | 修复后必须补**真库**用例：以非超级角色连接，设 GUC 后断言跨租户读不到、写被拒 | 单测断言不了「GUC 是否设进去了」 |
+| 3 | 把 `huicai_app` 启用写回 3 处配置 + `.env.example` | 一行默认值的事，但必须与机制修复同一个提交 |
+| 4 | 冒烟：`/system/health` + 登录 + 科目树/凭证分页**必须非空** | 本次就是靠这一步才发现 0 行 |
 
 ## V1 执行步骤（已实测失败，保留供追溯）
 

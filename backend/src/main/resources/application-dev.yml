@@ -5,7 +5,8 @@ spring:
 
   datasource:
     url: jdbc:postgresql://localhost:5432/huicai
-    username: huicai
+    # 同 application.yml：默认保持超级用户，待 TenantRlsInitializer 修好后再切 huicai_app
+    username: ${DB_USERNAME:huicai}
     password: ${DB_PASSWORD:huicai123}
     driver-class-name: org.postgresql.Driver
 

@@ -117,8 +117,11 @@ services:
       - "8000:8000"
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres16:5432/huicai
-      SPRING_DATASOURCE_USERNAME: huicai
-      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-huicai123}
+      # 当前仍用 bootstrap 超级用户：非超级角色 huicai_app 已建好并接管对象属主，
+      # 但 TenantRlsInitializer 实测从未让 app.enterprise_id 生效 ⇒ 切过去租户表全读 0 行。
+      # 修复后把默认值改成 huicai_app（见 M5b 手册 §V3）。
+      SPRING_DATASOURCE_USERNAME: ${DB_USERNAME:-huicai}
+      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD:-huicai123}
       SPRING_RABBITMQ_HOST: host.docker.internal
       SPRING_RABBITMQ_PORT: 5672
       SPRING_RABBITMQ_USERNAME: huicai

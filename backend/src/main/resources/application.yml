@@ -19,7 +19,11 @@ spring:
 
   datasource:
     url: jdbc:postgresql://localhost:5432/huicai
-    username: huicai
+    # ⚠️ 默认仍是 bootstrap 超级用户 huicai —— 非超级角色 huicai_app 已建好并接管属主，
+    # 但 P102 的 TenantRlsInitializer 实测**从未让 app.enterprise_id 生效**（2026-10-03），
+    # 切到 huicai_app 后全部租户表读 0 行。修复前不要改这里的默认值。
+    # 目标态：DB_USERNAME 默认 huicai_app（见 M5b 手册 §V3）
+    username: ${DB_USERNAME:huicai}
     password: ${DB_PASSWORD:huicai123}
     driver-class-name: org.postgresql.Driver
     type: com.zaxxer.hikari.HikariDataSource
