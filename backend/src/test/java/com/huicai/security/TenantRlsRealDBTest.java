@@ -115,15 +115,18 @@ class TenantRlsRealDBTest extends AbstractMapperTest {
                 con.setAutoCommit(false);
                 try (java.sql.Statement st = con.createStatement()) {
                     st.execute("SET LOCAL ROLE rls_probe");
+                    // is_local=true（事务级）：false 是**会话级**，会留在连接池连接上
+                    // 泄漏给后续用例（2026-10-03 CI 上实测导致 TenantRlsGucRealDBTest 读到
+                    // 上一个用例遗留的 987654 而变红）
                     st.execute("SELECT set_config('app.enterprise_id', '"
-                            + RLS_TABLE_ENTERPRISE + "', false)");
+                            + RLS_TABLE_ENTERPRISE + "', true)");
                     int own;
                     try (java.sql.ResultSet rs = st.executeQuery(
                             "SELECT count(*) FROM t_voucher WHERE voucher_no = 'P102.RLS.PROBE'")) {
                         rs.next();
                         own = rs.getInt(1);
                     }
-                    st.execute("SELECT set_config('app.enterprise_id', '987654', false)");
+                    st.execute("SELECT set_config('app.enterprise_id', '987654', true)");
                     int other;
                     try (java.sql.ResultSet rs = st.executeQuery(
                             "SELECT count(*) FROM t_voucher WHERE voucher_no = 'P102.RLS.PROBE'")) {
@@ -172,6 +175,9 @@ class TenantRlsRealDBTest extends AbstractMapperTest {
                     "未 FORCE 时属主应绕过 RLS，两个企业可见行数应相同 —— "
                             + "这证明 AT-102-2d 的过滤确实来自 FORCE 后的 RLS");
         } finally {
+            // 本用例在自动提交下用 set_config(..., false)（会话级），必须显式清理，
+            // 否则该值留在连接池连接上，被后续用例读到（本轮实测在 CI 上造成 2 条用例变红）
+            jdbcTemplate.execute("RESET app.enterprise_id");
             jdbcTemplate.update("DELETE FROM t_voucher WHERE voucher_no = ?", "P102.RLS.PROBE2");
         }
     }

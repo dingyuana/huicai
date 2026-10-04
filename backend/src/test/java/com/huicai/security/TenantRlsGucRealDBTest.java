@@ -68,16 +68,12 @@ class TenantRlsGucRealDBTest extends AbstractMapperTest {
         useEnterprise(ENT_A);
         transactionTemplate.executeWithoutResult(status -> subjectService.getTree());
 
-        String gucOutside = jdbcTemplate.execute((ConnectionCallback<String>) conn -> {
-            try (var st = conn.createStatement();
-                 var rs = st.executeQuery("select current_setting('app.enterprise_id', true)")) {
-                return rs.next() ? rs.getString(1) : null;
-            }
-        });
+        String gucOutside = readGucOutsideTransaction();
+        resetGuc();
 
         // 注意：PostgreSQL 在「曾经 SET LOCAL 过的事务」结束后，该变量读回来是**空串**
         // 而不是 NULL（全新会话才是 NULL）—— 故此处断言「空或 NULL」，
-        // 关键是**不能是任何企业号**（会话级 SET 才会残留 9001）
+        // 关键是**不能是任何企业号**（会话级 SET 才会残留具体值）
         assertTrue(isUnset(gucOutside),
                 "事务外仍能读到 app.enterprise_id=" + gucOutside
                         + " ⇒ 用的是 SET（会话级）而非 SET LOCAL，连接池复用会跨租户串数据");
@@ -85,7 +81,8 @@ class TenantRlsGucRealDBTest extends AbstractMapperTest {
 
     @Test
     @DisplayName("AT-102-10：无上下文（定时任务/初始化）时不得设假值")
-    void gucStaysNullWithoutContext() {
+    void gucStaysUnsetWithoutContext() {
+        resetGuc();
         EnterpriseContextHolderAccessor.clear();
 
         String guc = transactionTemplate.execute(status -> {
@@ -93,9 +90,32 @@ class TenantRlsGucRealDBTest extends AbstractMapperTest {
             return jdbcTemplate.queryForObject(
                     "select current_setting('app.enterprise_id', true)", String.class);
         });
+        resetGuc();
 
         assertTrue(isUnset(guc),
                 "无企业上下文时不应设置 app.enterprise_id（实际=" + guc + "），否则会写错租户");
+    }
+
+    /**
+     * 读事务外的 GUC。
+     *
+     * <p>⚠️ 必须先 {@code RESET} 再断言：连接池会复用连接，而**别的用例可能用会话级
+     * {@code set_config(..., false)} 留下脏值**（2026-10-03 CI 上实测：前一个用例遗留
+     * {@code 987654}，让本用例在 CI 变红而本地全绿）。不主动清理 = 断言依赖执行顺序。
+     */
+    private String readGucOutsideTransaction() {
+        resetGuc();
+        return jdbcTemplate.execute((ConnectionCallback<String>) conn -> {
+            try (var st = conn.createStatement();
+                 var rs = st.executeQuery("select current_setting('app.enterprise_id', true)")) {
+                return rs.next() ? rs.getString(1) : null;
+            }
+        });
+    }
+
+    /** 清掉连接上的会话级残留，使断言与执行顺序无关。 */
+    private void resetGuc() {
+        jdbcTemplate.execute("RESET app.enterprise_id");
     }
 
     /** 「未设置」的两种表现：NULL（全新会话）或空串（曾 SET LOCAL 过的事务结束后）。 */

@@ -324,6 +324,11 @@
     - **正解**：谓词改 `NULLIF(current_setting('app.enterprise_id', true), '')::bigint`，空串归 NULL ⇒ 返 0 行（需迁移）。
     - **判据**：写任何 `current_setting(...)::type` 谓词前，先在**同一会话**里跑一遍「BEGIN; SET LOCAL …; COMMIT; 再查」确认取值形态，别只在全新会话里验一次。
 
+29. 🔴 **会话级 `set_config(..., false)` 会把脏值留在连接池连接上 ⇒ 跨用例污染，且「本地绿、CI 红」**（2026-10-03 实测，PR #26）：`TenantRlsRealDBTest` 用 `set_config('app.enterprise_id', '987654', false)`（第三参 `false` = **会话级**，不是事务级）在自动提交下执行，值**永久留在连接上**；随后运行的 `TenantRlsGucRealDBTest` 读到 `987654` ⇒ **CI 上 2 条用例红，而本地全绿**（本地只是连接复用顺序不同）。
+    - **两个都要做**：① **污染源**改为事务级（`is_local=true`），非事务场景必须在 `finally` 里 `RESET app.enterprise_id`；② **受害用例**在断言前主动 `RESET`，使断言**与执行顺序无关** —— 只修①是靠运气，只修②是掩盖污染源。
+    - **判据**：任何 `set_config`/`SET`（会话级）碰到连接池，就必须问「这个值什么时候被清掉」。断言若依赖「当前连接的干净状态」，必须自己先清理，不能指望前一个用例自觉。
+    - **同源提醒**：「本地全绿 ⇒ 安全」又一次被推翻 —— 这类污染**只在连接复用顺序不同的环境暴露**，本地复现要靠 `-Dsurefire.runOrder=reverse` 之类手段。
+
 ### 4.6 工作流执行类
 20. **起步跳过三步闭环**：收到"开发/继续开发/写代码"指令时，Hermes 必须先走 SPEC→审核门→再执行，禁止直接写 SPEC 文档或代码。**三次纠正沉淀：** 2026-07-09 ai-evolution-v2 起步时直接写计划文档+commit，跳过老丁审核（违反铁律 #10）。修正：收到任何开发指令，第一条输出必须是 SPEC 草案或要求确认需求，不是代码/计划文档。
 21. **`git add -A` 导致 doc 漂移**：写完文档后用了 `git add -A` 而非指定文件路径，导致关联 issue 修复。修正：commit 前先 `git status --short` 确认只有目标文件被跟踪。
