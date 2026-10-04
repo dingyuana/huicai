@@ -98,11 +98,13 @@ class AssetCardControllerTest {
         AssetCardEntity input = new AssetCardEntity();
         input.setAssetName("新服务器");
         input.setAssetCode("ZC-002");
+        input.setAssetName("新服务器");   // t_asset_card.asset_name NOT NULL 无默认值
         input.setOriginalValue(new BigDecimal("80000.00"));
         input.setCategoryId(1L);
         input.setAcquisitionDate(LocalDate.of(2026, 1, 1));
         input.setUsefulLife(5);
-        input.setDepreciationMethod("直线法");
+        // 幻觉值修正：真库默认与 Service 兜底均为 STRAIGHT_LINE，中文「直线法」库里不存在
+        input.setDepreciationMethod("STRAIGHT_LINE");
 
         AssetCardEntity saved = new AssetCardEntity();
         saved.setId(2L);

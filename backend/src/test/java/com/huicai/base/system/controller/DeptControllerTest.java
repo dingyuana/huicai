@@ -73,6 +73,7 @@ class DeptControllerTest {
     void create_requestBodyParsed_returnsOk() throws Exception {
         DeptEntity dept = new DeptEntity();
         dept.setName("技术部");
+        dept.setDeptCode("TECH");   // t_dept.dept_code NOT NULL 无默认值 ⇒ DTO 已设为必填
         dept.setParentId(0L);
 
         doNothing().when(deptService).create(any());
@@ -91,6 +92,7 @@ class DeptControllerTest {
     void update_pathVariableAndBody_boundCorrectly() throws Exception {
         DeptEntity dept = new DeptEntity();
         dept.setName("研发部");
+        dept.setDeptCode("RD");     // 同上
 
         doNothing().when(deptService).update(any());
 

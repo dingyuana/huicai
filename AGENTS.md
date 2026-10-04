@@ -10,9 +10,9 @@
 
 | 维度 | 数据 |
 |------|------|
-| 后端代码 | 499 个 Java 主代码文件（另 244 个测试类文件）|
-| 测试用例 | **2030 个可执行测试注解**（`@Test` 2027 + `@TestFactory` 3）/ 239 个后端测试类 + 26 个前端测试文件 265 用例。**2026-10-03 全量实测：L1 `mvn clean test` = 1637 通过 / 0 Failures / 0 Errors / 5 Skipped；L2 真库 `mvn test -DexcludedGroups=` = 2030 通过 / 0 Failures / 0 Errors / 5 Skipped**，两次均打印 `All coverage checks have been met`（覆盖率门禁真执行，非静默跳过）。⚠️ **本地跑 L2 必须先 `docker start huicai-redis`**，否则 11 个用例报 `RedisConnectionFailure`（环境型红，非代码回归，见 §4.5 第 24 条）|
-| 覆盖率 | 棘轮门禁 **INSTRUCTION ≥30% / BRANCH ≥12% / METHOD ≥54%**（`backend/pom.xml` jacoco-check）。2026-10-03 按 **clean 口径**实测重标定：L1 真实值 **32.3% / 13.9% / 55.1%**（443 类），缓冲 2.3/1.9/1.1 点。已实测该门禁会红（阈值抬到 0.99 ⇒ `Rule violated` + `BUILD FAILURE`）。🔴 **标定必须 `mvn clean test`**：不带 clean 时 `target/jacoco.exec` 跨调用累积，实测虚高到 38.9/17.9/61.8（≈+6 点），据此标定会让真实 CI 全红 |
+| 后端代码 | 512 个 Java 主代码文件（另 248 个测试类文件，其中 `*Test.java` 240 个）|
+| 测试用例 | **2038 个可执行测试注解**（`@Test` 2035 + `@TestFactory` 3）/ 240 个后端测试类 + 26 个前端测试文件 265 用例。**2026-10-05 全量实测：L1 `mvn clean test` = 1645 通过 / 0 Failures / 0 Errors / 5 Skipped；L2 真库 `mvn test -DexcludedGroups=` = 2038 通过 / 0 Failures / 0 Errors / 5 Skipped**，两次均打印 `All coverage checks have been met`（覆盖率门禁真执行，非静默跳过）。⚠️ **本地跑 L2 必须先 `docker start huicai-redis`**，否则 11 个用例报 `RedisConnectionFailure`（环境型红，非代码回归，见 §4.5 第 24 条）|
+| 覆盖率 | 棘轮门禁 **INSTRUCTION ≥30% / BRANCH ≥12% / METHOD ≥55%**（`backend/pom.xml` jacoco-check）。2026-10-05 按 **clean 口径**实测重标定：L1 真实值 **32.05% / 13.39% / 56.18%**（456 类），缓冲 2.05/1.39/1.18 点。新增 8 个 `@Data` DTO 时 METHOD 一度掉到 **0.5364**（方法总数 6610→6780、仅多覆盖 28 个）⇒ 真实 BUILD FAILURE，见 §4.5 第 30 条「DTO 覆盖率税」。已实测该门禁会红（阈值抬到 0.99 ⇒ `Rule violated` + `BUILD FAILURE`）。🔴 **标定必须 `mvn clean test`**：不带 clean 时 `target/jacoco.exec` 跨调用累积，实测虚高到 38.9/17.9/61.8（≈+6 点），据此标定会让真实 CI 全红 |
 | 数据库 | PostgreSQL 16 / **83 个 migration，最新 V167**（V160=D1 补 `DISPUTED`、V161=对账审计表、V162=D8 补 `PENDING_CONFIRM`、V163=权限码种子、V164=治愈 identity 序列落后、V165=补代理用户企业种子、V166=FORCE RLS、**V167=RLS 谓词空串硬化 `NULLIF(current_setting(...), '')`**；注意：版本号非连续，缺 V6-V62 与 V64-V91 共 85 个号；因 `out-of-order: true` + `validate-on-migrate: false` 不影响运行）|
 | API 端点 | 510+ 个后端端点 |
 | 核心模块 | 基础数据、总账、应收应付、现金管理、固定资产、费用报销、发票税务、预算、财务报表、存储管理 |
@@ -20,9 +20,9 @@
 | AI 服务 | Python FastAPI 5 端点（health/anomaly/embedding/match/ocr）|
 | 技术栈 | Spring Boot 3.x + MyBatis-Plus + Redis 7 + MinIO + RabbitMQ |
 | 开发流程 | 大闭环 + 内循环（three-phase-loop v3.0）|
-| P0-P2 阶段 | 🟡 **功能模块**基本完成（基础体系 + 缺陷修复 + AI 辅助能力），但**基座与内控未收口**：M5b-V2 非超级角色已落地、**RLS 三层防线已修好并在最低权限主体下验证**（跨租户读 0 行 / 写被拒 / 谓词空串已由 V167 硬化）；**DTO 隔离批次①（资金模块）已完成**，门禁 P2 结构性存量 18 → **12**；剩余：批次②③（`base/system` 与 `asset/budget` 共 12 处）、P106 内控深度**未立项** |
+| P0-P2 阶段 | 🟡 **功能模块**基本完成（基础体系 + 缺陷修复 + AI 辅助能力），但**基座与内控未收口**：M5b-V2 非超级角色已落地、**RLS 三层防线已修好并在最低权限主体下验证**（跨租户读 0 行 / 写被拒 / 谓词空串已由 V167 硬化）；**DTO 隔离批次①③已完成**，原门禁 P2 结构性存量 18 → **0（脚本已报「未发现违规」）**；⚠️ 但字段级门禁**天生看不见「无 status 字段的 Entity 直收」**，用反射按**参数类型**全仓扫描实测仍有 **26 处 `@RequestBody Entity`**（客户/供应商/员工/菜单/银行账户/现金&银行日记账/资产分类/凭证类型/汇总模板/税种配置/系统配置/AI 反馈/凭证模板）⇒ 已把这 26 处**钉成棘轮基线**（`TenantDtoIsolationStructureTest#entityBodyBaselineIsRatcheted`，新增必红、减少必改 size），作为 P102 批次④待清；P106 内控深度**未立项** |
 | P3 远期 | ⏳ 0%（经营分析/预算预测/风控/工资薪酬）|
-| CI 门禁 | 6 个 workflow：L1 单测 / L2 真库 / Full Stack / SPEC 契约 / 夜间 E2E / 性能基线。Full Stack 内 4 个静态检测**全部阻断式**：接口覆盖（**棘轮** `--max-uncovered 280`，只在倒退时红）/ 实体入参状态越权（P0 强制 + P2 结构性存量）/ 租户夹具一致性（A/B 两类判定）/ 路由覆盖。**2026-10-03 PR #25 真实 CI 10/10 全绿**；此前 PR #25 曾因覆盖率阈值标定口径错误被两个 L1 job 拉红（见登记册 V1.66）⇒ **门禁「绿得起来也红得掉」已获真实证据** |
+| CI 门禁 | 6 个 workflow：L1 单测 / L2 真库 / Full Stack / SPEC 契约 / 夜间 E2E / 性能基线。Full Stack 内 4 个静态检测**全部阻断式**：接口覆盖（**棘轮** `--max-uncovered 280`，只在倒退时红）/ 实体入参状态越权（P0 强制 + P2 结构性存量）/ 租户夹具一致性（A/B 两类判定）/ 路由覆盖。**2026-10-05 PR #28 真实 CI 全绿（DTO 隔离批次①）**；2026-10-03 PR #25 真实 CI 10/10 全绿；此前 PR #25 曾因覆盖率阈值标定口径错误被两个 L1 job 拉红（见登记册 V1.66）⇒ **门禁「绿得起来也红得掉」已获真实证据** |
 
 ---
 
@@ -329,6 +329,18 @@
     - **两个都要做**：① **污染源**改为事务级（`is_local=true`），非事务场景必须在 `finally` 里 `RESET app.enterprise_id`；② **受害用例**在断言前主动 `RESET`，使断言**与执行顺序无关** —— 只修①是靠运气，只修②是掩盖污染源。
     - **判据**：任何 `set_config`/`SET`（会话级）碰到连接池，就必须问「这个值什么时候被清掉」。断言若依赖「当前连接的干净状态」，必须自己先清理，不能指望前一个用例自觉。
     - **同源提醒**：「本地全绿 ⇒ 安全」又一次被推翻 —— 这类污染**只在连接复用顺序不同的环境暴露**，本地复现要靠 `-Dsurefire.runOrder=reverse` 之类手段。
+
+30. 🔴 **新增 `@Data` DTO 会直接拉低方法覆盖率并让门禁变红 —— 这不是「覆盖率退步」，是「DTO 覆盖率税」（2026-10-05 DTO 批次③ 实测）**：本项目 JaCoCo **把 Lombok 生成的 getter/setter 计入方法数**（未按 `@lombok.Generated` 过滤）。实测加 8 个 DTO：方法总数 **6610 → 6780（+170，约 21/个）**，已覆盖只 **3609 → 3637（+28）** ⇒ METHOD 从 54.60% 掉到 **53.64%**，低于 54% 阈值，**真实 BUILD FAILURE**（`Rule violated ... 0.53, but expected minimum is 0.54`）。
+    - **错误做法**：把阈值往下调「迁就」代码 —— 那是把门禁改成橡皮图章。
+    - **正解**：补测试把税缴掉。新增 `DtoMappingContractTest` 用反射触碰每个 DTO 的**每个字段**（setter + getter 等值回读 + `toEntity()`），一次清零，且顺带锁住两条真实契约：**① DTO 每个字段都必须被 `toEntity` 映射**（漏映射 = 客户端提交被静默丢弃）；**② `toEntity` 不得凭空写入 DTO 里不存在的字段**（= 不得凭空写服务端托管字段）。修后 56.18%，阈值重抬 54% → 55%（§4.5 第 25 条要求）。
+    - **判据**：凡要新增一批 `@Data` DTO/VO，先预估「方法数 × 21」，并预留对应反射测试；否则「纯样板代码」会把门禁拉红，而这与代码质量无关 —— 别误判为回归去改阈值。
+    - **同源提醒**：DTO 的存在还带来**出参面**问题（`RoleController#create` 等仍 `R<RoleEntity>` 直出 Entity），本批未改（改出参会动前端契约），登记为待办。
+
+31. 🔴 **字段级门禁对「无状态字段的 Entity 直收」完全失明（2026-10-05 结构性守卫发现）**：`scripts/check_entity_status_massassignment.py` 收尾时报「✅ 未发现实体入参的状态越权风险」，但它是按「Entity 有 status 等字段 + 被 `@RequestBody` 直收」判定的 —— `TaxTypeEntity`、`CustomerEntity`、`MenuEntity` 等**根本没有 status 字段**，于是**铁律 #13 的违规被整类漏判**。
+    - **反证**：`TenantDtoIsolationStructureTest#noControllerTakesEntityRequestBody` 用**参数类型**判定（遍历 `com.huicai` 下全部 `@RestController` 的 POST/PUT 方法，检查 `@RequestBody` 参数是否为 `*Entity`），当场揪出门禁没报的 `TaxController#createTaxType/updateTaxType`。
+    - **正解**：门禁**不能只按字段判**，必须配一个「按类型判」的反射断言；两者互补 —— 字段级判「哪些字段危险」，类型级判「哪些端点违规」。
+    - **配套**：类型级守卫一上线就把剩余量暴露成 **26 处**，故用**棘轮**钉基线（`KNOWN_ENTITY_BODY_BASELINE` + `size==26`）：新增必红、清一处必须同步减清单并改 size（§4.5 第 21 条「恒绿/假绿」形态的第 4 类「输入不全」）。
+    - **教训复用**：写任何「扫描型门禁」前先问一句 —— **它的判定依据是不是覆盖了违规的全部形态？** 只覆盖「有 status 的那一类」就等于给其余类别开了免检通道。
 
 ### 4.6 工作流执行类
 20. **起步跳过三步闭环**：收到"开发/继续开发/写代码"指令时，Hermes 必须先走 SPEC→审核门→再执行，禁止直接写 SPEC 文档或代码。**三次纠正沉淀：** 2026-07-09 ai-evolution-v2 起步时直接写计划文档+commit，跳过老丁审核（违反铁律 #10）。修正：收到任何开发指令，第一条输出必须是 SPEC 草案或要求确认需求，不是代码/计划文档。

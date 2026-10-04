@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.huicai.common.response.R;
+import com.huicai.base.system.dto.PeriodSaveDTO;
 import com.huicai.base.system.entity.PeriodEntity;
 import com.huicai.base.system.service.PeriodService;
 import com.huicai.base.voucher.service.PeriodCloseService;
@@ -52,14 +53,16 @@ public class PeriodController {
 
     @Operation(summary = "新增期间")
     @PostMapping
-    public R<PeriodEntity> create(@Valid @RequestBody PeriodEntity period) {
+    public R<PeriodEntity> create(@Valid @RequestBody PeriodSaveDTO dto) {
+        PeriodEntity period = dto.toEntity();
         periodService.save(period);
         return R.ok(period);
     }
 
     @Operation(summary = "修改期间")
     @PutMapping("/{id}")
-    public R<Void> update(@PathVariable Long id, @Valid @RequestBody PeriodEntity period) {
+    public R<Void> update(@PathVariable Long id, @Valid @RequestBody PeriodSaveDTO dto) {
+        PeriodEntity period = dto.toEntity();
         period.setId(id);
         periodService.updateById(period);
         return R.ok();

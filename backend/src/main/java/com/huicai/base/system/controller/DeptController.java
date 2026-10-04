@@ -2,7 +2,9 @@ package com.huicai.base.system.controller;
 
 import com.huicai.common.response.R;
 import com.huicai.base.system.aspect.Log;
+import com.huicai.base.system.dto.DeptSaveDTO;
 import com.huicai.base.system.entity.DeptEntity;
+import jakarta.validation.Valid;
 import com.huicai.base.system.service.DeptService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
@@ -26,14 +28,15 @@ public class DeptController {
 
     @PostMapping
     @Log(value = "新增部门", module = "system")
-    public R<?> create(@RequestBody DeptEntity dept) {
-        deptService.create(dept);
+    public R<?> create(@Valid @RequestBody DeptSaveDTO dto) {
+        deptService.create(dto.toEntity());
         return R.ok();
     }
 
     @PutMapping("/{id}")
     @Log(value = "修改部门", module = "system")
-    public R<?> update(@PathVariable Long id, @RequestBody DeptEntity dept) {
+    public R<?> update(@PathVariable Long id, @Valid @RequestBody DeptSaveDTO dto) {
+        DeptEntity dept = dto.toEntity();
         dept.setId(id);
         deptService.update(dept);
         return R.ok();

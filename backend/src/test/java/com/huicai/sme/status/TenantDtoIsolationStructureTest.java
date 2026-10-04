@@ -1,20 +1,45 @@
 package com.huicai.sme.status;
 
+import com.huicai.base.system.controller.DeptController;
+import com.huicai.base.system.controller.PeriodController;
+import com.huicai.base.system.controller.RoleController;
+import com.huicai.base.system.controller.UserController;
+import com.huicai.sme.arap.controller.ExpenseReimbursementController;
+import com.huicai.sme.arap.controller.PrepaymentController;
 import com.huicai.sme.arap.dto.ExpenseReimbursementDTO;
 import com.huicai.sme.arap.dto.PrepaymentCreateDTO;
+import com.huicai.sme.asset.controller.AssetCardController;
+import com.huicai.sme.asset.controller.AssetDisposalController;
+import com.huicai.sme.asset.dto.AssetCardSaveDTO;
+import com.huicai.sme.asset.dto.AssetDisposalCreateDTO;
+import com.huicai.sme.budget.controller.BudgetController;
+import com.huicai.sme.budget.dto.BudgetAdjustmentCreateDTO;
+import com.huicai.sme.cash.controller.TicketController;
 import com.huicai.sme.cash.dto.TicketDTO;
+import com.huicai.sme.tax.controller.TaxController;
 import com.huicai.sme.tax.dto.InputInvoiceCreateDTO;
 import com.huicai.sme.tax.dto.OutputInvoiceCreateDTO;
 import com.huicai.sme.tax.dto.TaxDeclarationCreateDTO;
+import org.springframework.beans.factory.config.BeanDefinition;
+import org.springframework.context.annotation.ClassPathScanningCandidateComponentProvider;
+import org.springframework.core.type.filter.AnnotationTypeFilter;
+import org.springframework.web.bind.annotation.RestController;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 
 import java.lang.reflect.Field;
+import java.lang.reflect.Method;
+import java.lang.reflect.Parameter;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -54,7 +79,29 @@ class TenantDtoIsolationStructureTest {
             "id", "tenantId", "enterpriseId", "deleted", "version",
             "createdBy", "updatedBy", "createdAt", "updatedAt",
             "auditedBy", "auditedAt", "submittedAt", "approvedAt", "approvedBy",
-            "rejectReason", "applicantId", "reimbNo");
+            "rejectReason", "applicantId", "reimbNo",
+            // 批次③ 新增：折旧 / 处置 / 开账 / 登录态派生（均经查证由 Service 产生）
+            "accumulatedDepreciation", "netValue", "lastDepreciationPeriod",
+            "gainLoss", "openingStatus", "openedAt", "openedBy", "openedByName",
+            "lastLoginIp", "lastLoginAt", "deptName", "permissionCodes",
+            "children", "periodCode");
+
+    /** 本批次已 DTO 化的控制器：结构性锁「不得再出现 @RequestBody Entity」 */
+    private static final List<Class<?>> DTOIZED_CONTROLLERS = Arrays.asList(
+            TaxController.class, PrepaymentController.class,
+            ExpenseReimbursementController.class, TicketController.class,
+            UserController.class, RoleController.class, PeriodController.class,
+            DeptController.class, BudgetController.class,
+            AssetCardController.class, AssetDisposalController.class);
+
+    private static boolean isEntity(Class<?> c) {
+        for (Class<?> k = c; k != null && k != Object.class; k = k.getSuperclass()) {
+            if (k.getSimpleName().endsWith("Entity")) {
+                return true;
+            }
+        }
+        return false;
+    }
 
     private static List<String> fieldNames(Class<?> dto) {
         return Arrays.stream(dto.getDeclaredFields())
@@ -86,6 +133,109 @@ class TenantDtoIsolationStructureTest {
     void existingDtosStayClean() {
         assertNoForbiddenFields(OutputInvoiceCreateDTO.class);
         assertNoForbiddenFields(TaxDeclarationCreateDTO.class);
+    }
+
+    @Test
+    @DisplayName("批次③ 七个新 DTO 均不含服务端托管字段")
+    void batchThreeDtosAreClean() {
+        assertNoForbiddenFields(com.huicai.base.system.dto.UserSaveDTO.class);
+        assertNoForbiddenFields(com.huicai.base.system.dto.RoleSaveDTO.class);
+        assertNoForbiddenFields(com.huicai.base.system.dto.PeriodSaveDTO.class);
+        assertNoForbiddenFields(com.huicai.base.system.dto.DeptSaveDTO.class);
+        assertNoForbiddenFields(BudgetAdjustmentCreateDTO.class);
+        assertNoForbiddenFields(AssetCardSaveDTO.class);
+        assertNoForbiddenFields(AssetDisposalCreateDTO.class);
+    }
+
+    @Test
+    @DisplayName("已 DTO 化的 11 个控制器不再出现 @RequestBody Entity（挡住最典型的回退）")
+    void noControllerTakesEntityRequestBody() {
+        List<String> violations = new ArrayList<>();
+        for (Class<?> ctrl : DTOIZED_CONTROLLERS) {
+            for (Method m : ctrl.getDeclaredMethods()) {
+                boolean writeEndpoint = m.isAnnotationPresent(PostMapping.class)
+                        || m.isAnnotationPresent(PutMapping.class);
+                if (!writeEndpoint) {
+                    continue;
+                }
+                for (Parameter p : m.getParameters()) {
+                    if (p.isAnnotationPresent(RequestBody.class) && isEntity(p.getType())) {
+                        violations.add(ctrl.getSimpleName() + "#" + m.getName()
+                                + " 直收 Entity " + p.getType().getSimpleName());
+                    }
+                }
+            }
+        }
+        assertTrue(violations.isEmpty(),
+                "以下写端点仍直收 Entity（铁律 #13）：" + violations);
+    }
+
+    /**
+     * <b>全仓剩余 {@code @RequestBody Entity} 基线（26 处，棘轮钉住）</b>。
+     *
+     * <p><b>为什么要单独钉一份基线</b>：字段级门禁
+     * {@code scripts/check_entity_status_massassignment.py} 在本批次收尾时报
+     * 「未发现违规」，但用<b>参数类型</b>全仓扫描仍有 26 处写端点直收 Entity
+     * （客户/供应商/员工/菜单/银行账户/现金日记账/…）—— 因为这些 Entity
+     * <b>没有 status 字段</b>，字段级规则天然看不见。
+     * ⇒ <b>「门禁 0 违规」≠「铁律 #13 已达标」</b>。
+     *
+     * <p>本清单是<b>实测基线</b>：新增任何一处 Entity 直收都会红；清掉一处就要
+     * 同步从清单里删（并让 {@code size==26} 的断言提醒你改）。不可只加不减。
+     */
+    private static final Set<String> KNOWN_ENTITY_BODY_BASELINE = Set.of(
+            "AiFeedbackLogController#create",
+            "VoucherTemplateController#update",
+            "CustomerController#create", "CustomerController#update",
+            "EmployeeController#create", "EmployeeController#update",
+            "VendorController#create", "VendorController#update",
+            "SysConfigController#create", "SysConfigController#update",
+            "AssetCategoryController#create", "AssetCategoryController#update",
+            "VoucherTypeController#create", "VoucherTypeController#update",
+            "BankJournalController#create", "BankJournalController#update",
+            "SummaryLibController#create", "SummaryLibController#update",
+            "BankAccountController#create", "BankAccountController#update",
+            "MenuController#create", "MenuController#update",
+            "ClassificationRuleController#create", "ClassificationRuleController#update",
+            "CashJournalController#create", "CashJournalController#update");
+
+    @Test
+    @DisplayName("全仓扫描：Entity 直收写端点不新增（棘轮基线 26，清一处要减一处）")
+    void entityBodyBaselineIsRatcheted() throws Exception {
+        Set<String> actual = scanAllControllersForEntityBodies();
+        Set<String> added = new java.util.TreeSet<>(actual);
+        added.removeAll(KNOWN_ENTITY_BODY_BASELINE);
+        Set<String> removed = new java.util.TreeSet<>(KNOWN_ENTITY_BODY_BASELINE);
+        removed.removeAll(actual);
+        assertTrue(added.isEmpty(),
+                "新增了 Entity 直收写端点（铁律 #13）：" + added
+                        + "；请改用 DTO，并把该端点从基线清单中移除的同时补齐下方 size 断言");
+        assertTrue(removed.isEmpty(),
+                "基线清单里有 " + removed.size() + " 处已不再违规 ⇒ 请从基线里删掉并把 26 改成 "
+                        + actual.size() + "（棘轮只许降不许升）");
+        assertEquals(26, KNOWN_ENTITY_BODY_BASELINE.size(), "基线条目数与清单不一致");
+    }
+
+    private static Set<String> scanAllControllersForEntityBodies() throws Exception {
+        ClassPathScanningCandidateComponentProvider scanner =
+                new ClassPathScanningCandidateComponentProvider(false);
+        scanner.addIncludeFilter(new AnnotationTypeFilter(RestController.class));
+        Set<String> hits = new java.util.TreeSet<>();
+        for (BeanDefinition bd : scanner.findCandidateComponents("com.huicai")) {
+            Class<?> ctrl = Class.forName(bd.getBeanClassName());
+            for (Method m : ctrl.getDeclaredMethods()) {
+                if (!m.isAnnotationPresent(PostMapping.class)
+                        && !m.isAnnotationPresent(PutMapping.class)) {
+                    continue;
+                }
+                for (Parameter p : m.getParameters()) {
+                    if (p.isAnnotationPresent(RequestBody.class) && isEntity(p.getType())) {
+                        hits.add(ctrl.getSimpleName() + "#" + m.getName());
+                    }
+                }
+            }
+        }
+        return hits;
     }
 
     @Test

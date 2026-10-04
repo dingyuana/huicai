@@ -3,12 +3,14 @@ package com.huicai.sme.asset.controller;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.huicai.base.system.util.SecurityUtils;
 import com.huicai.common.response.R;
+import com.huicai.sme.asset.dto.AssetCardSaveDTO;
 import com.huicai.sme.asset.dto.DepreciationVoucherResult;
 import com.huicai.sme.asset.entity.AssetCardEntity;
 import com.huicai.sme.asset.service.AssetCardService;
 import com.huicai.sme.asset.service.DepreciationVoucherService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
@@ -44,13 +46,14 @@ public class AssetCardController {
 
     @Operation(summary = "创建")
     @PostMapping
-    public R<AssetCardEntity> create(@RequestBody AssetCardEntity entity) {
-        return R.ok(service.create(entity));
+    public R<AssetCardEntity> create(@Valid @RequestBody AssetCardSaveDTO dto) {
+        return R.ok(service.create(dto.toEntity()));
     }
 
     @Operation(summary = "更新")
     @PutMapping("/{id}")
-    public R<AssetCardEntity> update(@PathVariable Long id, @RequestBody AssetCardEntity entity) {
+    public R<AssetCardEntity> update(@PathVariable Long id, @Valid @RequestBody AssetCardSaveDTO dto) {
+        AssetCardEntity entity = dto.toEntity();
         entity.setId(id);
         return R.ok(service.update(entity));
     }

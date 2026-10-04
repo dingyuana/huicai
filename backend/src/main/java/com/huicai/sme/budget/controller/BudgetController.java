@@ -2,7 +2,9 @@ package com.huicai.sme.budget.controller;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.huicai.common.response.R;
+import com.huicai.sme.budget.dto.BudgetAdjustmentCreateDTO;
 import com.huicai.sme.budget.entity.BudgetAdjustmentEntity;
+import jakarta.validation.Valid;
 import com.huicai.sme.budget.entity.BudgetEntity;
 import com.huicai.sme.budget.entity.BudgetEntryEntity;
 import com.huicai.sme.budget.service.BudgetService;
@@ -89,8 +91,8 @@ public class BudgetController {
 
     @Operation(summary = "创建调整")
     @PostMapping("/adjustments")
-    public R<BudgetAdjustmentEntity> createAdjustment(@RequestBody BudgetAdjustmentEntity entity) {
-        return R.ok(service.createAdjustment(entity));
+    public R<BudgetAdjustmentEntity> createAdjustment(@Valid @RequestBody BudgetAdjustmentCreateDTO dto) {
+        return R.ok(service.createAdjustment(dto.toEntity()));
     }
 
     @Operation(summary = "审批调整")
