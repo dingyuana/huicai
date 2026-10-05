@@ -1,6 +1,7 @@
 package com.huicai.sme.arap.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.huicai.common.context.EnterpriseContextHolder;
 import com.huicai.common.exception.BusinessException;
 import com.huicai.sme.arap.dto.ReconciliationToleranceDTO;
 import com.huicai.sme.arap.dto.vo.ReconciliationToleranceVO;
@@ -26,7 +27,6 @@ import java.math.BigDecimal;
 @Transactional
 public class ReconciliationToleranceServiceImpl implements ReconciliationToleranceService {
 
-    private static final long DEFAULT_ENTERPRISE_ID = 1L;
     private static final BigDecimal DEFAULT_TOLERANCE_VALUE = new BigDecimal("5.00");
     private static final BigDecimal DEFAULT_TOLERANCE_RATE = new BigDecimal("10.00");
 
@@ -40,7 +40,7 @@ public class ReconciliationToleranceServiceImpl implements ReconciliationToleran
     @Override
     public ReconciliationToleranceEntity getTolerance(Long partyId, String partyType) {
         ReconciliationToleranceEntity entity = toleranceMapper.findTolerance(
-                DEFAULT_ENTERPRISE_ID, partyId, partyType);
+                currentEnterpriseId(), partyId, partyType);
 
         if (entity == null) {
             entity = new ReconciliationToleranceEntity();
@@ -69,7 +69,7 @@ public class ReconciliationToleranceServiceImpl implements ReconciliationToleran
     @Override
     public ReconciliationToleranceVO getDefaultConfig() {
         LambdaQueryWrapper<ReconciliationToleranceEntity> wrapper = new LambdaQueryWrapper<>();
-        wrapper.eq(ReconciliationToleranceEntity::getEnterpriseId, DEFAULT_ENTERPRISE_ID)
+        wrapper.eq(ReconciliationToleranceEntity::getEnterpriseId, currentEnterpriseId())
                 .isNull(ReconciliationToleranceEntity::getPartyId)
                 .eq(ReconciliationToleranceEntity::getIsActive, true)
                 .eq(ReconciliationToleranceEntity::getDeleted, 0);
@@ -84,7 +84,7 @@ public class ReconciliationToleranceServiceImpl implements ReconciliationToleran
     @Override
     public ReconciliationToleranceVO getByParty(Long partyId, String partyType) {
         LambdaQueryWrapper<ReconciliationToleranceEntity> wrapper = new LambdaQueryWrapper<>();
-        wrapper.eq(ReconciliationToleranceEntity::getEnterpriseId, DEFAULT_ENTERPRISE_ID)
+        wrapper.eq(ReconciliationToleranceEntity::getEnterpriseId, currentEnterpriseId())
                 .eq(ReconciliationToleranceEntity::getPartyId, partyId)
                 .eq(ReconciliationToleranceEntity::getPartyType, partyType)
                 .eq(ReconciliationToleranceEntity::getIsActive, true)
@@ -101,7 +101,7 @@ public class ReconciliationToleranceServiceImpl implements ReconciliationToleran
     @Transactional(rollbackFor = Exception.class)
     public ReconciliationToleranceVO create(ReconciliationToleranceDTO dto) {
         ReconciliationToleranceEntity entity = new ReconciliationToleranceEntity();
-        entity.setEnterpriseId(DEFAULT_ENTERPRISE_ID);
+        entity.setEnterpriseId(currentEnterpriseId());
         entity.setPartyId(dto.getPartyId());
         entity.setPartyType(dto.getPartyType());
         entity.setToleranceValue(dto.getToleranceAmount() != null
@@ -157,6 +157,30 @@ public class ReconciliationToleranceServiceImpl implements ReconciliationToleran
         entity.setDeleted(1);
         toleranceMapper.updateById(entity);
         log.info("删除容差配置: id={}", id);
+    }
+
+    /**
+     * 取当前企业上下文。
+     *
+     * <p><b>P106 / AT-106-3</b>：原为常量 {@code DEFAULT_ENTERPRISE_ID = 1L}，
+     * 4 个使用点（{@code getTolerance} / {@code getDefaultConfig} / {@code getByParty} / {@code create}）
+     * 全部按企业 1 查询或写入 ⇒ 任何其它企业的容差配置
+     * <b>既查不到也写不进</b>。
+     *
+     * <p><b>为什么必须抛异常而不是回落 1</b>：本服务没有「正确的企业」可猜 ——
+     * 回落 1 会把 A 企业的核销按 B 企业的容差判定，属静默错账（铁例 #14）。
+     *
+     * <p><b>与 {@code TenantRlsInitializer} 的边界</b>：切面在上下文为 null 时
+     * <b>不设 GUC</b>（RLS 返 0 行，属预期 fail-closed），本方法<b>不改动该语义</b>，
+     * 只要求「凡走容差计算/配置的业务路径必须有企业上下文」（SPEC §1.2 L1-3）。
+     */
+    private Long currentEnterpriseId() {
+        Long enterpriseId = EnterpriseContextHolder.get();
+        if (enterpriseId == null) {
+            throw new BusinessException(
+                    "缺少企业上下文，无法确定核销容差所属企业（禁止回落企业 1）");
+        }
+        return enterpriseId;
     }
 
     private ReconciliationToleranceVO convertToVO(ReconciliationToleranceEntity entity) {
