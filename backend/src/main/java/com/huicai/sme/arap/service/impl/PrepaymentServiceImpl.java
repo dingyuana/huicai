@@ -5,6 +5,7 @@ import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.huicai.common.context.EnterpriseContextHolder;
 import com.huicai.common.exception.BusinessException;
 import com.huicai.sme.arap.constant.ArapStatus;
 import com.huicai.sme.arap.entity.*;
@@ -52,7 +53,6 @@ import java.util.Objects;
 @Transactional
 public class PrepaymentServiceImpl implements PrepaymentService {
 
-    private static final long DEFAULT_TENANT_ID = 1L;
     private static final long DEFAULT_USER_ID = 1L;
 
     private static final String SUBJECT_PREPAY = "1123";
@@ -104,7 +104,14 @@ public class PrepaymentServiceImpl implements PrepaymentService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public PrepaymentEntity create(PrepaymentEntity entity) {
-        if (entity.getTenantId() == null) entity.setTenantId(DEFAULT_TENANT_ID);
+        // P106 / AGENTS §4.5 第 34 条：原为 `if (tenantId == null) setTenantId(DEFAULT_TENANT_ID /* = 1L */)`。
+        // t_prepayment 同时存在 tenant_id（V5 建表遗留）与 enterprise_id（V105 补，NOT NULL DEFAULT 1），
+        // 而 RLS 的 enterprise_policy 只读 enterprise_id ⇒ 写死 1 会让两列永久不一致：
+        // 任何按 tenant_id 的统计/索引都基于错误数据，且与被 RLS 放行的 enterprise_id 相互矛盾。
+        // 该列全库无任何读取方（rg 仅命中原这一行），故此处直接与 enterprise_id 同源：
+        // 有上下文时两列同为上下文企业；无上下文时两列都落 DB DEFAULT 1，仍然一致。
+        // ⚠️ 不得改成「无上下文即抛异常」—— TenantRlsInitializer:65-69 的 null-return 语义不变（SPEC §1.2 L1-3）。
+        entity.setTenantId(EnterpriseContextHolder.get());
         // P0-fix: 原为 `if (entity.getStatus() == null) entity.setStatus(ArapStatus.DRAFT)`。
         // PrepaymentController#create 直收 @RequestBody PrepaymentEntity（违反铁律 #13），
         // 只在 null 时兜底 ⇒ 客户端可指定任意 status。

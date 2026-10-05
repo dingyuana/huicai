@@ -44,6 +44,29 @@ SPEC §0.2 的断言已在**真实开发库**（`huicai-postgres`，以非超级
 | 绿法 | 删 `:55` 的 `DEFAULT_TENANT_ID` 与 `:107` 的赋值，让 `tenant_id` **恒等于** `enterprise_id`（保留对存量 `tenant_id` 的读取兼容，不加 CHECK 约束以免锁死历史数据） |
 | 反证手法 | 保留一个「把 `tenant_id` 改成 ≠E」的负向用例，证明按旧列的查询确实不得命中 |
 
+### 1a-1 实施结果（2026-10-05，Red → Green 完成）
+
+**红因与 SPEC §0.2 的预测不同，且更严重** —— 预测是「`tenant_id` 写死 1 而 `enterprise_id` 正确」，实测 **`enterprise_id` 本身就是错的**：
+
+```
+expected: <990001> but was: <1>     ← enterprise_id 没跟着上下文走
+```
+
+**根因链**：`PrepaymentEntity` 不继承 `BaseEntity` 且全类无任何 `@TableField`/`FieldFill` ⇒ MyBatis-Plus 的 `TableInfo.withInsertFill = false` ⇒ `MyMetaObjectHandler.insertFill` **根本不被调用**（不是「调用了但没填」，是「压根没进」）⇒ `enterpriseId` 永不被上下文覆盖；而 `t_prepayment.enterprise_id` 是 `V105` 加的 `NOT NULL DEFAULT 1` ⇒ **任何非企业 1 的上下文创建的预付款都落进企业 1**。⇒ 实际后果不是「两列不一致」，而是**跨租户默认写入**（沉淀为 AGENTS §4.5 第 34 条）。
+
+**修法（两处，各有实测依据）**：
+
+| # | 改动 | 依据 |
+|---|---|---|
+| 1 | `PrepaymentEntity.enterpriseId` 补 `@TableField(fill = FieldFill.INSERT)` | 「有任意一个 fill 字段」即触发 `insertFill` 回调。⚠️ **不能改用继承 `BaseEntity`** —— 真实库核对列类型：`created_at`/`updated_at` 是 `date`（基类 `LocalDateTime`）、`created_by` 是 `varchar(50)`（基类 `Long`）⇒ 3 处不匹配。该实体 `:12` 的既有注释早已写明这一点 |
+| 2 | `PrepaymentServiceImpl#create` 的 `setTenantId(DEFAULT_TENANT_ID)` 改为 `setTenantId(EnterpriseContextHolder.get())`，并删除 `DEFAULT_TENANT_ID` 常量 | `tenant_id` 全库**无任何读取方**（`rg` 仅命中原这一行）⇒ 可安全与 `enterprise_id` 同源。有上下文时两列同为上下文企业；**无上下文时两列都落 DB `DEFAULT 1`，仍然一致**。⚠️ 未改成「无上下文即抛异常」，`TenantRlsInitializer:65-69` 的 null-return 语义保持不变（SPEC §1.2 L1-3 边界） |
+
+**顺带查明（影响所有隔离类断言）**：L2 Testcontainers 的连接角色 `test` 是**超级用户**（实测 `rolsuper=t`/`bypassrls=t`），而超级用户**绕过 RLS** ⇒ 「切到别的企业应查不到」的断言在 L2 里恒绿。已改用 `SET LOCAL ROLE` 到 `NOSUPERUSER` 探针（做法同 `TenantRlsRealDBTest`），并加守卫用例 `l2RoleIsSuperuserSoRlsAssertionsNeedSetRole`。**修正后该断言转绿 ⇒ RLS 隔离层本身有效**，缺陷只在写入路径。沉淀为 AGENTS §4.5 第 33 条。
+
+**验证**：`AccountSetIsolationRealDBTest` **5/5 绿**；L1 `mvn clean test` = **1645/0/0/5** + `All coverage checks have been met`；L2 `mvn test -DexcludedGroups=` = **2043/0/0/5** + `All coverage checks have been met`（较基线 +5 即本类）。
+
+**未做**：§0.2 的另外 3 张表（`t_reconciliation_log` / `t_ai_feedback_log` / `t_classification_rule`）—— 见 1a-2~1a-5。
+
 ### 微循环 1a-2（Red→Green）`AT-106-2` 核销日志两处写入
 
 `ReconciliationServiceImpl:364` / `:780`（写 `t_reconciliation_log.tenant_id`）⇒ 改为写 `enterprise_id`。断言：两行 `enterprise_id = E` 且 `tenant_id` 不再被 Service 独立赋值。

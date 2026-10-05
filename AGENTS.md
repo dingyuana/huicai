@@ -351,7 +351,8 @@
     - **为什么 §4.5 第 23 条那次加固没抓到**：`MyMetaObjectHandler` 是**元对象层**修复，只对「声明了 fill 的字段」生效；**它无法覆盖「实体压根没用 fill 机制」这一类**——`hasSetter("enterpriseId")` 为真也不够，MyBatis-Plus 在 `TableInfo` 阶段就已判定该表无需 fill。
     - **判据**：见 Entity 先查两件事 —— ①`extends BaseEntity`？②类体内有 `@TableField(fill=…)`？**两者皆否 ⇒ 该实体的 `enterprise_id`/`createdAt`/`updatedAt` 一律走 DB 默认值**，而 V102~V105 补的列全是 `NOT NULL DEFAULT 1`。
     - **影响面（已全量扫描）**：18 个实体无 `FieldFill`，其中 8 个不继承 `BaseEntity`；5 个声明 `enterpriseId`，但 `UserEntity`/`AgencyUserEnterpriseEntity`/`AgencyEnterpriseEntity` 的 `enterprise_id` **按设计就是「归属企业」而非上下文**（被覆盖反而是错的）⇒ **只有 `PrepaymentEntity` 是缺陷**。这也说明**不能用「有无 enterpriseId 字段」判定**，必须逐个看语义。
-    - **治法**：让该实体继承 `BaseEntity`（顺带消掉重复字段），或给 `enterpriseId` 补 `@TableField(fill = FieldFill.INSERT)`；**不要**在 Service 里手填 —— 那样又回到「谁记得填」的老路。
+    - **治法（实测后收窄）**：**只能**给 `enterpriseId` 补 `@TableField(fill = FieldFill.INSERT)`。**不要**改用「继承 `BaseEntity`」—— 用真实库核对列类型即知会引入 **3 处不匹配**：`t_prepayment.created_at`/`updated_at` 是 `date`（基类 `LocalDateTime`）、`created_by` 是 `varchar(50)`（基类 `Long`）、且基类还有 `updated_by`/`version` 两列本表没有。⚠️ `PrepaymentEntity:12` 的类注释**早已写明**「不继承 BaseEntity，因为 createdBy(String)/createdAt(LocalDate)/updatedAt(LocalDate) 类型与基类不兼容」—— **这条既有注释就是正确线索，动手前应先读它**。**也不要**在 Service 里手填 `setEnterpriseId` —— 那样又回到「谁记得填」的老路。
+    - **「有 fill 字段」是触发元对象回调的开关**：MyBatis-Plus 只看「该实体是否有任意一个字段声明了 `FieldFill`」来决定是否调 `insertFill`，**不看目标字段自己有没有注解** ⇒ 所以给 `enterpriseId` 单独加注解即可生效，无需其它字段配合。
 
 32. 🔴 **git push 卡在 401 挑战 = HTTP/2 被中间设备打断，换 `http.version=HTTP/1.1` 即可（2026-10-05 实测）**：症状很有迷惑性 ——
     - `curl https://github.com/.../info/refs` **返回 200**、`Test-NetConnection -Port 443` **True**、
