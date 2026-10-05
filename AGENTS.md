@@ -342,6 +342,21 @@
     - **配套**：类型级守卫一上线就把剩余量暴露成 **26 处**，故用**棘轮**钉基线（`KNOWN_ENTITY_BODY_BASELINE` + `size==26`）：新增必红、清一处必须同步减清单并改 size（§4.5 第 21 条「恒绿/假绿」形态的第 4 类「输入不全」）。
     - **教训复用**：写任何「扫描型门禁」前先问一句 —— **它的判定依据是不是覆盖了违规的全部形态？** 只覆盖「有 status 的那一类」就等于给其余类别开了免检通道。
 
+32. 🔴 **git push 卡在 401 挑战 = HTTP/2 被中间设备打断，换 `http.version=HTTP/1.1` 即可（2026-10-05 实测）**：症状很有迷惑性 ——
+    - `curl https://github.com/.../info/refs` **返回 200**、`Test-NetConnection -Port 443` **True**、
+      `git push` 却**静默挂住**（无报错，`timeout` 杀掉后日志为空）；`GIT_TRACE_CURL=1` 显示流程停在
+      **收到 401 的瞬间**（`www-authenticate: Basic realm="GitHub"` 之后没有下文）；
+    - 同样地，`git ls-remote` 能成功（**公开仓库可匿名读**）⇒ **「ls-remote 通」不能证明 push 也通**，
+      这是最容易被拿来当「网络没问题」证据的那条命令；
+    - 判据与治法：`GIT_CURL_VERBOSE=1` 看到卡在 401 ⇒ 加 `-c http.version=HTTP/1.1`
+      （ALPN 协商到 h2 后带认证的流会被重置，h1 立刻成功）。
+    - ⚠️ **顺带一个独立坑**：`credential.helper=store --file=...` 的凭据文件**必须由 git 自己写**
+      （`printf 'protocol=https\nhost=github.com\nusername=..\npassword=..\n\n' | git credential-store --file=X store`）。
+      **手写等价的 `https://user:token@github.com` 一行不会被解析**（`credential-store get` 返回空 ⇒
+      表现为 `could not read Username`，看着像「没有凭据」，实为「格式不被接受」）。
+      PowerShell 写文件还要额外注意 `Set-Content -Encoding UTF8` 会带 **BOM**，同样导致解析失败。
+    - **配合**：把凭据放进 `--file=/tmp/xxx` 而不是全局配置，用完即删；本次已删除。
+
 ### 4.6 工作流执行类
 20. **起步跳过三步闭环**：收到"开发/继续开发/写代码"指令时，Hermes 必须先走 SPEC→审核门→再执行，禁止直接写 SPEC 文档或代码。**三次纠正沉淀：** 2026-07-09 ai-evolution-v2 起步时直接写计划文档+commit，跳过老丁审核（违反铁律 #10）。修正：收到任何开发指令，第一条输出必须是 SPEC 草案或要求确认需求，不是代码/计划文档。
 21. **`git add -A` 导致 doc 漂移**：写完文档后用了 `git add -A` 而非指定文件路径，导致关联 issue 修复。修正：commit 前先 `git status --short` 确认只有目标文件被跟踪。
