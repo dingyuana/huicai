@@ -3,7 +3,7 @@
 > **版本**：V1.2（实施回写） | **最后修改**：2026-10-03 | **作者**：opencode
 > **编号**：HUICAI-SPC-P107 | 优先级：**P0** | 状态：✅ **已实施（2026-09-30，D1~D6 + D8）**
 > **来源**：2026-09-29 代码功能审计（代理 C）发现的 6 项「读代码即可确认、修复路径明确」的存量缺陷
-> **关联需求**：REQ-2026-134（⚠️ V1.0 原写 REQ-2026-133 有误 —— 133 归 P106 内控深度，且该编号从未登记）| **前置**：无（可与 P102~P105 并行） | **test_ref**：`CustomerStatementRealDBTest`、`VoucherImmutabilityRealDBTest`、`BankReconciliationRealDBTest`、`AgentBatchServiceTest`
+> **关联需求**：REQ-2026-134（⚠️ V1.0 原写 REQ-2026-133 有误 —— 133 归 P106 内控深度，134 才是本 SPEC 在登记册的编号；133 已于 2026-10-05 随 P106 多账套子项登记）| **前置**：无（可与 P102~P105 并行） | **test_ref**：`CustomerStatementRealDBTest`、`VoucherImmutabilityRealDBTest`、`BankReconciliationRealDBTest`、`AgentBatchServiceTest`
 > **与 P102~P105 的分工**：P102~P105 是**架构级基座改造**（安全基座/审计/门禁/文档）；本 SPEC 是**点状缺陷修复**，混入会拖慢基座进度，故独立立项
 
 ---
