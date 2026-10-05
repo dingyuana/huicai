@@ -2,6 +2,7 @@ package com.huicai.sme.arap.service.impl;
 
 import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.huicai.common.context.EnterpriseContextHolder;
 import com.huicai.common.exception.BusinessException;
 import com.huicai.base.system.util.SecurityUtils;
 import com.huicai.sme.arap.constant.ArapStatus;
@@ -70,7 +71,6 @@ public class ReconciliationServiceImpl implements ReconciliationService {
 
     private static final BigDecimal SCORE_THRESHOLD = new BigDecimal("0.70");
     private static final BigDecimal DEFAULT_TOLERANCE_RATE = new BigDecimal("0.10");
-    private static final long DEFAULT_TENANT_ID = 1L;
     private static final long DEFAULT_USER_ID = 1L;
 
     /**
@@ -361,7 +361,7 @@ public class ReconciliationServiceImpl implements ReconciliationService {
 
         // Create reconciliation log（状态 SUBMITTED，待审批）
         ReconciliationLogEntity reconLog = new ReconciliationLogEntity();
-        reconLog.setTenantId(DEFAULT_TENANT_ID);
+        reconLog.setTenantId(EnterpriseContextHolder.get());
         reconLog.setSourceDocType(request.sourceDocType());
         reconLog.setSourceDocId(request.sourceDocId());
         reconLog.setTargetDocType(request.targetDocType());
@@ -777,7 +777,7 @@ public class ReconciliationServiceImpl implements ReconciliationService {
         // 3. 创建差额调整凭证分录 (仅记录, 不修改应收/应付结算金额)
         //    实际企业会额外生成一笔调整凭证: 借 财务费用/折扣 / 贷 应收/应付
         ReconciliationLogEntity adjustLog = new ReconciliationLogEntity();
-        adjustLog.setTenantId(DEFAULT_TENANT_ID);
+        adjustLog.setTenantId(EnterpriseContextHolder.get());
         adjustLog.setSourceDocType(request.sourceDocType());
         adjustLog.setSourceDocId(request.sourceDocId());
         adjustLog.setTargetDocType(request.targetDocType());
@@ -889,7 +889,10 @@ public class ReconciliationServiceImpl implements ReconciliationService {
             String exceptionType, String exceptionReason,
             String matchSuggestion) {
         ReconciliationExceptionEntity ex = new ReconciliationExceptionEntity();
-        ex.setTenantId(DEFAULT_TENANT_ID);
+        // P106 / AT-106-2b：原为 ex.setTenantId(DEFAULT_TENANT_ID)，但该字段在
+        // ReconciliationExceptionEntity 上标了 @TableField(exist=false)，且 t_reconciliation_exception
+        // 根本没有 tenant_id 列（真实库 information_schema 已核对）⇒ 该赋值从不参与 SQL，是误导性死代码。
+        // 修法是删代码而不是改列：改成 setEnterpriseId 会给不存在的租户列加值语义并掩盖 Entity 层缺陷。
         ex.setSourceDocType(sourceDocType);
         ex.setSourceDocId(sourceDocId);
         ex.setTargetDocType(targetDocType);

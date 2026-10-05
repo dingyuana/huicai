@@ -7,6 +7,7 @@ import com.huicai.base.business.mapper.ArapSettlementMapper;
 import com.huicai.base.business.mapper.BusinessDocMapper;
 import com.huicai.base.masterdata.entity.CustomerEntity;
 import com.huicai.base.masterdata.mapper.CustomerMapper;
+import com.huicai.common.context.EnterpriseContextHolder;
 import com.huicai.common.exception.BusinessException;
 import com.huicai.common.test.AbstractMapperTest;
 import com.huicai.common.test.SlowTest;
@@ -19,6 +20,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.transaction.annotation.Propagation;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
@@ -49,6 +51,12 @@ import static org.junit.jupiter.api.Assertions.*;
 @DisplayName("核销 - 核心业务链路集成测试")
 public class ReconciliationIntegrationTest extends AbstractMapperTest {
 
+    /** P106 / AT-106-2：非默认企业号，用于验证核销日志不写死租户 1 */
+    private static final Long P106_ENTERPRISE = 990101L;
+
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
+
     @Autowired
     private ReconciliationService reconciliationService;
 
@@ -73,11 +81,23 @@ public class ReconciliationIntegrationTest extends AbstractMapperTest {
 
     @BeforeEach
     void setUp() {
+        createFixtures();
+    }
+
+    /**
+     * 在<b>当前企业上下文</b>下建夹具。
+     *
+     * <p><b>为何可复用</b>：P106 / AT-106-2 需要在非默认企业（990101）下造数，
+     * 而 {@code EnterpriseDataPermissionInterceptor} 会按上下文过滤 ⇒ 沿用企业 1 的夹具
+     * 在切到 990101 后 {@code selectById} 会返 null（症状是「业务单据不存在」，
+     * 与真实原因毫无关系）。故夹具必须在目标上下文内重建。
+     */
+    private void createFixtures() {
         // 创建测试客户（auto-generated ID）
         CustomerEntity c = new CustomerEntity();
         c.setName("核销测试客户");
         c.setCode("WRTOFF-" + System.currentTimeMillis());
-        c.setEnterpriseId(1L);
+        c.setEnterpriseId(EnterpriseContextHolder.get());
         c.setDeleted(0);
         customerMapper.insert(c);
         customerId = c.getId();
@@ -304,5 +324,58 @@ public class ReconciliationIntegrationTest extends AbstractMapperTest {
         assertNotNull(records, "核销记录不应为 null");
         assertTrue(records.size() > 0, "应有至少一条核销记录");
         assertEquals("INVOICE_OUT", records.get(0).getTargetDocType(), "核销记录的 targetDocType 应正确");
+    }
+
+    /**
+     * P106 / REQ-2026-133 / AT-106-2：核销日志的 tenant_id 必须随企业上下文，不得写死常量 1。
+     *
+     * <p><b>缺陷</b>：{@code t_reconciliation_log} 同时有 {@code tenant_id}（V94:189）
+     * 与 {@code enterprise_id}（V105:23），而 RLS 的 enterprise_policy 只读后者；
+     * {@code ReconciliationServiceImpl:364/:780} 写的是
+     * {@code setTenantId(DEFAULT_TENANT_ID /* = 1L *&#47;/)} ⇒ 两列永久不一致。
+     *
+     * <p>本用例类必须是 {@code NOT_SUPPORTED}（execute 是 REQUIRES_NEW），
+     * 故上下文由本用例自行设置，且 {@code enterprise_id} 只能由真实落库回读验证 ——
+     * 内存对象的 enterpriseId 由 {@code MyMetaObjectHandler} 在 insert 时才写入。
+     */
+    @Test
+    @DisplayName("AT-106-2 核销日志写入当前企业而非常量 1（两列须恒等）")
+    void reconciliationLogMustFollowEnterpriseContext() {
+        useEnterprise(P106_ENTERPRISE);
+        final Long[] ctxBackup = { EnterpriseContextHolder.get() };
+
+        try {
+            // 夹具必须在目标上下文内重建（见 createFixtures 的注释）
+            createFixtures();
+
+            ExecuteRequest request = new ExecuteRequest(
+                    "INVOICE_OUT", businessDocId,
+                    "INVOICE_OUT", businessDocId,
+                    new BigDecimal("1100.00"),
+                    new BigDecimal("9.5"),
+                    "MANUAL",
+                    customerId, null,
+                    "202607", "P106 AT-106-2 核销日志企业归属");
+
+            ReconciliationLogEntity log = reconciliationService.execute(request);
+            assertNotNull(log, "核销日志不应为 null");
+            assertNotNull(log.getId(), "核销日志应有 ID");
+
+            Long tenantId = jdbcTemplate.queryForObject(
+                    "SELECT tenant_id FROM t_reconciliation_log WHERE id = ?", Long.class, log.getId());
+            Long enterpriseId = jdbcTemplate.queryForObject(
+                    "SELECT enterprise_id FROM t_reconciliation_log WHERE id = ?", Long.class, log.getId());
+
+            assertEquals(P106_ENTERPRISE, enterpriseId,
+                    "enterprise_id 应为当前企业上下文 " + P106_ENTERPRISE + "，实际 " + enterpriseId);
+            assertEquals(enterpriseId, tenantId,
+                    "两列必须恒等：ReconciliationServiceImpl:364/:780 写死 tenant_id=1（DEFAULT_TENANT_ID）"
+                            + "而 RLS 谓词读 enterprise_id ⇒ 两列永久不一致。实际 tenant_id=" + tenantId
+                            + " / enterprise_id=" + enterpriseId);
+        } finally {
+            if (ctxBackup[0] != null) {
+                useEnterprise(ctxBackup[0]);
+            }
+        }
     }
 }
