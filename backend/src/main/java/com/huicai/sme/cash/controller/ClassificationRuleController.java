@@ -10,6 +10,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import com.huicai.sme.cash.dto.ClassificationRuleSaveDTO;
+import jakarta.validation.Valid;
 
 @Tag(name = "分类规则管理")
 @RestController
@@ -40,13 +42,15 @@ public class ClassificationRuleController {
 
     @Operation(summary = "创建规则")
     @PostMapping
-    public R<ClassificationRuleEntity> create(@RequestBody ClassificationRuleEntity entity) {
+    public R<ClassificationRuleEntity> create(@Valid @RequestBody ClassificationRuleSaveDTO dto) {
+        ClassificationRuleEntity entity = dto.toEntity();
         return R.ok(service.create(entity));
     }
 
     @Operation(summary = "更新规则")
     @PutMapping("/{id}")
-    public R<ClassificationRuleEntity> update(@PathVariable Long id, @RequestBody ClassificationRuleEntity entity) {
+    public R<ClassificationRuleEntity> update(@PathVariable Long id, @Valid @RequestBody ClassificationRuleSaveDTO dto) {
+        ClassificationRuleEntity entity = dto.toEntity();
         ClassificationRuleEntity updated = service.update(id, entity);
         if (updated == null) {
             return R.badRequest("规则不存在");

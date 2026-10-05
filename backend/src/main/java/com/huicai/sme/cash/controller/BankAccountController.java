@@ -10,6 +10,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import com.huicai.sme.cash.dto.BankAccountSaveDTO;
+import jakarta.validation.Valid;
 
 @Tag(name = "银行账户")
 @RestController
@@ -42,13 +44,15 @@ public class BankAccountController {
 
     @Operation(summary = "新增账户")
     @PostMapping
-    public R<BankAccountEntity> create(@RequestBody BankAccountEntity entity) {
+    public R<BankAccountEntity> create(@Valid @RequestBody BankAccountSaveDTO dto) {
+        BankAccountEntity entity = dto.toEntity();
         return R.ok(service.create(entity));
     }
 
     @Operation(summary = "修改账户")
     @PutMapping("/{id}")
-    public R<BankAccountEntity> update(@PathVariable Long id, @RequestBody BankAccountEntity entity) {
+    public R<BankAccountEntity> update(@PathVariable Long id, @Valid @RequestBody BankAccountSaveDTO dto) {
+        BankAccountEntity entity = dto.toEntity();
         return R.ok(service.update(id, entity));
     }
 

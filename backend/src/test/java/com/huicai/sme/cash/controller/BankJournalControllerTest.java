@@ -26,6 +26,7 @@ import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
+import java.time.LocalDate;
 
 @SpringBootTest
 @AutoConfigureMockMvc(addFilters = false)
@@ -67,6 +68,11 @@ class BankJournalControllerTest {
     @DisplayName("新增银行日记账_RequestBody正确解析")
     void create_requestBody_parsedCorrectly() throws Exception {
         BankJournalEntity input = new BankJournalEntity();
+        // t_bank_journal 的 account_id/tx_date/period/tx_type/amount 均 NOT NULL 无默认值
+        input.setAccountId(1L);
+        input.setTxDate(LocalDate.of(2026, 3, 1));
+        input.setPeriod("202603");
+        input.setTxType("INCOME");   // chk_journal_type 允许集为大写
         input.setAmount(BigDecimal.valueOf(5000));
 
         BankJournalEntity created = new BankJournalEntity();
@@ -84,6 +90,10 @@ class BankJournalControllerTest {
     @DisplayName("更新银行日记账_RequestBody正确解析")
     void update_requestBody_parsedCorrectly() throws Exception {
         BankJournalEntity input = new BankJournalEntity();
+        input.setAccountId(1L);
+        input.setTxDate(LocalDate.of(2026, 3, 2));
+        input.setPeriod("202603");
+        input.setTxType("EXPENSE");
         input.setAmount(BigDecimal.valueOf(10000));
 
         BankJournalEntity updated = new BankJournalEntity();

@@ -13,6 +13,8 @@ import org.springframework.web.bind.annotation.*;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
+import com.huicai.sme.cash.dto.BankJournalSaveDTO;
+import jakarta.validation.Valid;
 
 @Tag(name = "银行日记账")
 @RestController
@@ -35,13 +37,15 @@ public class BankJournalController {
 
     @Operation(summary = "新增日记账")
     @PostMapping
-    public R<BankJournalEntity> create(@RequestBody BankJournalEntity entity) {
+    public R<BankJournalEntity> create(@Valid @RequestBody BankJournalSaveDTO dto) {
+        BankJournalEntity entity = dto.toEntity();
         return R.ok(service.create(entity, SecurityUtils.getCurrentUserId()));
     }
 
     @Operation(summary = "修改日记账")
     @PutMapping("/{id}")
-    public R<BankJournalEntity> update(@PathVariable Long id, @RequestBody BankJournalEntity entity) {
+    public R<BankJournalEntity> update(@PathVariable Long id, @Valid @RequestBody BankJournalSaveDTO dto) {
+        BankJournalEntity entity = dto.toEntity();
         return R.ok(service.update(id, entity));
     }
 

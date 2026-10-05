@@ -83,7 +83,8 @@ class MenuControllerTest {
     void create_requestBodyParsed_returnsOk() throws Exception {
         MenuEntity menu = new MenuEntity();
         menu.setName("系统管理");
-        menu.setType("MENU");
+        menu.setMenuCode("SYS");   // t_menu.menu_code NOT NULL 无默认值（REQ-2026-121 曾缺列）
+        menu.setType("MENU");      // chk_menu_type 允许集为大写
         menu.setPath("/system");
 
         doNothing().when(menuService).create(any());
@@ -102,6 +103,7 @@ class MenuControllerTest {
     void update_pathVariableAndBody_boundCorrectly() throws Exception {
         MenuEntity menu = new MenuEntity();
         menu.setName("角色管理");
+        menu.setMenuCode("ROLE");
 
         doNothing().when(menuService).update(any());
 

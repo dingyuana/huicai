@@ -1,15 +1,29 @@
 package com.huicai.sme.status;
 
+import com.huicai.base.ai.dto.AiFeedbackCreateDTO;
+import com.huicai.base.masterdata.dto.CustomerSaveDTO;
+import com.huicai.base.masterdata.dto.EmployeeSaveDTO;
+import com.huicai.base.masterdata.dto.VendorSaveDTO;
 import com.huicai.base.system.dto.DeptSaveDTO;
 import com.huicai.base.system.dto.PeriodSaveDTO;
+import com.huicai.base.system.dto.MenuSaveDTO;
 import com.huicai.base.system.dto.RoleSaveDTO;
+import com.huicai.base.system.dto.SummaryLibSaveDTO;
+import com.huicai.base.system.dto.SysConfigSaveDTO;
+import com.huicai.base.system.dto.VoucherTypeSaveDTO;
 import com.huicai.base.system.dto.UserSaveDTO;
+import com.huicai.base.voucher.dto.VoucherTemplateUpdateDTO;
 import com.huicai.sme.arap.dto.ExpenseReimbursementDTO;
 import com.huicai.sme.arap.dto.PrepaymentCreateDTO;
 import com.huicai.sme.asset.dto.AssetCardSaveDTO;
+import com.huicai.sme.asset.dto.AssetCategorySaveDTO;
 import com.huicai.sme.asset.dto.AssetDisposalCreateDTO;
 import com.huicai.sme.budget.dto.BudgetAdjustmentCreateDTO;
 import com.huicai.sme.cash.dto.TicketDTO;
+import com.huicai.sme.cash.dto.BankAccountSaveDTO;
+import com.huicai.sme.cash.dto.BankJournalSaveDTO;
+import com.huicai.sme.cash.dto.CashJournalSaveDTO;
+import com.huicai.sme.cash.dto.ClassificationRuleSaveDTO;
 import com.huicai.sme.tax.dto.InputInvoiceCreateDTO;
 import com.huicai.sme.tax.dto.OutputInvoiceCreateDTO;
 import com.huicai.sme.tax.dto.TaxDeclarationCreateDTO;
@@ -63,7 +77,14 @@ class DtoMappingContractTest {
     private static final List<Class<?>> STRICT_MAPPING_DTOS = Arrays.asList(
             UserSaveDTO.class, RoleSaveDTO.class, PeriodSaveDTO.class, DeptSaveDTO.class,
             BudgetAdjustmentCreateDTO.class, AssetCardSaveDTO.class,
-            AssetDisposalCreateDTO.class, TaxTypeSaveDTO.class);
+            AssetDisposalCreateDTO.class, TaxTypeSaveDTO.class,
+            // 批次④：14 个
+            AiFeedbackCreateDTO.class, VoucherTemplateUpdateDTO.class,
+            CustomerSaveDTO.class, VendorSaveDTO.class, EmployeeSaveDTO.class,
+            SysConfigSaveDTO.class, SummaryLibSaveDTO.class, VoucherTypeSaveDTO.class,
+            MenuSaveDTO.class, AssetCategorySaveDTO.class, BankAccountSaveDTO.class,
+            BankJournalSaveDTO.class, CashJournalSaveDTO.class,
+            ClassificationRuleSaveDTO.class);
 
     /** 批次① 及既有的 6 个 DTO：本类只负责把它们的 Lombok 方法也覆盖掉 */
     private static final List<Class<?>> OTHER_DTOS = Arrays.asList(

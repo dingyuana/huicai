@@ -11,6 +11,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
+import com.huicai.sme.cash.dto.CashJournalSaveDTO;
+import jakarta.validation.Valid;
 
 @Tag(name = "现金日记账")
 @RestController
@@ -39,13 +41,15 @@ public class CashJournalController {
 
     @Operation(summary = "新增")
     @PostMapping
-    public R<CashJournalEntity> create(@RequestBody CashJournalEntity entity) {
+    public R<CashJournalEntity> create(@Valid @RequestBody CashJournalSaveDTO dto) {
+        CashJournalEntity entity = dto.toEntity();
         return R.ok(cashJournalService.create(entity, SecurityUtils.getCurrentUserId()));
     }
 
     @Operation(summary = "修改")
     @PutMapping("/{id}")
-    public R<CashJournalEntity> update(@PathVariable Long id, @RequestBody CashJournalEntity entity) {
+    public R<CashJournalEntity> update(@PathVariable Long id, @Valid @RequestBody CashJournalSaveDTO dto) {
+        CashJournalEntity entity = dto.toEntity();
         return R.ok(cashJournalService.update(id, entity));
     }
 

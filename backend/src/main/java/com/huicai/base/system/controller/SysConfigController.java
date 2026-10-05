@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 import java.util.Map;
+import com.huicai.base.system.dto.SysConfigSaveDTO;
 
 @Tag(name = "系统参数管理")
 @RestController
@@ -44,14 +45,16 @@ public class SysConfigController {
 
     @Operation(summary = "新增参数")
     @PostMapping
-    public R<SysConfigEntity> create(@Valid @RequestBody SysConfigEntity config) {
+    public R<SysConfigEntity> create(@Valid @RequestBody SysConfigSaveDTO dto) {
+        SysConfigEntity config = dto.toEntity();
         sysConfigService.save(config);
         return R.ok(config);
     }
 
     @Operation(summary = "修改参数")
     @PutMapping("/{id}")
-    public R<Void> update(@PathVariable Long id, @Valid @RequestBody SysConfigEntity config) {
+    public R<Void> update(@PathVariable Long id, @Valid @RequestBody SysConfigSaveDTO dto) {
+        SysConfigEntity config = dto.toEntity();
         config.setId(id);
         sysConfigService.updateById(config);
         return R.ok();

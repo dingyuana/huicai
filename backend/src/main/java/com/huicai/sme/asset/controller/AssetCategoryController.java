@@ -10,6 +10,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import com.huicai.sme.asset.dto.AssetCategorySaveDTO;
+import jakarta.validation.Valid;
 
 @Tag(name = "资产类别")
 @RestController
@@ -42,13 +44,15 @@ public class AssetCategoryController {
 
     @Operation(summary = "创建")
     @PostMapping
-    public R<AssetCategoryEntity> create(@RequestBody AssetCategoryEntity entity) {
+    public R<AssetCategoryEntity> create(@Valid @RequestBody AssetCategorySaveDTO dto) {
+        AssetCategoryEntity entity = dto.toEntity();
         return R.ok(service.create(entity));
     }
 
     @Operation(summary = "更新")
     @PutMapping("/{id}")
-    public R<AssetCategoryEntity> update(@PathVariable Long id, @RequestBody AssetCategoryEntity entity) {
+    public R<AssetCategoryEntity> update(@PathVariable Long id, @Valid @RequestBody AssetCategorySaveDTO dto) {
+        AssetCategoryEntity entity = dto.toEntity();
         entity.setId(id);
         return R.ok(service.update(entity));
     }

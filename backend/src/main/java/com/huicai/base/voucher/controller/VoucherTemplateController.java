@@ -15,6 +15,8 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 import java.util.stream.Collectors;
+import com.huicai.base.voucher.dto.VoucherTemplateUpdateDTO;
+import jakarta.validation.Valid;
 
 /**
  * 凭证模板管理 — 配置驱动的科目映射 (替代硬编码).
@@ -77,7 +79,8 @@ public class VoucherTemplateController {
 
     @Operation(summary = "更新模板基本信息")
     @PutMapping("/{id}")
-    public R<Void> update(@PathVariable Long id, @RequestBody VoucherTemplateEntity template) {
+    public R<Void> update(@PathVariable Long id, @Valid @RequestBody VoucherTemplateUpdateDTO dto) {
+        VoucherTemplateEntity template = dto.toEntity();
         template.setId(id);
         templateService.update(template);
         return R.ok();

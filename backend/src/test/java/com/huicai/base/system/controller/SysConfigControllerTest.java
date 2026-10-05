@@ -106,6 +106,7 @@ class SysConfigControllerTest {
     @DisplayName("修改参数_PathVariable+RequestBody正确绑定")
     void update_pathVariableAndBody_boundCorrectly() throws Exception {
         SysConfigEntity config = new SysConfigEntity();
+        config.setConfigKey("sys.name");   // t_sys_config.config_key NOT NULL 无默认值
         config.setConfigValue("慧财财务系统");
         config.setDescription("更新描述");
 

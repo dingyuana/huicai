@@ -171,49 +171,31 @@ class TenantDtoIsolationStructureTest {
     }
 
     /**
-     * <b>全仓剩余 {@code @RequestBody Entity} 基线（26 处，棘轮钉住）</b>。
+     * <b>全仓零容忍：不得再出现 {@code @RequestBody Entity} 的写端点</b>。
      *
-     * <p><b>为什么要单独钉一份基线</b>：字段级门禁
-     * {@code scripts/check_entity_status_massassignment.py} 在本批次收尾时报
-     * 「未发现违规」，但用<b>参数类型</b>全仓扫描仍有 26 处写端点直收 Entity
-     * （客户/供应商/员工/菜单/银行账户/现金日记账/…）—— 因为这些 Entity
-     * <b>没有 status 字段</b>，字段级规则天然看不见。
-     * ⇒ <b>「门禁 0 违规」≠「铁律 #13 已达标」</b>。
+     * <p><b>为什么曾经需要棘轮基线</b>：字段级门禁
+     * {@code scripts/check_entity_status_massassignment.py} 只按
+     * 「含 status 字段的 Entity 被直收」判定，而 {@code CustomerEntity}、
+     * {@code MenuEntity}、{@code TaxTypeEntity} 等<b>根本没有 status 字段</b>
+     * ⇒ 它报「未发现违规」时，全仓按<b>参数类型</b>扫描仍有 **26 处**违规。
+     * 于是 2026-10-05 先把 26 处钉成棘轮基线（{@code size==26}），
+     * 2026-10-05 批次④ 全部清零后<b>基线已删除</b>，改为零容忍断言。
      *
-     * <p>本清单是<b>实测基线</b>：新增任何一处 Entity 直收都会红；清掉一处就要
-     * 同步从清单里删（并让 {@code size==26} 的断言提醒你改）。不可只加不减。
+     * <p>依据 AGENTS §4.5 第 31 条：扫描型守卫的判定依据必须覆盖违规的<b>全部形态</b>。
      */
-    private static final Set<String> KNOWN_ENTITY_BODY_BASELINE = Set.of(
-            "AiFeedbackLogController#create",
-            "VoucherTemplateController#update",
-            "CustomerController#create", "CustomerController#update",
-            "EmployeeController#create", "EmployeeController#update",
-            "VendorController#create", "VendorController#update",
-            "SysConfigController#create", "SysConfigController#update",
-            "AssetCategoryController#create", "AssetCategoryController#update",
-            "VoucherTypeController#create", "VoucherTypeController#update",
-            "BankJournalController#create", "BankJournalController#update",
-            "SummaryLibController#create", "SummaryLibController#update",
-            "BankAccountController#create", "BankAccountController#update",
-            "MenuController#create", "MenuController#update",
-            "ClassificationRuleController#create", "ClassificationRuleController#update",
-            "CashJournalController#create", "CashJournalController#update");
+    private static final Set<String> FORBIDDEN_BODY_CONTROLLERS = Set.of();
 
     @Test
-    @DisplayName("全仓扫描：Entity 直收写端点不新增（棘轮基线 26，清一处要减一处）")
-    void entityBodyBaselineIsRatcheted() throws Exception {
+    @DisplayName("全仓扫描：写端点不得再直收 Entity（铁律 #13 零容忍）")
+    void noEntityRequestBodyAnywhere() throws Exception {
         Set<String> actual = scanAllControllersForEntityBodies();
-        Set<String> added = new java.util.TreeSet<>(actual);
-        added.removeAll(KNOWN_ENTITY_BODY_BASELINE);
-        Set<String> removed = new java.util.TreeSet<>(KNOWN_ENTITY_BODY_BASELINE);
-        removed.removeAll(actual);
-        assertTrue(added.isEmpty(),
-                "新增了 Entity 直收写端点（铁律 #13）：" + added
-                        + "；请改用 DTO，并把该端点从基线清单中移除的同时补齐下方 size 断言");
-        assertTrue(removed.isEmpty(),
-                "基线清单里有 " + removed.size() + " 处已不再违规 ⇒ 请从基线里删掉并把 26 改成 "
-                        + actual.size() + "（棘轮只许降不许升）");
-        assertEquals(26, KNOWN_ENTITY_BODY_BASELINE.size(), "基线条目数与清单不一致");
+        Set<String> extra = new java.util.TreeSet<>(actual);
+        extra.removeAll(FORBIDDEN_BODY_CONTROLLERS);
+        assertTrue(extra.isEmpty(),
+                "以下写端点直收 Entity（铁律 #13）：" + extra
+                        + "；请改用 DTO 入参（参考已完成的 14 个 Save/Create DTO）");
+        assertTrue(FORBIDDEN_BODY_CONTROLLERS.isEmpty(),
+                "例外清单非空 ⇒ 铁律 #13 已出现开口，先评估再豁免：" + FORBIDDEN_BODY_CONTROLLERS);
     }
 
     private static Set<String> scanAllControllersForEntityBodies() throws Exception {
