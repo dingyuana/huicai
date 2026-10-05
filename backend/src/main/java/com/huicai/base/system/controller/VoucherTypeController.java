@@ -12,6 +12,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import com.huicai.base.system.dto.VoucherTypeSaveDTO;
 
 @Tag(name = "凭证类型管理")
 @RestController
@@ -37,14 +38,16 @@ public class VoucherTypeController {
 
     @Operation(summary = "新增凭证类型")
     @PostMapping
-    public R<VoucherTypeEntity> create(@Valid @RequestBody VoucherTypeEntity voucherType) {
+    public R<VoucherTypeEntity> create(@Valid @RequestBody VoucherTypeSaveDTO dto) {
+        VoucherTypeEntity voucherType = dto.toEntity();
         voucherTypeService.save(voucherType);
         return R.ok(voucherType);
     }
 
     @Operation(summary = "修改凭证类型")
     @PutMapping("/{id}")
-    public R<Void> update(@PathVariable Long id, @Valid @RequestBody VoucherTypeEntity voucherType) {
+    public R<Void> update(@PathVariable Long id, @Valid @RequestBody VoucherTypeSaveDTO dto) {
+        VoucherTypeEntity voucherType = dto.toEntity();
         voucherType.setId(id);
         voucherTypeService.updateById(voucherType);
         return R.ok();

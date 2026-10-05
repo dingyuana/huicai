@@ -97,8 +97,8 @@ class VoucherTypeControllerTest {
         when(voucherTypeService.updateById(any())).thenReturn(true);
 
         String json = """
-                {"name":"付款凭证"}
-                """;
+                {"code":"PAY","name":"付款凭证"}
+                """;   // t_voucher_type 的 code/name 均 NOT NULL 无默认值
 
         mvc.perform(put("/api/v1/voucher-types/1")
                         .contentType(MediaType.APPLICATION_JSON)

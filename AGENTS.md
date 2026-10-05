@@ -10,9 +10,9 @@
 
 | 维度 | 数据 |
 |------|------|
-| 后端代码 | 512 个 Java 主代码文件（另 248 个测试类文件，其中 `*Test.java` 240 个）|
+| 后端代码 | 526 个 Java 主代码文件（另 248 个测试类文件，其中 `*Test.java` 240 个）|
 | 测试用例 | **2038 个可执行测试注解**（`@Test` 2035 + `@TestFactory` 3）/ 240 个后端测试类 + 26 个前端测试文件 265 用例。**2026-10-05 全量实测：L1 `mvn clean test` = 1645 通过 / 0 Failures / 0 Errors / 5 Skipped；L2 真库 `mvn test -DexcludedGroups=` = 2038 通过 / 0 Failures / 0 Errors / 5 Skipped**，两次均打印 `All coverage checks have been met`（覆盖率门禁真执行，非静默跳过）。⚠️ **本地跑 L2 必须先 `docker start huicai-redis`**，否则 11 个用例报 `RedisConnectionFailure`（环境型红，非代码回归，见 §4.5 第 24 条）|
-| 覆盖率 | 棘轮门禁 **INSTRUCTION ≥30% / BRANCH ≥12% / METHOD ≥55%**（`backend/pom.xml` jacoco-check）。2026-10-05 按 **clean 口径**实测重标定：L1 真实值 **32.05% / 13.39% / 56.18%**（456 类），缓冲 2.05/1.39/1.18 点。新增 8 个 `@Data` DTO 时 METHOD 一度掉到 **0.5364**（方法总数 6610→6780、仅多覆盖 28 个）⇒ 真实 BUILD FAILURE，见 §4.5 第 30 条「DTO 覆盖率税」。已实测该门禁会红（阈值抬到 0.99 ⇒ `Rule violated` + `BUILD FAILURE`）。🔴 **标定必须 `mvn clean test`**：不带 clean 时 `target/jacoco.exec` 跨调用累积，实测虚高到 38.9/17.9/61.8（≈+6 点），据此标定会让真实 CI 全红 |
+| 覆盖率 | 棘轮门禁 **INSTRUCTION ≥30% / BRANCH ≥12% / METHOD ≥55%**（`backend/pom.xml` jacoco-check）。2026-10-05 按 **clean 口径**实测重标定（DTO 隔离批次④ 后）：L1 真实值 **31.77% / 12.81% / 57.18%**（470 类），缓冲 1.77/**0.81**/2.18 点 ⚠️ BRANCH 缓冲已不足 1 点（新增 14 个 `@Data` DTO 会带来大量 Lombok `equals` 分支）。两次踩坑：①新增 8 个 `@Data` DTO 时 METHOD 一度掉到 **0.5364** ⇒ 真实 BUILD FAILURE（§4.5 第 30 条「DTO 覆盖率税」）；②批次④ 补 14 个 DTO 后 BRANCH 从 13.39% 降到 12.81% ⇒ **DTO 化不止压 METHOD，也会压 BRANCH**（Lombok `equals/hashCode` 的分支没人碰）。已实测该门禁会红（阈值抬到 0.99 ⇒ `Rule violated` + `BUILD FAILURE`）。🔴 **标定必须 `mvn clean test`**：不带 clean 时 `target/jacoco.exec` 跨调用累积，实测虚高到 38.9/17.9/61.8（≈+6 点），据此标定会让真实 CI 全红 |
 | 数据库 | PostgreSQL 16 / **83 个 migration，最新 V167**（V160=D1 补 `DISPUTED`、V161=对账审计表、V162=D8 补 `PENDING_CONFIRM`、V163=权限码种子、V164=治愈 identity 序列落后、V165=补代理用户企业种子、V166=FORCE RLS、**V167=RLS 谓词空串硬化 `NULLIF(current_setting(...), '')`**；注意：版本号非连续，缺 V6-V62 与 V64-V91 共 85 个号；因 `out-of-order: true` + `validate-on-migrate: false` 不影响运行）|
 | API 端点 | 510+ 个后端端点 |
 | 核心模块 | 基础数据、总账、应收应付、现金管理、固定资产、费用报销、发票税务、预算、财务报表、存储管理 |
@@ -20,7 +20,7 @@
 | AI 服务 | Python FastAPI 5 端点（health/anomaly/embedding/match/ocr）|
 | 技术栈 | Spring Boot 3.x + MyBatis-Plus + Redis 7 + MinIO + RabbitMQ |
 | 开发流程 | 大闭环 + 内循环（three-phase-loop v3.0）|
-| P0-P2 阶段 | 🟡 **功能模块**基本完成（基础体系 + 缺陷修复 + AI 辅助能力），但**基座与内控未收口**：M5b-V2 非超级角色已落地、**RLS 三层防线已修好并在最低权限主体下验证**（跨租户读 0 行 / 写被拒 / 谓词空串已由 V167 硬化）；**DTO 隔离批次①③已完成**，原门禁 P2 结构性存量 18 → **0（脚本已报「未发现违规」）**；⚠️ 但字段级门禁**天生看不见「无 status 字段的 Entity 直收」**，用反射按**参数类型**全仓扫描实测仍有 **26 处 `@RequestBody Entity`**（客户/供应商/员工/菜单/银行账户/现金&银行日记账/资产分类/凭证类型/汇总模板/税种配置/系统配置/AI 反馈/凭证模板）⇒ 已把这 26 处**钉成棘轮基线**（`TenantDtoIsolationStructureTest#entityBodyBaselineIsRatcheted`，新增必红、减少必改 size），作为 P102 批次④待清；P106 内控深度**未立项** |
+| P0-P2 阶段 | 🟡 **功能模块**基本完成（基础体系 + 缺陷修复 + AI 辅助能力），但**基座与内控未收口**：M5b-V2 非超级角色已落地、**RLS 三层防线已修好并在最低权限主体下验证**（跨租户读 0 行 / 写被拒 / 谓词空串已由 V167 硬化）；**DTO 隔离批次①③已完成**，原门禁 P2 结构性存量 18 → **0（脚本已报「未发现违规」）**；⚠️ 但字段级门禁**天生看不见「无 status 字段的 Entity 直收」**，用反射按**参数类型**全仓扫描实测仍有 **26 处 `@RequestBody Entity`**（客户/供应商/员工/菜单/银行账户/现金&银行日记账/资产分类/凭证类型/汇总模板/税种配置/系统配置/AI 反馈/凭证模板）⇒ **批次④（2026-10-05）已把这 26 处全部清零**：新增 14 个 DTO（客户/供应商/员工/菜单/银行账户/现金&银行日记账/资产分类/凭证类型/汇总模板/系统参数/AI 反馈/凭证模板/银行日记账/分类规则），基线随之删除，断言升级为**零容忍**（`TenantDtoIsolationStructureTest#noEntityRequestBodyAnywhere`，全仓扫描 `com.huicai` 下所有 `@RestController` 的 POST/PUT 方法）。**全仓 `@RequestBody Entity` 已归零**；剩余待办：出参面 Entity 直出（如 `R<RoleEntity>`）、P106 内控深度**未立项** |
 | P3 远期 | ⏳ 0%（经营分析/预算预测/风控/工资薪酬）|
 | CI 门禁 | 6 个 workflow：L1 单测 / L2 真库 / Full Stack / SPEC 契约 / 夜间 E2E / 性能基线。Full Stack 内 4 个静态检测**全部阻断式**：接口覆盖（**棘轮** `--max-uncovered 280`，只在倒退时红）/ 实体入参状态越权（P0 强制 + P2 结构性存量）/ 租户夹具一致性（A/B 两类判定）/ 路由覆盖。**2026-10-05 PR #28 真实 CI 全绿（DTO 隔离批次①）**；2026-10-03 PR #25 真实 CI 10/10 全绿；此前 PR #25 曾因覆盖率阈值标定口径错误被两个 L1 job 拉红（见登记册 V1.66）⇒ **门禁「绿得起来也红得掉」已获真实证据** |
 

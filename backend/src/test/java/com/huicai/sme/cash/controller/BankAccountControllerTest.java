@@ -71,6 +71,7 @@ class BankAccountControllerTest {
     @DisplayName("新增银行账户_RequestBody正确解析")
     void create_requestBody_parsedCorrectly() throws Exception {
         BankAccountEntity input = new BankAccountEntity();
+        input.setAccountNo("6222021234567890");  // t_bank_account.account_no NOT NULL 无默认值
         input.setAccountName("建行一般户");
 
         BankAccountEntity created = new BankAccountEntity();
@@ -88,6 +89,7 @@ class BankAccountControllerTest {
     @DisplayName("更新银行账户_RequestBody正确解析")
     void update_requestBody_parsedCorrectly() throws Exception {
         BankAccountEntity input = new BankAccountEntity();
+        input.setAccountNo("6222021234567890");
         input.setAccountName("更新账户");
 
         BankAccountEntity updated = new BankAccountEntity();

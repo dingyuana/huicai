@@ -11,6 +11,8 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 import java.util.Map;
+import com.huicai.base.ai.dto.AiFeedbackCreateDTO;
+import jakarta.validation.Valid;
 
 @Tag(name = "AI 分类反馈日志")
 @RestController
@@ -43,7 +45,8 @@ public class AiFeedbackLogController {
 
     @Operation(summary = "记录反馈")
     @PostMapping
-    public R<AiFeedbackLogEntity> create(@RequestBody AiFeedbackLogEntity entity) {
+    public R<AiFeedbackLogEntity> create(@Valid @RequestBody AiFeedbackCreateDTO dto) {
+        AiFeedbackLogEntity entity = dto.toEntity();
         return R.ok(service.create(entity));
     }
 

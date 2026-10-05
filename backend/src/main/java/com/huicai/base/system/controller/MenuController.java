@@ -9,6 +9,8 @@ import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import com.huicai.base.system.dto.MenuSaveDTO;
+import jakarta.validation.Valid;
 
 @RestController
 @RequestMapping("/api/v1/system/menu")
@@ -34,14 +36,16 @@ public class MenuController {
 
     @PostMapping
     @Log(value = "新增菜单", module = "system")
-    public R<?> create(@RequestBody MenuEntity menu) {
+    public R<?> create(@Valid @RequestBody MenuSaveDTO dto) {
+        MenuEntity menu = dto.toEntity();
         menuService.create(menu);
         return R.ok();
     }
 
     @PutMapping("/{id}")
     @Log(value = "修改菜单", module = "system")
-    public R<?> update(@PathVariable Long id, @RequestBody MenuEntity menu) {
+    public R<?> update(@PathVariable Long id, @Valid @RequestBody MenuSaveDTO dto) {
+        MenuEntity menu = dto.toEntity();
         menu.setId(id);
         menuService.update(menu);
         return R.ok();

@@ -71,6 +71,7 @@ class AssetCategoryControllerTest {
     @DisplayName("新增资产分类_RequestBody正确解析")
     void create_requestBody_parsedCorrectly() throws Exception {
         AssetCategoryEntity input = new AssetCategoryEntity();
+        input.setCode("OFFICE");   // t_asset_category.code NOT NULL 无默认值
         input.setName("办公设备");
 
         AssetCategoryEntity created = new AssetCategoryEntity();
@@ -89,6 +90,7 @@ class AssetCategoryControllerTest {
     void update_requestBody_parsedCorrectly() throws Exception {
         AssetCategoryEntity input = new AssetCategoryEntity();
         input.setId(1L);
+        input.setCode("OFFICE");
         input.setName("更新分类");
 
         AssetCategoryEntity updated = new AssetCategoryEntity();

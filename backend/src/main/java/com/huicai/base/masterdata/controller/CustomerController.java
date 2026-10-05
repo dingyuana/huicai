@@ -19,6 +19,8 @@ import org.springframework.web.multipart.MultipartFile;
 import java.io.InputStream;
 import java.util.List;
 import java.util.Map;
+import com.huicai.base.masterdata.dto.CustomerSaveDTO;
+import jakarta.validation.Valid;
 
 @Tag(name = "客户档案")
 @RestController
@@ -52,13 +54,15 @@ public class CustomerController {
 
     @Operation(summary = "创建")
     @PostMapping
-    public R<CustomerEntity> create(@RequestBody CustomerEntity entity) {
+    public R<CustomerEntity> create(@Valid @RequestBody CustomerSaveDTO dto) {
+        CustomerEntity entity = dto.toEntity();
         return R.ok(service.create(entity));
     }
 
     @Operation(summary = "更新")
     @PutMapping("/{id}")
-    public R<CustomerEntity> update(@PathVariable Long id, @RequestBody CustomerEntity entity) {
+    public R<CustomerEntity> update(@PathVariable Long id, @Valid @RequestBody CustomerSaveDTO dto) {
+        CustomerEntity entity = dto.toEntity();
         entity.setId(id);
         return R.ok(service.update(entity));
     }

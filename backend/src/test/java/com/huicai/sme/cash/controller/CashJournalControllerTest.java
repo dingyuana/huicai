@@ -25,6 +25,7 @@ import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
+import java.time.LocalDate;
 
 @SpringBootTest
 @AutoConfigureMockMvc(addFilters = false)
@@ -85,6 +86,10 @@ class CashJournalControllerTest {
     void create_requestBody_parsedCorrectly() throws Exception {
         setAuth();
         CashJournalEntity entity = new CashJournalEntity();
+        // t_cash_journal 的 period/journal_date/journal_no 均 NOT NULL 无默认值
+        entity.setPeriod("202603");
+        entity.setJournalDate(LocalDate.of(2026, 3, 1));
+        entity.setJournalNo("CASH-001");
         entity.setDebit(BigDecimal.valueOf(1000));
 
         CashJournalEntity created = new CashJournalEntity();
@@ -102,6 +107,9 @@ class CashJournalControllerTest {
     @DisplayName("更新日记账_RequestBody正确解析")
     void update_requestBody_parsedCorrectly() throws Exception {
         CashJournalEntity entity = new CashJournalEntity();
+        entity.setPeriod("202603");
+        entity.setJournalDate(LocalDate.of(2026, 3, 2));
+        entity.setJournalNo("CASH-002");
         entity.setDebit(BigDecimal.valueOf(2000));
 
         CashJournalEntity updated = new CashJournalEntity();

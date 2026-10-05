@@ -19,6 +19,8 @@ import org.springframework.web.multipart.MultipartFile;
 import java.io.InputStream;
 import java.util.List;
 import java.util.Map;
+import com.huicai.base.masterdata.dto.VendorSaveDTO;
+import jakarta.validation.Valid;
 
 @Tag(name = "供应商档案")
 @RestController
@@ -52,13 +54,15 @@ public class VendorController {
 
     @Operation(summary = "创建")
     @PostMapping
-    public R<VendorEntity> create(@RequestBody VendorEntity entity) {
+    public R<VendorEntity> create(@Valid @RequestBody VendorSaveDTO dto) {
+        VendorEntity entity = dto.toEntity();
         return R.ok(service.create(entity));
     }
 
     @Operation(summary = "更新")
     @PutMapping("/{id}")
-    public R<VendorEntity> update(@PathVariable Long id, @RequestBody VendorEntity entity) {
+    public R<VendorEntity> update(@PathVariable Long id, @Valid @RequestBody VendorSaveDTO dto) {
+        VendorEntity entity = dto.toEntity();
         entity.setId(id);
         return R.ok(service.update(entity));
     }

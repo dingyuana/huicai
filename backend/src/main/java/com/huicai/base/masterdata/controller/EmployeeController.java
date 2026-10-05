@@ -10,6 +10,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import com.huicai.base.masterdata.dto.EmployeeSaveDTO;
+import jakarta.validation.Valid;
 
 @Tag(name = "员工档案 - P11-1")
 @RestController
@@ -49,13 +51,15 @@ public class EmployeeController {
 
     @Operation(summary = "创建")
     @PostMapping
-    public R<EmployeeEntity> create(@RequestBody EmployeeEntity entity) {
+    public R<EmployeeEntity> create(@Valid @RequestBody EmployeeSaveDTO dto) {
+        EmployeeEntity entity = dto.toEntity();
         return R.ok(service.create(entity));
     }
 
     @Operation(summary = "更新")
     @PutMapping("/{id}")
-    public R<EmployeeEntity> update(@PathVariable Long id, @RequestBody EmployeeEntity entity) {
+    public R<EmployeeEntity> update(@PathVariable Long id, @Valid @RequestBody EmployeeSaveDTO dto) {
+        EmployeeEntity entity = dto.toEntity();
         entity.setId(id);
         return R.ok(service.update(entity));
     }

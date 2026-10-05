@@ -12,6 +12,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import com.huicai.base.system.dto.SummaryLibSaveDTO;
 
 @Tag(name = "常用摘要库管理")
 @RestController
@@ -37,14 +38,16 @@ public class SummaryLibController {
 
     @Operation(summary = "新增摘要")
     @PostMapping
-    public R<SummaryLibEntity> create(@Valid @RequestBody SummaryLibEntity summary) {
+    public R<SummaryLibEntity> create(@Valid @RequestBody SummaryLibSaveDTO dto) {
+        SummaryLibEntity summary = dto.toEntity();
         summaryLibService.save(summary);
         return R.ok(summary);
     }
 
     @Operation(summary = "修改摘要")
     @PutMapping("/{id}")
-    public R<Void> update(@PathVariable Long id, @Valid @RequestBody SummaryLibEntity summary) {
+    public R<Void> update(@PathVariable Long id, @Valid @RequestBody SummaryLibSaveDTO dto) {
+        SummaryLibEntity summary = dto.toEntity();
         summary.setId(id);
         summaryLibService.updateById(summary);
         return R.ok();
