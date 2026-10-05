@@ -342,6 +342,17 @@
     - **配套**：类型级守卫一上线就把剩余量暴露成 **26 处**，故用**棘轮**钉基线（`KNOWN_ENTITY_BODY_BASELINE` + `size==26`）：新增必红、清一处必须同步减清单并改 size（§4.5 第 21 条「恒绿/假绿」形态的第 4 类「输入不全」）。
     - **教训复用**：写任何「扫描型门禁」前先问一句 —— **它的判定依据是不是覆盖了违规的全部形态？** 只覆盖「有 status 的那一类」就等于给其余类别开了免检通道。
 
+33. 🔴 **L2 Testcontainers 的连接角色是超级用户 ⇒ RLS 恒被绕过 ⇒ 隔离类断言是假绿**（2026-10-05 P106 批次 1a 实测）：`AbstractMapperTest:71-75` 用 `withUsername("test")`，而官方 postgres 镜像把 `POSTGRES_USER` 建为**超级用户**。探针实测（`TempRlsProbeTest`，已删）：`current_user=test`、**`rolsuper=t`**、`bypassrls=t`、`tableowner=test`，同时 `relrowsecurity=t` + **`relforcerowsecurity=t`** + `enterprise_policy` 1 条 + Flyway 到 **V167** ⇒ **配置全对，但谓词根本执行不到**（AGENTS §4.5 第 27 条的同型再现）。
+    - **症状极具欺骗性**：任何「切到别的企业上下文应查不到」的断言在 L2 里**恒绿**，且绿灯与「隔离已修好」无法区分；本轮 `AccountSetIsolationRealDBTest` 首版就中招（切到企业 990002 后仍可见 1 行，本以为隔离失效，实为角色绕过）。
+    - **正解**：隔离断言必须像 `TenantRlsRealDBTest` 那样**显式降权** —— `CREATE ROLE xxx NOSUPERUSER NOBYPASSRLS` + `GRANT SELECT` + 在 `setAutoCommit(false)` 的连接里 `SET LOCAL ROLE` + `set_config('app.enterprise_id', …, true)`，跑完 `rollback()`；**全库只有 `TenantRlsRealDBTest` 做对了**，其余测试类默认都跑在超级用户上。
+    - **配套守卫**：断言前提本身要留一条测试（`l2RoleIsSuperuserSoRlsAssertionsNeedSetRole` 断言 `rolsuper=t`），否则将来 Testcontainers 改用非超级角色时，探针写法会静默失去意义而无人察觉。
+    - **推论**：**L2 全绿不代表 RLS 有效**；涉 RLS 的验收必须在「开发库 + 非超级应用角色 `huicai_app`」或「L2 + 探针角色」两处之一做，二者缺一即为未验证。
+34. 🔴 **Entity 不继承 `BaseEntity` 且全类无 `@TableField` ⇒ `MyMetaObjectHandler.insertFill` 压根不被调用 ⇒ `enterprise_id` 静默落 DB 默认值**（2026-10-05 P106 批次 1a-1 实测，与 §4.2 第 10/16 条同源但**机制不同**）：`PrepaymentEntity` 是 `implements Serializable`（非继承 `BaseEntity`），且**全类没有一个 `@TableField`/`FieldFill`** ⇒ MyBatis-Plus 的 `TableInfo.withInsertFill` 恒为 `false` ⇒ `insertFill` 回调**根本不会触发**（不是「触发了但没填」，是「压根没进」）⇒ `MyMetaObjectHandler:29-31` 那段「无条件覆盖为上下文企业」的修复对它**完全无效**；而 `t_prepayment.enterprise_id` 是 `V105` 加的 `NOT NULL DEFAULT 1` ⇒ **任何非企业 1 的上下文创建的预付款都落进企业 1**。
+    - **为什么 §4.5 第 23 条那次加固没抓到**：`MyMetaObjectHandler` 是**元对象层**修复，只对「声明了 fill 的字段」生效；**它无法覆盖「实体压根没用 fill 机制」这一类**——`hasSetter("enterpriseId")` 为真也不够，MyBatis-Plus 在 `TableInfo` 阶段就已判定该表无需 fill。
+    - **判据**：见 Entity 先查两件事 —— ①`extends BaseEntity`？②类体内有 `@TableField(fill=…)`？**两者皆否 ⇒ 该实体的 `enterprise_id`/`createdAt`/`updatedAt` 一律走 DB 默认值**，而 V102~V105 补的列全是 `NOT NULL DEFAULT 1`。
+    - **影响面（已全量扫描）**：18 个实体无 `FieldFill`，其中 8 个不继承 `BaseEntity`；5 个声明 `enterpriseId`，但 `UserEntity`/`AgencyUserEnterpriseEntity`/`AgencyEnterpriseEntity` 的 `enterprise_id` **按设计就是「归属企业」而非上下文**（被覆盖反而是错的）⇒ **只有 `PrepaymentEntity` 是缺陷**。这也说明**不能用「有无 enterpriseId 字段」判定**，必须逐个看语义。
+    - **治法**：让该实体继承 `BaseEntity`（顺带消掉重复字段），或给 `enterpriseId` 补 `@TableField(fill = FieldFill.INSERT)`；**不要**在 Service 里手填 —— 那样又回到「谁记得填」的老路。
+
 32. 🔴 **git push 卡在 401 挑战 = HTTP/2 被中间设备打断，换 `http.version=HTTP/1.1` 即可（2026-10-05 实测）**：症状很有迷惑性 ——
     - `curl https://github.com/.../info/refs` **返回 200**、`Test-NetConnection -Port 443` **True**、
       `git push` 却**静默挂住**（无报错，`timeout` 杀掉后日志为空）；`GIT_TRACE_CURL=1` 显示流程停在

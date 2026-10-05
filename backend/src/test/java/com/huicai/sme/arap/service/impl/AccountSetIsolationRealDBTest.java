@@ -7,6 +7,7 @@ import com.huicai.sme.arap.service.PrepaymentService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.jdbc.core.ConnectionCallback;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 import java.math.BigDecimal;
@@ -108,20 +109,54 @@ class AccountSetIsolationRealDBTest extends AbstractMapperTest {
     }
 
     @Test
-    @DisplayName("负向：切到别的企业上下文后，本企业的预付款不可见（证明隔离读的是 enterprise_id）")
+    @DisplayName("负向：切到别的企业上下文后，本企业的预付款不可见（须 SET ROLE 到非超级探针）")
     void prepaymentIsInvisibleUnderOtherEnterpriseContext() {
+        // L2 的 Testcontainers 连接角色 test 是超级用户（实测 rolsuper=t、bypassrls=t），
+        // 而超级用户**绕过 RLS**，因此用 jdbcTemplate 直接查会看到全部行 —— 那样这条断言恒绿、
+        // 等于没测。必须 SET ROLE 到 NOSUPERUSER 探针，让谓词真正被执行。
+        // 做法与 TenantRlsRealDBTest#emptyGucReturnsZeroRowsInsteadOfError 一致（唯一做对的先例）。
         useEnterprise(ENTERPRISE_E);
         PrepaymentEntity saved = prepaymentService.create(draft("ISO"));
         assertNotNull(saved.getId(), "未落库");
 
-        useEnterprise(ENTERPRISE_E + 1);
+        jdbcTemplate.execute("DROP ROLE IF EXISTS p106_rls_probe");
+        jdbcTemplate.execute("CREATE ROLE p106_rls_probe NOSUPERUSER NOBYPASSRLS");
+        jdbcTemplate.execute("GRANT SELECT ON t_prepayment TO p106_rls_probe");
 
-        Integer visible = jdbcTemplate.queryForObject(
-                "SELECT count(*) FROM t_prepayment WHERE id = ?", Integer.class, saved.getId());
+        Integer visibleInProbe = jdbcTemplate.execute((ConnectionCallback<Integer>) con -> {
+            boolean prev = con.getAutoCommit();
+            con.setAutoCommit(false);
+            try (java.sql.Statement st = con.createStatement()) {
+                st.execute("SET LOCAL ROLE p106_rls_probe");
+                st.execute("SELECT set_config('app.enterprise_id', '" + (ENTERPRISE_E + 1) + "', true)");
+                try (java.sql.ResultSet rs = st.executeQuery(
+                        "SELECT count(*) FROM t_prepayment WHERE id = " + saved.getId())) {
+                    rs.next();
+                    return rs.getInt(1);
+                }
+            } finally {
+                con.rollback();
+                con.setAutoCommit(prev);
+            }
+        });
 
-        assertTrue(visible == null || visible == 0,
-                "切到企业 " + (ENTERPRISE_E + 1) + " 后应查不到企业 " + ENTERPRISE_E
-                        + " 的预付款（RLS 谓词读 enterprise_id），实际可见 " + visible + " 行");
+        assertEquals(0, visibleInProbe,
+                "以非超级探针角色 + 上下文企业 " + (ENTERPRISE_E + 1) + " 查询企业 " + ENTERPRISE_E
+                        + " 的预付款应返 0 行（RLS 谓词读 enterprise_id）；实际可见 " + visibleInProbe
+                        + " 行 —— 若非 0，说明隔离失效");
+    }
+
+    @Test
+    @DisplayName("守卫：L2 连接角色是超级用户，故任何隔离断言都必须 SET ROLE 到非超级探针")
+    void l2RoleIsSuperuserSoRlsAssertionsNeedSetRole() {
+        Boolean superuser = jdbcTemplate.queryForObject(
+                "SELECT rolsuper FROM pg_roles WHERE rolname = current_user", Boolean.class);
+
+        assertTrue(Boolean.TRUE.equals(superuser),
+                "本用例的隔离断言建立在「L2 连接角色是超级用户、RLS 被绕过」这一前提上。"
+                        + "若将来 Testcontainers 改用非超级角色，前提变化，"
+                        + "prepaymentIsInvisibleUnderOtherEnterpriseContext 的探针写法需同步复核。"
+                        + "当前 rolsuper=" + superuser);
     }
 
     @Test
