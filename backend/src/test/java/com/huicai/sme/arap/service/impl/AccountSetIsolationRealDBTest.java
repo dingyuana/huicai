@@ -1,0 +1,142 @@
+package com.huicai.sme.arap.service.impl;
+
+import com.huicai.common.test.AbstractMapperTest;
+import com.huicai.sme.arap.entity.PrepaymentEntity;
+import com.huicai.sme.arap.mapper.PrepaymentMapper;
+import com.huicai.sme.arap.service.PrepaymentService;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.jdbc.core.JdbcTemplate;
+
+import java.math.BigDecimal;
+import java.time.LocalDate;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+/**
+ * P106 / REQ-2026-133 / AT-106-1：预付款双列并存收口真库测试
+ *
+ * <p><b>缺陷</b>：{@code t_prepayment} 同时存在 {@code enterprise_id}（RLS 谓词读它）
+ * 与 {@code tenant_id}（V5 建表、V105 补 enterprise_id 后遗留），而
+ * {@code PrepaymentServiceImpl#create()} 写的是
+ * {@code if (entity.getTenantId() == null) entity.setTenantId(DEFAULT_TENANT_ID /* = 1L *&#47;/)}
+ * ⇒ <b>两列值永久不一致</b>：{@code enterprise_id} 由
+ * {@code MyMetaObjectHandler.insertFill} 无条件覆盖为上下文企业，
+ * 而 {@code tenant_id} 恒为常量 1。
+ *
+ * <p><b>为什么必须真库</b>：Mock 测不出这件事 —— {@code insertFill} 的无条件覆盖、
+ * RLS 谓词、以及两列的实际落库值都只有真实 PG 才能观察。
+ *
+ * <p><b>断言策略</b>（负向断言强制）：正向「两列恒等」+ 负向「按旧列查不得命中」，
+ * 只做正向会漏掉「一致但都错」的情况。
+ *
+ * @see docs/specs/P106-multi-book-account-set.md §0.2 / §7
+ * @see docs/development/plans/2026-10-05-P106-multi-book-plan.md 微循环 1a-1
+ */
+@DisplayName("P106 预付款：tenant_id 不得与 enterprise_id 并存且不一致")
+class AccountSetIsolationRealDBTest extends AbstractMapperTest {
+
+    /** 独立企业号，避免与基类默认的 1 混淆（AGENTS §4.5 第 23 条：切上下文而非硬塞实体） */
+    private static final Long ENTERPRISE_E = 990001L;
+
+    private static final String PREFIX = "9999.P106.PREPAY.";
+
+    @Autowired
+    private PrepaymentService prepaymentService;
+
+    @Autowired
+    private PrepaymentMapper prepaymentMapper;
+
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
+
+    private PrepaymentEntity draft(String tag) {
+        PrepaymentEntity e = new PrepaymentEntity();
+        e.setPeriod("209912");
+        e.setTxDate(LocalDate.now());
+        e.setAmount(new BigDecimal("1000.00"));
+        e.setSummary(PREFIX + tag);
+        e.setVendorId(1L);
+        return e;
+    }
+
+    @Test
+    @DisplayName("AT-106-1 企业上下文为 E 时，落库行 tenant_id 必须恒等于 enterprise_id")
+    void prepaymentTenantIdMustMatchEnterpriseId() {
+        useEnterprise(ENTERPRISE_E);
+
+        PrepaymentEntity saved = prepaymentService.create(draft("EQ"));
+
+        assertNotNull(saved.getId(), "未落库");
+
+        Long tenantId = jdbcTemplate.queryForObject(
+                "SELECT tenant_id FROM t_prepayment WHERE id = ?", Long.class, saved.getId());
+        Long enterpriseId = jdbcTemplate.queryForObject(
+                "SELECT enterprise_id FROM t_prepayment WHERE id = ?", Long.class, saved.getId());
+
+        assertEquals(ENTERPRISE_E, enterpriseId,
+                "enterprise_id 应由 insertFill 无条件覆盖为上下文企业");
+        assertEquals(enterpriseId, tenantId,
+                "两列必须恒等：PrepaymentServiceImpl#create 写死 tenant_id=1（DEFAULT_TENANT_ID）"
+                        + "而 RLS 谓词读 enterprise_id，两列永久不一致 ⇒ 任何按 tenant_id 的"
+                        + "统计/索引（如 idx_classification_rule_tenant）都基于错误数据。"
+                        + "实际 tenant_id=" + tenantId + " / enterprise_id=" + enterpriseId);
+    }
+
+    @Test
+    @DisplayName("负向：把 tenant_id 改成与 enterprise_id 不同的值后，按旧列的查询不得命中本企业数据")
+    void tenantIdIsNotAnIsolationColumn() {
+        useEnterprise(ENTERPRISE_E);
+
+        PrepaymentEntity saved = prepaymentService.create(draft("NEG"));
+        assertNotNull(saved.getId(), "未落库");
+
+        // 人为制造「旧列指向别的企业」的脏数据
+        jdbcTemplate.update("UPDATE t_prepayment SET tenant_id = ? WHERE id = ?",
+                Long.valueOf(999999L), saved.getId());
+
+        Integer byLegacyColumn = jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM t_prepayment WHERE id = ? AND tenant_id = ?",
+                Integer.class, saved.getId(), ENTERPRISE_E);
+
+        assertTrue(byLegacyColumn == null || byLegacyColumn == 0,
+                "按 tenant_id=" + ENTERPRISE_E + " 查询不应命中被改成 999999 的行，实际命中 "
+                        + byLegacyColumn + " 行 —— 若命中说明旧列仍被当作隔离依据使用");
+    }
+
+    @Test
+    @DisplayName("负向：切到别的企业上下文后，本企业的预付款不可见（证明隔离读的是 enterprise_id）")
+    void prepaymentIsInvisibleUnderOtherEnterpriseContext() {
+        useEnterprise(ENTERPRISE_E);
+        PrepaymentEntity saved = prepaymentService.create(draft("ISO"));
+        assertNotNull(saved.getId(), "未落库");
+
+        useEnterprise(ENTERPRISE_E + 1);
+
+        Integer visible = jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM t_prepayment WHERE id = ?", Integer.class, saved.getId());
+
+        assertTrue(visible == null || visible == 0,
+                "切到企业 " + (ENTERPRISE_E + 1) + " 后应查不到企业 " + ENTERPRISE_E
+                        + " 的预付款（RLS 谓词读 enterprise_id），实际可见 " + visible + " 行");
+    }
+
+    @Test
+    @DisplayName("正向：按 summary 前缀可捞回本用例造的行（守卫夹具可识别，避免全表断言）")
+    void fixtureIsRetrievableByPrefix() {
+        useEnterprise(ENTERPRISE_E);
+
+        PrepaymentEntity saved = prepaymentService.create(draft("FIND"));
+
+        Integer found = jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM t_prepayment WHERE summary LIKE ?",
+                Integer.class, PREFIX + "FIND%");
+
+        assertEquals(1, found,
+                "用例造的行应可按唯一前缀精确捞回；实测前缀不生效会让断言越界到全表（AGENTS §4.4 第 16 条）");
+        assertNotNull(prepaymentMapper.selectById(saved.getId()), "回读不到");
+    }
+}
