@@ -1,7 +1,7 @@
 # P106 SPEC — 多账套（企业级收口 + 账簿级立项）
 
-> **版本**：V1.2 | **最后修改**：2026-10-05 | **作者**：opencode（V1.2 为审核意见落地）
-> **编号**：HUICAI-SPC-P106 | 优先级：**P1** | 状态：📋 **待复审（审核已提出 4 项 P0 + 4 项 P1 + 2 项 P2，本版为修订稿，仍未动任何代码）**
+> **版本**：V1.3 | **最后修改**：2026-10-05 | **作者**：opencode（V1.3 为复审定点修正）
+> **编号**：HUICAI-SPC-P106 | 优先级：**P1** | 状态：📋 **复审结论：P0 已闭环，待老丁终审**（V1.2 审核 4 项 P0 中 3 项已闭环，第 3 项经复审发现「混计幽灵字段与真实双列」并已修正；仍未动任何代码）
 > **来源**：P101 商用化差距总纲 → P106「内控深度」中的「多账套」子项
 > **关联需求**：**REQ-2026-133**（⚠️ V1.0 原写 REQ-2026-134 **有误** —— 134 归 P107 存量缺陷修复包且已实施完成，P101 line 28 已明文「为它让出 134，133 保持不变」；更正记录见登记册 V1.77）| **前置**：RLS 三层已落地（PR #26/#27）、DTO 入参隔离已归零（PR #28~#30）
 > **test_ref**（现状与拟建分列）：**已存在** —— `TenantRlsRealDBTest`（6 项真库隔离断言）、`TenantRlsGucRealDBTest`、`TenantIsolationSecurityTest`、`TenantIsolationHttpTest`、`ReconciliationServiceImplTest`；**拟新建** —— `AccountSetIsolationRealDBTest`（承载 AT-106-1~5）
@@ -20,7 +20,8 @@
 | F3 | 唯一约束**已按企业分段** | `t_subject` `uq_subject_code_ent (code, enterprise_id)`（`V116:7`）；`t_period` `uq_period_code_ent (period_code, enterprise_id)`（`V116:19`）；`t_bank_account` `uq_bank_account_no_enterprise (account_no, enterprise_id)`（`V118:5`） |
 | F4 | **「企业 = 账套」已经落地，且有服务端强制边界** | 前端 `layouts/components/EnterpriseSwitcher.vue` + `X-Enterprise-Id` 头；`JwtAuthenticationFilter:84-111` 调 `EnterpriseMembershipChecker.isMember`（三源并集：直属 ∪ 代理授权 ∪ SUPER_ADMIN），不通过即 **403** 并回写 JSON（`:97-104`）；成功后写审计 `auditService.recordEnterpriseSwitch`（`:105-106`）；`:120-122` **无条件** `EnterpriseContextHolder.set(enterpriseId)` |
 | F5 | `t_enterprise` 已有**部分账套档案字段** | `V100:34-52`：`mode`（`NOT NULL DEFAULT 'SME'`，CHECK `('SME','AGENCY_CLIENT')`）、`status`（`NOT NULL DEFAULT 'PENDING'`）、`seed_data_done`（`NOT NULL DEFAULT FALSE`）、`agency_id`、`version`；`V134:16` 增 `start_period VARCHAR(6)`（`YYYYMM`，`NULL`=未建账） |
-| F6 | **单企业硬编码实为 6 处**（V1.1 写 2 处，**漏 4 处**） | **租户/企业列各 3 类**：①`ReconciliationToleranceServiceImpl:29` `DEFAULT_ENTERPRISE_ID = 1L`（**4 个使用点**：`:43`/`:72`/`:87`/`:104`）；②`OutputInvoiceStateMachineServiceImpl:291` `enterpriseId = 1L`；③`ReconciliationServiceImpl:73` `DEFAULT_TENANT_ID = 1L`（**3 个使用点**：`:364`/`:780`/`:892`，写入 `t_reconciliation_log`/`t_reconciliation_exception`）；④`PrepaymentServiceImpl:55` `DEFAULT_TENANT_ID = 1L`；⑤`AutoGenerationService:72`、`PrepaymentServiceImpl:56`、`PurchaseReturnServiceImpl:45`、`ReconciliationServiceImpl:74`、`SalesInvoiceImportService:50`、`InputInvoiceImportService:56` 共 6 处 `DEFAULT_USER_ID = 1L`（**审计/操作人维度**，非租户维度，单列在 §0.3） |
+| F6 | **租户/企业维度的硬编码是 4 个常量、8 个有效使用点**（V1.1 写「2 处」，**漏 2 个常量**；V1.2 写「6 处」，**计数与自己的列举不符**，本版更正） | ①`ReconciliationToleranceServiceImpl:29` `DEFAULT_ENTERPRISE_ID = 1L` —— **4 个使用点**（`:43`/`:72`/`:87`/`:104`），读写 `t_reconciliation_tolerance.enterprise_id`（真实列，`V103:45`），**全部有效**；②`OutputInvoiceStateMachineServiceImpl:288-292` `enterpriseId = 1L` —— 上下文为 null 时的兜底，赋给 `BusinessDocEntity.enterpriseId`（`BaseEntity:23-24` 真实列），**有效**，注释自认「理论上不应发生」；③`ReconciliationServiceImpl:73` `DEFAULT_TENANT_ID = 1L` —— 3 处调用但**只有 2 处有效**（`:364`/`:780` 写 `t_reconciliation_log.tenant_id`，真实列 `V94:189` ⇒ **真双列并存**）；`:892` 写 `ReconciliationExceptionEntity.tenantId`，该字段 `@TableField(exist=false)`（`:21-22`）且 `t_reconciliation_exception` **根本没有 `tenant_id` 列** ⇒ **幽灵字段死代码，赋值完全无效**；④`PrepaymentServiceImpl:55` `DEFAULT_TENANT_ID = 1L` —— 1 个使用点（`:107 if (entity.getTenantId() == null)`），写 `t_prepayment.tenant_id`（真实列 `V5:6`）⇒ **真双列并存** |
+| F6b | **操作人维度的硬编码另有 6 处，与 F6 不是同一类**（V1.2 曾把两者混计） | `AutoGenerationService:72`、`PrepaymentServiceImpl:56`、`PurchaseReturnServiceImpl:45`、`ReconciliationServiceImpl:74`、`SalesInvoiceImportService:50`、`InputInvoiceImportService:56` 的 `DEFAULT_USER_ID = 1L`。属审计操作人归属（铁律 #5），**已排除出本 SPEC 范围**，详见 §0.3 |
 | F7 | 一个普通企业用户**挂不了第二家企业** | `t_user.enterprise_id` 单归属；`uq_username UNIQUE (username)` 为**全局**唯一（`V1__baseline.sql:197`），非 `UNIQUE(username, enterprise_id)`。⇒ 同一用户名在两个企业各建一次会撞唯一键 |
 | F8 | **账套状态机实际允许集与本文 §5 流转图不一致**（V1.2 新增，V1.1 的图含非法值） | `chk_enterprise_status CHECK (status IN ('PENDING','ACTIVE','SUSPENDED','TERMINATED'))`（`V100:51`）；`EnterpriseStatus` 枚举与 `isValidTransition` 同样只有这 4 态，合法迁移为 `PENDING→ACTIVE`、`ACTIVE→SUSPENDED`、`SUSPENDED→{ACTIVE,TERMINATED}`。⚠️ **无 `CLOSED`**，V1.1 的流转图写了非法值（AGENTS §4.2 第 9/14 条的复发形态） |
 
@@ -42,11 +43,26 @@
 | 表 | `tenant_id` 来源 | `enterprise_id` 来源 | 风险 |
 |---|---|---|---|
 | `t_prepayment` | `V5:6` `NOT NULL DEFAULT 1` | `V105:10` | `PrepaymentServiceImpl:55` 写死 `DEFAULT_TENANT_ID=1L`，而 RLS 谓词只认 `enterprise_id` ⇒ **两列可永久不一致且无人守** |
-| `t_reconciliation_log` | `V94:189` `NOT NULL DEFAULT 1` | `V105:23` | `ReconciliationServiceImpl:73` 写死 `1L`，**3 个写入点**（`:364`/`:780`） |
+| `t_reconciliation_log` | `V94:189` `NOT NULL DEFAULT 1` | `V105:23` | `ReconciliationServiceImpl:73` 写死 `1L`，**2 个有效写入点**（`:364` 提报日志、`:780` 调整日志）。⚠️ 该常量还有第 3 处调用 `:892`，但写的是**另一张表**且是幽灵字段，见 §0.2 补注 |
 | `t_ai_feedback_log` | `V1__baseline.sql:1246` `BIGINT`（可空） | `V104:23` | AI 反馈日志跨企业混存；`tenant_id` 可空 ⇒ 与 `enterprise_id NOT NULL` 语义不一致 |
 | `t_classification_rule` | `V2:8` `NOT NULL DEFAULT 1` | `V104:26` | 分类规则（`idx_classification_rule_tenant` 索引仍建在 `tenant_id` 上） |
 
 ⚠️ **为什么这 4 张比 §0.1 的 10 张更危险**：§0.1 的表无隔离列，RLS 不生效是**一致的状态**（读写都不过滤）；而这 4 张**看起来已受 RLS 保护**（谓词命中 `enterprise_id`），但代码写的是另一列 ⇒ **产生「已隔离」的错觉**，与 AGENTS §4.5 第 27 条「看起来在工作、实际从未工作」同型。`t_classification_rule` 的索引还建在旧列上，会让按 `tenant_id` 的查询绕开 RLS 谓词的意图。
+
+#### 0.2 补注：`t_reconciliation_exception` 的 15 处 `exist = false`（**V1.3 新增，独立缺口**）
+
+`ReconciliationServiceImpl:892` 的 `ex.setTenantId(DEFAULT_TENANT_ID)` **不是双列并存问题，而是幽灵字段**：`ReconciliationExceptionEntity:21-22` 标了 `@TableField(exist = false)`，而 `t_reconciliation_exception` 建表（`V1__baseline:1284-1297`）无 `tenant_id` 列 ⇒ **该赋值完全不参与 SQL**，属 AGENTS §4.2 第 10 条说的**误导性代码**（赋值无效且不可断言）。
+
+复核该 Entity 的 **15 处** `@TableField(exist = false)` 后，按性质分三类：
+
+| 类别 | 字段 | 危害 |
+|---|---|---|
+| **反向缺口**（最隐蔽） | `updatedAt`（`:104`） | ⚠️ **`V127:34` 已给该表加真实列 `updated_at`**，Entity 却标 `exist = false` ⇒ 该列**从不写入、读回恒 null**。这正是 AGENTS §4.2 第 16 条「真实列存在但 Entity 标成不存在」—— 比幽灵字段更难发现，因为 `\d` 里一眼可见 |
+| **被业务代码赋值的幽灵字段** | `tenantId`（`:22`） | `ReconciliationServiceImpl:892` 在赋值 ⇒ 读代码会误以为该表有租户列 |
+| 字段遮蔽（无害但冗余） | `createdBy`（`:97`） | 遮蔽 `BaseEntity:27-28` 同名字段（父类同为 `exist=false`） |
+| 纯幽灵字段（12 个） | `sourceDocType`、`sourceDocId`、`targetDocType`、`targetDocId`、`partyId`、`partyType`、`unsettledAmount`、`exceptionReason`、`matchSuggestion`、`retryCount`、`assignedTo`、`remark` | 赋值无效、读回恒 null |
+
+⇒ **处置：登记为 P102 待办，不在本 SPEC 的 5 项遗留内**（本轮只清 §0.2 那 4 张表的租户列写入路径，不顺手动 Entity 的幽灵字段 —— 那是另一类缺陷，混在一起会让 DDL 变更无法归因）。已记入 §9 风险表。
 
 ### 0.3 6 处 `DEFAULT_USER_ID = 1L`（操作人维度，**本 SPEC 不处理，仅登记**）
 
@@ -81,11 +97,16 @@
 |---|---|---|---|
 | **L1-1** | **4 张双列并存表**（`t_prepayment`/`t_reconciliation_log`/`t_ai_feedback_log`/`t_classification_rule`）定性并收口：代码写 `tenant_id`、RLS 读 `enterprise_id`，两列可永久不一致且索引还建在旧列上 | F2/§0.2 | **P0** |
 | **L1-2** | **10 张「两列都没有」的纯平台全局表**逐表定性：哪些刻意全局共享（权限/导航骨架）、哪些应按企业隔离却漏了（`t_dept` 全局唯一编码、`t_sys_config` 含账套配置、`t_audit_log` 跨企业混存） | F2/§0.1 | P1 |
-| **L1-3** | 清掉 **6 处单企业硬编码**（V1.1 写 2 处，漏 `ReconciliationServiceImpl:73` 三个写入点、`PrepaymentServiceImpl:55` 及 `ReconciliationToleranceServiceImpl` 的另 3 个使用点），取不到上下文一律抛 `BusinessException` | F6 | P1 |
+| **L1-3** | 清掉 **4 个租户/企业维度硬编码常量**（共 8 个有效使用点，见 F6），取不到上下文一律抛 `BusinessException` | F6 | P1 |
 | **L1-4** | 明确「一个用户能否挂多家企业」产品决策，并落地（当前只能靠代理授权链） | F7 | P2 |
 | **L1-5** | `t_user.uq_username` 全局唯一 vs `(username, enterprise_id)` 的取舍 | F7 | P2 |
 
-⚠️ **L1-3 与已落地设计的边界（V1.2 新增）**：`TenantRlsInitializer:65-69` 的既定设计是「上下文为 null 时**直接 return，不设 GUC**」，注释理由是「定时任务/系统初始化等无登录态路径本就不属于任何企业」，且此时 RLS 返 0 行属**预期的 fail-closed**。⇒ **本项只清「有上下文却硬编码 1」这 4 处，不得把切面改成「null 即抛异常」** —— 那会把「静默返 0 行」变成「定时任务全站报错」，是 §9 风险表所列风险的放大而非修复。
+⚠️ **L1-3 与已落地设计的边界（V1.2 新增）**：`TenantRlsInitializer:65-69` 的既定设计是「上下文为 null 时**直接 return，不设 GUC**」，注释理由是「定时任务/系统初始化等无登录态路径本就不属于任何企业」，且此时 RLS 返 0 行属**预期的 fail-closed**。⇒ **本项只清「有上下文却硬编码 1」这 4 个常量，不得把切面改成「null 即抛异常」** —— 那会把「静默返 0 行」变成「定时任务全站报错」，是 §9 风险表所列风险的放大而非修复。
+
+⚠️ **L1-3 的两类清理动作不可混用（V1.3 新增）**：F6 的 8 个有效使用点分属两种修法 ——
+- **真双列并存**（`t_prepayment`、`t_reconciliation_log` 的 4 个写入点）⇒ 改**写 `enterprise_id`**（由 `BaseEntity` 的 `FieldFill.INSERT` + `MyMetaObjectHandler` 强制覆盖，AGENTS §4.5 第 23 条），并保留对 `tenant_id` 的读取兼容；
+- **幽灵字段**（`ReconciliationServiceImpl:892`）⇒ 赋值本就无效，**处置是删代码而不是改列**。若照「改成写 `enterprise_id`」去改，会给一个不存在的列加值语义，掩盖 Entity 层缺陷。
+两类的验收断言也不同：前者断言「写入行 `enterprise_id` = 上下文企业」，后者断言「**不存在** `tenant_id` 列」+「`:892` 的赋值已移除」。
 
 ⚠️ **不在本轮范围但已登记**：`t_enterprise.status` 已有 `PENDING/ACTIVE/SUSPENDED/TERMINATED` 四态状态机（`EnterpriseStateMachineServiceImpl`，人工触发，符合铁律 #1），但**全库无任何一处校验「非 ACTIVE 账套不得产生业务数据」**（`rg "账套未启用|非ACTIVE|ENTERPRISE_NOT_ACTIVE"` 零命中）⇒ 这是一个**尚未立项的独立缺口**，不是本 SPEC 的 5 项遗留之一；§7 的对应场景因此标注为「现状缺口 + 需单独立项」，不在本轮实现。
 
@@ -120,7 +141,7 @@
 | 跨企业读写隔离 | 切到 A 企业后查询返回 A 的行；写 A 的行在 B 的上下文下 **0 行可见 / 写入被拒**（**已实现**，`TenantRlsRealDBTest` 6/6 已覆盖，补跨企业写拒绝场景） |
 | 双列并存表收口 | §0.2 的 4 张表给出结论：代码写 `tenant_id` 的路径改为写 `enterprise_id`（或证明两列恒等并加约束），`t_classification_rule` 的索引迁到 `enterprise_id` |
 | 平台全局表定性 | §0.1 的 10 张表逐张给出结论并**落到 DDL 或文档**（不结论不算完成） |
-| 硬编码清零 | F6 的 **6 处**改为读上下文，取不到上下文时抛 `BusinessException`（铁律 #14），**不得静默用 1**；⚠️ **不改 `TenantRlsInitializer` 的 null-return 语义**（见 §1.2 L1-3 边界说明） |
+| 硬编码清零 | F6 的 **4 个常量 / 8 个有效使用点**改为读上下文，取不到上下文时抛 `BusinessException`（铁律 #14），**不得静默用 1**；⚠️ **不改 `TenantRlsInitializer` 的 null-return 语义**（见 §1.2 L1-3 边界说明）；幽灵字段赋值**删代码而非改列**（见 §0.2 补注） |
 | 唯一约束决策 | L1-4/L1-5 给出结论；若改 `uq_username` 必须走 Flyway 且提供回填脚本 |
 
 ## 5. 状态流转
@@ -171,8 +192,14 @@ Scenario: 预付款写入的 tenant_id 恒等于 enterprise_id（负向：不允
 
 Scenario: 核销日志写入企业上下文而非常量 1
   Given 企业上下文为 E（E ≠ 1）
-  When  ReconciliationServiceImpl 写核销提报日志（:364）与核销异常（:892）
-  Then  两行 enterprise_id = E；断言 tenant_id ≠ 恒等于 1 的旧行为
+  When  ReconciliationServiceImpl 写核销提报日志（:364）与核销调整日志（:780）
+  Then  两行 enterprise_id = E；且 tenant_id 不再被 Service 独立赋值为常量 1
+
+Scenario: 核销异常上的 tenantId 是幽灵字段，赋值须移除而非改列
+  Given ReconciliationExceptionEntity.tenantId 标 @TableField(exist=false)
+  When  清理 ReconciliationServiceImpl:892 的 ex.setTenantId(DEFAULT_TENANT_ID)
+  Then  该行代码被移除（负向：不得改为 setEnterpriseId，否则掩盖 Entity 缺陷）
+  And   断言 t_reconciliation_exception 无 tenant_id 列（information_schema 查证）
 
 Scenario: 核销容忍度按当前企业查询而非企业 1
   Given 企业上下文为 E≠1，企业 1 与 E 各有一条 t_reconciliation_tolerance
@@ -217,7 +244,8 @@ Scenario: SUPER_ADMIN 切换会设置企业上下文（**修正 V1.1 的错误�
 | 编号 | 场景 | 类型 | 落点 |
 |---|---|---|---|
 | AT-106-1 | 预付款两列一致（负向：手工改 `tenant_id` 后按旧列查不到） | 真实 DB | 新增 `AccountSetIsolationRealDBTest` |
-| AT-106-2 | 核销日志/异常写入当前企业而非常量 1 | 真实 DB | 同上 + `ReconciliationServiceImplTest` |
+| AT-106-2 | 核销日志（`:364`/`:780`）写入当前企业而非常量 1 | 真实 DB | 同上 |
+| AT-106-2b | 核销异常的 `tenantId` 幽灵字段赋值已移除（负向：不得改为 `setEnterpriseId`；断言表无 `tenant_id` 列） | 真实 DB + 单测 | 同上 + `ReconciliationServiceImplTest` |
 | AT-106-3 | 核销容忍度按当前企业查询 | 真实 DB | 同上 |
 | AT-106-4 | 无上下文写路径抛 `BusinessException` 且不写进行 1 | 真实 DB | 同上 |
 | AT-106-5 | 平台全局表 10 张定性结论落库/落文档 | 文档 + DDL | §0.1 + Flyway |
@@ -231,8 +259,8 @@ Scenario: SUPER_ADMIN 切换会设置企业上下文（**修正 V1.1 的错误�
 
 | 批次 | 内容 | 风险 | 门禁要求 |
 |---|---|---|---|
-| **1** | **1a** 4 张双列并存表收口（写 `enterprise_id`、索引迁移）；**1b** 10 张平台全局表逐表定性；**1c** 6 处单企业硬编码清零 | 中（动 DDL 与写路径） | 三方对照审计（PG ↔ Entity ↔ 业务代码）；DDL 走 Flyway；`node scripts/check-entity-schema.mjs`；覆盖率门禁仍 `All coverage checks have been met`（新增代码须带测试，见 §9 DTO/覆盖率税） |
-| **2** | 切换鉴权与跨企业隔离的**真库回归锁**（现有 4 个类已覆盖读隔离，补**跨企业写拒绝**与 AT-106-8 断言修正） | 低 | L2 全绿；L1 `All coverage checks have been met` |
+| **1** | **1a** 4 张双列并存表收口（写 `enterprise_id`、索引迁移）；**1b** 10 张平台全局表逐表定性；**1c** 4 个硬编码常量 / 8 个有效使用点清零（含 1 处幽灵字段赋值移除） | 中（动 DDL 与写路径） | 三方对照审计（PG ↔ Entity ↔ 业务代码）；DDL 走 Flyway；`node scripts/check-entity-schema.mjs`；覆盖率门禁仍 `All coverage checks have been met`（新增代码须带测试，见 §9 DTO/覆盖率税） |
+| **2** | 切换鉴权与跨企业隔离的**真库回归锁**（现有 4 个类已覆盖读隔离，补**跨企业写拒绝**与 AT-106-8 新增断言） | 低 | L2 全绿；L1 `All coverage checks have been met` |
 | **3** | L1-4 / L1-5 产品决策落地（可能含 `uq_username` 迁移） | 高（影响登录） | 需老丁单独审核 + 回填脚本 |
 
 ⚠️ **批次 1a 必须先做而不能与 1b 合并**：§0.2 的 4 张表「看起来已受 RLS 保护」，属**当前就在产生错误数据**的缺口（写入 `tenant_id=1` 而 RLS 读 `enterprise_id`）；§0.1 的 10 张表是「一致地未隔离」，是**设计与实现的取舍问题**，可慢。混在一起做会让 DDL 变更的因果无法归因。
@@ -255,12 +283,14 @@ Scenario: SUPER_ADMIN 切换会设置企业上下文（**修正 V1.1 的错误�
 | 双列并存表收口时历史数据两列不一致 | 收口前先跑**一致性核查**（`enterprise_id <> COALESCE(tenant_id, enterprise_id)` 的行数），不一致的行走 Flyway 回填并留证，不得静默改写 |
 | 出参面 110 端点仍直出 Entity（含 `UserController#get/#page` 返回 `UserEntity`） | 与本 SPEC 无关但**同属 P102**，建议并行处理（不阻塞本 SPEC）。⚠️ V1.1 曾称其「泄漏 `password` 哈希」，实测 `UserEntity:20-21` 已有 `@JsonProperty(access = WRITE_ONLY)` ⇒ **不会序列化输出**，此风险描述已失效，改为「出参面未用 VO」的通用问题 |
 | 覆盖率棘轮缓冲不足（BRANCH 仅 0.81 点，AGENTS §0） | 批次 1 新增代码/DTO 须同步补测试；实测口径必须 `mvn clean test`（不带 clean 会虚高约 6 点） |
+| 🔴 **`ReconciliationExceptionEntity` 有 15 处 `exist = false`，其中 `updatedAt` 是反向缺口**（V1.3 复审新发现，**已登记 P102 待办，不在本 SPEC 范围**）：`V127:34` 已给 `t_reconciliation_exception` 加真实列 `updated_at`，Entity `:104` 却标 `exist = false` ⇒ 该列**永不写入、读回恒 null**；另有 `tenantId` 被 `ReconciliationServiceImpl:892` 赋值（幽灵字段，误导性代码）。**为何不并入本轮**：它与 §0.2 的 DDL 收口不同源，混做会让变更无法归因（AGENTS §4.5 第 24 条同款思路） |
 | 无机器可读契约导致 SPEC 门禁对本 SPEC 只报「coverage gap」 | 本 SPEC 暂沿用现状（100 份中 92 份无契约），**建议下一批次补 YAML 契约**并纳入 `--require-contract` |
 
 ## 10. 版本历史
 
 | 版本 | 日期 | 变更人 | 变更内容 |
 |---|---|---|---|
-| **V1.2** | 2026-10-05 | opencode | **审核意见落地（4 项 P0 + 4 项 P1 + 2 项 P2，仍未动代码）**。审核方法是**逐条实测复核 F1~F7 并新增 F8**，不是读 SPEC 找问题。**P0-1 状态机含非法值**：V1.1 §5 写 `ACTIVE ──▶ CLOSED`，而 `chk_enterprise_status`（`V100:51`）与 `EnterpriseStatus` 枚举都只有 `PENDING/ACTIVE/SUSPENDED/TERMINATED`，**`CLOSED` 不是合法值** —— 已在 §5 重画为真实四态与合法迁移（`PENDING→ACTIVE`、`ACTIVE→SUSPENDED`、`SUSPENDED→{ACTIVE,TERMINATED}`），并新增 **F8** 固化该证据。**P0-2 §0.1 事实错误**：V1.1 称那 10 张表「仍用 `tenant_id`」，实测**既无 `enterprise_id` 也无 `tenant_id`**（`rg "ADD COLUMN.*tenant_id"` 全 migration 零命中）；更严重的是 V1.1 **漏掉了真正的缺口** —— **4 张双列并存表**（`t_prepayment`/`t_reconciliation_log`/`t_ai_feedback_log`/`t_classification_rule`），代码写 `tenant_id` 而 RLS 读 `enterprise_id`，**产生「已隔离」的错觉**（新增 §0.2）。**P0-3 硬编码漏报**：V1.1 F6 写「2 处」，实为 **6 处**（补 `ReconciliationServiceImpl:73` 的 3 个写入点、`PrepaymentServiceImpl:55`、`ReconciliationToleranceServiceImpl` 的另 3 个使用点）；另将 **6 处 `DEFAULT_USER_ID=1L`** 单列 §0.3 并**排除出本轮范围**（属审计操作人维度，需产品决策），避免与租户维度混计。**P0-4 场景与代码相反**：V1.1 §7 写「SUPER_ADMIN 不设上下文」，而 `JwtAuthenticationFilter:120-122` **无条件** `EnterpriseContextHolder.set(...)` —— 已改为「切换会设置上下文 + 不带头时按 JWT」，并核实现有 `#superAdminAllowedEverywhere:78-82` 只测 `isMember` 不涉上下文，**无断言冲突**。**P1-5 与已落地设计冲突**：V1.1 §6 要求「上下文取不到即抛异常」，与 `TenantRlsInitializer:65-69` 的既定 null-return 设计相反（其注释明写定时任务「本就不属于任何企业」）—— 已在 §1.2/§6/§9 三处划边界：**只清「有上下文却硬编码 1」，不改切面语义**。**P1-6 删掉逃逸口场景**：「审计日志按企业隔离（或改为断言文档）」这类二选一不可判定，已删除；`t_audit_log` 两列都没有已是确定结论，改为 §0.1 的取证项。**P1-7 补 AT-106-1~8 验收编号**并标注类型与落点。**P1-8 修正 test_ref**：V1.1 的三个类名**全不存在**，改为「已存在 5 个 + 拟建 1 个」；批次 2 描述由「当前只有单测」改为「4 个类已覆盖读隔离，补跨企业写拒绝」。**P2**：F1 表述限定为 `backend/src/main`（并补上被 V1.1 漏掉的 `t_sys_config` 账套级配置证据）；§9 补「无机器可读契约」与覆盖率缓冲不足两项风险。**遗留**：§0.1 的 10 张表**定性仍待定**（需逐表取证，我不替业务方判定「刻意全局共享 vs 应隔离」）；§0.2 的 4 张表需先跑一致性核查再动 DDL |
+| **V1.3** | 2026-10-05 | opencode | **复审定点修正 3 处（纯文档）**。复审方式是**重新独立复核，不信任 V1.2 自己的编辑** —— 4 项 P0 中 3 项确认闭环（P0-1 三处证据交叉一致；P0-2 分类正确；P0-4 与 `:108-110`/`:120-122` 一致），**P0-3 未闭环**，且复审又抓出 2 处 V1.2 自身的新错误：**①计数错误且自相矛盾** —— V1.2 的 F6 标题写「实为 6 处」，但它自己的列举是 4 个租户/企业维度常量 + 6 个操作人维度常量 ⇒ 本版改为「**4 个常量 / 8 个有效使用点**」，并把操作人维度拆成独立的 **F6b**（§0.3 保留）。**②把两类不同性质的东西混为一谈** —— V1.2 的 §0.2 写「`ReconciliationServiceImpl:73` 写死 `1L`，**3 个写入点**（`:364`/`:780`）」，**数字与列举自相矛盾**，且把 `:892` 错记到 `t_reconciliation_log`。追到 Entity 层后真相是：`:364`/`:780` 写真实列 `t_reconciliation_log.tenant_id`（**真双列并存**），而 `:892` 写的是 `ReconciliationExceptionEntity.tenantId` —— 该字段 `@TableField(exist = false)` 且 `t_reconciliation_exception` **根本没有 `tenant_id` 列** ⇒ **幽灵字段死代码，赋值完全无效**（AGENTS §4.2 第 10 条）⇒ §0.2 该行改为「**2 个有效写入点**」，并新增 **§0.2 补注**单列该 Entity。**③顺带发现一个反向缺口并登记 P102**：复核该 Entity 的 **15 处** `exist = false`，其中 **`updatedAt`（`:104`）是反向缺口** —— `V127:34` 已给该表加真实列 `updated_at`，Entity 却标 `exist = false` ⇒ **该列永不写入、读回恒 null**（AGENTS §4.2 第 16 条，比幽灵字段更隐蔽，因为 `\d` 里一眼可见）。**处置**：登记为 P102 待办 + §9 风险表，**不并入本 SPEC 的 5 项遗留**（与 §0.2 的 DDL 收口不同源，混做会让变更无法归因）。**同步**：`§1.2` L1-3 补「两类清理动作不可混用」（真双列 ⇒ 改写 `enterprise_id`；幽灵字段 ⇒ **删代码而不是改列**，验收断言也不同）；`§4`/`§8` 计数同步；`§7` 拆出独立的幽灵字段场景并新增 `AT-106-2b`（含负向断言「不得改为 `setEnterpriseId`」）。**方法论沉淀**：**审核 SPEC 不能只核对 SPEC 自己列的证据，必须把每个断言追到 Entity 字段映射层** —— V1.2 的 P0-3「改过仍错」是因为只在常量定义与调用点两层打转，没看 `@TableField`；而「幽灵字段 vs 真实双列」的区分**只有在 Entity 层才存在** |
+| **V1.2** | 2026-10-05 | opencode | **审核意见落地（4 项 P0 + 4 项 P1 + 2 项 P2，仍未动代码）**。审核方法是**逐条实测复核 F1~F7 并新增 F8**，不是读 SPEC 找问题。**P0-1 状态机含非法值**：V1.1 §5 写 `ACTIVE ──▶ CLOSED`，而 `chk_enterprise_status`（`V100:51`）与 `EnterpriseStatus` 枚举都只有 `PENDING/ACTIVE/SUSPENDED/TERMINATED`，**`CLOSED` 不是合法值** —— 已在 §5 重画为真实四态与合法迁移（`PENDING→ACTIVE`、`ACTIVE→SUSPENDED`、`SUSPENDED→{ACTIVE,TERMINATED}`），并新增 **F8** 固化该证据。**P0-2 §0.1 事实错误**：V1.1 称那 10 张表「仍用 `tenant_id`」，实测**既无 `enterprise_id` 也无 `tenant_id`**（`rg "ADD COLUMN.*tenant_id"` 全 migration 零命中）；更严重的是 V1.1 **漏掉了真正的缺口** —— **4 张双列并存表**（`t_prepayment`/`t_reconciliation_log`/`t_ai_feedback_log`/`t_classification_rule`），代码写 `tenant_id` 而 RLS 读 `enterprise_id`，**产生「已隔离」的错觉**（新增 §0.2）。**P0-3 硬编码漏报**：V1.1 F6 写「2 处」，本版补入 `ReconciliationServiceImpl:73`、`PrepaymentServiceImpl:55`、`ReconciliationToleranceServiceImpl` 的多个使用点；另将 `DEFAULT_USER_ID=1L` 单列 §0.3 并**排除出本轮范围**（属审计操作人维度，需产品决策），避免与租户维度混计。⚠️ **本版的计数与 §0.2 的「3 个写入点」表述经 V1.3 复审判定错误**（混计了幽灵字段），**以 V1.3 的「4 个常量 / 8 个有效使用点」为准**；**P0-4 场景与代码相反**：V1.1 §7 写「SUPER_ADMIN 不设上下文」，而 `JwtAuthenticationFilter:120-122` **无条件** `EnterpriseContextHolder.set(...)` —— 已改为「切换会设置上下文 + 不带头时按 JWT」，并核实现有 `#superAdminAllowedEverywhere:78-82` 只测 `isMember` 不涉上下文，**无断言冲突**。**P1-5 与已落地设计冲突**：V1.1 §6 要求「上下文取不到即抛异常」，与 `TenantRlsInitializer:65-69` 的既定 null-return 设计相反（其注释明写定时任务「本就不属于任何企业」）—— 已在 §1.2/§6/§9 三处划边界：**只清「有上下文却硬编码 1」，不改切面语义**。**P1-6 删掉逃逸口场景**：「审计日志按企业隔离（或改为断言文档）」这类二选一不可判定，已删除；`t_audit_log` 两列都没有已是确定结论，改为 §0.1 的取证项。**P1-7 补 AT-106-1~8 验收编号**并标注类型与落点。**P1-8 修正 test_ref**：V1.1 的三个类名**全不存在**，改为「已存在 5 个 + 拟建 1 个」；批次 2 描述由「当前只有单测」改为「4 个类已覆盖读隔离，补跨企业写拒绝」。**P2**：F1 表述限定为 `backend/src/main`（并补上被 V1.1 漏掉的 `t_sys_config` 账套级配置证据）；§9 补「无机器可读契约」与覆盖率缓冲不足两项风险。**遗留**：§0.1 的 10 张表**定性仍待定**（需逐表取证，我不替业务方判定「刻意全局共享 vs 应隔离」）；§0.2 的 4 张表需先跑一致性核查再动 DDL；**另新增登记**：`t_reconciliation_exception` 的 15 处 `exist = false`（含 `updatedAt` 反向缺口）作为 P102 待办 |
 | **V1.1** | 2026-10-05 | opencode | **关联需求编号更正：`REQ-2026-134` → `REQ-2026-133`**（纯文档，未动代码）。V1.0 把本项登记为 134，而该编号**已被 P107 存量缺陷修复包占用且已实施完成**（登记册 `REQ-2026-134` 行 = `SPC-P107`，2026-09-30 D1~D6+D8 全落地）—— 属 **P105 已修过的「REQ 重号」缺陷二次复发**。正确编号 `REQ-2026-133` 有三处交叉依据：①P101 line 28「已新增 P107（REQ-2026-134）承接，并**为它让出 REQ 编号**（原 P106 的 133 保持不变）」；②P101 子 SPEC 表「P106 | REQ-2026-133」；③P107 SPEC 头部「133 归 P106 内控深度」。**V1.0 自身即自相矛盾**：line 5（来源）写的是 133、line 6（关联需求）写的是 134。**同时补范围声明**：本 SPEC 只覆盖 P106 的「多账套」子项，年结/制单≠审核/数据权限粒度/部门级扩展仍未立项 |
 | **V1.0** | 2026-10-05 | opencode | 首版。基于实测把「多账套」拆为 L1（企业级，**已基本落地**，本轮只收口 4 项遗留）/ L2（账簿级，**完全缺失**，仅立项）；给出「复用 `enterprise_id` vs 新增 `book_id`」两模型对比与推荐；补齐竞品对标（用友/金蝶/SAP/QuickBooks）与年度层差距；定稿 BDD 与三分批实施计划。**未改动任何代码。** |
