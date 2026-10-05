@@ -1,10 +1,10 @@
 # P106 SPEC — 多账套（企业级收口 + 账簿级立项）
 
-> **版本**：V1.1 | **最后修改**：2026-10-05 | **作者**：opencode
-> **编号**：HUICAI-SPC-P106 | 优先级：**P1** | 状态：📋 **待审核（仅 SPEC，本轮不改任何 Java/SQL 代码）**
+> **版本**：V1.2 | **最后修改**：2026-10-05 | **作者**：opencode（V1.2 为审核意见落地）
+> **编号**：HUICAI-SPC-P106 | 优先级：**P1** | 状态：📋 **待复审（审核已提出 4 项 P0 + 4 项 P1 + 2 项 P2，本版为修订稿，仍未动任何代码）**
 > **来源**：P101 商用化差距总纲 → P106「内控深度」中的「多账套」子项
 > **关联需求**：**REQ-2026-133**（⚠️ V1.0 原写 REQ-2026-134 **有误** —— 134 归 P107 存量缺陷修复包且已实施完成，P101 line 28 已明文「为它让出 134，133 保持不变」；更正记录见登记册 V1.77）| **前置**：RLS 三层已落地（PR #26/#27）、DTO 入参隔离已归零（PR #28~#30）
-> **test_ref**（拟）：`EnterpriseIsolationRealDBTest`、`SwitchAuthorizationRealDBTest`、`AccountSetLifecycleTest`
+> **test_ref**（现状与拟建分列）：**已存在** —— `TenantRlsRealDBTest`（6 项真库隔离断言）、`TenantRlsGucRealDBTest`、`TenantIsolationSecurityTest`、`TenantIsolationHttpTest`、`ReconciliationServiceImplTest`；**拟新建** —— `AccountSetIsolationRealDBTest`（承载 AT-106-1~5）
 > **⚠️ 范围声明**：本 SPEC 只覆盖 P106 的**「多账套」子项**；P106 其余子项（年结、制单≠审核、数据权限粒度、部门级扩展）**仍未立项**。
 
 ---
@@ -15,22 +15,44 @@
 
 | # | 事实 | 证据 |
 |---|---|---|
-| F1 | **隔离维度只有 `enterprise_id`，没有账套/账簿维度** | `grep -riE 'book_set\|账套\|套账'` 全仓仅命中 1 条**注释**（`SubjectBalanceServiceImpl:495` 提到「新账套首期」），无实体、无表、无配置项 |
-| F2 | 83 张 `t_` 表中：**73 张有 `enterprise_id`**、**10 张仍用 `tenant_id`**、**70 张已开 RLS** | `information_schema.columns` / `pg_class.relrowsecurity` 统计 |
-| F3 | 唯一约束**已按企业分段** | `t_subject` `uq_subject_code_ent (code, enterprise_id)`；`t_period` `uq_period_code_ent (period_code, enterprise_id)`；`t_bank_account` `uq_bank_account_no_enterprise (account_no, enterprise_id)` |
-| F4 | **「企业 = 账套」其实已经落地，且有服务端强制边界** | 前端 `layouts/components/EnterpriseSwitcher.vue` + `X-Enterprise-Id` 头；`JwtAuthenticationFilter:84-107` 调 `EnterpriseMembershipChecker.isMember`（三源并集：直属 ∪ 代理授权 ∪ SUPER_ADMIN），不通过即 **403**，并写审计 `auditService.recordEnterpriseSwitch` |
-| F5 | `t_enterprise` 已有**部分账套档案字段** | `mode`（默认 `SME`）、`start_period`、`seed_data_done`、`status`（默认 `PENDING`）、`agency_id`、`version` |
-| F6 | **仍有 2 处硬编码单企业** | `OutputInvoiceStateMachineServiceImpl:291` `enterpriseId = 1L`；`ReconciliationToleranceServiceImpl:29` `DEFAULT_ENTERPRISE_ID = 1L` |
-| F7 | 一个普通企业用户**挂不了第二家企业** | `t_user.enterprise_id` 单归属 + `uq_username` 为**全局**唯一（非 `UNIQUE(username, enterprise_id)`） |
+| F1 | **`backend/src/main` 内无账套/账簿维度**：隔离维度只有 `enterprise_id` | `rg -ni "book_set\|bookSet\|账套\|套账\|账簿" backend/src/main` 仅命中 **2 条注释**（`SubjectBalanceServiceImpl:495-496` 「新账套首期」）。⚠️ **V1.1 曾写「无配置项」，实测证伪**：`t_sys_config` 已由 `V1__baseline.sql:1510-1511` 种入 `accounting.start_year='账套启用年度'`、`accounting.start_month='账套启用月份'` 两条**账套级配置**，而该表**既无 `enterprise_id` 也无 `tenant_id`**（见 F2）⇒ 账套概念在配置层已存在但**无企业维度**，是 §8 批次 1 取证的直接线索 |
+| F2 | 隔离列的真实分布是**三类**，不是 V1.1 所说的「有/无 `tenant_id`」二类 | 逐表核对 84 条 `CREATE TABLE` 后修正：**①主流形态** = 只有 `enterprise_id`（V102~V105 四个批次补列 + `t_agency_enterprise`）；**②双列并存** = `enterprise_id` 与 `tenant_id` 同时存在（4 张，见 §0.2）；**③两列都没有** = 纯平台全局表（10 张，见 §0.1）。V1.1 把③误述为「仍用 `tenant_id`」，会把取证方向带偏 |
+| F3 | 唯一约束**已按企业分段** | `t_subject` `uq_subject_code_ent (code, enterprise_id)`（`V116:7`）；`t_period` `uq_period_code_ent (period_code, enterprise_id)`（`V116:19`）；`t_bank_account` `uq_bank_account_no_enterprise (account_no, enterprise_id)`（`V118:5`） |
+| F4 | **「企业 = 账套」已经落地，且有服务端强制边界** | 前端 `layouts/components/EnterpriseSwitcher.vue` + `X-Enterprise-Id` 头；`JwtAuthenticationFilter:84-111` 调 `EnterpriseMembershipChecker.isMember`（三源并集：直属 ∪ 代理授权 ∪ SUPER_ADMIN），不通过即 **403** 并回写 JSON（`:97-104`）；成功后写审计 `auditService.recordEnterpriseSwitch`（`:105-106`）；`:120-122` **无条件** `EnterpriseContextHolder.set(enterpriseId)` |
+| F5 | `t_enterprise` 已有**部分账套档案字段** | `V100:34-52`：`mode`（`NOT NULL DEFAULT 'SME'`，CHECK `('SME','AGENCY_CLIENT')`）、`status`（`NOT NULL DEFAULT 'PENDING'`）、`seed_data_done`（`NOT NULL DEFAULT FALSE`）、`agency_id`、`version`；`V134:16` 增 `start_period VARCHAR(6)`（`YYYYMM`，`NULL`=未建账） |
+| F6 | **单企业硬编码实为 6 处**（V1.1 写 2 处，**漏 4 处**） | **租户/企业列各 3 类**：①`ReconciliationToleranceServiceImpl:29` `DEFAULT_ENTERPRISE_ID = 1L`（**4 个使用点**：`:43`/`:72`/`:87`/`:104`）；②`OutputInvoiceStateMachineServiceImpl:291` `enterpriseId = 1L`；③`ReconciliationServiceImpl:73` `DEFAULT_TENANT_ID = 1L`（**3 个使用点**：`:364`/`:780`/`:892`，写入 `t_reconciliation_log`/`t_reconciliation_exception`）；④`PrepaymentServiceImpl:55` `DEFAULT_TENANT_ID = 1L`；⑤`AutoGenerationService:72`、`PrepaymentServiceImpl:56`、`PurchaseReturnServiceImpl:45`、`ReconciliationServiceImpl:74`、`SalesInvoiceImportService:50`、`InputInvoiceImportService:56` 共 6 处 `DEFAULT_USER_ID = 1L`（**审计/操作人维度**，非租户维度，单列在 §0.3） |
+| F7 | 一个普通企业用户**挂不了第二家企业** | `t_user.enterprise_id` 单归属；`uq_username UNIQUE (username)` 为**全局**唯一（`V1__baseline.sql:197`），非 `UNIQUE(username, enterprise_id)`。⇒ 同一用户名在两个企业各建一次会撞唯一键 |
+| F8 | **账套状态机实际允许集与本文 §5 流转图不一致**（V1.2 新增，V1.1 的图含非法值） | `chk_enterprise_status CHECK (status IN ('PENDING','ACTIVE','SUSPENDED','TERMINATED'))`（`V100:51`）；`EnterpriseStatus` 枚举与 `isValidTransition` 同样只有这 4 态，合法迁移为 `PENDING→ACTIVE`、`ACTIVE→SUSPENDED`、`SUSPENDED→{ACTIVE,TERMINATED}`。⚠️ **无 `CLOSED`**，V1.1 的流转图写了非法值（AGENTS §4.2 第 9/14 条的复发形态） |
 
-### 0.1 10 张「只有 `tenant_id`、且 RLS 未开」的表（**实测清单，定性待定**）
+### 0.1 「两列都没有」的 10 张纯平台全局表（**定性待定**，§8 批次 1 取证对象）
 
 `t_agency`、`t_agency_user`、`t_audit_log`、`t_dept`、`t_enterprise`、`t_menu`、`t_role`、`t_role_menu`、`t_sys_config`、`t_user_role`
-⇒ 全部 `relrowsecurity = false`。
 
-其中 `t_menu` / `t_role` / `t_dept` / `t_sys_config` 是**企业内主数据**，`t_audit_log` 是**审计数据** —— 多企业并行时它们是「故意全局共享」（如菜单模板）还是「应按企业隔离却漏了」，属于本 SPEC 必须逐表取证的围（§8 批次 1）。
+⚠️ **V1.1 把它们写成「仍用 `tenant_id`」，实测证伪**：逐表核对建表语句，10 张表**既无 `enterprise_id` 也无 `tenant_id`**（`t_agency` 只有 `mode`/`status`/`seed_data_done` 等；`t_audit_log` 13 列全为业务/审计字段 + `deleted`；`t_dept` 12 列含 `dept_code`/`sort_order`）。`rg "ADD COLUMN.*tenant_id"` 在全部 migration 中**零命中** ⇒ 这些表从未有过租户列，「漏加租户列」与「刻意设计为全局」是两种不同解读，必须逐表取证而非默认前者。
 
-> ⚠️ 特别提示：`t_agency_enterprise` **不在**此清单（它有 `enterprise_id`），它与 `t_agency`/`t_agency_user` 的 `tenant_id` 构成代理侧的**两套并行租户列**，是 §1.2 L1-1 取证时最容易漏掉的一处。
+⇒ 全部 `relrowsecurity = false`（无 RLS，因为无隔离列可写谓词）。
+
+**取证时须区分的三类**：
+- **疑似「刻意全局共享」**：`t_menu`/`t_role`/`t_role_menu`/`t_user_role` 是**权限与导航骨架**，一份定义供所有企业复用是主流 SaaS 做法（金蝶/用友的「功能点」即如此），改为按企业隔离会导致每个新企业都要重配一遍角色与菜单；
+- **疑似「应按企业隔离」**：`t_dept`（部门是企业内主数据，且 `uq_dept_code` 为全局唯一 ⇒ **两个企业不可能有同名部门编码**，是可直接复现的隔离缺口）、`t_sys_config`（系统参数 + F1 的两条账套配置）、`t_audit_log`（审计数据跨企业混在一起，代理端无法按客户导出审计）；
+- **平台元数据**：`t_agency`/`t_agency_user`/`t_enterprise` 是代理-企业拓扑本身，处于隔离维度**之上**，不应当按企业隔离。
+
+### 0.2 4 张「`enterprise_id` 与 `tenant_id` 双列并存」的表（**V1.2 新增，这才是隔离的真实缺口**）
+
+| 表 | `tenant_id` 来源 | `enterprise_id` 来源 | 风险 |
+|---|---|---|---|
+| `t_prepayment` | `V5:6` `NOT NULL DEFAULT 1` | `V105:10` | `PrepaymentServiceImpl:55` 写死 `DEFAULT_TENANT_ID=1L`，而 RLS 谓词只认 `enterprise_id` ⇒ **两列可永久不一致且无人守** |
+| `t_reconciliation_log` | `V94:189` `NOT NULL DEFAULT 1` | `V105:23` | `ReconciliationServiceImpl:73` 写死 `1L`，**3 个写入点**（`:364`/`:780`） |
+| `t_ai_feedback_log` | `V1__baseline.sql:1246` `BIGINT`（可空） | `V104:23` | AI 反馈日志跨企业混存；`tenant_id` 可空 ⇒ 与 `enterprise_id NOT NULL` 语义不一致 |
+| `t_classification_rule` | `V2:8` `NOT NULL DEFAULT 1` | `V104:26` | 分类规则（`idx_classification_rule_tenant` 索引仍建在 `tenant_id` 上） |
+
+⚠️ **为什么这 4 张比 §0.1 的 10 张更危险**：§0.1 的表无隔离列，RLS 不生效是**一致的状态**（读写都不过滤）；而这 4 张**看起来已受 RLS 保护**（谓词命中 `enterprise_id`），但代码写的是另一列 ⇒ **产生「已隔离」的错觉**，与 AGENTS §4.5 第 27 条「看起来在工作、实际从未工作」同型。`t_classification_rule` 的索引还建在旧列上，会让按 `tenant_id` 的查询绕开 RLS 谓词的意图。
+
+### 0.3 6 处 `DEFAULT_USER_ID = 1L`（操作人维度，**本 SPEC 不处理，仅登记**）
+
+`AutoGenerationService:72`、`PrepaymentServiceImpl:56`、`PurchaseReturnServiceImpl:45`、`ReconciliationServiceImpl:74`、`SalesInvoiceImportService:50`、`InputInvoiceImportService:56`。
+
+性质与 §0.2 不同：这是**审计/操作人归属**（铁律 #5 审计追踪的 `operator_id`），不是租户隔离。修它需要「无登录态的后台任务如何记操作人」的产品决策（记 0 / 记系统用户 / 记发起人），超出本 SPEC 范围 ⇒ **登记为 P102 待办，不在本轮实施**。此处记录是为了让 §0.2 的「6 处硬编码」与本节的 6 处**不混淆**（V1.1 的 F6 只数了租户维度的 2 处，把操作人维度完全漏掉，审核时需按维度分开计数）。
 
 ## 1. 需求边界：把「多账套」拆成两级
 
@@ -38,29 +60,34 @@
 
 | 层级 | 定义 | 现状（实测） | 本轮定位 |
 |---|---|---|---|
-| **L1 企业级多账套** | 一个用户 / 一个代理同时使用**多个企业各自的独立账** | **已基本落地**（F2/F3/F4/F5） | ✅ **只做收口**，清 4 项遗留（§1.2） |
+| **L1 企业级多账套** | 一个用户 / 一个代理同时使用**多个企业各自的独立账** | **已基本落地**（F3/F4/F5），但有 4 张双列并存表与 6 处硬编码待清（F6/F8） | ✅ **只做收口**，清 5 项遗留（§1.2） |
 | **L2 账簿级多账套** | **同一个企业内**并存多套账（不同会计制度 / 不同启用期间 / 不同凭证簿） | **完全没有**（F1） | 📋 **只立项不实现**，等客户明确需求再动 |
 
 ### 1.1 L1 与 L2 的两种数据模型（决策点）
 
 | 维度 | 模型 A：**复用 `enterprise_id`**（一企业一套账） | 模型 B：**新增 `book_id`**（一企业多套账） |
 |---|---|---|
-| 表结构改动 | **0 张表** | 73 张表 + 唯一约束 + RLS 谓词 + 全部 Mapper/Service/报表 |
-| 隔离机制 | 已有的 `enterprise_id` + 70 张 RLS 直接复用 | 需 `enterprise_id + book_id` 复合隔离，且 `TenantRlsInitializer` 需再注入一个 GUC（`app.book_id`），并重做 V167 同款谓词硬化 |
+| 表结构改动 | **0 张表** | 全部已补 `enterprise_id` 的表 + 唯一约束 + RLS 谓词 + 全部 Mapper/Service/报表 |
+| 隔离机制 | 已有的 `enterprise_id` + 已开 RLS 直接复用 | 需 `enterprise_id + book_id` 复合隔离，且 `TenantRlsInitializer` 需再注入一个 GUC（`app.book_id`），并重做 V167 同款谓词硬化 |
 | 迁移风险 | 无数据迁移 | 需回填 `book_id`、双写过渡期、历史数据归属决策 |
 | 何时必须 | 「客户/企业之间隔离」—— **当前商用即此形态** | 「同一法人多套账（一般纳税人+小规模、境内+境外）」—— 目前**无客户实例** |
 | 结论 | ✅ **立即可用** | ⚠️ **本轮仅立项** |
 
 **推荐路线**：商用化第一阶段只交付 **L1 收口**；L2 保持立项状态，触发条件写进 §9。
 
-### 1.2 L1 收口的 4 项遗留（本 SPEC 的全部实施范围）
+### 1.2 L1 收口的 5 项遗留（本 SPEC 的全部实施范围）
 
 | 编号 | 遗留 | 依据 | 优先级 |
 |---|---|---|---|
-| **L1-1** | 7~10 张 `tenant_id` 表逐表定性：哪些是**故意全局共享**（如 `t_menu` 模板），哪些是**应按企业隔离却漏了**（`t_audit_log`/`t_dept`/`t_sys_config` 嫌疑最大） | F2 | P1 |
-| **L1-2** | 清掉 2 处 `enterpriseId = 1L` 硬编码 | F6 | P1 |
-| **L1-3** | 明确「一个用户能否挂多家企业」产品决策，并落地（当前只能靠代理授权链） | F7 | P2 |
-| **L1-4** | `t_user.uq_username` 全局唯一 vs `(username, enterprise_id)` 的取舍 | F7 | P2 |
+| **L1-1** | **4 张双列并存表**（`t_prepayment`/`t_reconciliation_log`/`t_ai_feedback_log`/`t_classification_rule`）定性并收口：代码写 `tenant_id`、RLS 读 `enterprise_id`，两列可永久不一致且索引还建在旧列上 | F2/§0.2 | **P0** |
+| **L1-2** | **10 张「两列都没有」的纯平台全局表**逐表定性：哪些刻意全局共享（权限/导航骨架）、哪些应按企业隔离却漏了（`t_dept` 全局唯一编码、`t_sys_config` 含账套配置、`t_audit_log` 跨企业混存） | F2/§0.1 | P1 |
+| **L1-3** | 清掉 **6 处单企业硬编码**（V1.1 写 2 处，漏 `ReconciliationServiceImpl:73` 三个写入点、`PrepaymentServiceImpl:55` 及 `ReconciliationToleranceServiceImpl` 的另 3 个使用点），取不到上下文一律抛 `BusinessException` | F6 | P1 |
+| **L1-4** | 明确「一个用户能否挂多家企业」产品决策，并落地（当前只能靠代理授权链） | F7 | P2 |
+| **L1-5** | `t_user.uq_username` 全局唯一 vs `(username, enterprise_id)` 的取舍 | F7 | P2 |
+
+⚠️ **L1-3 与已落地设计的边界（V1.2 新增）**：`TenantRlsInitializer:65-69` 的既定设计是「上下文为 null 时**直接 return，不设 GUC**」，注释理由是「定时任务/系统初始化等无登录态路径本就不属于任何企业」，且此时 RLS 返 0 行属**预期的 fail-closed**。⇒ **本项只清「有上下文却硬编码 1」这 4 处，不得把切面改成「null 即抛异常」** —— 那会把「静默返 0 行」变成「定时任务全站报错」，是 §9 风险表所列风险的放大而非修复。
+
+⚠️ **不在本轮范围但已登记**：`t_enterprise.status` 已有 `PENDING/ACTIVE/SUSPENDED/TERMINATED` 四态状态机（`EnterpriseStateMachineServiceImpl`，人工触发，符合铁律 #1），但**全库无任何一处校验「非 ACTIVE 账套不得产生业务数据」**（`rg "账套未启用|非ACTIVE|ENTERPRISE_NOT_ACTIVE"` 零命中）⇒ 这是一个**尚未立项的独立缺口**，不是本 SPEC 的 5 项遗留之一；§7 的对应场景因此标注为「现状缺口 + 需单独立项」，不在本轮实现。
 
 ## 2. 竞品对标（铁律 #15）
 
@@ -82,63 +109,90 @@
 |---|---|---|
 | `X-Enterprise-Id` | HTTP 头（可选） | 与 JWT 内 `enterpriseId` 不同则触发成员校验；不通过即 **403**，**不得**降级为「忽略并按 JWT 处理」（fail-closed，铁律同 P102） |
 | 当前用户 | `t_user` + `t_agency_user` + `t_agency_user_enterprise` | 三源并集（直属 ∪ 代理授权 ∪ SUPER_ADMIN），见 `EnterpriseMembershipChecker` |
-| 账套档案 | `t_enterprise`（`status` / `mode` / `start_period` / `seed_data_done` / `version`） | `status` 取值域需查证（默认 `PENDING`）；**非 ACTIVE 的账套不得产生业务数据**（本轮只加校验，不改已有数据） |
-| 业务上下文 | `EnterpriseContextHolder` | 事务内 `SET LOCAL app.enterprise_id`；空串/NULL 两种退化形态已被 V167 硬化 |
+| 账套档案 | `t_enterprise`（`status` / `mode` / `start_period` / `seed_data_done` / `version`） | `status` 允许集**已查证**（`chk_enterprise_status`，见 F8）：`PENDING`/`ACTIVE`/`SUSPENDED`/`TERMINATED`，默认 `PENDING`；`mode` 为 `('SME','AGENCY_CLIENT')`，默认 `SME` |
+| 业务上下文 | `EnterpriseContextHolder` | 事务内 `SET LOCAL app.enterprise_id`（`TenantRlsInitializer:74`）；**上下文为 null 时不设 GUC**（`:65-69` 既定设计，RLS 返 0 行属预期 fail-closed）；空串/NULL 两种退化形态已被 V167 硬化 |
 
 ## 4. 输出契约
 
 | 输出 | 验收标准 |
 |---|---|
 | 切换鉴权 | 非成员切换 **403** + 审计落库（**已实现**，本轮补回归锁） |
-| 跨企业读写隔离 | 切到 A 企业后查询返回 A 的行；写 A 的行在 B 的上下文下 **0 行可见 / 写入被拒**（**已实现**，补真库回归） |
-| 主数据隔离定性 | §1.2 L1-1 的每张表给出结论并**落到 DDL 或文档**（不结论不算完成） |
-| 硬编码清零 | F6 的 2 处改为读上下文，取不到上下文时抛 `BusinessException`（铁律 #14），**不得静默用 1** |
-| 唯一约束决策 | L1-3/L1-4 给出结论；若改 `uq_username` 必须走 Flyway 且提供回填脚本 |
+| 跨企业读写隔离 | 切到 A 企业后查询返回 A 的行；写 A 的行在 B 的上下文下 **0 行可见 / 写入被拒**（**已实现**，`TenantRlsRealDBTest` 6/6 已覆盖，补跨企业写拒绝场景） |
+| 双列并存表收口 | §0.2 的 4 张表给出结论：代码写 `tenant_id` 的路径改为写 `enterprise_id`（或证明两列恒等并加约束），`t_classification_rule` 的索引迁到 `enterprise_id` |
+| 平台全局表定性 | §0.1 的 10 张表逐张给出结论并**落到 DDL 或文档**（不结论不算完成） |
+| 硬编码清零 | F6 的 **6 处**改为读上下文，取不到上下文时抛 `BusinessException`（铁律 #14），**不得静默用 1**；⚠️ **不改 `TenantRlsInitializer` 的 null-return 语义**（见 §1.2 L1-3 边界说明） |
+| 唯一约束决策 | L1-4/L1-5 给出结论；若改 `uq_username` 必须走 Flyway 且提供回填脚本 |
 
 ## 5. 状态流转
 
 ```
-t_enterprise.status
-   PENDING ──(种子数据完成 seed_data_done=true)──▶ ACTIVE ──▶ CLOSED
-      │                                             │            │
-      └──────────── 禁止产生业务数据 ──────────────┴────────────┘
-   （status 的完整允许集须 pg_get_constraintdef 查证；默认值为 'PENDING'）
+t_enterprise.status   （允许集已查证：chk_enterprise_status，见 F8；无 CLOSED）
+   PENDING ──(种子数据完成 seed_data_done=true，EnterpriseStateMachineServiceImpl:36-40)──▶ ACTIVE
+                                                                          │
+                                                            ┌─────────────┴─────────────┐
+                                                            ▼                           ▼
+                                                      SUSPENDED ──▶ ACTIVE        TERMINATED（终态）
+                                                            │                            （不可迁出）
+                                              （可恢复，铁律 #1：人工触发）
+   ⚠️ 四态之外一律非法：全库无「非 ACTIVE 禁止产生业务数据」的校验（rg 零命中），
+      故目前 PENDING/SUSPENDED 账套仍可写业务数据 —— 属未立项缺口，见 §1.2 末段
 
-切换态（每请求）
-   JWT.enterpriseId ──请求头 X-Enterprise-Id──▶ 成员校验 ──通过──▶ EnterpriseContextHolder.set(E)
-                                       └────不通过──▶ 403（不区分「不存在」与「无权限」）
+切换态（每请求，JwtAuthenticationFilter:84-122）
+   JWT.enterpriseId ──请求头 X-Enterprise-Id──▶ 成员校验 ──通过/超管──▶ enterpriseId = requested
+                                                      │                        │
+                                                      └──不通过──▶ 403            ▼
+                                                          （不区分「不存在」        上下文非 null 则
+                                                            与「无权限」）      EnterpriseContextHolder.set(E)
+   头非法(非数字) → requested=null → 跳过校验，沿用 JWT 内企业（:87-91、:92、:108-110）
 ```
 
 ## 6. 异常处理
 
 | 场景 | 处理 | 错误码/行为 |
 |---|---|---|
-| 切换到非成员企业 | 403，且**不区分「企业不存在」与「无权限」**（避免企业存在性泄露，`JwtAuthenticationFilter:83` 现有约定） | 403 |
-| 请求头非法（非数字） | 按「未提供」处理，**不得**回退到「放行任意企业」 | 用 JWT 内企业 |
-| 账套非 ACTIVE 时写业务数据 | 抛 `BusinessException` | 4xx |
-| 上下文取不到（定时任务/批处理） | 抛 `BusinessException`，**禁止**回落 `enterpriseId=1`（F6 的根因） | 5xx/4xx |
+| 切换到非成员企业 | 403，且**不区分「企业不存在」与「无权限」**（避免企业存在性泄露，`JwtAuthenticationFilter:83` 现有约定，`:97-104` 已实现） | 403 |
+| 请求头非法（非数字） | 按「未提供」处理（`NumberFormatException` → `requested=null`，`:87-91`），**不得**回退到「放行任意企业」 | 用 JWT 内企业 |
+| **有上下文却硬编码 1**（L1-3） | 抛 `BusinessException` 并指明缺失的上下文，**禁止**回落 `enterpriseId/tenantId=1` | 4xx |
+| **无上下文的定时任务/批处理** | **维持现状**：`TenantRlsInitializer:65-69` 不设 GUC，RLS 返 0 行（预期的 fail-closed）。⚠️ **不得**改成抛异常 —— 见 §1.2 L1-3 边界说明 | 0 行（预期） |
+| 账套非 ACTIVE 时写业务数据 | **当前无校验**（现状缺口，未立项）。若后续立项，抛 `BusinessException` | 4xx |
 | 跨企业唯一约束冲突 | 依赖 DB 唯一约束（已按企业分段）+ 友好错误信息，不靠应用层预检 | 409/业务异常 |
+| 写入与 RLS 读列不一致（§0.2 双列并存） | 当前表现为「写入成功但 RLS 过滤后不可见」⇒ L1-1 收口前，此类写路径必须显式写 `enterprise_id` | 4xx（收口后） |
 
-## 7. BDD 验收标准（每个场景对应一个 `@Test`）
+## 7. BDD 验收标准（每个场景对应一个 `@Test`，编号见 §7.1）
 
 ```gherkin
-# 批次 1：主数据表定性 + 硬编码清零
-Scenario: 非 ACTIVE 账套不得产生业务数据
-  Given 企业 E 的 status = 'PENDING'
-  When  切换到 E 后创建一张费用报销单
-  Then  请求被拒绝，且错误信息指明「账套未启用」
+# 批次 1：双列并存表收口 + 平台全局表定性 + 硬编码清零
+
+Scenario: 预付款写入的 tenant_id 恒等于 enterprise_id（负向：不允许两列不一致）
+  Given 企业上下文为 E，t_prepayment 已有一行 enterprise_id = E
+  When  通过 PrepaymentService 创建一笔预付款
+  Then  该行 enterprise_id = E，且 tenant_id 不再被 Service 独立赋值
+  And   反向断言：把 tenant_id 手工改成 ≠ E 后，按 tenant_id 的查询不得命中该行
+
+Scenario: 核销日志写入企业上下文而非常量 1
+  Given 企业上下文为 E（E ≠ 1）
+  When  ReconciliationServiceImpl 写核销提报日志（:364）与核销异常（:892）
+  Then  两行 enterprise_id = E；断言 tenant_id ≠ 恒等于 1 的旧行为
+
+Scenario: 核销容忍度按当前企业查询而非企业 1
+  Given 企业上下文为 E≠1，企业 1 与 E 各有一条 t_reconciliation_tolerance
+  When  ReconciliationToleranceServiceImpl#getTolerance
+  Then  返回 E 的那条；负向：不得返回企业 1 的配置
 
 Scenario: 无企业上下文的批处理必须失败而非写进企业 1
   Given 某 Service 方法内 EnterpriseContextHolder 为空
   When  调用销项发票状态机 / 应收核销容忍度计算
   Then  抛 BusinessException，且 t_output_invoice 不出现 enterprise_id = 1 的新行
+  And   负向：TenantRlsInitializer 在上下文为 null 时仍不设 GUC（不得因本项改成抛异常）
 
-Scenario: 审计日志按企业隔离（或明确判定为全局共享并写进文档）
-  Given 企业 A 与 B 都产生了业务操作
-  When  以 A 的上下文查询 t_audit_log
-  Then  只返回 A 的行；若结论是「全局共享」，则本场景改为断言文档结论存在
+Scenario: 平台全局表的定性结论已落库或落文档
+  Given §0.1 的 10 张表
+  When  逐表核对隔离列与 RLS 状态
+  Then  每张表在 §0.1 表格中有明确归类（刻意全局共享 / 应按企业隔离 / 平台元数据）
+  And   「应按企业隔离」的表必须有对应 Flyway 号或明确的「不修」理由
 
-# 批次 2：切换鉴权回归锁（补真库用例）
+# 批次 2：切换鉴权回归锁（补跨企业写拒绝场景）
+
 Scenario: 成员切换成功
   Given 用户 U 通过 t_user.enterprise_id 直属企业 E
   When  带 X-Enterprise-Id: E 发请求
@@ -149,37 +203,64 @@ Scenario: 非成员切换被拒
   When  带 X-Enterprise-Id: E 发请求
   Then  403，且 t_audit_log（或切换审计表）无成功记录
 
-Scenario: 切换到 SUPERADMIN 不设上下文（沿用现有约定）
+Scenario: SUPER_ADMIN 切换会设置企业上下文（**修正 V1.1 的错误断言**）
   Given user_type = 'SUPER_ADMIN'
-  When  不带 X-Enterprise-Id 发请求
-  Then  不设 EnterpriseContextHolder（保留超管可运维能力）
+  When  带 X-Enterprise-Id: E（E ≠ JWT 内企业）发请求
+  Then  200，且 EnterpriseContextHolder 被设为 E
+  And   负向：不带该头时，SUPER_ADMIN 的上下文 = JWT 内 enterpriseId（可能为 null，
+         为 null 时不设上下文，见 JwtAuthenticationFilter:120-122）
+  ⚠️ V1.1 写的是「不设 EnterpriseContextHolder」，与 :120-122 的无条件 set 相反，已修正
 ```
+
+### 7.1 验收编号（与 REQUIREMENTS_REGISTRY / CI 对齐）
+
+| 编号 | 场景 | 类型 | 落点 |
+|---|---|---|---|
+| AT-106-1 | 预付款两列一致（负向：手工改 `tenant_id` 后按旧列查不到） | 真实 DB | 新增 `AccountSetIsolationRealDBTest` |
+| AT-106-2 | 核销日志/异常写入当前企业而非常量 1 | 真实 DB | 同上 + `ReconciliationServiceImplTest` |
+| AT-106-3 | 核销容忍度按当前企业查询 | 真实 DB | 同上 |
+| AT-106-4 | 无上下文写路径抛 `BusinessException` 且不写进行 1 | 真实 DB | 同上 |
+| AT-106-5 | 平台全局表 10 张定性结论落库/落文档 | 文档 + DDL | §0.1 + Flyway |
+| AT-106-6 | 成员切换成功、只返回本企业数据 | 集成 | 已有 `TenantIsolationHttpTest`，补断言 |
+| AT-106-7 | 非成员切换 403 且审计无成功记录 | 集成 | 已有 `TenantIsolationSecurityTest`，补断言 |
+| AT-106-8 | SUPER_ADMIN 切换**会**设置上下文（负向：不带头时按 JWT） | 集成 | 新增（现有 `#superAdminAllowedEverywhere` 只测 `isMember`，不涉上下文） |
+
+⚠️ **与现有用例无冲突（已核实）**：`TenantIsolationSecurityTest#superAdminAllowedEverywhere:78-82` 只断言 `checker.isMember(...)` 返回 `true`，**未涉及 `EnterpriseContextHolder`** ⇒ AT-106-8 是**新增断言**而非修正既有断言，不会与 P102/AT-102-1c 打架。`nullTargetIsAllowed:94-97` 同理只覆盖 `isMember` 的 null 分支。
 
 ## 8. 实施分批（每批独立可回滚）
 
 | 批次 | 内容 | 风险 | 门禁要求 |
 |---|---|---|---|
-| **1** | 10 张 `tenant_id` 表逐表定性 + 2 处硬编码清零 | 中（动 DDL 与状态机） | 三方对照审计（PG ↔ Entity ↔ 业务代码）；DDL 走 Flyway |
-| **2** | 切换鉴权与跨企业隔离的**真库回归锁**（当前只有单测） | 低 | L2 全绿 |
-| **3** | L1-3 / L1-4 产品决策落地（可能含 `uq_username` 迁移） | 高（影响登录） | 需老丁单独审核 + 回填脚本 |
+| **1** | **1a** 4 张双列并存表收口（写 `enterprise_id`、索引迁移）；**1b** 10 张平台全局表逐表定性；**1c** 6 处单企业硬编码清零 | 中（动 DDL 与写路径） | 三方对照审计（PG ↔ Entity ↔ 业务代码）；DDL 走 Flyway；`node scripts/check-entity-schema.mjs`；覆盖率门禁仍 `All coverage checks have been met`（新增代码须带测试，见 §9 DTO/覆盖率税） |
+| **2** | 切换鉴权与跨企业隔离的**真库回归锁**（现有 4 个类已覆盖读隔离，补**跨企业写拒绝**与 AT-106-8 断言修正） | 低 | L2 全绿；L1 `All coverage checks have been met` |
+| **3** | L1-4 / L1-5 产品决策落地（可能含 `uq_username` 迁移） | 高（影响登录） | 需老丁单独审核 + 回填脚本 |
+
+⚠️ **批次 1a 必须先做而不能与 1b 合并**：§0.2 的 4 张表「看起来已受 RLS 保护」，属**当前就在产生错误数据**的缺口（写入 `tenant_id=1` 而 RLS 读 `enterprise_id`）；§0.1 的 10 张表是「一致地未隔离」，是**设计与实现的取舍问题**，可慢。混在一起做会让 DDL 变更的因果无法归因。
 
 ## 9. 风险与明确不做（Out of scope）
 
 **不做**：
 - L2 账簿级多账套（`book_id`）的任何代码/DDL —— 触发条件：①出现明确客户需求（同一法人多套账）；②或同时管理 ≥3 个企业的代理客户提出报表合并诉求。
 - 不改 `t_enterprise` 的既有字段语义；不引入 `fiscal_year` 独立切换层（**先评估再立项**，见 §2 对标结论 3）。
-- 不动 70 张 RLS 策略的形状（V167 谓词保持不变）。
+- 不动已开 RLS 策略的形状（V167 谓词保持不变）。
+- **不改 `TenantRlsInitializer` 的「上下文为 null 则不设 GUC」语义**（见 §1.2 L1-3 边界说明）—— 改了会把「静默返 0 行」变成「定时任务全站报错」。
+- **不实现「非 ACTIVE 账套禁止产生业务数据」的校验** —— 该能力全库不存在（rg 零命中），属独立未立项缺口，需单独立项。
+- **不处理 6 处 `DEFAULT_USER_ID = 1L`**（§0.3）—— 属审计操作人维度，需「后台任务如何记操作人」的产品决策，登记为 P102 待办。
 
 **风险**：
 | 风险 | 缓解 |
 |---|---|
-| 「全局共享」误判为「应隔离」，导致代理端菜单/角色配置跨企业失效 | 每张表必须**先取证再定论**，定论写进本文档 §1.1 并在 PR 描述留证 |
-| 清硬编码后定时任务/批处理开始报错（此前靠 `1L` 侥幸跑通） | 批次 1 必须同时盘点**所有无上下文的入口**（定时任务、批处理、初始化），补齐或显式声明 |
-| 出参面 110 端点仍直出 Entity（含 `UserController#get` 泄漏 `password` 哈希） | 与本 SPEC 无关但**同属 P102**，建议并行处理（不阻塞本 SPEC） |
+| 「全局共享」误判为「应隔离」，导致代理端菜单/角色配置跨企业失效 | 每张表必须**先取证再定论**，定论写进本文档 §0.1 表格并在 PR 描述留证；权限/导航骨架类（`t_menu`/`t_role`/`t_role_menu`/`t_user_role`）默认按「刻意全局共享」处理，除非能举出具体越权/数据丢失场景 |
+| 清硬编码后定时任务/批处理开始报错（此前靠 `1L` 侥幸跑通） | 批次 1c 必须同时盘点**所有无上下文的入口**（定时任务、批处理、初始化），补齐或显式声明；⚠️ 但对**确实无上下文**的入口，处置是「显式声明 + 走独立事务边界」，不是抛异常 |
+| 双列并存表收口时历史数据两列不一致 | 收口前先跑**一致性核查**（`enterprise_id <> COALESCE(tenant_id, enterprise_id)` 的行数），不一致的行走 Flyway 回填并留证，不得静默改写 |
+| 出参面 110 端点仍直出 Entity（含 `UserController#get/#page` 返回 `UserEntity`） | 与本 SPEC 无关但**同属 P102**，建议并行处理（不阻塞本 SPEC）。⚠️ V1.1 曾称其「泄漏 `password` 哈希」，实测 `UserEntity:20-21` 已有 `@JsonProperty(access = WRITE_ONLY)` ⇒ **不会序列化输出**，此风险描述已失效，改为「出参面未用 VO」的通用问题 |
+| 覆盖率棘轮缓冲不足（BRANCH 仅 0.81 点，AGENTS §0） | 批次 1 新增代码/DTO 须同步补测试；实测口径必须 `mvn clean test`（不带 clean 会虚高约 6 点） |
+| 无机器可读契约导致 SPEC 门禁对本 SPEC 只报「coverage gap」 | 本 SPEC 暂沿用现状（100 份中 92 份无契约），**建议下一批次补 YAML 契约**并纳入 `--require-contract` |
 
 ## 10. 版本历史
 
 | 版本 | 日期 | 变更人 | 变更内容 |
 |---|---|---|---|
+| **V1.2** | 2026-10-05 | opencode | **审核意见落地（4 项 P0 + 4 项 P1 + 2 项 P2，仍未动代码）**。审核方法是**逐条实测复核 F1~F7 并新增 F8**，不是读 SPEC 找问题。**P0-1 状态机含非法值**：V1.1 §5 写 `ACTIVE ──▶ CLOSED`，而 `chk_enterprise_status`（`V100:51`）与 `EnterpriseStatus` 枚举都只有 `PENDING/ACTIVE/SUSPENDED/TERMINATED`，**`CLOSED` 不是合法值** —— 已在 §5 重画为真实四态与合法迁移（`PENDING→ACTIVE`、`ACTIVE→SUSPENDED`、`SUSPENDED→{ACTIVE,TERMINATED}`），并新增 **F8** 固化该证据。**P0-2 §0.1 事实错误**：V1.1 称那 10 张表「仍用 `tenant_id`」，实测**既无 `enterprise_id` 也无 `tenant_id`**（`rg "ADD COLUMN.*tenant_id"` 全 migration 零命中）；更严重的是 V1.1 **漏掉了真正的缺口** —— **4 张双列并存表**（`t_prepayment`/`t_reconciliation_log`/`t_ai_feedback_log`/`t_classification_rule`），代码写 `tenant_id` 而 RLS 读 `enterprise_id`，**产生「已隔离」的错觉**（新增 §0.2）。**P0-3 硬编码漏报**：V1.1 F6 写「2 处」，实为 **6 处**（补 `ReconciliationServiceImpl:73` 的 3 个写入点、`PrepaymentServiceImpl:55`、`ReconciliationToleranceServiceImpl` 的另 3 个使用点）；另将 **6 处 `DEFAULT_USER_ID=1L`** 单列 §0.3 并**排除出本轮范围**（属审计操作人维度，需产品决策），避免与租户维度混计。**P0-4 场景与代码相反**：V1.1 §7 写「SUPER_ADMIN 不设上下文」，而 `JwtAuthenticationFilter:120-122` **无条件** `EnterpriseContextHolder.set(...)` —— 已改为「切换会设置上下文 + 不带头时按 JWT」，并核实现有 `#superAdminAllowedEverywhere:78-82` 只测 `isMember` 不涉上下文，**无断言冲突**。**P1-5 与已落地设计冲突**：V1.1 §6 要求「上下文取不到即抛异常」，与 `TenantRlsInitializer:65-69` 的既定 null-return 设计相反（其注释明写定时任务「本就不属于任何企业」）—— 已在 §1.2/§6/§9 三处划边界：**只清「有上下文却硬编码 1」，不改切面语义**。**P1-6 删掉逃逸口场景**：「审计日志按企业隔离（或改为断言文档）」这类二选一不可判定，已删除；`t_audit_log` 两列都没有已是确定结论，改为 §0.1 的取证项。**P1-7 补 AT-106-1~8 验收编号**并标注类型与落点。**P1-8 修正 test_ref**：V1.1 的三个类名**全不存在**，改为「已存在 5 个 + 拟建 1 个」；批次 2 描述由「当前只有单测」改为「4 个类已覆盖读隔离，补跨企业写拒绝」。**P2**：F1 表述限定为 `backend/src/main`（并补上被 V1.1 漏掉的 `t_sys_config` 账套级配置证据）；§9 补「无机器可读契约」与覆盖率缓冲不足两项风险。**遗留**：§0.1 的 10 张表**定性仍待定**（需逐表取证，我不替业务方判定「刻意全局共享 vs 应隔离」）；§0.2 的 4 张表需先跑一致性核查再动 DDL |
 | **V1.1** | 2026-10-05 | opencode | **关联需求编号更正：`REQ-2026-134` → `REQ-2026-133`**（纯文档，未动代码）。V1.0 把本项登记为 134，而该编号**已被 P107 存量缺陷修复包占用且已实施完成**（登记册 `REQ-2026-134` 行 = `SPC-P107`，2026-09-30 D1~D6+D8 全落地）—— 属 **P105 已修过的「REQ 重号」缺陷二次复发**。正确编号 `REQ-2026-133` 有三处交叉依据：①P101 line 28「已新增 P107（REQ-2026-134）承接，并**为它让出 REQ 编号**（原 P106 的 133 保持不变）」；②P101 子 SPEC 表「P106 | REQ-2026-133」；③P107 SPEC 头部「133 归 P106 内控深度」。**V1.0 自身即自相矛盾**：line 5（来源）写的是 133、line 6（关联需求）写的是 134。**同时补范围声明**：本 SPEC 只覆盖 P106 的「多账套」子项，年结/制单≠审核/数据权限粒度/部门级扩展仍未立项 |
 | **V1.0** | 2026-10-05 | opencode | 首版。基于实测把「多账套」拆为 L1（企业级，**已基本落地**，本轮只收口 4 项遗留）/ L2（账簿级，**完全缺失**，仅立项）；给出「复用 `enterprise_id` vs 新增 `book_id`」两模型对比与推荐；补齐竞品对标（用友/金蝶/SAP/QuickBooks）与年度层差距；定稿 BDD 与三分批实施计划。**未改动任何代码。** |
