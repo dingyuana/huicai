@@ -42,7 +42,9 @@ class MasterDataVoContractTest {
     private static final java.util.List<VoContract> VO_CONTRACTS = java.util.List.of(
             new VoContract(com.huicai.base.system.vo.RoleVO.class, "RoleVO", "../frontend/src/api/modules/system.ts"),
             new VoContract(CustomerVO.class, "Customer", "../frontend/src/api/modules/arap.ts"),
-            new VoContract(VendorVO.class, "Vendor", "../frontend/src/api/modules/arap.ts"));
+            new VoContract(VendorVO.class, "Vendor", "../frontend/src/api/modules/arap.ts"),
+            new VoContract(com.huicai.base.masterdata.vo.EmployeeVO.class, "Employee",
+                    "../frontend/src/api/modules/employee.ts"));
 
     /** 各 VO 刻意不外露的字段 —— 每个都有依据，见各 VO 注释 */
     private static final Set<String> NEVER_EXPOSE = new LinkedHashSet<>(Arrays.asList(
