@@ -19,11 +19,13 @@
           <el-form-item label="异常类型">
             <el-select v-model="query.exceptionType" placeholder="全部" style="width:160px" clearable @change="fetchData">
               <el-option label="全部" value="" />
-              <el-option label="客商不匹配" value="PARTY_MISMATCH" />
-              <el-option label="金额不匹配" value="AMOUNT_MISMATCH" />
-              <el-option label="找不到可核销发票" value="INVOICE_NOT_FOUND" />
-              <el-option label="匹配失败" value="MATCH_FAILED" />
-              <el-option label="需人工审批" value="APPROVAL_REQUIRED" />
+              <!-- P109 / D-109-2：取值必须与 DB chk_exception_type 的允许集完全一致
+                   （AMOUNT_DIFF/DATE_DIFF/UNMATCHED/DUPLICATE）。原前端 5 值与 CHECK 不交集
+                   ⇒ 下拉永远查不到数据。禁止凭业务语感自造枚举值（AGENTS §4.2 第 9/14 条）。 -->
+              <el-option label="金额不符" value="AMOUNT_DIFF" />
+              <el-option label="账期不符" value="DATE_DIFF" />
+              <el-option label="未匹配到对手方" value="UNMATCHED" />
+              <el-option label="重复匹配" value="DUPLICATE" />
             </el-select>
           </el-form-item>
           <el-form-item>
@@ -114,20 +116,18 @@ function sourceLabel(s: string) {
 
 function exceptionTypeLabel(t: string) {
   const map: Record<string, string> = {
-    PARTY_MISMATCH: '客商不匹配', AMOUNT_MISMATCH: '金额不匹配',
-    INVOICE_NOT_FOUND: '找不到发票', MATCH_FAILED: '匹配失败',
-    APPROVAL_REQUIRED: '需人工审批',
+    AMOUNT_DIFF: '金额不符', DATE_DIFF: '账期不符',
+    UNMATCHED: '未匹配到对手方', DUPLICATE: '重复匹配',
   }
   return map[t] || t
 }
 
 function exceptionTypeTag(t: string) {
   switch (t) {
-    case 'PARTY_MISMATCH': return 'danger'
-    case 'AMOUNT_MISMATCH': return 'warning'
-    case 'INVOICE_NOT_FOUND': return 'info'
-    case 'MATCH_FAILED': return 'warning'
-    case 'APPROVAL_REQUIRED': return 'primary'
+    case 'AMOUNT_DIFF': return 'warning'
+    case 'DATE_DIFF': return 'info'
+    case 'UNMATCHED': return 'danger'
+    case 'DUPLICATE': return 'primary'
     default: return 'info'
   }
 }
