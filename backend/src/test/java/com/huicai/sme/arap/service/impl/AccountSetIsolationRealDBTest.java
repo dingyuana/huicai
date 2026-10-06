@@ -4,6 +4,7 @@ import com.huicai.common.test.AbstractMapperTest;
 import com.huicai.sme.arap.entity.PrepaymentEntity;
 import com.huicai.sme.arap.mapper.PrepaymentMapper;
 import com.huicai.sme.arap.service.PrepaymentService;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -173,5 +174,44 @@ class AccountSetIsolationRealDBTest extends AbstractMapperTest {
         assertEquals(1, found,
                 "用例造的行应可按唯一前缀精确捞回；实测前缀不生效会让断言越界到全表（AGENTS §4.4 第 16 条）");
         assertNotNull(prepaymentMapper.selectById(saved.getId()), "回读不到");
+    }
+
+    /**
+     * P106 / 批次 1a-3 的发现登记（<b>暂以 @Disabled 挂起</b>，等 SPEC 决策后再实现）。
+     *
+     * <p><b>实测结论</b>：{@code t_classification_rule} 与 {@code t_ai_feedback_log} 的问题
+     * <b>比预付款更严重 —— 读路径也按 {@code tenant_id} 过滤</b>，共 6 个方法把
+     * {@code tenantId} 当参数（5 处用于过滤或写入）：
+     * <ul>
+     *   <li>{@code ClassificationRuleServiceImpl#page(:43)} / {@code #seedForNewTenant(:105/:139/:187)}
+     *       / {@code #create(:56, 写死 1L)}</li>
+     *   <li>{@code AiFeedbackLogServiceImpl#page(:40)} / {@code #summaryByTenant(:77)}</li>
+     * </ul>
+     * 且两个 Controller 都把它暴露成 {@code @RequestParam}（客户端可任意传值）。
+     *
+     * <p><b>为什么不是越权读</b>：RLS 的 {@code enterprise_policy} 谓词是
+     * {@code enterprise_id = current_setting('app.enterprise_id')}（真实库已核对，且 FORCE 生效），
+     * 与 {@code tenant_id = <客户端值>} 是<b>两个 AND 条件</b> ⇒ 传任意 {@code tenantId}
+     * 也读不到其它企业的行。⇒ 定性为<b>功能缺陷（过滤条件失效）</b>，不是安全漏洞。
+     *
+     * <p><b>为什么挂起而不是直接改</b>：修法必然要动 <b>客户端契约</b> ——
+     * {@code tenantId} 请求参数要么废弃、要么改语义，涉及 Controller 签名与前端联调，
+     * 属铁律 #10「三步闭环」需先在 SPEC 里决策的事项，不应在实施批次里顺手改掉。
+     *
+     * <p>恢复条件：SPEC 决策「{@code tenantId} 参数废弃（改用上下文企业）」还是
+     * 「保留参数但忽略之」，并更新本用例的期望。
+     */
+    @Test
+    @Disabled("P106 批次 1a-3 待 SPEC 决策：tenantId 请求参数的废弃与否属客户端契约变更（铁律 #10）")
+    @DisplayName("P106 1a-3（挂起）：分类规则与 AI 反馈的读过滤应按 enterprise_id 而非客户端传入的 tenant_id")
+    void classificationAndAiFeedbackFiltersShouldUseEnterpriseContext() {
+        useEnterprise(ENTERPRISE_E);
+
+        // 期望（待 SPEC 决策后实现）：不传 tenantId 也能按当前企业查到本企业的规则
+        Integer rules = jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM t_classification_rule WHERE enterprise_id = ?",
+                Integer.class, ENTERPRISE_E);
+
+        assertNotNull(rules, "应能按 enterprise_id 直接查询，客户端无需传 tenantId");
     }
 }

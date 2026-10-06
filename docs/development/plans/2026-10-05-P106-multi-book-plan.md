@@ -76,7 +76,28 @@ expected: <990001> but was: <1>     ← enterprise_id 没跟着上下文走
 `ReconciliationServiceImpl:892` `ex.setTenantId(DEFAULT_TENANT_ID)` ⇒ **删代码，不改列**。
 **负向断言（关键）**：不得改成 `ex.setEnterpriseId(...)` —— 那会给一个不存在的租户列加值语义，掩盖 Entity 层缺陷。同时断言 `information_schema` 中 `t_reconciliation_exception` **不存在** `tenant_id` 列。
 
-### 微循环 1a-4（Red→Green）`AT-106-3` 核销容忍度按当前企业
+### 微循环 1a-3（**已调查，暂挂起**）`t_classification_rule` / `t_ai_feedback_log` 读写过滤
+
+**实测结论：这两张表的问题比预付款更严重 —— 读路径也按 `tenant_id` 过滤。** 共 **6 个方法**把 `tenantId` 当参数，其中 5 处用于过滤或写入：
+
+| 位置 | 用法 |
+|---|---|
+| `ClassificationRuleServiceImpl:43` | `page()` 读过滤 `WHERE tenant_id = <入参>` |
+| `ClassificationRuleServiceImpl:56` | `create()` **写死 `setTenantId(1L)`** |
+| `ClassificationRuleServiceImpl:105`/`:139`/`:187` | `seedForNewTenant()` 的存在性检查、插入、逐条插入 |
+| `AiFeedbackLogServiceImpl:40`/`:77` | `page()` 与 `summaryByTenant()` 读过滤 |
+
+且两个 Controller 都把它暴露成 **`@RequestParam`（客户端可任意传值）**：`ClassificationRuleController:27`（`page`）与 `:77`（`seed`）、`AiFeedbackLogController` 的 `page` 与 `summaryByTenant`。
+
+**为什么定性为「功能缺陷」而非「安全漏洞」**：RLS 的 `enterprise_policy` 谓词是 `enterprise_id = current_setting('app.enterprise_id', true)`（真实库已核对，`relforcerowsecurity = t`），与 `tenant_id = <客户端值>` 是**两个 AND 条件** ⇒ 客户端传任意 `tenantId` 也**读不到其它企业的行**。真实后果是**过滤条件失效**（多企业下 `tenant_id` 全为 1，客户端按企业过滤永远查不到/查到错行）。
+
+**为何本轮不直接改**：修法必然要动**客户端契约** —— `tenantId` 请求参数要么废弃（前端要改）、要么改语义（属 API 变更），涉及 Controller 签名与前端联调。按铁律 #10，这是**须先在 SPEC 里决策**的事项，不应在实施批次里顺手改掉（AGENTS §4.3 第 17 条：功能缺口判为待立项，测试保持失败待实现）。
+
+**已做的留证**：`AccountSetIsolationRealDBTest` 新增一条 **`@Disabled`** 用例（`P106 批次 1a-3 待 SPEC 决策：tenantId 请求参数的废弃与否属客户端契约变更`），把发现钉在测试里而不破坏 CI。恢复条件：SPEC 决策「废弃 `tenantId` 参数（改用上下文企业）」还是「保留但忽略」。
+
+**建议的 SPEC 决策方向**：**废弃 `tenantId` 请求参数，改用上下文企业**。理由：①RLS 已经按 `enterprise_id` 隔离，客户端再传一个租户号属**重复且不可信**的隔离维度；②保留即意味着「两个隔离列 + 一个客户端可控」，是 §0.2 那类双列隐患的延长线；③前端 `EnterpriseSwitcher` 已经通过 `X-Enterprise-Id` 切换，无需在每个筛选器里再传一遍。
+
+### 微循环 1a-4（Red→Green 已完成）`AT-106-3` 核销容忍度按当前企业
 
 `ReconciliationToleranceServiceImpl:29` 的 `DEFAULT_ENTERPRISE_ID`（4 个使用点 `:43`/`:72`/`:87`/`:104`）⇒ 改读 `EnterpriseContextHolder.get()`，为 null 时抛 `BusinessException`（铁律 #14）。
 **边界（SPEC §1.2）**：**不得**改 `TenantRlsInitializer:65-69` 的 null-return 语义；负向断言「切面在上下文为 null 时仍不设 GUC」。
