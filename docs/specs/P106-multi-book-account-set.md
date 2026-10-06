@@ -384,13 +384,29 @@ Scenario: SUPER_ADMIN 切换会设置企业上下文（**修正 V1.1 的错误�
 | 🔴 **L2 Testcontainers 的连接角色是超级用户 ⇒ RLS 类断言恒绿**（V1.4 实测，见 §0.6）：涉 RLS 的验收若在 L2 里直接查，**绿灯无意义** | 隔离断言必须显式降权探针（`SET LOCAL ROLE` 到 `NOSUPERUSER`），并保留 `l2RoleIsSuperuserSoRlsAssertionsNeedSetRole` 守卫 | ✅ 本轮已按此改造（跨企业不可见用例转绿即证明 RLS 层有效）；⚠️ **后续批次 2 必须沿用该写法** |
 | 无机器可读契约导致 SPEC 门禁对本 SPEC 只报「coverage gap」 | 沿用现状（100 份中 92 份无契约），建议下批次补 YAML 契约 | ⏸ 未做 |
 
-## 10. 待决策项（**V1.4 新增，需老丁拍板**）
+## 10. 待决策项 —— ✅ **V1.5 已裁定（2026-10-06，老丁）**
 
 | # | 决策项 | 背景 | 建议 |
 |---|---|---|---|
 | **D-1** | **`tenantId` 请求参数去留**（§0.4 的 6 个方法 + 2 个 Controller 的 `@RequestParam`） | 客户端可控的租户号与 RLS 的 `enterprise_id` 重复；RLS 已挡住越权，故只是功能缺陷 | **废弃该参数，改用上下文企业**。保留即等于「两个隔离列 + 一个客户端可控」 |
 | **D-2** | **§0.1 十张平台全局表的三类分组**（批次 1b 的前提） | 权限/导航骨架 4 张、`t_dept`/`t_sys_config`/`t_audit_log`、`t_agency`/`t_agency_user`/`t_enterprise` | 权限骨架按「刻意全局共享」；`t_dept`/`t_sys_config`/`t_audit_log` 按「应隔离」；代理拓扑 3 张按「平台元数据」 |
 | **D-3** | `t_classification_rule.tenant_id` 列与 `idx_classification_rule_tenant` 索引是否删除 | 依赖 D-1；删列属破坏性 DDL | **等 D-1 定案后再定**，本轮已用 `COMMENT` 标注为待清理 |
+
+### 10.1 裁定结论与解锁范围（V1.5 新增）
+
+| # | 裁定 | 解锁 |
+|---|---|---|
+| **D-1** | ✅ **废弃 `tenantId` 请求参数，改用上下文企业**（改读 `EnterpriseContextHolder.get()`） | 批次 **1a-3**：`AT-106-9` 的 `@Disabled` 用例恢复为绿 |
+| **D-2** | ✅ **拆成 D-2a + D-2b** | **D-2a**：7 张表定性落文档（零 DDL）；**D-2b**：`t_dept` 可排期，`t_sys_config`/`t_audit_log` 待产品确认 |
+| **D-3** | ✅ **随 D-1 联动删除** | `t_classification_rule.tenant_id` 列 + `idx_classification_rule_tenant` 索引进下一份 Flyway 一并删除（`DROP ... IF EXISTS`，非破坏性写法） |
+
+⚠️ **D-1 是客户端契约变更，不是可以静默合入的后端单方面改动**：后端删 4 个 `@RequestParam`、6 个方法签名去 `tenantId`，而前端 `ClassificationRuleController` 2 处 + `AiFeedbackLogController` 2 处调用需**同期**改。若不同期，表现为「筛选参数被服务端忽略」—— 功能退化但**不报错**，属最难发现的一类回归。
+
+⚠️ **D-2b 的两项仍阻塞**（属产品语义，不是技术问题）：
+- `t_sys_config` 含 `accounting.start_year` / `start_month` 两条**账套级配置**（V1 baseline:1510-1511）⇒ 判「应隔离」前须确认这两条是全局共享还是按企业分设；
+- `t_audit_log` **没有 `enterprise_id` 列** ⇒ 加列后**历史审计记录无法归属**（填什么？标「未知」？）。
+
+---
 
 ## 11. 版本历史
 
