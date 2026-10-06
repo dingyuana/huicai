@@ -1,6 +1,6 @@
 # P110 Entity–DB 三方对齐清零（十类实体的「反向缺口/前向缺口/幽灵字段」）
 
-> **状态**：🆕 **待审核**（SPEC V1.0，2026-10-06）—— 只提交取证结论与执行计划，未动生产代码
+> **状态**：🟡 **部分实施（Phase 0 完成，2026-10-06）**—— Phase 0（门禁升级）已落地；Phase 1-3 未开始。见 §3 末附「Phase 0 实施记录」。
 > **需求**：REQ-2026-139（新登记）| **编号**：HUICAI-SPC-P110 | **来源**：P102 批次 5/6/7 三方核对遗留 + AGENTS §4.2 第 4/8/13/16 条同型
 > **铁律约束**：三步闭环 SPEC→Plan→**审核**→执行。每个微循环独立 TDD（Red→Green），完成前验证 `check-entity-schema.mjs` 双向 + 真库 CRUD 探针
 > **关联**：[P106 多账套](P106-multi-book-account-set.md)《[P102 安全基线](P102-security-permission-baseline.md)》《[P109 异常池修复](P109-reconciliation-exception-pool-repair.md)》
@@ -108,6 +108,17 @@
 - `check-entity-schema.mjs` 双向通过、计数 0 偏差
 - 对每张受影响表增补「真库 CRUD 探针」（`AbstractMapperTest` 风格）：新增一条最小合法记录 → 读回 → 断言每列被正确持久化（对补字段/删标注的每个字段逐一 assert）
 - L1 `mvn clean test`、L2 `mvn test -DexcludedGroups=` 全绿并满足现行阈值
+
+---
+
+## 3.1 Phase 0 实施记录（2026-10-06，已合入 `backend/scripts/check-entity-schema.mjs`）
+
+- **已做**：① 新增 `getTableColumnMeta()`（psql 返回 `column_name|||is_nullable|||column_default`），为 A 类判定提供元数据 ② 新增 `allEntityFieldsFromSource()`（绕过旧解析器对 `@TableId`/`exist=false` 的过滤，覆盖子类未声明的 BaseEntity 字段）③ 主流程新增 C 类（`exist=false` 实列）与 A 类（NOT NULL 且无默认值、Entity 未覆盖）双项检测 ④ **修复了错误分类 bug**：A/C 类此前落入「表不存在，跳过」的 `missingTableErrors`（表名 regex 只匹配正向「但 xx 表没有此列」），已追加 `/\b(t_\w+)\s+表/` 兜底，An/C 发现项现进入 `realErrors`
+- **首轮双向跑出的已知 11 实伤（全部进入基线台账，不构成阻断；修复后必须同提交移除对应条目）**：
+  - C 类幽灵字段 4 例：`AgencyUserEntity.createdBy`/`updatedBy`、`SubjectBalanceEntity.deleted`、`BankStatementEntity.generatedDocNo`
+  - A 类反向缺口 7 例：`t_voucher_template.template_code`/`entries`、`t_aging_alert.doc_type`/`party_type`、`t_account_mapping_rule.rule_code`/`rule_name`/`source_type`
+- **为什么不立即跑红**：AK/P0 期台账不是「代码退步」，而是历史负债；但台账之外的任何新反向缺口/幽灵字段一出现即 `exit 1`
+- **覆盖范围**：非表字段（`@TableId` 主键、`@TableLogic`、BaseEntity 继承链）纳入 A 类覆盖集；`PostgreSQL GENERATED ALWAYS AS IDENTITY` 与 `DEFAULT` 列豁免；类型对应的 `Map<String,Object>` 泛型字段不判（与正向 B 类同样豁免）
 
 ---
 
