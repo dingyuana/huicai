@@ -33,7 +33,6 @@ class TemplateMatcherTest {
     void setUp() {
         bankStmtTemplate = new VoucherTemplateEntity();
         bankStmtTemplate.setId(1L);
-        bankStmtTemplate.setSource("BANK_STMT");
         bankStmtTemplate.setBusinessType("bank_fee");
     }
 

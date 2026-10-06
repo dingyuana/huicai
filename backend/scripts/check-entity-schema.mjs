@@ -151,8 +151,7 @@ const KNOWN_OPEN_DEFECTS = [
   'c#SubjectBalanceEntity#deleted',
   'c#BankStatementEntity#generatedDocNo',
   // A 类 反向缺口（表 + 列）
-  'a#t_voucher_template#template_code',
-  'a#t_voucher_template#entries',
+  // Phase 1 已修：t_voucher_template#template_code / #entries（已提供声明 + 真库测试锁定）
   'a#t_aging_alert#doc_type',
   'a#t_aging_alert#party_type',
   'a#t_account_mapping_rule#rule_code',

@@ -41,7 +41,7 @@ class VoucherTemplateControllerTest {
         VoucherTemplateEntity tpl = new VoucherTemplateEntity();
         tpl.setId(1L);
         tpl.setName("银行手续费");
-        tpl.setClassification("bank_fee");
+        tpl.setBusinessType("bank_fee");
         tpl.setIsActive(true);
 
         when(templateService.listAllActive()).thenReturn(List.of(tpl));
@@ -60,7 +60,7 @@ class VoucherTemplateControllerTest {
         VoucherTemplateEntity tpl = new VoucherTemplateEntity();
         tpl.setId(1L);
         tpl.setName("银行手续费");
-        tpl.setClassification("bank_fee");
+        tpl.setBusinessType("bank_fee");
 
         when(templateService.matchByClassification(eq("bank_fee"))).thenReturn(tpl);
         when(templateService.getLines(eq(1L))).thenReturn(List.of());
@@ -106,8 +106,7 @@ class VoucherTemplateControllerTest {
         VoucherTemplateEntity created = new VoucherTemplateEntity();
         created.setId(1L);
         created.setName("银行手续费");
-        created.setClassification("bank_fee");
-        created.setNumberPrefix("JZ");
+        created.setBusinessType("bank_fee");
         created.setIsActive(true);
 
         when(templateService.create(any(), any())).thenReturn(created);
