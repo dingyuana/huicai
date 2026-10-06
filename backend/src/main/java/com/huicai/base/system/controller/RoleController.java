@@ -21,17 +21,23 @@ public class RoleController {
     private final RoleService roleService;
     private final MenuService menuService;
 
+    /**
+     * P102 出参面 DTO 化：原为 {@code R<?>} —— 返回类型写 {@code ?} 时
+     * **按类型扫描的守卫抓不到它**（AGENTS §0 记录过这个盲区），但它确实直出 Entity。
+     * 现显式改为 {@code IPage<RoleVO>}。
+     */
     @GetMapping("/page")
-    public R<?> page(@RequestParam(defaultValue = "1") long page,
-                     @RequestParam(defaultValue = "10") long size,
-                     @RequestParam(required = false) String keyword,
-                     @RequestParam(required = false) String status) {
-        return R.ok(roleService.pageRole(page, size, keyword, status));
+    public R<com.baomidou.mybatisplus.core.metadata.IPage<com.huicai.base.system.vo.RoleVO>> page(
+            @RequestParam(defaultValue = "1") long page,
+            @RequestParam(defaultValue = "10") long size,
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) String status) {
+        return R.ok(com.huicai.base.system.vo.RoleVO.from(roleService.pageRole(page, size, keyword, status)));
     }
 
     @GetMapping("/{id}")
-    public R<?> get(@PathVariable Long id) {
-        return R.ok(roleService.getById(id));
+    public R<com.huicai.base.system.vo.RoleVO> get(@PathVariable Long id) {
+        return R.ok(com.huicai.base.system.vo.RoleVO.from(roleService.getById(id)));
     }
 
     @GetMapping("/{id}/menus")
@@ -46,12 +52,13 @@ public class RoleController {
         return R.ok();
     }
 
+    /** P102 出参面 DTO 化：原直接返回 {@code RoleEntity}（铁律 #13），现返回 {@code RoleVO} */
     @PostMapping
     @Log(value = "新增角色", module = "system")
-    public R<RoleEntity> create(@Valid @RequestBody RoleSaveDTO dto) {
+    public R<com.huicai.base.system.vo.RoleVO> create(@Valid @RequestBody RoleSaveDTO dto) {
         RoleEntity role = dto.toEntity();
         roleService.create(role);
-        return R.ok(role);
+        return R.ok(com.huicai.base.system.vo.RoleVO.from(role));
     }
 
     @PutMapping("/{id}")
