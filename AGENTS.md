@@ -11,7 +11,7 @@
 |------|------|
 | 后端代码 | 526 个 Java 主代码文件（另 248 个测试类文件，其中 `*Test.java` 240 个）|
 | 测试用例 | **2082 个可执行测试注解**（L2 口径，`-DexcludedGroups=`）/ 242 个后端测试类 + 26 个前端测试文件 265 用例。**2026-10-06（P102 批次 4 后）全量实测：L1 `mvn clean test` = 1654 通过 / 0 Failures / 0 Errors / 5 Skipped；L2 真库 `mvn test -DexcludedGroups=` = 2082 通过 / 0 Failures / 0 Errors / 6 Skipped**，两次均打印 `All coverage checks have been met`（覆盖率门禁真执行，非静默跳过；`grep -c 'Skipping JaCoCo execution'` = 0）。⚠️ **本地跑 L2 必须先 `docker start huicai-redis`**，否则 11 个用例报 `RedisConnectionFailure`（环境型红，非代码回归，见 §4.5 第 24 条）|
-| 覆盖率 | 棘轮门禁 **INSTRUCTION ≥47% / BRANCH ≥38% / METHOD ≥66%**（`backend/pom.xml` jacoco-check，**2026-10-06 P102 批次 4 后再次上调**，此前为 45%/36%/65%，再此前 30%/12%/55%）。clean 口径（L1）实测 **47.85% / 39.28% / 66.84%**，缓冲 0.85/1.28/0.84 点 ✅ 三个维度首次同时超过 1 点（此前 BRANCH 长期不足 1 点）。🔴 **本轮阈值只敢抬 1~2 点是权衡结果**：新增 VO 会同时抬三个维度，抬得越紧越容易被非代码因素打红；AGENTS §4.5 第 25 条要求「紧贴实测」，但「紧贴」不等于「贴死」。**本次暴涨的来源不是「多写了测试」，而是补上一笔从未被量化的分支税**（§4.5 第 30 条）：105 个 DTO/VO 的 Lombok `equals`/`hashCode` 分支原覆盖 **2/5708（0.04%）**，现覆盖 **5561/5708（97.4%）**。🔴 已反证门禁仍能变红（INSTRUCTION 临时抬 0.99 ⇒ `Rule violated ... instructions covered ratio is 0.47, but expected minimum is 0.99` + `MVN_EXIT=1`，随后 `cp` 还原）。🔴 **标定必须 `mvn clean test`**：不带 clean 时 `target/jacoco.exec` 跨调用累积，实测虚高约 6 点，据此标定会让真实 CI 全红。⚠️ **阈值按 L1 标定**（L2 是超集、更高，实测 52.35/40.46/71.39）；`@SlowTest` 类不进 L1 ⇒ 新增慢测**不会**推高 L1 覆盖率。⚠️ **Lombok 的 `equals` 内部会调用每个字段的 getter** ⇒ 补 `equals/hashCode` 覆盖会顺带覆盖此前未被触及的 getter，这也是 INSTRUCTION/METHOD 同步大涨的原因 |
+| 覆盖率 | 棘轮门禁 **INSTRUCTION ≥48% / BRANCH ≥40% / METHOD ≥67%**（`backend/pom.xml` jacoco-check，**2026-10-06 P102 批次 5 后再次上调**，此前 47%/38%/66%、45%/36%/65%，再此前 30%/12%/55%）。clean 口径（L1）实测 **48.59% / 40.60% / 67.47%**，缓冲 **0.59/0.60/0.47 点** ⚠️ 三维缓冲均已不足 1 点 —— 这三个值就是当前实测值的**上取整天花板**（再抬 1 点即 `Rule violated`），属 §4.5 第 25 条「紧贴实测」的最紧形态。🔴 **本轮阈值只敢抬 1~2 点是权衡结果**：新增 VO 会同时抬三个维度，抬得越紧越容易被非代码因素打红；AGENTS §4.5 第 25 条要求「紧贴实测」，但「紧贴」不等于「贴死」。**本次暴涨的来源不是「多写了测试」，而是补上一笔从未被量化的分支税**（§4.5 第 30 条）：105 个 DTO/VO 的 Lombok `equals`/`hashCode` 分支原覆盖 **2/5708（0.04%）**，现覆盖 **5561/5708（97.4%）**。🔴 已反证门禁仍能变红（INSTRUCTION 临时抬 0.99 ⇒ `Rule violated ... instructions covered ratio is 0.48, but expected minimum is 0.99` + `MVN_EXIT=1`，随后 `cp` 还原）。🔴 **标定必须 `mvn clean test`**：不带 clean 时 `target/jacoco.exec` 跨调用累积，实测虚高约 6 点，据此标定会让真实 CI 全红。⚠️ **阈值按 L1 标定**（L2 是超集、更高，实测 52.35/40.46/71.39）；`@SlowTest` 类不进 L1 ⇒ 新增慢测**不会**推高 L1 覆盖率。⚠️ **Lombok 的 `equals` 内部会调用每个字段的 getter** ⇒ 补 `equals/hashCode` 覆盖会顺带覆盖此前未被触及的 getter，这也是 INSTRUCTION/METHOD 同步大涨的原因 |
 | 数据库 | PostgreSQL 16 / **85 个 migration，最新 V169**（V160=D1 补 `DISPUTED`、V161=对账审计表、V162=D8 补 `PENDING_CONFIRM`、V163=权限码种子、V164=治愈 identity 序列落后、V165=补代理用户企业种子、V166=FORCE RLS、V167=RLS 谓词空串硬化 `NULLIF(current_setting(...), '')`、V168=P106 补 2 个 `(enterprise_id, deleted)` 复合索引、**V169=P109 核销异常池补 13 列 + `account_id`/`period` 降可空**）；注意：版本号非连续，缺 V6-V62 与 V64-V91 共 85 个号；因 `out-of-order: true` + `validate-on-migrate: false` 不影响运行）⚠️ **开发库可能远落后于 migration 最高号**（实测长期停在 V99）⇒ `check-entity-schema.mjs` 报的「列不存在」需先确认开发库版本，勿直接当缺陷（§4.5 第 23 条）|
 | API 端点 | 510+ 个后端端点 |
 | 核心模块 | 基础数据、总账、应收应付、现金管理、固定资产、费用报销、发票税务、预算、财务报表、存储管理 |
@@ -337,7 +337,7 @@
       - ⚠️ **「DTO 覆盖率税」这个说法当时只按 METHOD 观测，漏了 BRANCH 维度** —— 与 §4.5 第 25 条「只按一个维度推断整体」同型。**判据：新增 `@Data` 类时，METHOD 与 BRANCH 两个维度都要估，只看方法数会低估一个数量级。**
       - ⚠️ 并非所有 DTO/VO 都有 Lombok `equals`：实测 `TaxBurdenVO` 是手写 POJO（只有 getter/setter，**根本没有 equals**）⇒ 走 Object 的身份 equals，不含分支，不属要缴的税。扫描时必须按「是否自声明 `equals(Object)`」过滤，否则会把身份 equals 当成覆盖失败。
     - **判据**：凡要新增一批 `@Data` DTO/VO，先预估「方法数 × 21」**与「分支数 × 约 45~66」**，并预留对应的反射测试；否则「纯样板代码」会把门禁拉红，而这与代码质量无关 —— 别误判为回归去改阈值。
-    - **同源提醒**：DTO 的存在还带来**出参面**问题（`RoleController#create` 等仍 `R<RoleEntity>` 直出 Entity），本批未改（改出参会动前端契约），登记为待办；实测出参面共 **152 个返回点 / 30 个控制器 / 37 个不同 Entity 类型**。✅ **2026-10-06 出参面 VO 化已推进 4 批**：Role / Customer / Vendor / Employee（批次 1~3，19 个返回点）+ **批次 4 的 7 个干净控制器 / 29 个返回点**（Period / VoucherType / SummaryLib / SysConfig / AssetCategory / CashJournal / BankJournal）—— 剩余 **106 个返回点**（按 `R<...Entity>` 正则实测）。
+    - **同源提醒**：DTO 的存在还带来**出参面**问题（`RoleController#create` 等仍 `R<RoleEntity>` 直出 Entity），本批未改（改出参会动前端契约），登记为待办；实测出参面共 **152 个返回点 / 30 个控制器 / 37 个不同 Entity 类型**。✅ **2026-10-06 出参面 VO 化已推进 4 批**：Role / Customer / Vendor / Employee（批次 1~3，19 个返回点）+ **批次 4 的 7 个干净控制器 / 29 个返回点**（Period / VoucherType / SummaryLib / SysConfig / AssetCategory / CashJournal / BankJournal）+ **批次 5 的 4 个干净控制器 / 21 个返回点**（BankAccount / AssetCard / ClassificationRule / AiTask+AiAnomalyTag）—— 剩余 **85 个返回点 / 15 个控制器**（按 `R<...Entity>` 正则实测）。
       - ✅ **2026-10-06 实测：出参面 DTO 化的「税」已被上面那个扫描式测试预付掉**。`DtoLombokBranchCoverageTest` 按类路径扫描，新增 VO **无需再写测试**即自动覆盖其 getter（被 `equals` 调）/ setter（被本测试的 `build()` 调）/ `equals`+`hashCode` 分支 ⇒ DTO/VO 的**方法**覆盖已达 **1692/1781（95.0%）**、**分支**覆盖 **5561/5708（97.4%）**。⚠️ 但**余量很紧**：阈值重抬到 45/36/65 后，**BRANCH 只能再吃 533 个未覆盖分支、METHOD 只能再吃 57 个未覆盖方法**（≈ 2~3 个未覆盖的 `@Data` 类）⇒ 新增 DTO/VO **必须**落在扫描范围内（`@Data` 类或 record、有可构造途径），否则立刻把门禁拉红。**判据：新增 DTO/VO 前先确认它能被扫描测试覆盖（实测 `DtoLombokBranchCoverageTest` 会打印「扫描 N 个 / 无样例字段 M 个」，M 异常增大即覆盖不全）。**
 
 31. 🔴 **字段级门禁对「无状态字段的 Entity 直收」完全失明（2026-10-05 结构性守卫发现）**：`scripts/check_entity_status_massassignment.py` 收尾时报「✅ 未发现实体入参的状态越权风险」，但它是按「Entity 有 status 等字段 + 被 `@RequestBody` 直收」判定的 —— `TaxTypeEntity`、`CustomerEntity`、`MenuEntity` 等**根本没有 status 字段**，于是**铁律 #13 的违规被整类漏判**。
@@ -383,7 +383,11 @@
     - **判据**：MockMvc 断言失败时，若「期望」与「实际」肉眼看不出差别，**先怀疑编码**。注意 `JwtAuthenticationFilter` 自己写的 403 响应体**是**带 `charset=UTF-8` 的，所以同一测试类里不同端点的解码行为可能不一致 —— 这本身就是个陷阱。
 
 37. 🔴 **脚本化批量改代码会把「无参调用」和「多行语句」一起改崩**（2026-10-06 P102 批次 4 实测，一轮改崩 4 次才收敛）：用正则批量把 `return R.ok(X);` 改成 `return R.ok(VO.from(X));` 时，连环踩了三个坑，且**每一个都编译不过、但报的是完全无关的行**：
-    - **坑 1：按括号配平找语句结尾 ⇒ 少一个右括号**。`R.ok(a(...)))` 结尾应是 `));`，脚本写成 `)));`。报 `';' expected` 指向**上一个方法**的结尾，肉眼看不出错在哪。
+    - **坑 1：括号配平取「表达式」时，正反两个方向都会错**。扫描到 `depth` 归 0 时 `j` 已经**越过**闭合的 `)`，于是
+      - 取 **`s[start:j]`** ⇒ `inner` 多带一个右括号 ⇒ 包裹后变成 `from(x)))` —— **多一个右括号**（批次 5 实测，编译报 `';' expected`）；
+      - 或按「行尾补 `));`」⇒ **少一个右括号**（批次 4 实测，`R.ok(a(...)))` 应为 `));` 却写成 `)));`）。
+      两种都报在**上一个方法**的结尾，肉眼完全看不出错在哪。
+      **正解**：扫描结束后显式 `inner = s[start:j-1]` 并 `assert s[j-1] == ')'`；改完立刻跑**剔除字符串/注释后的括号余额**检查 —— 直接数原文会被 `@Operation(summary="规则列表(精确)")` 这类中文括号骗出假阴性。
     - **坑 2：无参 `R.ok()` 被当成有参**。`R<Void>` 的 delete/lock/unlock 一律是裸 `return R.ok();`，脚本把它改成 `return R.ok(PeriodVO.from()));` ⇒ 括号失衡 + `cannot find symbol` 混在一起。**判据**：包裹前必须先按**方法声明的返回类型**筛，`R<Void>` / `R<Long>` / `R<Map<..>>` 一律不动。
     - **坑 3：正则依赖字段命名假设**。脚本假设 service 字段叫 `xxxService`，而 `AssetCategoryController` / `BankJournalController` 叫 `service` ⇒ 8 处静默漏改，直到**编译报 `inference variable T has incompatible bounds`** 才暴露。**正解**：按方法**声明的返回类型**（`R<...VO>`）定位方法体，而不是猜表达式长相。
     - **强制三查（缺一不可）**：① `mvn test-compile` ② 括号余额逐文件统计（负值或非 0 即崩）③ `R<Void>` 方法体必须仍是裸 `R.ok()`。
@@ -393,6 +397,9 @@
     - **与 §4.2 第 9 条同型**：那里是「同名 `status` 在三张表的 CHECK 允许集不同」，这里是「同名列在不同契约下语义不同」。**判据**：字段的敏感性**不能按列名归类**，必须逐个 VO 对着**前端 interface 的实际声明**核对。
     - **两类约束必须分开写**：①**契约约束**（前端声明了什么就必须有，漏了前端读到 `undefined`）②**安全约束**（哪些列不许外露）。把两者混成一个 `NEVER_EXPOSE` 集合，就会把合法的展示字段误判为泄漏。
     - **守卫的这类红灯不要「改守卫」了事**：本轮先确认了 5 个前端接口确实声明 `createdAt`，才把它移出集合并**在代码里写明依据**（哪 5 个接口、哪一行）。判据是「有没有外部证据」，不是「守卫报错了」。
+    - ✅ **2026-10-06 批次 5 的第二例，方向相反：这次要改的是「前端 interface」**。`classificationRule.ts#ClassificationRule` 声明了 `tenantId` 与 `updatedAt`，守卫报 `ClassificationRuleVO 外露了内部字段 [tenantId, updatedAt]`。查证结果：`ClassificationRuleList.vue` **两个都不读**，且 `t_classification_rule` 两列都真实存在 ⇒ 是**前端契约陈旧**，不是 VO 泄露。⇒ 从 interface 删掉两行（VO 随之收窄）。
+      - 附带修正一个**易混点**：`pageRules(params: { tenantId?: number })` 里的 `tenantId` 是**请求参数**（控制器确实收它），**不属于出参契约**，不能跟着删。**判据**：同一文件里同名字段出现在「函数入参」与「返回 interface」是两件事，只改后者。
+      - `tenantId` 该删还有一层依据：P106 D-1 已裁定**废弃 `tenantId`**，契约里继续声明会诱导后人往多账套方向用它。
 
 ### 4.6 工作流执行类
 20. **起步跳过三步闭环**：收到"开发/继续开发/写代码"指令时，Hermes 必须先走 SPEC→审核门→再执行，禁止直接写 SPEC 文档或代码。**三次纠正沉淀：** 2026-07-09 ai-evolution-v2 起步时直接写计划文档+commit，跳过老丁审核（违反铁律 #10）。修正：收到任何开发指令，第一条输出必须是 SPEC 草案或要求确认需求，不是代码/计划文档。

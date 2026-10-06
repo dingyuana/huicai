@@ -6,6 +6,7 @@ import com.huicai.base.business.entity.ClassificationRuleEntity;
 import com.huicai.sme.cash.service.ClassificationRuleService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import com.huicai.sme.tax.vo.ClassificationRuleVO;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
@@ -23,39 +24,39 @@ public class ClassificationRuleController {
 
     @Operation(summary = "规则列表分页")
     @GetMapping
-    public R<IPage<ClassificationRuleEntity>> page(
+    public R<IPage<ClassificationRuleVO>> page(
             @RequestParam(required = false) Long tenantId,
             @RequestParam(defaultValue = "1") Integer current,
             @RequestParam(defaultValue = "20") Integer size) {
-        return R.ok(service.page(tenantId, current, size));
+        return R.ok(ClassificationRuleVO.from(service.page(tenantId, current, size)));
     }
 
     @Operation(summary = "规则详情")
     @GetMapping("/{id}")
-    public R<ClassificationRuleEntity> getById(@PathVariable Long id) {
+    public R<ClassificationRuleVO> getById(@PathVariable Long id) {
         ClassificationRuleEntity entity = service.getById(id);
         if (entity == null) {
             return R.badRequest("规则不存在");
         }
-        return R.ok(entity);
+        return R.ok(ClassificationRuleVO.from(entity));
     }
 
     @Operation(summary = "创建规则")
     @PostMapping
-    public R<ClassificationRuleEntity> create(@Valid @RequestBody ClassificationRuleSaveDTO dto) {
+    public R<ClassificationRuleVO> create(@Valid @RequestBody ClassificationRuleSaveDTO dto) {
         ClassificationRuleEntity entity = dto.toEntity();
-        return R.ok(service.create(entity));
+        return R.ok(ClassificationRuleVO.from(service.create(entity)));
     }
 
     @Operation(summary = "更新规则")
     @PutMapping("/{id}")
-    public R<ClassificationRuleEntity> update(@PathVariable Long id, @Valid @RequestBody ClassificationRuleSaveDTO dto) {
+    public R<ClassificationRuleVO> update(@PathVariable Long id, @Valid @RequestBody ClassificationRuleSaveDTO dto) {
         ClassificationRuleEntity entity = dto.toEntity();
         ClassificationRuleEntity updated = service.update(id, entity);
         if (updated == null) {
             return R.badRequest("规则不存在");
         }
-        return R.ok(updated);
+        return R.ok(ClassificationRuleVO.from(updated));
     }
 
     @Operation(summary = "删除规则")
@@ -81,9 +82,9 @@ public class ClassificationRuleController {
 
     @Operation(summary = "单笔测试匹配")
     @PostMapping("/match")
-    public R<ClassificationRuleEntity> match(@RequestParam String description,
+    public R<ClassificationRuleVO> match(@RequestParam String description,
                                               @RequestParam(required = false) String direction,
                                               @RequestParam(required = false) String counterparty) {
-        return R.ok(service.match(description, direction, counterparty));
+        return R.ok(ClassificationRuleVO.from(service.match(description, direction, counterparty)));
     }
 }

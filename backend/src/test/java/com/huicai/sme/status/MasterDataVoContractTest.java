@@ -59,7 +59,18 @@ class MasterDataVoContractTest {
             new VoContract(com.huicai.sme.cash.vo.BankJournalVO.class, "BankJournalVO",
                     "../frontend/src/api/modules/bankJournal.ts"),
             new VoContract(com.huicai.sme.cash.vo.CashJournalVO.class, "CashJournal",
-                    "../frontend/src/api/modules/cashJournal.ts"));
+                    "../frontend/src/api/modules/cashJournal.ts"),
+            // ---- 批次 5：三方核对无反向缺口/无幽灵字段，且前端契约逐字段对齐 ----
+            new VoContract(com.huicai.sme.cash.vo.BankAccountVO.class, "BankAccountVO",
+                    "../frontend/src/api/modules/bankAccount.ts"),
+            new VoContract(com.huicai.sme.asset.vo.AssetCardVO.class, "AssetCard",
+                    "../frontend/src/api/modules/asset.ts"),
+            new VoContract(com.huicai.sme.tax.vo.ClassificationRuleVO.class, "ClassificationRule",
+                    "../frontend/src/api/modules/classificationRule.ts"),
+            new VoContract(com.huicai.base.ai.vo.AiTaskVO.class, "AiTask",
+                    "../frontend/src/api/modules/ai.ts"),
+            new VoContract(com.huicai.base.ai.vo.AiAnomalyTagVO.class, "AiAnomalyTag",
+                    "../frontend/src/api/modules/ai.ts"));
 
     /**
      * 各 VO 刻意不外露的字段 —— 每个都有依据，见各 VO 注释。

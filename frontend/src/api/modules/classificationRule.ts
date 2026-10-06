@@ -2,7 +2,6 @@ import request from '@/api/request'
 
 export interface ClassificationRule {
   id?: number
-  tenantId?: number
   name: string
   ruleType: string       // keyword / keyword_regex / counterparty_match
   pattern: string
@@ -18,7 +17,6 @@ export interface ClassificationRule {
   subjectLevel2?: string  // 二级科目
   subjectLevel3?: string  // 三级科目
   createdAt?: string
-  updatedAt?: string
 }
 
 export function pageRules(params: {
