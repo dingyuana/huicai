@@ -31,6 +31,20 @@ public class EmployeeSaveDTO {
 
     private Long deptId;
 
+    /**
+     * 职位 —— 2026-10-06 补入（P102 出参面批次 3）。
+     *
+     * <p><b>为什么必须补</b>：{@code t_employee.position} 是真实列（V1 baseline），
+     * 前端「职位」输入框一直在提交它，但本 DTO 原先<b>没有</b>该字段 ⇒
+     * Jackson 绑定时静默丢弃 ⇒ <b>用户填的职位永远存不进去</b>，且不报任何错。
+     * 对应 AGENTS §4.3 的「静默忽略」反模式。
+     *
+     * <p>上限按 DB 列宽 {@code VARCHAR(100)} 取 100（AGENTS §4.2 第 13 条：
+     * 必填/长度约束以 DB 为准，不凭感觉）。
+     */
+    @Size(max = 100, message = "职位长度不能超过 100")
+    private String position;
+
     @Size(max = 32, message = "电话长度不能超过 32")
     private String phone;
 
@@ -47,6 +61,7 @@ public class EmployeeSaveDTO {
         e.setCode(code);
         e.setName(name);
         e.setDeptId(deptId);
+        e.setPosition(position);
         e.setPhone(phone);
         e.setEmail(email);
         e.setIsActive(isActive);

@@ -91,13 +91,19 @@ public class EmployeeServiceImpl implements EmployeeService {
         existing.setCode(entity.getCode());
         existing.setName(entity.getName());
         existing.setDeptId(entity.getDeptId());
+        // P102 批次 3：position 必须在这里逐字段搬运 —— 本方法是「读-改-写」，
+        // 新加字段若不同步补 here，update 会静默丢弃它（AGENTS §4.4 第 11 条同型：
+        // 只在 create 侧赋值，update 侧漏掉 ⇒ 编辑一次就丢）。
+        existing.setPosition(entity.getPosition());
         existing.setPhone(entity.getPhone());
         existing.setEmail(entity.getEmail());
-        existing.setBankName(entity.getBankName());
-        existing.setBankAccount(entity.getBankAccount());
-        existing.setIdCard(entity.getIdCard());
         existing.setIsActive(entity.getIsActive());
         existing.setRemark(entity.getRemark());
+        // ⚠️ 刻意**不再**搬运 bankName / bankAccount / idCard：
+        // 它们在 EmployeeEntity 上标着 exist=false，t_employee 无对应列 ⇒ 这三行
+        // 读到的恒为 null、写进的也被 MyBatis 丢弃，属**误导性死代码**
+        // （AGENTS §4.2 第 10 条）。EmployeeSaveDTO 早已移除对应入参，
+        // 此处的搬运只会让人误以为这三个字段受支持。
         mapper.updateById(existing);
         return existing;
     }
