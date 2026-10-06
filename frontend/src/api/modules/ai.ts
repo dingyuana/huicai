@@ -36,6 +36,18 @@ export interface AiAnomalyTag {
   createdAt?: string
 }
 
+/** AI 分类反馈日志 —— 按 t_ai_feedback_log 真实列声明（P102 批次 7）。 */
+export interface AiFeedbackLog {
+  id?: number
+  bankTxnId?: number
+  aiSuggestedAction?: string
+  aiConfidence?: number
+  aiBusinessScene?: string
+  humanAction?: string
+  humanModifiedFields?: string
+  createdAt?: string
+}
+
 export function dispatchTask(taskType: string, bizType: string, bizId: number, inputData: any): Promise<AiTask> {
   return request.post('/v1/ai/tasks', { taskType, bizType, bizId, inputData })
 }

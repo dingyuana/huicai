@@ -1,6 +1,19 @@
 import request from '@/api/request'
 
-export function uploadFile(file: File, bizType: string, bizId?: number, uploaderId?: number) {
+/** 附件 —— 按 t_attachment 真实列声明的出参契约（P102 批次 7）。此前全为 Promise<any>。 */
+export interface Attachment {
+  id?: number
+  bizType?: string
+  bizId?: number
+  fileName?: string
+  originalName?: string
+  fileSize?: number
+  contentType?: string
+  uploadedBy?: number
+  createdAt?: string
+}
+
+export function uploadFile(file: File, bizType: string, bizId?: number, uploaderId?: number): Promise<Attachment> {
   const formData = new FormData()
   formData.append('file', file)
   formData.append('bizType', bizType)
@@ -11,7 +24,7 @@ export function uploadFile(file: File, bizType: string, bizId?: number, uploader
   })
 }
 
-export function listAttachments(bizType: string, bizId: number): Promise<any[]> {
+export function listAttachments(bizType: string, bizId: number): Promise<Attachment[]> {
   return request.get('/v1/attachments/list', { params: { bizType, bizId } })
 }
 

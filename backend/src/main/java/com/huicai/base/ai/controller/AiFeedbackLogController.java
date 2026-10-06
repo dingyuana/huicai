@@ -6,6 +6,7 @@ import com.huicai.base.ai.entity.AiFeedbackLogEntity;
 import com.huicai.base.ai.service.AiFeedbackLogService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import com.huicai.base.ai.vo.AiFeedbackLogVO;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
@@ -24,30 +25,30 @@ public class AiFeedbackLogController {
 
     @Operation(summary = "反馈日志分页")
     @GetMapping
-    public R<IPage<AiFeedbackLogEntity>> page(
+    public R<IPage<AiFeedbackLogVO>> page(
             @RequestParam(required = false) Long tenantId,
             @RequestParam(required = false) Long bankTxnId,
             @RequestParam(required = false) String humanAction,
             @RequestParam(defaultValue = "1") Integer current,
             @RequestParam(defaultValue = "20") Integer size) {
-        return R.ok(service.page(tenantId, bankTxnId, humanAction, current, size));
+        return R.ok(AiFeedbackLogVO.from(service.page(tenantId, bankTxnId, humanAction, current, size)));
     }
 
     @Operation(summary = "反馈日志详情")
     @GetMapping("/{id}")
-    public R<AiFeedbackLogEntity> getById(@PathVariable Long id) {
+    public R<AiFeedbackLogVO> getById(@PathVariable Long id) {
         AiFeedbackLogEntity entity = service.getById(id);
         if (entity == null) {
             return R.badRequest("反馈日志不存在");
         }
-        return R.ok(entity);
+        return R.ok(AiFeedbackLogVO.from(entity));
     }
 
     @Operation(summary = "记录反馈")
     @PostMapping
-    public R<AiFeedbackLogEntity> create(@Valid @RequestBody AiFeedbackCreateDTO dto) {
+    public R<AiFeedbackLogVO> create(@Valid @RequestBody AiFeedbackCreateDTO dto) {
         AiFeedbackLogEntity entity = dto.toEntity();
-        return R.ok(service.create(entity));
+        return R.ok(AiFeedbackLogVO.from(service.create(entity)));
     }
 
     @Operation(summary = "按租户统计")

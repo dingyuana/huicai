@@ -73,7 +73,16 @@ class MasterDataVoContractTest {
                     "../frontend/src/api/modules/ai.ts"),
             // P102 批次 6：修掉 PrepaymentList.vue 的 4 个恒空白字段
             new VoContract(com.huicai.sme.arap.vo.PrepaymentVO.class, "Prepayment",
-                    "../frontend/src/api/modules/prepayment.ts"));
+                    "../frontend/src/api/modules/prepayment.ts"),
+            // P102 批次 7：ticket/attachment/ai-feedback-log —— 前端此前全是 Promise<any>，现已补类型
+            new VoContract(com.huicai.sme.cash.vo.TicketVO.class, "Ticket",
+                    "../frontend/src/api/modules/ticket.ts"),
+            new VoContract(com.huicai.sme.cash.vo.TicketTransactionVO.class, "TicketTransaction",
+                    "../frontend/src/api/modules/ticket.ts"),
+            new VoContract(com.huicai.base.storage.vo.AttachmentVO.class, "Attachment",
+                    "../frontend/src/api/modules/attachment.ts"),
+            new VoContract(com.huicai.base.ai.vo.AiFeedbackLogVO.class, "AiFeedbackLog",
+                    "../frontend/src/api/modules/ai.ts"));
 
     /**
      * 各 VO 刻意不外露的字段 —— 每个都有依据，见各 VO 注释。
