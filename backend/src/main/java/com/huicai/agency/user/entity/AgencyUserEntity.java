@@ -20,13 +20,13 @@ public class AgencyUserEntity {
     private String agencyRole;
     private String status;
 
-    @TableField(exist = false)
+    /* P110 Phase 3：created_by/updated_by 真实存在于 t_agency_user，
+     * 旧写法 @TableField(exist = false) 会让列永久不写入。改为普通字段。 */
     private Long createdBy;
 
     @TableField(fill = FieldFill.INSERT)
     private LocalDateTime createdAt;
 
-    @TableField(exist = false)
     private Long updatedBy;
 
     @TableField(fill = FieldFill.INSERT_UPDATE)

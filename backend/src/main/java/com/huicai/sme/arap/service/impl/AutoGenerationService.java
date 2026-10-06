@@ -484,6 +484,7 @@ public class AutoGenerationService {
         // SALARY: 工资单不自动制证，停在 DRAFT 等人确认
         if ("SALARY".equals(doc.getDocType())) {
             stmt.setGeneratedDocId(doc.getId());
+            stmt.setGeneratedDocNo(doc.getDocNo());
             stmt.setGeneratedAt(LocalDateTime.now());
             statementMapper.updateById(stmt);
             log.info("工资单自动生成（跳过制证）: statementId={}, docId={}, amount={}",
@@ -502,6 +503,7 @@ public class AutoGenerationService {
                 doc.setUpdatedAt(LocalDateTime.now());
                 docMapper.updateById(doc);
                 stmt.setGeneratedDocId(doc.getId());
+                stmt.setGeneratedDocNo(doc.getDocNo());
                 // P10-3: 模板路径也生成应收/应付单 (ID 已在前面解析, 不会为 null)
                 createReceivableOrPayableFromBankDoc(doc, stmt, period, amount, userId);
                 docMapper.updateById(doc);
@@ -566,6 +568,7 @@ public class AutoGenerationService {
         docMapper.updateById(doc);
 
         stmt.setGeneratedDocId(doc.getId());
+        stmt.setGeneratedDocNo(doc.getDocNo());
         stmt.setGeneratedVoucherId(voucher.getId());
 
         // P10-3: 硬编码路径生成应收/应付单 (ID 已在前面解析, 不会为 null)

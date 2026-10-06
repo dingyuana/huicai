@@ -146,13 +146,10 @@ function getTableColumns(tableName) {
 // ─────────────────────────────────────────────────────────────────────
 const KNOWN_OPEN_DEFECTS = [
   // C 类 幽灵字段误标字段
-  'c#AgencyUserEntity#createdBy',
-  'c#AgencyUserEntity#updatedBy',
-  'c#SubjectBalanceEntity#deleted',
-  'c#BankStatementEntity#generatedDocNo',
-  // A 类 反向缺口（表 + 列）
+          // A 类 反向缺口（表 + 列）
   // Phase 1 已修：t_voucher_template#template_code / #entries（VoucherTemplateEntity 已清零 + 真库测试锁定）
   // Phase 2 已修：t_aging_alert#doc_type/party_type、t_account_mapping_rule#rule_code/rule_name/source_type
+  // Phase 3 已修：AgencyUserEntity#createdBy/updatedBy、SubjectBalanceEntity#deleted、BankStatementEntity#generatedDocNo
           ];
 
 // Phase 0（P110）：A 类双向校验需要列的「是否可空 + 是否有默认值」元数据

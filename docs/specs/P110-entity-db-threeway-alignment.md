@@ -1,6 +1,6 @@
 # P110 Entity–DB 三方对齐清零（十类实体的「反向缺口/前向缺口/幽灵字段」）
 
-> **状态**：🟡 **部分实施（Phase 0 完成，2026-10-06）**—— Phase 0（门禁升级）已落地；Phase 1-3 未开始。见 §3 末附「Phase 0 实施记录」。
+> **状态**：✅ **全部 Phase 已完成（2026-10-06）**—— Phase 0（门禁升级）+ Phase 1（`voucher_template`）+ Phase 2（`t_aging_alert`/`t_account_mapping_rule`）+ Phase 3（4 处 C 类清零）。工具台账 11 → 0；`check-entity-schema.mjs` 回到完全通过。台账里的 4 处 C 类/A 类缺陷全部修复后同步受代码 + 真库测试锁定。
 > **需求**：REQ-2026-139（新登记）| **编号**：HUICAI-SPC-P110 | **来源**：P102 批次 5/6/7 三方核对遗留 + AGENTS §4.2 第 4/8/13/16 条同型
 > **铁律约束**：三步闭环 SPEC→Plan→**审核**→执行。每个微循环独立 TDD（Red→Green），完成前验证 `check-entity-schema.mjs` 双向 + 真库 CRUD 探针
 > **关联**：[P106 多账套](P106-multi-book-account-set.md)《[P102 安全基线](P102-security-permission-baseline.md)》《[P109 异常池修复](P109-reconciliation-exception-pool-repair.md)》
@@ -121,6 +121,12 @@
 - **覆盖范围**：非表字段（`@TableId` 主键、`@TableLogic`、BaseEntity 继承链）纳入 A 类覆盖集；`PostgreSQL GENERATED ALWAYS AS IDENTITY` 与 `DEFAULT` 列豁免；类型对应的 `Map<String,Object>` 泛型字段不判（与正向 B 类同样豁免）
 
 ---
+
+### 3.2 Phase 1–3 落地摘要（2026-10-06，本日快速收敛）
+
+- **Phase 1 — `VoucherTemplateEntity` 清 8 野列 + 补 5 真实列**：`templateCode`/`voucherTypeCode`/`summary`/`entries`（jsonb）/`remark` 补齐、Ghost 的 `description/classification/source/direction/matchPriority/numberPrefix` + 冗余 BaseEntity shadow 删除；`VoucherTemplateVO` 同步；`VoucherTemplateCreateRequest` 改为必填 `templateCode/businessType/entries/voucherTypeCode`。真库测试 `VoucherTemplatePhase1RealDBTest` 补字段回读 + 漏字段 DB NOT NULL 拦截 2/2 绿。
+- **Phase 2 — `AgingAlertEntity`/`AccountMappingRuleEntity`**：补齐 `doc_type`/`party_type`（NPE 保护 INSERT）；alertLevel 改为 DB-CHECK 允许集 `INFO/WARNING/CRITICAL`（旧产出 `MILD/MODERATE/SEVERE` 必违约）；`dismissAlert/resolveAlert` 的 `dismissedAt` 野字段改写入真实列 `processedAt`；`AgingAlertVO` drop `notifiedAt/dismissedAt`；`AccountMappingRuleEntity` 从 6 个 exist=false 野列重写为真实列集并继承 `BaseEntity`；真库测试 `AgingAlertPhase2RealDBTest` (2/2) + `AccountMappingRulePhase2RealDBTest` (1/1)。
+- **Phase 3 — C 类 4 处清零**：`AgencyUserEntity` (createdBy/updatedBy 去 exist=false)、`SubjectBalanceEntity`（删除对 BaseEntity deleted 的 exist=false shadow ← MP 标准逻辑删除生效）、`BankStatementEntity.generatedDocNo`（去 exist=false）。`AutoGenerationService` 三条路径新增 `stmt.setGeneratedDocNo(doc.getDocNo())`，DB 列存在即将被填充。台账归零。
 
 ## 4. BDD 验收契约（Given-When-Then，每个场景对应一个 @Test）
 
