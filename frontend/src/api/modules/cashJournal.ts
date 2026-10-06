@@ -1,16 +1,22 @@
 import request from '@/api/request'
 
 export interface CashJournal {
+  // 2026-10-06（P102 批次4）：本接口原先声明的 docNo/docDate/subjectName/status 四个字段
+  // —— **在 t_cash_journal 上一个都不存在**（真实列是 journal_no / journal_date，且无
+  // subject_name / status 列），且页面 CashJournalList.vue 从未使用它们 ⇒ 属陈旧死接口。
+  // 页面真实读的是 journalNo/journalDate/summary/debit/credit/balance/voucherId，
+  // 全部是真实列。故把接口改成页面真实在用的字段（与 Employee 的 department 同型处置）。
   id?: number
-  docNo?: string
-  docDate?: string
+  period?: string
+  journalDate?: string
+  journalNo?: string
   summary?: string
   subjectId?: number
-  subjectName?: string
+  oppositeSubjectId?: number
   debit?: number
   credit?: number
   balance?: number
-  status?: string
+  source?: string
   voucherId?: number
 }
 

@@ -44,11 +44,34 @@ class MasterDataVoContractTest {
             new VoContract(CustomerVO.class, "Customer", "../frontend/src/api/modules/arap.ts"),
             new VoContract(VendorVO.class, "Vendor", "../frontend/src/api/modules/arap.ts"),
             new VoContract(com.huicai.base.masterdata.vo.EmployeeVO.class, "Employee",
-                    "../frontend/src/api/modules/employee.ts"));
+                    "../frontend/src/api/modules/employee.ts"),
+            // ---- 批次 4：七个「字段形态干净」的控制器 ----
+            new VoContract(com.huicai.base.system.vo.PeriodVO.class, "PeriodVO",
+                    "../frontend/src/api/modules/period.ts"),
+            new VoContract(com.huicai.base.system.vo.VoucherTypeVO.class, "VoucherTypeVO",
+                    "../frontend/src/api/modules/voucherType.ts"),
+            new VoContract(com.huicai.base.system.vo.SummaryLibVO.class, "SummaryLibVO",
+                    "../frontend/src/api/modules/summaryLib.ts"),
+            new VoContract(com.huicai.base.system.vo.SysConfigVO.class, "SysConfigVO",
+                    "../frontend/src/api/modules/sysConfig.ts"),
+            new VoContract(com.huicai.sme.asset.vo.AssetCategoryVO.class, "AssetCategory",
+                    "../frontend/src/api/modules/asset.ts"),
+            new VoContract(com.huicai.sme.cash.vo.BankJournalVO.class, "BankJournalVO",
+                    "../frontend/src/api/modules/bankJournal.ts"),
+            new VoContract(com.huicai.sme.cash.vo.CashJournalVO.class, "CashJournal",
+                    "../frontend/src/api/modules/cashJournal.ts"));
 
-    /** 各 VO 刻意不外露的字段 —— 每个都有依据，见各 VO 注释 */
+    /**
+     * 各 VO 刻意不外露的字段 —— 每个都有依据，见各 VO 注释。
+     *
+     * <p>⚠️ <b>createdAt 刻意不在此集合里</b>：它虽是审计列，但<b>有 5 个前端接口明确声明了它</b>
+     * （PeriodVO / VoucherTypeVO / SummaryLibVO / SysConfigVO / BankJournalVO 都含
+     * {@code createdAt: string}）⇒ 它是这些页面的<b>合法展示字段</b>，不是内部状态。
+     * 本集合一度把它包含进来，当场被本守卫报红（PeriodVO 外露了内部字段 [createdAt]）
+     * —— 这正是本守卫存在的意义：把「我以为的内部字段」与「契约真正要求的字段」强制分开。
+     */
     private static final Set<String> NEVER_EXPOSE = new LinkedHashSet<>(Arrays.asList(
-            "version", "deleted", "createdBy", "updatedBy", "createdAt", "updatedAt",
+            "version", "deleted", "createdBy", "updatedBy", "updatedAt",
             "enterpriseId", "tenantId", "menuIds", "permissionCodes"));
 
     private static Set<String> fieldsOf(Class<?> c) {
