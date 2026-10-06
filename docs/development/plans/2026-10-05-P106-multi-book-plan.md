@@ -97,6 +97,42 @@ expected: <990001> but was: <1>     ← enterprise_id 没跟着上下文走
 
 **建议的 SPEC 决策方向**：**废弃 `tenantId` 请求参数，改用上下文企业**。理由：①RLS 已经按 `enterprise_id` 隔离，客户端再传一个租户号属**重复且不可信**的隔离维度；②保留即意味着「两个隔离列 + 一个客户端可控」，是 §0.2 那类双列隐患的延长线；③前端 `EnterpriseSwitcher` 已经通过 `X-Enterprise-Id` 切换，无需在每个筛选器里再传一遍。
 
+### 微循环 1a-5（已实施）索引补齐 —— **计划里的假设被实测推翻**
+
+**计划原本写**：「把 `idx_classification_rule_tenant` 从 `tenant_id` 迁到 `enterprise_id`」。**实测该假设不成立** —— `enterprise_id` 的索引**早已存在**：
+
+| 表 | 已有 enterprise_id 索引 | 来源 |
+|---|---|---|
+| `t_classification_rule` | `idx_t_classification_rule_enterprise (enterprise_id)` | V104:38 |
+| `t_prepayment` | `idx_t_prepayment_enterprise (enterprise_id)` | V105:28 |
+| `t_reconciliation_log` | `idx_t_reconciliation_log_enterprise (enterprise_id)` | V105:31 |
+
+⇒ 真正的缺口是另外两处：`t_ai_feedback_log` **只有主键索引、完全没有 `enterprise_id` 索引**（V104 补了列但漏了索引）；`t_classification_rule` 的 `enterprise_id` 索引是**单列**，而实际查询同时过滤 `enterprise_id` 与 `deleted`。
+
+**`V168__p106_add_enterprise_composite_indexes.sql`**（幂等，仅新增）：
+
+| # | 迁移内容 | 依据 |
+|---|---|---|
+| ① | `idx_t_ai_feedback_log_enterprise_deleted (enterprise_id, deleted)` | 真实缺口：原先只有主键索引 |
+| ② | `idx_t_classification_rule_enterprise_deleted (enterprise_id, deleted)` | 补 `deleted` 以匹配实际查询形状 |
+| ③ | `COMMENT ON INDEX idx_classification_rule_tenant` 标注「待清理 / 1a-3 待决策」 | 只标注不删 |
+
+**为什么不删旧索引**（两条理由）：①删索引属破坏性 DDL，按 AGENTS §7 需老丁确认；②`t_classification_rule.tenant_id` 列是否废弃取决于 **1a-3 的「`tenantId` 请求参数去留」决策**（尚未做），提前删索引等于抢先替业务方决策。
+
+**验证**：Testcontainers 库 Flyway 日志出现 `Migrating schema "public" to version "168 - p106 add enterprise composite indexes"`；开发库手工应用同一份 SQL 后 `pg_indexes` 查到 2 个新索引；**重跑一次输出 `relation ... already exists, skipping` ⇒ 幂等成立**。L1 `1647/0/0/5` + L2 `2047/0/0/6`（Skipped +1 即新增的 `@Disabled` 用例），两次 `All coverage checks have been met`。
+
+### 批次 1a 小结（5 个微循环）
+
+| 微循环 | 状态 | 结果 |
+|---|---|---|
+| 1a-1 预付款 `enterprise_id` + `tenant_id` 对齐 | ✅ | 非企业 1 的上下文创建的预付款不再落进企业 1 |
+| 1a-2 核销日志两处写入 + 幽灵字段赋值移除 | ✅ | 两列恒等；`:892` 的死代码删除而非改列 |
+| 1a-3 分类规则 / AI 反馈的 `tenantId` 过滤 | ⏸ **待 SPEC 决策** | 定性为功能缺陷（过滤失效）非漏洞；已用 `@Disabled` 用例留证 |
+| 1a-4 核销容差按上下文取 | ✅ | 4 个使用点；无上下文抛 `BusinessException` 而非回落 1 |
+| 1a-5 索引补齐 | ✅ | 新增 2 个复合索引；计划假设被实测推翻 |
+
+**批次 1a 的净收获（已修生产缺陷）**：预付款跨租户默认写入、核销日志两列不一致、核销容差按企业 1 判定（静默错账）。**新登记的未实现缺口**：1a-3 的 `tenantId` 参数去留、`ReconciliationExceptionEntity` 15 处 `exist = false`（含 `updatedAt` 反向缺口）、6 处 `DEFAULT_USER_ID = 1L`。
+
 ### 微循环 1a-4（Red→Green 已完成）`AT-106-3` 核销容忍度按当前企业
 
 `ReconciliationToleranceServiceImpl:29` 的 `DEFAULT_ENTERPRISE_ID`（4 个使用点 `:43`/`:72`/`:87`/`:104`）⇒ 改读 `EnterpriseContextHolder.get()`，为 null 时抛 `BusinessException`（铁律 #14）。
