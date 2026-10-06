@@ -138,6 +138,62 @@ function getTableColumns(tableName) {
   }
 }
 
+
+// ─────────────────────────────────────────────────────────────────────
+// ⚠️ 已登记台账（P110 Phase 0 尚未修复的 11 处已确认真伤缺陷），
+// 新增的「相同类别 + 相同表 + 相同列」不再参加红灯，但每一项都必须
+// 等价为「同一实体文件中同一处描述字符串」——修复后请**同提交删除**。
+// ─────────────────────────────────────────────────────────────────────
+const KNOWN_OPEN_DEFECTS = [
+  // C 类 幽灵字段误标字段
+  'c#AgencyUserEntity#createdBy',
+  'c#AgencyUserEntity#updatedBy',
+  'c#SubjectBalanceEntity#deleted',
+  'c#BankStatementEntity#generatedDocNo',
+  // A 类 反向缺口（表 + 列）
+  'a#t_voucher_template#template_code',
+  'a#t_voucher_template#entries',
+  'a#t_aging_alert#doc_type',
+  'a#t_aging_alert#party_type',
+  'a#t_account_mapping_rule#rule_code',
+  'a#t_account_mapping_rule#rule_name',
+  'a#t_account_mapping_rule#source_type',
+];
+
+// Phase 0（P110）：A 类双向校验需要列的「是否可空 + 是否有默认值」元数据
+function getTableColumnMeta(tableName) {
+  try {
+    const sql = `SELECT column_name || '|||' || is_nullable || '|||' || COALESCE(column_default, 'NO_DEFAULT_SENTINEL') FROM information_schema.columns WHERE table_schema='public' AND table_name='${tableName}' ORDER BY ordinal_position`;
+    const cmd = `docker exec -i huicai-postgres psql -U ${DB.user} -d ${DB.db} -t -c "${sql}" 2>/dev/null`;
+    const output = execSync(cmd, { encoding: 'utf-8', timeout: 10000 });
+    return output.split('\n').map(l => l.trim()).filter(Boolean).map(l => {
+      const [name, nullable, defRaw] = l.split('|||');
+      // 注意：isNullable 这里定义为「该列是 NOT NULL」（沿用 nullable 字段返回 'NO' 表示 NOT NULL 的特性）
+      return { name, isNotNull: nullable === 'NO', hasDefault: defRaw !== 'NO_DEFAULT_SENTINEL' };
+    });
+  } catch {
+    return null;
+  }
+}
+
+// Phase 0（P110）：解析一个 Entity 类文件里的**全部**私有字段（不过滤 @TableId/@TableLogic）
+// —— 返回 [{ fieldName, existFalse, explicitColumn }]
+function allEntityFieldsFromSource(src) {
+  const re = /(?:@TableField\s*\(([^)]*)\)\s*)?(?:@TableId\s*\([^)]*\)\s*)?(?:@TableLogic\s*)?(?:@Version\s*)?(?:private\s+\S+\s+(\w+)\s*;)/g;
+  const out = [];
+  let m;
+  while ((m = re.exec(src)) !== null) {
+    const annotation = m[1] || '';
+    const fieldName = m[2];
+    if (!fieldName) continue;
+    const existFalse = /exist\s*=\s*false/.test(annotation);
+    const bare = annotation.match(/^"([^"]+)"$/);
+    const val = annotation.match(/value\s*=\s*"([^"]+)"/);
+    out.push({ fieldName, existFalse, explicitColumn: bare ? bare[1] : (val ? val[1] : null) });
+  }
+  return out;
+}
+
 // ── 自定义 SQL 列引用检查（@Select / XML Mapper） ──
 
 const SQL_KEYWORDS = new Set([
@@ -512,6 +568,50 @@ for (const filePath of findEntityFiles(ENTITY_DIR)) {
       allErrors.push(`  ${relPath}: 字段 "${field.fieldName}" → 列 "${colName}"，但 ${entity.tableName} 表没有此列`);
     }
   }
+  // ── Phase 0：C 类（幽灵字段误标 @TableField(exist=false)，但 DB 有该列） ──
+  const allFields = allEntityFieldsFromSource(readFileSync(filePath, 'utf-8'));
+  const extendsBaseEntity = /extends\s+BaseEntity/.test(readFileSync(filePath, 'utf-8'));
+  for (const f of allFields) {
+    if (!f.existFalse) continue;
+    const cName = f.explicitColumn || f.fieldName.replace(/([A-Z])/g, '_$1').toLowerCase();
+    if (columns.includes(cName)) {
+      const relPath = relative(join(import.meta.dirname, '..'), filePath);
+      const cls = 'c#' + filePath.split('/').pop().replace('.java', '') + '#' + f.fieldName;
+      allErrors.push(`  ${relPath}: 字段 "${f.fieldName}" 被标 @TableField(exist = false)，但 ${entity.tableName} 表实际存在列 "${cName}"（幽灵误标：该列永不写入、读回恒 null，需核对设计）${KNOWN_OPEN_DEFECTS.includes(cls) ? '【已登记缺陷台账 REQ-2026-139】' : ''}`);
+    }
+  }
+
+  // ── Phase 0：A 类（DB 必填无默认列，Entity 未覆盖） ──
+  const colMeta = getTableColumnMeta(entity.tableName);
+  if (colMeta) {
+    const covered = new Set();
+    for (const f of allFields) {
+      if (f.existFalse) continue; // exist=false 不参与覆盖（它宣称「不持久化」）
+      covered.add(f.explicitColumn || f.fieldName.replace(/([A-Z])/g, '_$1').toLowerCase());
+    }
+    if (extendsBaseEntity) {
+      // BaseEntity 的字段不在子类类体里，但它们确实映射真实列
+      try {
+        const baseFile = ENTITY_DIR + '/com/huicai/common/entity/BaseEntity.java';
+        const baseSrc = readFileSync(baseFile, 'utf-8');
+        for (const f of allEntityFieldsFromSource(baseSrc)) {
+          if (f.existFalse) continue;
+          covered.add(f.explicitColumn || f.fieldName.replace(/([A-Z])/g, '_$1').toLowerCase());
+        }
+      } catch {
+        // BaseEntity 路径探测失败时退化：放弃 BaseEntity 覆盖，后续会报 A 类误报，
+        // 管理员应修正 BaseEntity 路径而非无视。此处取保守策略：仍然尝试全部来源扫描。
+      }
+    }
+    for (const c of colMeta) {
+      if (!c.isNotNull) continue;          // 可空列不报
+      if (c.hasDefault) continue;          // 有默认值的列（含 identity/主键/default）不报
+      if (covered.has(c.name)) continue;   // Entity 已覆盖
+      const relPath = relative(join(import.meta.dirname, '..'), filePath);
+      const cls = 'a#' + entity.tableName + '#' + c.name;
+      allErrors.push(`  ${relPath}: ${entity.tableName} 表必填列 "${c.name}"（NOT NULL 且无默认值）在 Entity 中无对应字段（反向缺口，insert 必挂）${KNOWN_OPEN_DEFECTS.includes(cls) ? '【已登记缺陷台账 REQ-2026-139】' : ''}`);
+    }
+  }
 }
 
 // ── Mapper 方法缺少 SQL 绑定检查 ──
@@ -801,7 +901,10 @@ if (!dbAvailable) {
 // 按表分组统计
 const tableErrors = {};
 for (const err of allErrors) {
-  const tableMatch = err.match(/但 (\S+) 表没有此列/);
+  // B 类（正向）消息匹配：「但 t_xxx 表没有此列」；
+  // A/C 类消息（Phase 0 新增）分别形如「t_xxx 表必填列...」「...但 t_xxx 表实际存在列...」
+  let tableMatch = err.match(/但 (\S+) 表没有此列/);
+  if (!tableMatch) tableMatch = err.match(/\b(t_\w+)\s+表/);
   const tableName = tableMatch ? tableMatch[1] : 'unknown';
   if (!tableErrors[tableName]) tableErrors[tableName] = [];
   tableErrors[tableName].push(err);
@@ -930,18 +1033,27 @@ if (missingCreatedAtErrors.length > 0) {
   }
 }
 
-if (realErrors.length > 0) {
+  // 基线过滤：只保留「未打台账标签」的实伤发现项
+  const unbaselined = realErrors.filter(e => !e.includes('【已登记缺陷台账 REQ-2026-139】'));
+  const baselined = realErrors.filter(e => e.includes('【已登记缺陷台账 REQ-2026-139】'));
+  if (baselined.length > 0) {
+    console.log(`\n📋 已登记在 P110 台账的已知缺陷（${baselined.length} 项，等待 Phase 1–3 修复，此项不构成阻断）：`);
+    for (const err of baselined) {
+      console.log(err);
+    }
+  }
+  if (unbaselined.length > 0) {
   console.error('❌ 表存在但列不匹配（需要立即修复）：\n');
-  for (const err of realErrors) {
+  for (const err of unbaselined) {
     console.error(err);
   }
-  console.error(`\n共 ${realErrors.length} 个不匹配项，涉及以下表：`);
-  const affectedTables = [...new Set(realErrors.map(e => {
+  console.error(`\n共 ${unbaselined.length} 个未登记不匹配项/台账阻塞项，涉及以下表：`);
+  const affectedTables = [...new Set(unbaselined.map(e => {
     const m = e.match(/但 (\S+) 表/);
     return m ? m[1] : 'unknown';
   }))];
   for (const t of affectedTables) {
-    const count = realErrors.filter(e => e.includes(t)).length;
+    const count = unbaselined.filter(e => e.includes(t)).length;
     console.error(`  ${t}（${count} 字段）`);
   }
   console.error('\n修复方法：');
@@ -950,6 +1062,10 @@ if (realErrors.length > 0) {
   console.error('  3. 如果列名不同 → 用 @TableField(value = "实际列名")');
   process.exit(1);
 } else {
-  console.log('✅ Entity-DB 列一致性检查通过');
+  if (baselined.length === 0) {
+    console.log('✅ Entity-DB 列一致性检查通过');
+  } else {
+    console.log(`✅ 未登记项检查通过（台账中 ${baselined.length} 项已登记缺陷项持续追踪中，Phase 1–3 完成则自动归零）`);
+  }
   process.exit(0);
 }
