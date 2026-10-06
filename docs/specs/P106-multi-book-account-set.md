@@ -291,21 +291,72 @@ Scenario: SUPER_ADMIN 切换会设置企业上下文（**修正 V1.1 的错误�
 | AT-106-4 | 无上下文写路径抛 `BusinessException` 且不写进行 1 | 真实 DB | 同 AT-106-3（容差侧已覆盖） | ✅ 绿 |
 | AT-106-4b | **L2 连接角色是超级用户的守卫**（断言 `rolsuper=t`，使隔离类断言必须走探针） | 真实 DB | `AccountSetIsolationRealDBTest#l2RoleIsSuperuserSoRlsAssertionsNeedSetRole` | ✅ 绿（新增，见 §0.6） |
 | AT-106-5 | 平台全局表 10 张定性结论落库/落文档 | 文档 + DDL | §0.1 + Flyway | ⏸ 未启动（等裁定） |
-| AT-106-6 | 成员切换成功、只返回本企业数据 | 集成 | 已有 `TenantIsolationHttpTest`，补断言 | ⏸ 未启动（批次 2） |
-| AT-106-7 | 非成员切换 403 且审计无成功记录 | 集成 | 已有 `TenantIsolationSecurityTest`，补断言 | ⏸ 未启动（批次 2） |
-| AT-106-8 | SUPER_ADMIN 切换**会**设置上下文（负向：不带头时按 JWT） | 集成 | 新增（现有 `#superAdminAllowedEverywhere` 只测 `isMember`，不涉上下文） | ⏸ 未启动（批次 2） |
+| AT-106-6 | 成员切换成功、只返回本企业数据 | 真实 DB + HTTP | `TenantSwitchRealDBTest#memberSwitchRewritesContextAndIsolatesData` | ✅ 绿（**落点改**：见下） |
+| AT-106-7 | 非成员切换 403 且审计无成功记录 | 真实 DB + HTTP | `TenantSwitchRealDBTest#nonMemberSwitchDeniedWithNoAuditTrail` | ✅ 绿（**落点改**：见下） |
+| AT-106-8 | SUPER_ADMIN 切换**会**设置上下文（负向：不带头时按 JWT） | 真实 DB + HTTP | `TenantSwitchRealDBTest#superAdminSwitchSetsContext` + `#superAdminWithoutHeaderUsesJwtEnterprise` | ✅ 绿（**落点改**：见下） |
+| **AT-106-10** | **跨企业写拒绝**（A 的记录在 B 上下文下不可确认，且状态不得被改动） | 真实 DB + HTTP | `TenantSwitchRealDBTest#crossEnterpriseWriteIsRejected` | ✅ 绿（新增） |
+| **AT-106-11** | **观测手段守卫**：`current-period` 确实随上下文变化 / 无上下文时返 400 | 真实 DB + HTTP | `TenantSwitchRealDBTest#currentPeriodEndpointActuallyReflectsContext` + `#currentPeriodFailsWithoutContext` | ✅ 绿（新增） |
+| **AT-106-12** | **夹具前提守卫**：`t_user.enterprise_id` 不被 fill 机制改写 | 真实 DB | `TenantSwitchRealDBTest#userHomeEnterpriseIsNotOverwrittenByContext` | ✅ 绿（新增） |
+| **AT-106-13** | **切换放行必留痕**（否则 AT-106-7「拒绝时无记录」恒真） | 真实 DB + HTTP | `TenantSwitchRealDBTest#allowedSwitchIsAudited` | ✅ 绿（新增） |
+| **AT-106-14** | **被拒切换不改写上下文** | 真实 DB + HTTP | `TenantSwitchRealDBTest#deniedSwitchDoesNotRewriteContext` | ✅ 绿（新增） |
+
+### 7.2 批次 2 的落点偏离与理由（V1.5 新增，**偏离原 SPEC 计划**）
+
+原 §7.1 计划把 AT-106-6/7 落在**已有的** `TenantIsolationHttpTest` / `TenantIsolationSecurityTest`「补断言」。**实测该方案不可行，已改落点**，理由三条：
+
+1. **`TenantIsolationHttpTest` 结构上无法承载**。它只断言「无凭证 → 401」，原因是「无 JWT 时请求本就会被 401 挡下」（其原注释）。要回答「带合法凭证时上下文如何变」，必须**签发真 JWT**；而该类与 `EnterpriseControllerTest` 一样把 `JwtProvider`/`StringRedisTemplate`/`UserDetailsServiceImpl` 全部 `@MockBean` 掉 ⇒ 一旦引入真 JWT，就要连带把这一整套 mock 拆掉，等于重写该类而非「补断言」。
+2. **三个场景需要同一套真库夹具**（两个企业 + 直管用户 + 代理授权用户 + STRANGER），拆到两个既有类里会重复造数，且两类的 mock 策略并不兼容。
+3. **`TenantIsolationSecurityTest` 验的是「规则」不是「链路」**（其原注释已自陈分工）。上下文是否被改写只有走过滤器才观察得到。
+
+⇒ 新建 `TenantSwitchRealDBTest`（11 例）一次承载 AT-106-6/7/8 + 跨企业写拒绝 + 4 条守卫。
+
+### 7.3 观测手段的选择（V1.5 新增）
+
+**用 `/api/v1/enterprise/current-period` 作上下文探针，而不是为测试新增端点**：该端点直接以 `EnterpriseContextHolder.get()` 为入参查 `t_enterprise`，而 `t_enterprise` 属 `EnterpriseDataPermissionInterceptor.SHARED_TABLES`（不被注入条件），故「响应的 `startPeriod` 是哪一家」严格等价于「过滤器把上下文设成了哪一家」。两个测试企业各设一个不同的 `start_period`（`209801` / `209802`）即可无歧义区分。
+
+⚠️ **该探针自身必须被守卫**（AT-106-11）：若它某天改为读 JWT、读默认值或对所有企业返回同一常量，则 AT-106-6/8 会**集体恒绿**且无任何异常。故除「两次请求返回不同值」的正控外，另配一条**反向自检**（无上下文时该端点必须返 400）—— 后者实测抓到了「基类 `@BeforeEach` 预置上下文导致无上下文场景恒绿」的夹具陷阱，详见 AGENTS 新增条目。
 | **AT-106-9** | **分类规则 / AI 反馈的读过滤应按 `enterprise_id`**（§0.4 的 6 个方法） | 待定 | `AccountSetIsolationRealDBTest` 中一条 **`@Disabled`** 用例 | ⏸ **挂起待决策** —— `tenantId` 请求参数去留属客户端契约变更（铁律 #10） |
 
 ⚠️ **与现有用例无冲突（已核实）**：`TenantIsolationSecurityTest#superAdminAllowedEverywhere:78-82` 只断言 `checker.isMember(...)` 返回 `true`，**未涉及 `EnterpriseContextHolder`** ⇒ AT-106-8 是**新增断言**而非修正既有断言，不会与 P102/AT-102-1c 打架。`nullTargetIsAllowed:94-97` 同理只覆盖 `isMember` 的 null 分支。
 
 ## 8. 实施分批（每批独立可回滚）
 
-| 批次 | 内容 | 风险 | 门禁要求 | **V1.4 状态** |
+| 批次 | 内容 | 风险 | 门禁要求 | **V1.5 状态** |
 |---|---|---|---|---|
 | **1a** | 4 张双列并存表收口（写 `enterprise_id`、索引补齐） | 中（动 DDL 与写路径） | 三方对照审计（PG ↔ Entity ↔ 业务代码）；DDL 走 Flyway；`node scripts/check-entity-schema.mjs`；覆盖率门禁 `All coverage checks have been met` | 🟡 **部分完成** —— 5 个微循环：1a-1 / 1a-2（含 2b）/ 1a-4 / 1a-5 已完成；**1a-3 挂起待决策**（§0.4） |
 | **1b** | 10 张平台全局表逐表定性 | 中 | 同上 | ⏸ **未启动** —— 等老丁裁定三类分组 |
-| **2** | 切换鉴权与跨企业隔离的**真库回归锁**（现有 4 个类已覆盖读隔离，补**跨企业写拒绝**与 AT-106-8） | 低 | L2 全绿；L1 `All coverage checks have been met`。⚠️ **涉 RLS 的断言必须走非超级探针**（§0.6），否则恒绿 | ⏸ 未启动 |
+| **2** | 切换鉴权与跨企业隔离的**真库回归锁**（补**跨企业写拒绝**与 AT-106-8） | 低 | L2 全绿；L1 `All coverage checks have been met` | ✅ **已完成**（2026-10-06）—— 新增 `TenantSwitchRealDBTest` 11 例，AT-106-6/7/8/10~14 全绿；**未发现新生产缺陷**（详见 §8.1） |
 | **3** | L1-4 / L1-5 产品决策落地（可能含 `uq_username` 迁移） | 高（影响登录） | 需老丁单独审核 + 回填脚本 | ⏸ 未启动 |
+
+### 8.1 批次 2 的结论：**零生产缺陷，回归锁已就位**（V1.5 新增）
+
+与批次 1a 不同，批次 2 **没有发现任何生产缺陷** —— `JwtAuthenticationFilter` 的成员三源并集校验、上下文改写、审计留痕三条链路实测均正确。本批次的价值是**把这些行为钉成回归锁**，因为此前它们**完全没有 HTTP 层的回归保护**：
+
+| 行为 | 批次 2 之前的保护 | 现状 |
+|---|---|---|
+| 非成员切换被拒 403 | 只有**规则层**（`TenantIsolationSecurityTest` 直接调 `checker.isMember`） | 规则层 + **链路层**双锁 |
+| SUPER_ADMIN 切换会改写上下文 | **无**（`superAdminAllowedEverywhere` 只断言 `isMember` 返回 true） | AT-106-8 + AT-106-11 锁死 |
+| 跨企业写被拒 | **无** | AT-106-10 锁死 |
+| 拒绝时审计无成功记录 | **无** | AT-106-7 + AT-106-13（正控）锁死 |
+
+⚠️ **「规则层绿 ≠ 链路层绿」**：规则正确但没接进过滤器，同样等于没修 —— 与 P104 覆盖率门禁假绿同族。批次 2 之前正是这个状态：`TenantIsolationSecurityTest` 6 例全绿，但**没有任何一条能证明过滤器真的调用了它**。
+
+⚠️ **RLS 维度本批次未覆盖（诚实声明）**：§0.6 要求「涉 RLS 的断言必须走非超级探针」，而 HTTP 层用的是连接池连接（L2 为超级用户）⇒ **无法在 MockMvc 请求内降权**。故本批次的隔离断言全部落在**第二层（`EnterpriseDataPermissionInterceptor` 数据权限拦截器）**，该层是应用内 ThreadLocal 驱动的，与连接角色无关，**在超级用户下依然真实生效**。第三层（RLS 谓词）的真库探针验证仍由 `TenantRlsRealDBTest`（6 例）与 `AccountSetIsolationRealDBTest#prepaymentIsInvisibleUnderOtherEnterpriseContext` 承担。**两层各自有锁，但「一次请求内同时验证两层」目前无人验证** —— 已登记为遗留缺口。
+
+### 8.2 批次 2 的反证矩阵（V1.5 新增，AGENTS §2.3 要求）
+
+逐条注入缺陷、实测转绿→转红→还原（生产代码最终 `git status` 干净）：
+
+| 注入的缺陷 | 转红的用例数 |
+|---|---|
+| ① 去掉成员校验（`allowed` 恒 `true`） | 2（AT-106-7 及其配套） |
+| ② 不改写上下文（删掉 `enterpriseId = requested`） | **4**（AT-106-6 / AT-106-8 / AT-106-10 / AT-106-11） |
+| ③ 审计多写一条 | 1（AT-106-13） |
+| ④ 给 `UserEntity.enterpriseId` 补 `@TableField(fill=INSERT)` | 1（AT-106-12） |
+
+**注入 ② 一处缺陷同时打红 4 条**，是本批次断言有效性的核心证据 —— 说明这些用例确实在观察「上下文」，而不是恒绿。
+
+⚠️ 注入 ④ 顺带**证伪了本批次最初的一个前提假设**：原以为 `t_user.enterprise_id` 是「因为按设计属于归属企业、所以不被 `insertFill` 覆盖」，实测去掉 `withoutEnterpriseContext` 包裹后断言**依然绿** ⇒ 真实机制是 `UserEntity` 不继承 `BaseEntity` 且全类无 `@TableField` ⇒ `withInsertFill=false` ⇒ **`insertFill` 压根不被调用**（AGENTS §4.5 第 34 条同型）。结论虽相同，但**理由完全不同**，若按错误理由理解，会误以为「给该字段补 fill 注解是安全的风格统一」—— 实测证明补上即立刻转红（建账号时指定企业的功能失效）。AT-106-12 就是拦这一手的闸门。
 
 ⚠️ **批次 1a 必须先做而不能与 1b 合并**：§0.2 的 4 张表「看起来已受 RLS 保护」，属**当前就在产生错误数据**的缺口（写入 `tenant_id=1` 而 RLS 读 `enterprise_id`）；§0.1 的 10 张表是「一致地未隔离」，是**设计与实现的取舍问题**，可慢。混在一起做会让 DDL 变更的因果无法归因。
 
@@ -345,6 +396,7 @@ Scenario: SUPER_ADMIN 切换会设置企业上下文（**修正 V1.1 的错误�
 
 | 版本 | 日期 | 变更人 | 变更内容 |
 |---|---|---|---|
+| **V1.5** | 2026-10-06 | opencode | **批次 2 实施回写：切换鉴权真库回归锁，零生产缺陷**。**①落点偏离原计划（已改）** —— V1.4 计划把 AT-106-6/7 落在既有 `TenantIsolationHttpTest` / `TenantIsolationSecurityTest`「补断言」，实测**不可行**：前者把 `JwtProvider`/`StringRedisTemplate`/`UserDetailsServiceImpl` 全部 `@MockBean`，而回答「带合法凭证时上下文如何变」必须签发**真 JWT** ⇒ 引入真 JWT 就要拆掉整套 mock，等于重写该类；后者验的是「规则」不是「链路」。故新建 `TenantSwitchRealDBTest`（11 例）一次承载 AT-106-6/7/8 + 跨企业写拒绝 + 4 条守卫（新增编号 **AT-106-10 ~ AT-106-14**）。**②零生产缺陷** —— `JwtAuthenticationFilter` 的成员三源并集、上下文改写、审计留痕三条链路实测均正确；本批次价值在于这些行为此前**完全没有 HTTP 层回归保护**（`TenantIsolationSecurityTest` 6 例全绿却无一能证明过滤器真的调用了它 —— 「规则层绿 ≠ 链路层绿」，与 P104 覆盖率门禁假绿同族）。**③新增 §7.3 观测手段**：用 `/api/v1/enterprise/current-period` 作上下文探针（它直接以 `EnterpriseContextHolder.get()` 为入参查共享表 `t_enterprise`，故响应 `startPeriod` 严格等价于「上下文是谁」），两个测试企业各设不同 `start_period` 即可无歧义区分 —— **不为测试新增端点**。**④新增 §8.2 反证矩阵**：逐条注入缺陷实测转红，其中「删掉 `enterpriseId = requested`」一处打红 **4 条**（AT-106-6/8/10/11），是断言有效性的核心证据。**⑤一处前提假设被自己的守卫证伪** —— 原以为 `t_user.enterprise_id` 是「按设计属归属企业故不被 `insertFill` 覆盖」，实测去掉 `withoutEnterpriseContext` 包裹后断言**依然绿** ⇒ 真实机制是 `UserEntity` 不继承 `BaseEntity` 且全类无 `@TableField` ⇒ **`insertFill` 压根不被调用**（§0.5 同型）；结论虽同但理由全异，若按错误理由理解会误以为「补 fill 注解是安全的风格统一」，实测补上即转红（建账号指定企业失效）⇒ 新增 AT-106-12 拦这一手。**⑥诚实声明 RLS 维度未覆盖**：MockMvc 用连接池连接（L2 为超级用户），**无法在请求内降权** ⇒ 本批次隔离断言全部落在**第二层数据权限拦截器**（应用内 ThreadLocal 驱动，超级用户下仍真实生效）；第三层 RLS 谓词仍由 `TenantRlsRealDBTest` 承担。**两层各有锁，但「一次请求内同时验证两层」无人验证**，已登记为遗留缺口。**验证**：L1 `1647/0/0/5`（clean 口径覆盖率 31.77/12.82/57.17，与批次前持平 —— 新类为 `@SlowTest` 不进 L1，故棘轮阈值无需重抬）、L2 `2058/0/0/6`（+11 即本类），两次 `All coverage checks have been met`，`check_tenant_fixture.py` 与 `check_entity_status_massassignment.py` 均 exit 0。**遗留**：1a-3（D-1）、批次 1b（D-2）、批次 3 未启动；新增「请求内同时验证两层防线」缺口 |
 | **V1.4** | 2026-10-06 | opencode | **实施回写（批次 1a 执行后）**：3 处诊断修正 + 1 处计划假设被推翻 + 3 项实施状态。**①「隔离泄漏」的定性被实测证伪** —— V1.3 写「代码写 `tenant_id`、RLS 读 `enterprise_id` ⇒ 产生『已隔离』的错觉」，暗示存在泄漏；实测 4 张表的 RLS 谓词虽只读 `enterprise_id`，但它与 `tenant_id` 过滤是**两个 AND 条件**，**跨企业读并不泄漏**（探针角色下实测返 0 行）⇒ 正确的定性是「RLS 隔离层有效，但两列数据不一致导致业务读错」，危害降级。**②新增 §0.5：真正的 P0 是 `enterprise_id` 静默落 DB 默认值** —— `PrepaymentEntity` 不继承 `BaseEntity` 且全类无 `@TableField` ⇒ `insertFill` 根本不触发 ⇒ 非企业 1 的上下文创建的预付款落进企业 1（**跨租户默认写入**）。影响面已全量扫描：8 个实体不继承 `BaseEntity`，其中 3 个的 `enterprise_id` 按设计是「归属企业」而非上下文，**只有 `PrepaymentEntity` 是缺陷**；治法经实测收窄为「补 `fill` 注解」，**不可**改用继承（会引入 3 处列类型不匹配）。**③新增 §0.4：读路径也按 `tenant_id` 过滤的 6 处**（`ClassificationRuleServiceImpl` 4 处 + `AiFeedbackLogServiceImpl` 2 处，且两个 Controller 都暴露成 `@RequestParam`）—— 定性为**功能缺陷（过滤失效）非安全漏洞**；因修法必然动**客户端契约**，按铁律 #10 挂起待决策，留 `@Disabled` 用例（`AT-106-9`）钉住。**④新增 §0.6：L2 Testcontainers 的连接角色是超级用户 ⇒ RLS 类断言恒绿** —— 探针实测 `rolsuper=t`/`bypassrls=t`，配置全对但谓词执行不到；正解是 `SET LOCAL ROLE` 到非超级探针（`TenantRlsRealDBTest` 是全库唯一做对的先例）⇒ **L2 全绿不代表 RLS 有效**。**⑤计划里的假设被推翻**：原写「把 `idx_classification_rule_tenant` 从 `tenant_id` 迁到 `enterprise_id`」，实测 **`enterprise_id` 索引早已存在**（V104:38 / V105:28 / V105:31 各有一个单列索引）⇒ 照做会创建重复索引；真实缺口是 `t_ai_feedback_log` **完全没有 `enterprise_id` 索引** + `t_classification_rule` 缺 `deleted` 复合维度，已由 **`V168`** 幂等补齐（旧索引只用 `COMMENT` 标注待清理，不删 —— 删属破坏性 DDL 且会抢先替 D-1 决策）。**⑥§1.2 补实施状态列、§7.1 补状态列、新增 §10 待决策项（D-1 `tenantId` 参数去留 / D-2 十张表分组 / D-3 旧列旧索引删否）**。**批次 1a 成果**：已修 3 类生产缺陷（预付款跨租户默认写入、核销日志两列不一致、核销容差按企业 1 判定属静默错账），清 6 个常量 / 8 个有效使用点 + 1 处幽灵字段赋值；L1 `1647/0/0/5`、L2 `2047/0/0/6`，两次 `All coverage checks have been met`。**遗留**：1a-3 挂起（D-1）、批次 1b 未启动（D-2）、批次 2/3 未启动 |
 | **V1.3** | 2026-10-05 | opencode | **复审定点修正 3 处（纯文档）**。复审方式是**重新独立复核，不信任 V1.2 自己的编辑** —— 4 项 P0 中 3 项确认闭环（P0-1 三处证据交叉一致；P0-2 分类正确；P0-4 与 `:108-110`/`:120-122` 一致），**P0-3 未闭环**，且复审又抓出 2 处 V1.2 自身的新错误：**①计数错误且自相矛盾** —— V1.2 的 F6 标题写「实为 6 处」，但它自己的列举是 4 个租户/企业维度常量 + 6 个操作人维度常量 ⇒ 本版改为「**4 个常量 / 8 个有效使用点**」，并把操作人维度拆成独立的 **F6b**（§0.3 保留）。**②把两类不同性质的东西混为一谈** —— V1.2 的 §0.2 写「`ReconciliationServiceImpl:73` 写死 `1L`，**3 个写入点**（`:364`/`:780`）」，**数字与列举自相矛盾**，且把 `:892` 错记到 `t_reconciliation_log`。追到 Entity 层后真相是：`:364`/`:780` 写真实列 `t_reconciliation_log.tenant_id`（**真双列并存**），而 `:892` 写的是 `ReconciliationExceptionEntity.tenantId` —— 该字段 `@TableField(exist = false)` 且 `t_reconciliation_exception` **根本没有 `tenant_id` 列** ⇒ **幽灵字段死代码，赋值完全无效**（AGENTS §4.2 第 10 条）⇒ §0.2 该行改为「**2 个有效写入点**」，并新增 **§0.2 补注**单列该 Entity。**③顺带发现一个反向缺口并登记 P102**：复核该 Entity 的 **15 处** `exist = false`，其中 **`updatedAt`（`:104`）是反向缺口** —— `V127:34` 已给该表加真实列 `updated_at`，Entity 却标 `exist = false` ⇒ **该列永不写入、读回恒 null**（AGENTS §4.2 第 16 条，比幽灵字段更隐蔽，因为 `\d` 里一眼可见）。**处置**：登记为 P102 待办 + §9 风险表，**不并入本 SPEC 的 5 项遗留**（与 §0.2 的 DDL 收口不同源，混做会让变更无法归因）。**同步**：`§1.2` L1-3 补「两类清理动作不可混用」（真双列 ⇒ 改写 `enterprise_id`；幽灵字段 ⇒ **删代码而不是改列**，验收断言也不同）；`§4`/`§8` 计数同步；`§7` 拆出独立的幽灵字段场景并新增 `AT-106-2b`（含负向断言「不得改为 `setEnterpriseId`」）。**方法论沉淀**：**审核 SPEC 不能只核对 SPEC 自己列的证据，必须把每个断言追到 Entity 字段映射层** —— V1.2 的 P0-3「改过仍错」是因为只在常量定义与调用点两层打转，没看 `@TableField`；而「幽灵字段 vs 真实双列」的区分**只有在 Entity 层才存在** |
 | **V1.2** | 2026-10-05 | opencode | **审核意见落地（4 项 P0 + 4 项 P1 + 2 项 P2，仍未动代码）**。审核方法是**逐条实测复核 F1~F7 并新增 F8**，不是读 SPEC 找问题。**P0-1 状态机含非法值**：V1.1 §5 写 `ACTIVE ──▶ CLOSED`，而 `chk_enterprise_status`（`V100:51`）与 `EnterpriseStatus` 枚举都只有 `PENDING/ACTIVE/SUSPENDED/TERMINATED`，**`CLOSED` 不是合法值** —— 已在 §5 重画为真实四态与合法迁移（`PENDING→ACTIVE`、`ACTIVE→SUSPENDED`、`SUSPENDED→{ACTIVE,TERMINATED}`），并新增 **F8** 固化该证据。**P0-2 §0.1 事实错误**：V1.1 称那 10 张表「仍用 `tenant_id`」，实测**既无 `enterprise_id` 也无 `tenant_id`**（`rg "ADD COLUMN.*tenant_id"` 全 migration 零命中）；更严重的是 V1.1 **漏掉了真正的缺口** —— **4 张双列并存表**（`t_prepayment`/`t_reconciliation_log`/`t_ai_feedback_log`/`t_classification_rule`），代码写 `tenant_id` 而 RLS 读 `enterprise_id`，**产生「已隔离」的错觉**（新增 §0.2）。**P0-3 硬编码漏报**：V1.1 F6 写「2 处」，本版补入 `ReconciliationServiceImpl:73`、`PrepaymentServiceImpl:55`、`ReconciliationToleranceServiceImpl` 的多个使用点；另将 `DEFAULT_USER_ID=1L` 单列 §0.3 并**排除出本轮范围**（属审计操作人维度，需产品决策），避免与租户维度混计。⚠️ **本版的计数与 §0.2 的「3 个写入点」表述经 V1.3 复审判定错误**（混计了幽灵字段），**以 V1.3 的「4 个常量 / 8 个有效使用点」为准**；**P0-4 场景与代码相反**：V1.1 §7 写「SUPER_ADMIN 不设上下文」，而 `JwtAuthenticationFilter:120-122` **无条件** `EnterpriseContextHolder.set(...)` —— 已改为「切换会设置上下文 + 不带头时按 JWT」，并核实现有 `#superAdminAllowedEverywhere:78-82` 只测 `isMember` 不涉上下文，**无断言冲突**。**P1-5 与已落地设计冲突**：V1.1 §6 要求「上下文取不到即抛异常」，与 `TenantRlsInitializer:65-69` 的既定 null-return 设计相反（其注释明写定时任务「本就不属于任何企业」）—— 已在 §1.2/§6/§9 三处划边界：**只清「有上下文却硬编码 1」，不改切面语义**。**P1-6 删掉逃逸口场景**：「审计日志按企业隔离（或改为断言文档）」这类二选一不可判定，已删除；`t_audit_log` 两列都没有已是确定结论，改为 §0.1 的取证项。**P1-7 补 AT-106-1~8 验收编号**并标注类型与落点。**P1-8 修正 test_ref**：V1.1 的三个类名**全不存在**，改为「已存在 5 个 + 拟建 1 个」；批次 2 描述由「当前只有单测」改为「4 个类已覆盖读隔离，补跨企业写拒绝」。**P2**：F1 表述限定为 `backend/src/main`（并补上被 V1.1 漏掉的 `t_sys_config` 账套级配置证据）；§9 补「无机器可读契约」与覆盖率缓冲不足两项风险。**遗留**：§0.1 的 10 张表**定性仍待定**（需逐表取证，我不替业务方判定「刻意全局共享 vs 应隔离」）；§0.2 的 4 张表需先跑一致性核查再动 DDL；**另新增登记**：`t_reconciliation_exception` 的 15 处 `exist = false`（含 `updatedAt` 反向缺口）作为 P102 待办 |

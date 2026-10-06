@@ -161,9 +161,27 @@ expected: <990001> but was: <1>     ← enterprise_id 没跟着上下文走
 
 ## 3. 批次 2（P1）：切换鉴权真库回归锁
 
-现状：`TenantRlsRealDBTest`（6 项）/ `TenantRlsGucRealDBTest`（3 项）/ `TenantIsolationSecurityTest` / `TenantIsolationHttpTest` 已覆盖**读**隔离。
-本批次只**补缺**：`AT-106-6`（切到 A 只返回 A 的数据）、`AT-106-7`（非成员 403 且审计无成功记录）、`AT-106-8`（SUPER_ADMIN **会**设置上下文，负向：不带头时按 JWT）、**跨企业写拒绝**。
-⚠️ 已核实 `TenantIsolationSecurityTest#superAdminAllowedEverywhere:78-82` 只断言 `isMember`，**与 AT-106-8 无冲突**。
+**状态**：✅ **已完成**（2026-10-06，SPEC V1.5 回写）
+
+| 项 | 结果 |
+|---|---|
+| AT-106-6 成员切换成功、只返回本企业数据 | ✅ 绿 |
+| AT-106-7 非成员切换 403 且审计无成功记录 | ✅ 绿 |
+| AT-106-8 SUPER_ADMIN 会设上下文（负向：不带头按 JWT） | ✅ 绿 |
+| 跨企业写拒绝（原计划项） | ✅ 绿（新增编号 AT-106-10） |
+| 新增 4 条守卫（观测手段 / 夹具前提 / 放行必留痕 / 被拒不改写） | ✅ 绿（AT-106-11 ~ 14） |
+
+**落点偏离原计划（已改）**：原计划写「AT-106-6 在 `TenantIsolationHttpTest` 补断言、AT-106-7 在 `TenantIsolationSecurityTest` 补断言」。**实测不可行**，改为新建 `TenantSwitchRealDBTest`（11 例）一次承载。理由见 SPEC §7.2，核心是：`TenantIsolationHttpTest` 把 `JwtProvider`/`StringRedisTemplate`/`UserDetailsServiceImpl` 全部 `@MockBean`，而回答「带合法凭证时上下文如何变」**必须签发真 JWT** ⇒ 引入真 JWT 就要拆掉整套 mock。
+
+**本批次零生产缺陷** —— 过滤器三条链路实测均正确。价值在于此前这些行为**完全没有 HTTP 层回归保护**：`TenantIsolationSecurityTest` 6 例全绿，却无一能证明过滤器真的调用了 `EnterpriseMembershipChecker`（「规则层绿 ≠ 链路层绿」）。
+
+**观测手段**：复用 `/api/v1/enterprise/current-period`（它直接以 `EnterpriseContextHolder.get()` 为入参查共享表 `t_enterprise`）⇒ 响应 `startPeriod` 严格等价于「上下文是谁」，**不为测试新增端点**。两个测试企业各设不同 `start_period`（209801/209802）。
+
+**反证矩阵**（逐条注入缺陷实测转红，生产代码最终还原）：删掉 `enterpriseId = requested` ⇒ **打红 4 条**；去掉成员校验 ⇒ 打红 2 条；审计多写一条 ⇒ 打红 1 条；给 `UserEntity.enterpriseId` 补 `@TableField(fill)` ⇒ 打红 1 条。
+
+**诚实声明**：RLS（第三层）维度**本批次未覆盖** —— MockMvc 用连接池连接，L2 为超级用户，无法在请求内 `SET LOCAL ROLE`。隔离断言全部落在**第二层数据权限拦截器**（应用内 ThreadLocal 驱动，超级用户下仍生效）。两层各有锁，但「一次请求内同时验证两层」无人验证，已登记为遗留缺口。
+
+**遗留（原 §3 的 4 项已全部覆盖）**：`TenantRlsRealDBTest`（6 项）/ `TenantRlsGucRealDBTest`（3 项）/ `TenantIsolationSecurityTest` / `TenantIsolationHttpTest` 保持不动。
 
 ## 4. 批次 3（P2）：L1-4 / L1-5 产品决策落地
 
