@@ -151,13 +151,9 @@ const KNOWN_OPEN_DEFECTS = [
   'c#SubjectBalanceEntity#deleted',
   'c#BankStatementEntity#generatedDocNo',
   // A 类 反向缺口（表 + 列）
-  // Phase 1 已修：t_voucher_template#template_code / #entries（已提供声明 + 真库测试锁定）
-  'a#t_aging_alert#doc_type',
-  'a#t_aging_alert#party_type',
-  'a#t_account_mapping_rule#rule_code',
-  'a#t_account_mapping_rule#rule_name',
-  'a#t_account_mapping_rule#source_type',
-];
+  // Phase 1 已修：t_voucher_template#template_code / #entries（VoucherTemplateEntity 已清零 + 真库测试锁定）
+  // Phase 2 已修：t_aging_alert#doc_type/party_type、t_account_mapping_rule#rule_code/rule_name/source_type
+          ];
 
 // Phase 0（P110）：A 类双向校验需要列的「是否可空 + 是否有默认值」元数据
 function getTableColumnMeta(tableName) {

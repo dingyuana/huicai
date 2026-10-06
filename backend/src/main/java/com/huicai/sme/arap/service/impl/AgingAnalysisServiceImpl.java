@@ -270,11 +270,14 @@ public class AgingAnalysisServiceImpl implements AgingAnalysisService {
             );
             if (existing > 0) continue;
 
+            // P110 Phase 2：补 doc_type/party_type 两个 NOT NULL 列（否则 insert 必挂）；
+            // alertLevel 产出 DB CHECK 允许集（旧产出的 MILD/MODERATE/SEVERE 必违约）
             String level = alertLevel(ar.days());
             AgingAlertEntity alert = new AgingAlertEntity();
             alert.setCustomerId(row.partyId());
+            alert.setPartyType("CUSTOMER");
             alert.setDocId(row.sourceId());
-            alert.setDocNo(row.sourceNo());
+            alert.setDocType(row.sourceType());
             alert.setUnsettledAmount(row.unsettledAmount());
             alert.setDueDate(row.dueDate());
             alert.setOverdueDays(ar.days());
@@ -288,10 +291,14 @@ public class AgingAnalysisServiceImpl implements AgingAnalysisService {
         return count;
     }
 
+    /**
+     * alert_level DB CHECK 只允许 INFO/WARNING/CRITICAL。
+     * 旧产出的 MILD/MODERATE/SEVERE 与 CHECK 无交集 ⇒ insert 必挂。
+     * 本函数按 DB 允许集输出，其中 INFO ≤ 30 天、WARNING ≤ 90 天、否则 CRITICAL。
+     */
     private String alertLevel(int overdueDays) {
-        if (overdueDays <= 30) return "MILD";
-        if (overdueDays <= 60) return "MODERATE";
-        if (overdueDays <= 90) return "SEVERE";
+        if (overdueDays <= 30) return "INFO";
+        if (overdueDays <= 90) return "WARNING";
         return "CRITICAL";
     }
 
@@ -311,13 +318,26 @@ public class AgingAnalysisServiceImpl implements AgingAnalysisService {
         }
         wrapper.orderByDesc(AgingAlertEntity::getCreatedAt);
 
-        return alertMapper.selectList(wrapper).stream()
+        var alerts = alertMapper.selectList(wrapper);
+        // docNo 不再是 entity 字段（该列不属于 t_aging_alert），改由业务单回查补齐
+        var docNos = alerts.stream()
+            .map(AgingAlertEntity::getDocId)
+            .filter(java.util.Objects::nonNull)
+            .distinct()
+            .collect(java.util.stream.Collectors.toList());
+        var docNoById = docNos.isEmpty()
+                ? java.util.Collections.<Long, String>emptyMap()
+                : businessDocMapper.selectBatchIds(docNos).stream()
+                    .collect(java.util.stream.Collectors.toMap(
+                        BusinessDocEntity::getId, BusinessDocEntity::getDocNo,
+                        (a, b) -> a));
+        return alerts.stream()
             .map(a -> new AgingAlertVO(
                 a.getId(), a.getCustomerId(),
                 lookupCustomerName(a.getCustomerId()),
-                a.getDocNo(), a.getUnsettledAmount(), a.getDueDate(),
+                docNoById.get(a.getDocId()), a.getUnsettledAmount(), a.getDueDate(),
                 a.getOverdueDays(), a.getAlertLevel(), a.getStatus(),
-                a.getNotifiedAt(), a.getDismissedAt(), a.getCreatedAt()
+                a.getCreatedAt()
             ))
             .toList();
     }
@@ -328,7 +348,7 @@ public class AgingAnalysisServiceImpl implements AgingAnalysisService {
         AgingAlertEntity alert = alertMapper.selectById(id);
         if (alert != null) {
             alert.setStatus("DISMISSED");
-            alert.setDismissedAt(LocalDateTime.now());
+            alert.setProcessedAt(LocalDateTime.now());
             alertMapper.updateById(alert);
         }
     }
@@ -339,7 +359,7 @@ public class AgingAnalysisServiceImpl implements AgingAnalysisService {
         AgingAlertEntity alert = alertMapper.selectById(id);
         if (alert != null) {
             alert.setStatus("RESOLVED");
-            alert.setDismissedAt(LocalDateTime.now());
+            alert.setProcessedAt(LocalDateTime.now());
             alertMapper.updateById(alert);
         }
     }
