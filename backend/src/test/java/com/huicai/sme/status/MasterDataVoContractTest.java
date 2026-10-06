@@ -70,7 +70,10 @@ class MasterDataVoContractTest {
             new VoContract(com.huicai.base.ai.vo.AiTaskVO.class, "AiTask",
                     "../frontend/src/api/modules/ai.ts"),
             new VoContract(com.huicai.base.ai.vo.AiAnomalyTagVO.class, "AiAnomalyTag",
-                    "../frontend/src/api/modules/ai.ts"));
+                    "../frontend/src/api/modules/ai.ts"),
+            // P102 批次 6：修掉 PrepaymentList.vue 的 4 个恒空白字段
+            new VoContract(com.huicai.sme.arap.vo.PrepaymentVO.class, "Prepayment",
+                    "../frontend/src/api/modules/prepayment.ts"));
 
     /**
      * 各 VO 刻意不外露的字段 —— 每个都有依据，见各 VO 注释。

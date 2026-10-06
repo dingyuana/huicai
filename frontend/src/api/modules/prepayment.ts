@@ -2,21 +2,24 @@ import request from '@/api/request'
 
 export interface Prepayment {
   id?: number
+  /** 单据编号：来自 doc_id → t_business_doc.doc_no；手工建单的预付款为 null（无 doc_id） */
   prepayNo?: string
   vendorId?: number
   vendorName?: string
   customerId?: number
   customerName?: string
   amount: number
-  appliedAmount?: number
+  /** 已核销金额。此前 interface 写的是 appliedAmount，但 t_prepayment 没有该列，
+   *  真实列名是 settled_amount ⇒ 该字段长期读到 undefined，显示恒为 0。 */
+  settledAmount?: number
+  /** 未核销金额（页面原本用 amount - appliedAmount 现算，等价于本列） */
+  unsettledAmount?: number
   period?: string
   txDate?: string
   summary?: string
   status?: string
   sourceDocType?: string
   sourceDocId?: number
-  createdBy?: string
-  createdAt?: string
 }
 
 export function pagePrepayment(params: any): Promise<any> {

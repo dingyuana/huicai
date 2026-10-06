@@ -9,6 +9,8 @@ import com.huicai.base.business.mapper.BusinessDocMapper;
 import com.huicai.sme.arap.service.ArapSettlementService;
 import com.huicai.base.system.entity.Subject;
 import com.huicai.base.system.mapper.SubjectMapper;
+import com.huicai.base.masterdata.mapper.VendorMapper;
+import com.huicai.base.masterdata.mapper.CustomerMapper;
 import com.huicai.base.voucher.entity.VoucherEntryEntity;
 import com.huicai.base.voucher.entity.VoucherEntity;
 import com.huicai.base.voucher.mapper.VoucherEntryMapper;
@@ -68,6 +70,13 @@ class PrepaymentServiceImplTest {
     @Mock
     private SubjectMapper subjectMapper;
 
+    /** P102 批次 6：出参 VO 要补全供应商/客户名，故 Impl 多注入了这两个 mapper */
+    @Mock
+    private VendorMapper vendorMapper;
+
+    @Mock
+    private CustomerMapper customerMapper;
+
     private PrepaymentServiceImpl service;
 
     private static final Long PREPAY_ID = 100L;
@@ -81,7 +90,8 @@ class PrepaymentServiceImplTest {
         service = new PrepaymentServiceImpl(
                 prepaymentMapper, businessDocMapper, settlementService,
                 settlementMapper, settlementEntryMapper,
-                voucherMapper, voucherEntryMapper, voucherNoService, subjectMapper);
+                voucherMapper, voucherEntryMapper, voucherNoService, subjectMapper,
+                vendorMapper, customerMapper);
     }
 
     // ==================== create ====================

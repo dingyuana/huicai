@@ -2,6 +2,7 @@ package com.huicai.sme.arap.service;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.huicai.sme.arap.entity.PrepaymentEntity;
+import com.huicai.sme.arap.vo.PrepaymentVO;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -50,4 +51,19 @@ public interface PrepaymentService {
 
     /** 获取指定客户的未结清预收款列表 */
     List<PrepaymentEntity> getOpenPrepaymentsForCustomer(Long customerId);
+
+    // ================= P102 批次 6：出参面 VO 视图层 =================
+    // 设计取舍：**不改上面任何 Entity 返回签名**（8 个测试类依赖它们），
+    // 另开一组 view* 方法专供 Controller 出参。过滤条件仍复用 pageQuery，
+    // **不把 LambdaQueryWrapper 的条件复制进自定义 SQL**（避免两套事实来源漂移）。
+
+    /** 分页出参：Entity 分页 + 单据号/供应商名/客户名批量补全 */
+    IPage<PrepaymentVO> pageView(Long vendorId, Long customerId, String status, String scope,
+                                 LocalDate startDate, LocalDate endDate, Integer current, Integer size);
+
+    /** 单条出参（详情 / create / confirm / applyTo* 的返回值） */
+    PrepaymentVO viewOf(PrepaymentEntity entity);
+
+    /** 列表出参（getOpenPrepayments* 的返回值） */
+    List<PrepaymentVO> viewList(List<PrepaymentEntity> list);
 }

@@ -40,10 +40,10 @@
               <template #default="{row}">{{ fmtAmount(row.amount) }}</template>
             </el-table-column>
             <el-table-column label="已核销" width="110" align="right">
-              <template #default="{row}">{{ fmtAmount(row.appliedAmount) }}</template>
+              <template #default="{row}">{{ fmtAmount(row.settledAmount) }}</template>
             </el-table-column>
             <el-table-column label="未核销" width="110" align="right">
-              <template #default="{row}">{{ fmtAmount((row.amount || 0) - (row.appliedAmount || 0)) }}</template>
+              <template #default="{row}">{{ fmtAmount((row.amount || 0) - (row.settledAmount || 0)) }}</template>
             </el-table-column>
             <el-table-column prop="period" label="期间" width="80" align="center" />
             <el-table-column prop="txDate" label="日期" width="100" />
@@ -106,10 +106,10 @@
               <template #default="{row}">{{ fmtAmount(row.amount) }}</template>
             </el-table-column>
             <el-table-column label="已核销" width="110" align="right">
-              <template #default="{row}">{{ fmtAmount(row.appliedAmount) }}</template>
+              <template #default="{row}">{{ fmtAmount(row.settledAmount) }}</template>
             </el-table-column>
             <el-table-column label="未核销" width="110" align="right">
-              <template #default="{row}">{{ fmtAmount((row.amount || 0) - (row.appliedAmount || 0)) }}</template>
+              <template #default="{row}">{{ fmtAmount((row.amount || 0) - (row.settledAmount || 0)) }}</template>
             </el-table-column>
             <el-table-column prop="period" label="期间" width="80" align="center" />
             <el-table-column prop="txDate" label="日期" width="100" />
@@ -175,7 +175,7 @@
       <el-form :model="offsetForm" label-width="100px" ref="offsetFormRef">
         <el-form-item label="核销方式" prop="targetDocId">
           <el-select v-model="offsetForm.targetDocId" filterable :placeholder="activeTab==='vendor'?'选择应付单':'选择应收单'" style="width:100%">
-            <el-option v-for="d in targetDocOptions" :key="d.id" :label="d.docNo + ' - ' + fmtAmount(d.amount - (d.appliedAmount || 0))" :value="d.id" />
+            <el-option v-for="d in targetDocOptions" :key="d.id" :label="d.docNo + ' - ' + fmtAmount(d.amount - (d.settledAmount || 0))" :value="d.id" />
           </el-select>
         </el-form-item>
         <el-form-item label="本次核销">
@@ -405,14 +405,14 @@ async function openOffset(row: any) {
       pageParams['vendorId'] = partyId
       const res = await pagePayable(pageParams)
       targetDocOptions.value = (res?.records || []).filter((d: any) => {
-        const remain = (d.amount || 0) - (d.appliedAmount || 0)
+        const remain = (d.amount || 0) - (d.settledAmount || 0)
         return remain > 0
       })
     } else {
       pageParams['customerId'] = partyId
       const res = await pageReceivable(pageParams)
       targetDocOptions.value = (res?.records || []).filter((d: any) => {
-        const remain = (d.amount || 0) - (d.appliedAmount || 0)
+        const remain = (d.amount || 0) - (d.settledAmount || 0)
         return remain > 0
       })
     }
@@ -492,8 +492,8 @@ function onDetail(row: any) {
     `<div><b>单据编号：</b>${row.prepayNo}</div>
      <div><b>${activeTab.value === 'vendor' ? '供应商' : '客户'}：</b>${row.vendorName || row.customerName}</div>
      <div><b>金额：</b>${fmtAmount(row.amount)}</div>
-     <div><b>已核销：</b>${fmtAmount(row.appliedAmount)}</div>
-     <div><b>未核销：</b>${fmtAmount((row.amount || 0) - (row.appliedAmount || 0))}</div>
+     <div><b>已核销：</b>${fmtAmount(row.settledAmount)}</div>
+     <div><b>未核销：</b>${fmtAmount((row.amount || 0) - (row.settledAmount || 0))}</div>
      <div><b>期间：</b>${row.period}</div>
      <div><b>日期：</b>${row.txDate}</div>
      <div><b>摘要：</b>${row.summary || '-'}</div>
