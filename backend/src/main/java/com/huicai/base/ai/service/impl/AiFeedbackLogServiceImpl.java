@@ -4,6 +4,7 @@ import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.huicai.common.context.EnterpriseContextHolder;
 import com.huicai.common.exception.BusinessException;
 import com.huicai.base.ai.entity.AiFeedbackLogEntity;
 import com.huicai.base.ai.mapper.AiFeedbackLogMapper;
@@ -28,17 +29,32 @@ public class AiFeedbackLogServiceImpl implements AiFeedbackLogService {
 
     private final AiFeedbackLogMapper mapper;
 
+    /**
+     * 取当前企业上下文；缺失即抛错（fail-closed）。
+     *
+     * <p>同 {@code ClassificationRuleServiceImpl#requireEnterpriseContext}：D-1 初版
+     * {@code if (ctx != null) eq(...)} 在无上下文时是「不过滤 = 返回全表」，与注释
+     * 声称的「读空集合」相反，属 fail-open。
+     */
+    private Long requireEnterpriseContext(String scene) {
+        Long ctx = EnterpriseContextHolder.get();
+        if (ctx == null) {
+            throw new BusinessException("无当前企业上下文，无法" + scene);
+        }
+        return ctx;
+    }
+
     @Override
-    public IPage<AiFeedbackLogEntity> page(Long tenantId, Long bankTxnId, String humanAction,
+    public IPage<AiFeedbackLogEntity> page(Long bankTxnId, String humanAction,
                                            Integer current, Integer size) {
         Page<AiFeedbackLogEntity> page = new Page<>(
                 current == null ? 1 : current,
                 size == null ? 20 : size
         );
+        // P106 批次 1a-3（D-1）：废弃客户端传 tenantId，按当前企业上下文的 enterprise_id 过滤。
+        Long ctx = requireEnterpriseContext("查询 AI 反馈日志");
         LambdaQueryWrapper<AiFeedbackLogEntity> wrapper = new LambdaQueryWrapper<>();
-        if (tenantId != null) {
-            wrapper.eq(AiFeedbackLogEntity::getTenantId, tenantId);
-        }
+        wrapper.eq(AiFeedbackLogEntity::getEnterpriseId, ctx);
         if (bankTxnId != null) {
             wrapper.eq(AiFeedbackLogEntity::getBankTxnId, bankTxnId);
         }
@@ -71,11 +87,10 @@ public class AiFeedbackLogServiceImpl implements AiFeedbackLogService {
     }
 
     @Override
-    public List<Map<String, Object>> summaryByTenant(Long tenantId) {
+    public List<Map<String, Object>> summary() {
+        Long ctx = requireEnterpriseContext("汇总 AI 反馈日志");
         LambdaQueryWrapper<AiFeedbackLogEntity> wrapper = new LambdaQueryWrapper<>();
-        if (tenantId != null) {
-            wrapper.eq(AiFeedbackLogEntity::getTenantId, tenantId);
-        }
+        wrapper.eq(AiFeedbackLogEntity::getEnterpriseId, ctx);
         List<AiFeedbackLogEntity> list = mapper.selectList(wrapper);
 
         // 按 humanAction 分组统计

@@ -26,12 +26,11 @@ public class AiFeedbackLogController {
     @Operation(summary = "反馈日志分页")
     @GetMapping
     public R<IPage<AiFeedbackLogVO>> page(
-            @RequestParam(required = false) Long tenantId,
             @RequestParam(required = false) Long bankTxnId,
             @RequestParam(required = false) String humanAction,
             @RequestParam(defaultValue = "1") Integer current,
             @RequestParam(defaultValue = "20") Integer size) {
-        return R.ok(AiFeedbackLogVO.from(service.page(tenantId, bankTxnId, humanAction, current, size)));
+        return R.ok(AiFeedbackLogVO.from(service.page(bankTxnId, humanAction, current, size)));
     }
 
     @Operation(summary = "反馈日志详情")
@@ -51,10 +50,10 @@ public class AiFeedbackLogController {
         return R.ok(AiFeedbackLogVO.from(service.create(entity)));
     }
 
-    @Operation(summary = "按租户统计")
+    @Operation(summary = "按当前企业统计")
     @GetMapping("/summary")
-    public R<List<Map<String, Object>>> summaryByTenant(@RequestParam Long tenantId) {
-        return R.ok(service.summaryByTenant(tenantId));
+    public R<List<Map<String, Object>>> summary() {
+        return R.ok(service.summary());
     }
 
     @Operation(summary = "查询某流水的所有反馈")

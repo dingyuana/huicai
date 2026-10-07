@@ -12,9 +12,12 @@ import java.util.Map;
 public interface AiFeedbackLogService {
 
     /**
-     * 反馈日志分页（支持 tenantId / bankTxnId / humanAction 过滤）
+     * 反馈日志分页（支持 bankTxnId / humanAction 过滤）。
+     *
+     * <p>P106 批次 1a-3（D-1）：已移除 {@code tenantId} 入参，改按当前上下文企业的
+     * {@code enterprise_id} 过滤；无企业上下文时抛 {@code BusinessException}（fail-closed）。
      */
-    IPage<AiFeedbackLogEntity> page(Long tenantId, Long bankTxnId, String humanAction, Integer current, Integer size);
+    IPage<AiFeedbackLogEntity> page(Long bankTxnId, String humanAction, Integer current, Integer size);
 
     /**
      * 反馈日志详情
@@ -27,9 +30,13 @@ public interface AiFeedbackLogService {
     AiFeedbackLogEntity create(AiFeedbackLogEntity entity);
 
     /**
-     * 按租户统计：每种 human_action 的次数 + 平均 ai_confidence
+     * 按当前企业统计：每种 human_action 的次数 + 平均 ai_confidence
+     *
+     * <p>P106 批次 1a-3（D-1）：已移除 {@code tenantId} 入参，改按
+     * {@code EnterpriseContextHolder.get()} 取当前上下文企业；无上下文时抛
+     * {@code BusinessException}（fail-closed）。</p>
      */
-    List<Map<String, Object>> summaryByTenant(Long tenantId);
+    List<Map<String, Object>> summary();
 
     /**
      * 查询某流水的所有反馈（按创建时间倒序，最多 10 条）

@@ -25,10 +25,9 @@ public class ClassificationRuleController {
     @Operation(summary = "规则列表分页")
     @GetMapping
     public R<IPage<ClassificationRuleVO>> page(
-            @RequestParam(required = false) Long tenantId,
             @RequestParam(defaultValue = "1") Integer current,
             @RequestParam(defaultValue = "20") Integer size) {
-        return R.ok(ClassificationRuleVO.from(service.page(tenantId, current, size)));
+        return R.ok(ClassificationRuleVO.from(service.page(current, size)));
     }
 
     @Operation(summary = "规则详情")
@@ -75,8 +74,9 @@ public class ClassificationRuleController {
 
     @Operation(summary = "初始化种子规则")
     @PostMapping("/seed")
-    public R<Integer> seed(@RequestParam Long tenantId) {
-        int count = service.seedForNewTenant(tenantId);
+    public R<Integer> seed() {
+        // P106 批次 1a-3（D-1）：不再收取 tenantId 参数；种子企业 = 当前上下文企业
+        int count = service.seedForCurrentEnterprise();
         return R.ok("已插入 " + count + " 条种子规则", count);
     }
 

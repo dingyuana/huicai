@@ -19,6 +19,7 @@ DIR-{序号}: {一句话问题描述}
 | DIR-001 | **安全加固会静默改写测试造数，且症状伪装成「隔离失效」** | 规范缺失 | REQ-2026-129 / P102 | ✅ **已闭环**（2026-10-03）：已回写 AGENTS §4.5 第 23 条，且 `check_tenant_fixture.py` 已挂进 `full-stack-test.yml` 阻断式门禁 |
 | DIR-002 | 静态检查若依赖调用方自觉遵守排除清单，其自身会成为新的假绿来源 | 流程错误 | REQ-2026-131 / P104 | ✅ **主要盲区已消除**（2026-10-03 检测器升级为 A/B 两类判定，见下）；残留盲区 3 条已在脚本 docstring 明示 |
 | DIR-003 | 慢测（L2）只在夜间 CI 跑，本地无等价入口，导致「本地全绿 ⇒ 安全」不成立 | 流程错误 | REQ-2026-131 / P104 | ✅ **已回写** AGENTS §4.5 第 24 条（2026-10-03，实测 L2 本地 5 分钟可跑完） |
+| DIR-004 | **分页 `total` 跨租户泄漏**：分页插件排在企业隔离拦截器之前，COUNT 拿不到 `enterprise_id` | 技术约束缺失 | REQ-2026-133 / P106 | 🚧 **待老丁裁定**（2026-10-07 实施 P106 D-1 时查出，已给 A/B/C 三方案；未改全局配置） |
 
 ---
 
@@ -74,3 +75,37 @@ DIR-{序号}: {一句话问题描述}
 - 根因是本地 Redis 未起（`application.yml:9-11` 指向 `localhost:6379`，容器 `huicai-redis` 处于 Exited）；而 CI 的 `l2-integration-test.yml` 有 `services.redis` ⇒ **该失败模式只在本地出现**。
 - `docker start huicai-redis` 后重跑同 3 类：**12/12 全绿**，证明与代码无关。
 - **已沉淀**：AGENTS §4.5 第 24 条。**待办仍未关闭**：CI 无法验证「本地等价」，故合并前是否强制本地 L2 仍无机制保障 —— 建议要么在提交信息标注 L2-clean，要么把 Redis 也纳入 Testcontainers/Compose 的测试前置。
+
+---
+
+## DIR-004
+
+- **类型**：技术约束缺失（MyBatis-Plus 插件注册顺序无规范）
+- **影响范围**：**所有**使用 MyBatis-Plus 分页且未在应用层显式带 `enterprise_id` 条件的接口。
+  实测（`t_subject`，上下文企业 990001 无科目、**未加任何企业条件**）：**`total=43` / `records=0`**
+  ⇒ 总条数是**别的企业**的条数。
+- **关联**：REQ-2026-133 / P106（在批次 1a-3 / D-1 的反证过程中查出，非 D-1 本身引入）
+
+**根因**：`MyBatisPlusConfig` 注册顺序为
+`Pagination → OptimisticLocker → EnterpriseDataPermission → DataPermission`。
+MyBatis-Plus 按注册顺序调用内层拦截器的 `willDoQuery`，而 `PaginationInnerInterceptor`
+会**自行拼 COUNT 并用传入的 executor 直接执行**，该路径**不再回到拦截器链**
+⇒ 排在它后面的 `EnterpriseDataPermissionInterceptor#beforeQuery` 无机会改写 COUNT。
+
+**为什么至今无人发现**：多数 Service 已在应用层自己带 `enterprise_id`，
+COUNT 与 SELECT 都带条件时总数恰好正确 ⇒ **缺陷被应用层掩盖**。
+本条正是在 D-1 反证「删掉应用层过滤会怎样」时才暴露（AGENTS §4.5 第 40 条）。
+
+**为什么不能靠 Mock 发现**：Mock 里 `mapper.selectPage` 直接返回 `Page` 对象，
+`total` 由分页拦截器在**运行时**计算，Mock 永远看不到 COUNT。
+
+**待裁定方案**（详见 [DIR-004-pagination-total-tenant-leak.md](DIR-004-pagination-total-tenant-leak.md)）：
+
+| 方案 | 做法 | 评价 |
+|---|---|---|
+| **A（推荐）** | 把企业/数据权限拦截器移到分页**之前** | 改 4 行，一次修好所有分页接口；风险是全局行为变更，需评估 `optimizeCountSql` |
+| B | 换 MP 官方 `TenantLineInnerInterceptor` | 改动大，等于重做三层防线第二层，不建议现在动 |
+| C | 先加守卫测试暴露存量，再配合 A 修复 | 只暴露不修复 |
+
+**配套沉淀**：AGENTS §4.5 第 40 条 —— 「凡用 MyBatis-Plus 分页，务必同时断言 `total` 与
+`records.size()`，只断言 records 等于没断言一半」。

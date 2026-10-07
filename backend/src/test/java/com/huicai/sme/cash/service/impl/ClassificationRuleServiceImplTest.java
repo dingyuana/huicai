@@ -2,6 +2,9 @@ package com.huicai.sme.cash.service.impl;
 
 import com.huicai.base.business.entity.ClassificationRuleEntity;
 import com.huicai.base.business.mapper.ClassificationRuleMapper;
+import com.huicai.common.context.EnterpriseContextHolder;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -17,6 +20,17 @@ class ClassificationRuleServiceImplTest {
 
     @Mock private ClassificationRuleMapper mapper;
     @InjectMocks private ClassificationRuleServiceImpl service;
+
+    @BeforeEach
+    void setUpEnterpriseContext() {
+        // P106 D-1：读路径要求企业上下文存在（fail-closed）
+        EnterpriseContextHolder.set(1L);
+    }
+
+    @AfterEach
+    void clearEnterpriseContext() {
+        EnterpriseContextHolder.clear();
+    }
 
     private ClassificationRuleEntity stubEntity() {
         ClassificationRuleEntity e = new ClassificationRuleEntity();
@@ -73,7 +87,7 @@ class ClassificationRuleServiceImplTest {
     @Test
     void page_调selectPage() {
         when(mapper.selectPage(any(), any())).thenReturn(null);
-        service.page(null, 1, 20);
+        service.page(1, 20);
         verify(mapper).selectPage(any(), any());
     }
 }

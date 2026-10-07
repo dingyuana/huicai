@@ -4,7 +4,9 @@ import com.huicai.common.test.AbstractMapperTest;
 import com.huicai.sme.arap.entity.PrepaymentEntity;
 import com.huicai.sme.arap.mapper.PrepaymentMapper;
 import com.huicai.sme.arap.service.PrepaymentService;
-import org.junit.jupiter.api.Disabled;
+import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.huicai.base.business.entity.ClassificationRuleEntity;
+import com.huicai.sme.cash.service.ClassificationRuleService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -16,6 +18,7 @@ import java.time.LocalDate;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -48,6 +51,9 @@ class AccountSetIsolationRealDBTest extends AbstractMapperTest {
 
     @Autowired
     private PrepaymentService prepaymentService;
+
+    @Autowired
+    private ClassificationRuleService classificationRuleService;
 
     @Autowired
     private PrepaymentMapper prepaymentMapper;
@@ -177,41 +183,74 @@ class AccountSetIsolationRealDBTest extends AbstractMapperTest {
     }
 
     /**
-     * P106 / 批次 1a-3 的发现登记（<b>暂以 @Disabled 挂起</b>，等 SPEC 决策后再实现）。
+     * P106 / 批次 1a-3（D-1）：分类规则分页改为按上下文企业的 enterprise_id 过滤，
+     * `tenantId` 请求参数彻底废弃。实测：企业 E 看不到企业 1 的规则，反之亦然。
      *
-     * <p><b>实测结论</b>：{@code t_classification_rule} 与 {@code t_ai_feedback_log} 的问题
-     * <b>比预付款更严重 —— 读路径也按 {@code tenant_id} 过滤</b>，共 6 个方法把
-     * {@code tenantId} 当参数（5 处用于过滤或写入）：
-     * <ul>
-     *   <li>{@code ClassificationRuleServiceImpl#page(:43)} / {@code #seedForNewTenant(:105/:139/:187)}
-     *       / {@code #create(:56, 写死 1L)}</li>
-     *   <li>{@code AiFeedbackLogServiceImpl#page(:40)} / {@code #summaryByTenant(:77)}</li>
-     * </ul>
-     * 且两个 Controller 都把它暴露成 {@code @RequestParam}（客户端可任意传值）。
-     *
-     * <p><b>为什么不是越权读</b>：RLS 的 {@code enterprise_policy} 谓词是
-     * {@code enterprise_id = current_setting('app.enterprise_id')}（真实库已核对，且 FORCE 生效），
-     * 与 {@code tenant_id = <客户端值>} 是<b>两个 AND 条件</b> ⇒ 传任意 {@code tenantId}
-     * 也读不到其它企业的行。⇒ 定性为<b>功能缺陷（过滤条件失效）</b>，不是安全漏洞。
-     *
-     * <p><b>为什么挂起而不是直接改</b>：修法必然要动 <b>客户端契约</b> ——
-     * {@code tenantId} 请求参数要么废弃、要么改语义，涉及 Controller 签名与前端联调，
-     * 属铁律 #10「三步闭环」需先在 SPEC 里决策的事项，不应在实施批次里顺手改掉。
-     *
-     * <p>恢复条件：SPEC 决策「{@code tenantId} 参数废弃（改用上下文企业）」还是
-     * 「保留参数但忽略之」，并更新本用例的期望。
+     * <p>启用条件（已满足）：V1.3 决策确认「tenantId 参数废弃（改用上下文企业）」⇒ 恢复生效，
+     * 并按 §0.5 教训（§4.4）用真实 service 回路验证，而非图案字面量。
      */
     @Test
-    @Disabled("P106 批次 1a-3 待 SPEC 决策：tenantId 请求参数的废弃与否属客户端契约变更（铁律 #10）")
-    @DisplayName("P106 1a-3（挂起）：分类规则与 AI 反馈的读过滤应按 enterprise_id 而非客户端传入的 tenant_id")
+    @DisplayName("P106 1a-3：分类规则分页按 enterprise_id 过滤，tenantId 参数废弃")
     void classificationAndAiFeedbackFiltersShouldUseEnterpriseContext() {
+        // 造两行：一行给企业 1，一行给企业 E
+        int n = jdbcTemplate.update(
+                "INSERT INTO t_classification_rule (enterprise_id, tenant_id, name, rule_type, pattern, match_field, direction, classification, priority, is_active, deleted, created_at, updated_at) " +
+                "VALUES (1, 1, ?, 'keyword_regex', 'TTT', 'description', 'in', 'bank_fee', 99, true, 0, now(), now())",
+                "9999.P106.CLS.EA");
+        assertEquals(1, n);
+        int n2 = jdbcTemplate.update(
+                "INSERT INTO t_classification_rule (enterprise_id, tenant_id, name, rule_type, pattern, match_field, direction, classification, priority, is_active, deleted, created_at, updated_at) " +
+                "VALUES (?, ?, ?, 'keyword_regex', 'TTT', 'description', 'in', 'bank_fee', 99, true, 0, now(), now())",
+                ENTERPRISE_E, ENTERPRISE_E, "9999.P106.CLS.EB");
+        assertEquals(1, n2);
+
+        // 上下文切到企业 E：service.page 只应返回 E 的该行
         useEnterprise(ENTERPRISE_E);
+        IPage<ClassificationRuleEntity> pageE = classificationRuleService.page(1, 20);
+        assertEquals(1, pageE.getRecords().size(), "企业 E 只应看到自己的 1 条规则");
+        assertEquals("9999.P106.CLS.EB", pageE.getRecords().get(0).getName());
 
-        // 期望（待 SPEC 决策后实现）：不传 tenantId 也能按当前企业查到本企业的规则
-        Integer rules = jdbcTemplate.queryForObject(
-                "SELECT count(*) FROM t_classification_rule WHERE enterprise_id = ?",
-                Integer.class, ENTERPRISE_E);
+        // 上下文切回企业 1：反过来只应返回企业 1 的该行
+        useEnterprise(1L);
+        IPage<ClassificationRuleEntity> page1 = classificationRuleService.page(1, 20);
+        assertTrue(page1.getRecords().stream().anyMatch(r -> "9999.P106.CLS.EA".equals(r.getName())),
+                "企业 1 应看不到 9999.P106.CLS.EB 的规则");
 
-        assertNotNull(rules, "应能按 enterprise_id 直接查询，客户端无需传 tenantId");
+        jdbcTemplate.update("DELETE FROM t_classification_rule WHERE name LIKE '9999.P106.CLS.%'");
+    }
+
+    /**
+     * D-1 追加：{@code match()} 原按 {@code tenant_id} 过滤，同一缺陷类的<b>读路径</b> ——
+     * 两列一旦不一致（本项目预付款已出现过该形态），会静默匹配到别的企业的规则。
+     *
+     * <p><b>为什么只能在真库测</b>：断言 {@code LambdaQueryWrapper} 落到哪个列需 MP 的
+     * {@code TableInfo} lambda 缓存，而该缓存<b>只在 Spring 上下文初始化时建立</b>，
+     * 纯 Mockito 单测里调用 {@code getCustomSqlSegment()} 直接抛
+     * {@code MybatisPlusException: can not find lambda cache}（AGENTS §4.3 第 7 条 Mock 盲区）。
+     */
+    @Test
+    @DisplayName("P106 1a-3：match() 按 enterprise_id 而非 tenant_id 过滤")
+    void matchMustNotCrossEnterpriseBoundary() {
+        // 关键：两列**故意不一致**（tenant_id=1 / enterprise_id=E），复刻预付款 1a-1 的缺陷形态。
+        // 这样两个方向都能证伪旧实现：
+        //   ctx=E   → 正确实现按 enterprise_id 命中本企业规则；旧实现按 tenant_id=1 取则取不到
+        //   ctx=1   → 正确实现按 enterprise_id 不命中；旧实现若不过滤则会把它读出来
+        jdbcTemplate.update(
+                "INSERT INTO t_classification_rule (enterprise_id, tenant_id, name, rule_type, pattern, match_field, direction, classification, priority, is_active, deleted, created_at, updated_at) "
+                        + "VALUES (?, 1, ?, 'keyword_regex', 'ZZUNIQUEPATTERNZZ', 'description', 'in', 'bank_fee', 1, true, 0, now(), now())",
+                ENTERPRISE_E, "9999.P106.MATCH.E");
+        try {
+            // 正向：这条规则属于企业 E（enterprise_id=E），ctx=E 时必须命中
+            useEnterprise(ENTERPRISE_E);
+            assertNotNull(classificationRuleService.match("含ZZUNIQUEPATTERNZZ的摘要", "in", null),
+                    "企业 E 应命中自己 enterprise_id 下的规则；若按 tenant_id=1 过滤则取不到（两列不一致时静默漏匹配）");
+
+            // 负向：企业 1 的 enterprise_id 不是 E，绝不能命中
+            useEnterprise(1L);
+            assertNull(classificationRuleService.match("含ZZUNIQUEPATTERNZZ的摘要", "in", null),
+                    "企业 1 不得命中 enterprise_id 属于企业 E 的规则（跨企业静默错分）");
+        } finally {
+            jdbcTemplate.update("DELETE FROM t_classification_rule WHERE name = '9999.P106.MATCH.E'");
+        }
     }
 }

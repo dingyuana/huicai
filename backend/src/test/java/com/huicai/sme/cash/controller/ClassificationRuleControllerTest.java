@@ -38,7 +38,7 @@ class ClassificationRuleControllerTest {
     @DisplayName("分页查询_默认参数返回200")
     void page_defaultParams_returnsOk() throws Exception {
         IPage<ClassificationRuleEntity> page = new Page<>(1, 20);
-        when(classificationRuleService.page(any(), anyInt(), anyInt())).thenReturn(page);
+        when(classificationRuleService.page(anyInt(), anyInt())).thenReturn(page);
 
         mvc.perform(get("/api/sme/cash/v1/classification-rules"))
                 .andExpect(status().isOk())
@@ -49,16 +49,15 @@ class ClassificationRuleControllerTest {
     @DisplayName("分页查询_自定义参数正确绑定")
     void page_customParams_boundCorrectly() throws Exception {
         IPage<ClassificationRuleEntity> page = new Page<>(2, 10);
-        when(classificationRuleService.page(eq(1001L), eq(2), eq(10))).thenReturn(page);
+        when(classificationRuleService.page(eq(2), eq(10))).thenReturn(page);
 
         mvc.perform(get("/api/sme/cash/v1/classification-rules")
-                        .param("tenantId", "1001")
                         .param("current", "2")
                         .param("size", "10"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(200));
 
-        verify(classificationRuleService).page(eq(1001L), eq(2), eq(10));
+        verify(classificationRuleService).page(eq(2), eq(10));
     }
 
     @Test
