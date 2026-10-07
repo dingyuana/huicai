@@ -48,7 +48,6 @@ class SharedTablesExemptionRealDBTest extends AbstractMapperTest {
         put("t_user_role", "刻意全局共享：用户-角色绑定骨架");
         put("t_sys_config", "平台级（D-2b 裁定 A）：含 accounting.start_year/month 账套级配置，按全局统一");
         put("t_audit_log", "平台级（D-2b 裁定 A）：当前无 enterprise_id，历史审计记录无需归属");
-        put("t_dept", "企业内主数据：无隔离列且 uq_dept_code 全局唯一 ⇒ 隔离排期到后续批次");
         put("t_agency", "平台元数据：代理主体，位于隔离维度之上");
         put("t_agency_user", "平台元数据：代理人员，位于隔离维度之上");
         put("t_enterprise", "平台元数据：企业主体，位于隔离维度之上（其 enterprise_id 是外键不是租户列）");
@@ -64,6 +63,10 @@ class SharedTablesExemptionRealDBTest extends AbstractMapperTest {
     private static final Map<String, String> GROUP_B_SEMANTIC_EXEMPTION = new LinkedHashMap<>() {{
         put("t_user", "enterprise_id = 归属企业（V101 可空列），非上下文企业；"
                 + "按上下文过滤会造成循环依赖 —— 决定「当前企业是谁」的成员校验本身要读它");
+        put("t_dept", "P106 批次 1b''：**已移出白名单并按企业隔离**（V171 补 enterprise_id + "
+                + "unique 按企业分段 + RLS）。仍列在此处仅因其 enterprise_id 语义与 A 类的"
+                + "「无隔离列」不同：它是真隔离列，不在 SHARED_TABLES 内 —— "
+                + "保留条目是为了记录「曾豁免、现已隔离」这一历史，防止误加回去");
         put("t_agency_enterprise", "enterprise_id = 代理↔企业授权关系的一端（V100 建表即有），"
                 + "该表是拓扑边本身，不是某企业的业务数据");
         put("t_agency_user_enterprise", "enterprise_id = 分配的客户企业ID（V112），"
@@ -94,6 +97,10 @@ class SharedTablesExemptionRealDBTest extends AbstractMapperTest {
         Set<String> registered = new LinkedHashSet<>(GROUP_A_NO_ISOLATION_COLUMN.keySet());
         registered.addAll(GROUP_B_SEMANTIC_EXEMPTION.keySet());
 
+        // t_dept 已在批次 1b'' 移出白名单，故不属于「已登记但未入白名单」的违规
+        List<String> expectedInWhitelist = new ArrayList<>(registered);
+        expectedInWhitelist.remove("t_dept");
+
         List<String> unregistered = new ArrayList<>(whitelist);
         unregistered.removeAll(registered);
         assertTrue(unregistered.isEmpty(),
@@ -101,7 +108,7 @@ class SharedTablesExemptionRealDBTest extends AbstractMapperTest {
                         + " ⇒ 白名单 = 「不过滤」，混入业务表等于静默关闭该表的第二层防线且无报错。"
                         + "请先在 SPEC §0.1 补定性，再登记到 A 或 B 类。");
 
-        List<String> notWhitelisted = new ArrayList<>(registered);
+        List<String> notWhitelisted = new ArrayList<>(expectedInWhitelist);
         notWhitelisted.removeAll(whitelist);
         assertTrue(notWhitelisted.isEmpty(),
                 "已登记为豁免但不在 SHARED_TABLES 中的表：" + notWhitelisted
@@ -178,12 +185,13 @@ class SharedTablesExemptionRealDBTest extends AbstractMapperTest {
     @Test
     @DisplayName("登记表基数：A 类 10 张 + B 类 4 张 = 白名单 14 张")
     void registryCardinalityMustMatchWhitelist() {
-        assertEquals(10, GROUP_A_NO_ISOLATION_COLUMN.size(), "A 类应为 10 张（SPEC §0.1 的三类定性）");
-        assertEquals(4, GROUP_B_SEMANTIC_EXEMPTION.size(),
-                "B 类应为 4 张（t_user + 3 张拓扑/代理关联表）");
-        assertEquals(GROUP_A_NO_ISOLATION_COLUMN.size() + GROUP_B_SEMANTIC_EXEMPTION.size(),
+        assertEquals(9, GROUP_A_NO_ISOLATION_COLUMN.size(),
+                "A 类应为 9 张（SPEC §0.1 的三类定性；t_dept 已于批次 1b'' 隔离并移出白名单）");
+        assertEquals(5, GROUP_B_SEMANTIC_EXEMPTION.size(),
+                "B 类应为 5 张（t_user + t_dept + 3 张拓扑/代理关联表）");
+        assertEquals(GROUP_A_NO_ISOLATION_COLUMN.size() + GROUP_B_SEMANTIC_EXEMPTION.size() - 1,
                 readSharedTables().size(),
-                "登记表总张数须与 SHARED_TABLES 一致");
+                "登记表张数应为 A + B - 1（B 类里的 t_dept 已在批次 1b'' 移出白名单，只保留登记条目做历史留证）");
     }
 
     private Integer countIsolationColumns(String table) {

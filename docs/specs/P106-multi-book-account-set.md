@@ -1,6 +1,6 @@
 # P106 SPEC — 多账套（企业级收口 + 账簿级立项）
 
-> **版本**：V1.9 | **最后修改**：2026-10-07 | **作者**：opencode（V1.9 为实施回写：🔴 P0 修复 `t_user` 跨企业 PII 泄漏）
+> **版本**：V2.0 | **最后修改**：2026-10-07 | **作者**：opencode（V2.0 为实施回写：`t_dept` 隔离落地 + P0 修复 `t_user` 跨企业 PII 泄漏）
 > **编号**：HUICAI-SPC-P106 | 优先级：**P1** | 状态：🚧 **实施中 —— 批次 1a（含 1a-3 / D-1）、批次 1b（D-2a 定性）、批次 2、批次 3（D-3 删列）已完成**；遗留仅 `t_dept` 隔离缺口（见 §0.1.1）与 `t_ai_feedback_log.tenant_id` 删列待决
 > **来源**：P101 商用化差距总纲 → P106「内控深度」中的「多账套」子项
 > **关联需求**：**REQ-2026-133**（⚠️ V1.0 原写 REQ-2026-134 **有误** —— 134 归 P107 存量缺陷修复包且已实施完成，P101 line 28 已明文「为它让出 134，133 保持不变」；更正记录见登记册 V1.77）| **前置**：RLS 三层已落地（PR #26/#27）、DTO 入参隔离已归零（PR #28~#30）
@@ -47,15 +47,32 @@
 | 4 | `t_user_role` | `V1`（7 列） | **刻意全局共享** | 用户-角色绑定骨架。⚠️ `t_user.enterprise_id` 是**归属企业**（非上下文），已在 §0.5 说明 |
 | 5 | `t_sys_config` | `V1` + 种子（13 列） | **平台级**（D-2b 裁定 A） | 含 `accounting.start_year`/`start_month` 两条**账套级配置**，裁定为「同一套会计制度参数」全局统一，**不加 `enterprise_id`**（零 DDL） |
 | 6 | `t_audit_log` | `V1`（13 列） | **平台级**（D-2b 裁定 A） | 当前**无 `enterprise_id` 列**，历史审计记录**无需归属**（不是「归属不了」，而是设计上就平台级），**不加列** |
-| 7 | `t_dept` | `V1`（12 列） | ⚠️ **隔离缺口，隔离排期到后续批次** | 部门是企业内主数据，且 `uq_dept_code` 为**全局唯一** ⇒ **两个企业不可能有同名部门编码**。`DeptServiceImpl` 实测**不带任何企业维度**查询全表 ⇒ 可直接复现的隔离缺口。**本批次只定性不修**（加列需迁移 + 改唯一约束 + 改 Service，属独立 DDL 批次） |
+| 7 | `t_dept` | `V1` + **`V171`** | ✅ **已按企业隔离（V2.0）** | 部门是企业内主数据。`V171` 补 `enterprise_id`、把 `uq_dept_code`（全局唯一）改为 `uq_dept_code_ent (dept_code, enterprise_id)`、开 RLS + FORCE；`t_dept` 同步移出 `SHARED_TABLES`，`DeptEntity` 补 `enterpriseId (fill=INSERT)`。守卫 `DeptTenantIsolationRealDBTest`（5 例） |
 | 8 | `t_agency` | `V100`（14 列） | **平台元数据** | 代理主体，位于隔离维度**之上** |
 | 9 | `t_agency_user` | `V112`（14 列） | **平台元数据** | 代理人员，位于隔离维度**之上** |
 | 10 | `t_enterprise` | `V100` + `V134`（18 列） | **平台元数据** | 企业主体本身。（其 `enterprise_id` 出现在 `t_agency_enterprise` 里，是**外键**不是本表的租户列） |
 
-⚠️ **`t_dept` 是本组唯一的真缺口，且是「已知未修」而非「判定无需修」**：
+⚠️ **`t_dept` 原为本组唯一的真缺口（「已知未修」而非「判定无需修」），V2.0 已修复**：
 `AssetReportServiceImpl` / `ExpenseSummaryReportServiceImpl` 的注释自认「t_dept 为共享表（维度名查用，无敏感）」——
 这个理由对「只查部门名」成立，但对 `DeptServiceImpl` 的**部门增删改查**不成立。
-⇒ 已登记为后续批次的 DDL 任务，不在本批次（零 DDL）范围内。
+⇒ 已在批次 1b' 修掉（见下），实施要点与两个踩坑：
+
+**① 必须同时改三处，缺一即半成品**
+- **DB**（`V171`）：加 `enterprise_id` + 唯一约束按企业分段 + RLS + FORCE；
+- **应用层白名单**：`t_dept` 移出 `SHARED_TABLES`（否则第二层继续不过滤，实测部门树互相可见）；
+- **Entity**：`DeptEntity` 补 `enterpriseId` 且标 `@TableField(fill = FieldFill.INSERT)`。
+
+**② 🔴 漏掉 Entity 那一处 ⇒ 症状极具误导性（已实测）**
+`DeptEntity` 不继承 `BaseEntity`。只在 DB 加列而 Entity 不声明，MyBatis-Plus **不把该列纳入 INSERT**
+⇒ 新建部门落 `enterprise_id = DEFAULT 1` ⇒ 改完唯一约束后，
+两个企业建同名部门**仍然撞键**，报错是 `DuplicateKeyException` ——
+看起来像「约束没改成功」，真实原因是**写入侧根本没带企业号**（AGENTS §4.5 第 34 条同型）。
+而本类的 fill 回调**本来就会触发**（`createdAt` 已是 fill 字段），
+`MyMetaObjectHandler.insertFill` 按字段名 `enterpriseId` 无条件覆盖为上下文企业 ⇒ 只加字段即可。
+
+**③ 报表侧无需改动**：`AssetReportServiceImpl:301`、`ExpenseSummaryReportServiceImpl:259`、
+`LedgerServiceImpl:429` 都只用 `t_dept` **查部门名**（`selectList(null)` / `selectBatchIds`），
+按企业过滤正是期望语义（报告只应出现本企业的部门名）。
 
 #### 0.1.2 ⚠️ V1.8 修正：白名单里另有 4 张表**不属于**「两列都没有」这一类（原 §0.1 漏登）
 
@@ -63,8 +80,11 @@
 比 §0.1 登记的 10 张**多 4 张**，而这 4 张**都有 `enterprise_id`** ⇒ 原 §0.1 的
 「10 张纯平台全局表」分类**不完整**，与运行时事实已分叉。补登为 **B 类**：
 
+⚠️ **V2.0 更新**：`t_dept` 已于批次 1b' **移出白名单**（V171 补了隔离列并开 RLS），白名单由 **14 张减为 13 张**；下表保留 `t_dept` 条目仅作「曾豁免、现已隔离」的历史留证。
+
 | 表 | `enterprise_id` 来源 | 为何仍须豁免 |
 |---|---|---|
+| `t_dept` | **`V171`**（本批次新增） | ⚠️ **已不在白名单内** —— 保留此行仅作「曾豁免、现已隔离」的历史留证。其 `enterprise_id` 是真隔离列，语义与 A 类（无隔离列）不同，故归 B 类登记 |
 | `t_user` | `V101`（**可空**列） | 该列语义是**归属企业**，不是当前上下文企业。且**存在循环依赖**：登录链路（`AuthController` → `UserDetailsServiceImpl` → `selectByUsername`）必须在**尚无企业上下文**时按用户名查人；若注入 `enterprise_id`，登录时 ctx 为 null ⇒ **所有人无法登录**。⚠️ **V1.9 修正**：此豁免**只对登录/成员校验/代理平台三条路径成立**，原写法把整张表放行，导致用户管理端点跨企业泄漏 PII（见 §0.1.4） |
 | `t_agency_enterprise` | `V100` 建表即有（`COMMENT` 实证） | 该表是代理↔企业的**授权关系本身**（拓扑边），不是某企业的业务数据 |
 | `t_agency_user_enterprise` | `V112` 建表即有（注释「分配的客户企业ID」） | 同上，授权关系本身，语义为「被服务对象」 |
@@ -567,6 +587,7 @@ Scenario: SUPER_ADMIN 切换会设置企业上下文（**修正 V1.1 的错误�
 
 | 版本 | 日期 | 变更人 | 变更内容 |
 |---|---|---|---|
+| **V2.0** | 2026-10-07 | opencode | **批次 1b'：`t_dept` 隔离落地；附 🔴 P0 `t_user` 泄漏修复**。**①三处同改，缺一即半成品** —— DB（`V171`：加 `enterprise_id` + `uq_dept_code` 改按企业分段 + RLS + FORCE）、应用层（`t_dept` 移出 `SHARED_TABLES`）、Entity（`DeptEntity` 补 `enterpriseId (fill=INSERT)`）。**②🔴 漏掉 Entity 那一处的症状极具误导性（实测）** —— `DeptEntity` 不继承 `BaseEntity`，只在 DB 加列则 MP 不纳入 INSERT ⇒ 新部门落 `DEFAULT 1` ⇒ **改完唯一约束后两个企业建同名部门仍撞键**，报错是 `DuplicateKeyException`，看着像「约束没改成功」，真实原因是**写入侧根本没带企业号**（§4.5 第 34 条同型：Entity 不继承 BaseEntity ⇒ insertFill 不触发）。本类 fill 回调本就会触发（`createdAt` 已是 fill 字段），`insertFill` 按字段名无条件覆盖为上下文企业 ⇒ 只加字段即可。**③D-2a 守卫如设计般报警** —— 加了 `enterprise_id` 后 A 类断言即转红；按其设计意图把 `t_dept` **重分类 A→B** 并把基数从 10+4 改为 9+5（白名单 14→13）。**④守卫 5 例** —— ①两企业可各建同名部门（核心价值）②同企业内仍唯一（防过度修复）③部门树不跨企业 ④**非超级探针下 RLS 真的生效**（L2 连接是超级用户会绕过 RLS，应用层断言无法证明第三层）⑤守卫前提 rolsuper=t。**⑤反证 4 处逐条转红**：放回白名单 / 去掉 Entity 字段 / 唯一约束改回全局 / RLS 谓词改 `USING true`；其中后两处**首版无效**（注入破坏了 Java 结构导致编译失败），改为「注入放方法首部 + 利用 clean 重建容器免恢复」后拿到真红。**⑥开发库滞后被工具如实报出** —— `check-entity-schema.mjs` 报「t_dept 无 enterprise_id 列」，实测开发库停在 **V166**、落后 3 个版本，且 `t_dept` 存量 **0 行**（DEFAULT 1 误归属风险不存在）；按 §4.5 第 23 条先确认版本再下结论，重启应用把开发库推到 **V171** 后脚本 ✅ 通过。**⑦报表侧零改动** —— 三处只用 `t_dept` 查名，按企业过滤正是期望语义。**验证**：L1 `1665/0/0/5`、L2 `2123/0/0/5`（+5 真库；`RedisConnectionFailure` 计数 0，`BUILD SUCCESS`）、前端 265 全绿、三静态门禁全过、既有 `DeptMapperConstraintsRealDBTest` 全绿（同企业内仍撞唯一键，验证约束分段未做成过度修复）。 |
 | **V1.9** | 2026-10-07 | opencode | **🔴 P0 修复：`t_user` 用户管理端点跨企业泄漏 PII**。**①缺陷实测坐实** —— `t_user` **三层防线全空**：应用层 `UserServiceImpl` 7 个方法全无企业维度；第二层因 `t_user` 在 `SHARED_TABLES` 内而不注入；DB 层 `relrowsecurity=false`/`policies=0`，非超级探针可见两家数据。实测 `ctx=990007` 的 `pageUser` 返回了企业 1 的用户，`getById`/`update`/`delete`/`resetPassword` 可**按猜测 id 读改删**别家企业用户。**②根因是我自己的豁免理由过宽** —— §0.1.2 写「成员校验要读它，存在循环依赖」，那只解释了**登录路径**，却把整张表放行；D-2a 的守卫在写 B 类登记时才发现。⚠️ **判据：给某张表开豁免时，必须逐路径列出「哪些路径需要豁免」，「整表豁免 + 只解释一条路径」必然漏**。**③不能简单移出白名单** —— 登录须在无上下文时按用户名查人，注入会让 ctx=null 谓词恒不成立 ⇒ 全员无法登录；代理端亦需跨客户企业读本代理用户。⇒ 豁免保留，用户管理路径**自己补隔离**。**④实施 9 处** —— `pageUser` 加 `enterprise_id` 条件 + 无上下文 fail-closed；`getById`/`update`/`updateStatus`/`resetPassword`/`assignRoles`/`delete` 先校验归属、越权抛异常；`create` 显式落当前企业。⚠️ **`create` 那处是连带发现**：`UserSaveDTO` 刻意不含 `enterpriseId`，且 `UserEntity` 不继承 `BaseEntity` ⇒ `insertFill` 不触发 ⇒ 原实现新建用户 `enterprise_id` 为 **NULL**，既是不属于任何企业的游离数据，也会在列表按企业过滤后**永远不可见**（与预付款 1a-1 同型的静默错位）。**⑤守卫 6 例全部走真实 Service 回路**（裸调 mapper 会让用例通过而端点仍泄漏），含「越权写被拒后数据保持原样」与「本企业仍可读写」两条双向断言。**⑥反证 4 处逐条转红**；⚠️ 反证 ①首版**无效** —— 删行后留下悬空语句，编译失败而非红灯，修正为整段替换后才拿到真红。**判据：编译失败不算反证成功**（§4.5 第 41 条同型）。**验证**：L1 `1665/0/0/5`（clean 口径 49.15/41.57/67.88，阈值 49/41/67，`All coverage checks have been met`，`Skipping JaCoCo execution` 计数 0）；L2 `2118/0/0/5`（+6 真库 +2 单测；`RedisConnectionFailure` 计数 0，`BUILD SUCCESS`）—— **登录链路与代理端流程零回归**；前端 265 全绿、三静态门禁全过。 |
 | **V1.8** | 2026-10-07 | opencode | **批次 1b（D-2a）实施回写：零 DDL 定性收口 + 守卫查出原 SPEC 一处漏登**。**①D-2a 是零 DDL** —— 不改列、不改 SQL，只把「哪些表刻意不做企业隔离」写成可查结论。**②逐表实测建表与后续 ALTER** —— 10 张表**从未有过** `enterprise_id`/`tenant_id`，`relrowsecurity` 全为 false；三类定性（权限骨架 4 / 平台级 2 / 平台元数据 3）+ `t_dept` 单列为真缺口。**③`t_dept` 明确为「已知未修」而非「判定无需修」** —— 其隔离理由（`uq_dept_code` 全局唯一 ⇒ 两企业不可能有同名部门编码 + `DeptServiceImpl` 实测不带企业维度查全表）成立；而报表侧注释自认的「维度名查用，无敏感」只对查名成立、对增删改不成立 ⇒ 排期到后续 DDL 批次。**④🔴 守卫反查查出原 §0.1 漏登 4 张表** —— `SHARED_TABLES` 实为 **14 张**，多出的 4 张（`t_user`/`t_agency_enterprise`/`t_agency_user_enterprise`/`t_service_progress`）**都有 `enterprise_id`**。⇒ 「10 张纯平台全局表」这个分类**不完整**，已与运行时事实分叉；补登为 **B 类（语义豁免）**。⚠️ **两类理由根本不同**：A 类是「无隔离列，注入必然 SQL 报错」，B 类是「有隔离列但语义非上下文企业，注入会破坏设计语义」——混为一谈会写出「白名单 = 无隔离列的表」这类**错误不变量**，而它恰好能靠「只看其中 10 张」通过自检。**⑤守卫 `SharedTablesExemptionRealDBTest`（5 例）** —— 断言白名单 == A ∪ B（**两个方向都锁**）、A 类无隔离列、B 类**必须**有 `enterprise_id`（反向对照）、A 类无 RLS、基数 10+4=14。**为什么「零 DDL 的文档收口」也需要守卫** —— 文档性结论最容易的失效形态是**与代码分叉**；白名单是「放行不过滤」的名单，**多一张业务表 = 静默关闭该表第二层防线且无任何报错**。**⑥反证 4 类全部转红** —— ①白名单多一张 ②移除一张 A 类表 ③登记表漏登一张 ④给 A 类表加隔离列。⚠️ **反证 ②首版无效** —— 注入脚本的匹配串与真实格式不符，`assert` 失败却未中止脚本，于是跑的是未注入的绿；修正匹配串后立即转红。**判据：反证脚本自身也会失败，必须确认「注入确实发生」再采信它给出的绿**（与 §4.5 第 41 条同型）。**验证**：L1 `1663/0/0/5`、L2 `2110/0/0/5`（+5 即本守卫；`RedisConnectionFailure` 计数 0，`BUILD SUCCESS`）、前端 `vue-tsc` exit 0 + vitest `26 files / 265 tests` 全绿、三个静态门禁全过。**遗留**：`t_dept` 隔离缺口（需 DDL 批次）、`t_ai_feedback_log.tenant_id` 删列待决。**V1.9 附：P0 `t_user` 泄漏已修**（L2 `2118/0/0/5`）。 |
 | **V1.7** | 2026-10-07 | opencode | **批次 3（D-3）实施回写：删列落地 + 一处夹具诚实降级 + 一处迁移顺序教训**。**①范围严格按裁定** —— 只删 `t_classification_rule.tenant_id` 列与 `idx_classification_rule_tenant` 索引；**`t_ai_feedback_log.tenant_id` 刻意未删**（同属 §0.2 双列表但不在 D-3 裁定内，按铁律 #7 三方对照 + §7.7 不得顺手扩大 DDL 范围），已登记为遗留待决策。**②TDD 先行** —— 新增 `AccountSetIsolationRealDBTest#tenantIdColumnAndIndexMustBeDropped` 先跑出 `expected: <0> but was: <1>`（列仍在）确认 RED，再写 V170 转绿。**③Entity 字段必须同步删** —— 只删 DB 列而留着 `ClassificationRuleEntity.tenantId`，MyBatis-Plus 会把该字段纳入 SELECT/INSERT ⇒ 真库直接报 `column "tenant_id" does not exist`（实测 2 条 ERROR）；同时清理 `ClassificationRuleServiceImpl#create` 的 `setTenantId` 与 `createSeed` 的赋值，两个测试类的 `getTenantId/setTenantId` 断言改为 `enterprise_id`。**④迁移内「留证型查询」必须在 DDL 之前（实测踩坑）** —— V170 首版把「统计两列不一致行数」的 `DO $$` 块放在 `DROP COLUMN` **之后**，Flyway 直接失败 `column "tenant_id" does not exist`。⇒ DDL 的执行顺序对留证查询是**硬约束**（不是风格问题），已调整为先留证再删。**⑤两处 D-1 夹具必须重写，且诚实记录证伪能力下降** —— `matchMustNotCrossEnterpriseBoundary` 首版靠「两列故意不一致」证伪旧实现，列删后该形态在库内不再可能 ⇒ 夹具改为只写 `enterprise_id`，**证伪能力从「能证伪按 tenant_id 过滤」降为「只能证伪不过滤/按错企业号」**；该缺口由 D-1 的单测断言（SQL 片段含 `enterprise_id` 且不含 `tenant_id`）承担，且列已删、MP 若仍引用必抛 SQL 错 ⇒ 整体覆盖不降级。已在用例 javadoc 写明。**⑥三类反证全部可证伪** —— ①把 `tenantId` 字段加回 Entity ⇒ 2 条 ERROR（`column does not exist`）；②把列加回库 ⇒ 守卫转红；③把 `enterprise_id` 索引删掉 ⇒ 反向对照转红。⚠️ **反证 2 首版自身无效** —— 注入的 `ALTER TABLE` 被放在断言**之后**，守卫恒绿；改为「先加列再断言」后立即转红。**判据：反证脚本自己也可能造假，必须确认「注入点在断言之前」。****验证**：L1 `1663/0/0/5`（clean 口径 49.14/41.56/67.87，阈值 49/41/67，`All coverage checks have been met`，`Skipping JaCoCo execution` 计数 0）；L2 `2105/0/0/5`（+1 即 D-3 守卫；`RedisConnectionFailure` 计数 0，`BUILD SUCCESS`）；前端 `vue-tsc` exit 0 + vitest `26 files / 265 tests` 全绿；`check_tenant_fixture.py` / `check_entity_status_massassignment.py` exit 0；`check-entity-schema.mjs` ✅（该脚本已能双向校验，删列后 Entity-DB 仍一致）。**遗留**：`t_ai_feedback_log.tenant_id` 删列待决策、批次 1b（D-2a 文档）未启动。 |

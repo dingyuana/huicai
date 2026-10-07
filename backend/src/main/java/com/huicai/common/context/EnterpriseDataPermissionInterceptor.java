@@ -43,7 +43,10 @@ public class EnterpriseDataPermissionInterceptor implements InnerInterceptor {
         "t_agency", "t_enterprise", "t_agency_enterprise",
         "t_agency_user", "t_agency_user_enterprise",
         "t_service_progress",
-        "t_sys_config", "t_audit_log", "t_dept"
+        "t_sys_config", "t_audit_log"
+        // P106 批次 1b'：t_dept 已移出本白名单 —— V171 补了 enterprise_id 并开了 RLS。
+        // 此前它在此处的理由是「无隔离列，注入必报错」，前提已随 V171 失效；
+        // 留在白名单会让应用层继续不过滤，跨企业可见（实测部门树互相可见）。
     );
 
     @Override
