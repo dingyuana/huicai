@@ -17,8 +17,8 @@ import java.time.LocalDateTime;
 @TableName("t_ai_feedback_log")
 public class AiFeedbackLogEntity extends BaseEntity {
 
-    /** 租户 ID */
-    private Long tenantId;
+    // P106 D-3 补做：原 tenantId 字段已删除 —— 对应 DB 列由 V172 迁移 DROP。
+    // 若保留该字段，MyBatis-Plus 会把它纳入 SELECT/INSERT，真库报 column "tenant_id" does not exist。
 
     /** 银行流水 ID（关联 t_bank_statement） */
     private Long bankTxnId;

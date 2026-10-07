@@ -51,7 +51,6 @@ class AiFeedbackLogServiceImplTest {
     private AiFeedbackLogEntity stubEntity() {
         AiFeedbackLogEntity e = new AiFeedbackLogEntity();
         e.setId(1L);
-        e.setTenantId(1L);
         e.setBankTxnId(1L);
         e.setAiSuggestedAction("CLASSIFY");
         e.setAiConfidence(85);

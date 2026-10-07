@@ -301,4 +301,25 @@ class AccountSetIsolationRealDBTest extends AbstractMapperTest {
         assertEquals(1, entIdx,
                 "enterprise_id 索引必须保留 —— D-3 只删旧列索引，不得误删替代索引");
     }
+
+    /**
+     * D-3 补做：{@code t_ai_feedback_log.tenant_id} 列必须已删除。
+     *
+     * <p><b>为什么这一张也要守</b>：它同属 §0.2 双列并存表，D-3 裁定只点名了
+     * {@code t_classification_rule} —— 该列「暂存」了 11 个批次，期间的任何
+     * 读写路径复活都会把「双列并存」缺陷带回这张表。其无读写路径、无索引，
+     * 删除零风险，却能堵住这条复活路径（与我自己在 SPEC 里留下的「刻意未删」
+     * 的未决债一致，见 V172 的实施说明）。
+     */
+    @Test
+    @DisplayName("D-3 补做：ai_feedback_log.tenant_id 列必须已删除")
+    void aiFeedbackLogTenantIdColumnMustBeDropped() {
+        Integer colCount = jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM information_schema.columns "
+                        + "WHERE table_name = 't_ai_feedback_log' AND column_name = 'tenant_id'",
+                Integer.class);
+        assertEquals(0, colCount,
+                "D-3 补做已删除 t_ai_feedback_log.tenant_id，列若重新出现则双列并存缺陷静默复活"
+                        + "（当前 " + colCount + " 列）");
+    }
 }
