@@ -1,5 +1,7 @@
 DIR_TITLE: 分页插件排序导致跨租户 total 泄漏（COUNT 未注入 enterprise_id）
 
+> **状态**：✅ **已闭环（2026-10-07，方案 A 实施完成）** —— 老丁裁定采方案 A，`MyBatisPlusConfig` 拦截器顺序已调整为「企业/部门权限 → 分页 → 乐观锁」，新增 `PaginationTotalTenantIsolationRealDBTest`（2 例）钉死，反证「还原顺序 ⇒ 2 条转红」已实测。
+
 ## 一句话结论
 
 `MyBatisPlusConfig` 把 `PaginationInnerInterceptor` 注册在
@@ -55,11 +57,41 @@ EnterpriseDataPermission → DataPermission → Pagination → OptimisticLocker
 - 优点：改动 4 行，一次性修好**所有**分页接口。
 - 风险：属**全局行为变更**，需评估是否影响既有查询与优化器换算（`optimizeCountSql`）。
 
-**方案 B：MP 官方租户插件** —— 用 `TenantLineInnerInterceptor` 替换自研拦截器，
-与分页插件天然兼容（官方推荐顺序）。改动大，等价于重做三层防线第二层，不建议现在动。
+### ✅ 方案 A 实施记录（2026-10-07）
 
-**方案 C：断言式封杀** —— 先加一条守卫测试锁住「total == 本企业行数」，
-把存量接口逐个暴露，再配合 A 一次性修复。仅靠 C 无法修复，只暴露不修复。
+**机理已用反编译确认**（MP 3.5.7 `mybatis-plus-extension`）：`MybatisPlusInterceptor.intercept`
+按注册顺序对每个拦截器依次调用 `willDoQuery` → `beforeQuery`；而
+`PaginationInnerInterceptor.willDoQuery` 会**自行拼 COUNT 并直接用传入的 executor 执行**，
+该路径**不再回到拦截器链**。故「分页排在条件注入之前」⇒ COUNT 生成时
+`boundSql` 尚未被注入 `enterprise_id`。
+
+**改动**：`MyBatisPlusConfig#mybatisPlusInterceptor` 顺序改为
+企业权限 → 部门权限 → 分页 → 乐观锁（乐观锁只作用于 UPDATE，置后不影响）。
+
+**守卫**：`PaginationTotalTenantIsolationRealDBTest`（2 例）——
+- `totalMustNotLeakWhenCurrentEnterpriseHasNoRows`：上下文企业 990002 无科目 ⇒
+  `total` 与 `records` 必须同时为 0。**修复前实测 `total=43 / records=0`**。
+- `totalMustCountOnlyCurrentEnterpriseRows`：企业 1 造 2 行 + 企业 990003 造 3 行，
+  切到 990003 ⇒ `total` 与 `records` 必须同时为 3。**修复前实测 `total=5 / records=3`**。
+- ⚠️ **守卫刻意不加任何应用层企业条件、直接调 mapper** ——
+  否则缺陷会被应用层条件掩盖，守卫就退化为「对本次改动不敏感」的假绿（§4.5 第 40 条）。
+
+**反证**（`mvn clean test`，排除增量编译未重编这一假来源）：
+还原旧顺序 ⇒ **2 条同时转红**，报错信息正是 `total 跨租户泄漏：…total 却为 43/5`；
+恢复修复后顺序 ⇒ 2/2 绿。
+
+**全量回归**：L1 `1663/0/0/5`（clean 口径 49.14/41.55/67.88，阈值 49/41/67，
+`All coverage checks have been met`，`Skipping JaCoCo execution` 计数 0）；
+L2 `2104/0/0/5`（+2 即本守卫；`RedisConnectionFailure` 计数 0，`BUILD SUCCESS`）；
+前端 `vue-tsc` exit 0 + vitest 26 files / 265 tests 全绿；
+`check_tenant_fixture.py` / `check_entity_status_massassignment.py` exit 0；
+`check-entity-schema.mjs` ✅。**无既有测试因重排序而转红。**
+
+**方案 B：MP 官方租户插件** —— 用 `TenantLineInnerInterceptor` 替换自研拦截器。
+改动大，等价于重做三层防线第二层，**本次不采纳**。
+
+**方案 C：断言式封杀** —— 仅加守卫测试只暴露不修复。**本次已作为 A 的配套一并落地**
+（`PaginationTotalTenantIsolationRealDBTest`），使其成为长期回归锁。
 
 ## 关联
 

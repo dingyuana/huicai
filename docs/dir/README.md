@@ -19,7 +19,7 @@ DIR-{序号}: {一句话问题描述}
 | DIR-001 | **安全加固会静默改写测试造数，且症状伪装成「隔离失效」** | 规范缺失 | REQ-2026-129 / P102 | ✅ **已闭环**（2026-10-03）：已回写 AGENTS §4.5 第 23 条，且 `check_tenant_fixture.py` 已挂进 `full-stack-test.yml` 阻断式门禁 |
 | DIR-002 | 静态检查若依赖调用方自觉遵守排除清单，其自身会成为新的假绿来源 | 流程错误 | REQ-2026-131 / P104 | ✅ **主要盲区已消除**（2026-10-03 检测器升级为 A/B 两类判定，见下）；残留盲区 3 条已在脚本 docstring 明示 |
 | DIR-003 | 慢测（L2）只在夜间 CI 跑，本地无等价入口，导致「本地全绿 ⇒ 安全」不成立 | 流程错误 | REQ-2026-131 / P104 | ✅ **已回写** AGENTS §4.5 第 24 条（2026-10-03，实测 L2 本地 5 分钟可跑完） |
-| DIR-004 | **分页 `total` 跨租户泄漏**：分页插件排在企业隔离拦截器之前，COUNT 拿不到 `enterprise_id` | 技术约束缺失 | REQ-2026-133 / P106 | 🚧 **待老丁裁定**（2026-10-07 实施 P106 D-1 时查出，已给 A/B/C 三方案；未改全局配置） |
+| DIR-004 | **分页 `total` 跨租户泄漏**：分页插件排在企业隔离拦截器之前，COUNT 拿不到 `enterprise_id` | 技术约束缺失 | REQ-2026-133 / P106 | ✅ **已闭环**（2026-10-07 采方案 A：重排 `MyBatisPlusConfig` 拦截器顺序；`PaginationTotalTenantIsolationRealDBTest` 2 例钉死，反证还原顺序即 2 条转红） |
 
 ---
 
@@ -85,6 +85,7 @@ DIR-{序号}: {一句话问题描述}
   实测（`t_subject`，上下文企业 990001 无科目、**未加任何企业条件**）：**`total=43` / `records=0`**
   ⇒ 总条数是**别的企业**的条数。
 - **关联**：REQ-2026-133 / P106（在批次 1a-3 / D-1 的反证过程中查出，非 D-1 本身引入）
+- **状态**：✅ 已闭环（2026-10-07，方案 A）
 
 **根因**：`MyBatisPlusConfig` 注册顺序为
 `Pagination → OptimisticLocker → EnterpriseDataPermission → DataPermission`。
@@ -101,11 +102,15 @@ COUNT 与 SELECT 都带条件时总数恰好正确 ⇒ **缺陷被应用层掩�
 
 **待裁定方案**（详见 [DIR-004-pagination-total-tenant-leak.md](DIR-004-pagination-total-tenant-leak.md)）：
 
-| 方案 | 做法 | 评价 |
+| 方案 | 做法 | 结论 |
 |---|---|---|
-| **A（推荐）** | 把企业/数据权限拦截器移到分页**之前** | 改 4 行，一次修好所有分页接口；风险是全局行为变更，需评估 `optimizeCountSql` |
-| B | 换 MP 官方 `TenantLineInnerInterceptor` | 改动大，等于重做三层防线第二层，不建议现在动 |
-| C | 先加守卫测试暴露存量，再配合 A 修复 | 只暴露不修复 |
+| **A** | 把企业/数据权限拦截器移到分页**之前** | ✅ **已采纳并实施**（老丁 2026-10-07）。改 4 行，一次修好所有分页接口 |
+| B | 换 MP 官方 `TenantLineInnerInterceptor` | 不采纳 —— 等于重做三层防线第二层 |
+| C | 加守卫测试暴露存量 | ✅ **作为 A 的配套落地**（`PaginationTotalTenantIsolationRealDBTest`） |
+
+**实施结果**：顺序改为 `EnterpriseDataPermission → DataPermission → Pagination → OptimisticLocker`。
+机理经 MP 3.5.7 反编译确认（分页插件在 `willDoQuery` 里自行执行 COUNT，该路径不回拦截器链）。
+反证「还原顺序 ⇒ 2 条转红」已实测；全量 L1 `1663/0/0/5`、L2 `2104/0/0/5`、前端 265 全绿，无既有测试转红。
 
 **配套沉淀**：AGENTS §4.5 第 40 条 —— 「凡用 MyBatis-Plus 分页，务必同时断言 `total` 与
 `records.size()`，只断言 records 等于没断言一半」。
