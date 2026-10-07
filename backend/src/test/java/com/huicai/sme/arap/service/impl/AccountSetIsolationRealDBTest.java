@@ -192,16 +192,17 @@ class AccountSetIsolationRealDBTest extends AbstractMapperTest {
     @Test
     @DisplayName("P106 1a-3：分类规则分页按 enterprise_id 过滤，tenantId 参数废弃")
     void classificationAndAiFeedbackFiltersShouldUseEnterpriseContext() {
+        // P106 D-3：t_classification_rule.tenant_id 已删除，夹具只写 enterprise_id
         // 造两行：一行给企业 1，一行给企业 E
         int n = jdbcTemplate.update(
-                "INSERT INTO t_classification_rule (enterprise_id, tenant_id, name, rule_type, pattern, match_field, direction, classification, priority, is_active, deleted, created_at, updated_at) " +
-                "VALUES (1, 1, ?, 'keyword_regex', 'TTT', 'description', 'in', 'bank_fee', 99, true, 0, now(), now())",
+                "INSERT INTO t_classification_rule (enterprise_id, name, rule_type, pattern, match_field, direction, classification, priority, is_active, deleted, created_at, updated_at) " +
+                "VALUES (1, ?, 'keyword_regex', 'TTT', 'description', 'in', 'bank_fee', 99, true, 0, now(), now())",
                 "9999.P106.CLS.EA");
         assertEquals(1, n);
         int n2 = jdbcTemplate.update(
-                "INSERT INTO t_classification_rule (enterprise_id, tenant_id, name, rule_type, pattern, match_field, direction, classification, priority, is_active, deleted, created_at, updated_at) " +
-                "VALUES (?, ?, ?, 'keyword_regex', 'TTT', 'description', 'in', 'bank_fee', 99, true, 0, now(), now())",
-                ENTERPRISE_E, ENTERPRISE_E, "9999.P106.CLS.EB");
+                "INSERT INTO t_classification_rule (enterprise_id, name, rule_type, pattern, match_field, direction, classification, priority, is_active, deleted, created_at, updated_at) " +
+                "VALUES (?, ?, 'keyword_regex', 'TTT', 'description', 'in', 'bank_fee', 99, true, 0, now(), now())",
+                ENTERPRISE_E, "9999.P106.CLS.EB");
         assertEquals(1, n2);
 
         // 上下文切到企业 E：service.page 只应返回 E 的该行
@@ -219,38 +220,85 @@ class AccountSetIsolationRealDBTest extends AbstractMapperTest {
         jdbcTemplate.update("DELETE FROM t_classification_rule WHERE name LIKE '9999.P106.CLS.%'");
     }
 
-    /**
+/**
      * D-1 追加：{@code match()} 原按 {@code tenant_id} 过滤，同一缺陷类的<b>读路径</b> ——
      * 两列一旦不一致（本项目预付款已出现过该形态），会静默匹配到别的企业的规则。
      *
      * <p><b>为什么只能在真库测</b>：断言 {@code LambdaQueryWrapper} 落到哪个列需 MP 的
-     * {@code TableInfo} lambda 缓存，而该缓存<b>只在 Spring 上下文初始化时建立</b>，
+     * {@code TableInfo} lambda 缓存，而该缓存<b>只在 Spring 上下文启动时建立</b>，
      * 纯 Mockito 单测里调用 {@code getCustomSqlSegment()} 直接抛
      * {@code MybatisPlusException: can not find lambda cache}（AGENTS §4.3 第 7 条 Mock 盲区）。
+     *
+     * <p><b>⚠️ 夹具在 D-3 后改写（诚实记录）</b>：本用例首版<b>刻意造两列不一致</b>
+     * （{@code tenant_id=1 / enterprise_id=E}）来证伪旧实现。D-3 删除 {@code tenant_id} 列后
+     * 该形态<b>在库内不再可能</b> ⇒ 夹具改为只写 {@code enterprise_id}。
+     * ⇒ 证伪能力随之下降：现在只能证伪「match 不过滤 / 按别的企业号过滤」，
+     * <b>不能再证伪「按 tenant_id 过滤」</b> —— 但后者已由 D-1 的
+     * 单测断言（SQL 片段含 {@code enterprise_id} 且不含 {@code tenant_id}）承担，
+     * 且列已删除，MP 若仍引用该列会直接抛 SQL 错。故整体覆盖不降级。
      */
     @Test
-    @DisplayName("P106 1a-3：match() 按 enterprise_id 而非 tenant_id 过滤")
+    @DisplayName("P106 1a-3：match() 按 enterprise_id 过滤，跨企业不命中")
     void matchMustNotCrossEnterpriseBoundary() {
-        // 关键：两列**故意不一致**（tenant_id=1 / enterprise_id=E），复刻预付款 1a-1 的缺陷形态。
-        // 这样两个方向都能证伪旧实现：
-        //   ctx=E   → 正确实现按 enterprise_id 命中本企业规则；旧实现按 tenant_id=1 取则取不到
-        //   ctx=1   → 正确实现按 enterprise_id 不命中；旧实现若不过滤则会把它读出来
+        // D-3 后 tenant_id 列已删，夹具只写 enterprise_id
         jdbcTemplate.update(
-                "INSERT INTO t_classification_rule (enterprise_id, tenant_id, name, rule_type, pattern, match_field, direction, classification, priority, is_active, deleted, created_at, updated_at) "
-                        + "VALUES (?, 1, ?, 'keyword_regex', 'ZZUNIQUEPATTERNZZ', 'description', 'in', 'bank_fee', 1, true, 0, now(), now())",
+                "INSERT INTO t_classification_rule (enterprise_id, name, rule_type, pattern, match_field, direction, classification, priority, is_active, deleted, created_at, updated_at) " +
+                "VALUES (?, ?, 'keyword_regex', 'ZZUNIQUEPATTERNZZ', 'description', 'in', 'bank_fee', 1, true, 0, now(), now())",
                 ENTERPRISE_E, "9999.P106.MATCH.E");
         try {
             // 正向：这条规则属于企业 E（enterprise_id=E），ctx=E 时必须命中
             useEnterprise(ENTERPRISE_E);
             assertNotNull(classificationRuleService.match("含ZZUNIQUEPATTERNZZ的摘要", "in", null),
-                    "企业 E 应命中自己 enterprise_id 下的规则；若按 tenant_id=1 过滤则取不到（两列不一致时静默漏匹配）");
+                    "企业 E 应命中自己 enterprise_id 下的规则");
 
-            // 负向：企业 1 的 enterprise_id 不是 E，绝不能命中
+            // 负向：企业 1 的 enterprise_id 不是 E，绝不能命中（否则 match 会跨企业静默错分）
             useEnterprise(1L);
             assertNull(classificationRuleService.match("含ZZUNIQUEPATTERNZZ的摘要", "in", null),
                     "企业 1 不得命中 enterprise_id 属于企业 E 的规则（跨企业静默错分）");
         } finally {
             jdbcTemplate.update("DELETE FROM t_classification_rule WHERE name = '9999.P106.MATCH.E'");
         }
+    }
+
+    /**
+     * P106 D-3 守卫：{@code t_classification_rule.tenant_id} 列与
+     * {@code idx_classification_rule_tenant} 索引<b>必须已不存在</b>。
+     *
+     * <p><b>为什么要守「列不存在」这种负向事实</b>：删列后若有人（或后来的 migration）
+     * 把 {@code tenant_id} 加回来，或 Entity 上残留字段重新参与映射，
+     * 「两列并存」这个已关闭的缺陷类就会<b>静默复活</b> ——
+     * 代码仍能跑、测试仍可能全绿（因为读路径已只用 {@code enterprise_id}），
+     * 唯独数据层又开始积累第二套隔离真相（AGENTS §4.2 第 16 条「反向缺口」同型：
+     * 列在 {@code \\d} 里一眼可见，不查就发现不了）。
+     *
+     * <p><b>为什么必须查 {@code information_schema} 而不是 {@code \\d}</b>：
+     * 本项目已多次因「开发库停在旧 Flyway 版本」把工具告警误当缺陷（AGENTS §4.5 第 23 条）。
+     * 本用例跑在 L2 Testcontainers 上，Flyway 已应用全部迁移 ⇒ 读到的是权威结构。
+     */
+    @Test
+    @DisplayName("P106 D-3：tenant_id 列与 idx_classification_rule_tenant 索引必须已删除")
+    void tenantIdColumnAndIndexMustBeDropped() {
+        Integer colCount = jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM information_schema.columns "
+                        + "WHERE table_name = 't_classification_rule' AND column_name = 'tenant_id'",
+                Integer.class);
+        assertEquals(0, colCount,
+                "D-3 已删除 t_classification_rule.tenant_id，列若重新出现则「双列并存」缺陷静默复活"
+                        + "（当前 " + colCount + " 列）");
+
+        Integer idxCount = jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM pg_indexes "
+                        + "WHERE tablename = 't_classification_rule' AND indexname = 'idx_classification_rule_tenant'",
+                Integer.class);
+        assertEquals(0, idxCount,
+                "idx_classification_rule_tenant 建在已删除的列上，必须随之删除（当前仍有 " + idxCount + " 个）");
+
+        // 反向对照：enterprise_id 的索引必须仍在，否则删列时误删了替代索引
+        Integer entIdx = jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM pg_indexes WHERE tablename = 't_classification_rule' "
+                        + "AND indexname = 'idx_t_classification_rule_enterprise'",
+                Integer.class);
+        assertEquals(1, entIdx,
+                "enterprise_id 索引必须保留 —— D-3 只删旧列索引，不得误删替代索引");
     }
 }

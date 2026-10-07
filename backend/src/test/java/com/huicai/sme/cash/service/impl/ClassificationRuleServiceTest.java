@@ -81,7 +81,10 @@ class ClassificationRuleServiceTest {
         ClassificationRuleEntity input = new ClassificationRuleEntity();
         ClassificationRuleEntity result = service.create(input);
 
-        assertEquals(1L, result.getTenantId());
+        // P106 D-3：tenant_id 列已删，隔离维度唯一为 enterprise_id。
+        // ⚠️ create() 现在**不再**给 entity 赋 enterpriseId —— 那是 MetaObjectHandler
+        //    insertFill 的职责（纯 Mockito 单测里不触发），故此处不断言该字段。
+        //    无上下文必须抛错这一负向行为由 create_无企业上下文_抛BusinessException 覆盖。
         assertEquals("keyword_regex", result.getRuleType());
         assertEquals("description", result.getMatchField());
         assertEquals(0, result.getPriority());
@@ -97,7 +100,6 @@ class ClassificationRuleServiceTest {
         when(mapper.insert(any(ClassificationRuleEntity.class))).thenReturn(1);
 
         ClassificationRuleEntity input = new ClassificationRuleEntity();
-        input.setTenantId(5L);
         input.setRuleType("counterparty_match");
         input.setMatchField("counterparty");
         input.setPriority(10);
@@ -106,7 +108,6 @@ class ClassificationRuleServiceTest {
 
         ClassificationRuleEntity result = service.create(input);
 
-        assertEquals(5L, result.getTenantId());
         assertEquals("counterparty_match", result.getRuleType());
         assertEquals("counterparty", result.getMatchField());
         assertEquals(10, result.getPriority());
@@ -225,7 +226,8 @@ class ClassificationRuleServiceTest {
         assertEquals("银行利息与手续费", seeds.get(0).getName());
         assertEquals("keyword_regex", seeds.get(0).getRuleType());
         assertEquals(1, seeds.get(0).getPriority());
-        assertEquals(1L, seeds.get(0).getTenantId());
+        // P106 D-3：种子的隔离维度为 enterprise_id（tenant_id 列已删）
+        assertEquals(1L, seeds.get(0).getEnterpriseId());
         assertEquals("手续费|工本费|年费|账户管理费|利息|结息|存款利息", seeds.get(0).getPattern());
         assertEquals("description", seeds.get(0).getMatchField());
         assertNull(seeds.get(0).getDirection());
@@ -315,7 +317,6 @@ class ClassificationRuleServiceTest {
     private ClassificationRuleEntity rule(Long id, int priority, String name, String direction, String pattern, String classification) {
         ClassificationRuleEntity r = new ClassificationRuleEntity();
         r.setId(id);
-        r.setTenantId(1L);
         r.setPriority(priority);
         r.setName(name);
         r.setRuleType("keyword_regex");

@@ -75,12 +75,11 @@ public class ClassificationRuleServiceImpl implements ClassificationRuleService 
 
     @Override
     public ClassificationRuleEntity create(ClassificationRuleEntity entity) {
-        // P106 批次 1a-3（D-1）：tenantId 请求参数废弃。新写入行的 tenant_id 仍与
-        // enterprise_id 一致取自当前上下文（审计自洽），直至 D-3 把列整个删除。
-        // 注意：绝不回退硬编码 1L —— 那正是 P106 1a-1 在预付款上查出的「静默落企业 1」缺陷。
-        if (entity.getTenantId() == null) {
-            entity.setTenantId(requireEnterpriseContext("创建分类规则"));
-        }
+        // P106 D-3：DB 的 tenant_id 列已由 V170 删除，Entity 字段同步移除，故此处不再赋值。
+        // 隔离维度唯一为 enterpriseId（由 MyMetaObjectHandler.insertFill 按上下文写入）。
+        // ⚠️ 反向对照：若无上下文，绝不能让它落到 DB 默认企业 1 ——
+        //    那正是 P106 1a-1 在预付款上查出的「静默跨租户写入」缺陷。
+        requireEnterpriseContext("创建分类规则");
         if (entity.getRuleType() == null) entity.setRuleType("keyword_regex");
         if (entity.getMatchField() == null) entity.setMatchField("description");
         if (entity.getPriority() == null) entity.setPriority(0);
@@ -216,7 +215,7 @@ public class ClassificationRuleServiceImpl implements ClassificationRuleService 
                                                 String classification, Long debitSubjectId, Long creditSubjectId,
                                                 String subjectLevel1, String subjectLevel2, String subjectLevel3) {
         ClassificationRuleEntity entity = new ClassificationRuleEntity();
-        entity.setTenantId(enterpriseId);
+        // P106 D-3：tenant_id 列已删，只写 enterprise_id（隔离维度唯一）
         entity.setEnterpriseId(enterpriseId);
         entity.setName(name);
         entity.setRuleType(ruleType);

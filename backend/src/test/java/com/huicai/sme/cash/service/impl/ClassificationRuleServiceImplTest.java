@@ -60,7 +60,6 @@ class ClassificationRuleServiceImplTest {
     @Test
     void create_正常_调insert() {
         ClassificationRuleEntity e = stubEntity();
-        e.setTenantId(1L);
         service.create(e);
         verify(mapper).insert(any(ClassificationRuleEntity.class));
     }
