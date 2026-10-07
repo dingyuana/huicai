@@ -1,6 +1,6 @@
 # P106 SPEC — 多账套（企业级收口 + 账簿级立项）
 
-> **版本**：V1.8 | **最后修改**：2026-10-07 | **作者**：opencode（V1.8 为实施回写：批次 1b / D-2a 定性收口，零 DDL）
+> **版本**：V1.9 | **最后修改**：2026-10-07 | **作者**：opencode（V1.9 为实施回写：🔴 P0 修复 `t_user` 跨企业 PII 泄漏）
 > **编号**：HUICAI-SPC-P106 | 优先级：**P1** | 状态：🚧 **实施中 —— 批次 1a（含 1a-3 / D-1）、批次 1b（D-2a 定性）、批次 2、批次 3（D-3 删列）已完成**；遗留仅 `t_dept` 隔离缺口（见 §0.1.1）与 `t_ai_feedback_log.tenant_id` 删列待决
 > **来源**：P101 商用化差距总纲 → P106「内控深度」中的「多账套」子项
 > **关联需求**：**REQ-2026-133**（⚠️ V1.0 原写 REQ-2026-134 **有误** —— 134 归 P107 存量缺陷修复包且已实施完成，P101 line 28 已明文「为它让出 134，133 保持不变」；更正记录见登记册 V1.77）| **前置**：RLS 三层已落地（PR #26/#27）、DTO 入参隔离已归零（PR #28~#30）
@@ -65,7 +65,7 @@
 
 | 表 | `enterprise_id` 来源 | 为何仍须豁免 |
 |---|---|---|
-| `t_user` | `V101`（**可空**列） | 该列语义是**归属企业**，不是当前上下文企业。且**存在循环依赖**：决定「当前企业是谁」的 `EnterpriseMembershipChecker` 本身要读 `t_user` —— 若按上下文过滤，成员校验会把自己过滤掉 |
+| `t_user` | `V101`（**可空**列） | 该列语义是**归属企业**，不是当前上下文企业。且**存在循环依赖**：登录链路（`AuthController` → `UserDetailsServiceImpl` → `selectByUsername`）必须在**尚无企业上下文**时按用户名查人；若注入 `enterprise_id`，登录时 ctx 为 null ⇒ **所有人无法登录**。⚠️ **V1.9 修正**：此豁免**只对登录/成员校验/代理平台三条路径成立**，原写法把整张表放行，导致用户管理端点跨企业泄漏 PII（见 §0.1.4） |
 | `t_agency_enterprise` | `V100` 建表即有（`COMMENT` 实证） | 该表是代理↔企业的**授权关系本身**（拓扑边），不是某企业的业务数据 |
 | `t_agency_user_enterprise` | `V112` 建表即有（注释「分配的客户企业ID」） | 同上，授权关系本身，语义为「被服务对象」 |
 | `t_service_progress` | `V148` 建表即 `NOT NULL` | 建表注释明写「`agency_id` 隔离 + `enterprise_id` 存被服务客户」，**查询手动按 `agency_id` 过滤以支持代理端跨客户查询**；注入上下文 `enterprise_id` 会把跨客户视图限死 |
@@ -92,6 +92,54 @@ D-2a 是**零 DDL 的文档收口**，但文档结论会与代码分叉，故必
 ⚠️ **反证 ②首版无效** —— 注入脚本的匹配串与真实格式不符，`assert` 失败却未中止脚本，
 导致跑的是未注入的绿；修正匹配串后立即转红。**判据：反证脚本自身也会失败，
 必须确认「注入确实发生」再采信它给出的绿。**
+
+#### 0.1.4 🔴 P0：`t_user` 用户管理端点跨企业泄漏 PII（V1.9 已修）
+
+**发现路径**：D-2a 的定性守卫在写「B 类豁免」时，顺手反查 `t_user` 的全部调用点，
+发现 §0.1.2 给自己写的豁免理由**只解释了登录路径，却把整张表放行了**。
+
+**实测证据**（真库探针，非推演）：
+
+```
+t_user  relrowsecurity=false  force=false  policies=0
+ctx=990007  pageUser(命中 probe_ 前缀)  total=2  records=2
+   -> ent=1       username=probe_e1_a     ← 别的企业的用户
+   -> ent=990007  username=probe_ex_a
+非超级探针 ctx=990007 可见 probe_ 用户数=2   ← DB 层也无隔离
+```
+
+⇒ **三层防线全空**：
+① 应用层 `UserServiceImpl` 对 `t_user` 的 7 个方法**全无企业维度**；
+② 第二层 `EnterpriseDataPermissionInterceptor` 因 `t_user` 在 `SHARED_TABLES` 内而不注入；
+③ DB 层 `relrowsecurity=false` + `policies=0`，非超级探针照样看到两家数据。
+
+**暴露面**：`GET /api/v1/system/user/page` 返回用户名/真实姓名/邮箱/手机号；
+`getById`/`update`/`updateStatus`/`resetPassword`/`assignRoles`/`delete`
+可**按猜测 id 读改删**别家企业用户。
+
+**为什么不能简单把 `t_user` 移出 `SHARED_TABLES`**：
+登录链路必须在无上下文时按用户名查人，注入会让 ctx=null ⇒ 谓词恒不成立 ⇒ **全员无法登录**；
+代理端（`AgencyUserServiceImpl`）需跨客户企业读本代理用户，其 `enterprise_id` 语义是「归属企业」。
+⇒ 豁免**必须保留**，但**用户管理路径要自己补隔离**。
+
+**修法（V1.9 已实施，9 处）**：
+- `pageUser`：wrapper 加 `.eq(getEnterpriseId, ctx)` + **无上下文 fail-closed**；
+- `getById` / `update` / `updateStatus` / `resetPassword` / `assignRoles` / `delete`：
+  先 `selectById` 校验归属，越权**抛 `BusinessException`**；
+- `create`：**显式落当前企业**（`UserSaveDTO` 刻意不含 `enterpriseId`，且 `UserEntity` 不继承
+  `BaseEntity` ⇒ `insertFill` 不触发 ⇒ 原实现新建用户 `enterprise_id` 为 **NULL**，
+  既是「不属于任何企业」的游离数据，也会在列表按企业过滤后**永远不可见**）。
+- 负向断言：越权 `updateStatus` 被拒后**数据必须保持原样**（防「先改后校验」）；
+  正向对照：本企业用户仍可正常读写，**防修复退化成「一律拒绝」**。
+
+**守卫** `UserTenantIsolationRealDBTest`（6 例，全部走**真实 Service 回路** ——
+裸调 mapper 会让用例通过而端点仍泄漏）+ `UserServiceImplTest` 补 2 条负向断言。
+
+**反证 4 处逐条转红**：①去掉 `enterprise_id` 条件 ②退回 fail-open
+③去掉 `getById` 归属校验 ④去掉 `create` 的企业落库。
+⚠️ 反证 ①首版**无效**（删行后留下悬空语句 ⇒ 编译失败而非红灯），
+修正为「整段替换且保持可编译」后才拿到真红 —— **编译失败不算反证成功**。
+
 
 ### 0.2 4 张「`enterprise_id` 与 `tenant_id` 双列并存」的表（**V1.2 新增；⚠️ V1.4 已把「隔离缺口」降级为「数据不一致」，真正的 P0 见 §0.5**）
 
@@ -519,7 +567,8 @@ Scenario: SUPER_ADMIN 切换会设置企业上下文（**修正 V1.1 的错误�
 
 | 版本 | 日期 | 变更人 | 变更内容 |
 |---|---|---|---|
-| **V1.8** | 2026-10-07 | opencode | **批次 1b（D-2a）实施回写：零 DDL 定性收口 + 守卫查出原 SPEC 一处漏登**。**①D-2a 是零 DDL** —— 不改列、不改 SQL，只把「哪些表刻意不做企业隔离」写成可查结论。**②逐表实测建表与后续 ALTER** —— 10 张表**从未有过** `enterprise_id`/`tenant_id`，`relrowsecurity` 全为 false；三类定性（权限骨架 4 / 平台级 2 / 平台元数据 3）+ `t_dept` 单列为真缺口。**③`t_dept` 明确为「已知未修」而非「判定无需修」** —— 其隔离理由（`uq_dept_code` 全局唯一 ⇒ 两企业不可能有同名部门编码 + `DeptServiceImpl` 实测不带企业维度查全表）成立；而报表侧注释自认的「维度名查用，无敏感」只对查名成立、对增删改不成立 ⇒ 排期到后续 DDL 批次。**④🔴 守卫反查查出原 §0.1 漏登 4 张表** —— `SHARED_TABLES` 实为 **14 张**，多出的 4 张（`t_user`/`t_agency_enterprise`/`t_agency_user_enterprise`/`t_service_progress`）**都有 `enterprise_id`**。⇒ 「10 张纯平台全局表」这个分类**不完整**，已与运行时事实分叉；补登为 **B 类（语义豁免）**。⚠️ **两类理由根本不同**：A 类是「无隔离列，注入必然 SQL 报错」，B 类是「有隔离列但语义非上下文企业，注入会破坏设计语义」——混为一谈会写出「白名单 = 无隔离列的表」这类**错误不变量**，而它恰好能靠「只看其中 10 张」通过自检。**⑤守卫 `SharedTablesExemptionRealDBTest`（5 例）** —— 断言白名单 == A ∪ B（**两个方向都锁**）、A 类无隔离列、B 类**必须**有 `enterprise_id`（反向对照）、A 类无 RLS、基数 10+4=14。**为什么「零 DDL 的文档收口」也需要守卫** —— 文档性结论最容易的失效形态是**与代码分叉**；白名单是「放行不过滤」的名单，**多一张业务表 = 静默关闭该表第二层防线且无任何报错**。**⑥反证 4 类全部转红** —— ①白名单多一张 ②移除一张 A 类表 ③登记表漏登一张 ④给 A 类表加隔离列。⚠️ **反证 ②首版无效** —— 注入脚本的匹配串与真实格式不符，`assert` 失败却未中止脚本，于是跑的是未注入的绿；修正匹配串后立即转红。**判据：反证脚本自身也会失败，必须确认「注入确实发生」再采信它给出的绿**（与 §4.5 第 41 条同型）。**验证**：L1 `1663/0/0/5`、L2 `2110/0/0/5`（+5 即本守卫；`RedisConnectionFailure` 计数 0，`BUILD SUCCESS`）、前端 `vue-tsc` exit 0 + vitest `26 files / 265 tests` 全绿、三个静态门禁全过。**遗留**：`t_dept` 隔离缺口（需 DDL 批次）、`t_ai_feedback_log.tenant_id` 删列待决。 |
+| **V1.9** | 2026-10-07 | opencode | **🔴 P0 修复：`t_user` 用户管理端点跨企业泄漏 PII**。**①缺陷实测坐实** —— `t_user` **三层防线全空**：应用层 `UserServiceImpl` 7 个方法全无企业维度；第二层因 `t_user` 在 `SHARED_TABLES` 内而不注入；DB 层 `relrowsecurity=false`/`policies=0`，非超级探针可见两家数据。实测 `ctx=990007` 的 `pageUser` 返回了企业 1 的用户，`getById`/`update`/`delete`/`resetPassword` 可**按猜测 id 读改删**别家企业用户。**②根因是我自己的豁免理由过宽** —— §0.1.2 写「成员校验要读它，存在循环依赖」，那只解释了**登录路径**，却把整张表放行；D-2a 的守卫在写 B 类登记时才发现。⚠️ **判据：给某张表开豁免时，必须逐路径列出「哪些路径需要豁免」，「整表豁免 + 只解释一条路径」必然漏**。**③不能简单移出白名单** —— 登录须在无上下文时按用户名查人，注入会让 ctx=null 谓词恒不成立 ⇒ 全员无法登录；代理端亦需跨客户企业读本代理用户。⇒ 豁免保留，用户管理路径**自己补隔离**。**④实施 9 处** —— `pageUser` 加 `enterprise_id` 条件 + 无上下文 fail-closed；`getById`/`update`/`updateStatus`/`resetPassword`/`assignRoles`/`delete` 先校验归属、越权抛异常；`create` 显式落当前企业。⚠️ **`create` 那处是连带发现**：`UserSaveDTO` 刻意不含 `enterpriseId`，且 `UserEntity` 不继承 `BaseEntity` ⇒ `insertFill` 不触发 ⇒ 原实现新建用户 `enterprise_id` 为 **NULL**，既是不属于任何企业的游离数据，也会在列表按企业过滤后**永远不可见**（与预付款 1a-1 同型的静默错位）。**⑤守卫 6 例全部走真实 Service 回路**（裸调 mapper 会让用例通过而端点仍泄漏），含「越权写被拒后数据保持原样」与「本企业仍可读写」两条双向断言。**⑥反证 4 处逐条转红**；⚠️ 反证 ①首版**无效** —— 删行后留下悬空语句，编译失败而非红灯，修正为整段替换后才拿到真红。**判据：编译失败不算反证成功**（§4.5 第 41 条同型）。**验证**：L1 `1665/0/0/5`（clean 口径 49.15/41.57/67.88，阈值 49/41/67，`All coverage checks have been met`，`Skipping JaCoCo execution` 计数 0）；L2 `2118/0/0/5`（+6 真库 +2 单测；`RedisConnectionFailure` 计数 0，`BUILD SUCCESS`）—— **登录链路与代理端流程零回归**；前端 265 全绿、三静态门禁全过。 |
+| **V1.8** | 2026-10-07 | opencode | **批次 1b（D-2a）实施回写：零 DDL 定性收口 + 守卫查出原 SPEC 一处漏登**。**①D-2a 是零 DDL** —— 不改列、不改 SQL，只把「哪些表刻意不做企业隔离」写成可查结论。**②逐表实测建表与后续 ALTER** —— 10 张表**从未有过** `enterprise_id`/`tenant_id`，`relrowsecurity` 全为 false；三类定性（权限骨架 4 / 平台级 2 / 平台元数据 3）+ `t_dept` 单列为真缺口。**③`t_dept` 明确为「已知未修」而非「判定无需修」** —— 其隔离理由（`uq_dept_code` 全局唯一 ⇒ 两企业不可能有同名部门编码 + `DeptServiceImpl` 实测不带企业维度查全表）成立；而报表侧注释自认的「维度名查用，无敏感」只对查名成立、对增删改不成立 ⇒ 排期到后续 DDL 批次。**④🔴 守卫反查查出原 §0.1 漏登 4 张表** —— `SHARED_TABLES` 实为 **14 张**，多出的 4 张（`t_user`/`t_agency_enterprise`/`t_agency_user_enterprise`/`t_service_progress`）**都有 `enterprise_id`**。⇒ 「10 张纯平台全局表」这个分类**不完整**，已与运行时事实分叉；补登为 **B 类（语义豁免）**。⚠️ **两类理由根本不同**：A 类是「无隔离列，注入必然 SQL 报错」，B 类是「有隔离列但语义非上下文企业，注入会破坏设计语义」——混为一谈会写出「白名单 = 无隔离列的表」这类**错误不变量**，而它恰好能靠「只看其中 10 张」通过自检。**⑤守卫 `SharedTablesExemptionRealDBTest`（5 例）** —— 断言白名单 == A ∪ B（**两个方向都锁**）、A 类无隔离列、B 类**必须**有 `enterprise_id`（反向对照）、A 类无 RLS、基数 10+4=14。**为什么「零 DDL 的文档收口」也需要守卫** —— 文档性结论最容易的失效形态是**与代码分叉**；白名单是「放行不过滤」的名单，**多一张业务表 = 静默关闭该表第二层防线且无任何报错**。**⑥反证 4 类全部转红** —— ①白名单多一张 ②移除一张 A 类表 ③登记表漏登一张 ④给 A 类表加隔离列。⚠️ **反证 ②首版无效** —— 注入脚本的匹配串与真实格式不符，`assert` 失败却未中止脚本，于是跑的是未注入的绿；修正匹配串后立即转红。**判据：反证脚本自身也会失败，必须确认「注入确实发生」再采信它给出的绿**（与 §4.5 第 41 条同型）。**验证**：L1 `1663/0/0/5`、L2 `2110/0/0/5`（+5 即本守卫；`RedisConnectionFailure` 计数 0，`BUILD SUCCESS`）、前端 `vue-tsc` exit 0 + vitest `26 files / 265 tests` 全绿、三个静态门禁全过。**遗留**：`t_dept` 隔离缺口（需 DDL 批次）、`t_ai_feedback_log.tenant_id` 删列待决。**V1.9 附：P0 `t_user` 泄漏已修**（L2 `2118/0/0/5`）。 |
 | **V1.7** | 2026-10-07 | opencode | **批次 3（D-3）实施回写：删列落地 + 一处夹具诚实降级 + 一处迁移顺序教训**。**①范围严格按裁定** —— 只删 `t_classification_rule.tenant_id` 列与 `idx_classification_rule_tenant` 索引；**`t_ai_feedback_log.tenant_id` 刻意未删**（同属 §0.2 双列表但不在 D-3 裁定内，按铁律 #7 三方对照 + §7.7 不得顺手扩大 DDL 范围），已登记为遗留待决策。**②TDD 先行** —— 新增 `AccountSetIsolationRealDBTest#tenantIdColumnAndIndexMustBeDropped` 先跑出 `expected: <0> but was: <1>`（列仍在）确认 RED，再写 V170 转绿。**③Entity 字段必须同步删** —— 只删 DB 列而留着 `ClassificationRuleEntity.tenantId`，MyBatis-Plus 会把该字段纳入 SELECT/INSERT ⇒ 真库直接报 `column "tenant_id" does not exist`（实测 2 条 ERROR）；同时清理 `ClassificationRuleServiceImpl#create` 的 `setTenantId` 与 `createSeed` 的赋值，两个测试类的 `getTenantId/setTenantId` 断言改为 `enterprise_id`。**④迁移内「留证型查询」必须在 DDL 之前（实测踩坑）** —— V170 首版把「统计两列不一致行数」的 `DO $$` 块放在 `DROP COLUMN` **之后**，Flyway 直接失败 `column "tenant_id" does not exist`。⇒ DDL 的执行顺序对留证查询是**硬约束**（不是风格问题），已调整为先留证再删。**⑤两处 D-1 夹具必须重写，且诚实记录证伪能力下降** —— `matchMustNotCrossEnterpriseBoundary` 首版靠「两列故意不一致」证伪旧实现，列删后该形态在库内不再可能 ⇒ 夹具改为只写 `enterprise_id`，**证伪能力从「能证伪按 tenant_id 过滤」降为「只能证伪不过滤/按错企业号」**；该缺口由 D-1 的单测断言（SQL 片段含 `enterprise_id` 且不含 `tenant_id`）承担，且列已删、MP 若仍引用必抛 SQL 错 ⇒ 整体覆盖不降级。已在用例 javadoc 写明。**⑥三类反证全部可证伪** —— ①把 `tenantId` 字段加回 Entity ⇒ 2 条 ERROR（`column does not exist`）；②把列加回库 ⇒ 守卫转红；③把 `enterprise_id` 索引删掉 ⇒ 反向对照转红。⚠️ **反证 2 首版自身无效** —— 注入的 `ALTER TABLE` 被放在断言**之后**，守卫恒绿；改为「先加列再断言」后立即转红。**判据：反证脚本自己也可能造假，必须确认「注入点在断言之前」。****验证**：L1 `1663/0/0/5`（clean 口径 49.14/41.56/67.87，阈值 49/41/67，`All coverage checks have been met`，`Skipping JaCoCo execution` 计数 0）；L2 `2105/0/0/5`（+1 即 D-3 守卫；`RedisConnectionFailure` 计数 0，`BUILD SUCCESS`）；前端 `vue-tsc` exit 0 + vitest `26 files / 265 tests` 全绿；`check_tenant_fixture.py` / `check_entity_status_massassignment.py` exit 0；`check-entity-schema.mjs` ✅（该脚本已能双向校验，删列后 Entity-DB 仍一致）。**遗留**：`t_ai_feedback_log.tenant_id` 删列待决策、批次 1b（D-2a 文档）未启动。 |
 | **V1.6** | 2026-10-07 | opencode | **批次 1a-3（D-1）实施回写：3 处发现 + 6 处断言 + 1 个跨批次缺陷**。**①主实施** —— `ClassificationRuleService` 与 `AiFeedbackLogService` 共 **6 个方法签名去 `tenantId`**，两个 Controller 删 4 处 `@RequestParam`，前端 `classificationRule.ts` + `ClassificationRuleList.vue` 同步改；读路径一律改按 `EnterpriseContextHolder.get()` → `enterprise_id`；`AT-106-9` 解除 `@Disabled` 并转绿。**②发现 §0.4 漏了第 7 处** —— `match()` 也按 `tenant_id` 过滤（同表同层，清单外），一并改；取证判据从「逐个方法列举」改为「grep 隔离列的读写点」。**③D-1 初版是 fail-open（已修）** —— `if (ctx != null) eq(...)` 在无上下文时**返回全表**，且注释自称「等价于读空集合（安全）」与代码相反；改为 `requireEnterpriseContext()` 缺失即抛，并补 6 条负向断言。**④断言不敏感 → 假绿（已修）** —— 端到端用例被 `EnterpriseDataPermissionInterceptor` 的 SQL 层注入掩盖，删掉应用层过滤仍全绿；补「显式初始化 MP `TableInfo` 缓存后断言 SQL 片段」的应用层断言，5 处独立反证逐条转红。**⑤查出跨批次缺陷 DIR-004** —— `PaginationInnerInterceptor` 排在企业隔离拦截器之前 ⇒ **分页 `total` 跨租户泄漏**（`t_subject` 实测 `total=43 / records=0`），未在本批次改全局配置，已登记待裁定（**同日按方案 A 闭环**，见 §0.4.1）。**⑥D-2b 两项已裁定** —— `t_sys_config` 与 `t_audit_log` 均**保持平台级**（不加列），与 `SHARED_TABLES` 现状一致。**验证**：L1 `1663/0/0/5`（clean 口径 49.14/41.55/67.88，阈值 49/41/67，`All coverage checks have been met`，`Skipping JaCoCo execution` 计数 0）；L2 `2102/0/0/5`（**DIR-004 闭环后复测 `2104/0/0/5`**；`RedisConnectionFailure` 计数 0，`BUILD SUCCESS`）；前端 `vue-tsc` exit 0 + vitest `26 files / 265 tests` 全绿；`check_tenant_fixture.py` 与 `check_entity_status_massassignment.py` exit 0；`check-entity-schema.mjs` ✅。**遗留**：D-3 删列、批次 1b（D-2a 文档）。**附：DIR-004 同日按方案 A 闭环**，L2 升至 `2104/0/0/5`。 |
 | **V1.5** | 2026-10-06 | opencode | **批次 2 实施回写：切换鉴权真库回归锁，零生产缺陷**。**①落点偏离原计划（已改）** —— V1.4 计划把 AT-106-6/7 落在既有 `TenantIsolationHttpTest` / `TenantIsolationSecurityTest`「补断言」，实测**不可行**：前者把 `JwtProvider`/`StringRedisTemplate`/`UserDetailsServiceImpl` 全部 `@MockBean`，而回答「带合法凭证时上下文如何变」必须签发**真 JWT** ⇒ 引入真 JWT 就要拆掉整套 mock，等于重写该类；后者验的是「规则」不是「链路」。故新建 `TenantSwitchRealDBTest`（11 例）一次承载 AT-106-6/7/8 + 跨企业写拒绝 + 4 条守卫（新增编号 **AT-106-10 ~ AT-106-14**）。**②零生产缺陷** —— `JwtAuthenticationFilter` 的成员三源并集、上下文改写、审计留痕三条链路实测均正确；本批次价值在于这些行为此前**完全没有 HTTP 层回归保护**（`TenantIsolationSecurityTest` 6 例全绿却无一能证明过滤器真的调用了它 —— 「规则层绿 ≠ 链路层绿」，与 P104 覆盖率门禁假绿同族）。**③新增 §7.3 观测手段**：用 `/api/v1/enterprise/current-period` 作上下文探针（它直接以 `EnterpriseContextHolder.get()` 为入参查共享表 `t_enterprise`，故响应 `startPeriod` 严格等价于「上下文是谁」），两个测试企业各设不同 `start_period` 即可无歧义区分 —— **不为测试新增端点**。**④新增 §8.2 反证矩阵**：逐条注入缺陷实测转红，其中「删掉 `enterpriseId = requested`」一处打红 **4 条**（AT-106-6/8/10/11），是断言有效性的核心证据。**⑤一处前提假设被自己的守卫证伪** —— 原以为 `t_user.enterprise_id` 是「按设计属归属企业故不被 `insertFill` 覆盖」，实测去掉 `withoutEnterpriseContext` 包裹后断言**依然绿** ⇒ 真实机制是 `UserEntity` 不继承 `BaseEntity` 且全类无 `@TableField` ⇒ **`insertFill` 压根不被调用**（§0.5 同型）；结论虽同但理由全异，若按错误理由理解会误以为「补 fill 注解是安全的风格统一」，实测补上即转红（建账号指定企业失效）⇒ 新增 AT-106-12 拦这一手。**⑥诚实声明 RLS 维度未覆盖**：MockMvc 用连接池连接（L2 为超级用户），**无法在请求内降权** ⇒ 本批次隔离断言全部落在**第二层数据权限拦截器**（应用内 ThreadLocal 驱动，超级用户下仍真实生效）；第三层 RLS 谓词仍由 `TenantRlsRealDBTest` 承担。**两层各有锁，但「一次请求内同时验证两层」无人验证**，已登记为遗留缺口。**验证**：L1 `1647/0/0/5`（clean 口径覆盖率 31.77/12.82/57.17，与批次前持平 —— 新类为 `@SlowTest` 不进 L1，故棘轮阈值无需重抬）、L2 `2058/0/0/6`（+11 即本类），两次 `All coverage checks have been met`，`check_tenant_fixture.py` 与 `check_entity_status_massassignment.py` 均 exit 0。**遗留**：1a-3（D-1）、批次 1b（D-2）、批次 3 未启动；新增「请求内同时验证两层防线」缺口 |
