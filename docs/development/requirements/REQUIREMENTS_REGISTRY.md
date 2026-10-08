@@ -285,11 +285,11 @@
 
 | REQ-2026-016 | 费用报销管理 | P1 | DRAFT→SUBMITTED→APPROVED→REJECTED→VOUCHERED | SPC-008-P11 | ⚠️ 后端完整，前端基础 | PARTIAL |
 
-| REQ-2026-055 | 核销全链路 Timeline 视图 | P1 | 时间轴展示从银行流水→收款单→核销→凭证全链路 | SPC-042 | 🆕 规划中 | PLANNED |
+| REQ-2026-055 | 核销全链路 Timeline 视图 | P1 | 时间轴展示从银行流水→收款单→核销→凭证全链路 | SPC-042 | ✅ 已实现（P42 V2.1，ReconciliationTimeline.vue + trace API） | DONE |
 
-| REQ-2026-056 | 核销穿透点击（Drill-down） | P1 | 核销单详情页中上游来源/下游去向标签，点击跳转 | SPC-042 | 🆕 规划中 | PLANNED |
+| REQ-2026-056 | 核销穿透点击（Drill-down） | P1 | 核销单详情页中上游来源/下游去向标签，点击跳转 | SPC-042 | ✅ 已实现（P42 V2.1，onTimelineJump → router.push） | DONE |
 
-| REQ-2026-057 | FIFO 自动核销（人工触发） | P1 | 核销工作台一键触发先进先出自动匹配，草稿展示待确认 | SPC-042 | 🆕 规划中 | PLANNED |
+| REQ-2026-057 | FIFO 自动核销（人工触发） | P1 | 核销工作台一键触发先进先出自动匹配，草稿展示待确认 | SPC-042 | ✅ 已实现（P42 V2.1，dry-run 预览 + 确认执行） | DONE |
 
 | REQ-2026-063 | 账龄分析与逾期预警 | P1 | 账龄分析表、到期债权表、逾期预警(4级) | SPC-051-P51 | ✅ 已完成 | DONE |
 
@@ -651,7 +651,7 @@
 
 | REQ-2026-078 | 期初建账审计增强 | P1 | 期初建账允许任意指定录入时间（建账日期）；记录期初建账日期、录入人员；审计日志修复操作人落库 | SPC-P72 | ✅ 已实现（代码 commit b24c7c0；opened_at/opened_by 落库测试 + AuditLog operator_id/operator_name RealDB 断言；V135 migration） | DONE |
 
-| REQ-2026-135 | 银行流水核销体验优化 | P1 | 状态命名去歧义（payment_created→待核销）、核销工作台批量制证、小额直制证阈值配置、仪表盘待核销提醒 | SPC-P73 | 🆕 规划中（SPEC 待审核） | REVIEW |
+| REQ-2026-135 | 银行流水核销体验优化 | P1 | 状态命名去歧义（payment_created→待核销）、核销工作台批量制证、小额直制证阈值配置、仪表盘待核销提醒 | SPC-P73 | ✅ 已实现（P73 V1.4，批1+批2全部完成） | DONE |
 
 | REQ-2026-136 | 核销模板科目修正 | P0 | 修正核销单凭证模板双重记账：应收核销借1002→借2203、应付核销贷1002→贷1123 | SPC-P74 | ✅ 已实现（V130 源文件修正 + V140 生产迁移 + 端到端测试，commit 31ce3f4） | DONE |
 
