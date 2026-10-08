@@ -223,11 +223,14 @@ def contract_kind(contract: dict) -> str:
     """契约分两类，校验模板不同，必须分派：
       - state_machine：有 states/transitions（发票/流水/单据状态机）
       - rules        ：有 rules（如 P37 凭证类型映射规则，本就无状态可言）
+      - endpoints    ：有 endpoints 或 contracts（API/端点型，如 P30/P36/P32/P40）
     """
     if contract.get('states') or contract.get('transitions'):
         return 'state_machine'
     if contract.get('rules'):
         return 'rules'
+    if contract.get('endpoints') or contract.get('contracts'):
+        return 'endpoints'
     return 'unknown'
 
 
@@ -380,6 +383,53 @@ def validate_trigger_uniqueness(contract: dict, result: ValidationResult):
                 f"Trigger '{trigger}' from state {list(state)} has {len(tids)} transitions: {tids}. "
                 f"This may be intentional (e.g., different preconditions) but should be verified."
             )
+
+
+def validate_endpoints(contract: dict, result: ValidationResult):
+    """端点型契约校验（endpoints / contracts）：id 唯一、条目结构、验收测试交叉。
+
+    该类型契约的"实质内容"是端点/合约条目，而非状态机。缺 required 字段为 error，
+    语义性问题为 warning（与 validate_rules 一致的容错姿态）。
+    """
+    items = None
+    if isinstance(contract.get('endpoints'), list):
+        items = contract['endpoints']
+    elif isinstance(contract.get('contracts'), list):
+        items = contract['contracts']
+
+    if not isinstance(items, list) or not items:
+        result.add_error("'endpoints'/'contracts' must be a non-empty list for an endpoints-type contract")
+        return
+
+    ids = []
+    for it in items:
+        if not isinstance(it, dict):
+            result.add_warning(f"Endpoint entry is not a mapping, skipped: {it!r}")
+            continue
+        iid = as_text(it.get('id', '?'))
+        ids.append(iid)
+        if not iid or iid == '?':
+            result.add_error("Endpoint entry without 'id'")
+
+        if not it.get('description'):
+            result.add_warning(f"Endpoint {iid}: no 'description'")
+
+        has_api_shape = bool(it.get('endpoint')) or bool(it.get('path'))
+        has_assertion = bool(it.get('assertion')) or bool(it.get('expected'))
+        has_target = bool(it.get('target'))
+        if not (has_api_shape or has_assertion or has_target):
+            result.add_error(
+                f"Endpoint {iid}: 缺实质断言（需 endpoint/path、assertion/expected 或 target 至少其一）")
+        if it.get('type') == 'api' and not it.get('endpoint'):
+            result.add_error(f"Endpoint {iid}: type=api 但缺 'endpoint'")
+        if it.get('endpoint') and it.get('type') != 'api':
+            result.add_warning(f"Endpoint {iid}: 有 endpoint 但 type 非 'api'，建议 type: api")
+
+    dup = {x for x in ids if ids.count(x) > 1}
+    if dup:
+        result.add_error(f"Duplicate endpoint IDs: {sorted(dup)}")
+
+    validate_acceptance_tests(contract, result)
 
 
 def validate_acceptance_tests(contract: dict, result: ValidationResult):
@@ -574,6 +624,88 @@ def check_test_coverage(contract: dict, project_root: str, result: ValidationRes
 
 
 # ---------------------------------------------------------------------------
+# 端点型契约的交叉检查（warn-only：端点/断言路径未逐字命中代码时仅告警，不降级为失败）
+# ---------------------------------------------------------------------------
+
+def _endpoints_of(contract):
+    e = contract.get('endpoints')
+    if isinstance(e, list):
+        return e
+    c = contract.get('contracts')
+    if isinstance(c, list):
+        return c
+    return []
+
+
+def _endpoint_path(it):
+    """从 'POST /api/v1/x/{id}/y' 或 '/ai/v1/health' 提取可用于在源码中搜索的字面量。"""
+    ep = as_text(it.get('endpoint') or it.get('path') or '').strip()
+    if not ep:
+        return ''
+    parts = ep.split(None, 1)
+    path = parts[1] if len(parts) == 2 else parts[0]
+    # 去掉路径占位变量以后的部分，保留稳定字面量前缀
+    cut = path.find('{')
+    if cut != -1:
+        path = path[:cut]
+    return path.rstrip('/')
+
+
+def check_endpoint_implementation(contract: dict, project_root: str, result: ValidationResult):
+    main_src = Path(project_root) / "backend" / "src" / "main" / "java"
+    if not main_src.exists():
+        return
+    for it in _endpoints_of(contract):
+        if not isinstance(it, dict):
+            continue
+        iid = as_text(it.get('id', '?'))
+        path = _endpoint_path(it)
+        if not path:
+            continue
+        found = False
+        try:
+            for f in main_src.rglob("*.java"):
+                text = f.read_text(encoding="utf-8", errors="ignore")
+                if path and path in text:
+                    found = True
+                    break
+        except Exception:
+            break
+        if found:
+            result.add_info(f"Endpoint {iid}: path '{path}' found in main sources ✓")
+        else:
+            result.add_warning(f"Endpoint {iid}: path '{path}' not found in backend/src/main/java")
+
+
+def check_endpoint_tests(contract: dict, project_root: str, result: ValidationResult):
+    test_root = Path(project_root) / "backend" / "src" / "test"
+    if not test_root.exists():
+        return
+    for it in _endpoints_of(contract):
+        if not isinstance(it, dict):
+            continue
+        iid = as_text(it.get('id', '?'))
+        ref = as_text(it.get('test_ref') or it.get('method') or '').strip()
+        if not ref:
+            continue
+        found = False
+        try:
+            for f in test_root.rglob("*.java"):
+                text = f.read_text(encoding="utf-8", errors="ignore")
+                if ref in text:
+                    found = True
+                    break
+        except Exception:
+            break
+        if found:
+            result.add_info(f"Endpoint {iid}: test_ref '{ref}' found ✓")
+        else:
+            result.add_warning(f"Endpoint {iid}: test_ref '{ref}' not found in backend/src/test")
+
+
+
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
@@ -655,6 +787,14 @@ def main():
                 if args.check_implementation:
                     print(f"\n  → Checking rule implementations...")
                     check_rule_implementations(contract, args.project_root, result)
+            elif kind == 'endpoints':
+                validate_endpoints(contract, result)
+                if args.check_implementation:
+                    print(f"\n  → Checking endpoint implementations...")
+                    check_endpoint_implementation(contract, args.project_root, result)
+                if args.check_tests:
+                    print(f"\n  → Checking endpoint test refs...")
+                    check_endpoint_tests(contract, args.project_root, result)
             elif kind == 'state_machine':
                 validate_structure(contract, result)
                 validate_state_machine_logic(contract, result)
