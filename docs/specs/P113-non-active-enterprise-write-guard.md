@@ -150,3 +150,149 @@ L2 `2138/0/0/5`（+9，`RedisConnectionFailure` 计数 0，`BUILD SUCCESS`）；
 2. **无企业上下文时放行**是否可接受？（系统初始化/定时任务需要；若要求 fail-closed，需另行安排这些系统路径显式声明身份）
 3. 读路径**放行**（停用账套可查历史）是否符合预期？
 4. 是否同意同时**更正 P106 SPEC §8 范围声明**（删除 3 项已实现子项：制单≠审核 / 数据权限粒度 / 年结 —— 取证证明已实现）？
+
+---
+
+# MACHINE-READABLE CONTRACT
+
+contract_version: "1.0"
+
+entity: EnterpriseEntity
+module: security
+table: t_enterprise
+
+# 本 SPEC 不改状态机，只**读取**状态做写入准入判定。
+# 四态来自 chk_enterprise_status（t_enterprise.status），与
+# EnterpriseStateMachineServiceImpl 人工触发的四态一一对应。
+states:
+  PENDING:
+    description: "待激活 —— 未激活账套禁止写入业务数据"
+    initial: true
+    terminal: false
+  ACTIVE:
+    description: "已激活 —— 唯一允许写入业务数据的状态"
+    initial: false
+    terminal: false
+  SUSPENDED:
+    description: "已暂停 —— 禁止写入，但读路径放行以便对账审计"
+    initial: false
+    terminal: false
+  TERMINATED:
+    description: "已终止（终态）—— 禁止写入"
+    initial: false
+    terminal: true
+
+transitions:
+  - id: activate
+    from: PENDING
+    to: ACTIVE
+    trigger: activateEnterprise
+    precondition: "status == PENDING"
+    postcondition: "status == ACTIVE"
+    side_effects: []
+    test_ref: EnterpriseStateMachineServiceImpl
+  - id: suspend
+    from: ACTIVE
+    to: SUSPENDED
+    trigger: suspendEnterprise
+    precondition: "status == ACTIVE"
+    postcondition: "status == SUSPENDED"
+    side_effects: []
+    test_ref: EnterpriseStateMachineServiceImpl
+  - id: reactivate
+    from: SUSPENDED
+    to: ACTIVE
+    trigger: reactivateEnterprise
+    precondition: "status == SUSPENDED"
+    postcondition: "status == ACTIVE"
+    side_effects: []
+    test_ref: EnterpriseStateMachineServiceImpl
+  - id: terminate
+    from: SUSPENDED
+    to: TERMINATED
+    trigger: terminateEnterprise
+    precondition: "status == SUSPENDED"
+    postcondition: "status == TERMINATED"
+    side_effects: []
+    test_ref: EnterpriseStateMachineServiceImpl
+
+constraints:
+  - id: C-01
+    type: security
+    rule: "EnterpriseWriteGuard 切面拦 @PostMapping/@PutMapping/@DeleteMapping；非 ACTIVE 抛 BusinessException.forbidden"
+    implementation: "EnterpriseWriteGuard.assertEnterpriseWritable()"
+    enforcement: "服务端统一入口，一次覆盖全仓 268 个写端点"
+  - id: C-02
+    type: business
+    rule: "无企业上下文时放行（系统初始化/定时任务/种子克隆走此路径，fail-closed 会使其全部不可用）"
+    enforcement: "EnterpriseWriteGuard 内 enterpriseId == null 分支"
+  - id: C-03
+    type: business
+    rule: "读路径（@GetMapping）刻意不拦：停用账套须仍可查询历史数据以满足对账审计"
+    enforcement: "切点只匹配 Post/Put/DeleteMapping"
+  - id: C-04
+    type: database
+    rule: "t_enterprise.status CHECK (status IN ('PENDING','ACTIVE','SUSPENDED','TERMINATED'))"
+    migration: chk_enterprise_status
+  - id: C-05
+    type: business
+    rule: "账套不存在按 fail-closed 拒绝（查不到主体即视为不可写）"
+    enforcement: "currentStatus 返回 null 时抛 BusinessException.forbidden"
+
+acceptance_tests:
+  - id: AT-113-1
+    description: "ACTIVE 账套写端点放行"
+    method: activeEnterpriseMayWrite
+    assertion: "ACTIVE 账套 doWrite 返回 'written'"
+    status: covered
+  - id: AT-113-2
+    description: "SUSPENDED 账套写端点被拒且异常指明状态"
+    method: suspendedEnterpriseCannotWrite
+    assertion: "抛 BusinessException 且消息含 SUSPENDED"
+    status: covered
+  - id: AT-113-3
+    description: "PENDING 账套写端点被拒"
+    method: pendingEnterpriseCannotWrite
+    assertion: "抛 BusinessException"
+    status: covered
+  - id: AT-113-4
+    description: "TERMINATED 账套写端点被拒"
+    method: terminatedEnterpriseCannotWrite
+    assertion: "抛 BusinessException"
+    status: covered
+  - id: AT-113-5
+    description: "无企业上下文时放行（系统路径不误伤）"
+    method: noContextIsAllowedThrough
+    assertion: "withoutEnterpriseContext 下 doWrite 返回 'written'"
+    status: covered
+  - id: AT-113-6
+    description: "账套不存在 fail-closed 拒绝"
+    method: missingEnterpriseFailsClosed
+    assertion: "抛 BusinessException 且消息含「不存在」或「不可用」"
+    status: covered
+  - id: AT-113-7
+    description: "读路径不受守卫影响"
+    method: readPathNotGuarded
+    assertion: "SUSPENDED 账套下 doRead 仍返回 'read'"
+    status: covered
+  - id: AT-113-8
+    description: "切面真被织入（同一方法随账套状态改变结果）"
+    method: aspectIsActuallyWeaved
+    assertion: "ACTIVE 放行 → 改 SUSPENDED 被拒 → 改回 ACTIVE 又放行"
+    status: covered
+  - id: AT-113-9
+    description: "守卫切面已注册为 Spring Bean"
+    method: guardBeanExists
+    assertion: "EnterpriseWriteGuard Bean 非空"
+    status: covered
+
+out_of_scope:
+  - "读路径准入控制（停用账套仍可查历史，见 C-03）"
+  - "DEPT_AND_CHILD 递归数据权限（DataPermissionInterceptor 现降级为 DEPT，属独立已知简化）"
+  - "t_user 的 3 行 enterprise_id=NULL 数据修复（老丁裁定单独立项）"
+
+dependencies:
+  - spec: P106
+    relation: "多账套子项已全部收口；本 SPEC 补其 §8 登记的唯一未立项缺口"
+  - spec: P108
+    relation: "RLS 谓词空串硬化；本 SPEC 读 t_enterprise 状态，与 GUC 无关"

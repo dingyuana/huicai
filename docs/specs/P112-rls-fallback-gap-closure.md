@@ -185,3 +185,90 @@ L2 `2129/0/0/5`（+5，`RedisConnectionFailure` 计数 0，`BUILD SUCCESS`）；
 1. 是否同意**只补 `t_bank_reconciliation_log` 一张**，另两张按 §2 论证排除？
 2. `t_user` 的 NULL 数据修复（3 行 `AGENCY` 种子）与策略补齐，是否**单独立项**？（本 SPEC 不含）
 3. 9 张无隔离列表是否维持 D-2b 裁定「平台级不加列」？
+
+---
+
+# MACHINE-READABLE CONTRACT
+
+contract_version: "1.0"
+
+entity: BankReconciliationLogEntity
+module: security
+table: t_bank_reconciliation_log
+
+# 本 SPEC 不涉及业务状态机（该表无 status 语义），契约以「规则型」表达：
+# 校验器支持无 states/transitions 但有 rules 的契约。
+rules:
+  - id: C-01
+    source: "P112 §1（V173 迁移）"
+    rule: "t_bank_reconciliation_log 启用 ENABLE ROW LEVEL SECURITY + FORCE ROW LEVEL SECURITY"
+    mapping: { table: t_bank_reconciliation_log, enable: true, force: true }
+    implementation: "BankReconciliationLogEntity"
+  - id: C-02
+    source: "P112 §3 输出契约"
+    rule: "策略名固定 enterprise_policy，FOR ALL，谓词与既有 71 张租户表逐字一致"
+    mapping: { policy: enterprise_policy, cmd: ALL, predicate: "enterprise_id = NULLIF(current_setting('app.enterprise_id', true), '')::bigint" }
+    implementation: "BankReconciliationLogEntity"
+  - id: C-03
+    source: "P108 / V167 谓词空串硬化"
+    rule: "谓词必须用 V167 硬化写法；未硬化写法在「曾 SET LOCAL 的会话」空串形态下抛 invalid input syntax for type bigint"
+    mapping: { hardened: true, nullif_wrap: true }
+    implementation: "BankReconciliationLogEntity"
+  - id: C-04
+    source: "AbstractMapperTest / MyMetaObjectHandler"
+    rule: "该表 enterprise_id 由 fill=INSERT 无条件覆盖为上下文企业，不会产生 NULL 行被 RLS 过滤掉"
+    mapping: { fill: INSERT, field: enterpriseId }
+    implementation: "BankReconciliationLogEntity"
+  - id: C-05
+    source: "P112 §2 为何另两张不能补"
+    rule: "t_user 与 t_agency_enterprise 明确不开策略：前者 3/4 行 enterprise_id=NULL 且登录走无上下文按用户名查人，后者代理须跨客户读"
+    mapping: { excluded: [t_user, t_agency_enterprise] }
+    implementation: "BankReconciliationLogEntity"
+
+acceptance_tests:
+  - id: AT-112-1
+    description: "非超管探针无 GUC 时返 0 行（fail-closed）"
+    method: policyFiltersByEnterprise
+    assertion: "probeCounts[2] == 0"
+    status: covered
+  - id: AT-112-2
+    description: "本企业可见"
+    method: policyFiltersByEnterprise
+    assertion: "probeCounts[0] == 1"
+    status: covered
+  - id: AT-112-3
+    description: "跨企业 0 行"
+    method: policyFiltersByEnterprise
+    assertion: "probeCounts[1] == 0"
+    status: covered
+  - id: AT-112-4
+    description: "GUC 空串不抛 invalid input syntax（V167 硬化谓词）"
+    method: emptyGucDoesNotThrow
+    assertion: "调用不抛异常"
+    status: covered
+  - id: AT-112-5
+    description: "反证：超管绕过 RLS（对照探针）"
+    method: superuserBypassesRls
+    assertion: "容器超管身份跨企业仍可见 1 行"
+    status: covered
+  - id: AT-112-6
+    description: "写路径：本企业写成功，跨企业读不到"
+    method: writeVisibleOnlyToOwnEnterprise
+    assertion: "own == 1 且 other == 0"
+    status: covered
+  - id: AT-112-7
+    description: "结构：本表同时 ENABLE + FORCE 且有 enterprise_policy 策略"
+    method: tableHasRlsEnabledAndPolicy
+    assertion: "relrowsecurity && relforcerowsecurity 且策略数 == 1"
+    status: covered
+
+out_of_scope:
+  - "t_user 3 行 enterprise_id=NULL 数据修复与策略补齐（老丁裁定单独立项）"
+  - "t_agency_enterprise 策略补齐（代理须跨客户读）"
+  - "9 张无 enterprise_id 隔离列的平台级表（维持 D-2b 裁定不加列）"
+
+dependencies:
+  - spec: P108
+    relation: "V167 RLS 谓词空串硬化；本 SPEC 复用其 NULLIF 写法（反证②证明非装饰）"
+  - spec: P106
+    relation: "多账套子项已收口；本 SPEC 补其 §0.1 中 t_bank_reconciliation_log 的第三层兜底缺口"
