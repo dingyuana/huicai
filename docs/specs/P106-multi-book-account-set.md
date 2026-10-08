@@ -5,7 +5,7 @@
 > **来源**：P101 商用化差距总纲 → P106「内控深度」中的「多账套」子项
 > **关联需求**：**REQ-2026-133**（⚠️ V1.0 原写 REQ-2026-134 **有误** —— 134 归 P107 存量缺陷修复包且已实施完成，P101 line 28 已明文「为它让出 134，133 保持不变」；更正记录见登记册 V1.77）| **前置**：RLS 三层已落地（PR #26/#27）、DTO 入参隔离已归零（PR #28~#30）
 > **test_ref**：**已存在** —— `TenantRlsRealDBTest`（6 项真库隔离断言）、`TenantRlsGucRealDBTest`、`TenantIsolationSecurityTest`、`TenantIsolationHttpTest`、`ReconciliationServiceImplTest`、`ReconciliationToleranceServiceImplTest`、`ReconciliationIntegrationTest`；**本 SPEC 新增** —— `AccountSetIsolationRealDBTest`（**8 例**，承载 AT-106-1~5 + 1a-3 的两条 + **D-3 schema 守卫一条**）、`TenantSwitchRealDBTest`（11 例，批次 2）、`PaginationTotalTenantIsolationRealDBTest`（2 例，DIR-004）、`SharedTablesExemptionRealDBTest`（5 例，D-2a 定性守卫）
-> **⚠️ 范围声明**：本 SPEC 只覆盖 P106 的**「多账套」子项**；P106 其余子项（年结、制单≠审核、数据权限粒度、部门级扩展）**仍未立项**。
+> **⚠️ 范围声明（2026-10-08 取证更正）**：本 SPEC 只覆盖 P106 的**「多账套」子项**。原声明称其余子项（年结、制单≠审核、数据权限粒度、部门级扩展）**仍未立项**，**该声明已被实测推翻** —— 逐项取证结果：年结（`PeriodCloseServiceImpl.closePeriod` + `BatchCloseServiceImpl` + SPEC `S-17` + 真库测试）、制单≠审核（`BusinessDocServiceImpl:337-339`「制单人不能审核自己提交的单据」）、数据权限粒度（`DataPermissionInterceptor` 已实现 ALL/CUSTOM/DEPT/SELF 且已注册进 `MyBatisPlusConfig:50`）**均已实现**。真正未立项的只有「**非 ACTIVE 账套禁写**」，已由 **SPEC-P113** 立项并实施完成（`V1.0`）。⚠️ `DEPT_AND_CHILD` 目前**降级为 `DEPT` 行为**（`DataPermissionInterceptor:219-220` 注释自认「暂不递归查子部门」），属**已知的有意简化**，不在本轮范围。
 
 ---
 
