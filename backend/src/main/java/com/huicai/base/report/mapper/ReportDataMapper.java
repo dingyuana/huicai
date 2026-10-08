@@ -118,7 +118,11 @@ public interface ReportDataMapper {
     /**
      * 现金流量表(基于现金流分配)
      * 从凭证分录中银行存款(1002)的借贷发生额计算，按对方科目判断业务活动类型。
-     * 对方科目为固定资产(1601)等投资类 → 投资活动；其余 → 经营活动。
+     * P96 REQ-095：增加筹资活动（FINANCING）分支——借款/还款（2001/2501）、
+     *   资本注入（4001）、股利支付（4104）；修正预付账款（1123）设备款归投资活动。
+     * 对方科目为固定资产(1601)等投资类 → 投资活动；
+     * 对方科目为借款/实收资本/利润分配 → 筹资活动；
+     * 其余 → 经营活动。
      */
     @Select("""
         SELECT flow_type, SUM(amount) AS amount
@@ -126,21 +130,41 @@ public interface ReportDataMapper {
             SELECT
               CASE
                 WHEN e.debit > 0 THEN
-                  CASE WHEN EXISTS (
-                    SELECT 1 FROM t_voucher_entry e2
-                    INNER JOIN t_subject s2 ON s2.id = e2.subject_id
-                    WHERE e2.voucher_id = e.voucher_id AND e2.id != e.id
-                      AND e2.credit > 0
-                      AND (s2.code LIKE '15%' OR s2.code LIKE '16%' OR s2.code LIKE '17%' OR s2.code LIKE '18%' OR s2.code LIKE '19%')
-                  ) THEN 'INVESTING_IN' ELSE 'OPERATING_IN' END
+                  CASE
+                    WHEN EXISTS (
+                      SELECT 1 FROM t_voucher_entry e2
+                      INNER JOIN t_subject s2 ON s2.id = e2.subject_id
+                      WHERE e2.voucher_id = e.voucher_id AND e2.id != e.id
+                        AND e2.credit > 0
+                        AND (s2.code LIKE '15%' OR s2.code LIKE '16%' OR s2.code LIKE '17%' OR s2.code LIKE '18%' OR s2.code LIKE '19%')
+                    ) THEN 'INVESTING_IN'
+                    WHEN EXISTS (
+                      SELECT 1 FROM t_voucher_entry e2
+                      INNER JOIN t_subject s2 ON s2.id = e2.subject_id
+                      WHERE e2.voucher_id = e.voucher_id AND e2.id != e.id
+                        AND e2.credit > 0
+                        AND (s2.code LIKE '2001%' OR s2.code LIKE '2501%' OR s2.code LIKE '4001%' OR s2.code LIKE '4101%')
+                    ) THEN 'FINANCING_IN'
+                    ELSE 'OPERATING_IN'
+                  END
                 ELSE
-                  CASE WHEN EXISTS (
-                    SELECT 1 FROM t_voucher_entry e2
-                    INNER JOIN t_subject s2 ON s2.id = e2.subject_id
-                    WHERE e2.voucher_id = e.voucher_id AND e2.id != e.id
-                      AND e2.debit > 0
-                      AND (s2.code LIKE '15%' OR s2.code LIKE '16%' OR s2.code LIKE '17%' OR s2.code LIKE '18%' OR s2.code LIKE '19%')
-                  ) THEN 'INVESTING_OUT' ELSE 'OPERATING_OUT' END
+                  CASE
+                    WHEN EXISTS (
+                      SELECT 1 FROM t_voucher_entry e2
+                      INNER JOIN t_subject s2 ON s2.id = e2.subject_id
+                      WHERE e2.voucher_id = e.voucher_id AND e2.id != e.id
+                        AND e2.debit > 0
+                        AND (s2.code LIKE '15%' OR s2.code LIKE '16%' OR s2.code LIKE '17%' OR s2.code LIKE '18%' OR s2.code LIKE '19%' OR s2.code LIKE '1123%')
+                    ) THEN 'INVESTING_OUT'
+                    WHEN EXISTS (
+                      SELECT 1 FROM t_voucher_entry e2
+                      INNER JOIN t_subject s2 ON s2.id = e2.subject_id
+                      WHERE e2.voucher_id = e.voucher_id AND e2.id != e.id
+                        AND e2.debit > 0
+                        AND (s2.code LIKE '2001%' OR s2.code LIKE '2501%' OR s2.code LIKE '4104%')
+                    ) THEN 'FINANCING_OUT'
+                    ELSE 'OPERATING_OUT'
+                  END
               END AS flow_type,
               CASE WHEN e.debit > 0 THEN e.debit ELSE e.credit END AS amount
             FROM t_voucher_entry e
@@ -155,6 +179,36 @@ public interface ReportDataMapper {
     """)
     List<Map<String, Object>> cashFlowData(@Param("startPeriod") String startPeriod,
                                            @Param("endPeriod") String endPeriod);
+
+    /**
+     * P96 REQ-096：间接法补充资料调节项。
+     * 取累计折旧(1602)/累计摊销(1702)/长期待摊(1801)的本期贷方发生额（非付现费用），
+     * 以及经营性应收(1122 应收账款)、应付(2202 应付账款)、存货(1403/1405/5001)的期初期末变动。
+     * 净利润从利润表取，不在此查询。
+     */
+    @Select("""
+        SELECT
+          (SELECT COALESCE(SUM(e.credit), 0) FROM t_voucher_entry e
+             INNER JOIN t_voucher v ON v.id = e.voucher_id
+             INNER JOIN t_subject s ON s.id = e.subject_id
+            WHERE v.deleted = 0 AND v.status = 'POSTED'
+              AND v.period = #{period} AND s.code IN ('1602','1702','1801')) AS non_cash_expense,
+          (SELECT COALESCE(SUM(e.debit), 0) FROM t_voucher_entry e
+             INNER JOIN t_voucher v ON v.id = e.voucher_id
+             INNER JOIN t_subject s ON s.id = e.subject_id
+            WHERE v.deleted = 0 AND v.status = 'POSTED'
+              AND v.period = #{period} AND s.code = '6603') AS financial_expense,
+          (SELECT COALESCE(end_balance - begin_balance, 0) FROM t_subject_balance sb
+             INNER JOIN t_subject s ON s.id = sb.subject_id
+            WHERE sb.period = #{period} AND s.code = '1122') AS ar_change,
+          (SELECT COALESCE(end_balance - begin_balance, 0) FROM t_subject_balance sb
+             INNER JOIN t_subject s ON s.id = sb.subject_id
+            WHERE sb.period = #{period} AND s.code = '2202') AS ap_change,
+          (SELECT COALESCE(end_balance - begin_balance, 0) FROM t_subject_balance sb
+             INNER JOIN t_subject s ON s.id = sb.subject_id
+            WHERE sb.period = #{period} AND s.code IN ('1403','1405','5001')) AS inventory_change
+    """)
+    Map<String, Object> indirectMethodAdjustments(@Param("period") String period);
 
     /**
      * 辅助核算明细（P97/REQ-097，阶段 C-2）。

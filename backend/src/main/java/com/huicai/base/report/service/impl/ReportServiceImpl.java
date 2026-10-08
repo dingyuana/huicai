@@ -548,6 +548,40 @@ public class ReportServiceImpl implements ReportService {
         result.put("closingCashYtd", closingCashYtd);
         result.put("cashCheckDiffYtd", cashCheckDiffYtd);
         result.put("cashCheckOkYtd", cashCheckDiffYtd.abs().compareTo(new BigDecimal("0.01")) < 0);
+
+        // P96 REQ-096：间接法补充资料（将净利润调节为经营活动现金流量净额）
+        // 公式：净利润 + 非付现费用(折旧/摊销) + 财务费用 - 经营性应收增加 + 经营性应付增加 - 存货增加
+        Map<String, Object> adj = reportDataMapper.indirectMethodAdjustments(period);
+        BigDecimal nonCashExpense = toBigDecimal(getOrNull(adj, "non_cash_expense"));
+        BigDecimal financialExpense = toBigDecimal(getOrNull(adj, "financial_expense"));
+        BigDecimal arChange = toBigDecimal(getOrNull(adj, "ar_change"));
+        BigDecimal apChange = toBigDecimal(getOrNull(adj, "ap_change"));
+        BigDecimal inventoryChange = toBigDecimal(getOrNull(adj, "inventory_change"));
+        // 净利润从利润表取
+        Map<String, Object> income = incomeStatement(period);
+        BigDecimal netProfit = toBigDecimal(income.get("netProfit"));
+        BigDecimal indirectOperatingNet = netProfit
+                .add(nonCashExpense)
+                .add(financialExpense)
+                .subtract(arChange)
+                .add(apChange)
+                .subtract(inventoryChange);
+        BigDecimal indirectCheckDiff = indirectOperatingNet.subtract(cur.opNet());
+        List<Map<String, Object>> supplement = new ArrayList<>();
+        supplement.add(Map.of("label", "净利润", "amount", netProfit));
+        supplement.add(Map.of("label", "加：固定资产折旧、油气资产折耗、生产性生物资产折旧", "amount", nonCashExpense));
+        supplement.add(Map.of("label", "    无形资产摊销", "amount", BigDecimal.ZERO));
+        supplement.add(Map.of("label", "    长期待摊费用摊销", "amount", BigDecimal.ZERO));
+        supplement.add(Map.of("label", "财务费用（收益以\"－\"号填列）", "amount", financialExpense));
+        supplement.add(Map.of("label", "经营性应收项目的减少（增加以\"－\"号填列）", "amount", arChange.negate()));
+        supplement.add(Map.of("label", "经营性应付项目的增加（减少以\"－\"号填列）", "amount", apChange));
+        supplement.add(Map.of("label", "存货的减少（增加以\"－\"号填列）", "amount", inventoryChange.negate()));
+        supplement.add(Map.of("label", "经营活动产生的现金流量净额", "amount", indirectOperatingNet, "bold", true));
+        result.put("supplement", supplement);
+        result.put("indirectOperatingNet", indirectOperatingNet);
+        result.put("indirectCheckDiff", indirectCheckDiff);
+        result.put("indirectCheckOk", indirectCheckDiff.abs().compareTo(new BigDecimal("0.01")) < 0);
+
         return result;
     }
 

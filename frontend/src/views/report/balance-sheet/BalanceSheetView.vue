@@ -12,6 +12,7 @@
         <el-form-item>
           <el-button type="primary" @click="fetchData">查询</el-button>
           <el-button @click="onExport">导出</el-button>
+          <el-button @click="onPrintPreview">打印预览</el-button>
         </el-form-item>
         <el-form-item>
           <el-checkbox v-model="hideNoMovement">隐藏无发生额且无余额科目</el-checkbox>
@@ -36,7 +37,7 @@
       <el-row :gutter="20" v-if="result">
         <el-col :span="12">
           <h3>资产</h3>
-          <el-table :data="visibleAssets" border>
+          <el-table :data="visibleAssets" border @row-click="drillToLedger" row-class-name="drillable-row">
             <el-table-column prop="code" label="编码" width="100" />
             <el-table-column prop="name" label="科目" min-width="120" />
             <el-table-column v-if="yearStartAvailable" label="年初数" align="right" width="130">
@@ -106,7 +107,7 @@
         </el-col>
         <el-col :span="12">
           <h3>负债</h3>
-          <el-table :data="visibleLiabilities" border>
+          <el-table :data="visibleLiabilities" border @row-click="drillToLedger" row-class-name="drillable-row">
             <el-table-column prop="code" label="编码" width="100" />
             <el-table-column prop="name" label="科目" min-width="120" />
             <el-table-column v-if="yearStartAvailable" label="年初数" align="right" width="130">
@@ -161,7 +162,7 @@
             </span>
           </div>
           <h3 style="margin-top: 16px">所有者权益</h3>
-          <el-table :data="visibleEquity" border>
+          <el-table :data="visibleEquity" border @row-click="drillToLedger" row-class-name="drillable-row">
             <el-table-column prop="code" label="编码" width="100" />
             <el-table-column prop="name" label="科目" min-width="120" />
             <el-table-column v-if="yearStartAvailable" label="年初数" align="right" width="130">
@@ -191,17 +192,75 @@
         </el-col>
       </el-row>
     </el-card>
+
+    <!-- P95 REQ-094：A4 打印预览 -->
+    <el-dialog v-model="printDialogVisible" title="打印预览" width="90%" top="5vh" :close-on-click-modal="false">
+      <div class="print-area">
+        <div class="print-header">
+          <h2>资产负债表</h2>
+          <p>所属期间：{{ query.period }} | 金额单位：元</p>
+        </div>
+        <el-row :gutter="20">
+          <el-col :span="12">
+            <h3>资产</h3>
+            <table class="print-table">
+              <thead><tr><th>编码</th><th>科目</th><th>年初数</th><th>期末余额</th></tr></thead>
+              <tbody>
+                <tr v-for="row in visibleAssets" :key="row.code">
+                  <td>{{ row.code }}</td>
+                  <td>{{ row.name }}</td>
+                  <td class="num">{{ fmtAmount(yearStartValue(row.code)) }}</td>
+                  <td class="num">{{ fmtAmount(row.end_balance) }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </el-col>
+          <el-col :span="12">
+            <h3>负债及所有者权益</h3>
+            <table class="print-table">
+              <thead><tr><th>编码</th><th>科目</th><th>年初数</th><th>期末余额</th></tr></thead>
+              <tbody>
+                <tr v-for="row in visibleLiabilities" :key="'l'+row.code">
+                  <td>{{ row.code }}</td>
+                  <td>{{ row.name }}</td>
+                  <td class="num">{{ fmtAmount(yearStartValue(row.code)) }}</td>
+                  <td class="num">{{ fmtAmount(row.end_balance) }}</td>
+                </tr>
+                <tr v-for="row in visibleEquity" :key="'e'+row.code">
+                  <td>{{ row.code }}</td>
+                  <td>{{ row.name }}</td>
+                  <td class="num">{{ fmtAmount(yearStartValue(row.code)) }}</td>
+                  <td class="num">{{ fmtAmount(row.end_balance) }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </el-col>
+        </el-row>
+        <div class="print-footer">
+          <span>制表人：__________</span>
+          <span>审核人：__________</span>
+          <span>法定代表人：__________</span>
+        </div>
+      </div>
+      <template #footer>
+        <el-button @click="printDialogVisible = false">关闭</el-button>
+        <el-button type="primary" @click="doPrint">打印</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { resolveLatestClosedPeriod, yearStartPeriod } from '@/utils/period'
 import { ElMessage } from 'element-plus'
 import { balanceSheet, balanceSheetReclassified, subjectBalance, exportBalanceSheet } from '@/api/modules/report'
 import { amountClass, formatAmount } from '@/utils/format'
 import { isRowVisible, guardDanglingSubtotal, isStandardBlankRow } from '@/utils/report/rowVisibility'
 import PeriodNavigator from '@/components/finance/PeriodNavigator.vue'
+
+const router = useRouter()
 
 const query = reactive({ period: '' })
 const result = ref<any>(null)
@@ -312,6 +371,33 @@ const onExport = async () => {
   }
 }
 
+// P95 REQ-093：报表行下钻明细账（3 跳链路：报表 → 明细账 → 凭证）
+// 资产负债表行含 code（科目编码），直接带 subjectCode 跳转
+const drillToLedger = (row: any) => {
+  const subjectCode = row?.code
+  if (!subjectCode) return
+  router.push({
+    name: 'LedgerView',
+    query: {
+      period: query.period,
+      subjectCode: String(subjectCode),
+    },
+  })
+}
+
+// P95 REQ-094：打印预览（全屏 dialog + window.print）
+const printDialogVisible = ref(false)
+const onPrintPreview = () => {
+  if (!query.period) {
+    ElMessage.warning('请先选择期间')
+    return
+  }
+  printDialogVisible.value = true
+}
+const doPrint = () => {
+  window.print()
+}
+
 onMounted(async () => {
   query.period = await resolveLatestClosedPeriod()
   fetchData()
@@ -319,6 +405,29 @@ onMounted(async () => {
 </script>
 
 <style scoped>
+/* P95 REQ-093：可下钻行鼠标变手型 */
+:deep(.drillable-row) {
+  cursor: pointer;
+}
+:deep(.drillable-row:hover) {
+  background: #ecf5ff !important;
+}
+/* P95 REQ-094：打印预览样式 */
+.print-header { text-align: center; margin-bottom: 16px; }
+.print-header h2 { margin: 0 0 8px; }
+.print-header p { margin: 0; color: #606266; font-size: 14px; }
+.print-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.print-table th, .print-table td { border: 1px solid #303133; padding: 4px 8px; text-align: left; }
+.print-table th { background: #f5f7fa; }
+.print-table .num { text-align: right; font-variant-numeric: tabular-nums; }
+.print-footer { display: flex; justify-content: space-around; margin-top: 40px; padding-top: 20px; border-top: 1px solid #dcdfe6; }
+/* A4 打印：表头每页重复、行不跨页截断、隐藏非打印内容 */
+@media print {
+  .el-dialog__header, .el-dialog__footer { display: none !important; }
+  .print-table thead { display: table-header-group; }
+  .print-table tr { break-inside: avoid; }
+  body { background: #fff; }
+}
 /* P92-B: 流动分类小计行。视觉权重介于科目明细行与总计行之间；
    不用 display:none / v-if，保证零值时也显示 0.00（法定报表金额必须可见，不折叠口径） */
 .subtotal-row {

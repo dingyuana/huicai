@@ -14,6 +14,7 @@
         <el-form-item>
           <el-button type="primary" @click="fetchData">查询</el-button>
           <el-button @click="onExport">导出</el-button>
+          <el-button @click="onPrintPreview">打印预览</el-button>
         </el-form-item>
         <el-form-item>
           <el-checkbox v-model="hideNoMovement">隐藏无发生额且无余额科目</el-checkbox>
@@ -43,6 +44,35 @@
         </el-table-column>
       </el-table>
     </el-card>
+
+    <!-- P95 REQ-094：A4 打印预览 -->
+    <el-dialog v-model="printDialogVisible" title="打印预览" width="80%" top="5vh" :close-on-click-modal="false">
+      <div class="print-area">
+        <div class="print-header">
+          <h2>现金流量表</h2>
+          <p>所属期间：{{ query.period }} | 金额单位：元</p>
+        </div>
+        <table class="print-table">
+          <thead><tr><th>项目</th><th>本期金额</th><th>本年累计金额</th></tr></thead>
+          <tbody>
+            <tr v-for="(row, i) in visibleRows" :key="i" :class="{ bold: row.bold }">
+              <td>{{ row.label }}</td>
+              <td class="num">{{ fmtAmount(row.amount) }}</td>
+              <td class="num">{{ fmtAmount(row.amountYtd) }}</td>
+            </tr>
+          </tbody>
+        </table>
+        <div class="print-footer">
+          <span>制表人：__________</span>
+          <span>审核人：__________</span>
+          <span>法定代表人：__________</span>
+        </div>
+      </div>
+      <template #footer>
+        <el-button @click="printDialogVisible = false">关闭</el-button>
+        <el-button type="primary" @click="doPrint">打印</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -123,6 +153,14 @@ const onExport = async () => {
   }
 }
 
+// P95 REQ-094：打印预览
+const printDialogVisible = ref(false)
+const onPrintPreview = () => {
+  if (!query.period) { ElMessage.warning('请先选择期间'); return }
+  printDialogVisible.value = true
+}
+const doPrint = () => window.print()
+
 onMounted(async () => {
   query.period = await resolveLatestClosedPeriod()
   fetchData()
@@ -130,6 +168,21 @@ onMounted(async () => {
 </script>
 
 <style scoped>
+/* P95 REQ-094：打印样式 */
+.print-header { text-align: center; margin-bottom: 16px; }
+.print-header h2 { margin: 0 0 8px; }
+.print-header p { margin: 0; color: #606266; font-size: 14px; }
+.print-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.print-table th, .print-table td { border: 1px solid #303133; padding: 4px 8px; text-align: left; }
+.print-table th { background: #f5f7fa; }
+.print-table .num { text-align: right; font-variant-numeric: tabular-nums; }
+.print-table .bold { font-weight: 600; }
+.print-footer { display: flex; justify-content: space-around; margin-top: 40px; padding-top: 20px; border-top: 1px solid #dcdfe6; }
+@media print {
+  .el-dialog__header, .el-dialog__footer { display: none !important; }
+  .print-table thead { display: table-header-group; }
+  .print-table tr { break-inside: avoid; }
+}
 .amount-bold {
   font-weight: 600;
   color: #409eff;
