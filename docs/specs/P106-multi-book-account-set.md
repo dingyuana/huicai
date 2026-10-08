@@ -1,7 +1,7 @@
 # P106 SPEC — 多账套（企业级收口 + 账簿级立项）
 
 > **版本**：V2.1 | **最后修改**：2026-10-07 | **作者**：opencode（V2.1 为实施回写：D-3 补做删 `t_ai_feedback_log.tenant_id`，关闭双列并存的未决债）
-> **编号**：HUICAI-SPC-P106 | 优先级：**P1** | 状态：🚧 **实施中 —— 批次 1a（含 1a-3 / D-1）、批次 1b（D-2a 定性）、批次 2、批次 3（D-3 删列）已完成**；遗留仅 `t_dept` 隔离缺口（见 §0.1.1）与 `t_ai_feedback_log.tenant_id` 删列待决
+> **编号**：HUICAI-SPC-P106 | 优先级：**P1** | 状态：✅ **「多账套」子项已全部收口**（2026-10-08）—— 批次 1a（含 1a-3 / D-1）、批次 1b（D-2a 定性 + `t_dept` 隔离，`V171`）、批次 2（D-2b + P0 `t_user` 修复）、批次 3（D-3 删列 + 补做 `V172`）**均已实施并有真库守卫锁定**；原列的两项遗留（`t_dept` 隔离缺口、`t_ai_feedback_log.tenant_id`）**已全部闭合**。相邻内控缺口另由 **SPEC-P112**（RLS 兜底补齐至 72 张）与 **SPEC-P113**（非 ACTIVE 账套禁写）承接，不在本 SPEC 范围
 > **来源**：P101 商用化差距总纲 → P106「内控深度」中的「多账套」子项
 > **关联需求**：**REQ-2026-133**（⚠️ V1.0 原写 REQ-2026-134 **有误** —— 134 归 P107 存量缺陷修复包且已实施完成，P101 line 28 已明文「为它让出 134，133 保持不变」；更正记录见登记册 V1.77）| **前置**：RLS 三层已落地（PR #26/#27）、DTO 入参隔离已归零（PR #28~#30）
 > **test_ref**：**已存在** —— `TenantRlsRealDBTest`（6 项真库隔离断言）、`TenantRlsGucRealDBTest`、`TenantIsolationSecurityTest`、`TenantIsolationHttpTest`、`ReconciliationServiceImplTest`、`ReconciliationToleranceServiceImplTest`、`ReconciliationIntegrationTest`；**本 SPEC 新增** —— `AccountSetIsolationRealDBTest`（**8 例**，承载 AT-106-1~5 + 1a-3 的两条 + **D-3 schema 守卫一条**）、`TenantSwitchRealDBTest`（11 例，批次 2）、`PaginationTotalTenantIsolationRealDBTest`（2 例，DIR-004）、`SharedTablesExemptionRealDBTest`（5 例，D-2a 定性守卫）
