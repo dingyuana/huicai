@@ -589,6 +589,8 @@ class ReportServiceImplTest {
         cash.put("end_cash", new BigDecimal("10000"));
         when(reportDataMapper.cashSubjectBalance("202606")).thenReturn(cash);
         when(subjectBalanceService.checkOpeningContinuity("202606")).thenReturn(new HashMap<>());
+        when(reportDataMapper.subjectBalance("202606")).thenReturn(new ArrayList<>());
+        when(reportDataMapper.subjectBalance("202601")).thenReturn(new ArrayList<>());
 
         assertTrue(hasRule("202606", "R_REVENUE_ZERO"), "零收入且有费用必须提示");
     }
@@ -609,6 +611,8 @@ class ReportServiceImplTest {
         cash.put("end_cash", new BigDecimal("12000"));
         when(reportDataMapper.cashSubjectBalance("202606")).thenReturn(cash);
         when(subjectBalanceService.checkOpeningContinuity("202606")).thenReturn(new HashMap<>());
+        when(reportDataMapper.subjectBalance("202606")).thenReturn(new ArrayList<>());
+        when(reportDataMapper.subjectBalance("202601")).thenReturn(new ArrayList<>());
 
         assertTrue(diagIds("202606").isEmpty(), "负向：收入正常、现金未骤降、期初连续时不得产出任何诊断");
     }
@@ -628,6 +632,8 @@ class ReportServiceImplTest {
         cash.put("end_cash", new BigDecimal("40000"));
         when(reportDataMapper.cashSubjectBalance("202606")).thenReturn(cash);
         when(subjectBalanceService.checkOpeningContinuity("202606")).thenReturn(new HashMap<>());
+        when(reportDataMapper.subjectBalance("202606")).thenReturn(new ArrayList<>());
+        when(reportDataMapper.subjectBalance("202601")).thenReturn(new ArrayList<>());
 
         assertTrue(hasRule("202606", "R_CASH_DROP"), "期末现金不足期初一半必须提示");
     }
@@ -653,6 +659,8 @@ class ReportServiceImplTest {
         oc.put("maxAbsDiff", new BigDecimal("100000.00"));
         oc.put("mismatches", List.of(Map.of("subjectCode", "4001", "diff", new BigDecimal("-100000.00"))));
         when(subjectBalanceService.checkOpeningContinuity("202606")).thenReturn(oc);
+        when(reportDataMapper.subjectBalance("202606")).thenReturn(new ArrayList<>());
+        when(reportDataMapper.subjectBalance("202601")).thenReturn(new ArrayList<>());
 
         assertTrue(hasRule("202606", "R_OPENING_DISCONTINUITY"), "期初不连续须转为页条诊断（REQ-102）");
     }
@@ -669,14 +677,18 @@ class ReportServiceImplTest {
         when(reportDataMapper.cumulativeData("202601", "202606")).thenReturn(new HashMap<>());
         when(reportDataMapper.cashSubjectBalance("202606")).thenReturn(new HashMap<>());
         when(subjectBalanceService.checkOpeningContinuity("202606")).thenReturn(new HashMap<>());
+        when(reportDataMapper.subjectBalance("202606")).thenReturn(new ArrayList<>());
+        when(reportDataMapper.subjectBalance("202601")).thenReturn(new ArrayList<>());
 
         service.diagnostics("202606");
 
         // 只读铁律（ReportDataMapper 是纯 @Mapper 接口无写方法，故用交互白名单断言）：
-        // 除三个只读查询外不得有任何其他调用——一旦诊断里混进写操作即失败
+        // 除只读查询外不得有任何其他调用——一旦诊断里混进写操作即失败
         verify(reportDataMapper, times(1)).incomeStatementData("202606");
         verify(reportDataMapper, times(1)).cumulativeData("202601", "202606");
         verify(reportDataMapper, times(1)).cashSubjectBalance("202606");
+        verify(reportDataMapper, times(1)).subjectBalance("202606");
+        verify(reportDataMapper, times(1)).subjectBalance("202601");
         verify(subjectBalanceService, times(1)).checkOpeningContinuity("202606");
         verifyNoMoreInteractions(reportDataMapper, subjectBalanceService);
     }

@@ -92,6 +92,33 @@ public class ReportServiceImpl implements ReportService {
                     continuity.get("mismatchCount") + " 个科目本期期初与上期期末不符，最大差额 "
                             + continuity.get("maxAbsDiff") + "；结账前须核对期初建账或补齐衔接凭证"));
         }
+
+        // REQ-037：存货占比过高预警（存货=1401/1403/1405/1406/1408 等 14xx 存货类）
+        Map<String, Object> bs = balanceSheet(period);
+        BigDecimal totalAssets = toBigDecimal(bs.get("totalAssets"));
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> assets = (List<Map<String, Object>>) bs.get("assets");
+        BigDecimal inventory = BigDecimal.ZERO;
+        BigDecimal receivable = BigDecimal.ZERO;
+        if (assets != null) {
+            for (Map<String, Object> a : assets) {
+                String code = String.valueOf(a.get("code"));
+                BigDecimal bal = toBigDecimal(a.get("end_balance"));
+                if (code.startsWith("14")) inventory = inventory.add(bal);
+                if (code.startsWith("1122")) receivable = receivable.add(bal);
+            }
+        }
+        if (totalAssets.signum() > 0 && inventory.compareTo(totalAssets.multiply(new BigDecimal("0.3"))) > 0) {
+            BigDecimal ratio = inventory.multiply(new BigDecimal("100")).divide(totalAssets, 1, java.math.RoundingMode.HALF_UP);
+            out.add(diagnostic("R_INVENTORY_HIGH", "存货占资产比例过高",
+                    "存货 " + inventory + " 占总资产 " + totalAssets + " 的 " + ratio + "%，超过 30% 阈值，关注积压与跌价风险"));
+        }
+        if (totalAssets.signum() > 0 && receivable.compareTo(totalAssets.multiply(new BigDecimal("0.25"))) > 0) {
+            BigDecimal ratio = receivable.multiply(new BigDecimal("100")).divide(totalAssets, 1, java.math.RoundingMode.HALF_UP);
+            out.add(diagnostic("R_RECEIVABLE_HIGH", "应收账款占资产比例过高",
+                    "应收账款 " + receivable + " 占总资产 " + totalAssets + " 的 " + ratio + "%，超过 25% 阈值，关注回款与坏账风险"));
+        }
+
         return out;
     }
 

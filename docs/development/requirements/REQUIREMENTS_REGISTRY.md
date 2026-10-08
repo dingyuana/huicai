@@ -413,7 +413,7 @@
 
 | REQ-2026-036 | 财务分析 | P2 | 杜邦分析、趋势分析、指标计算 | SPC-017-P0 | ✅ 已实现（AnalysisService: keyMetrics/dupontAnalysis/yoyMom/listMetrics） | DONE |
 
-| REQ-2026-037 | 异常指标告警 | P2 | 指标异常自动检测、告警推送 | SPC-018-P3 | ⏳ 规划中 | PLANNED |
+| REQ-2026-037 | 异常指标告警 | P2 | 指标异常自动检测、告警推送 | SPC-018-P3 | ✅ 已实现（diagnostics 5 条规则：零收入有费用/现金骤降/期初不连续/存货占比过高/应收占比过高 + Dashboard 告警展示） | DONE |
 
 | REQ-2026-082 | 资产负债表平衡根治 | P0 | 资产总计恒等于负债+所有者权益；含未分配利润（本年利润）取数、科目方向口径统一、不平衡强校验拦截与差异诊断；报表取数不依赖未结转的脏数据 | SPC-P69 | ✅ 算法层已实现待验收（全科目归类+本年利润行+diff/unbalancedItems+结账拦截，17+28 测试）；部署与存量脏数据为运营项 | ACCEPT |
 
@@ -567,19 +567,13 @@
 
 |------|---------|--------|------|-----------|
 
-| REQ-2026-047 | 人是唯一审核主体 | P0 | 系统不允许自动调整业务状态 |  |  | DESIGN |
-
-| REQ-2026-048 | 凭证不可变性 | P0 | 已审核凭证只能红冲 |  |  | DESIGN |
-
-| REQ-2026-049 | 金额精度保证 | P0 | BigDecimal + NUMERIC(18,2) |  |  | DESIGN |
-
-| REQ-2026-050 | 编号关联溯源 | P0 | 全链路双向追溯 |  |  | DESIGN |
-
-| REQ-2026-051 | 审计追踪 | P0 | AOP + jsonb 快照 |  |  | DESIGN |
-
-| REQ-2026-052 | 数据权限隔离 | P1 | 组织级数据隔离 |  |  | DESIGN |
-
-| REQ-2026-053 | 核销架构约束 | P0 | 银行流水不直接参与核销 |  |  | DESIGN |
+| REQ-2026-047 | 人是唯一审核主体 | P0 | 系统不允许自动调整业务状态 |  | ✅ 已体现代码（状态机均需人工触发，无自动过审路径） | DONE |
+| REQ-2026-048 | 凭证不可变性 | P0 | 已审核凭证只能红冲 |  | ✅ 已体现代码（已审核凭证不允许编辑，仅红冲 REVERSED） | DONE |
+| REQ-2026-049 | 金额精度保证 | P0 | BigDecimal + NUMERIC(18,2) |  | ✅ 已体现代码（全栈 BigDecimal + DB NUMERIC(18,2)） | DONE |
+| REQ-2026-050 | 编号关联溯源 | P0 | 全链路双向追溯 |  | ✅ 已体现代码（凭证→单据→发票全链路 docId/voucherId 关联） | DONE |
+| REQ-2026-051 | 审计追踪 | P0 | AOP + jsonb 快照 |  | ✅ 已体现代码（AuditLog + AOP 切面） | DONE |
+| REQ-2026-052 | 数据权限隔离 | P1 | 组织级数据隔离 |  | ✅ 已体现代码（RLS + enterprise_id + DataPermissionInterceptor） | DONE |
+| REQ-2026-053 | 核销架构约束 | P0 | 银行流水不直接参与核销 |  | ✅ 已体现代码（核销唯一入口为核销工作台，银行流水不直接核销） | DONE |
 
 | REQ-2026-054 | AI 输出=建议 | P0 | 不自动应用，人工确认后落库 |  |  | DESIGN |
 
@@ -659,9 +653,9 @@
 
 | REQ-2026-087 | 折旧与资产统计报表 | P1 | 资产分类汇总（数量/原值/累计折旧/净值/本期应提/净值率）+ 折旧计提汇总（部门×类别）+ Excel 导出；处置资产排除；只读不触发计提 | SPC-P77 | ✅ 已实现（AssetReportController + AssetReportService + AssetReportView.vue） | DONE |
 
-| REQ-2026-088 | 预收预付余额汇总 | P1 | 按往来单位的预收/预付余额汇总（期初/本期新增/本期抵扣/本期冲销/期末），恒等式校验 opening+created−applied−reversed==closing；口径对齐 P75 | SPC-P78 | 📝 设计已完成（DSN-应收应付管理.md §8），SPEC 待建 | PLANNED |
+| REQ-2026-088 | 预收预付余额汇总 | P1 | 按往来单位的预收/预付余额汇总（期初/本期新增/本期抵扣/本期冲销/期末），恒等式校验 opening+created−applied−reversed==closing；口径对齐 P75 | SPC-P78 | ✅ 已实现（PrepaymentBalanceReportService + PrepaymentController + PrepaymentSummaryView.vue） | DONE |
 
-| REQ-2026-089 | 代理服务进度与工作量统计 | P2 | t_service_progress 节点跟踪（取票→记账→审核→报税）+ 超期预警 + 人工强制标记（留审计）+ 工作量统计（负责客户数/完成率/在办/超期）；只读聚合不改业务状态 | SPC-P79 | 📝 设计已完成（DSN-代理公司场景设计.md），SPEC 待建 | PLANNED |
+| REQ-2026-089 | 代理服务进度与工作量统计 | P2 | t_service_progress 节点跟踪（取票→记账→审核→报税）+ 超期预警 + 人工强制标记（留审计）+ 工作量统计（负责客户数/完成率/在办/超期）；只读聚合不改业务状态 | SPC-P79 | ✅ 已实现（ServiceProgressController + Service + Listener + ServiceProgressView.vue） | DONE |
 
 
 
