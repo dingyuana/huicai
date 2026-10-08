@@ -295,7 +295,7 @@
 
 | REQ-2026-064 | 客户对账与差异处理 | P1 | 客户对账单、未达账项、差异处理闭环 | SPC-052-P52 | ✅ 已完成 | DONE |
 
-| REQ-2026-065 | 采购付款财务流程 | P1 | 应付账龄、付款计划、采购退货、预付款联动 | SPC-053-P53 | 📝 SPEC已完成 | PLANNED |
+| REQ-2026-065 | 采购付款财务流程 | P1 | 应付账龄、付款计划、采购退货、预付款联动 | SPC-053-P53 | ✅ 已实现（PurchaseReturnController + PaymentPlanController + AgingAnalysisController + PrepaymentController） | DONE |
 
 | REQ-2026-080 | 反核销制证凭证联动作废（幽灵凭证修复） | P0 | 反核销时作废 DRAFT 制证凭证并清空核销单/业务单据双侧 voucher 挂接；非 DRAFT 凭证拦截提示先红冲；单据状态按剩余金额回落 | SPC-111 | ✅ 已完成（commit 4843440，28 单测 + 端到端 settlement_27 全链验证） | DONE |
 
@@ -369,9 +369,9 @@
 
 | REQ-2026-029 | 以票定账（凭证生成） | P0 | 人工审核→业务单→凭证，票→证全链路追溯 | SPC-014-P41 | ✅ | DONE |
 
-| REQ-2026-030 | 税务申报 | P1 | 增值税申报、税金计算 | SPC-011-P13 | ⏳ 规划中 | PLANNED |
+| REQ-2026-030 | 税务申报 | P1 | 增值税申报、税金计算 | SPC-011-P13 | ✅ 已实现（TaxController 申报分页/创建/附表二等端点 + TaxVatView.vue） | DONE |
 
-| REQ-2026-076 | 销项发票批量操作 | P1 | 7 个状态机批量端点（submit/confirm/reject/revert/markVouchered/void/reverse）+ 前端选择列+动态按钮+失败明细弹窗；best-effort 模式单条失败不影响其他；单次≤100 条 | SPC-076-P56 | 🆕 规划中 | PLANNED |
+| REQ-2026-076 | 销项发票批量操作 | P1 | 7 个状态机批量端点（submit/confirm/reject/revert/markVouchered/void/reverse）+ 前端选择列+动态按钮+失败明细弹窗；best-effort 模式单条失败不影响其他；单次≤100 条 | SPC-076-P56 | ✅ 已实现（TaxController P56 批量端点 7 个 + best-effort） | DONE |
 
 
 
@@ -643,7 +643,7 @@
 
 | REQ-2026-073 | 批量结账 | P1 | 多企业批量结账 | SPC-126-S-26 | ✅ 已实现（BatchCloseService + /batch/close） | DONE |
 
-| REQ-2026-074 | 客户合同管理 | P2 | 合同 CRUD、续费提醒 | SPC-126-S-26 | 🆕 规划中 | PLANNED |
+| REQ-2026-074 | 客户合同管理 | P2 | 合同 CRUD、续费提醒 | SPC-126-S-26 | ✅ 已实现（ClientController /api/v1/agency/contracts + ContractService） | DONE |
 
 | REQ-2026-075 | 代理工作台前端 | P1 | 客户列表、切换、批量操作 UI | SPC-126-S-26 | ✅ 已实现（AgencyDashboard + BatchOperation + EnterpriseList） | DONE |
 
