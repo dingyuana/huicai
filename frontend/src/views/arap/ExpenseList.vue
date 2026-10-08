@@ -46,33 +46,49 @@
         <template #empty>
           <el-empty v-if="scope === 'completed' && !dateRange" description="请先选择日期范围（快捷时段或自定义）查询已完成单据" />
         </template>
-        <el-table-column prop="id" label="编号" width="70" />
+        <el-table-column label="报销单号" width="140">
+          <template #default="{ row }">{{ row.reimbNo || row.id }}</template>
+        </el-table-column>
         <el-table-column label="员工" width="140">
           <template #default="{ row }">{{ row.employeeName || employeeLabel(row.employeeId) }}</template>
         </el-table-column>
-        <el-table-column prop="expenseType" label="费用类型" width="120" align="center">
+        <el-table-column prop="expenseType" label="费用类型" width="100" align="center">
           <template #default="{ row }">
             <el-tag size="small">{{ EXPENSE_TYPE_MAP[row.expenseType] || row.expenseType }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="金额" width="140" align="right">
+        <el-table-column label="金额" width="110" align="right">
           <template #default="{ row }">{{ fmtAmount(row.amount) }}</template>
         </el-table-column>
-        <el-table-column prop="summary" label="摘要" min-width="200" show-overflow-tooltip />
-        <el-table-column label="状态" width="110" align="center">
+        <el-table-column prop="summary" label="摘要" min-width="160" show-overflow-tooltip />
+        <el-table-column label="驳回原因" min-width="120" show-overflow-tooltip>
+          <template #default="{ row }">
+            <el-tooltip v-if="row.rejectReason" :content="row.rejectReason" placement="top">
+              <span style="color:#f56c6c">{{ row.rejectReason }}</span>
+            </el-tooltip>
+            <span v-else>-</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="状态" width="100" align="center">
           <template #default="{ row }">
             <el-tag :type="STATUS_TAG_MAP[row.status] || 'info'" size="small">
               {{ STATUS_MAP[row.status] || row.status }}
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="310" fixed="right">
+        <el-table-column label="提交时间" width="160">
+          <template #default="{ row }">{{ row.submittedAt ? row.submittedAt.slice(0, 16) : '-' }}</template>
+        </el-table-column>
+        <el-table-column label="操作" width="330" fixed="right">
           <template #default="{ row }">
             <el-button text type="primary" v-if="row.status === 'DRAFT'" @click="$router.push('/arap/expense/edit?id=' + row.id)">编辑</el-button>
             <el-button text type="primary" v-if="row.status === 'DRAFT'" @click="onSubmit(row)">提交</el-button>
+            <el-button text type="primary" v-if="row.status === 'REJECTED'" @click="$router.push('/arap/expense/edit?id=' + row.id)">修改重报</el-button>
+            <el-button text type="primary" v-if="row.status === 'REJECTED'" @click="onSubmit(row)">重新提交</el-button>
             <el-button text type="success" v-if="row.status === 'SUBMITTED'" @click="onApprove(row)">通过</el-button>
             <el-button text type="danger" v-if="row.status === 'SUBMITTED'" @click="onReject(row)">驳回</el-button>
             <el-button text type="warning" v-if="row.status === 'APPROVED'" @click="onAutoVoucher(row)">生成凭证</el-button>
+            <el-button text type="info" v-if="row.status === 'VOUCHERED' && row.voucherId" @click="$router.push('/finance/voucher?id=' + row.voucherId)">查看凭证</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -97,6 +113,7 @@ import { onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { pageExpense, submitExpense, approveExpense, rejectExpense, autoVoucher } from '@/api/modules/expense'
 import { listEmployee, type Employee } from '@/api/modules/employee'
+import { useUserStore } from '@/store/user'
 
 const STATUS_OPTIONS = [
   { value: 'DRAFT', label: '草稿' },
@@ -191,8 +208,11 @@ const onSubmit = async (row: any) => {
   fetchData()
 }
 
+const userStore = useUserStore()
+
 const onApprove = async (row: any) => {
-  await approveExpense(row.id)
+  const approver = userStore.userInfo?.name || userStore.userInfo?.username || ''
+  await approveExpense(row.id, approver)
   ElMessage.success('已审核通过')
   fetchData()
 }

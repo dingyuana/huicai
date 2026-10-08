@@ -283,7 +283,7 @@
 
 | REQ-2026-015 | 坏账计提 | P1 | 账龄分析、坏账准备计提 | SPC-043-P43 | ✅ 已完成 | DONE |
 
-| REQ-2026-016 | 费用报销管理 | P1 | DRAFT→SUBMITTED→APPROVED→REJECTED→VOUCHERED | SPC-008-P11 | ⚠️ 后端完整，前端基础 | PARTIAL |
+| REQ-2026-016 | 费用报销管理 | P1 | DRAFT→SUBMITTED→APPROVED→REJECTED→VOUCHERED | SPC-008-P11 | ✅ 已实现（P66 核心缺口修复：驳回重报闭环、费用类型补齐、信息展示、审批人传参、只读守卫） | DONE |
 
 | REQ-2026-055 | 核销全链路 Timeline 视图 | P1 | 时间轴展示从银行流水→收款单→核销→凭证全链路 | SPC-042 | ✅ 已实现（P42 V2.1，ReconciliationTimeline.vue + trace API） | DONE |
 
@@ -345,7 +345,7 @@
 
 | REQ-2026-024 | 折旧计提 | P0 | 按月计提、多折旧方法 | SPC-006 | ✅ | DONE |
 
-| REQ-2026-025 | 资产处置与盘点 | P0 | 处置、盘点、盘盈/盘亏处理 | SPC-013-P2 | ⏳ 规划中 | PLANNED |
+| REQ-2026-025 | 资产处置与盘点 | P0 | 处置、盘点、盘盈/盘亏处理 | SPC-013-P2 | ✅ 已实现（AssetDisposalController + AssetInventoryController + 前端列表页） | DONE |
 
 
 
@@ -407,7 +407,7 @@
 
 |------|---------|--------|---------|-----------|---------|
 
-| REQ-2026-034 | 三大报表自动生成 | P0 | 资产负债表/利润表/现金流量表 | SPC-016-P17 | ⚠️ 基础 | PARTIAL |
+| REQ-2026-034 | 三大报表自动生成 | P0 | 资产负债表/利润表/现金流量表 | SPC-016-P17 | ✅ 已实现（P17 9 方法全实现，前后端齐备） | DONE |
 
 | REQ-2026-035 | 自定义报表 | P1 | 自定义模板、Excel/PDF 导出 | SPC-016 | ⚠️ 基础 | PARTIAL |
 
