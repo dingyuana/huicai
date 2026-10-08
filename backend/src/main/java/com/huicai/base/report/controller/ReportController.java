@@ -95,6 +95,27 @@ public class ReportController {
         reportService.exportSubjectBalance(period, response);
     }
 
+    @Operation(summary = "REQ-035 自定义科目余额表查询")
+    @GetMapping("/custom/subject-balance")
+    public R<List<Map<String, Object>>> customSubjectBalance(
+            @RequestParam String period,
+            @RequestParam(required = false) Integer level,
+            @RequestParam(required = false) String codePrefix,
+            @RequestParam(required = false, defaultValue = "false") Boolean onlyWithBalance) {
+        return R.ok(reportService.customSubjectBalance(period, level, codePrefix, onlyWithBalance));
+    }
+
+    @Operation(summary = "REQ-035 自定义科目余额表导出")
+    @GetMapping("/custom/subject-balance/export")
+    public void exportCustomSubjectBalance(
+            @RequestParam String period,
+            @RequestParam(required = false) Integer level,
+            @RequestParam(required = false) String codePrefix,
+            @RequestParam(required = false, defaultValue = "false") Boolean onlyWithBalance,
+            HttpServletResponse response) throws IOException {
+        reportService.exportCustomSubjectBalance(period, level, codePrefix, onlyWithBalance, response);
+    }
+
     @Operation(summary = "资产负债表导出")
     @GetMapping("/balance-sheet/export")
     public void exportBalanceSheet(@RequestParam String period, HttpServletResponse response) throws IOException {

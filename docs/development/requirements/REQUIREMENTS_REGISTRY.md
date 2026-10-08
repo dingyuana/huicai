@@ -409,9 +409,9 @@
 
 | REQ-2026-034 | 三大报表自动生成 | P0 | 资产负债表/利润表/现金流量表 | SPC-016-P17 | ✅ 已实现（P17 9 方法全实现，前后端齐备） | DONE |
 
-| REQ-2026-035 | 自定义报表 | P1 | 自定义模板、Excel/PDF 导出 | SPC-016 | ⚠️ 基础 | PARTIAL |
+| REQ-2026-035 | 自定义报表 | P1 | 自定义模板、Excel/PDF 导出 | SPC-016 | ✅ 已实现（custom/subject-balance 查询+导出端点 + CustomReportView.vue，支持级次/编码前缀/有余额筛选） | DONE |
 
-| REQ-2026-036 | 财务分析 | P2 | 杜邦分析、趋势分析、指标计算 | SPC-017-P0 | ⏳ 规划中 | PLANNED |
+| REQ-2026-036 | 财务分析 | P2 | 杜邦分析、趋势分析、指标计算 | SPC-017-P0 | ✅ 已实现（AnalysisService: keyMetrics/dupontAnalysis/yoyMom/listMetrics） | DONE |
 
 | REQ-2026-037 | 异常指标告警 | P2 | 指标异常自动检测、告警推送 | SPC-018-P3 | ⏳ 规划中 | PLANNED |
 
@@ -655,9 +655,9 @@
 
 | REQ-2026-136 | 核销模板科目修正 | P0 | 修正核销单凭证模板双重记账：应收核销借1002→借2203、应付核销贷1002→贷1123 | SPC-P74 | ✅ 已实现（V130 源文件修正 + V140 生产迁移 + 端到端测试，commit 31ce3f4） | DONE |
 
-| REQ-2026-086 | 费用汇总报表 | P1 | 按部门/费用类型/员工 × 期间区间的报销费用汇总（金额/单据数/人均/同比/环比）+ Excel 导出；status∈(APPROVED,VOUCHERED)；数据权限拦截器注入 | SPC-P76 | 📝 设计已完成（DSN-费用报销管理.md §8），SPEC 待建 | PLANNED |
+| REQ-2026-086 | 费用汇总报表 | P1 | 按部门/费用类型/员工 × 期间区间的报销费用汇总（金额/单据数/人均/同比/环比）+ Excel 导出；status∈(APPROVED,VOUCHERED)；数据权限拦截器注入 | SPC-P76 | ✅ 已实现（ExpenseSummaryReportService + /summary + /summary/export + ExpenseSummaryView.vue） | DONE |
 
-| REQ-2026-087 | 折旧与资产统计报表 | P1 | 资产分类汇总（数量/原值/累计折旧/净值/本期应提/净值率）+ 折旧计提汇总（部门×类别）+ Excel 导出；处置资产排除；只读不触发计提 | SPC-P77 | 📝 设计已完成（DSN-固定资产管理.md §8），SPEC 待建 | PLANNED |
+| REQ-2026-087 | 折旧与资产统计报表 | P1 | 资产分类汇总（数量/原值/累计折旧/净值/本期应提/净值率）+ 折旧计提汇总（部门×类别）+ Excel 导出；处置资产排除；只读不触发计提 | SPC-P77 | ✅ 已实现（AssetReportController + AssetReportService + AssetReportView.vue） | DONE |
 
 | REQ-2026-088 | 预收预付余额汇总 | P1 | 按往来单位的预收/预付余额汇总（期初/本期新增/本期抵扣/本期冲销/期末），恒等式校验 opening+created−applied−reversed==closing；口径对齐 P75 | SPC-P78 | 📝 设计已完成（DSN-应收应付管理.md §8），SPEC 待建 | PLANNED |
 

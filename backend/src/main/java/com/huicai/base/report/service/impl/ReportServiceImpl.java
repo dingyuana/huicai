@@ -800,4 +800,42 @@ public class ReportServiceImpl implements ReportService {
         }
         writeExcel(response, "现金流量表", period, headers, rows);
     }
+
+    @Override
+    public List<Map<String, Object>> customSubjectBalance(String period, Integer level, String codePrefix, Boolean onlyWithBalance) {
+        List<Map<String, Object>> data = subjectBalanceTable(period);
+        return data.stream()
+                .filter(row -> {
+                    if (level != null) {
+                        Object lv = row.get("level");
+                        if (lv == null || !level.toString().equals(lv.toString())) return false;
+                    }
+                    if (codePrefix != null && !codePrefix.isEmpty()) {
+                        Object code = row.get("code");
+                        if (code == null || !code.toString().startsWith(codePrefix)) return false;
+                    }
+                    if (Boolean.TRUE.equals(onlyWithBalance)) {
+                        BigDecimal end = toBigDecimal(row.get("end_balance"));
+                        BigDecimal begin = toBigDecimal(row.get("begin_balance"));
+                        if (end.signum() == 0 && begin.signum() == 0) return false;
+                    }
+                    return true;
+                })
+                .toList();
+    }
+
+    @Override
+    public void exportCustomSubjectBalance(String period, Integer level, String codePrefix, Boolean onlyWithBalance, HttpServletResponse response) throws IOException {
+        List<Map<String, Object>> data = customSubjectBalance(period, level, codePrefix, onlyWithBalance);
+        String[] headers = {"科目编码", "科目名称", "级次", "余额方向", "期初余额", "本期借方", "本期贷方", "期末余额"};
+        List<List<Object>> rows = new ArrayList<>();
+        for (Map<String, Object> row : data) {
+            rows.add(List.of(
+                    row.get("code"), row.get("name"), row.get("level"), directionLabel(row.get("direction")),
+                    row.get("begin_balance"), row.get("debit_total"),
+                    row.get("credit_total"), row.get("end_balance")
+            ));
+        }
+        writeExcel(response, "自定义科目余额表", period, headers, rows);
+    }
 }

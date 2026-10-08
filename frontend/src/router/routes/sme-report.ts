@@ -36,6 +36,14 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/report/cash-flow/CashFlowView.vue'),
     meta: { title: '现金流量表', permission: 'report:cashflow:view', keepAlive: true },
   },
+
+  // ─── 自定义报表（REQ-035）───
+  {
+    path: 'report/custom',
+    name: 'CustomReportView',
+    component: () => import('@/views/report/CustomReportView.vue'),
+    meta: { title: '自定义报表', permission: 'report:subject:list', keepAlive: true },
+  },
 ]
 
 export default routes
