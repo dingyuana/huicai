@@ -44,13 +44,13 @@ jobs:
       - name: 校验所有 SPEC 契约
         run: |
           # 🆕 棘轮（AGENTS §4.5 第 21/25 条）：上限写在命令行里（可审计）。
-          # 不加此参数时 82/104 缺契约仍是 PASSED ⇒ 门禁恒绿、无信号。
-          # 上限 82 = 2026-10-08 实测值（total=104 validated=22 broken=0；端点型契约已被校验器识别）。
+          # 不加此参数时 87/118 缺契约仍是 PASSED ⇒ 门禁恒绿、无信号。
+          # 上限 87 = 2026-10-08 实测值（total=118 validated=31 broken=0；P 系列 + S 系列均已纳入门禁）。
 #   演进：96（基线 8 份有契约）→ 94（补 P112/P113）→ 86（统一 24 份标记 + 修 4 份坏契约）。
           # 每补齐一份契约就把上限下调 1 ⇒ 棘轮而非固定阈值。
           python scripts/validate_spec_contract.py \
             --dir docs/specs/ \
             --check-implementation \
             --check-tests \
-            --max-no-contract 82 \
+            --max-no-contract 87 \
             --project-root "${{ github.workspace }}"

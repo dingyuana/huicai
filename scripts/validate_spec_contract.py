@@ -743,7 +743,11 @@ def main():
         files_to_check = [args.path]
     elif args.dir:
         dir_path = Path(args.dir)
-        files_to_check = [str(f) for f in dir_path.glob("P*-*.md")]
+        # 门禁枚举：P 系列 + S 系列（原先只收 P，S 系列从未被评估 —— 静默盲区）。
+        # SPEC-CONTRACT-SCHEMA / T1-* / timestamp-* 不属于职责契约，仍排除。
+        files_to_check = sorted(
+            str(f) for f in set(dir_path.glob("P*-*.md")) | set(dir_path.glob("S-*.md"))
+        )
 
     all_passed = True
     missing_count = 0
