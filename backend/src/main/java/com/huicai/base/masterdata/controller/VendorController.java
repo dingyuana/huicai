@@ -32,39 +32,39 @@ public class VendorController {
 
     @Operation(summary = "分页查询")
     @GetMapping("/page")
-    public R<IPage<VendorEntity>> page(
+    public R<IPage<com.huicai.base.masterdata.vo.VendorVO>> page(
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) Boolean isActive,
             @RequestParam(defaultValue = "1") Integer current,
             @RequestParam(defaultValue = "20") Integer size) {
-        return R.ok(service.pageQuery(keyword, isActive, current, size));
+        return R.ok(com.huicai.base.masterdata.vo.VendorVO.from(service.pageQuery(keyword, isActive, current, size)));
     }
 
     @Operation(summary = "查询全部")
     @GetMapping("/list")
-    public R<List<VendorEntity>> list() {
-        return R.ok(service.listAll());
+    public R<List<com.huicai.base.masterdata.vo.VendorVO>> list() {
+        return R.ok(com.huicai.base.masterdata.vo.VendorVO.from(service.listAll()));
     }
 
     @Operation(summary = "详情")
     @GetMapping("/{id}")
-    public R<VendorEntity> getById(@PathVariable Long id) {
-        return R.ok(service.getById(id));
+    public R<com.huicai.base.masterdata.vo.VendorVO> getById(@PathVariable Long id) {
+        return R.ok(com.huicai.base.masterdata.vo.VendorVO.from(service.getById(id)));
     }
 
     @Operation(summary = "创建")
     @PostMapping
-    public R<VendorEntity> create(@Valid @RequestBody VendorSaveDTO dto) {
+    public R<com.huicai.base.masterdata.vo.VendorVO> create(@Valid @RequestBody VendorSaveDTO dto) {
         VendorEntity entity = dto.toEntity();
-        return R.ok(service.create(entity));
+        return R.ok(com.huicai.base.masterdata.vo.VendorVO.from(service.create(entity)));
     }
 
     @Operation(summary = "更新")
     @PutMapping("/{id}")
-    public R<VendorEntity> update(@PathVariable Long id, @Valid @RequestBody VendorSaveDTO dto) {
+    public R<com.huicai.base.masterdata.vo.VendorVO> update(@PathVariable Long id, @Valid @RequestBody VendorSaveDTO dto) {
         VendorEntity entity = dto.toEntity();
         entity.setId(id);
-        return R.ok(service.update(entity));
+        return R.ok(com.huicai.base.masterdata.vo.VendorVO.from(service.update(entity)));
     }
 
     @Operation(summary = "删除")

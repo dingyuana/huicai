@@ -10,6 +10,8 @@ import jakarta.validation.Valid;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import com.huicai.base.system.util.SecurityUtils;
+import com.huicai.sme.cash.vo.TicketTransactionVO;
+import com.huicai.sme.cash.vo.TicketVO;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
@@ -26,7 +28,7 @@ public class TicketController {
 
     @Operation(summary = "分页查询")
     @GetMapping("/page")
-    public R<IPage<TicketEntity>> page(
+    public R<IPage<TicketVO>> page(
             @RequestParam(required = false) String ticketType,
             @RequestParam(required = false) String status,
             @RequestParam(defaultValue = "1") Integer current,
@@ -34,25 +36,25 @@ public class TicketController {
             @RequestParam(required = false) String scope,
             @RequestParam(required = false) LocalDate startDate,
             @RequestParam(required = false) LocalDate endDate) {
-        return R.ok(ticketService.pageQuery(ticketType, status, current, size, scope, startDate, endDate));
+        return R.ok(TicketVO.from(ticketService.pageQuery(ticketType, status, current, size, scope, startDate, endDate)));
     }
 
     @Operation(summary = "查询详情")
     @GetMapping("/{id}")
-    public R<TicketEntity> get(@PathVariable Long id) {
-        return R.ok(ticketService.getById(id));
+    public R<TicketVO> get(@PathVariable Long id) {
+        return R.ok(TicketVO.from(ticketService.getById(id)));
     }
 
     @Operation(summary = "新增票据")
     @PostMapping
-    public R<TicketEntity> create(@Valid @RequestBody TicketDTO dto) {
-        return R.ok(ticketService.create(dto.toEntity(), SecurityUtils.getCurrentUserId()));
+    public R<TicketVO> create(@Valid @RequestBody TicketDTO dto) {
+        return R.ok(TicketVO.from(ticketService.create(dto.toEntity(), SecurityUtils.getCurrentUserId())));
     }
 
     @Operation(summary = "修改票据")
     @PutMapping("/{id}")
-    public R<TicketEntity> update(@PathVariable Long id, @Valid @RequestBody TicketDTO dto) {
-        return R.ok(ticketService.update(id, dto.toEntity()));
+    public R<TicketVO> update(@PathVariable Long id, @Valid @RequestBody TicketDTO dto) {
+        return R.ok(TicketVO.from(ticketService.update(id, dto.toEntity())));
     }
 
     @Operation(summary = "删除票据")
@@ -64,25 +66,25 @@ public class TicketController {
 
     @Operation(summary = "领用票据")
     @PostMapping("/{id}/issue")
-    public R<TicketEntity> issue(@PathVariable Long id) {
-        return R.ok(ticketService.issue(id, SecurityUtils.getCurrentUserId()));
+    public R<TicketVO> issue(@PathVariable Long id) {
+        return R.ok(TicketVO.from(ticketService.issue(id, SecurityUtils.getCurrentUserId())));
     }
 
     @Operation(summary = "兑现票据")
     @PostMapping("/{id}/cash")
-    public R<TicketEntity> cash(@PathVariable Long id) {
-        return R.ok(ticketService.cash(id, SecurityUtils.getCurrentUserId()));
+    public R<TicketVO> cash(@PathVariable Long id) {
+        return R.ok(TicketVO.from(ticketService.cash(id, SecurityUtils.getCurrentUserId())));
     }
 
     @Operation(summary = "作废票据")
     @PostMapping("/{id}/void")
-    public R<TicketEntity> voidTicket(@PathVariable Long id) {
-        return R.ok(ticketService.voidTicket(id, SecurityUtils.getCurrentUserId()));
+    public R<TicketVO> voidTicket(@PathVariable Long id) {
+        return R.ok(TicketVO.from(ticketService.voidTicket(id, SecurityUtils.getCurrentUserId())));
     }
 
     @Operation(summary = "交易流水")
     @GetMapping("/{ticketId}/transactions")
-    public R<List<TicketTransactionEntity>> transactions(@PathVariable Long ticketId) {
-        return R.ok(ticketService.getTransactions(ticketId));
+    public R<List<TicketTransactionVO>> transactions(@PathVariable Long ticketId) {
+        return R.ok(TicketTransactionVO.from(ticketService.getTransactions(ticketId)));
     }
 }

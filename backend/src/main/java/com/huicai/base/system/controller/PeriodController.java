@@ -12,6 +12,7 @@ import com.huicai.base.system.util.SecurityUtils;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import com.huicai.base.system.vo.PeriodVO;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
@@ -28,35 +29,35 @@ public class PeriodController {
 
     @Operation(summary = "获取期间列表(分页)")
     @GetMapping
-    public R<IPage<PeriodEntity>> list(
+    public R<IPage<com.huicai.base.system.vo.PeriodVO>> list(
             @RequestParam(defaultValue = "1") Integer current,
             @RequestParam(defaultValue = "20") Integer size) {
-        return R.ok(periodService.page(new Page<>(current, size),
+        return R.ok(PeriodVO.from(periodService.page(new Page<>(current, size),
                 new LambdaQueryWrapper<PeriodEntity>()
                         .orderByAsc(PeriodEntity::getYear)
-                        .orderByAsc(PeriodEntity::getMonth)));
+                        .orderByAsc(PeriodEntity::getMonth))));
     }
 
     @Operation(summary = "获取期间列表(全量)")
     @GetMapping("/all")
-    public R<List<PeriodEntity>> listAll() {
-        return R.ok(periodService.list(new LambdaQueryWrapper<PeriodEntity>()
-                .orderByDesc(PeriodEntity::getPeriodCode)));
+    public R<List<com.huicai.base.system.vo.PeriodVO>> listAll() {
+        return R.ok(PeriodVO.from(periodService.list(new LambdaQueryWrapper<PeriodEntity>()
+                .orderByDesc(PeriodEntity::getPeriodCode))));
     }
 
     @Operation(summary = "获取期间列表(全量, /list 路径兼容前端)")
     @GetMapping("/list")
-    public R<List<PeriodEntity>> listAllNamed() {
-        return R.ok(periodService.list(new LambdaQueryWrapper<PeriodEntity>()
-                .orderByDesc(PeriodEntity::getPeriodCode)));
+    public R<List<com.huicai.base.system.vo.PeriodVO>> listAllNamed() {
+        return R.ok(PeriodVO.from(periodService.list(new LambdaQueryWrapper<PeriodEntity>()
+                .orderByDesc(PeriodEntity::getPeriodCode))));
     }
 
     @Operation(summary = "新增期间")
     @PostMapping
-    public R<PeriodEntity> create(@Valid @RequestBody PeriodSaveDTO dto) {
+    public R<com.huicai.base.system.vo.PeriodVO> create(@Valid @RequestBody PeriodSaveDTO dto) {
         PeriodEntity period = dto.toEntity();
         periodService.save(period);
-        return R.ok(period);
+        return R.ok(PeriodVO.from(period));
     }
 
     @Operation(summary = "修改期间")
@@ -108,7 +109,7 @@ public class PeriodController {
 
     @Operation(summary = "获取期间详情")
     @GetMapping("/{id}")
-    public R<PeriodEntity> getById(@PathVariable Long id) {
-        return R.ok(periodService.getById(id));
+    public R<com.huicai.base.system.vo.PeriodVO> getById(@PathVariable Long id) {
+        return R.ok(PeriodVO.from(periodService.getById(id)));
     }
 }

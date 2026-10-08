@@ -152,27 +152,28 @@ public class VoucherTemplateController {
 
     @lombok.Data
     public static class VoucherTemplateCreateRequest {
+        /** 模板代码（唯一） */
+        private String templateCode;
         private String name;
-        private String description;
-        private String classification;
-        private String source;
+        /** 单据类型（业务分类） */
         private String businessType;
-        private String direction;
-        private Integer matchPriority;
-        private String numberPrefix;
+        private String voucherTypeCode;
+        private String summary;
+        /** 分录模板（JSON 数组文本，须为合法 JSON） */
+        private String entries;
         private Boolean isActive;
+        private String remark;
         private List<VoucherTemplateLineEntity> lines;
 
         public VoucherTemplateEntity toEntity() {
             VoucherTemplateEntity e = new VoucherTemplateEntity();
+            e.setTemplateCode(templateCode);
             e.setName(name);
-            e.setDescription(description);
-            e.setClassification(classification);
-            e.setSource(source);
             e.setBusinessType(businessType);
-            e.setDirection(direction);
-            e.setMatchPriority(matchPriority);
-            e.setNumberPrefix(numberPrefix != null ? numberPrefix : "JZ");
+            e.setVoucherTypeCode(voucherTypeCode);
+            e.setSummary(summary);
+            e.setEntries(entries);
+            e.setRemark(remark);
             e.setIsActive(isActive != null ? isActive : true);
             return e;
         }

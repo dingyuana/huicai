@@ -21,14 +21,12 @@ public class VoucherTemplateMapperTest {
         // 设置必要字段
         entity.setName("测试模板");
         entity.setBusinessType("PAYMENT");
-        entity.setClassification("EXPENSE");
-        entity.setDirection("CREDIT");
-        entity.setNumberPrefix("JZ");
-        entity.setSource("MANUAL");
-        entity.setMatchPriority(100);
+        entity.setTemplateCode("TPL_001");
+        entity.setVoucherTypeCode("FK");
+        entity.setSummary("测试模板");
+        entity.setEntries("[]");
         entity.setIsActive(true);
-        entity.setDescription("测试模板描述");
-        entity.setCreatedBy(1L);
+        entity.setRemark("测试模板描述");
         
         // 验证方法可调用且返回正确类型
         Mockito.when(mapper.insert(entity)).thenReturn(1);
@@ -45,14 +43,12 @@ public class VoucherTemplateMapperTest {
         VoucherTemplateEntity entity = new VoucherTemplateEntity();
         entity.setName("测试模板");
         entity.setBusinessType("PAYMENT");
-        entity.setClassification("EXPENSE");
-        entity.setDirection("CREDIT");
-        entity.setNumberPrefix("JZ");
-        entity.setSource("MANUAL");
-        entity.setMatchPriority(100);
+        entity.setTemplateCode("TPL_001");
+        entity.setVoucherTypeCode("FK");
+        entity.setSummary("测试模板");
+        entity.setEntries("[]");
         entity.setIsActive(true);
-        entity.setDescription("测试模板描述");
-        entity.setCreatedBy(1L);
+        entity.setRemark("测试模板描述");
         Mockito.when(mapper.selectById(1L)).thenReturn(entity);
         
         VoucherTemplateEntity result = mapper.selectById(1L);
@@ -68,14 +64,12 @@ public class VoucherTemplateMapperTest {
         VoucherTemplateEntity entity = new VoucherTemplateEntity();
         entity.setName("测试模板");
         entity.setBusinessType("PAYMENT");
-        entity.setClassification("EXPENSE");
-        entity.setDirection("CREDIT");
-        entity.setNumberPrefix("JZ");
-        entity.setSource("MANUAL");
-        entity.setMatchPriority(100);
+        entity.setTemplateCode("TPL_001");
+        entity.setVoucherTypeCode("FK");
+        entity.setSummary("测试模板");
+        entity.setEntries("[]");
         entity.setIsActive(true);
-        entity.setDescription("测试模板描述");
-        entity.setCreatedBy(1L);
+        entity.setRemark("测试模板描述");
         Mockito.when(mapper.updateById(entity)).thenReturn(1);
         
         int rows = mapper.updateById(entity);
@@ -105,14 +99,12 @@ public class VoucherTemplateMapperTest {
         VoucherTemplateEntity e = new VoucherTemplateEntity();
         e.setName("测试模板");
         e.setBusinessType("PAYMENT");
-        e.setClassification("EXPENSE");
-        e.setDirection("CREDIT");
-        e.setNumberPrefix("JZ");
-        e.setSource("MANUAL");
-        e.setMatchPriority(100);
+        e.setTemplateCode("TPL_001");
+        e.setVoucherTypeCode("FK");
+        e.setSummary("测试模板");
+        e.setEntries("[]");
         e.setIsActive(true);
-        e.setDescription("测试模板描述");
-        e.setCreatedBy(1L);
+        e.setRemark("测试模板描述");
         Mockito.when(mapper.insert(e)).thenReturn(1);
         Mockito.when(mapper.selectById(1L)).thenReturn(e);
         Mockito.when(mapper.updateById(e)).thenReturn(1);

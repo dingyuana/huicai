@@ -135,12 +135,13 @@ docs/
 > - [DSN-PRD合理性评估.md](./design/analysis/DSN-PRD合理性评估.md)
 > - [DSN-PRD差距分析.md](./design/analysis/DSN-PRD差距分析.md)
 
-### 2.3 SPEC 规格契约文档（specs/ — 97份 md + 1份 JSON）
+### 2.3 SPEC 规格契约文档（specs/ — 99份 md + 1份 JSON）
 
 | 编号范围 | 说明 | 数量 |
 |----------|------|------|
 | P0~P72 | 功能规格文档（P 系列，含 P-BUSINESSDOC-LIST/P-SALARY/P-TRANSFER），按开发顺序增量编号 | 64份 |
 | P73~P79 | 后补批次：P73 银行流水核销 UX、P74 核销单凭证模板、P75 应收应付余额汇总（草案）、P76 费用汇总（已实现）、P77 折旧统计（已实现）、P78 预收预付汇总（已实现）、P79 代理进度（已实现 P0+P1） | 7份 |
+| P100~P113 | 商用化与治理批次：P101 商用化总纲、P102 安全基座、P104 测试门禁、P106 多账套、P107 存量缺陷包、P108 RLS 谓词硬化、P109 核销异常池、P110 Entity-DB 三方对齐、**P112 RLS 兜底缺口闭合**、**P113 非 ACTIVE 账套禁写**（2026-10-08 登记） | 13份 |
 | S-00~S-29 | 系统级规范文档（S 系列，S-17 含 S-17-1 子文档），按业务域分层编号 | 14份 |
 | 其他 | SPEC-CONTRACT-SCHEMA.md（契约规范）、T1-BankStatement数据隔离测试方案.md、timestamp-precision.md、P-LARGETABLE-BATCH、P-OUTPUTINVOICE-LIST | 6份 |
 

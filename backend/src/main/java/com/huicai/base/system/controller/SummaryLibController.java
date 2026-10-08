@@ -8,6 +8,7 @@ import com.huicai.base.system.service.SummaryLibService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import com.huicai.base.system.vo.SummaryLibVO;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
@@ -24,24 +25,24 @@ public class SummaryLibController {
 
     @Operation(summary = "获取摘要列表(分页)")
     @GetMapping
-    public R<IPage<SummaryLibEntity>> list(
+    public R<IPage<com.huicai.base.system.vo.SummaryLibVO>> list(
             @RequestParam(defaultValue = "1") Integer current,
             @RequestParam(defaultValue = "20") Integer size) {
-        return R.ok(summaryLibService.page(new Page<>(current, size)));
+        return R.ok(SummaryLibVO.from(summaryLibService.page(new Page<>(current, size))));
     }
 
     @Operation(summary = "获取摘要列表(全量)")
     @GetMapping("/all")
-    public R<List<SummaryLibEntity>> listAll() {
-        return R.ok(summaryLibService.list());
+    public R<List<com.huicai.base.system.vo.SummaryLibVO>> listAll() {
+        return R.ok(SummaryLibVO.from(summaryLibService.list()));
     }
 
     @Operation(summary = "新增摘要")
     @PostMapping
-    public R<SummaryLibEntity> create(@Valid @RequestBody SummaryLibSaveDTO dto) {
+    public R<com.huicai.base.system.vo.SummaryLibVO> create(@Valid @RequestBody SummaryLibSaveDTO dto) {
         SummaryLibEntity summary = dto.toEntity();
         summaryLibService.save(summary);
-        return R.ok(summary);
+        return R.ok(SummaryLibVO.from(summary));
     }
 
     @Operation(summary = "修改摘要")
@@ -62,7 +63,7 @@ public class SummaryLibController {
 
     @Operation(summary = "获取摘要详情")
     @GetMapping("/{id}")
-    public R<SummaryLibEntity> getById(@PathVariable Long id) {
-        return R.ok(summaryLibService.getById(id));
+    public R<com.huicai.base.system.vo.SummaryLibVO> getById(@PathVariable Long id) {
+        return R.ok(SummaryLibVO.from(summaryLibService.getById(id)));
     }
 }

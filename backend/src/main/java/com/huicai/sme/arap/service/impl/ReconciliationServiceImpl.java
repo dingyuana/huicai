@@ -2,6 +2,7 @@ package com.huicai.sme.arap.service.impl;
 
 import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.huicai.common.context.EnterpriseContextHolder;
 import com.huicai.common.exception.BusinessException;
 import com.huicai.base.system.util.SecurityUtils;
 import com.huicai.sme.arap.constant.ArapStatus;
@@ -70,7 +71,6 @@ public class ReconciliationServiceImpl implements ReconciliationService {
 
     private static final BigDecimal SCORE_THRESHOLD = new BigDecimal("0.70");
     private static final BigDecimal DEFAULT_TOLERANCE_RATE = new BigDecimal("0.10");
-    private static final long DEFAULT_TENANT_ID = 1L;
     private static final long DEFAULT_USER_ID = 1L;
 
     /**
@@ -361,7 +361,7 @@ public class ReconciliationServiceImpl implements ReconciliationService {
 
         // Create reconciliation log（状态 SUBMITTED，待审批）
         ReconciliationLogEntity reconLog = new ReconciliationLogEntity();
-        reconLog.setTenantId(DEFAULT_TENANT_ID);
+        reconLog.setTenantId(EnterpriseContextHolder.get());
         reconLog.setSourceDocType(request.sourceDocType());
         reconLog.setSourceDocId(request.sourceDocId());
         reconLog.setTargetDocType(request.targetDocType());
@@ -777,7 +777,7 @@ public class ReconciliationServiceImpl implements ReconciliationService {
         // 3. 创建差额调整凭证分录 (仅记录, 不修改应收/应付结算金额)
         //    实际企业会额外生成一笔调整凭证: 借 财务费用/折扣 / 贷 应收/应付
         ReconciliationLogEntity adjustLog = new ReconciliationLogEntity();
-        adjustLog.setTenantId(DEFAULT_TENANT_ID);
+        adjustLog.setTenantId(EnterpriseContextHolder.get());
         adjustLog.setSourceDocType(request.sourceDocType());
         adjustLog.setSourceDocId(request.sourceDocId());
         adjustLog.setTargetDocType(request.targetDocType());
@@ -879,6 +879,19 @@ public class ReconciliationServiceImpl implements ReconciliationService {
 
     // ==================== 异常池管理 ====================
 
+    /**
+     * {@code t_reconciliation_exception.exception_type} 的<b>合法值集合</b>。
+     *
+     * <p>🔴 <b>来源：DB CHECK 约束 {@code chk_exception_type}，非本类自定</b>
+     * （V1 baseline:1297，允许集 {@code ('AMOUNT_DIFF','DATE_DIFF','UNMATCHED','DUPLICATE')}）。
+     * 铁律：任何常量都要 {@code pg_get_constraintdef} 查证后再用，
+     * 禁止照抄别处的字符串或凭业务语感猜（AGENTS §4.2 第 9/14 条）。
+     *
+     * <p>P109 / D-109-2 裁定为「前端对齐 DB」，故此集合即前端下拉的全部合法值。
+     */
+    private static final Set<String> EXCEPTION_TYPE_ALLOWED = Set.of(
+            "AMOUNT_DIFF", "DATE_DIFF", "UNMATCHED", "DUPLICATE");
+
     @Override
     @Transactional(rollbackFor = Exception.class)
     public ReconciliationExceptionEntity createException(
@@ -888,8 +901,21 @@ public class ReconciliationServiceImpl implements ReconciliationService {
             BigDecimal amount, BigDecimal unsettledAmount,
             String exceptionType, String exceptionReason,
             String matchSuggestion) {
+        // P109：原先这些字段全标着 @TableField(exist=false)，赋值从不参与 SQL ——
+        // 12 个 setter 静默丢弃，而 @TableField 注解把错误**掩盖**成「Entity 精简过」。
+        // 真库实测：account_id（NOT NULL + FK，Entity 连字段都没有）导致整条 INSERT 必然失败，
+        // 且异常类型这套值 DB CHECK 根本不认。现在三件事一起修（V169 + Entity + 前端词表）。
+        if (StrUtil.isBlank(sourceDocType)) {
+            throw new BusinessException("异常记录缺少来源单据类型(sourceDocType), 无法创建: " + exceptionType);
+        }
+        if (StrUtil.isBlank(exceptionType) || !EXCEPTION_TYPE_ALLOWED.contains(exceptionType)) {
+            throw new BusinessException("异常类型非法: " + exceptionType + ", 合法值为 " + EXCEPTION_TYPE_ALLOWED);
+        }
         ReconciliationExceptionEntity ex = new ReconciliationExceptionEntity();
-        ex.setTenantId(DEFAULT_TENANT_ID);
+        // P106 / AT-106-2b：原为 ex.setTenantId(DEFAULT_TENANT_ID)，但该字段在
+        // ReconciliationExceptionEntity 上标了 @TableField(exist=false)，且 t_reconciliation_exception
+        // 根本没有 tenant_id 列（真实库 information_schema 已核对）⇒ 该赋值从不参与 SQL，是误导性死代码。
+        // 修法是删代码而不是改列：改成 setEnterpriseId 会给不存在的租户列加值语义并掩盖 Entity 层缺陷。
         ex.setSourceDocType(sourceDocType);
         ex.setSourceDocId(sourceDocId);
         ex.setTargetDocType(targetDocType);
@@ -904,6 +930,8 @@ public class ReconciliationServiceImpl implements ReconciliationService {
         ex.setStatus("OPEN");
         ex.setRetryCount(0);
         ex.setCreatedBy(DEFAULT_USER_ID);
+        // enterprise_id 交给 MyMetaObjectHandler.insertFill 按上下文覆盖（AGENTS §4.5 第 34 条）：
+        // 本 Entity 继承 BaseEntity，其 enterpriseId 是 @TableField(fill = INSERT) ⇒ insertFill 会触发。
         exceptionMapper.insert(ex);
         log.info("核销异常记录创建: id={}, type={}, sourceDocType={}, sourceDocId={}, reason={}",
                 ex.getId(), exceptionType, sourceDocType, sourceDocId, exceptionReason);
@@ -985,7 +1013,9 @@ public class ReconciliationServiceImpl implements ReconciliationService {
         ReconciliationLogEntity reconLog = execute(req);
 
         // 更新异常记录
-        ex.setRetryCount(ex.getRetryCount() + 1);
+        // P109：retryCount 原是幽灵字段（exist=false）⇒ 读回恒 null ⇒ `null + 1` 直接 NPE。
+        // 现 V169 已补真实列且给了 DEFAULT 0，但仍做 null 兜底：历史行若为 NULL 仍可重试。
+        ex.setRetryCount(ex.getRetryCount() == null ? 1 : ex.getRetryCount() + 1);
         ex.setResolvedBy(userId != null ? userId : DEFAULT_USER_ID);
         ex.setResolvedAt(LocalDateTime.now());
         exceptionMapper.updateById(ex);

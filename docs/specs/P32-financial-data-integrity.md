@@ -334,7 +334,7 @@ COMMENT ON COLUMN t_bank_statement.version IS '乐观锁版本号';
 
 ---
 
-# === MACHINE-READABLE CONTRACT ===
+# MACHINE-READABLE CONTRACT
 
 contract_version: "1.0"
 

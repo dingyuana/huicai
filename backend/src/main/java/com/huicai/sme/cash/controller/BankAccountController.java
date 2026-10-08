@@ -6,6 +6,7 @@ import com.huicai.sme.cash.entity.BankAccountEntity;
 import com.huicai.sme.cash.service.BankAccountService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import com.huicai.sme.cash.vo.BankAccountVO;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
@@ -23,37 +24,37 @@ public class BankAccountController {
 
     @Operation(summary = "分页查询")
     @GetMapping("/page")
-    public R<IPage<BankAccountEntity>> page(
+    public R<IPage<BankAccountVO>> page(
             @RequestParam(required = false) String keyword,
             @RequestParam(defaultValue = "1") Integer current,
             @RequestParam(defaultValue = "20") Integer size) {
-        return R.ok(service.pageQuery(keyword, current, size));
+        return R.ok(BankAccountVO.from(service.pageQuery(keyword, current, size)));
     }
 
     @Operation(summary = "查询所有启用账户")
     @GetMapping("/active")
-    public R<List<BankAccountEntity>> active() {
-        return R.ok(service.listActive());
+    public R<List<BankAccountVO>> active() {
+        return R.ok(BankAccountVO.from(service.listActive()));
     }
 
     @Operation(summary = "账户详情")
     @GetMapping("/{id}")
-    public R<BankAccountEntity> getById(@PathVariable Long id) {
-        return R.ok(service.getById(id));
+    public R<BankAccountVO> getById(@PathVariable Long id) {
+        return R.ok(BankAccountVO.from(service.getById(id)));
     }
 
     @Operation(summary = "新增账户")
     @PostMapping
-    public R<BankAccountEntity> create(@Valid @RequestBody BankAccountSaveDTO dto) {
+    public R<BankAccountVO> create(@Valid @RequestBody BankAccountSaveDTO dto) {
         BankAccountEntity entity = dto.toEntity();
-        return R.ok(service.create(entity));
+        return R.ok(BankAccountVO.from(service.create(entity)));
     }
 
     @Operation(summary = "修改账户")
     @PutMapping("/{id}")
-    public R<BankAccountEntity> update(@PathVariable Long id, @Valid @RequestBody BankAccountSaveDTO dto) {
+    public R<BankAccountVO> update(@PathVariable Long id, @Valid @RequestBody BankAccountSaveDTO dto) {
         BankAccountEntity entity = dto.toEntity();
-        return R.ok(service.update(id, entity));
+        return R.ok(BankAccountVO.from(service.update(id, entity)));
     }
 
     @Operation(summary = "删除账户")

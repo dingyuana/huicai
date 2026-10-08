@@ -11,20 +11,24 @@ import java.util.stream.Collectors;
 
 /**
  * 凭证模板视图对象 (含分录行).
+ *
+ * <p><b>P110 Phase 1（2026-10-06）</b>：字段与 {@link VoucherTemplateEntity} 对齐，
+ * 删除了从未落库的 6 个野列（description/classification/source/direction/matchPriority/numberPrefix）
+ * —— 旧实现中 {@code e.getXxx()} 恒 null，VO 输出对应字段也恒 null（AGENTS §4.5 第 38 类）。
+ * 新增 3 个从未回读的列：templateCode/voucherTypeCode/summary（来源 Entity 已补对齐）。
  */
 @Data
 public class VoucherTemplateVO {
 
     private Long id;
+    private String templateCode;
     private String name;
-    private String description;
-    private String classification;
-    private String source;
     private String businessType;
-    private String direction;
-    private Integer matchPriority;
-    private String numberPrefix;
+    private String voucherTypeCode;
+    private String summary;
+    private String entries;
     private Boolean isActive;
+    private String remark;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
     private List<LineVO> lines;
@@ -47,15 +51,14 @@ public class VoucherTemplateVO {
     public static VoucherTemplateVO fromEntity(VoucherTemplateEntity e, List<VoucherTemplateLineEntity> lines) {
         VoucherTemplateVO vo = new VoucherTemplateVO();
         vo.setId(e.getId());
+        vo.setTemplateCode(e.getTemplateCode());
         vo.setName(e.getName());
-        vo.setDescription(e.getDescription());
-        vo.setClassification(e.getClassification());
-        vo.setSource(e.getSource());
         vo.setBusinessType(e.getBusinessType());
-        vo.setDirection(e.getDirection());
-        vo.setMatchPriority(e.getMatchPriority());
-        vo.setNumberPrefix(e.getNumberPrefix());
+        vo.setVoucherTypeCode(e.getVoucherTypeCode());
+        vo.setSummary(e.getSummary());
+        vo.setEntries(e.getEntries());
         vo.setIsActive(e.getIsActive());
+        vo.setRemark(e.getRemark());
         vo.setCreatedAt(e.getCreatedAt());
         vo.setUpdatedAt(e.getUpdatedAt());
         if (lines != null) {

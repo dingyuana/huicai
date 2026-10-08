@@ -94,6 +94,6 @@ public interface AgingAnalysisService {
         Long id, Long customerId, String customerName,
         String docNo, BigDecimal unsettledAmount, LocalDate dueDate,
         int overdueDays, String alertLevel, String status,
-        LocalDateTime notifiedAt, LocalDateTime dismissedAt, LocalDateTime createdAt
+        LocalDateTime createdAt
     ) {}
 }

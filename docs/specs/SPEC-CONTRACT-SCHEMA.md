@@ -84,7 +84,7 @@ SPEC 中的验收标准必须使用 Given-When-Then 格式（BDD 行为驱动开
 ## 2. Schema Definition
 
 ```yaml
-# === MACHINE-READABLE CONTRACT ===
+# MACHINE-READABLE CONTRACT
 # Parse from here down. Everything above is human-readable SPEC.
 
 contract_version: "1.0"

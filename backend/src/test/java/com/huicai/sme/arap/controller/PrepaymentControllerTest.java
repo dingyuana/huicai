@@ -5,6 +5,8 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.huicai.sme.arap.entity.PrepaymentEntity;
 import com.huicai.sme.arap.service.PrepaymentService;
+import com.huicai.sme.arap.vo.PrepaymentVO;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -16,6 +18,7 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Map;
 
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
@@ -35,22 +38,77 @@ class PrepaymentControllerTest {
     @MockBean
     private PrepaymentService prepaymentService;
 
+    /**
+     * P102 批次 6：控制器出参改为 VO（内部走 view* 视图层）。
+     * 这里给 viewOf/viewList/pageView 打通用桩，把 Entity 逐字段映射成 VO，
+     * 使既有「字段值」断言继续成立 —— 桩的是<b>转换</b>，不是被断言的行为。
+     */
+    @BeforeEach
+    void stubViewLayer() {
+        when(prepaymentService.viewOf(any())).thenAnswer(inv ->
+                PrepaymentVO.from(inv.getArgument(0, PrepaymentEntity.class), null, null, null));
+        when(prepaymentService.viewList(any())).thenAnswer(inv -> {
+            List<PrepaymentEntity> src = inv.getArgument(0);
+            PrepaymentVO.Names names = new PrepaymentVO.Names(Map.of(), Map.of(), Map.of());
+            return src == null ? null : src.stream().map(e -> PrepaymentVO.from(e, names)).toList();
+        });
+    }
+
     @Test
     @DisplayName("分页查询预付款_默认参数正确生效")
     void pageQuery_defaultParams_applied() throws Exception {
-        IPage<PrepaymentEntity> page = new Page<>(1, 20);
-        when(prepaymentService.pageQuery(isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), eq(1), eq(20))).thenReturn(page);
+        // ⚠️ 原用例只断言 $.code == 200，且桩的是 pageQuery —— 控制器改走 pageView 后
+        // 该桩变成**永不生效的死代码**，测试却照样绿（AGENTS §4.5 第 9 条「假绿」）。
+        // 现在桩 pageView 并**断言内容**（records 条数 + 关键字段），不是只验非 null。
+        PrepaymentEntity e = new PrepaymentEntity();
+        e.setId(7L);
+        e.setAmount(new BigDecimal("1234.00"));
+        e.setStatus("CONFIRMED");
+        IPage<PrepaymentVO> page = new Page<>(1, 20);
+        page.setRecords(List.of(PrepaymentVO.from(e, "BD-202610-001", "上海贸易", null)));
+        page.setTotal(1);
+        when(prepaymentService.pageView(isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), eq(1), eq(20)))
+                .thenReturn(page);
 
         mvc.perform(get("/api/sme/arap/v1/prepayment/page"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value(200));
+                .andExpect(jsonPath("$.code").value(200))
+                .andExpect(jsonPath("$.data.total").value(1))
+                .andExpect(jsonPath("$.data.records.length()").value(1))
+                .andExpect(jsonPath("$.data.records[0].id").value(7))
+                .andExpect(jsonPath("$.data.records[0].prepayNo").value("BD-202610-001"))
+                .andExpect(jsonPath("$.data.records[0].vendorName").value("上海贸易"));
+    }
+
+    @Test
+    @DisplayName("分页查询预付款_内部字段不外露（负向断言）")
+    void pageQuery_internalFieldsNeverExposed() throws Exception {
+        // 铁律 #13 + AGENTS §4.5 第 38 条：Entity 的内部/审计字段不得随出参面泄漏。
+        // 正向断言「该有的有」不足以守住这条，必须同时断言「不该有的没有」。
+        PrepaymentEntity e = new PrepaymentEntity();
+        e.setId(8L);
+        e.setDocId(999L);
+        e.setVoucherId(888L);
+        IPage<PrepaymentVO> page = new Page<>(1, 20);
+        page.setRecords(List.of(PrepaymentVO.from(e, null, null, null)));
+        when(prepaymentService.pageView(any(), any(), any(), any(), any(), any(), any(), any()))
+                .thenReturn(page);
+
+        mvc.perform(get("/api/sme/arap/v1/prepayment/page"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.records[0].id").value(8))
+                .andExpect(jsonPath("$.data.records[0].docId").doesNotExist())
+                .andExpect(jsonPath("$.data.records[0].voucherId").doesNotExist())
+                .andExpect(jsonPath("$.data.records[0].tenantId").doesNotExist())
+                .andExpect(jsonPath("$.data.records[0].deleted").doesNotExist())
+                .andExpect(jsonPath("$.data.records[0].enterpriseId").doesNotExist());
     }
 
     @Test
     @DisplayName("分页查询预付款_自定义参数正确绑定")
     void pageQuery_customParams_boundCorrectly() throws Exception {
-        IPage<PrepaymentEntity> page = new Page<>(2, 50);
-        when(prepaymentService.pageQuery(eq(100L), eq(200L), eq("CONFIRMED"), eq("completed"), isNull(), isNull(), eq(2), eq(50))).thenReturn(page);
+        IPage<PrepaymentVO> page = new Page<>(2, 50);
+        when(prepaymentService.pageView(eq(100L), eq(200L), eq("CONFIRMED"), eq("completed"), isNull(), isNull(), eq(2), eq(50))).thenReturn(page);
 
         mvc.perform(get("/api/sme/arap/v1/prepayment/page")
                         .param("vendorId", "100")

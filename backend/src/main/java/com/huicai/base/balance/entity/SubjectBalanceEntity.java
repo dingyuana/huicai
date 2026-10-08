@@ -45,8 +45,8 @@ public class SubjectBalanceEntity extends BaseEntity {
     @TableField(fill = FieldFill.INSERT_UPDATE)
     private LocalDateTime updatedAt;
 
-    /** t_subject_balance 表无 deleted 列，不使用逻辑删除 */
-    @TableField(exist = false)
-    private Integer deleted;
-
+    /* P110 Phase 3：删除本类对 deleted 字段的 exist=false shadow。
+     *  DB 中 t_subject_balance.deleted 真实存在（NOT NULL DEFAULT 0），且
+     *  BaseEntity 已声明 @TableLogic —— 旧的 exist=false 重声明会遮蔽它，
+     *  导致本表不经过逻辑删除过滤。删除 shadow 后 MP 走标准 @TableLogic 覆盖。 */
 }

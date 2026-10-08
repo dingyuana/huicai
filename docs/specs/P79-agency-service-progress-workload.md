@@ -264,7 +264,7 @@ Then 发票/凭证/结账/申报各业务单据状态与推进前完全一致（
 ---
 
 ```yaml
-# === MACHINE-READABLE CONTRACT ===
+# MACHINE-READABLE CONTRACT
 contract_version: "1.0"
 entity: ServiceProgressEntity
 module: agency

@@ -7,6 +7,7 @@ import com.huicai.sme.cash.service.BankJournalService;
 import com.huicai.base.system.util.SecurityUtils;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import com.huicai.sme.cash.vo.BankJournalVO;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
@@ -26,27 +27,27 @@ public class BankJournalController {
 
     @Operation(summary = "分页查询")
     @GetMapping("/page")
-    public R<IPage<BankJournalEntity>> page(
+    public R<IPage<com.huicai.sme.cash.vo.BankJournalVO>> page(
             @RequestParam(required = false) Long accountId,
             @RequestParam(required = false) String period,
             @RequestParam(required = false) String txType,
             @RequestParam(defaultValue = "1") Integer current,
             @RequestParam(defaultValue = "20") Integer size) {
-        return R.ok(service.pageQuery(accountId, period, txType, current, size));
+        return R.ok(BankJournalVO.from(service.pageQuery(accountId, period, txType, current, size)));
     }
 
     @Operation(summary = "新增日记账")
     @PostMapping
-    public R<BankJournalEntity> create(@Valid @RequestBody BankJournalSaveDTO dto) {
+    public R<com.huicai.sme.cash.vo.BankJournalVO> create(@Valid @RequestBody BankJournalSaveDTO dto) {
         BankJournalEntity entity = dto.toEntity();
-        return R.ok(service.create(entity, SecurityUtils.getCurrentUserId()));
+        return R.ok(BankJournalVO.from(service.create(entity, SecurityUtils.getCurrentUserId())));
     }
 
     @Operation(summary = "修改日记账")
     @PutMapping("/{id}")
-    public R<BankJournalEntity> update(@PathVariable Long id, @Valid @RequestBody BankJournalSaveDTO dto) {
+    public R<com.huicai.sme.cash.vo.BankJournalVO> update(@PathVariable Long id, @Valid @RequestBody BankJournalSaveDTO dto) {
         BankJournalEntity entity = dto.toEntity();
-        return R.ok(service.update(id, entity));
+        return R.ok(BankJournalVO.from(service.update(id, entity)));
     }
 
     @Operation(summary = "删除日记账")

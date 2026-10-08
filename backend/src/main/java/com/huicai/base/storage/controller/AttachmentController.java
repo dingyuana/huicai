@@ -5,6 +5,7 @@ import com.huicai.base.storage.entity.AttachmentEntity;
 import com.huicai.base.storage.service.AttachmentService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import com.huicai.base.storage.vo.AttachmentVO;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
@@ -22,20 +23,20 @@ public class AttachmentController {
 
     @Operation(summary = "上传文件")
     @PostMapping("/upload")
-    public R<AttachmentEntity> upload(
+    public R<AttachmentVO> upload(
             @RequestParam("file") MultipartFile file,
             @RequestParam("bizType") String bizType,
             @RequestParam(value = "bizId", required = false) Long bizId,
             @RequestParam(value = "uploaderId", required = false) Long uploaderId) {
-        return R.ok(service.upload(file, bizType, bizId, uploaderId));
+        return R.ok(AttachmentVO.from(service.upload(file, bizType, bizId, uploaderId)));
     }
 
     @Operation(summary = "查询业务附件")
     @GetMapping("/list")
-    public R<List<AttachmentEntity>> list(
+    public R<List<AttachmentVO>> list(
             @RequestParam String bizType,
             @RequestParam Long bizId) {
-        return R.ok(service.listByBiz(bizType, bizId));
+        return R.ok(AttachmentVO.from(service.listByBiz(bizType, bizId)));
     }
 
     @Operation(summary = "获取下载链接")

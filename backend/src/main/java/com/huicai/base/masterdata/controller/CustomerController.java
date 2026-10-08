@@ -32,39 +32,39 @@ public class CustomerController {
 
     @Operation(summary = "分页查询")
     @GetMapping("/page")
-    public R<IPage<CustomerEntity>> page(
+    public R<IPage<com.huicai.base.masterdata.vo.CustomerVO>> page(
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) Boolean isActive,
             @RequestParam(defaultValue = "1") Integer current,
             @RequestParam(defaultValue = "20") Integer size) {
-        return R.ok(service.pageQuery(keyword, isActive, current, size));
+        return R.ok(com.huicai.base.masterdata.vo.CustomerVO.from(service.pageQuery(keyword, isActive, current, size)));
     }
 
     @Operation(summary = "查询全部")
     @GetMapping("/list")
-    public R<List<CustomerEntity>> list() {
-        return R.ok(service.listAll());
+    public R<List<com.huicai.base.masterdata.vo.CustomerVO>> list() {
+        return R.ok(com.huicai.base.masterdata.vo.CustomerVO.from(service.listAll()));
     }
 
     @Operation(summary = "详情")
     @GetMapping("/{id}")
-    public R<CustomerEntity> getById(@PathVariable Long id) {
-        return R.ok(service.getById(id));
+    public R<com.huicai.base.masterdata.vo.CustomerVO> getById(@PathVariable Long id) {
+        return R.ok(com.huicai.base.masterdata.vo.CustomerVO.from(service.getById(id)));
     }
 
     @Operation(summary = "创建")
     @PostMapping
-    public R<CustomerEntity> create(@Valid @RequestBody CustomerSaveDTO dto) {
+    public R<com.huicai.base.masterdata.vo.CustomerVO> create(@Valid @RequestBody CustomerSaveDTO dto) {
         CustomerEntity entity = dto.toEntity();
-        return R.ok(service.create(entity));
+        return R.ok(com.huicai.base.masterdata.vo.CustomerVO.from(service.create(entity)));
     }
 
     @Operation(summary = "更新")
     @PutMapping("/{id}")
-    public R<CustomerEntity> update(@PathVariable Long id, @Valid @RequestBody CustomerSaveDTO dto) {
+    public R<com.huicai.base.masterdata.vo.CustomerVO> update(@PathVariable Long id, @Valid @RequestBody CustomerSaveDTO dto) {
         CustomerEntity entity = dto.toEntity();
         entity.setId(id);
-        return R.ok(service.update(entity));
+        return R.ok(com.huicai.base.masterdata.vo.CustomerVO.from(service.update(entity)));
     }
 
     @Operation(summary = "删除")

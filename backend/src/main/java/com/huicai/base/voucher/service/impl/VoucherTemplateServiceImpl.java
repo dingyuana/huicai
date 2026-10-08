@@ -46,9 +46,9 @@ public class VoucherTemplateServiceImpl implements VoucherTemplateService {
     }
 
     @Override
-    public VoucherTemplateEntity matchByClassification(String classification) {
-        if (StrUtil.isBlank(classification)) return null;
-        return templateMapper.selectActiveByClassification(classification);
+    public VoucherTemplateEntity matchByClassification(String docTypeCode) {
+        if (StrUtil.isBlank(docTypeCode)) return null;
+        return templateMapper.selectActiveByClassification(docTypeCode);
     }
 
     @Override
@@ -68,8 +68,8 @@ public class VoucherTemplateServiceImpl implements VoucherTemplateService {
         }
 
         // 如果设置激活, 先停用同分类其他模板
-        if (Boolean.TRUE.equals(template.getIsActive()) && StrUtil.isNotBlank(template.getClassification())) {
-            deactivateSiblings(template.getClassification(), null);
+        if (Boolean.TRUE.equals(template.getIsActive()) && StrUtil.isNotBlank(template.getBusinessType())) {
+            deactivateSiblings(template.getBusinessType(), null);
         }
 
         templateMapper.insert(template);
@@ -85,8 +85,8 @@ public class VoucherTemplateServiceImpl implements VoucherTemplateService {
             }
         }
 
-        log.info("凭证模板创建: id={}, name={}, classification={}",
-                template.getId(), template.getName(), template.getClassification());
+        log.info("凭证模板创建: id={}, name={}, docType={}",
+                template.getId(), template.getName(), template.getBusinessType());
         return template;
     }
 
@@ -101,8 +101,8 @@ public class VoucherTemplateServiceImpl implements VoucherTemplateService {
         // 如果改为激活, 停用同分类其他模板
         if (Boolean.TRUE.equals(template.getIsActive())
                 && !Boolean.TRUE.equals(old.getIsActive())
-                && StrUtil.isNotBlank(template.getClassification())) {
-            deactivateSiblings(template.getClassification(), template.getId());
+                && StrUtil.isNotBlank(template.getBusinessType())) {
+            deactivateSiblings(template.getBusinessType(), template.getId());
         }
 
         templateMapper.updateById(template);
@@ -141,8 +141,8 @@ public class VoucherTemplateServiceImpl implements VoucherTemplateService {
             throw BusinessException.notFound("模板不存在: " + id);
         }
 
-        if (active && StrUtil.isNotBlank(template.getClassification())) {
-            deactivateSiblings(template.getClassification(), id);
+        if (active && StrUtil.isNotBlank(template.getBusinessType())) {
+            deactivateSiblings(template.getBusinessType(), id);
         }
 
         template.setIsActive(active);
@@ -250,10 +250,10 @@ public class VoucherTemplateServiceImpl implements VoucherTemplateService {
     /**
      * 停用同分类下的其他激活模板 (保持每个分类仅 1 个激活).
      */
-    private void deactivateSiblings(String classification, Long excludeId) {
+    private void deactivateSiblings(String docTypeFilter, Long excludeId) {
         List<VoucherTemplateEntity> siblings = templateMapper.selectList(
                 new LambdaQueryWrapper<VoucherTemplateEntity>()
-                        .eq(VoucherTemplateEntity::getBusinessType, classification)
+                        .eq(VoucherTemplateEntity::getBusinessType, docTypeFilter)
                         .eq(VoucherTemplateEntity::getIsActive, true)
                         .ne(excludeId != null, VoucherTemplateEntity::getId, excludeId));
         for (VoucherTemplateEntity sib : siblings) {

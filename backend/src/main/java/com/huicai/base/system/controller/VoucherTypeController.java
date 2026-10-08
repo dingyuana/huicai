@@ -8,6 +8,7 @@ import com.huicai.base.system.service.VoucherTypeService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import com.huicai.base.system.vo.VoucherTypeVO;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
@@ -24,24 +25,24 @@ public class VoucherTypeController {
 
     @Operation(summary = "获取凭证类型列表(分页)")
     @GetMapping
-    public R<IPage<VoucherTypeEntity>> list(
+    public R<IPage<com.huicai.base.system.vo.VoucherTypeVO>> list(
             @RequestParam(defaultValue = "1") Integer current,
             @RequestParam(defaultValue = "20") Integer size) {
-        return R.ok(voucherTypeService.page(new Page<>(current, size)));
+        return R.ok(VoucherTypeVO.from(voucherTypeService.page(new Page<>(current, size))));
     }
 
     @Operation(summary = "获取凭证类型列表(全量)")
     @GetMapping("/all")
-    public R<List<VoucherTypeEntity>> listAll() {
-        return R.ok(voucherTypeService.list());
+    public R<List<com.huicai.base.system.vo.VoucherTypeVO>> listAll() {
+        return R.ok(VoucherTypeVO.from(voucherTypeService.list()));
     }
 
     @Operation(summary = "新增凭证类型")
     @PostMapping
-    public R<VoucherTypeEntity> create(@Valid @RequestBody VoucherTypeSaveDTO dto) {
+    public R<com.huicai.base.system.vo.VoucherTypeVO> create(@Valid @RequestBody VoucherTypeSaveDTO dto) {
         VoucherTypeEntity voucherType = dto.toEntity();
         voucherTypeService.save(voucherType);
-        return R.ok(voucherType);
+        return R.ok(VoucherTypeVO.from(voucherType));
     }
 
     @Operation(summary = "修改凭证类型")
@@ -62,7 +63,7 @@ public class VoucherTypeController {
 
     @Operation(summary = "获取凭证类型详情")
     @GetMapping("/{id}")
-    public R<VoucherTypeEntity> getById(@PathVariable Long id) {
-        return R.ok(voucherTypeService.getById(id));
+    public R<com.huicai.base.system.vo.VoucherTypeVO> getById(@PathVariable Long id) {
+        return R.ok(VoucherTypeVO.from(voucherTypeService.getById(id)));
     }
 }

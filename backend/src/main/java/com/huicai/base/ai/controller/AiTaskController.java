@@ -7,6 +7,8 @@ import com.huicai.base.ai.entity.AiTaskEntity;
 import com.huicai.base.ai.service.AiTaskService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import com.huicai.base.ai.vo.AiAnomalyTagVO;
+import com.huicai.base.ai.vo.AiTaskVO;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
@@ -23,59 +25,59 @@ public class AiTaskController {
 
     @Operation(summary = "下发 AI 任务")
     @PostMapping("/tasks")
-    public R<AiTaskEntity> createTask(@RequestBody CreateTaskRequest request) {
-        return R.ok(service.createAndDispatch(
+    public R<AiTaskVO> createTask(@RequestBody CreateTaskRequest request) {
+        return R.ok(AiTaskVO.from(service.createAndDispatch(
                 request.taskType,
                 request.bizType,
                 request.bizId,
                 request.inputData
-        ));
+        )));
     }
 
     @Operation(summary = "分页查询")
     @GetMapping("/tasks/page")
-    public R<IPage<AiTaskEntity>> page(
+    public R<IPage<AiTaskVO>> page(
             @RequestParam(required = false) String taskType,
             @RequestParam(required = false) String status,
             @RequestParam(defaultValue = "1") Integer current,
             @RequestParam(defaultValue = "20") Integer size) {
-        return R.ok(service.pageQuery(taskType, status, current, size));
+        return R.ok(AiTaskVO.from(service.pageQuery(taskType, status, current, size)));
     }
 
     @Operation(summary = "详情")
     @GetMapping("/tasks/{id}")
-    public R<AiTaskEntity> getById(@PathVariable Long id) {
-        return R.ok(service.getById(id));
+    public R<AiTaskVO> getById(@PathVariable Long id) {
+        return R.ok(AiTaskVO.from(service.getById(id)));
     }
 
     @Operation(summary = "审核并应用")
     @PostMapping("/tasks/{id}/review")
-    public R<AiTaskEntity> review(@PathVariable Long id, @RequestParam Long reviewerId,
+    public R<AiTaskVO> review(@PathVariable Long id, @RequestParam Long reviewerId,
                                     @RequestParam(defaultValue = "true") boolean approved) {
-        return R.ok(service.review(id, reviewerId, approved));
+        return R.ok(AiTaskVO.from(service.review(id, reviewerId, approved)));
     }
 
     @Operation(summary = "标记异常")
     @PostMapping("/anomalies")
-    public R<AiAnomalyTagEntity> tagAnomaly(@RequestBody AnomalyRequest request) {
-        return R.ok(service.tagAnomaly(
+    public R<AiAnomalyTagVO> tagAnomaly(@RequestBody AnomalyRequest request) {
+        return R.ok(AiAnomalyTagVO.from(service.tagAnomaly(
                 request.bizType, request.bizId, request.anomalyType,
                 request.severity, request.description, request.taskId
-        ));
+        )));
     }
 
     @Operation(summary = "异常列表")
     @GetMapping("/anomalies")
-    public R<List<AiAnomalyTagEntity>> listAnomalies(
+    public R<List<AiAnomalyTagVO>> listAnomalies(
             @RequestParam(required = false) String bizType,
             @RequestParam(required = false) Boolean resolved) {
-        return R.ok(service.listAnomalies(bizType, resolved));
+        return R.ok(AiAnomalyTagVO.from(service.listAnomalies(bizType, resolved)));
     }
 
     @Operation(summary = "解决异常")
     @PostMapping("/anomalies/{id}/resolve")
-    public R<AiAnomalyTagEntity> resolve(@PathVariable Long id, @RequestParam Long resolverId) {
-        return R.ok(service.resolveAnomaly(id, resolverId));
+    public R<AiAnomalyTagVO> resolve(@PathVariable Long id, @RequestParam Long resolverId) {
+        return R.ok(AiAnomalyTagVO.from(service.resolveAnomaly(id, resolverId)));
     }
 
     public static class CreateTaskRequest {

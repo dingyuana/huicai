@@ -6,6 +6,7 @@ import com.huicai.sme.asset.entity.AssetCategoryEntity;
 import com.huicai.sme.asset.service.AssetCategoryService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import com.huicai.sme.asset.vo.AssetCategoryVO;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
@@ -23,38 +24,38 @@ public class AssetCategoryController {
 
     @Operation(summary = "分页查询")
     @GetMapping("/page")
-    public R<IPage<AssetCategoryEntity>> page(
+    public R<IPage<com.huicai.sme.asset.vo.AssetCategoryVO>> page(
             @RequestParam(required = false) String keyword,
             @RequestParam(defaultValue = "1") Integer current,
             @RequestParam(defaultValue = "20") Integer size) {
-        return R.ok(service.pageQuery(keyword, current, size));
+        return R.ok(AssetCategoryVO.from(service.pageQuery(keyword, current, size)));
     }
 
     @Operation(summary = "查询全部")
     @GetMapping("/list")
-    public R<List<AssetCategoryEntity>> list() {
-        return R.ok(service.listAll());
+    public R<List<com.huicai.sme.asset.vo.AssetCategoryVO>> list() {
+        return R.ok(AssetCategoryVO.from(service.listAll()));
     }
 
     @Operation(summary = "根据ID查询")
     @GetMapping("/{id}")
-    public R<AssetCategoryEntity> getById(@PathVariable Long id) {
-        return R.ok(service.getById(id));
+    public R<com.huicai.sme.asset.vo.AssetCategoryVO> getById(@PathVariable Long id) {
+        return R.ok(AssetCategoryVO.from(service.getById(id)));
     }
 
     @Operation(summary = "创建")
     @PostMapping
-    public R<AssetCategoryEntity> create(@Valid @RequestBody AssetCategorySaveDTO dto) {
+    public R<com.huicai.sme.asset.vo.AssetCategoryVO> create(@Valid @RequestBody AssetCategorySaveDTO dto) {
         AssetCategoryEntity entity = dto.toEntity();
-        return R.ok(service.create(entity));
+        return R.ok(AssetCategoryVO.from(service.create(entity)));
     }
 
     @Operation(summary = "更新")
     @PutMapping("/{id}")
-    public R<AssetCategoryEntity> update(@PathVariable Long id, @Valid @RequestBody AssetCategorySaveDTO dto) {
+    public R<com.huicai.sme.asset.vo.AssetCategoryVO> update(@PathVariable Long id, @Valid @RequestBody AssetCategorySaveDTO dto) {
         AssetCategoryEntity entity = dto.toEntity();
         entity.setId(id);
-        return R.ok(service.update(entity));
+        return R.ok(AssetCategoryVO.from(service.update(entity)));
     }
 
     @Operation(summary = "删除")

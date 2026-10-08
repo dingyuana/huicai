@@ -72,7 +72,9 @@ public class BankStatementEntity extends BaseEntity {
     @TableField(exist = false)
     private String generatedVoucherNo;
 
-    @TableField(exist = false)
+    /* P110 Phase 3: t_bank_statement.generated_doc_no 真实存在，
+     * 旧 exist=false 注解导致该字段从未持久化。已清除标注，
+     * AutoGenerationService 三条路径同步写入该列。 */
     private String generatedDocNo;
 
     @TableField(fill = FieldFill.INSERT)

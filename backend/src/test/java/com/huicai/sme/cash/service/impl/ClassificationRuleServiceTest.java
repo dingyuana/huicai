@@ -2,10 +2,18 @@ package com.huicai.sme.cash.service.impl;
 
 import com.huicai.base.business.entity.ClassificationRuleEntity;
 import com.huicai.base.business.mapper.ClassificationRuleMapper;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.huicai.common.exception.BusinessException;
 import com.huicai.config.security.LoginUser;
+import com.huicai.common.context.EnterpriseContextHolder;
 import com.huicai.base.system.entity.UserEntity;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import com.baomidou.mybatisplus.core.MybatisConfiguration;
+import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
+import org.apache.ibatis.builder.MapperBuilderAssistant;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -26,7 +34,7 @@ import static org.mockito.Mockito.*;
  * 分类规则 Service 纯单元测试 — 新8分类体系
  * <p>
  * 参考 VoucherEntryValidationTest 模式: 不启动 Spring, 仅测试纯业务逻辑.
- * 覆盖 create/update/delete/reorder/seedForNewTenant/match 方法.
+ * 覆盖 create/update/delete/reorder/seedForCurrentEnterprise/match 方法.
  */
 @ExtendWith(MockitoExtension.class)
 class ClassificationRuleServiceTest {
@@ -48,11 +56,22 @@ class ClassificationRuleServiceTest {
         LoginUser loginUser = new LoginUser(user, List.of(new SimpleGrantedAuthority("ROLE_USER")));
         SecurityContextHolder.getContext().setAuthentication(
                 new UsernamePasswordAuthenticationToken(loginUser, null, loginUser.getAuthorities()));
+        // P106 批次 1a-3（D-1）：种子/创建用 currentEnterpriseId，默认为 1L
+        EnterpriseContextHolder.set(1L);
+    }
+
+    @BeforeAll
+    static void initMybatisPlusTableInfoCache() {
+        // 让 LambdaQueryWrapper 能在无 Spring 环境下渲染列名（见 page_应用层过滤 说明）
+        TableInfoHelper.initTableInfo(
+                new MapperBuilderAssistant(new MybatisConfiguration(), ""),
+                ClassificationRuleEntity.class);
     }
 
     @AfterEach
     void clearSecurityContext() {
         SecurityContextHolder.clearContext();
+        EnterpriseContextHolder.clear();
     }
 
     // ==================== create ====================
@@ -62,7 +81,10 @@ class ClassificationRuleServiceTest {
         ClassificationRuleEntity input = new ClassificationRuleEntity();
         ClassificationRuleEntity result = service.create(input);
 
-        assertEquals(1L, result.getTenantId());
+        // P106 D-3：tenant_id 列已删，隔离维度唯一为 enterprise_id。
+        // ⚠️ create() 现在**不再**给 entity 赋 enterpriseId —— 那是 MetaObjectHandler
+        //    insertFill 的职责（纯 Mockito 单测里不触发），故此处不断言该字段。
+        //    无上下文必须抛错这一负向行为由 create_无企业上下文_抛BusinessException 覆盖。
         assertEquals("keyword_regex", result.getRuleType());
         assertEquals("description", result.getMatchField());
         assertEquals(0, result.getPriority());
@@ -78,7 +100,6 @@ class ClassificationRuleServiceTest {
         when(mapper.insert(any(ClassificationRuleEntity.class))).thenReturn(1);
 
         ClassificationRuleEntity input = new ClassificationRuleEntity();
-        input.setTenantId(5L);
         input.setRuleType("counterparty_match");
         input.setMatchField("counterparty");
         input.setPriority(10);
@@ -87,7 +108,6 @@ class ClassificationRuleServiceTest {
 
         ClassificationRuleEntity result = service.create(input);
 
-        assertEquals(5L, result.getTenantId());
         assertEquals("counterparty_match", result.getRuleType());
         assertEquals("counterparty", result.getMatchField());
         assertEquals(10, result.getPriority());
@@ -167,35 +187,36 @@ class ClassificationRuleServiceTest {
         verify(mapper, never()).updateById(any(ClassificationRuleEntity.class));
     }
 
-    // ==================== seedForNewTenant ====================
+    // ==================== seedForCurrentEnterprise ====================
 
     @Test
-    void seedForNewTenant_已有种子则跳过() {
+    void seedForCurrentEnterprise_已有种子则跳过() {
         when(mapper.selectCount(any())).thenReturn(8L);
 
-        int inserted = service.seedForNewTenant(1L);
+        int inserted = service.seedForCurrentEnterprise();
 
         assertEquals(0, inserted);
         verify(mapper, never()).insert(any(ClassificationRuleEntity.class));
     }
 
     @Test
-    void seedForNewTenant_新租户插入8条() {
+    void seedForCurrentEnterprise_多企业同时写入各自的种子() {
         when(mapper.selectCount(any())).thenReturn(0L);
         when(mapper.insert(any(ClassificationRuleEntity.class))).thenReturn(1);
 
-        int inserted = service.seedForNewTenant(99L);
+        EnterpriseContextHolder.set(99L);
+        int inserted = service.seedForCurrentEnterprise();
 
         assertEquals(8, inserted);
         verify(mapper, times(8)).insert(any(ClassificationRuleEntity.class));
     }
 
     @Test
-    void seedForNewTenant_8条种子内容正确() {
+    void seedForCurrentEnterprise_8条种子内容正确() {
         when(mapper.selectCount(any())).thenReturn(0L);
         when(mapper.insert(any(ClassificationRuleEntity.class))).thenReturn(1);
 
-        service.seedForNewTenant(1L);
+        service.seedForCurrentEnterprise();
 
         ArgumentCaptor<ClassificationRuleEntity> captor = ArgumentCaptor.forClass(ClassificationRuleEntity.class);
         verify(mapper, times(8)).insert(captor.capture());
@@ -205,7 +226,8 @@ class ClassificationRuleServiceTest {
         assertEquals("银行利息与手续费", seeds.get(0).getName());
         assertEquals("keyword_regex", seeds.get(0).getRuleType());
         assertEquals(1, seeds.get(0).getPriority());
-        assertEquals(1L, seeds.get(0).getTenantId());
+        // P106 D-3：种子的隔离维度为 enterprise_id（tenant_id 列已删）
+        assertEquals(1L, seeds.get(0).getEnterpriseId());
         assertEquals("手续费|工本费|年费|账户管理费|利息|结息|存款利息", seeds.get(0).getPattern());
         assertEquals("description", seeds.get(0).getMatchField());
         assertNull(seeds.get(0).getDirection());
@@ -265,14 +287,14 @@ class ClassificationRuleServiceTest {
         assertNull(seeds.get(7).getDirection());
     }
 
-    // ==================== createSeed (private, 通过 seedForNewTenant 间接验证) ====================
+    // ==================== createSeed (private, 通过 seedForCurrentEnterprise 间接验证) ====================
 
     @Test
-    void seedForNewTenant_种子共8条方向正确() {
+    void seedForCurrentEnterprise_种子共8条方向正确() {
         when(mapper.selectCount(any())).thenReturn(0L);
         when(mapper.insert(any(ClassificationRuleEntity.class))).thenReturn(1);
 
-        service.seedForNewTenant(1L);
+        service.seedForCurrentEnterprise();
 
         ArgumentCaptor<ClassificationRuleEntity> captor = ArgumentCaptor.forClass(ClassificationRuleEntity.class);
         verify(mapper, times(8)).insert(captor.capture());
@@ -295,7 +317,6 @@ class ClassificationRuleServiceTest {
     private ClassificationRuleEntity rule(Long id, int priority, String name, String direction, String pattern, String classification) {
         ClassificationRuleEntity r = new ClassificationRuleEntity();
         r.setId(id);
-        r.setTenantId(1L);
         r.setPriority(priority);
         r.setName(name);
         r.setRuleType("keyword_regex");
@@ -404,5 +425,70 @@ class ClassificationRuleServiceTest {
         assertNull(service.match(null, "in", null));
         assertNull(service.match("", "in", null));
         verify(mapper, never()).selectList(any());
+    }
+
+    // ==================== P106 D-1：无企业上下文必须 fail-closed ====================
+
+    /**
+     * D-1 初版写的是 {@code if (ctx != null) eq(getEnterpriseId, ctx)}，
+     * 无上下文时整个条件被跳过 => <b>返回全表</b>（fail-open）。
+     * 本组用例锁死「取不到上下文就抛错」，防止再退化成不过滤。
+     */
+    @Test
+    void page_无企业上下文_抛BusinessException而非返回全表() {
+        EnterpriseContextHolder.clear();
+        assertThrows(BusinessException.class, () -> service.page(1, 20));
+        verify(mapper, never()).selectPage(any(), any());
+    }
+
+    @Test
+    void create_无企业上下文_抛BusinessException而非落企业1() {
+        EnterpriseContextHolder.clear();
+        ClassificationRuleEntity input = new ClassificationRuleEntity();
+        assertThrows(BusinessException.class, () -> service.create(input));
+        verify(mapper, never()).insert(any(ClassificationRuleEntity.class));
+    }
+
+    @Test
+    void match_无企业上下文_抛BusinessException而非全表匹配() {
+        EnterpriseContextHolder.clear();
+        assertThrows(BusinessException.class, () -> service.match("手续费", null, null));
+        verify(mapper, never()).selectList(any());
+    }
+
+    /**
+     * 证明 page() 的<b>应用层</b>过滤确实按 enterprise_id 绑定当前企业。
+     *
+     * <p><b>为什么必须显式初始化 MP 的 TableInfo 缓存</b>：
+     * {@code LambdaQueryWrapper#getCustomSqlSegment()} 依赖 {@code TableInfoHelper} 的
+     * lambda→列名缓存，而该缓存默认<b>只在 Spring 上下文启动时建立</b>；纯 Mockito 单测里
+     * 直接渲染会抛 {@code can not find lambda cache}（AGENTS §4.3 第 7 条 Mock 盲区）。
+     * {@code TableInfoHelper.initTableInfo(...)} 可在无容器环境下补齐该缓存，
+     * 从而让本断言既能取到真实列名，又不依赖 Spring。
+     *
+     * <p><b>为什么不能只写端到端断言</b>：实测 {@code EnterpriseDataPermissionInterceptor}
+     * 已在 SQL 层注入 enterprise_id，删掉 page() 的应用层过滤后端到端用例<b>仍然全绿</b>，
+     * 即端到端断言对本次改动<b>不敏感</b>（假绿，§4.5 第 21 条）。必须断言到应用层这一层。
+     */
+    @Test
+    void page_应用层过滤按enterpriseId而非tenantId() {
+        EnterpriseContextHolder.set(990001L);
+        when(mapper.selectPage(any(), any())).thenReturn(new Page<>(1, 20));
+
+        service.page(1, 20);
+
+        LambdaQueryWrapper<ClassificationRuleEntity> w = capturePageWrapper();
+        String sql = w.getCustomSqlSegment();
+        assertTrue(sql.contains("enterprise_id"), "应用层应按 enterprise_id 过滤，实际 SQL 片段: " + sql);
+        assertFalse(sql.contains("tenant_id"), "D-1 后应用层读路径不得再出现 tenant_id，实际: " + sql);
+        assertTrue(w.getParamNameValuePairs().containsValue(990001L),
+                "过滤值应为当前上下文企业 990001，实际: " + w.getParamNameValuePairs());
+    }
+
+    private LambdaQueryWrapper<ClassificationRuleEntity> capturePageWrapper() {
+        ArgumentCaptor<LambdaQueryWrapper<ClassificationRuleEntity>> captor =
+                ArgumentCaptor.forClass(LambdaQueryWrapper.class);
+        verify(mapper).selectPage(any(), captor.capture());
+        return captor.getValue();
     }
 }

@@ -5,6 +5,7 @@ import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.huicai.common.context.EnterpriseContextHolder;
 import com.huicai.common.exception.BusinessException;
 import com.huicai.sme.arap.constant.ArapStatus;
 import com.huicai.sme.arap.entity.*;
@@ -26,6 +27,12 @@ import com.huicai.base.voucher.mapper.VoucherMapper;
 import com.huicai.base.voucher.service.VoucherNoService;
 import com.huicai.base.system.entity.Subject;
 import com.huicai.base.system.mapper.SubjectMapper;
+import com.huicai.base.masterdata.mapper.VendorMapper;
+import com.huicai.base.masterdata.mapper.CustomerMapper;
+import com.huicai.base.masterdata.entity.VendorEntity;
+import com.huicai.base.masterdata.entity.CustomerEntity;
+import com.huicai.sme.arap.vo.PrepaymentVO;
+import com.huicai.common.context.EnterpriseContextHolder;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -52,7 +59,6 @@ import java.util.Objects;
 @Transactional
 public class PrepaymentServiceImpl implements PrepaymentService {
 
-    private static final long DEFAULT_TENANT_ID = 1L;
     private static final long DEFAULT_USER_ID = 1L;
 
     private static final String SUBJECT_PREPAY = "1123";
@@ -69,6 +75,9 @@ public class PrepaymentServiceImpl implements PrepaymentService {
     private final VoucherEntryMapper voucherEntryMapper;
     private final VoucherNoService voucherNoService;
     private final SubjectMapper subjectMapper;
+    // P102 批次 6：出参 VO 需要补全单据号/供应商名/客户名（跨表，非 t_prepayment 本表列）
+    private final VendorMapper vendorMapper;
+    private final CustomerMapper customerMapper;
 
     @Override
     public IPage<PrepaymentEntity> pageQuery(Long vendorId, Long customerId, String status, String scope,
@@ -104,7 +113,14 @@ public class PrepaymentServiceImpl implements PrepaymentService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public PrepaymentEntity create(PrepaymentEntity entity) {
-        if (entity.getTenantId() == null) entity.setTenantId(DEFAULT_TENANT_ID);
+        // P106 / AGENTS §4.5 第 34 条：原为 `if (tenantId == null) setTenantId(DEFAULT_TENANT_ID /* = 1L */)`。
+        // t_prepayment 同时存在 tenant_id（V5 建表遗留）与 enterprise_id（V105 补，NOT NULL DEFAULT 1），
+        // 而 RLS 的 enterprise_policy 只读 enterprise_id ⇒ 写死 1 会让两列永久不一致：
+        // 任何按 tenant_id 的统计/索引都基于错误数据，且与被 RLS 放行的 enterprise_id 相互矛盾。
+        // 该列全库无任何读取方（rg 仅命中原这一行），故此处直接与 enterprise_id 同源：
+        // 有上下文时两列同为上下文企业；无上下文时两列都落 DB DEFAULT 1，仍然一致。
+        // ⚠️ 不得改成「无上下文即抛异常」—— TenantRlsInitializer:65-69 的 null-return 语义不变（SPEC §1.2 L1-3）。
+        entity.setTenantId(EnterpriseContextHolder.get());
         // P0-fix: 原为 `if (entity.getStatus() == null) entity.setStatus(ArapStatus.DRAFT)`。
         // PrepaymentController#create 直收 @RequestBody PrepaymentEntity（违反铁律 #13），
         // 只在 null 时兜底 ⇒ 客户端可指定任意 status。
@@ -114,8 +130,17 @@ public class PrepaymentServiceImpl implements PrepaymentService {
         // 这次人工确认（铁律 #1）。
         // 改为无条件强制 DRAFT —— 创建态是唯一合法起点。
         entity.setStatus(ArapStatus.DRAFT);
+        // P102 批次 6：不变量 settled + unsettled == amount 必须对**任何调用方**成立。
+        // 原实现是 `if (unsettled == null) unsettled = amount`，即**无视已传入的 settledAmount**
+        // ⇒ 任何传了 settled>0 的调用方都会拿到 amount != settled + unsettled 的不一致记录，
+        // 而后续 applyToPayable/BadDebtService 都是在此基础上做加减（AGENTS §4.3「双列不一致」）。
+        // 现状说明：现网两条创建路径都传 settled=ZERO（AutoGenerationService:780,820；
+        // HTTP 路径 PrepaymentCreateDTO 刻意不含 settledAmount），所以此前**没有被触发** ——
+        // 这是个尚未被踩到的陷阱，而不是已发生的错账。改为按不变量推导，顺手封掉它。
         if (entity.getSettledAmount() == null) entity.setSettledAmount(BigDecimal.ZERO);
-        if (entity.getUnsettledAmount() == null) entity.setUnsettledAmount(entity.getAmount());
+        if (entity.getUnsettledAmount() == null) {
+            entity.setUnsettledAmount(entity.getAmount().subtract(entity.getSettledAmount()));
+        }
         if (entity.getTxDate() == null) entity.setTxDate(LocalDate.now());
         prepaymentMapper.insert(entity);
         log.info("预付款创建: id={}, vendorId={}, customerId={}, amount={}, status={}",
@@ -460,6 +485,75 @@ public class PrepaymentServiceImpl implements PrepaymentService {
                         .eq(PrepaymentEntity::getStatus, ArapStatus.CONFIRMED)
                         .orderByAsc(PrepaymentEntity::getCreatedAt)
         );
+    }
+
+    // ================= P102 批次 6：出参面 VO 视图层 =================
+
+    @Override
+    public IPage<PrepaymentVO> pageView(Long vendorId, Long customerId, String status, String scope,
+                                        LocalDate startDate, LocalDate endDate, Integer current, Integer size) {
+        // 刻意复用 pageQuery：过滤条件只存在于 LambdaQueryWrapper 一处，不复制进 SQL。
+        IPage<PrepaymentEntity> page = pageQuery(vendorId, customerId, status, scope,
+                startDate, endDate, current, size);
+        return PrepaymentVO.from(page, lookupNames(page == null ? List.of() : page.getRecords()));
+    }
+
+    @Override
+    public PrepaymentVO viewOf(PrepaymentEntity entity) {
+        return entity == null ? null
+                : PrepaymentVO.from(entity, lookupNames(List.of(entity)));
+    }
+
+    @Override
+    public List<PrepaymentVO> viewList(List<PrepaymentEntity> list) {
+        return list == null ? null : PrepaymentVO.from(list, lookupNames(list));
+    }
+
+    /**
+     * 一次查齐三张关联表的 id → 展示名（每页 3 条 SQL，不是 3×N）。
+     *
+     * <p>为什么用 MP 的 selectList 而不是手写 JOIN：
+     * ① 表名/列名已用 information_schema 核实（t_vendor.name / t_customer.name / t_business_doc.doc_no），
+     *    但 MP 顺带带上逻辑删除与租户条件，手写 SQL 容易漏（AGENTS §4.2 第 7 条）；
+     * ② 返回强类型 Entity，不存在 Map key 大小写问题（AGENTS §4.3 第 17 条）。
+     *
+     * <p>⚠️ 名称查不到就<b>返回 null</b>，不做「未知供应商」之类兜底字符串 ——
+     * 兜底会把「主数据缺失」伪装成正常数据，正是 §4.5 第 25 条说的那类假绿。
+     */
+    private PrepaymentVO.Names lookupNames(List<PrepaymentEntity> list) {
+        java.util.Set<Long> docIds = new java.util.LinkedHashSet<>();
+        java.util.Set<Long> vendorIds = new java.util.LinkedHashSet<>();
+        java.util.Set<Long> customerIds = new java.util.LinkedHashSet<>();
+        for (PrepaymentEntity e : list) {
+            if (e.getDocId() != null) {
+                docIds.add(e.getDocId());
+            }
+            if (e.getVendorId() != null) {
+                vendorIds.add(e.getVendorId());
+            }
+            if (e.getCustomerId() != null) {
+                customerIds.add(e.getCustomerId());
+            }
+        }
+        java.util.Map<Long, String> docNos = new java.util.HashMap<>();
+        if (!docIds.isEmpty()) {
+            for (BusinessDocEntity d : businessDocMapper.selectBatchIds(docIds)) {
+                docNos.put(d.getId(), d.getDocNo());
+            }
+        }
+        java.util.Map<Long, String> vendorNames = new java.util.HashMap<>();
+        if (!vendorIds.isEmpty()) {
+            for (VendorEntity v : vendorMapper.selectBatchIds(vendorIds)) {
+                vendorNames.put(v.getId(), v.getName());
+            }
+        }
+        java.util.Map<Long, String> customerNames = new java.util.HashMap<>();
+        if (!customerIds.isEmpty()) {
+            for (CustomerEntity c : customerMapper.selectBatchIds(customerIds)) {
+                customerNames.put(c.getId(), c.getName());
+            }
+        }
+        return new PrepaymentVO.Names(docNos, vendorNames, customerNames);
     }
 
     private Long findSubjectIdByCode(String code) {

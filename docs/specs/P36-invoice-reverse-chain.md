@@ -187,7 +187,7 @@ Long reverseInvoice(Long invoiceId, Long userId, String reason);
 
 ---
 
-# === MACHINE-READABLE CONTRACT ===
+# MACHINE-READABLE CONTRACT
 
 contract_version: "1.0"
 

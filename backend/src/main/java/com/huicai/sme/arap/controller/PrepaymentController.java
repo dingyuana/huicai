@@ -7,6 +7,7 @@ import com.huicai.sme.arap.dto.PrepaymentCreateDTO;
 import com.huicai.sme.arap.service.PrepaymentBalanceReportService;
 import com.huicai.sme.arap.service.PrepaymentBalanceReportService.PrepaymentBalanceSummaryVO;
 import com.huicai.sme.arap.service.PrepaymentService;
+import com.huicai.sme.arap.vo.PrepaymentVO;
 import jakarta.validation.Valid;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -28,7 +29,7 @@ public class PrepaymentController {
 
     @Operation(summary = "分页查询预付款/预收款")
     @GetMapping("/page")
-    public R<IPage<PrepaymentEntity>> pageQuery(
+    public R<IPage<PrepaymentVO>> pageQuery(
             @RequestParam(required = false) Long vendorId,
             @RequestParam(required = false) Long customerId,
             @RequestParam(required = false) String status,
@@ -37,51 +38,51 @@ public class PrepaymentController {
             @RequestParam(required = false) String scope,
             @RequestParam(required = false) LocalDate startDate,
             @RequestParam(required = false) LocalDate endDate) {
-        return R.ok(prepaymentService.pageQuery(vendorId, customerId, status, scope, startDate, endDate, current, size));
+        return R.ok(prepaymentService.pageView(vendorId, customerId, status, scope, startDate, endDate, current, size));
     }
 
     @Operation(summary = "查询预付款详情")
     @GetMapping("/{id}")
-    public R<PrepaymentEntity> getById(@PathVariable Long id) {
-        return R.ok(prepaymentService.getById(id));
+    public R<PrepaymentVO> getById(@PathVariable Long id) {
+        return R.ok(prepaymentService.viewOf(prepaymentService.getById(id)));
     }
 
     @Operation(summary = "新增预付款 (DRAFT)")
     @PostMapping
-    public R<PrepaymentEntity> create(@Valid @RequestBody PrepaymentCreateDTO dto) {
-        return R.ok(prepaymentService.create(dto.toEntity()));
+    public R<PrepaymentVO> create(@Valid @RequestBody PrepaymentCreateDTO dto) {
+        return R.ok(prepaymentService.viewOf(prepaymentService.create(dto.toEntity())));
     }
 
     @Operation(summary = "确认预付款 (DRAFT → CONFIRMED)")
     @PostMapping("/{id}/confirm")
-    public R<PrepaymentEntity> confirm(@PathVariable Long id) {
-        return R.ok(prepaymentService.confirm(id));
+    public R<PrepaymentVO> confirm(@PathVariable Long id) {
+        return R.ok(prepaymentService.viewOf(prepaymentService.confirm(id)));
     }
 
     @Operation(summary = "预付冲应付 — 核销抵扣 (CONFIRMED → APPLIED)")
     @PostMapping("/{prepayId}/apply-to-payable/{payableId}")
-    public R<PrepaymentEntity> applyToPayable(
+    public R<PrepaymentVO> applyToPayable(
             @PathVariable Long prepayId,
             @PathVariable Long payableId,
             @RequestParam(required = false) BigDecimal applyAmount,
             @RequestParam(required = false) String period,
             @RequestParam(defaultValue = "0") Long userId,
             @RequestParam(required = false) String summary) {
-        return R.ok(prepaymentService.applyToPayable(
-                prepayId, payableId, applyAmount, period, userId, summary));
+        return R.ok(prepaymentService.viewOf(prepaymentService.applyToPayable(
+                prepayId, payableId, applyAmount, period, userId, summary)));
     }
 
     @Operation(summary = "预收冲应收 — 核销抵扣 (CONFIRMED → APPLIED)")
     @PostMapping("/{prepayId}/apply-to-receivable/{receivableId}")
-    public R<PrepaymentEntity> applyToReceivable(
+    public R<PrepaymentVO> applyToReceivable(
             @PathVariable Long prepayId,
             @PathVariable Long receivableId,
             @RequestParam(required = false) BigDecimal applyAmount,
             @RequestParam(required = false) String period,
             @RequestParam(defaultValue = "0") Long userId,
             @RequestParam(required = false) String summary) {
-        return R.ok(prepaymentService.applyToReceivable(
-                prepayId, receivableId, applyAmount, period, userId, summary));
+        return R.ok(prepaymentService.viewOf(prepaymentService.applyToReceivable(
+                prepayId, receivableId, applyAmount, period, userId, summary)));
     }
 
     @Operation(summary = "反冲预付款 (CONFIRMED/APPLIED → REVERSED)")
@@ -95,14 +96,14 @@ public class PrepaymentController {
 
     @Operation(summary = "查询供应商未结清预付款列表")
     @GetMapping("/open/{vendorId}")
-    public R<List<PrepaymentEntity>> getOpenPrepayments(@PathVariable Long vendorId) {
-        return R.ok(prepaymentService.getOpenPrepayments(vendorId));
+    public R<List<PrepaymentVO>> getOpenPrepayments(@PathVariable Long vendorId) {
+        return R.ok(prepaymentService.viewList(prepaymentService.getOpenPrepayments(vendorId)));
     }
 
     @Operation(summary = "查询客户未结清预收款列表")
     @GetMapping("/open-customer/{customerId}")
-    public R<List<PrepaymentEntity>> getOpenPrepaymentsForCustomer(@PathVariable Long customerId) {
-        return R.ok(prepaymentService.getOpenPrepaymentsForCustomer(customerId));
+    public R<List<PrepaymentVO>> getOpenPrepaymentsForCustomer(@PathVariable Long customerId) {
+        return R.ok(prepaymentService.viewList(prepaymentService.getOpenPrepaymentsForCustomer(customerId)));
     }
 
     @Operation(summary = "查询可用预付款（P53 M4）")

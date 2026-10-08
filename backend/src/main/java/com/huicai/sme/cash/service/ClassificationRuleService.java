@@ -11,9 +11,12 @@ import java.util.List;
 public interface ClassificationRuleService {
 
     /**
-     * 规则列表分页
+     * 规则列表分页。
+     *
+     * <p>P106 批次 1a-3（D-1）：已移除 {@code tenantId} 入参，改按当前上下文企业的
+     * {@code enterprise_id} 过滤；无企业上下文时抛 {@code BusinessException}（fail-closed）。
      */
-    IPage<ClassificationRuleEntity> page(Long tenantId, Integer current, Integer size);
+    IPage<ClassificationRuleEntity> page(Integer current, Integer size);
 
     /**
      * 规则详情
@@ -41,11 +44,12 @@ public interface ClassificationRuleService {
     void reorder(List<Long> ids);
 
     /**
-     * 为新租户初始化种子规则（幂等）
+     * P106 批次 1a-3（D-1）：废弃 {@code tenantId} 请求参数，改用当前上下文企业。
+     * 种子幂等只看 {@code enterprise_id = 当前上下文企业}。
      *
      * @return 插入条数
      */
-    int seedForNewTenant(Long tenantId);
+    int seedForCurrentEnterprise();
 
     /**
      * 单笔测试匹配

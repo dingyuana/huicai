@@ -65,6 +65,17 @@ jobs:
         run: python scripts/check_entity_status_massassignment.py
         # 🔥 同上：默认报告模式。存量清理完毕后改为 --strict 阻断。
 
+  registry-drift-check:
+    name: 登记册漂移守卫（阻断式）
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: 登记册结构/状态码/SPEC 引用守卫
+        run: python scripts/check_registry_drift.py
+
   tenant-fixture-check:
     name: 租户夹具一致性检测
     runs-on: ubuntu-latest

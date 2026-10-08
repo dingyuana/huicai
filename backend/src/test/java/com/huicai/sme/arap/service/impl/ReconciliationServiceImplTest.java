@@ -721,9 +721,38 @@ class ReconciliationServiceImplTest {
         ReconciliationExceptionEntity ex = service.createException(
                 "bank_txn", 1L, "INVOICE_OUT", 100L,
                 5L, "CUSTOMER", new BigDecimal("1000"), new BigDecimal("500"),
-                "PARTY_MISMATCH", "客商不匹配", null);
+                // P109 / D-109-2：本值原先写的是 "PARTY_MISMATCH" —— 它来自**前端那套词表**，
+                // 与 DB 的 chk_exception_type 允许集完全不相交（V1 baseline:1297 只允许
+                // AMOUNT_DIFF/DATE_DIFF/UNMATCHED/DUPLICATE）。
+                // ⇒ 这个 Mock 用例当时断言的是一个**永远不可能落库**的值，而 Mock 结构上
+                // 看不出 CHECK 约束（AGENTS §4.3 第 7 条），所以缺陷一直没暴露。
+        // 老丁裁定 D-109-2 = 改前端对齐 DB，故此处同步改为 DB 合法值。
+                "UNMATCHED", "未匹配到对手方", null);
         verify(exceptionMapper).insert(any(ReconciliationExceptionEntity.class));
         assertEquals("OPEN", ex.getStatus());
+    }
+
+    @Test
+    void createException_非法异常类型_throw且列出合法值() {
+        // P109：原先没有任何校验，非法值会一路走到 DB 才炸（且 V169 前根本走不到 INSERT）。
+        BusinessException e = assertThrows(BusinessException.class, () ->
+                service.createException(
+                        "bank_txn", 1L, "INVOICE_OUT", 100L,
+                        5L, "CUSTOMER", new BigDecimal("1000"), new BigDecimal("500"),
+                        "PARTY_MISMATCH", "客商不匹配", null));
+        assertTrue(e.getMessage().contains("AMOUNT_DIFF"),
+                "报错应列出 DB CHECK 的合法值，实际：" + e.getMessage());
+        verify(exceptionMapper, never()).insert(any(ReconciliationExceptionEntity.class));
+    }
+
+    @Test
+    void createException_缺来源单据类型_throw() {
+        BusinessException e = assertThrows(BusinessException.class, () ->
+                service.createException(
+                        null, 1L, "INVOICE_OUT", 100L,
+                        5L, "CUSTOMER", new BigDecimal("1000"), new BigDecimal("500"),
+                        "AMOUNT_DIFF", "金额不符", null));
+        assertTrue(e.getMessage().contains("sourceDocType"), "报错应指明缺失字段：" + e.getMessage());
     }
 
     @Test

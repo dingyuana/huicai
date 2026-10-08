@@ -197,7 +197,9 @@
 
 ---
 
-# === MACHINE-READABLE CONTRACT ===
+# MACHINE-READABLE CONTRACT
+
+```yaml
 
 contract_version: "1.0"
 
@@ -278,6 +280,7 @@ dependencies:
     relation: "红冲过的单据核销金额需重新计算"
   - spec: P22
     relation: "核销凭证的摘要需包含业务单据号"
+```
 
 ---
 

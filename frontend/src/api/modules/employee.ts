@@ -4,7 +4,10 @@ export interface Employee {
   id?: number
   code: string
   name: string
-  department?: string
+  // 2026-10-06（P102 批次3）：原先声明的 department 全仓无人读取，且后端从未返回过该字段
+  // —— 页面用的 deptName 同样不是后端字段（EmployeeEntity 只有 deptId: Long）。
+  // 故把死字段换成后端真实存在的 deptId，让接口反映真实用法。
+  deptId?: number
   position?: string
   phone?: string
   email?: string

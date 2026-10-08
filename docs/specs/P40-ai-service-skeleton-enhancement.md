@@ -153,7 +153,7 @@ GET /redoc     → ReDoc UI (可选)
 
 ---
 
-## === MACHINE-READABLE CONTRACT ===
+# MACHINE-READABLE CONTRACT
 
 contract_version: "1.0"
 

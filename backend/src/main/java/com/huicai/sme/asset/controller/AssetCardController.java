@@ -11,6 +11,7 @@ import com.huicai.sme.asset.service.DepreciationVoucherService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import com.huicai.sme.asset.vo.AssetCardVO;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
@@ -29,33 +30,33 @@ public class AssetCardController {
 
     @Operation(summary = "分页查询")
     @GetMapping("/page")
-    public R<IPage<AssetCardEntity>> page(
+    public R<IPage<AssetCardVO>> page(
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) String status,
             @RequestParam(required = false) Long categoryId,
             @RequestParam(defaultValue = "1") Integer current,
             @RequestParam(defaultValue = "20") Integer size) {
-        return R.ok(service.pageQuery(keyword, status, categoryId, current, size));
+        return R.ok(AssetCardVO.from(service.pageQuery(keyword, status, categoryId, current, size)));
     }
 
     @Operation(summary = "详情")
     @GetMapping("/{id}")
-    public R<AssetCardEntity> getById(@PathVariable Long id) {
-        return R.ok(service.getById(id));
+    public R<AssetCardVO> getById(@PathVariable Long id) {
+        return R.ok(AssetCardVO.from(service.getById(id)));
     }
 
     @Operation(summary = "创建")
     @PostMapping
-    public R<AssetCardEntity> create(@Valid @RequestBody AssetCardSaveDTO dto) {
-        return R.ok(service.create(dto.toEntity()));
+    public R<AssetCardVO> create(@Valid @RequestBody AssetCardSaveDTO dto) {
+        return R.ok(AssetCardVO.from(service.create(dto.toEntity())));
     }
 
     @Operation(summary = "更新")
     @PutMapping("/{id}")
-    public R<AssetCardEntity> update(@PathVariable Long id, @Valid @RequestBody AssetCardSaveDTO dto) {
+    public R<AssetCardVO> update(@PathVariable Long id, @Valid @RequestBody AssetCardSaveDTO dto) {
         AssetCardEntity entity = dto.toEntity();
         entity.setId(id);
-        return R.ok(service.update(entity));
+        return R.ok(AssetCardVO.from(service.update(entity)));
     }
 
     @Operation(summary = "删除")

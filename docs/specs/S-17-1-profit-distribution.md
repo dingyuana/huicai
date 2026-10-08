@@ -156,7 +156,7 @@ POST /api/v1/period-close/profit-distribution?period={periodCode}
 ---
 
 ```yaml
-# === MACHINE-READABLE CONTRACT (V1.0) ===
+# MACHINE-READABLE CONTRACT
 
 contract_version: "1.0"
 entity: PeriodClose
@@ -164,7 +164,9 @@ module: finance
 extension_of: S-17
 
 endpoints:
-  - method: POST
+  - id: E-001
+    description: "利润分配单：按本年利润提取 10% 生成利润分配凭证"
+    method: POST
     path: /api/v1/period-close/profit-distribution
     params:
       period: YYYYMM
@@ -192,16 +194,15 @@ logic:
         amount: 提取额
 
 acceptance_tests:
-  - scenario: "利润分配成功 - 盈利 84,050 → 提取 8,405"
-    given: "4103 endBalance=84,050.00"
-    when: "POST /api/v1/period-close/profit-distribution"
-    then: "凭证 DRAFT, 借 4104 8,405 / 贷 4101 8,405"
-  - scenario: "幂等保护 - 已有凭证拒绝"
-    given: "已存在 DISTRIB-202607 凭证"
-    when: "POST /api/v1/period-close/profit-distribution"
-    then: "400 已存在"
-  - scenario: "亏损 - 不分配"
-    given: "4103 endBalance=-15,950.00"
-    when: "POST /api/v1/period-close/profit-distribution"
-    then: "400 亏损无需分配"
-```
+  - id: AT-1
+    description: "利润分配成功 - 盈利 84,050 → 提取 8,405"
+    assertion: "凭证 DRAFT, 借 4104 8,405 / 贷 4101 8,405"
+    status: covered
+  - id: AT-2
+    description: "幂等保护 - 已有凭证拒绝"
+    assertion: "400 已存在"
+    status: covered
+  - id: AT-3
+    description: "亏损 - 不分配"
+    assertion: "400 亏损无需分配"
+    status: covered

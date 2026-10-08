@@ -400,7 +400,7 @@ const onDelete = async (row: ClassificationRule) => {
 
 // Seed
 const onSeed = async () => {
-  await seedRules(1)
+  await seedRules()
   ElMessage.success('种子规则已初始化')
   await fetchData()
 }

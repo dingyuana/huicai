@@ -16,8 +16,10 @@ import java.time.LocalDateTime;
 @TableName("t_classification_rule")
 public class ClassificationRuleEntity extends BaseEntity {
 
-    /** 租户 ID */
-    private Long tenantId;
+    // P106 D-3：原 tenantId 字段已删除 —— 对应的 DB 列由 V170 迁移 DROP。
+    // 若保留该字段，MyBatis-Plus 会把它纳入 SELECT/INSERT 列表，
+    // 真实库将报 `column "tenant_id" does not exist`（实测已在 D-3 迁移后出现）。
+    // 隔离维度唯一为继承自 BaseEntity 的 enterpriseId。
 
     /** 规则名称, 如"银行手续费" */
     private String name;
