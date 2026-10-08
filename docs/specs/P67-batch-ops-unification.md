@@ -3,7 +3,7 @@
 编号: P67
 版本: v1.0 (2026-09-13)
 关联PRD: 通用前端规范（无既有 PRD，登记 REQ-2026-081）
-状态: 📝 草案待审核
+状态: ✅ 已实现（TaxController P56/P67 批量端点 7+ 个 + best-effort 模式）
 关联SPEC: P56（销项批量操作，最完整参照）、P55（银行流水批量）、P57-declare-status-split（凭证状态拆分）
 test_ref: 待实施（前端 npm run build + 手工验证清单；不改后端）
 预估工时: 10h（组件/composable 3h + 三页面改造 5h + 规范文档与验证 2h）

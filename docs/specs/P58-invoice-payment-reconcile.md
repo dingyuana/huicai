@@ -1,7 +1,7 @@
 # P58 SPEC — 发票-收付款勾稽 Tab（三流合一视图）
 
 > **版本**：V1.0 | **日期**：2026-08-27 | **作者**：Hermes
-> **状态**：📝 待审核
+> **状态**：✅ 已实现（InvoicePaymentReconcileController + Service + Mapper）
 > **编号**：HUICAI-SPC-058
 > **关联PRD**：../prd/发票税务管理-PRD-V1.0.md、../prd/应收应付核销-PRD-V1.0.md
 > **关联SPEC**：P30-reconciliation-workbench-enhance.md、P57-declare-status-split.md
