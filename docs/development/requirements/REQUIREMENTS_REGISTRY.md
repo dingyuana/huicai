@@ -637,15 +637,15 @@
 
 | REQ-2026-070 | 客户切换 | P0 | 切换接口、RLS context 同步 | SPC-126-S-26 | ✅ **已实现** （`EnterpriseController#switchEnterprise` 已实现含权限校验「无权切换企业」；回归锁 `TenantSwitchRealDBTest` 存在。原登记「规划中」严重过时） | DONE |
 
-| REQ-2026-071 | 批量发票导入 | P1 | 多租户批量导入、enterprise_id 隔离 | SPC-126-S-26 | 🆕 规划中 | PLANNED |
+| REQ-2026-071 | 批量发票导入 | P1 | 多租户批量导入、enterprise_id 隔离 | SPC-126-S-26 | ✅ 已实现（BatchImportService + /batch/import） | DONE |
 
-| REQ-2026-072 | 批量凭证审核 | P1 | 批量审核只影响当前企业 | SPC-126-S-26 | 🆕 规划中 | PLANNED |
+| REQ-2026-072 | 批量凭证审核 | P1 | 批量审核只影响当前企业 | SPC-126-S-26 | ✅ 已实现（BatchAuditService + /batch/audit-vouchers） | DONE |
 
-| REQ-2026-073 | 批量结账 | P1 | 多企业批量结账 | SPC-126-S-26 | 🆕 规划中 | PLANNED |
+| REQ-2026-073 | 批量结账 | P1 | 多企业批量结账 | SPC-126-S-26 | ✅ 已实现（BatchCloseService + /batch/close） | DONE |
 
 | REQ-2026-074 | 客户合同管理 | P2 | 合同 CRUD、续费提醒 | SPC-126-S-26 | 🆕 规划中 | PLANNED |
 
-| REQ-2026-075 | 代理工作台前端 | P1 | 客户列表、切换、批量操作 UI | SPC-126-S-26 | 🆕 规划中 | PLANNED |
+| REQ-2026-075 | 代理工作台前端 | P1 | 客户列表、切换、批量操作 UI | SPC-126-S-26 | ✅ 已实现（AgencyDashboard + BatchOperation + EnterpriseList） | DONE |
 
 | REQ-2026-077 | 企业级建账期间通用化 | P1 | start_period 落库自动回填、默认期间接口、过账校验基于建账期间、前端 11 处默认期间改造 | SPC-P71 | ✅ 已实现（代码 commit b24c7c0；current-period 接口 11 tests + SubjectBalanceServiceImpl 35 tests 全绿；V134 migration） | DONE |
 
