@@ -30,7 +30,7 @@
       <el-alert v-else-if="result && result.cashCheckOkYtd === false" type="warning" show-icon :closable="false"
         :title="`⚠ 本年累计勾稽差异 ${fmtAmount(result.cashCheckDiffYtd)}`" style="margin-bottom: 16px" />
 
-      <el-table v-if="result" :data="visibleRows" border>
+      <el-table v-if="result" :data="visibleRows" border @row-click="drillToVouchers" row-class-name="drillable-row">
         <el-table-column prop="label" label="项目" min-width="280" />
         <el-table-column label="本期金额" align="right" width="180">
           <template #default="{ row }">
@@ -78,6 +78,7 @@
 
 <script setup lang="ts">
 import { onMounted, reactive, ref, computed } from 'vue'
+import { useRouter } from 'vue-router'
 import { resolveLatestClosedPeriod } from '@/utils/period'
 import { ElMessage } from 'element-plus'
 import { cashFlowStatement, exportCashFlow } from '@/api/modules/report'
@@ -85,6 +86,8 @@ import { amountClass, formatAmount } from '@/utils/format'
 import { isRowVisible, isStandardBlankRow } from '@/utils/report/rowVisibility'
 import PeriodNavigator from '@/components/finance/PeriodNavigator.vue'
 import DiagnosticAlert from '@/components/report/DiagnosticAlert.vue'
+
+const router = useRouter()
 
 const query = reactive({ period: '' })
 const result = ref<any>(null)
@@ -161,6 +164,15 @@ const onPrintPreview = () => {
 }
 const doPrint = () => window.print()
 
+// P95 REQ-093：现金流表行下钻 → 凭证列表（按期间过滤）
+const drillToVouchers = (row: any) => {
+  if (row.bold) return // 小计/合计行不可点
+  router.push({
+    name: 'VoucherList',
+    query: { period: query.period },
+  })
+}
+
 onMounted(async () => {
   query.period = await resolveLatestClosedPeriod()
   fetchData()
@@ -168,6 +180,9 @@ onMounted(async () => {
 </script>
 
 <style scoped>
+/* P95 REQ-093：可下钻行手型，小计行不可点 */
+:deep(.drillable-row) { cursor: pointer; }
+:deep(.drillable-row:hover) { background: #ecf5ff !important; }
 /* P95 REQ-094：打印样式 */
 .print-header { text-align: center; margin-bottom: 16px; }
 .print-header h2 { margin: 0 0 8px; }

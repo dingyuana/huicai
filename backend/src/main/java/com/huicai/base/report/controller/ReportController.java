@@ -4,6 +4,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import com.huicai.base.report.service.AnalysisService;
 import com.huicai.base.report.service.ReportService;
+import com.huicai.base.report.service.VoucherCashFlowService;
 import com.huicai.common.response.R;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
@@ -21,6 +22,7 @@ public class ReportController {
 
     private final ReportService reportService;
     private final AnalysisService analysisService;
+    private final VoucherCashFlowService voucherCashFlowService;
 
     @Operation(summary = "科目余额表")
     @GetMapping("/subject-balance/auxiliary")
@@ -126,5 +128,12 @@ public class ReportController {
                     return map;
                 }).toList();
         return R.ok(list);
+    }
+
+    @Operation(summary = "P96 REQ-095: 按期间批量重建现金流量分配")
+    @PostMapping("/cash-flow/rebuild")
+    public R<Integer> rebuildCashFlow(@RequestParam String period) {
+        int count = voucherCashFlowService.rebuildByPeriod(period);
+        return R.ok(count);
     }
 }

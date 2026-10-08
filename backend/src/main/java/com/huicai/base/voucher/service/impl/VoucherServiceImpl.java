@@ -92,6 +92,7 @@ public class VoucherServiceImpl extends ServiceImpl<VoucherMapper, VoucherEntity
     private final VoucherStateMachineService voucherStateMachineService;
     private final OutputInvoiceMapper outputInvoiceMapper;
     private final BusinessDocMapper businessDocMapper;
+    private final com.huicai.base.report.service.VoucherCashFlowService voucherCashFlowService;
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final ApplicationEventPublisher eventPublisher; // P79：BOOKING 节点推进事件
 
@@ -354,6 +355,13 @@ public class VoucherServiceImpl extends ServiceImpl<VoucherMapper, VoucherEntity
         // 更新科目余额
         List<VoucherEntryEntity> entries = voucherEntryMapper.selectByVoucherId(id);
         subjectBalanceService.updateBalanceOnPost(entity, entries);
+
+        // P96 REQ-095：凭证过账时自动分配现金流量项目
+        try {
+            voucherCashFlowService.assignCashFlow(id);
+        } catch (Exception e) {
+            log.warn("现金流分配失败(不阻断过账): voucherId={}, err={}", id, e.getMessage());
+        }
 
         log.info("记账凭证: id={}, userId={}", id, userId);
     }
