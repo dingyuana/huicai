@@ -115,7 +115,7 @@ none ──init(建账成功)──▶ entered ──lock──▶ locked(终态
 
 ---
 
-# === MACHINE-READABLE CONTRACT ===
+# MACHINE-READABLE CONTRACT
 
 contract_version: "1.0"
 
@@ -137,6 +137,12 @@ states:
     initial: false
     terminal: true
 
+constraints:
+  - id: C-TERMINAL
+    type: business
+    rule: "LOCKED 为终态：unlock / clear / initOpeningBalances 一律禁止，opening_status 不变并抛 BusinessException(400/409)"
+    enforcement: "期初余额守卫；验收见 test_unlock_locked_period_fails"
+
 transitions:
   - id: T-01
     from: NONE
@@ -153,14 +159,6 @@ transitions:
     precondition: "opening_status == ENTERED && trial balance balanced"
     postcondition: "opening_status == LOCKED"
     test_ref: test_lock_opening_positive
-
-  - id: T-03
-    from: LOCKED
-    to: NONE/ENTERED
-    trigger: unlock/clear/init
-    precondition: "FORBIDDEN — locked 为终态"
-    postcondition: "opening_status 不变; BusinessException(400/409)"
-    test_ref: test_unlock_locked_period_fails
 
   - id: T-04
     from: ENTERED

@@ -238,7 +238,7 @@ ISSUED -> ACTIVE -> BLACKLISTED (登出) -> EXPIRED
 ---
 
 ```yaml
-# === MACHINE-READABLE CONTRACT ===
+# MACHINE-READABLE CONTRACT
 
 contract_version: "1.0"
 entity: UserEntity

@@ -180,7 +180,7 @@
 
 ```yaml
 ---
-# === MACHINE-READABLE CONTRACT ===
+# MACHINE-READABLE CONTRACT
 contract_version: "1.0"
 states:
   - DRAFT
@@ -188,13 +188,16 @@ states:
   - BUILT
   - DEPLOYED
 transitions:
-  - from: DRAFT
+  - id: T-01
+    from: DRAFT
     to: COMPILED
     trigger: mvn_compile
-  - from: COMPILED
+  - id: T-02
+    from: COMPILED
     to: BUILT
     trigger: npm_build
-  - from: BUILT
+  - id: T-03
+    from: BUILT
     to: DEPLOYED
     trigger: docker_up
 acceptance_tests:

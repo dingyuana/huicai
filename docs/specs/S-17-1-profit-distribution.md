@@ -156,7 +156,7 @@ POST /api/v1/period-close/profit-distribution?period={periodCode}
 ---
 
 ```yaml
-# === MACHINE-READABLE CONTRACT (V1.0) ===
+# MACHINE-READABLE CONTRACT
 
 contract_version: "1.0"
 entity: PeriodClose

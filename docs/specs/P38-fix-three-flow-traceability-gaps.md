@@ -431,7 +431,7 @@ WHERE s.generated_doc_id = d.id
 ---
 
 ```
-# === MACHINE-READABLE CONTRACT ===
+# MACHINE-READABLE CONTRACT
 
 contract_version: "1.0"
 
@@ -553,6 +553,7 @@ out_of_scope:
 dependencies:
   - spec: P34
     relation: "F5 依赖 P34 V73 数据迁移完成，旧格式数据已清理"
+```
 
 ---
 

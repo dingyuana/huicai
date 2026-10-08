@@ -88,7 +88,7 @@ PostgreSQL `timestamp` 默认精度为 `timestamp(6)`（微秒）。改为 `time
 
 ```yaml
 ---
-# === MACHINE-READABLE CONTRACT ===
+# MACHINE-READABLE CONTRACT
 contract_version: "1.0"
 states:
   - DRAFT

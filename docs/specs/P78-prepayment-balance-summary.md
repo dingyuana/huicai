@@ -195,7 +195,7 @@ Then 预付（供应商侧）单据不出现在结果中（按 customerId 分组
 ---
 
 ```yaml
-# === MACHINE-READABLE CONTRACT ===
+# MACHINE-READABLE CONTRACT
 contract_version: "1.0"
 entity: PrepaymentEntity
 module: sme-arap
@@ -240,8 +240,9 @@ transitions:
         status: CONFIRMED
     test_ref: test_apply_reduces_unsettled_and_settles
   - id: T-03
-    from: ANY_NON_REVERSED
+    from: "*"
     to: REVERSED
+    precondition: "status != REVERSED"
     trigger: reverse
     precondition: "status in (CONFIRMED, APPLIED)"
     postcondition: "status = REVERSED; 金额计入 currentReversed，不计期末"

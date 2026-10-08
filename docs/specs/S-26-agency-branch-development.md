@@ -642,7 +642,7 @@ com.huicai.agency
 ***
 
 ```yaml
-# === MACHINE-READABLE CONTRACT ===
+# MACHINE-READABLE CONTRACT
 
 contract_version: "2.0"
 module: agency

@@ -224,7 +224,7 @@ backend/src/main/java/com/huicai/
 ---
 
 ```yaml
-# === MACHINE-READABLE CONTRACT ===
+# MACHINE-READABLE CONTRACT
 
 contract_version: "1.0"
 

@@ -190,7 +190,7 @@ Then 结果不含企业 A 单据（拦截器注入 enterprise_id）
 ---
 
 ```yaml
-# === MACHINE-READABLE CONTRACT ===
+# MACHINE-READABLE CONTRACT
 contract_version: "1.0"
 entity: ExpenseReimbursementEntity
 module: sme-arap

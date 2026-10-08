@@ -140,7 +140,7 @@ none ──init(建账成功)──▶ entered ──lock──▶ locked
 
 ---
 
-# === MACHINE-READABLE CONTRACT ===
+# MACHINE-READABLE CONTRACT
 
 contract_version: "1.0"
 
