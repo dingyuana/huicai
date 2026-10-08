@@ -586,6 +586,13 @@ def main():
     parser.add_argument("--strict", action="store_true", help="Fail on warnings too")
     parser.add_argument("--require-contract", action="store_true",
                         help="Fail when a SPEC has no machine-readable contract (strict coverage mode)")
+    # 🆕 棘轮（AGENTS §4.5 第 25 条）：把「恒绿」变成「只能变好不能变坏」。
+    # --require-contract 要求 100% 覆盖，今天不可达（会恒红）；
+    # 而默认不传时 96/104 缺契约仍是 PASSED ⇒ 门禁恒绿、无信号（§4.5 第 21 条）。
+    # 本参数把上限钉在**实测值**：缺契约数超过上限即失败。
+    # 上限写在 CI 命令行里（可审计），每次补齐契约就下调 ⇒ 棘轮而非固定阈值。
+    parser.add_argument("--max-no-contract", type=int, default=None,
+                        help="棘轮上限：缺机器可读契约的 SPEC 数不得超过该值，超过则失败")
     # 项目根默认由本文件位置推导（scripts/ 的上一级），不再硬编码绝对路径。
     # 原默认 "/root/data/disk/huicai" 是他人机器的残留，在任何其它 checkout 上
     # --check-implementation 都会直接 PermissionError 崩溃 —— 门禁因环境而崩，
@@ -697,6 +704,13 @@ def main():
     if args.require_contract and missing_count:
         print(f"  ❌ --require-contract: {missing_count} SPEC 缺契约")
         all_passed = False
+    if args.max_no_contract is not None and missing_count > args.max_no_contract:
+        print(f"  ❌ 棘轮回退：缺契约 SPEC 数 {missing_count} > 上限 {args.max_no_contract}"
+              f" ⇒ 契约覆盖率倒退（新增了无契约的 SPEC，或既有 SPEC 丢了契约段）")
+        all_passed = False
+    elif args.max_no_contract is not None:
+        print(f"  ✅ 棘轮通过：缺契约 {missing_count} ≤ 上限 {args.max_no_contract}"
+              f"（上限可下调以收紧：当前覆盖率 {validated}/{total}）")
     if all_passed and not broken_count:
         print("  ✅ SPEC contract gate PASSED")
     else:
