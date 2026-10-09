@@ -36,52 +36,90 @@ DEFAULT_MAX_UNCOVERED = 280
 DEFAULT_MAX_ORPHAN = 0
 
 
+COMMENT_RE = re.compile(r'/\*.*?\*/', re.S)
+
+
+def _strip_comments(text):
+    """去掉块注释与行注释 —— 否则 javadoc 里的 {@code @GetMapping("/x")} 会被当成真端点.
+
+    ⚠️ 本项目 `EnterpriseWriteGuard` 的类注释里就写着
+    {@code @PostMapping}/{@code @PutMapping}/{@code @DeleteMapping}，
+    首版未剥注释时它会污染「当前类前缀」，进而把后续方法的路径算错。
+    """
+    text = COMMENT_RE.sub(' ', text)
+    return re.sub(r'//[^\n]*', ' ', text)
+
+
+# `@GetMapping` / `@GetMapping()` / `@GetMapping("path")` 三种形态都要认。
+# ⚠️ 漏掉前两种会让「类级前缀本身就是一个端点」的 POST/PUT/GET 全部消失
+#   （如 PeriodController 的 `@PostMapping` = POST /api/v1/periods），
+#   于是前端 `request.post('/v1/periods', data)` 被误判成「前端调了不存在的端点」。
+#   与 extract_frontend_api_calls 的 group(1)/group(2) 漏扫同型：**正则漏一种书写形态，
+#   症状都是成片误报，而不会报任何错**。
+
+
 def extract_backend_endpoints():
     """提取后端所有 Controller 端点."""
-    controllers = {}
-    current_ctrl = ""
     endpoints = []
 
-    # 找到所有 Controller 文件
     controller_files = sorted(BACKEND_DIR.glob("src/main/java/**/*Controller.java"))
 
     for fpath in controller_files:
-        content = fpath.read_text(encoding="utf-8")
-        lines = content.split("\n")
+        content = _strip_comments(fpath.read_text(encoding="utf-8"))
         current_ctrl = ""
-        for line in lines:
+        for line in content.split("\n"):
             # 类级 @RequestMapping
             m = re.search(r'@RequestMapping\s*\(\s*["\']([^"\']+)["\']', line)
             if m:
                 current_ctrl = m.group(1)
 
-            # 方法级注解
+            # 方法级注解（含无参形态）
             for method in ["PostMapping", "GetMapping", "PutMapping", "DeleteMapping"]:
-                m2 = re.search(r'@' + method + r'\s*\(\s*["\']([^"\']*)["\']', line)
-                if m2:
-                    sub = m2.group(1)
-                    full = current_ctrl + ("/" if not sub.startswith("/") else "") + sub
+                for m2 in re.finditer(
+                        r'@' + method + r'\b\s*(?:\(\s*(?:"([^"]*)"|\'([^\']*)\')?\s*\))?', line):
+                    sub = m2.group(1) if m2.group(1) is not None else (
+                        m2.group(2) if m2.group(2) is not None else "")
+                    full = current_ctrl + ("/" if sub and not sub.startswith("/") else "") + sub
                     endpoints.append(full)
 
     return sorted(set(endpoints))
 
 
 def extract_frontend_api_calls():
-    """提取前端所有 API 调用."""
+    """提取前端所有 API 调用.
+
+    🔴 扫描范围必须覆盖 `.vue`（AGENTS §4.5 第 22 条：多份配置只读其一 ⇒ 成片误报）
+
+    首版只扫 `src/api/**/*.ts`，而本项目有 **43 处 `request.*` 直接写在 `.vue` 里**
+    （`views/**/*.vue`，实测 22 个后端端点因此被误判为「前端未接」）。
+    症状极具欺骗性：这批端点**确实已被前端调用**，但门禁报红；
+    若照着报告去「接入前端」，会发现页面里已经有了 —— 而真正的倒退
+    （新增端点未接）会被这条噪声淹没。
+
+    故此处同时扫 `src/api/**/*.ts` 与 `src/**/*.vue`，并支持双引号字面量。
+    """
     calls = []
 
-    # 找到所有 API 模块文件
     api_files = sorted(FRONTEND_DIR.glob("src/api/**/*.ts"))
+    vue_files = sorted(FRONTEND_DIR.glob("src/**/*.vue"))
 
-    for fpath in api_files:
+    for fpath in api_files + vue_files:
         content = fpath.read_text(encoding="utf-8")
-        # 匹配 request.get/post/put/delete 的 URL
+        # 三种字面量形态，统一取 **group(2)**（group(1) 是 HTTP 方法名，不是 URL）
+        # ⚠️ 首版在此处写的是 group(1)，而 group(1) 恒为 'get'/'post'/'put'/'delete'，
+        #   又恰被 normalize() 的噪声过滤（`if not p or p in ("get","post",...)`）丢弃
+        #   ⇒ **所有单引号/双引号写法的 API 调用被整体漏扫**，而模板字符串
+        #   （反引号，写的是 group(2)）正常计入。
+        #   症状：报告称「前端调用 148 条」，而实测源码里有 489 处 `request.*`。
+        #   判据：正则里 `(get|post|put|delete)` 是 group(1)，URL 一定是 group(2)。
         # 模板字符串: request.post(`/tax/output-invoices/${id}/confirm`)
         for m in re.finditer(r"request\.(get|post|put|delete)\s*\(\s*`([^`]+)`", content):
             calls.append(m.group(2))
-        # 普通字符串: request.get('/tax/types/page')
+        # 普通字符串: request.get('/tax/types/page') / request.get("/tax/types/page")
         for m in re.finditer(r"request\.(get|post|put|delete)\s*\(\s*'([^']+)'", content):
-            calls.append(m.group(1))
+            calls.append(m.group(2))
+        for m in re.finditer(r'request\.(get|post|put|delete)\s*\(\s*"([^"]+)"', content):
+            calls.append(m.group(2))
 
     return sorted(set(calls))
 
