@@ -10,7 +10,10 @@ export interface PeriodVO {
   startDate: string
   endDate: string
   status: string
+  openingStatus?: string
   createdAt: string
+  openedAt?: string
+  openedByName?: string
 }
 
 /** 期间创建参数 */

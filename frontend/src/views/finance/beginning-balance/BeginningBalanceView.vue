@@ -257,8 +257,7 @@ async function saveBalance() {
     entryRows.value = []
     openedAt.value = ''
     periodStatusMap.value = { ...periodStatusMap.value, [queryPeriod.value]: 'entered' }
-    fetchPeriods()
-    fetchBalances()
+    fetchPeriods().then(() => fetchBalances())
   } finally { saving.value = false }
 }
 
