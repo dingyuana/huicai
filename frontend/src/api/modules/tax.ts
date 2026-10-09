@@ -186,10 +186,10 @@ export function queryInputReconcile(params: { period?: string; vendorId?: number
 export function queryOutputReconcile(params: { period?: string; customerId?: number }): Promise<InvoiceReconcileVO[]> {
   return request.get('/sme/tax/v1/invoice-reconcile/output', { params })
 }
-// ====== P2-7 AI 辅助 ======
-export function aiSubjectMapping(itemName: string, amount?: number, counterparty?: string): Promise<any> {
-  return request.post('/agent/route', {
-    intent: 'match',
-    input_data: { item_name: itemName, amount, counterparty }
-  })
-}
+// ⚠️ 原 `aiSubjectMapping()` 调用 `/agent/route`，**后端从无此端点**
+// （`rg 'agent/route' backend/src/main/java` 零命中；AI 侧只有
+//   `/api/v1/ai/tasks` 异步下发端点与 Python 的 ocr/embedding/anomaly/qa）。
+// 该函数被 `OutputInvoiceList.vue` 的「AI 推荐科目」按钮调用 ⇒ 点一下必然 404。
+// 对应需求 `REQ-2026-038`（AI 科目映射）状态仍是 `PLANNED`，
+// 即「功能未实现」而非「契约陈旧」（AGENTS §4.5 第 39 条判据：页面真的在用）。
+// 故按「诚实标注缺口」处置：删除死函数 + 按钮禁用并说明，不伪造端点。

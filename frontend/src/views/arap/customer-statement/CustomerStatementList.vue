@@ -254,7 +254,7 @@ const handleSend = async (row: any) => {
 const handleConfirm = async (row: any) => {
   try {
     await ElMessageBox.confirm('确定确认该对账单？', '确认', { type: 'info' })
-    await request.post(`/customer-statements/${row.id}/confirm`)
+    await request.post(`/sme/arap/v1/customer-statements/${row.id}/confirm`)
     ElMessage.success('已确认')
     fetchData()
   } catch {
@@ -279,7 +279,7 @@ const onDispute = async () => {
     return
   }
   try {
-    await request.post(`/customer-statements/${disputeTarget.id}/dispute`, { reason: disputeForm.reason })
+    await request.post(`/sme/arap/v1/customer-statements/${disputeTarget.id}/dispute`, { reason: disputeForm.reason })
     ElMessage.success('已标记争议')
     disputeDialogVisible.value = false
     fetchData()

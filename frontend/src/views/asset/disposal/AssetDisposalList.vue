@@ -150,13 +150,13 @@ const onSubmit = async () => {
 }
 
 const onApprove = async (row: any) => {
-  await request.post(`/asset-disposals/${row.id}/approve`)
+  await request.post(`/sme/asset/v1/asset-disposals/${row.id}/approve`)
   ElMessage.success('已审批')
   fetchData()
 }
 
 const onDelete = async (row: any) => {
-  await request.delete(`/asset-disposals/${row.id}`)
+  await request.delete(`/sme/asset/v1/asset-disposals/${row.id}`)
   ElMessage.success('已删除')
   fetchData()
 }

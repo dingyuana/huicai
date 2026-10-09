@@ -311,7 +311,9 @@
           </template>
           <template v-else-if="detail?.status === 'CONFIRMED'">
             <el-button type="primary" size="small" @click="doAction(detail, 'markVouchered')">生成凭证</el-button>
-            <el-button type="primary" size="small" @click="onAiRecommend(detail)">AI 推荐科目</el-button>
+            <el-tooltip content="AI 科目映射尚未上线（REQ-2026-038 待实施）">
+              <el-button type="primary" size="small" disabled>AI 推荐科目</el-button>
+            </el-tooltip>
             <el-button type="warning" size="small" @click="doAction(detail, 'revert')">回退到待审核</el-button>
             <el-button type="danger" size="small" @click="doAction(detail, 'void')">作废</el-button>
           </template>
@@ -477,20 +479,6 @@ const doAction = async (row: any, action: string) => {
     detailVisible.value = false
     fetchData(); fetchStats()
   } catch { /* backend handles error msg */ }
-}
-
-const onAiRecommend = async (row: any) => {
-  const summary = row.goodsName || row.remark || ''
-  if (!summary) { ElMessage.warning('缺少摘要信息，无法推荐'); return }
-  try {
-    const { aiSubjectMapping } = await import('@/api/modules/tax')
-    const res: any = await aiSubjectMapping(summary, Number(row.amount), row.customerName)
-    if (res?.result?.best) {
-      ElMessage.success(`AI 推荐科目: ${res.result.best.account_name} (${res.result.best.account_code})`)
-    } else {
-      ElMessage.info('AI 未找到匹配科目，请手工选择')
-    }
-  } catch { ElMessage.error('AI 推荐失败') }
 }
 
 const STATUS_MAP: Record<string, string> = {

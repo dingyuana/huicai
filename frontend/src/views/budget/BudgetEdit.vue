@@ -86,7 +86,7 @@ onMounted(async () => {
   const id = route.query.id
   if (id) {
     isEdit.value = true
-    const data: any = await request.get(`/budgets/${id}`)
+    const data: any = await request.get(`/sme/budget/v1/budgets/${id}`)
     form.value = { period: data.period, budgetType: data.budgetType, remark: data.remark, entries: data.entries || [] }
   }
 })

@@ -143,9 +143,12 @@ export function getReceivable(id: number): Promise<any> {
   return request.get(`/sme/arap/v1/receivables/${id}`)
 }
 
-export function createReceivable(data: any): Promise<any> {
-  return request.post('/sme/arap/v1/receivables', data)
-}
+// ⚠️ 原 `createReceivable()` / `createPayable()` 指向 `POST /sme/arap/v1/receivables`
+// 与 `POST /sme/arap/v1/payables`，**后端从无这两个端点**
+// （ArapController 只有 page / {id} / {id}/confirm / {id}/reverse / aging / overdue）。
+// 且两函数**全仓无调用点**（应收应付一律经业务单据 t_business_doc 生成，
+// 手工创建应收应付本身就不是本系统的设计入口）⇒ 属死函数 + 幻觉端点，删除。
+// 依据 AGENTS §4.5 第 39 条：先 grep 调用点，无调用点 + 后端无端点 ⇒ 删代码而非改契约。
 
 export function confirmReceivable(id: number): Promise<any> {
   return request.post(`/sme/arap/v1/receivables/${id}/confirm`)
@@ -173,10 +176,6 @@ export function pagePayable(params: any): Promise<any> {
 
 export function getPayable(id: number): Promise<any> {
   return request.get(`/sme/arap/v1/payables/${id}`)
-}
-
-export function createPayable(data: any): Promise<any> {
-  return request.post('/sme/arap/v1/payables', data)
 }
 
 export function confirmPayable(id: number): Promise<any> {
@@ -292,7 +291,7 @@ export function disputeStatement(id: number, data: any): Promise<void> {
   return request.post(`/sme/arap/v1/customer-statements/${id}/dispute`, data)
 }
 export function pageOutstandingItems(params: any): Promise<any> {
-  return request.get('/sme/arap/v1/outstanding-items/page', { params })
+  return request.get('/sme/arap/v1/outstanding-items', { params })
 }
 export function resolveOutstandingItem(id: number): Promise<void> {
   return request.post(`/sme/arap/v1/outstanding-items/${id}/resolve`)
@@ -301,7 +300,7 @@ export function cancelOutstandingItem(id: number): Promise<void> {
   return request.post(`/sme/arap/v1/outstanding-items/${id}/cancel`)
 }
 export function pageDisputes(params: any): Promise<any> {
-  return request.get('/sme/arap/v1/disputes/page', { params })
+  return request.get('/sme/arap/v1/disputes', { params })
 }
 export function resolveDispute(id: number): Promise<void> {
   return request.post(`/sme/arap/v1/disputes/${id}/resolve`)
