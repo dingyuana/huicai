@@ -222,6 +222,24 @@
         </el-card>
       </div>
     </el-drawer>
+
+    <!-- 年度结账 -->
+    <el-card shadow="never" style="margin-top:16px">
+      <template #header><span>年度结账</span></template>
+      <el-space>
+        <el-input-number v-model="yearCloseYear" :min="2000" :max="2100" controls-position="right" />
+        <el-button @click="onYearCheck">年结检查</el-button>
+        <el-button type="primary" :disabled="!yearCheckResult?.allClosed" @click="onYearClose">执行年结</el-button>
+      </el-space>
+      <el-alert
+        v-if="yearCheckResult"
+        :title="yearCheckResult.message"
+        :type="yearCheckResult.allClosed ? 'success' : 'warning'"
+        show-icon
+        :closable="false"
+        style="margin-top:12px"
+      />
+    </el-card>
   </div>
 </template>
 
@@ -233,11 +251,30 @@ import PeriodNavigator from '@/components/finance/PeriodNavigator.vue'
 import {
   checkClose, closePeriod, reopenPeriod,
   generateSequence, batchReviewPost,
-  type CloseCheckResult, type CarryoverStepResult, type SequenceVoucher,
+  yearCheck, yearClose,
+  type CloseCheckResult, type CarryoverStepResult, type SequenceVoucher, type YearCheckResult,
 } from '@/api/modules/periodClose'
 
 const period = ref('')
 const periodStatus = ref('')
+
+// 年度结账
+const yearCloseYear = ref(new Date().getFullYear())
+const yearCheckResult = ref<YearCheckResult | null>(null)
+
+const onYearCheck = async () => {
+  yearCheckResult.value = await yearCheck(yearCloseYear.value)
+}
+const onYearClose = async () => {
+  await ElMessageBox.confirm(
+    `确认执行 ${yearCloseYear.value} 年度结账？将锁定全年并结转期初余额到次年，操作不可逆。`,
+    '年度结账确认',
+    { type: 'warning' }
+  )
+  await yearClose(yearCloseYear.value)
+  ElMessage.success(`${yearCloseYear.value} 年度结账完成`)
+  yearCheckResult.value = null
+}
 
 const step = ref(1)
 const checkResult = ref<CloseCheckResult | null>(null)

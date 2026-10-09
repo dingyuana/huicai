@@ -50,12 +50,19 @@ def _strip_comments(text):
     return re.sub(r'//[^\n]*', ' ', text)
 
 
-# `@GetMapping` / `@GetMapping()` / `@GetMapping("path")` 三种形态都要认。
-# ⚠️ 漏掉前两种会让「类级前缀本身就是一个端点」的 POST/PUT/GET 全部消失
-#   （如 PeriodController 的 `@PostMapping` = POST /api/v1/periods），
-#   于是前端 `request.post('/v1/periods', data)` 被误判成「前端调了不存在的端点」。
-#   与 extract_frontend_api_calls 的 group(1)/group(2) 漏扫同型：**正则漏一种书写形态，
-#   症状都是成片误报，而不会报任何错**。
+# `@GetMapping` / `@GetMapping()` / `@GetMapping("path")` / `@GetMapping(value = "path", ...)`
+# 四种形态都要认。漏掉任一种的症状都一样：**成片误报，且不报任何错**。
+#   - 漏前两种 ⇒「类级前缀本身就是一个端点」的 POST/PUT/GET 消失
+#     （如 PeriodController 的 `@PostMapping` = POST /api/v1/periods），
+#     前端 `request.post('/v1/periods', data)` 被误判成「前端调了不存在的端点」。
+#   - 漏第三种 ⇒ 本项目 3 处 `@PostMapping(value = "/import", consumes = ...)`
+#     （Customer/Vendor/Subject 导入）消失。
+# ⚠️ 末尾必须允许「还有别的参数」，否则
+# `@PostMapping(value = "/import", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)`
+# 匹配失败后会退化成「无参形态」⇒ 误报成 `/api/v1/customers`（凭空多出一个端点）。
+MAPPING_ARG = (r'(?:\(\s*(?:(?:value|path)\s*=\s*)?'
+               r'(?:"([^"]*)"|\'([^\']*)\')?'
+               r'\s*(?:,[^)]*)?\s*\))?')
 
 
 def extract_backend_endpoints():
@@ -68,15 +75,14 @@ def extract_backend_endpoints():
         content = _strip_comments(fpath.read_text(encoding="utf-8"))
         current_ctrl = ""
         for line in content.split("\n"):
-            # 类级 @RequestMapping
-            m = re.search(r'@RequestMapping\s*\(\s*["\']([^"\']+)["\']', line)
+            # 类级 @RequestMapping（同样支持 value = 形态）
+            m = re.search(r'@RequestMapping\s*\(\s*(?:(?:value|path)\s*=\s*)?["\']([^"\']+)["\']', line)
             if m:
                 current_ctrl = m.group(1)
 
-            # 方法级注解（含无参形态）
+            # 方法级注解（含无参与 value= 形态）
             for method in ["PostMapping", "GetMapping", "PutMapping", "DeleteMapping"]:
-                for m2 in re.finditer(
-                        r'@' + method + r'\b\s*(?:\(\s*(?:"([^"]*)"|\'([^\']*)\')?\s*\))?', line):
+                for m2 in re.finditer(r'@' + method + r'\b' + MAPPING_ARG, line):
                     sub = m2.group(1) if m2.group(1) is not None else (
                         m2.group(2) if m2.group(2) is not None else "")
                     full = current_ctrl + ("/" if sub and not sub.startswith("/") else "") + sub

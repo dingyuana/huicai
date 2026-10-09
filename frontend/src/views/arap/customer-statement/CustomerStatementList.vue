@@ -242,7 +242,7 @@ const onGenerate = async () => {
 const handleSend = async (row: any) => {
   try {
     await ElMessageBox.confirm('确定发送该对账单给客户？', '确认', { type: 'info' })
-    await request.post(`/customer-statements/${row.id}/send`)
+    await request.post(`/sme/arap/v1/customer-statements/${row.id}/send`)
     ElMessage.success('已发送')
     fetchData()
   } catch {

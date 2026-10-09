@@ -2,6 +2,7 @@ package com.huicai.base.voucher.controller;
 
 import com.huicai.common.response.R;
 import com.huicai.base.voucher.service.PeriodCloseService;
+import com.huicai.base.voucher.service.YearCloseService;
 import com.huicai.base.system.util.SecurityUtils;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -19,6 +20,7 @@ import java.util.Map;
 public class PeriodCloseController {
 
     private final PeriodCloseService periodCloseService;
+    private final YearCloseService yearCloseService;
 
     @Operation(summary = "结账前检查")
     @GetMapping("/check")
@@ -57,5 +59,19 @@ public class PeriodCloseController {
     @GetMapping("/log")
     public R<List<Map<String, Object>>> log(@RequestParam String period) {
         return R.ok(periodCloseService.listCloseLog(period));
+    }
+
+    @Operation(summary = "年结前检查（全年 12 月是否均已结账）")
+    @GetMapping("/year-check")
+    public R<Map<String, Object>> yearCheck(@RequestParam Integer year) {
+        return R.ok(yearCloseService.checkBeforeYearClose(year));
+    }
+
+    @Operation(summary = "执行年度结账（锁定全年+生成次年期间+期初结转）")
+    @PostMapping("/year-close")
+    @PreAuthorize("hasAuthority('period:year-close')")
+    public R<Void> yearClose(@RequestParam Integer year) {
+        yearCloseService.yearClose(year);
+        return R.ok();
     }
 }
