@@ -20,6 +20,21 @@
   故改为与 JaCoCo 覆盖率同款的**棘轮**：以当前实测值为上限，只在**倒退**时红。
   ⚠️ 每修掉一批端点接入，必须回来下调 `--max-uncovered`，否则棘轮退化成固定上限
   （同 AGENTS §4.5 第 25 条）。
+
+🔴 2026-10-09：那个 280 的基线本身是**错的**，本轮把测量口径修对后重测为 92。
+  首版有 5 处漏扫，每一处的症状都是「成片误报且不报任何错」：
+    ① 前端正则取 `group(1)`（HTTP 方法名）而非 `group(2)`（URL）
+       —— 而 group(1) 恰为 'get'/'post'/'put'/'delete'，又被 normalize() 的噪声
+       过滤丢弃 ⇒ 单引号/双引号写法的调用**整体漏扫**（源码 489 处，脚本只认 148）。
+    ② 前端只扫 `src/api/**/*.ts`，不扫 `.vue`（本项目 43 处调用直接写在页面里）。
+    ③ 后端未剥离 javadoc —— `{@code @PostMapping}` 之类会污染「当前类前缀」。
+    ④ 后端只认 `@XxxMapping("path")`，漏掉无参 `@XxxMapping`
+       （= 类级前缀本身就是一个端点，如 `PeriodController` 的 `@PostMapping`）。
+    ⑤ 后端漏掉 `@XxxMapping(value = "/path", consumes = ...)` 形态（本项目 3 处）。
+  **判据沉淀**：门禁的阈值必须用「门禁自己的口径」测量，不能用另一套口径自算；
+  「阈值很紧」与「阈值测错了」可以同时成立 —— 后者更危险，因为它让人不敢下调。
+  另：修好口径后孤儿从 53 → 0 的过程中，暴露并修掉了 **16 处真实前端 404**
+  （路径缺前缀 / 指向后端不存在的端点），即这道门禁此前一直在对真缺陷装聋。
 """
 
 import argparse
@@ -31,8 +46,9 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 BACKEND_DIR = PROJECT_ROOT / "backend"
 FRONTEND_DIR = PROJECT_ROOT / "frontend"
 
-# 棘轮基线：2026-10-03 实测（后端 425 端点 / 前端 148 调用 / 匹配 145 / 未接 280 / 孤儿 0）
-DEFAULT_MAX_UNCOVERED = 280
+# 棘轮基线：2026-10-09 口径修正后实测
+# （后端 471 端点 / 前端 390 调用 / 匹配 379 / 未接 92 / 孤儿 0）
+DEFAULT_MAX_UNCOVERED = 92
 DEFAULT_MAX_ORPHAN = 0
 
 
