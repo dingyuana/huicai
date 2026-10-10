@@ -42,7 +42,16 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 class AgencyCrossClientRlsRealDBTest extends AbstractMapperTest {
 
     private static final String PROBE_ROLE = "r135_probe";
-    private static final String[] TABLES = {"t_agency_user_enterprise", "t_service_progress"};
+    /**
+     * 三张「代理端跨客户语义」表。
+     *
+     * <p>⚠️ <b>2026-10-10 追加 t_contract</b>（V177）：V156 审核逐表定性时坐实，
+     * 该表<b>同时存在 agency_id 与 enterprise_id</b>（均 NOT NULL），
+     * 且续费提醒查询按设计就是跨客户扫描
+     * ⇒ 与前两张同型。探针实测同代理 3 个客户的合同，RLS 下只返 1 条。
+     */
+    private static final String[] TABLES = {
+            "t_agency_user_enterprise", "t_service_progress", "t_contract"};
 
     @Autowired
     private JdbcTemplate jdbc;
@@ -132,6 +141,21 @@ class AgencyCrossClientRlsRealDBTest extends AbstractMapperTest {
             int[] c = probeRowCounts("t_service_progress", 1L, 999999L);
             assertEquals(c[0], c[1],
                     "换 GUC 后可见行数变了（" + c[0] + " vs " + c[1] + "）⇒ RLS 仍在生效");
+        } finally {
+            dropProbe();
+        }
+    }
+
+    @Test
+    @DisplayName("AT-135-2c t_contract：换 GUC 不改变可见行数（免 RLS，V177）")
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    void contractTableIsRlsFree() {
+        ensureProbe();
+        try {
+            int[] c = probeRowCounts("t_contract", 1L, 999999L);
+            assertEquals(c[0], c[1],
+                    "换 GUC 后可见行数变了（" + c[0] + " vs " + c[1]
+                            + "）⇒ RLS 仍在生效，代理看不到本代理其它客户的合同与续费提醒");
         } finally {
             dropProbe();
         }
@@ -233,7 +257,8 @@ class AgencyCrossClientRlsRealDBTest extends AbstractMapperTest {
             Integer rls = jdbc.queryForObject(
                     "SELECT count(*) FROM pg_class WHERE relname = ? AND (relrowsecurity OR relforcerowsecurity)",
                     Integer.class, t);
-            assertEquals(0, rls, t + " 仍处于 ENABLE/FORCE RLS 状态 ⇒ V176 未生效或被回退");
+            assertEquals(0, rls, t + " 仍处于 ENABLE/FORCE RLS 状态"
+                    + " ⇒ 对应迁移（t_contract 为 V177，另两张为 V176）未生效或被回退");
 
             Integer pol = jdbc.queryForObject(
                     "SELECT count(*) FROM pg_policies WHERE schemaname='public' AND tablename=? AND policyname='enterprise_policy'",

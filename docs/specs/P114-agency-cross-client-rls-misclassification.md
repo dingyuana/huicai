@@ -183,6 +183,13 @@ JWT 里**确实带** `agencyId` claim（`JwtProvider.generateAccessToken` 有写
 | AT-135-6 | Given `UserEntity.agencyId=7`，When 走 2 参构造器，Then `LoginUser.getAgencyId()==7` | `LoginUserAgencyIdTest` |
 | AT-135-7 | Given 登录上下文 `agencyId` 为 null，When 校验归属，Then **fail-loud**（报错含 `agencyId`）且**未查库** | `missingAgencyIdInContextFailsLoud` |
 | AT-135-8 | Given 操作者与目标属不同 agency，When 查派工，Then 403 且**未触达数据查询** | `crossAgencyLookupRejected` |
+| AT-135-11 | Given `t_contract` 换 GUC 读，Then 可见行数不变（V177：代理跨客户合同语义） | `contractTableIsRlsFree` |
+| AT-135-12 | Given 非代理管理员读三处合同读端点，Then 403 **且服务层零调用** | `ClientControllerAuthTest` 三条 |
+| AT-135-13 | Given 同代理名下两个 enterprise，When 查续费提醒，Then 两条都返回 | `getRenewalReminders` 按 `agency_id` 收敛 |
+| AT-135-14 | Given 为别家代理企业建合同，Then 403（`create` 防跨代理写入） | `ContractServiceImpl#create` |
+
+⚠️ **AT-135-12 只覆盖 3 个读端点**：两个写端点被上游 `EnterpriseWriteGuard` 抢先拦，
+无法证伪角色守卫，已在测试 javadoc 与 §7 遗留 1 如实声明。
 
 🔴 **负向断言的必要性**：AT-135-4 除断言 403 外，还 `verify(never())` 服务层未被调用。
 只断言 403 不够 —— 若实现是「先查后判」，数据已被读出，那就是**假拒绝**（§4.5 第 43 条）。
@@ -248,6 +255,26 @@ rules:
     rule: "t_service_progress 同批撤 RLS：查询全部以 agency_id 收敛，enterprise_id 仅作可选收窄（ServiceProgressServiceImpl:175 可空），天然跨客户"
     mapping: { table: t_service_progress, drop_policy: true, disable_rls: true, convergence: agency_id }
     implementation: "ServiceProgressEntity"
+  - id: C-07
+    source: "V177（遗留 1 闭环）/ t_contract 三条佐证"
+    rule: "t_contract 同时存在 agency_id 与 enterprise_id（均 NOT NULL），enterprise_id 语义为签约客户；续费提醒查询按设计无 enterprise_id 条件 ⇒ 撤 RLS 并改按 agency_id 收敛"
+    mapping: { table: t_contract, drop_policy: true, disable_rls: true, convergence: agency_id }
+    implementation: "ContractEntity"
+  - id: C-08
+    source: "P114 §4 护栏 / ClientController 五端点"
+    rule: "ClientController 五个端点（含只读 GET）均须校验 AGENCY_ADMIN 或 SUPER_ADMIN；此前完全无鉴权，SecurityConfig 仅 anyRequest().authenticated()"
+    mapping: { endpoint: "/api/v1/agency/contracts", roles: [AGENCY_ADMIN, SUPER_ADMIN] }
+    implementation: "ContractEntity"
+  - id: C-09
+    source: "P114 §4 护栏 / ContractServiceImpl 写路径"
+    rule: "create 须校验 dto.agencyId 等于当前操作者 agencyId，否则 forbidden（防跨代理为客户建合同）"
+    mapping: { method: create, scope: agency_id, forbid_cross_agency: true }
+    implementation: "ContractEntity"
+  - id: C-10
+    source: "V177 覆盖度诚实声明（反证逼出）"
+    rule: "ClientControllerAuthTest 中两个写端点负向用例被上游 EnterpriseWriteGuard 抢先拦截，不构成本守卫的证伪证据；可证伪的仅三个 GET"
+    mapping: { falsifiable_endpoints: 3, blocked_by: EnterpriseWriteGuard }
+    implementation: "ContractEntity"
   - id: C-04
     source: "P114 §4 护栏①（端点角色鉴权）"
     rule: "AssignmentController 三个端点（含只读的 GET）均须校验 AGENCY_ADMIN 或 SUPER_ADMIN；此前读端点完全无鉴权"
@@ -315,33 +342,90 @@ acceptance_tests:
     method: twoArgConstructorCarriesAgencyId
     assertion: "new LoginUser(userWith(7L), List.of()).getAgencyId() == 7"
     status: covered
+  - id: AT-135-11
+    description: "t_contract 换 GUC 不改变可见行数（V177 免 RLS）"
+    method: contractTableIsRlsFree
+    assertion: "probeRowCounts(t_contract, 1L, 999999L) 两值相等"
+    status: covered
+  - id: AT-135-12
+    description: "非代理管理员读三个合同读端点应被拒，且服务层零调用"
+    method: nonDispatcherCannotPage
+    assertion: "$.code == 403 且 verify(never()).page"
+    status: covered
+  - id: AT-135-13
+    description: "同代理名下两个 enterprise 的续费提醒都应返回（V177 核心场景）"
+    method: getRenewalReminders
+    assertion: "按 agency_id 收敛后两条都返回（原先 RLS 只返回 GUC 那一个企业）"
+    status: covered
+  - id: AT-135-14
+    description: "为别家代理的企业创建合同应 403"
+    method: requireSameAgency
+    assertion: "create 校验 dto.agencyId == 当前 agencyId，否则 forbidden"
+    status: covered
 
 out_of_scope:
-  - "V156 另两张（t_contract / t_close_log）的隔离方式取证（不在 SHARED_TABLES，与本例不同型）"
-  - "把 BadSqlGrammarException 归类为 4xx / 运维告警（当前 RLS 配置错误仍返回 500）"
-  - "ServiceProgressController 的端点级角色校验（其查询已按 agency_id 收敛）"
+  - "t_user 3 行 enterprise_id=NULL 数据修复与策略补齐（老丁裁定单独立项）"
+  - "t_agency_enterprise 策略补齐（代理须跨客户读）"
+  - "9 张无 enterprise_id 隔离列的平台级表（维持 D-2b 裁定不加列）"
+  - "t_close_log：enterprise_id 为「本行归属租户」，RLS 判定为**正确**，V156 审核后保留不动"
+  - "把 BadSqlGrammarException 归类为 4xx / 运维告警"
+  - "ServiceProgressController 的端点级角色校验"
 
 dependencies:
   - spec: P108
     relation: "V167 RLS 谓词空串硬化；本 SPEC 反证①证明撤销 RLS 时三条 DDL 必须同时去掉"
   - spec: P112
-    relation: "同为 RLS 分类治理；P112 补第三层兜底，P114 撤销错分类的第三层，二者口径相反处即本 SPEC §0.4"
+    relation: "同为 RLS 分类治理；P112 补第三层兜底，P114 撤销错分类的第三层"
+  - spec: P113
+    relation: "EnterpriseWriteGuard 拦截 t_contract 的写端点，使 ClientControllerAuthTest 的两个写负向用例无法证伪本 SPEC 的角色守卫"
 
 ---
 
 ## §7 已知遗留
 
-1. **V156 另两张未审**：`t_contract` / `t_close_log` 不在白名单，与本例不同型，
-   但同属「V156 一刀切」的产物，建议单独取证（已登记待核）。
-2. **异常分类**：RLS 配置错误当前返回 500 而非 4xx，可观测性不足。
-   建议后续把 `BadSqlGrammarException` 归类为可诊断的 4xx/运维告警，本 SPEC 不含。
-3. **`ServiceProgressController`** 本次未补端点级角色校验（其查询已按 `agency_id` 收敛），
-   但与 `AssignmentController` 同属代理端，建议后续统一审计。
-4. **根因二的连带效应需复核**：修好 `LoginUser` 后，那 8 处调用点**第一次真正拿到 `agencyId`** ——
-   此前它们拿到的是 null。此前的行为（如 `EnterpriseController:60` 的成员校验、
-   `PeriodCloseServiceImpl:354` 的结账范围）可能一直建立在「null」之上。
-   本次全量 L1/L2 均零回归，但**「从 null 变成真实值」属行为变更**，
-   建议在真实环境走一遍代理端主流程（企业切换 / 期末结账 / 税务 / 制证）确认。
+### ✅ 遗留 1 已闭环（V177 / 2026-10-10 同日审核并处置）
+
+**V156 审核结论**（探针实测，非推演）：
+
+| 表 | `enterprise_id` 语义 | RLS 现状 | 判定 |
+|---|---|---|---|
+| `t_close_log` | **本行归属租户**（期末结账日志） | ENABLE+FORCE | ✅ 正确，**保留** |
+| `t_contract` | **签约客户**（与 `agency_id` 并存） | ENABLE+FORCE | ❌ 同型误分类，**V177 已撤** |
+
+**`t_contract` 的三条独立佐证**：
+1. 表**同时存在 `agency_id` 与 `enterprise_id`**（均 NOT NULL）—— 纯租户表不会有 `agency_id`
+2. `ContractMapper.findRenewalReminders()` 查询**无任何 `enterprise_id` 条件**，按设计就是「扫本代理全部客户」
+3. V156 未逐表定性就一刀切开，与 `t_agency_user_enterprise` 同款误判
+
+**行为探针实证**（`huicai_app` = NOSUPERUSER + NOBYPASSRLS）：造同代理（`agency_id=1`）名下企业 1/2/4 的三条合同 → 超管对照 **3 条**，应用以 `GUC=1` 跑同一条查询只返 **1 条**（仅 `enterprise_id=1）。
+⇒ 代理管理员只能看到自己名下企业的合同，**另外两个客户的续费提醒静默消失**。
+
+⚠️ **探针自纠**：审核 `t_close_log` 时，首版探针在同一事务里 `INSERT` 后 `ROLLBACK` 再查询，得出「0 行」。该结果**无意义**（是探针写错，不是缺陷）。改用 `COMMIT` 造数后重测，得 `GUC=1 → 只看到 enterprise_id=1` 一行，才是有效证据。
+**判据：探针返回「异常干净」的结果时，先怀疑探针本身。**
+
+**V177 与 V176 的关键差异**：`ClientController` 五个端点（含只读 `GET /page`、`GET /renewal-reminders`）此前**完全无鉴权**，`SecurityConfig` 仅 `anyRequest().authenticated()`，服务层也无 agency 归属校验。撤掉 RLS 后**任何登录用户都能遍历全部客户的合同金额与到期日**（跨代理泄漏，比丢行严重）。故护栏同批：
+① ClientController 五端点补 `AGENCY_ADMIN`/`SUPER_ADMIN` 角色校验
+② `ContractServiceImpl` 按 `agency_id` 收敛 `create`/`getById`/`renew`/`page`/`getRenewalReminders`
+③ 守卫扩到三张表 + `ClientControllerAuthTest` 8 例
+
+🔴 **覆盖度诚实声明（反证逼出来的）**：`ClientControllerAuthTest` 的 8 例里，**只有 3 个 GET 的负向用例能证伪角色守卫**。两个写端点被更上游的 `EnterpriseWriteGuard`（P113）抢先拦截（它用 `JdbcTemplate` 真查 `t_enterprise.status` 并 fail-closed），恒返 403 且**到不了** `requireContractAccess()`。
+实测反证：注释掉 `create`/`renew` 两处守卫，那两条用例**仍然全绿** ⇒ 对本守卫是无效反证。
+已在用例 javadoc 如实写明「拦截者是上游账套守卫，非角色守卫」，并只以 `verify(never())` 证明「未到服务层」。
+**判据：一个端点上多个守卫时，只看响应码无法区分是谁拒的；反证必须逐个禁用守卫看是否转红。**
+
+---
+
+### 遗留 2：异常分类
+RLS 配置错误当前返回 500 而非 4xx，可观测性不足。
+建议后续把 `BadSqlGrammarException` 归类为可诊断的 4xx/运维告警，本 SPEC 不含。
+
+### 遗留 3：ServiceProgressController 端点角色校验
+本次未补端点级角色校验（其查询已按 `agency_id` 收敛），但与 `AssignmentController`/`ClientController` 同属代理端，建议后续统一审计。
+
+### 遗留 4：根因二的连带效应需复核
+修好 `LoginUser` 后，那 8 处调用点**第一次真正拿到 `agencyId`** —— 此前它们拿到的是 null。
+本次 L1/L2 均零回归，但**「从 null 变成真实值」属行为变更**，建议在真实环境走一遍
+代理端主流程（企业切换 / 期末结账 / 税务 / 制证）确认。
 
 ---
 
@@ -349,5 +433,6 @@ dependencies:
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| V1.2 | 2026-10-10 | **§7 遗留 1 闭环（V177）**：V156 审核逐表定性 —— `t_close_log` RLS **正确保留**（`enterprise_id`=归属租户）；`t_contract` **同型误分类已撤**（三条佐证 + 探针实测 3 条只返 1 条）。新增 `ClientControllerAuthTest` 8 例 + `ContractServiceImpl` 按 `agency_id` 收敛 5 处。🔴 反证逼出覆盖度降级：两个写端点被上游 `EnterpriseWriteGuard` 抢先拦，角色守卫不可证伪，已在测试与 SPEC 如实声明。AT-135-11~14、规则 C-07~C-10 同步补入契约 |
 | V1.1 | 2026-10-10 | 补 §0.5 根因二（`LoginUser` 硬编码 `agencyId=null`，涉 8 处调用点）、AT-135-6~8、三条反证与 L1/L2 回归数据；`requireSameAgency` 改 fail-loud |
 | V1.0 | 2026-10-10 | 初版：取证、方案选型、护栏、验收、反证。实施 `V176` + Controller/Service 校验 + 守卫 5 例 |
