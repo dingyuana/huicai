@@ -214,6 +214,121 @@ L2 跑前已 `docker start huicai-redis`（否则 11 例报 `RedisConnectionFail
 
 ---
 
+## §6.5 机器可读契约
+
+> ⚠️ **标记必须是裸 `# MACHINE-READABLE CONTRACT`**（写在 ```yaml 围栏**内**，
+> 即校验器的 Case A）—— 写成 `## §6.5 MACHINE-READABLE CONTRACT` 会被判「无契约」。
+> 这正是 AGENTS 记录的「有契约 ≠ 门禁看得见契约」（§0 硬数字第 ⑯ 条）：
+> 首次写下时用了 `## ` 前缀，门禁实测仍报 `no_contract 88`，改回裸标记才被识别。
+
+```yaml
+# MACHINE-READABLE CONTRACT
+
+contract_version: "1.0"
+
+entity: AgencyUserEnterpriseEntity
+module: agency
+table: t_agency_user_enterprise
+
+# 本 SPEC 不涉及业务状态机（派工记录无 status 语义），契约以「规则型」表达：
+# 校验器支持无 states/transitions 但有 rules 的契约（同 P112）。
+rules:
+  - id: C-01
+    source: "P114 §0.2 探针1（线上 500 成因）"
+    rule: "t_agency_user_enterprise 的 enterprise_id 语义为「被服务的客户」，非「本行归属租户」；跨客户派工不得被 enterprise_id = app.enterprise_id 谓词过滤"
+    mapping: { table: t_agency_user_enterprise, rls: false, semantic: cross_client }
+    implementation: "AgencyUserEnterpriseEntity"
+  - id: C-02
+    source: "P114 §2 方案选型 / V176"
+    rule: "V176 撤 RLS：DROP POLICY IF EXISTS enterprise_policy + NO FORCE + DISABLE ROW LEVEL SECURITY，与 SHARED_TABLES 口径对齐"
+    mapping: { table: t_agency_user_enterprise, drop_policy: true, disable_rls: true, no_force: true }
+    implementation: "AgencyUserEnterpriseEntity"
+  - id: C-03
+    source: "P114 §1 为何连带 t_service_progress"
+    rule: "t_service_progress 同批撤 RLS：查询全部以 agency_id 收敛，enterprise_id 仅作可选收窄（ServiceProgressServiceImpl:175 可空），天然跨客户"
+    mapping: { table: t_service_progress, drop_policy: true, disable_rls: true, convergence: agency_id }
+    implementation: "ServiceProgressEntity"
+  - id: C-04
+    source: "P114 §4 护栏①（端点角色鉴权）"
+    rule: "AssignmentController 三个端点（含只读的 GET）均须校验 AGENCY_ADMIN 或 SUPER_ADMIN；此前读端点完全无鉴权"
+    mapping: { endpoint: "/api/v1/agency/assignments", roles: [AGENCY_ADMIN, SUPER_ADMIN], reject_before_service: true }
+    implementation: "AgencyUserEnterpriseEntity"
+  - id: C-05
+    source: "P114 §4 护栏②（服务层归属校验）"
+    rule: "listByAgencyUserId 须按 agency_id 校验目标归属；SUPER_ADMIN 豁免；agencyId 缺失时 fail-loud 抛 500 并指明字段名，不得按「无权」处理"
+    mapping: { method: requireSameAgency, scope: agency_id, fail_loud: true, exempt: [SUPER_ADMIN] }
+    implementation: "AgencyUserEnterpriseEntity"
+  - id: C-06
+    source: "P114 §0.5 根因二（LoginUser 字段丢失）"
+    rule: "LoginUser 2 参构造器（生产唯一调用点 UserDetailsServiceImpl:89）必须从 UserEntity 取 agencyId，不得硬编码 null；否则 getCurrentAgencyId() 恒 null，波及 8 处调用点"
+    mapping: { constructor: "LoginUser(UserEntity, List)", field: agencyId, from: UserEntity, hardcoded_null: false }
+    implementation: "AgencyUserEnterpriseEntity"
+
+acceptance_tests:
+  - id: AT-135-1
+    description: "t_agency_user_enterprise 换 GUC 不改变可见行数（免 RLS）"
+    method: assignmentTableIsRlsFree
+    assertion: "probeRowCounts(1L, 999999L) 两值相等"
+    status: covered
+  - id: AT-135-2
+    description: "t_service_progress 换 GUC 不改变可见行数（免 RLS）"
+    method: serviceProgressTableIsRlsFree
+    assertion: "probeRowCounts(1L, 999999L) 两值相等"
+    status: covered
+  - id: AT-135-3
+    description: "写路径：GUC 与被派企业不同的会话仍能写入（线上 500 的回归锁）"
+    method: crossEnterpriseInsertSucceeds
+    assertion: "探针角色 SET LOCAL app.enterprise_id=1 后 INSERT enterprise_id≠1 不抛异常"
+    status: covered
+  - id: AT-135-4
+    description: "结构：两表均已 DISABLE RLS 且无 enterprise_policy 残留"
+    method: bothTablesHaveRlsDisabledAndNoPolicy
+    assertion: "pg_class 的 relrowsecurity/relforcerowsecurity 计数 == 0 且 pg_policies 计数 == 0"
+    status: covered
+  - id: AT-135-5
+    description: "反证：对真租户表施加同形状策略后，本类探针必须能观测到行数变化"
+    method: probeCanDetectRlsWhenItExists
+    assertion: "施加策略后 probeRowCounts(t_subject) 两值不相等"
+    status: covered
+  - id: AT-135-6
+    description: "非代理管理员读派工列表应被拒，且服务层一次都不被调用"
+    method: listByAgencyUserIdRejectsNonDispatcher
+    assertion: "$.code == 403 且 verify(never()).listByAgencyUserId"
+    status: covered
+  - id: AT-135-7
+    description: "非代理管理员派工/取消派工应被拒（负向）"
+    method: assignRejectsNonDispatcher
+    assertion: "$.code == 403 且 verify(never()).assign"
+    status: covered
+  - id: AT-135-8
+    description: "查看别家代理公司的派工记录应 403，且不得触达查询"
+    method: crossAgencyLookupRejected
+    assertion: "ex.getCode()==403 且 verify(never()).getEnterpriseIdsByAgencyUserId"
+    status: covered
+  - id: AT-135-9
+    description: "登录上下文缺 agencyId 时必须 fail-loud，不得静默拒绝"
+    method: missingAgencyIdInContextFailsLoud
+    assertion: "异常消息含 agencyId 且未查库"
+    status: covered
+  - id: AT-135-10
+    description: "LoginUser 2 参构造器必须带上 t_user.agency_id"
+    method: twoArgConstructorCarriesAgencyId
+    assertion: "new LoginUser(userWith(7L), List.of()).getAgencyId() == 7"
+    status: covered
+
+out_of_scope:
+  - "V156 另两张（t_contract / t_close_log）的隔离方式取证（不在 SHARED_TABLES，与本例不同型）"
+  - "把 BadSqlGrammarException 归类为 4xx / 运维告警（当前 RLS 配置错误仍返回 500）"
+  - "ServiceProgressController 的端点级角色校验（其查询已按 agency_id 收敛）"
+
+dependencies:
+  - spec: P108
+    relation: "V167 RLS 谓词空串硬化；本 SPEC 反证①证明撤销 RLS 时三条 DDL 必须同时去掉"
+  - spec: P112
+    relation: "同为 RLS 分类治理；P112 补第三层兜底，P114 撤销错分类的第三层，二者口径相反处即本 SPEC §0.4"
+
+---
+
 ## §7 已知遗留
 
 1. **V156 另两张未审**：`t_contract` / `t_close_log` 不在白名单，与本例不同型，
