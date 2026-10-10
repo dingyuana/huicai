@@ -202,19 +202,60 @@ export function payableAging(vendorId: number): Promise<any> {
   return request.get('/sme/arap/v1/payables/aging', { params: { vendorId } })
 }
 
+/**
+ * 坏账准备 —— 字段集 = `t_bad_debt_provision` 的真实列，由 `BadDebtProvisionVO` 逐字段对应。
+ *
+ * ⚠️ `BadDebtList.vue` 表格里渲染的「应有余额 / 已有余额 / 调整金额 / 调整类型 /
+ * 凭证号」5 列**后端一个都没有**（Entity 标了 `@TableField(exist = false)`，
+ * DB `t_bad_debt_provision` 也无这些列）⇒ 页面恒显空/0。
+ * 这属**功能未实现**（页面已搭 UI、后端无计算逻辑与落库列），不是契约陈旧，
+ * 故本接口**不声明**它们 —— 声明了只会把「恒空」变成「类型合法的恒空」（AGENTS §4.5 第 39 条）。
+ * 补齐需独立立项：加列 + 账龄/科目余额计算 + 凭证号 JOIN。
+ */
+export interface BadDebtProvision {
+  id: number
+  period: string
+  method: string        // AGING_RATIO / PERCENTAGE / INDIVIDUAL
+  provisionDate: string
+  totalAmount: number
+  status: string        // DRAFT / CONFIRMED / VOUCHERED
+  remark?: string
+  createdAt: string
+}
+
+/**
+ * 客户对账单 —— 字段集 = `t_customer_statement` 的真实列，由 `CustomerStatementVO` 逐字段对应。
+ *
+ * ⚠️ `CustomerStatementList.vue` 渲染的「客户名称 / 原始金额 / 已核销 / 未核销」
+ * 4 列**后端没有对应数据**（`customerName` 是 Entity 幽灵字段，
+ * `originalAmount/writtenOffAmount/outstandingAmount` 在 DB 与 Entity 中均不存在）
+ * ⇒ 同上，属功能未实现，本接口不声明。
+ */
+export interface CustomerStatement {
+  id: number
+  statementNo: string
+  period: string
+  openingBalance: number
+  closingBalance: number
+  status: string        // DRAFT / SENT / CONFIRMED / CANCELLED
+  remark?: string
+  sentAt?: string
+  createdAt: string
+}
+
 export function pageBadDebt(params: any): Promise<any> {
   return request.get('/sme/arap/v1/bad-debts/page', { params })
 }
 
-export function getBadDebt(id: number): Promise<any> {
+export function getBadDebt(id: number): Promise<BadDebtProvision> {
   return request.get(`/sme/arap/v1/bad-debts/${id}`)
 }
 
-export function provisionBadDebtPercentage(data: any): Promise<any> {
+export function provisionBadDebtPercentage(data: any): Promise<BadDebtProvision> {
   return request.post('/sme/arap/v1/bad-debts/provision/percentage', data)
 }
 
-export function confirmBadDebt(id: number): Promise<any> {
+export function confirmBadDebt(id: number): Promise<BadDebtProvision> {
   return request.post(`/sme/arap/v1/bad-debts/${id}/confirm`)
 }
 
@@ -272,10 +313,10 @@ export function recoveryBadDebt(data: { sourceId: number; amount: number }): Pro
 }
 
 // ===== 客户对账 (P52) =====
-export function generateStatements(data: { customerIds: number[]; period: string }): Promise<any> {
+export function generateStatements(data: { customerIds: number[]; period: string }): Promise<CustomerStatement[]> {
   return request.post('/sme/arap/v1/customer-statements/generate', data)
 }
-export function getStatement(id: number): Promise<any> {
+export function getStatement(id: number): Promise<CustomerStatement> {
   return request.get(`/sme/arap/v1/customer-statements/${id}`)
 }
 export function pageStatements(params: any): Promise<any> {

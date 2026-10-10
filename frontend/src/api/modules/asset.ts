@@ -98,16 +98,30 @@ export function getAssetCategory(id: number): Promise<AssetCategory> {
 
 // ==================== 资产处置 ====================
 
+/**
+ * 资产处置 —— 字段集 = `t_asset_disposal` 的真实列，由 `AssetDisposalVO` 逐字段对应。
+ *
+ * ⚠️ 原声明的 `assetCardId / disposalValue / netBookValue / reason` 四字段
+ * **后端一个都没有**（真实列是 `asset_id / original_value / net_value`，且无 remark），
+ * 且 grep `AssetDisposalList.vue` 引用行数均为 0 ⇒ 属契约陈旧，已删除。
+ * 反之页面真正渲染的 `disposalNo / originalValue / netValue` 原先不在 interface 里，已补上。
+ * 判据见 AGENTS §4.5 第 38 条：字段敏感性不能按列名归类，须 grep 页面有没有真的读它。
+ */
 export interface AssetDisposal {
   id?: number
-  assetCardId: number
+  disposalNo?: string
+  assetId?: number
   disposalType?: string
-  disposalDate: string
-  disposalValue?: number
-  netBookValue?: number
+  disposalDate?: string
+  period?: string
+  originalValue?: number
+  accumulatedDepreciation?: number
+  netValue?: number
+  disposalIncome?: number
+  disposalExpense?: number
   gainLoss?: number
-  reason?: string
   status?: string
+  voucherId?: number
 }
 
 export function pageAssetDisposal(params: any): Promise<any> {
@@ -132,17 +146,26 @@ export function deleteAssetDisposal(id: number): Promise<void> {
 
 // ==================== 资产盘点 ====================
 
+/**
+ * 资产盘点 —— 字段集 = `t_asset_inventory` 的真实列，由 `AssetInventoryVO` 逐字段对应。
+ *
+ * ⚠️ 原声明的 `planName / matchedCount / surplusCount / remark` 四字段后端**一个都没有**
+ * （真实列是 `total_count / profit_count / loss_count`，且无 remark 列），
+ * 已删除。但需诚实标注：这不只是「契约陈旧」——
+ * `views/asset/inventory/AssetInventoryList.vue` 整个模板只有一句
+ * `<el-empty description="资产盘点功能开发中" />`，页面**尚未实现**，
+ * 上述字段的引用行数全部为 0。故按真实列更正契约，功能缺口另行立项。
+ */
 export interface AssetInventory {
   id?: number
   inventoryNo?: string
-  planName: string
-  inventoryDate: string
+  inventoryDate?: string
+  period?: string
   status?: string
   totalCount?: number
-  matchedCount?: number
-  surplusCount?: number
+  profitCount?: number
   lossCount?: number
-  remark?: string
+  voucherId?: number
 }
 
 export function pageAssetInventory(params: any): Promise<any> {

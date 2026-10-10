@@ -2,6 +2,7 @@ package com.huicai.sme.arap.controller;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.huicai.common.response.R;
+import com.huicai.base.business.dto.vo.ArapSettlementEntryVO;
 import com.huicai.base.business.dto.vo.ArapSettlementVO;
 import com.huicai.base.business.entity.ArapSettlementEntity;
 import com.huicai.base.business.entity.ArapSettlementEntryEntity;
@@ -39,8 +40,8 @@ public class ArapSettlementController {
 
     @Operation(summary = "创建核销单")
     @PostMapping
-    public R<ArapSettlementEntity> create(@RequestBody CreateRequest request) {
-        return R.ok(service.create(request.settlement, request.entries));
+    public R<ArapSettlementVO> create(@RequestBody CreateRequest request) {
+        return R.ok(ArapSettlementVO.from(service.create(request.settlement, request.entries)));
     }
 
     @Operation(summary = "提交核销单 — DRAFT → SUBMITTED")
@@ -52,8 +53,8 @@ public class ArapSettlementController {
 
     @Operation(summary = "审批通过 — SUBMITTED → CONFIRMED")
     @PostMapping("/{id}/approve")
-    public R<ArapSettlementEntity> approve(@PathVariable Long id) {
-        return R.ok(service.approve(id));
+    public R<ArapSettlementVO> approve(@PathVariable Long id) {
+        return R.ok(ArapSettlementVO.from(service.approve(id)));
     }
 
     @Operation(summary = "驳回 — SUBMITTED → REJECTED")
@@ -65,8 +66,8 @@ public class ArapSettlementController {
 
     @Operation(summary = "确认核销（兼容旧接口，DRAFT→CONFIRMED自动提审）")
     @PostMapping("/{id}/confirm")
-    public R<ArapSettlementEntity> confirm(@PathVariable Long id) {
-        return R.ok(service.confirm(id));
+    public R<ArapSettlementVO> confirm(@PathVariable Long id) {
+        return R.ok(ArapSettlementVO.from(service.confirm(id)));
     }
 
     @Operation(summary = "生成凭证 — CONFIRMED → VOUCHERED")
@@ -92,8 +93,8 @@ public class ArapSettlementController {
 
     @Operation(summary = "核销明细列表")
     @GetMapping("/{id}/entries")
-    public R<List<ArapSettlementEntryEntity>> getEntries(@PathVariable Long id) {
-        return R.ok(service.getEntries(id));
+    public R<List<ArapSettlementEntryVO>> getEntries(@PathVariable Long id) {
+        return R.ok(ArapSettlementEntryVO.from(service.getEntries(id)));
     }
 
     @Operation(summary = "驳回核销单（无理由）")
