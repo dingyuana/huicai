@@ -102,6 +102,79 @@ class AssignmentControllerTest {
         when(menuMapper.selectBatchIds(anyList())).thenReturn(List.<MenuEntity>of());
     }
 
+    /**
+     * 变体：把登录用户降级为 {@code ACCOUNTANT}（非代理管理员）。
+     *
+     * <p>🔴 <b>用于 V176 的负向断言</b>：撤掉本表 RLS 后，读端点若仍无角色校验，
+     * 任何登录用户都能遍历 {@code agencyUserId} 读出别家代理的派工名单。
+     * 下面两条用例锁死「非代理管理员一律拒绝」，且断言
+     * <b>service 层方法一次都没被调用</b> —— 只断言 403 是不够的：
+     * 若实现是「先查后判」，数据已经被读出来了（§4.5 第 43 条的负向断言要求）。
+     */
+    @SuppressWarnings("unchecked")
+    private void stubTokenAsAccountant() {
+        stubValidToken();
+        when(jwtProvider.getAgencyRoleFromToken(eq(VALID_TOKEN))).thenReturn("ACCOUNTANT");
+        when(jwtProvider.getUserTypeFromToken(eq(VALID_TOKEN))).thenReturn("AGENCY");
+        UserEntity user = new UserEntity();
+        user.setId(1L);
+        user.setUsername("accountant01");
+        user.setPassword("$2a$10$encoded");
+        user.setUserType("AGENCY");
+        user.setAgencyId(1L);
+        user.setAgencyRole("ACCOUNTANT");
+        user.setStatus("ACTIVE");
+        user.setDeleted(0);
+        when(userMapper.selectOne(any())).thenReturn(user);
+    }
+
+    @Test
+    @DisplayName("V176 负向：非代理管理员读派工列表应被拒，且服务层一次都不被调用")
+    void listByAgencyUserIdRejectsNonDispatcher() throws Exception {
+        stubTokenAsAccountant();
+
+        // ⚠️ 本项目约定：业务异常由 GlobalExceptionHandler 写进 body 的 code 字段，
+        //    HTTP 状态码仍为 200（同本类既有的 testUnassignNotFound 断言口径）。
+        //    故此处断言 $.code 而非 HTTP 403 —— 否则会把「约定」误判成「守卫失效」。
+        mvc.perform(get("/api/v1/agency/assignments")
+                        .header("Authorization", "Bearer " + VALID_TOKEN)
+                        .param("agencyUserId", "10"))
+                .andExpect(jsonPath("$.code").value(403));
+
+        // 关键负向断言：拒绝必须发生在**进入服务层之前**，
+        // 否则说明数据已被读出、只是没返回 —— 那是「假拒绝」。
+        verify(agencyUserEnterpriseService, never()).listByAgencyUserId(anyLong());
+    }
+
+    @Test
+    @DisplayName("V176 负向：非代理管理员派工应被拒，且服务层一次都不被调用")
+    void assignRejectsNonDispatcher() throws Exception {
+        stubTokenAsAccountant();
+        AssignmentCreateDTO dto = new AssignmentCreateDTO();
+        dto.setAgencyUserId(10L);
+        dto.setEnterpriseId(100L);
+
+        mvc.perform(post("/api/v1/agency/assignments")
+                        .header("Authorization", "Bearer " + VALID_TOKEN)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(om.writeValueAsString(dto)))
+                .andExpect(jsonPath("$.code").value(403));
+
+        verify(agencyUserEnterpriseService, never()).assign(any(AssignmentCreateDTO.class));
+    }
+
+    @Test
+    @DisplayName("V176 负向：非代理管理员取消派工应被拒，且服务层一次都不被调用")
+    void unassignRejectsNonDispatcher() throws Exception {
+        stubTokenAsAccountant();
+
+        mvc.perform(delete("/api/v1/agency/assignments/{id}", 1L)
+                        .header("Authorization", "Bearer " + VALID_TOKEN))
+                .andExpect(jsonPath("$.code").value(403));
+
+        verify(agencyUserEnterpriseService, never()).unassign(anyLong());
+    }
+
     @Test
     @DisplayName("场景9: 分配客户企业给会计")
     void testAssignEnterprise() throws Exception {

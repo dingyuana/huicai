@@ -47,6 +47,15 @@ public class EnterpriseDataPermissionInterceptor implements InnerInterceptor {
         // P106 批次 1b'：t_dept 已移出本白名单 —— V171 补了 enterprise_id 并开了 RLS。
         // 此前它在此处的理由是「无隔离列，注入必报错」，前提已随 V171 失效；
         // 留在白名单会让应用层继续不过滤，跨企业可见（实测部门树互相可见）。
+        //
+        // ⚠️ REQ-2026-135 / V176：t_agency_user_enterprise 与 t_service_progress
+        // 此前在**应用层（本白名单）判为语义豁免**、在**DB 层（V156）却开了 RLS**，
+        // 两层对同一张表给出相反裁定，而 DB 层赢了 ⇒ 代理跨客户派工 100% 失败
+        // （实测 POST /api/v1/agency/assignments 500，且读路径静默丢行）。
+        // V176 已撤这两张表的 RLS，与本白名单口径重新对齐。
+        // 🔴 判据沉淀：**白名单与 RLS 是同一张表的两个「隔离开关」，
+        // 二者不一致时必然有一方是错的**；本例是 DB 层赢、且赢的那一方语义不对。
+        // 新增白名单项时必须同步确认该表 RLS 状态（反之亦然），否则复现此型。
     );
 
     @Override
