@@ -121,6 +121,13 @@ services:
       # 角色由 M5b 手册 §V2 创建并接管对象属主；口令与 postgres 容器口令分开注入。
       SPRING_DATASOURCE_USERNAME: ${DB_USERNAME:-huicai_app}
       SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD:-huicai123}
+      # 🔴 Flyway 用独立身份（2026-10-09 修）：应用是 NOSUPERUSER + NOBYPASSRLS，
+      #   RLS 生效后 seed 迁移必被 with_check 拒（t_cash_flow_rule 等），应用起不来。
+      #   M5b 手册既定设计就是「huicai 超级用户保留给运维/迁移」，故此处指向它。
+      #   ⚠️ 这是**部署正确性**要求，不是图省事：漏配则 seed 迁移全红。
+      SPRING_FLYWAY_URL: jdbc:postgresql://postgres16:5432/huicai
+      SPRING_FLYWAY_USER: ${FLYWAY_USER:-${POSTGRES_USER:-huicai}}
+      SPRING_FLYWAY_PASSWORD: ${FLYWAY_PASSWORD:-${POSTGRES_PASSWORD:-huicai123}}
       SPRING_RABBITMQ_HOST: host.docker.internal
       SPRING_RABBITMQ_PORT: 5672
       SPRING_RABBITMQ_USERNAME: huicai
@@ -135,6 +142,12 @@ services:
       NVIDIA_API_KEY: ${NVIDIA_API_KEY:-}
     extra_hosts:
       - "host.docker.internal:host-gateway"
+      # ⚠️ DESKTOP-GB3K98M 是 Windows 主机名，Docker 默认把它设为容器 hostname；
+      #   MyBatis-Plus 3.5.7 的 NetUtils.findFirstNonLoopbackAddress() 调
+      #   InetAddress.getLocalHost() 解析此 hostname 失败 ⇒ 抛出
+      #   RuntimeException: Unable to retrieve localhost，整个应用启动不起来。
+      #   此处显式把它映射到 127.0.0.1，让 Java 能拿到回环地址而非抛异常。
+      - "DESKTOP-GB3K98M:127.0.0.1"
     depends_on:
       postgres16:
         condition: service_healthy

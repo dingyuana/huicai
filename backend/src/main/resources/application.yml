@@ -39,6 +39,33 @@ spring:
     table: flyway_schema_history
     out-of-order: true
     validate-on-migrate: false
+    # ─────────────────────────────────────────────────────────────
+    # 🔴 Flyway 必须用**独立于应用**的数据源身份（2026-10-09 修）
+    #
+    # 【缺陷】此前 Flyway 与应用共用 spring.datasource（= huicai_app）。
+    #   M5b 把应用降到 NOSUPERUSER + NOBYPASSRLS 后，RLS 真正生效，
+    #   于是**任何向租户表 seed 的迁移都会失败**：
+    #     ERROR: new row violates row-level security policy for table "t_cash_flow_rule"
+    #   72 张表的策略均为 with_check 为空 ⇒ PostgreSQL 复用 qual 当 WITH CHECK
+    #   ⇒ 要求 enterprise_id = current_setting('app.enterprise_id')，而迁移期
+    #   没有任何企业上下文（那次 GUC 由 TenantRlsInitializer 切面按
+    #   EnterpriseContextHolder 设置，Flyway 路径上根本没有）⇒ 必被拒。
+    #   连带后果：应用启动即失败（flywayInitializer → userMapper → …）。
+    #
+    # 【为什么不是「给 migration 加 SET LOCAL」】那种修法要求每个 seed
+    #   迁移都记得写，漏一个就红一次；且「种子数据该归哪个租户」本身是
+    #   业务判断，多数种子规则（如 t_cash_flow_rule 的现金流量分类规则）
+    #   是**平台级**数据，硬塞进 enterprise_id=1 反而制造脏数据。
+    #
+    # 【与 M5b 手册的关系】手册 §「当前环境状态」明确：
+    #   `huicai` 超级用户**保留**，用途即「运维/迁移」。
+    #   故此处把 Flyway 指向该身份，是回到既定设计，不是新开口子。
+    #   ⚠️ 超级用户绕过 RLS 是其固有属性，无法也不应「只给迁移开 RLS 豁免」
+    #   —— 真要收敛，须另建仅 BYPASSRLS 的专用角色并重跑属主接管。
+    # ─────────────────────────────────────────────────────────────
+    url: ${FLYWAY_URL:${spring.datasource.url}}
+    user: ${FLYWAY_USER:${POSTGRES_USER:huicai}}
+    password: ${FLYWAY_PASSWORD:${POSTGRES_PASSWORD:huicai123}}
 
   jackson:
     date-format: yyyy-MM-dd HH:mm
