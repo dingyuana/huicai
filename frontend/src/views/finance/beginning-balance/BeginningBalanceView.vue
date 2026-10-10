@@ -11,14 +11,14 @@
       <el-tabs v-model="activeTab">
         <el-tab-pane label="期初录入" name="entry">
           <div class="toolbar">
-            <el-button type="primary" :disabled="isOpeningLocked" @click="openEntryDialog">录入期初</el-button>
+            <el-button type="primary" :disabled="!queryPeriod || isOpeningLocked" @click="openEntryDialog">录入期初</el-button>
             <el-button :disabled="isOpeningLocked || isOpeningNone" @click="onClearOpening">清空重录</el-button>
             <el-button @click="fetchBalances">刷新</el-button>
             <el-tag v-if="openingStatus" :type="openingStatusTagType" size="large" style="margin-left:8px">
               {{ openingStatusLabel }}
             </el-tag>
             <span v-if="currentPeriodMeta?.openedAt" class="opening-meta">
-              建账日期：{{ currentPeriodMeta.openedAt }}　录入人：{{ currentPeriodMeta.openedByName || '-' }}
+              建账日期：{{ formatOpeningDate(currentPeriodMeta.openedAt) }}　录入人：{{ currentPeriodMeta.openedByName || '-' }}
             </span>
           </div>
           <el-table :data="balanceList" v-loading="loading" border stripe style="width:100%">
@@ -80,9 +80,9 @@
             <span style="margin-left:16px">建账日期：</span>
             <el-date-picker
               v-model="openedAt"
-              type="datetime"
+              type="date"
               placeholder="选择建账日期"
-              value-format="YYYY-MM-DD HH:mm:ss"
+              value-format="YYYY-MM-DD"
               style="width:200px" />
           </div>
           <div class="entry-total" :class="debitTotal !== creditTotal ? 'unbalanced' : 'balanced'">
@@ -150,6 +150,10 @@ const currentPeriodMeta = computed(() => periodMetaMap.value[queryPeriod.value])
 const isOpeningNone = computed(() => openingStatus.value === 'none')
 const isOpeningEntered = computed(() => openingStatus.value === 'entered')
 const isOpeningLocked = computed(() => openingStatus.value === 'locked')
+
+function formatOpeningDate(value: string) {
+  return value.slice(0, 10)
+}
 
 const openingStatusLabel = computed(() => {
   switch (openingStatus.value) {
@@ -241,6 +245,10 @@ async function doTrialBalance() {
 }
 
 async function saveBalance() {
+  if (!queryPeriod.value) {
+    ElMessage.warning('请先选择会计期间')
+    return
+  }
   const rows = entryRows.value.filter(r => r.subjectId && (r.amount || 0) > 0)
   if (rows.length === 0) { ElMessage.warning('请至少录入一个科目'); return }
   if (debitTotal.value !== creditTotal.value) {
