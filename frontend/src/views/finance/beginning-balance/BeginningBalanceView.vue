@@ -11,7 +11,27 @@
       <el-tabs v-model="activeTab">
         <el-tab-pane label="期初录入" name="entry">
           <div class="toolbar">
-            <el-button type="primary" :disabled="!queryPeriod || isOpeningLocked" @click="openEntryDialog">录入期初</el-button>
+            <!--
+              🔴 禁用条件必须**配一条出路提示**（2026-10-10 修复）。
+              本行原先是 :disabled="isOpeningLocked"，后被加上 !queryPeriod
+              以防提交 null period（那会 400）。但「查无会计期间」是**合法初始状态**
+              —— 实测开发库 t_period 为 0 行时，期间下拉为空、queryPeriod 恒为 ''，
+              按钮于是**永久禁用且无任何提示**，用户完全不知道下一步该做什么。
+              判据：禁用一个控件时，必须同时回答「为什么灰」与「怎么才能点」。
+            -->
+            <el-tooltip
+              v-if="!queryPeriod"
+              content="尚无可用会计期间，请先在「会计期间」中创建期间后再录入期初"
+              placement="top">
+              <span>
+                <el-button type="primary" disabled>录入期初</el-button>
+              </span>
+            </el-tooltip>
+            <el-button
+              v-else
+              type="primary"
+              :disabled="isOpeningLocked"
+              @click="openEntryDialog">录入期初</el-button>
             <el-button :disabled="isOpeningLocked || isOpeningNone" @click="onClearOpening">清空重录</el-button>
             <el-button @click="fetchBalances">刷新</el-button>
             <el-tag v-if="openingStatus" :type="openingStatusTagType" size="large" style="margin-left:8px">
