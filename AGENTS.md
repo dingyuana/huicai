@@ -539,7 +539,8 @@
      - 🔴 **判据③（本 SPEC 最贵的一条）：守卫「收得过紧」会连踩两次，且第二次更隐蔽**。初版只有 `AGENCY` 分支 ⇒ `ENTERPRISE` 自有用户被误判无权（**8 例转红**）；二版改成「`ENTERPRISE` 必须等于归属企业」⇒ 又挡住「归属 A 但经代理派工可访问 B」的合法用户（**1 例转红**）。**判据：守卫必须先答「谁会被放行」，再答「该拦谁」；只写拒斥分支的守卫，收紧时必然误伤合法路径。** 误伤与漏放的成本不对称：误伤先暴露、漏放可能长期静默 —— 但**开发期就得靠回归发现误伤**，不能指望线上暴露。
      - ⚠️ **可见性 ≠ 归属**：企业自有用户的可见集是「归属企业 ∪ 代理派工企业」，不是「只能看归属企业」。写成后者会误伤「一人多账套」的真实场景。
      - 🔴 **判据④：「零回归」也可能是假象**。P119 加了 6 处制审分离校验后 L2 `2213/0/0/5` 零回归 —— 但既有用例**全部无登录态** ⇒ `created_by` 落 NULL ⇒ 校验按设计放行。**零回归无法区分「校验正确放行」与「校验根本没生效」**；必须另建真库行为测试，并让测试**自证前提**（`createdByIsPersisted` 断言 `created_by` 真能读回，否则校验失效时该测试仍会绿）。
-     - ⚠️ **夹具连踩三次「凭语感写列名」**（§4.2 第 4 条的老对手）：`t_asset_card.asset_category_id`→实为 `category_id`；漏 NOT NULL 的 `residual_value`/`useful_life`；`t_asset_category.category_name`/`category_type`/`sort_order`/`status`→实为 `code`/`name`/`level`。**判据：测试夹具优先用 Entity 造数而非裸 SQL**，让列名随映射自动对齐；必须裸 SQL 时先 `information_schema.columns` 查证。
+     - 🔴 **同 SPEC 内又查出第二处同型缺口：`BatchOperationController`** —— 4 个端点**全无角色守卫**，且 `POST /agency/batch/close` 的入参是**调用方自填的 `List<Long> enterpriseIds`**，`audit-vouchers`/`audit-invoices` 同理 ⇒ 会计仍可跨客户批量结账/审核。**判据：修完一处端点鉴权后，必须把同一控制器/同一功能的其余端点一并扫一遍**（本例 P120 修了 `EnterpriseController`，同批功能域的 `BatchOperationController` 就漏了）。前端已加角色门禁，**后端守卫待补**。
+- ⚠️ **夹具连踩三次「凭语感写列名」**（§4.2 第 4 条的老对手）：`t_asset_card.asset_category_id`→实为 `category_id`；漏 NOT NULL 的 `residual_value`/`useful_life`；`t_asset_category.category_name`/`category_type`/`sort_order`/`status`→实为 `code`/`name`/`level`。**判据：测试夹具优先用 Entity 造数而非裸 SQL**，让列名随映射自动对齐；必须裸 SQL 时先 `information_schema.columns` 查证。
 
 ### 4.6 工作流执行类
 20. **起步跳过三步闭环**：收到"开发/继续开发/写代码"指令时，Hermes 必须先走 SPEC→审核门→再执行，禁止直接写 SPEC 文档或代码。**三次纠正沉淀：** 2026-07-09 ai-evolution-v2 起步时直接写计划文档+commit，跳过老丁审核（违反铁律 #10）。修正：收到任何开发指令，第一条输出必须是 SPEC 草案或要求确认需求，不是代码/计划文档。

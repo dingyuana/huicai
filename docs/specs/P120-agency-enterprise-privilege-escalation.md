@@ -121,14 +121,38 @@ P119 实施后 L2 全量 `2213/0/0/5` 零回归，但那些既有用例**全部�
 
 `getEnterpriseList(agencyId, page, size)` → `getEnterpriseList(page, size)`，两个调用点（`EnterpriseList.vue`、`AssignmentManage.vue`）同步。
 
-## §6 已知局限
+## §6 已知局限与后续工作项
 
 1. **`@PreAuthorize` 统一化未做** —— 本轮沿用硬编码分流（Q1 裁定）。全仓 `@PreAuthorize` 仍仅 11 处，授权机制未统一，登记为独立工作项。
-2. **前端无路由级角色拦截** —— 菜单由后端 `t_menu` 驱动，会计仍可能看到「派工管理」入口（点击后 403）。**UI 隐藏不是安全边界**，真正的防线在服务端；是否隐藏菜单属产品决策，未擅自改。
-3. **`current-period` 的 `enterprise_id` 过滤只补在兜底分支** —— 其余分支走 `enterpriseMapper` 的按企业查询，本已带条件。
+2. **🔴 `BatchOperationController` 4 个端点仍无角色守卫（新发现，未修）** —— 与本节 §1 完全同型：
+   - `POST /agency/batch/close` 入参是 `List<Long> enterpriseIds`，**由调用方自填企业 id**；
+   - `POST /agency/batch/audit-vouchers` / `audit-invoices` 同理；
+   - `POST /agency/batch/import` 无守卫。
+   
+   ⇒ 会计仍可跨客户批量结账/审核。**已在前端加角色门禁（见 6.3），但前端不是安全边界**，
+   后端守卫尚未补，登记为**必须尽快处理的待办**。
+3. **前端角色门禁已补**（本次 `修改前端` 交付）：
+   - `AppSidebar.vue`：`batch-operation`、`service-progress` 两项加 `v-if="authStore.isAgencyAdmin"`；
+   - `routes/agency.ts`：两项补 `meta.agencyRole: 'AGENCY_ADMIN'`；
+   - `router/index.ts`：把代理角色守卫**移到「是否已选企业」门槛之前**（原顺序下，
+     会计是否被正确拒绝取决于「有没有选企业」这个无关状态）；
+   - 新增 `agency-role-gating.test.ts` 13 例，钉住「侧边栏标注 ⟺ 路由 meta」两侧口径一致，
+     并反证成立（各撤一处即红）。
+
+   ⚠️ 更正本 SPEC V1.0 的一处错误表述：当时写「前端无路由级角色拦截」是**错的** ——
+   `meta.agencyRole` 机制早已存在并覆盖 4 个路由，真实缺口只是漏标 2 个。
 
 ## §7 版本历史
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
 | V1.0 | 2026-10-11 | 首版。修复 10 个无鉴权端点 + `page` 参数越权 + `current-period` 跨企业取数；新增 `AgencyEnterpriseRoleGuard` 与结构守卫 6 例 |
+| V1.1 | 2026-10-11 | 前端角色门禁补齐：侧边栏 + 路由 meta 补标 `batch-operation`/`service-progress`；角色守卫前移至企业门槛之前；新增 `agency-role-gating.test.ts` 13 例（反证成立）。⚠️ **同时更正 V1.0 一处错误表述**（「前端无路由级角色拦截」是错的，机制本就存在），并登记新发现的 `BatchOperationController` 4 端点无守卫缺口 |
+
+### 附：前端验证数据
+
+| 项 | 结果 |
+|---|---|
+| 前端全量测试 | ✅ **27 个文件 / 278 用例全过** |
+| `vue-tsc --noEmit` | ✅ exit 0 |
+| 新守卫 `agency-role-gating.test.ts` | ✅ 13 例，两个反证均成立 |

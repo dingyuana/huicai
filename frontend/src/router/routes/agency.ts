@@ -16,7 +16,9 @@ const routes: RouteRecordRaw[] = [
         path: 'batch-operation',
         name: 'AgencyBatchOperation',
         component: () => import('@/views/agency/BatchOperation.vue'),
-        meta: { title: '批量操作' },
+        // SPEC-P120：批量结账/强制完成属跨客户管理动作，且后端
+        // BatchOperationController 四个端点均无角色守卫。仅经理可入。
+        meta: { title: '批量操作', agencyRole: 'AGENCY_ADMIN' },
       },
       {
         path: 'accountant-list',
@@ -46,7 +48,9 @@ const routes: RouteRecordRaw[] = [
         path: 'service-progress',
         name: 'AgencyServiceProgress',
         component: () => import('@/views/agency/ServiceProgressView.vue'),
-        meta: { title: '服务进度与工作量' },
+        // SPEC-P120：展示全部会计的跨客户工作量，含 force-done 写入口。
+        // 会计/助理访问会看到无关客户与他人进度，仅经理可入。
+        meta: { title: '服务进度与工作量', agencyRole: 'AGENCY_ADMIN' },
       },
     ],
   },

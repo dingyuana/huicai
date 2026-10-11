@@ -152,11 +152,17 @@
           <span>代理公司</span>
         </template>
         <el-menu-item index="/agency/enterprise-list">客户列表</el-menu-item>
-        <el-menu-item index="/agency/batch-operation">批量操作</el-menu-item>
+        <!-- 代理经理专属：会计/助理无跨客户管理操作权（SPEC-P120）。
+             后端 /batch/close 的入参是调用方自填的企业 id 列表且无角色守卫，
+             故本入口仅对经理开放，与 accountant-list / assignment-manage 等
+             其它管理类入口口径一致。 -->
+        <el-menu-item v-if="authStore.isAgencyAdmin" index="/agency/batch-operation">批量操作</el-menu-item>
         <el-menu-item v-if="authStore.isAgencyAdmin" index="/agency/accountant-list">会计管理</el-menu-item>
         <el-menu-item v-if="authStore.isAgencyAdmin" index="/agency/assignment-manage">客户分配</el-menu-item>
         <el-menu-item v-if="authStore.isAgencyAdmin" index="/agency/dashboard">主管仪表盘</el-menu-item>
-        <el-menu-item index="/agency/service-progress">服务进度与工作量</el-menu-item>
+        <!-- 服务进度与工作量：展示全部会计的跨客户工作量，并含 force-done 写操作，
+             对会计会暴露他人/无关客户信息（SPEC-P120）。 -->
+        <el-menu-item v-if="authStore.isAgencyAdmin" index="/agency/service-progress">服务进度与工作量</el-menu-item>
       </el-sub-menu>
 
       <!-- 实验室（SUPER_ADMIN 且 Flag 开启时可见） -->

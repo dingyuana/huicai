@@ -56,30 +56,35 @@ router.beforeEach(async (to, _from, next) => {
     return next({ path: '/dashboard' })
   }
 
-  // S-26: AGENCY 用户访问业务路由时，检查是否已选择企业
-  if (authStore.isAgency && !authStore.currentEnterpriseId) {
-    const allowedPaths = ['/agency/enterprise-list', '/agency/batch-operation', '/403', '/404']
-    if (!allowedPaths.includes(to.path)) {
-      return next({ path: '/agency/enterprise-list' })
+    // S-26: 代理角色路由守卫（仅 AGENCY_ADMIN 可访问会计管理/客户分配/批量操作/服务进度）
+    //
+    // ⚠️ 必须放在「是否已选企业」门槛**之前**：授权判定不应被与应用无关的状态
+    //    （是否选了企业）影响。原顺序下，未选企业的会计会被重定向到
+    //    enterprise-list 而非 403 —— 虽也能挡住，但「挡住的理由」变了，
+    //    一旦有人把 enterprise-list 加进可放行路径就会悄悄放开。
+    if (authStore.isAgency && !authStore.isAgencyAdmin) {
+      const agencyRoleRequired = to.meta.agencyRole as string | undefined
+      if (agencyRoleRequired && authStore.agencyRole !== agencyRoleRequired) {
+        return next({ path: '/403' })
+      }
     }
-  }
 
-  // 页面刷新后重新获取用户信息（token存在但userInfo为空）
-  if (authStore.token && !authStore.userInfo) {
-    try {
-      await authStore.fetchUserInfo()
-    } catch {
-      return next({ path: '/login' })
+    // S-26: AGENCY 用户访问业务路由时，检查是否已选择企业
+    if (authStore.isAgency && !authStore.currentEnterpriseId) {
+      const allowedPaths = ['/agency/enterprise-list', '/403', '/404']
+      if (!allowedPaths.includes(to.path)) {
+        return next({ path: '/agency/enterprise-list' })
+      }
     }
-  }
 
-  // S-26: 代理角色路由守卫（仅 AGENCY_ADMIN 可访问会计管理/客户分配）
-  if (authStore.isAgency && !authStore.isAgencyAdmin) {
-    const agencyRoleRequired = to.meta.agencyRole as string | undefined
-    if (agencyRoleRequired && authStore.agencyRole !== agencyRoleRequired) {
-      return next({ path: '/403' })
+    // 页面刷新后重新获取用户信息（token存在但userInfo为空）
+    if (authStore.token && !authStore.userInfo) {
+      try {
+        await authStore.fetchUserInfo()
+      } catch {
+        return next({ path: '/login' })
+      }
     }
-  }
 
   // 权限校验（SUPER_ADMIN 跳过）
   if (!authStore.isSuperAdmin) {
