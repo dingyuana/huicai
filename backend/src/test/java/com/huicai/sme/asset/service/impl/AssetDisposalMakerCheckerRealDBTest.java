@@ -11,6 +11,7 @@ import com.huicai.sme.asset.mapper.AssetCardMapper;
 import com.huicai.sme.asset.mapper.AssetCategoryMapper;
 import com.huicai.sme.asset.mapper.AssetDisposalMapper;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -102,7 +103,6 @@ class AssetDisposalMakerCheckerRealDBTest extends AbstractMapperTest {
         card.setAccumulatedDepreciation(BigDecimal.ZERO);
         card.setNetValue(new BigDecimal("10000"));
         card.setStatus("IN_USE");
-        card.setEnterpriseId(entId);
         card.setDeleted(0);
         assetCardMapper.insert(card);
 
@@ -119,7 +119,6 @@ class AssetDisposalMakerCheckerRealDBTest extends AbstractMapperTest {
         e.setDisposalExpense(BigDecimal.ZERO);
         e.setGainLoss(BigDecimal.ZERO);
         e.setStatus("DRAFT");
-        e.setEnterpriseId(entId);
         e.setCreatedBy(createdBy);
         e.setDeleted(0);
         mapper.insert(e);
@@ -147,6 +146,21 @@ class AssetDisposalMakerCheckerRealDBTest extends AbstractMapperTest {
         cat.setDeleted(0);
         categoryMapper.insert(cat);
         return cat.getId();
+    }
+
+    /**
+     * 切到真实的企业上下文。
+     *
+     * <p>⚠️ SPEC-P120 修 CI 红：租户夹具一致性门禁判本类为 A 类违规 ——
+     * 在实体上直接 {@code setEnterpriseId(entId)} 会被
+     * {@code MyMetaObjectHandler} 的强制覆盖改写，使「设的」与「实际落的」不一致。
+     * 正确范式是切上下文（与 4 个兄弟测试一致），不在实体上硬设。
+     */
+    @BeforeEach
+    void switchToEnterprise() {
+        Long entId = jdbc.queryForObject(
+                "SELECT id FROM t_enterprise WHERE deleted=0 ORDER BY id LIMIT 1", Long.class);
+        useEnterprise(entId);
     }
 
     @AfterEach

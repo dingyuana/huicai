@@ -171,6 +171,49 @@ S-26 失败的根本原因就是**逐端点各写一遍、写漏了** —— 现
 
 ---
 
+# MACHINE-READABLE CONTRACT
+
+contract_version: "1.0"
+
+entity: VoucherEntity
+module: voucher
+table: t_voucher
+
+# P116：凭证层制审分离 + 代理端数据范围守卫。
+# ⚠️ 本 SPEC 的校验依赖 P117（created_by 真实落库）—— 修复前
+# getCreatedBy() 恒 null，校验恒不触发。
+rules:
+  - id: R-116-01
+    source: "凭证审核时制单人不得审核自己提交的凭证"
+    mapping:
+      guard_method: assertNotSelfReview
+      applies_to: [audit, batchAudit]
+      null_is_allowed: true
+    implementation: VoucherServiceImpl
+    test_ref: VoucherMakerCheckerGuardTest
+
+  - id: R-116-02
+    source: "代理端数据范围按 agency_id 收敛"
+    mapping:
+      resolver: AgencyDataScopeResolver
+      scoped_endpoints: 3
+    implementation: AgencyDataScopeResolver
+    test_ref: AgencyReviewerRolePairGuardTest
+
+acceptance_tests:
+  - id: AT-116-6
+    given: "凭证 created_by == 审核人"
+    when: "调用 audit(vid, uid)"
+    then: "抛 BusinessException，含「制单人不能审核自己提交的凭证」"
+    test_ref: VoucherMakerCheckerGuardTest#selfReviewRejected
+  - id: AT-116-7
+    given: "代理端数据范围被越界"
+    when: "运行守卫"
+    then: "红灯"
+    test_ref: AgencyReviewerRolePairGuardTest
+
+---
+
 ## §8 版本历史
 
 | 版本 | 日期 | 变更 |

@@ -158,6 +158,72 @@ V1.2 的实际动作（性质是**防未来回归**，不是修活洞）：
 ⚠️ 同时更正 V1.0 的另一处错误表述：「前端无路由级角色拦截」是**错的** ——
 `meta.agencyRole` 机制本就存在并覆盖 4 个路由，真实缺口只是漏标 2 个。
 
+# MACHINE-READABLE CONTRACT
+
+contract_version: "1.0"
+
+entity: EnterpriseEntity
+module: agency
+table: t_enterprise
+
+# 本 SPEC 修复 P0 越权：EnterpriseController 11 个端点中只有 switch 做了
+# agencyRole 分流，其余 10 个全部裸奔 —— 会计可新建/改删/启停客户企业，
+# 且 page(@RequestParam Long agencyId) 接受调用方自填代理 id。
+#
+# 本契约登记修复后必须成立的不变量。
+rules:
+  - id: R-120-01
+    source: "EnterpriseController 每个端点必须接入角色守卫"
+    mapping:
+      guard: AgencyEnterpriseRoleGuard
+      exempt_endpoints: [/api/v1/enterprise/switch]
+    implementation: EnterpriseController
+    test_ref: AgencyEnterpriseRoleGuardStructureTest
+
+  - id: R-120-02
+    source: "page 端点不得接受调用方自填 agencyId"
+    mapping:
+      endpoint: /api/v1/agency/enterprises/page
+      forbidden_param: agencyId
+    implementation: EnterpriseController
+    test_ref: AgencyEnterpriseRoleGuardStructureTest
+
+  - id: R-120-03
+    source: "requireVisibleEnterprise 必须先答「谁会被放行」再答「该拦谁」"
+    mapping:
+      allow_super_admin: true
+      allow_agency: resolveVisibleEnterpriseIds
+      allow_enterprise: 归属企业 ∪ 代理派工企业
+    implementation: AgencyEnterpriseRoleGuard
+    test_ref: AgencyEnterpriseRoleGuardStructureTest
+
+  - id: R-120-04
+    source: "BatchOperationController 端点须有角色守卫（当前为 501 未实现桩，防实现时遗漏）"
+    mapping:
+      guard: AgencyEnterpriseRoleGuard
+      endpoints: [/import, /audit-vouchers, /audit-invoices, /close]
+    implementation: BatchOperationController
+    test_ref: BatchOperationControllerGuardStructureTest
+
+acceptance_tests:
+  - id: AT-120-1
+    given: "任一端点缺少 roleGuard 调用"
+    when: "运行 AgencyEnterpriseRoleGuardStructureTest"
+    then: "红灯并列出漏保护的端点"
+    test_ref: AgencyEnterpriseRoleGuardStructureTest#everyEndpointHasGuard
+  - id: AT-120-2
+    given: "page 签名含 agencyId"
+    when: "运行结构守卫"
+    then: "红灯（调用方可自填代理 id 越权取数）"
+    test_ref: AgencyEnterpriseRoleGuardStructureTest#pageMustNotAcceptAgencyIdParam
+  - id: AT-120-3
+    given: "前端侧边栏或路由 meta 漏标角色"
+    when: "运行 agency-role-gating.test.ts"
+    then: "红灯（菜单可见/URL 直达绕过）"
+    test_ref: agency-role-gating.test.ts
+
+---
+
 ## §7 版本历史
 
 | 版本 | 日期 | 变更 |

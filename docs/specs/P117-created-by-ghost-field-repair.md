@@ -117,6 +117,59 @@ private Long createdBy;
 
 3. **前端「制单人」列** —— 字段恢复后，**历史行仍空白**，新单据正常显示。属预期行为，非缺陷。
 
+# MACHINE-READABLE CONTRACT
+
+contract_version: "1.0"
+
+entity: BaseEntity
+module: common
+table: t_voucher
+
+# P117：created_by/updatedBy 曾被误标 @TableField(exist=false)，
+# 使 MyBatis-Plus 既不写也不读 —— 57 处 setCreatedBy 全成死代码，
+# 制审分离内控因此从未生效。V178 为 61 张缺列表补列。
+rules:
+  - id: R-117-01
+    source: "BaseEntity.createdBy 必须是真实映射列（不得 exist=false）"
+    mapping:
+      field: createdBy
+      column: created_by
+      ghost_field: false
+    implementation: BaseEntity
+    test_ref: AuditOperatorRealUserStructureTest
+
+  - id: R-117-02
+    source: "BaseEntity.updatedBy 同 createdBy"
+    mapping:
+      field: updatedBy
+      column: updated_by
+      ghost_field: false
+    implementation: BaseEntity
+    test_ref: AuditOperatorRealUserStructureTest
+
+  - id: R-117-03
+    source: "V178 补列须为 bigint 且排除 t_prepayment（其 created_by 是 varchar(50)）"
+    mapping:
+      migration: V178__spec_p117_add_created_by_updated_by_columns.sql
+      column_type: bigint
+      excluded: [t_prepayment]
+    implementation: BaseEntity
+    test_ref: MakerCheckerAllApprovalsStructureTest
+
+acceptance_tests:
+  - id: AT-117-1
+    given: "created_by 读回为 null 而库里非空"
+    when: "运行 VoucherMakerCheckerGuardTest"
+    then: "红灯（幽灵字段未修复）"
+    test_ref: VoucherMakerCheckerGuardTest#selfReviewRejected
+  - id: AT-117-2
+    given: "createdBy 被改回 exist=false"
+    when: "运行守卫"
+    then: "红灯（P117 不变量回归锁）"
+    test_ref: AuditOperatorRealUserStructureTest#createdByIsNotGhostField
+
+---
+
 ## §8 版本历史
 
 | 版本 | 日期 | 变更 |

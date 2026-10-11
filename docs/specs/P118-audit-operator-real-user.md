@@ -84,6 +84,58 @@ private Long currentOperatorId() {
 2. **历史数据不回填** —— ✅ **已裁定（2026-10-11）**，取证与理由详见 SPEC-P117 §7.1：81 行存量经证实为开发期测试/演示数据，且反查源覆盖率仅 1.6%，回填无意义且会写入假审计值。
 3. **`created_by` 与 `submitted_by` / `audited_by` 并存**：部分表另有专用的「提交人/审核人」列，与 `created_by` 语义不同，本轮未合并（避免重演 `tenant_id` 双列并存债）。
 
+# MACHINE-READABLE CONTRACT
+
+contract_version: "1.0"
+
+entity: BaseEntity
+module: common
+table: t_voucher
+
+# P118：P117 让 created_by 真正落库后，全仓 34 处
+# setCreatedBy(DEFAULT_USER_ID) 才开始产生实际影响 —— 每处都写下
+# 一个并非实际操作人的值。本 SPEC 收口这些赋值。
+rules:
+  - id: R-118-01
+    source: "审计字段不得写死常量，须取真实登录人"
+    mapping:
+      forbidden_pattern: '.setCreatedBy(DEFAULT_USER_ID)'
+      required_pattern: currentOperatorId
+    implementation: ArapSettlementServiceImpl
+    test_ref: AuditOperatorRealUserStructureTest
+
+  - id: R-118-02
+    source: "DEFAULT_USER_ID 必须 > 0（id=0 不存在任何真实用户）"
+    mapping:
+      field: DEFAULT_USER_ID
+      min_value: 1
+      note: "ArapSettlementServiceImpl 原为 0L，是 7 个文件中唯一例外"
+    implementation: ArapSettlementServiceImpl
+    test_ref: AuditOperatorRealUserStructureTest
+
+  - id: R-118-03
+    source: "无登录态时回退兜底值而非 null（恒 NULL 即 P117 缺陷表征）"
+    mapping:
+      helper: currentOperatorId
+      fallback: DEFAULT_USER_ID
+      fallback_required: true
+    implementation: ReconciliationServiceImpl
+    test_ref: AuditOperatorRealUserStructureTest
+
+acceptance_tests:
+  - id: AT-118-1
+    given: "生产代码出现 .setCreatedBy(DEFAULT_USER_ID)"
+    when: "运行守卫"
+    then: "红灯并指出文件:行号"
+    test_ref: AuditOperatorRealUserStructureTest#noHardcodedAuditOperator
+  - id: AT-118-2
+    given: "DEFAULT_USER_ID 被设为 0"
+    when: "运行守卫"
+    then: "红灯"
+    test_ref: AuditOperatorRealUserStructureTest#defaultUserIdIsNotZero
+
+---
+
 ## §8 版本历史
 
 | 版本 | 日期 | 变更 |

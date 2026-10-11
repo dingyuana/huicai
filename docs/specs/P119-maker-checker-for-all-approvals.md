@@ -86,6 +86,82 @@ P116 为凭证层补了制审分离。取证（扫描全部 `approve(` / `audit(
 
 > 实测参照：P117 修复时已有 **6 个既有夹具**因此变红（`LedgerChainRealDBTest` ×4、`VoucherIntegrationTest` ×2），已改为建单人与审核人分离。本批预计同类影响面更大。
 
+# MACHINE-READABLE CONTRACT
+
+contract_version: "1.0"
+
+entity: BaseEntity
+module: voucher
+table: t_voucher
+
+# 本 SPEC 修复的是「幽灵字段」：BaseEntity.createdBy 曾被标注
+# @TableField(exist=false)，使 MyBatis-Plus 既不写也不读该列 ——
+# 全仓 57 处 setCreatedBy(...) 全成死代码，制审分离内控因此从未生效。
+#
+# 本契约登记的是**修复后必须成立的不变量**，供 validate_spec_contract 反查代码。
+rules:
+  - id: R-119-01
+    source: "BaseEntity.createdBy 不得标 @TableField(exist=false)"
+    mapping:
+      field: createdBy
+      column: created_by
+      must_be_persisted: true
+      must_be_readable: true
+    implementation: BaseEntity
+    test_ref: AuditOperatorRealUserStructureTest
+
+  - id: R-119-02
+    source: "BaseEntity.updatedBy 同 createdBy，须为真实映射列"
+    mapping:
+      field: updatedBy
+      column: updated_by
+      must_be_persisted: true
+      must_be_readable: true
+    implementation: BaseEntity
+    test_ref: AuditOperatorRealUserStructureTest
+
+  - id: R-119-03
+    source: "V178 为缺列的 t_* 表补 created_by/updated_by（bigint，排除 t_prepayment）"
+    mapping:
+      migration: V178__spec_p117_add_created_by_updated_by_columns.sql
+      column_type: bigint
+      excluded_tables: t_prepayment
+    implementation: BaseEntity
+    test_ref: MakerCheckerAllApprovalsStructureTest
+
+  - id: R-119-04
+    source: "P119 制审分离：created_by 与审批人相同须被拒，且 created_by 为 NULL 时放行"
+    mapping:
+      guard_method: assertNotSelfApprove
+      null_is_allowed: true
+      null_rationale: "Excel 导入/定时任务无录入人概念"
+    implementation: AssetDisposalServiceImpl
+    test_ref: AssetDisposalMakerCheckerRealDBTest
+
+acceptance_tests:
+  - id: AT-119-1
+    given: "处置单 created_by == 审批人"
+    when: "调用 approve(id)"
+    then: "抛 BusinessException 且状态保持 DRAFT（不得先改后判）"
+    test_ref: AssetDisposalMakerCheckerRealDBTest#selfApprovalRejected
+  - id: AT-119-2
+    given: "处置单 created_by != 审批人"
+    when: "调用 approve(id)"
+    then: "放行且状态变 APPROVED（防止守卫恒红）"
+    test_ref: AssetDisposalMakerCheckerRealDBTest#otherUserCanApprove
+  - id: AT-119-3
+    given: "处置单 created_by IS NULL"
+    when: "调用 approve(id)"
+    then: "放行（与凭证层口径一致）"
+    test_ref: AssetDisposalMakerCheckerRealDBTest#nullCreatedByIsAllowed
+  - id: AT-119-4
+    given: "created_by 被改回 @TableField(exist=false)"
+    when: "运行 AuditOperatorRealUserStructureTest"
+    then: "红灯（P117 不变量回归锁）"
+    test_ref: AuditOperatorRealUserStructureTest#createdByIsNotGhostField
+
+---
+
 ## §6 版本历史
 
 | 版本 | 日期 | 变更 |
