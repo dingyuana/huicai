@@ -92,6 +92,21 @@ public class EnterpriseServiceImpl implements EnterpriseService {
     }
 
     @Override
+    public IPage<EnterpriseVO> pageByAgency(Long agencyId, int page, int size,
+                                            java.util.List<Long> visibleIds) {
+        // SPEC-P120：会计/助理的可见范围是「派工关系」，不是「本代理全部」。
+        // ⚠️ 必须在**应用层**收口 —— 拦截器只注入 enterprise_id，对本查询无效
+        //    （§4.5 第 40 条：无上下文/非多租户表时不能依赖 SQL 层兜底）。
+        Page<EnterpriseEntity> p = new Page<>(page, size);
+        IPage<EnterpriseEntity> result = enterpriseMapper.selectPage(p,
+                new LambdaQueryWrapper<EnterpriseEntity>()
+                        .in(!visibleIds.isEmpty(), EnterpriseEntity::getId, visibleIds)
+                        .eq(visibleIds.isEmpty(), EnterpriseEntity::getId, -1L)
+                        .orderByDesc(EnterpriseEntity::getCreatedAt));
+        return result.convert(this::toVO);
+    }
+
+    @Override
     @Transactional(rollbackFor = Exception.class)
     public void delete(Long id) {
         EnterpriseEntity entity = enterpriseMapper.selectById(id);

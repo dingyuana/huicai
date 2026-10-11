@@ -180,9 +180,8 @@ function statusLabel(status: string) {
 async function fetchList() {
   loading.value = true
   try {
-    const agencyId = authStore.agencyId
-    if (!agencyId) return
-    const res = await getEnterpriseList(agencyId, page.value, size.value)
+    // SPEC-P120：不再自填 agencyId，可见范围由后端按角色收敛
+    const res = await getEnterpriseList(page.value, size.value)
     tableData.value = res.records
     total.value = res.total
     stats.total = res.total

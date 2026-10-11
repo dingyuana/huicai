@@ -299,6 +299,10 @@ class EnterpriseControllerTest {
     @DisplayName("current-period: start_period存在且有数据期间 -> 返回最近有数据期间")
     void currentPeriod_startPeriodWithData_returnsHasDataPeriod() throws Exception {
         stubAdmin();
+        // SPEC-P120：current-period 现要求「当前用户可见该企业」。
+        // 管理员走 t_agency_enterprise 绑定关系，不 stub 则查不到任何绑定 → 403。
+        when(agencyEnterpriseMapper.getEnterpriseIdsByAgencyId(1L))
+                .thenReturn(List.of(1L));
         EnterpriseContextHolder.set(1L);
 
         EnterpriseEntity enterprise = new EnterpriseEntity();
@@ -327,6 +331,10 @@ class EnterpriseControllerTest {
     @DisplayName("current-period: start_period存在但无数据期间 -> 返回start_period本身")
     void currentPeriod_startPeriodNoData_returnsStartPeriod() throws Exception {
         stubAdmin();
+        // SPEC-P120：current-period 现要求「当前用户可见该企业」。
+        // 管理员走 t_agency_enterprise 绑定关系，不 stub 则查不到任何绑定 → 403。
+        when(agencyEnterpriseMapper.getEnterpriseIdsByAgencyId(1L))
+                .thenReturn(List.of(1L));
         EnterpriseContextHolder.set(1L);
 
         EnterpriseEntity enterprise = new EnterpriseEntity();
@@ -355,6 +363,10 @@ class EnterpriseControllerTest {
     @DisplayName("current-period: 存量企业start_period为空 -> 返回企业最新期间")
     void currentPeriod_legacyNoStartPeriod_returnsLatestPeriod() throws Exception {
         stubAdmin();
+        // SPEC-P120：current-period 现要求「当前用户可见该企业」。
+        // 管理员走 t_agency_enterprise 绑定关系，不 stub 则查不到任何绑定 → 403。
+        when(agencyEnterpriseMapper.getEnterpriseIdsByAgencyId(1L))
+                .thenReturn(List.of(1L));
         EnterpriseContextHolder.set(1L);
 
         EnterpriseEntity enterprise = new EnterpriseEntity();
@@ -380,6 +392,10 @@ class EnterpriseControllerTest {
     @DisplayName("current-period: 未切换企业 -> 返回400")
     void currentPeriod_noContext_returns400() throws Exception {
         stubAdmin();
+        // SPEC-P120：current-period 现要求「当前用户可见该企业」。
+        // 管理员走 t_agency_enterprise 绑定关系，不 stub 则查不到任何绑定 → 403。
+        when(agencyEnterpriseMapper.getEnterpriseIdsByAgencyId(1L))
+                .thenReturn(List.of(1L));
         // 故意不调 EnterpriseContextHolder.set()，确保 ThreadLocal 为空
         EnterpriseContextHolder.clear();
 

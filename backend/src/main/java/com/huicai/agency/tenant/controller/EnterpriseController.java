@@ -1,6 +1,7 @@
 package com.huicai.agency.tenant.controller;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.huicai.agency.tenant.dto.EnterpriseCreateDTO;
 import com.huicai.agency.tenant.dto.EnterpriseVO;
 import com.huicai.agency.tenant.entity.EnterpriseEntity;
@@ -13,6 +14,7 @@ import com.huicai.agency.tenant.vo.EnterpriseSwitchVO;
 import com.huicai.agency.user.mapper.AgencyUserEnterpriseMapper;
 import com.huicai.agency.user.mapper.AgencyUserMapper;
 import com.huicai.agency.user.entity.AgencyUserEntity;
+import com.huicai.agency.security.AgencyEnterpriseRoleGuard;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.huicai.base.system.entity.PeriodEntity;
 import com.huicai.base.system.mapper.PeriodMapper;
@@ -22,6 +24,8 @@ import com.huicai.common.exception.BusinessException;
 import com.huicai.common.response.R;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+
+import java.util.List;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -35,6 +39,7 @@ public class EnterpriseController {
     private final AgencyUserMapper agencyUserMapper;
     private final AgencyUserEnterpriseMapper agencyUserEnterpriseMapper;
     private final PeriodMapper periodMapper;
+    private final AgencyEnterpriseRoleGuard roleGuard;
 
     // ========== 切换接口 (Sprint 2) ==========
 
@@ -110,6 +115,9 @@ public class EnterpriseController {
         if (enterpriseId == null) {
             throw BusinessException.badRequest("尚未切换企业, 无法获取默认期间");
         }
+        // SPEC-P120：会计/助理不得读取未派给自己的企业期间
+        roleGuard.requireVisibleEnterprise(enterpriseId);
+
         EnterpriseEntity enterprise = enterpriseMapper.selectById(enterpriseId);
         if (enterprise == null || enterprise.getDeleted() == 1) {
             throw BusinessException.notFound("企业不存在");
@@ -133,8 +141,13 @@ public class EnterpriseController {
         }
 
         // 存量企业（start_period 为空）：返回企业期间列表中最新的一个，与改造前行为一致
+        //
+        // ⚠️ SPEC-P120：原实现**未按企业过滤**，取的是全库最新期间 ——
+        // 租户隔离靠 EnterpriseDataPermissionInterceptor 注入，但那层在
+        // 多租户表白名单里对本表不一定生效（§4.5 第 45 条 DIR-004 同型）。
         PeriodEntity latest = periodMapper.selectOne(
                 new LambdaQueryWrapper<PeriodEntity>()
+                        .eq(PeriodEntity::getEnterpriseId, enterpriseId)
                         .orderByDesc(PeriodEntity::getPeriodCode)
                         .last("LIMIT 1"));
         vo.setCurrentPeriod(latest == null ? null : latest.getPeriodCode());
@@ -143,40 +156,61 @@ public class EnterpriseController {
 
     @PostMapping("/api/v1/agency/enterprises")
     public R<EnterpriseVO> create(@Valid @RequestBody EnterpriseCreateDTO dto) {
+        roleGuard.requireAgencyAdmin("新建客户企业");
         return R.ok(enterpriseService.create(dto));
     }
 
     @PutMapping("/api/v1/agency/enterprises/{id}")
     public R<EnterpriseVO> update(@PathVariable Long id, @RequestBody EnterpriseCreateDTO dto) {
+        roleGuard.requireAgencyAdmin("修改客户企业");
+        roleGuard.requireVisibleEnterprise(id);
         return R.ok(enterpriseService.update(id, dto));
     }
 
     @GetMapping("/api/v1/agency/enterprises/{id}")
     public R<EnterpriseVO> getById(@PathVariable Long id) {
+        roleGuard.requireVisibleEnterprise(id);
         return R.ok(enterpriseService.getById(id));
     }
 
+    /**
+     * 客户企业列表 —— <b>不接收调用方自填的 agencyId</b>。
+     *
+     * <p><b>SPEC-P120</b>：原签名是 {@code page(@RequestParam Long agencyId)}，
+     * 会计传任意 {@code agencyId} 即可列出<b>任意代理</b>的全部客户企业。
+     * 现改为由 {@link AgencyEnterpriseRoleGuard} 按角色收敛可见范围：
+     * 经理/审核员见本代理全部，会计/助理仅见派给自己的。
+     */
     @GetMapping("/api/v1/agency/enterprises/page")
-    public R<IPage<EnterpriseVO>> page(@RequestParam Long agencyId,
-                                        @RequestParam(defaultValue = "1") int page,
+    public R<IPage<EnterpriseVO>> page(@RequestParam(defaultValue = "1") int page,
                                         @RequestParam(defaultValue = "10") int size) {
-        return R.ok(enterpriseService.pageByAgency(agencyId, page, size));
+        List<Long> visibleIds = roleGuard.resolveVisibleEnterpriseIds();
+        if (visibleIds.isEmpty()) {
+            return R.ok(new Page<>());
+        }
+        return R.ok(enterpriseService.pageByAgency(
+                SecurityUtils.getCurrentAgencyId(), page, size, visibleIds));
     }
 
     @DeleteMapping("/api/v1/agency/enterprises/{id}")
     public R<Void> delete(@PathVariable Long id) {
+        roleGuard.requireAgencyAdmin("删除客户企业");
+        roleGuard.requireVisibleEnterprise(id);
         enterpriseService.delete(id);
         return R.ok();
     }
 
     @PostMapping("/api/v1/agency/enterprises/{id}/bind")
     public R<Void> bind(@PathVariable Long id, @RequestParam Long agencyId) {
+        roleGuard.requireAgencyAdmin("绑定客户企业");
         enterpriseService.bind(id, agencyId);
         return R.ok();
     }
 
     @PostMapping("/api/v1/agency/enterprises/{id}/activate")
     public R<EnterpriseVO> activate(@PathVariable Long id) {
+        roleGuard.requireAgencyAdmin("启用客户账套");
+        roleGuard.requireVisibleEnterprise(id);
         EnterpriseEntity entity = stateMachineService.activateEnterprise(id);
         // 重新查询以获取 cloneSeedData 后更新的 seedDataDone
         EnterpriseEntity refreshed = enterpriseMapper.selectById(id);
@@ -195,6 +229,8 @@ public class EnterpriseController {
 
     @PostMapping("/api/v1/agency/enterprises/{id}/suspend")
     public R<EnterpriseVO> suspend(@PathVariable Long id, @RequestParam(required = false, defaultValue = "手动暂停") String reason) {
+        roleGuard.requireAgencyAdmin("停用客户账套");
+        roleGuard.requireVisibleEnterprise(id);
         EnterpriseEntity entity = stateMachineService.suspendEnterprise(id, reason);
         EnterpriseVO vo = new EnterpriseVO();
         vo.setId(entity.getId());
@@ -211,6 +247,7 @@ public class EnterpriseController {
 
     @PostMapping("/api/v1/agency/enterprises/{id}/unbind")
     public R<Void> unbind(@PathVariable Long id, @RequestParam Long agencyId) {
+        roleGuard.requireAgencyAdmin("解绑客户企业");
         enterpriseService.unbind(id, agencyId);
         return R.ok();
     }
