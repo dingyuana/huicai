@@ -81,7 +81,7 @@ private Long currentOperatorId() {
 ## §7 已知局限
 
 1. **方法签名未改**：`submit(Long id)` / `reject(Long id, String reason)` / `cancel(Long id)` 等仍无 `userId` 参数，操作人从登录上下文取。属既有接口形态，改签名会波及全部调用点，**本轮不扩大范围**。
-2. **历史数据仍未回填**（承 SPEC-P117 §7.1）：存量行 `created_by` 仍是 NULL。
+2. **历史数据不回填** —— ✅ **已裁定（2026-10-11）**，取证与理由详见 SPEC-P117 §7.1：81 行存量经证实为开发期测试/演示数据，且反查源覆盖率仅 1.6%，回填无意义且会写入假审计值。
 3. **`created_by` 与 `submitted_by` / `audited_by` 并存**：部分表另有专用的「提交人/审核人」列，与 `created_by` 语义不同，本轮未合并（避免重演 `tenant_id` 双列并存债）。
 
 ## §8 版本历史
