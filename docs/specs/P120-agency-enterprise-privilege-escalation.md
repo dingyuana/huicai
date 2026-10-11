@@ -124,30 +124,47 @@ P119 实施后 L2 全量 `2213/0/0/5` 零回归，但那些既有用例**全部�
 ## §6 已知局限与后续工作项
 
 1. **`@PreAuthorize` 统一化未做** —— 本轮沿用硬编码分流（Q1 裁定）。全仓 `@PreAuthorize` 仍仅 11 处，授权机制未统一，登记为独立工作项。
-2. **🔴 `BatchOperationController` 4 个端点仍无角色守卫（新发现，未修）** —— 与本节 §1 完全同型：
-   - `POST /agency/batch/close` 入参是 `List<Long> enterpriseIds`，**由调用方自填企业 id**；
-   - `POST /agency/batch/audit-vouchers` / `audit-invoices` 同理；
-   - `POST /agency/batch/import` 无守卫。
-   
-   ⇒ 会计仍可跨客户批量结账/审核。**已在前端加角色门禁（见 6.3），但前端不是安全边界**，
-   后端守卫尚未补，登记为**必须尽快处理的待办**。
-3. **前端角色门禁已补**（本次 `修改前端` 交付）：
-   - `AppSidebar.vue`：`batch-operation`、`service-progress` 两项加 `v-if="authStore.isAgencyAdmin"`；
-   - `routes/agency.ts`：两项补 `meta.agencyRole: 'AGENCY_ADMIN'`；
-   - `router/index.ts`：把代理角色守卫**移到「是否已选企业」门槛之前**（原顺序下，
-     会计是否被正确拒绝取决于「有没有选企业」这个无关状态）；
-   - 新增 `agency-role-gating.test.ts` 13 例，钉住「侧边栏标注 ⟺ 路由 meta」两侧口径一致，
-     并反证成立（各撤一处即红）。
+2. **`BatchOperationController` 已补角色守卫（V1.2，见 §6.1）**。
+3. **前端角色门禁已补**（V1.1，见 §6.2）。
 
-   ⚠️ 更正本 SPEC V1.0 的一处错误表述：当时写「前端无路由级角色拦截」是**错的** ——
-   `meta.agencyRole` 机制早已存在并覆盖 4 个路由，真实缺口只是漏标 2 个。
+### 6.1 🔴 一处必须更正的过度断言（V1.0 → V1.2）
+
+V1.0 写：「`BatchOperationController` 4 端点全无守卫 ⇒ **会计仍可跨客户批量结账/审核**」。
+
+**该结论不实，据实更正**：取到实现后确认，4 个端点**全是 501 未实现桩**
+（`P107 D3` / `REQ-2026-134` 为避免假成功而显式禁用），
+且 `BatchServiceNotImplementedTest` 7 例专门锁死「不得回报成功」。
+
+⇒ **今天并无越权漏洞**：会计调 `POST /agency/batch/close` 只会拿到 501，不执行任何动作。
+
+🔴 **教训（判据：判定「有漏洞」前，先确认端点到底是实现还是桩）**：
+「端点没有角色守卫」**不等于**「可被打」。我因为看到「无守卫」就直接推导出
+「会计可跨客户批量结账」，是把**形态**当成了**行为**。
+
+V1.2 的实际动作（性质是**防未来回归**，不是修活洞）：
+- 4 端点插入 `roleGuard.requireAgencyAdmin(...)`；
+- 新增 `BatchOperationControllerGuardStructureTest` 4 例，把「端点必须有角色校验」
+  钉成机械不变量 —— **实现放开而忘加守卫 ⇒ 立刻红**；
+- 反证成立（撤守卫即精确列出 `/import`、`/close`）。
+- ⚠️ 该守卫还锁了一条：控制器不得 `catch (BusinessException)` 或用 `try` 包裹批量调用 ——
+  那会把 501 假成功包装成 200。
+
+### 6.2 前端角色门禁（V1.1）
+
+`AppSidebar.vue` 与 `routes/agency.ts` 原先漏标 `batch-operation` / `service-progress`。
+已补 `v-if` + `meta.agencyRole`，并把角色守卫前移到企业门槛之前。
+新增 `agency-role-gating.test.ts` 13 例（反证成立）。
+
+⚠️ 同时更正 V1.0 的另一处错误表述：「前端无路由级角色拦截」是**错的** ——
+`meta.agencyRole` 机制本就存在并覆盖 4 个路由，真实缺口只是漏标 2 个。
 
 ## §7 版本历史
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
 | V1.0 | 2026-10-11 | 首版。修复 10 个无鉴权端点 + `page` 参数越权 + `current-period` 跨企业取数；新增 `AgencyEnterpriseRoleGuard` 与结构守卫 6 例 |
-| V1.1 | 2026-10-11 | 前端角色门禁补齐：侧边栏 + 路由 meta 补标 `batch-operation`/`service-progress`；角色守卫前移至企业门槛之前；新增 `agency-role-gating.test.ts` 13 例（反证成立）。⚠️ **同时更正 V1.0 一处错误表述**（「前端无路由级角色拦截」是错的，机制本就存在），并登记新发现的 `BatchOperationController` 4 端点无守卫缺口 |
+| V1.1 | 2026-10-11 | 前端角色门禁补齐（侧边栏 + 路由 meta + 守卫顺序前移）；新增 `agency-role-gating.test.ts` 13 例 |
+| V1.2 | 2026-10-11 | 补 `BatchOperationController` 4 端点守卫 + `BatchOperationControllerGuardStructureTest` 4 例。🔴 **据实更正 V1.0 的过度断言**：「会计仍可跨客户批量结账」不实 —— 4 端点全是 501 未实现桩，今天并无活洞；本批性质是防未来回归 |
 
 ### 附：前端验证数据
 
