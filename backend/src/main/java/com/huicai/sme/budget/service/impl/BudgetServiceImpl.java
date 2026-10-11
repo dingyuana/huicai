@@ -37,6 +37,43 @@ import java.util.Map;
 @Transactional
 public class BudgetServiceImpl implements BudgetService {
 
+    /**
+     * 取当前制单人 —— 有登录态用真实用户。
+     *
+     * <p><b>SPEC-P119</b>：P117 把 created_by 修成真实落库列后，本类多条创建
+     * 路径此前无人写入该列，导致制审分离校验恒不触发（恒绿门禁形态）。
+     *
+     * <p><b>Q2 裁定：无登录态返回 null，不写兜底常量。</b>
+     * Excel 导入 / 定时任务 / 系统初始化本就没有「录入人」概念，
+     * 填 DEFAULT_USER_ID 等于凭空造一个假用户（与 P118 清理的问题同型）。
+     * 代价是这些单据永远无法做制审分离校验 —— 属已登记的已知局限，
+     * 校验对 created_by IS NULL 放行，与凭证层/业务单据层口径一致。
+     */
+    private Long currentOperatorId() {
+        try {
+            return com.huicai.base.system.util.SecurityUtils.getCurrentUserId();
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /**
+     * 制审分离：制单人不能审批自己提交的单据。
+     *
+     * <p><b>SPEC-P119</b>：本校验此前完全不存在。与 P116 已补的凭证层、
+     * 业务单据层口径逐字对齐 —— 含 {@code created_by} 为 NULL 时放行。
+     *
+     * <p>NULL 放行是刻意为之：Excel 导入 / 定时任务 / 系统初始化无登录态，
+     * 本就没有「录入人」概念（Q2 裁定），此时若反过来说「他自审」是错的。
+     * 代价是这些单据永远无法做制审分离校验，属已登记的已知局限。
+     */
+    private void assertNotSelfApprove(Long userId, Long createdBy, String docName) {
+        if (userId != null && createdBy != null && userId.equals(createdBy)) {
+            throw BusinessException.badRequest(
+                    "制单人不能审批自己提交的" + docName + "（制审分离）");
+        }
+    }
+
     private final BudgetMapper budgetMapper;
     private final BudgetEntryMapper entryMapper;
     private final BudgetAdjustmentMapper adjustmentMapper;
@@ -82,6 +119,7 @@ public class BudgetServiceImpl implements BudgetService {
             }
         }
         entity.setTotalAmount(total);
+        entity.setCreatedBy(currentOperatorId());
         budgetMapper.insert(entity);
         if (entries != null) {
             for (BudgetEntryEntity e : entries) {
@@ -109,6 +147,7 @@ public class BudgetServiceImpl implements BudgetService {
         if (!BudgetStatus.BUDGET_SUBMITTED.equals(entity.getStatus())) {
             throw new BusinessException("仅已提交状态可审批");
         }
+        assertNotSelfApprove(currentOperatorId(), entity.getCreatedBy(), "预算");
         entity.setStatus(BudgetStatus.BUDGET_APPROVED);
         entity.setApprovedAt(LocalDateTime.now());
         budgetMapper.updateById(entity);

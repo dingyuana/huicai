@@ -59,6 +59,43 @@ public class BankStatementServiceImpl implements BankStatementService {
      * 设为 true = 导入后立即对每条流水调 autoGenerateService.autoGenerate (旧行为, 仅供运维回退).
      */
     @Value("${huicai.bank.autoGenerateOnImport:false}")
+    /**
+     * 取当前制单人 —— 有登录态用真实用户。
+     *
+     * <p><b>SPEC-P119</b>：P117 把 created_by 修成真实落库列后，本类多条创建
+     * 路径此前无人写入该列，导致制审分离校验恒不触发（恒绿门禁形态）。
+     *
+     * <p><b>Q2 裁定：无登录态返回 null，不写兜底常量。</b>
+     * Excel 导入 / 定时任务 / 系统初始化本就没有「录入人」概念，
+     * 填 DEFAULT_USER_ID 等于凭空造一个假用户（与 P118 清理的问题同型）。
+     * 代价是这些单据永远无法做制审分离校验 —— 属已登记的已知局限，
+     * 校验对 created_by IS NULL 放行，与凭证层/业务单据层口径一致。
+     */
+    private Long currentOperatorId() {
+        try {
+            return com.huicai.base.system.util.SecurityUtils.getCurrentUserId();
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /**
+     * 制审分离：制单人不能审批自己提交的单据。
+     *
+     * <p><b>SPEC-P119</b>：本校验此前完全不存在。与 P116 已补的凭证层、
+     * 业务单据层口径逐字对齐 —— 含 {@code created_by} 为 NULL 时放行。
+     *
+     * <p>NULL 放行是刻意为之：Excel 导入 / 定时任务 / 系统初始化无登录态，
+     * 本就没有「录入人」概念（Q2 裁定），此时若反过来说「他自审」是错的。
+     * 代价是这些单据永远无法做制审分离校验，属已登记的已知局限。
+     */
+    private void assertNotSelfApprove(Long userId, Long createdBy, String docName) {
+        if (userId != null && createdBy != null && userId.equals(createdBy)) {
+            throw BusinessException.badRequest(
+                    "制单人不能审批自己提交的" + docName + "（制审分离）");
+        }
+    }
+
     private boolean autoGenerateOnImport;
 
     private final BankStatementMapper statementMapper;
@@ -226,6 +263,7 @@ public class BankStatementServiceImpl implements BankStatementService {
             try {
                 BankStatementEntity stmt = parseRow(cols, mapping, accountId);
                 if (stmt != null) {
+        stmt.setCreatedBy(currentOperatorId());
                     statementMapper.insert(stmt);
                     imported++;
 
@@ -544,6 +582,9 @@ public class BankStatementServiceImpl implements BankStatementService {
             throw BusinessException.badRequest(
                 "当前状态 " + status + " 无法审核，请先完成出纳确认");
         }
+        // SPEC-P119：制审分离（审核人不得是录入人）
+        // audit() 有显式 userId 参数，优先用它（与 P116 凭证层 audit(vid, uid) 口径一致）
+        assertNotSelfApprove(userId, stmt.getCreatedBy(), "银行流水");
         return doAutoGenerate(stmt, userId);
     }
 
@@ -647,6 +688,8 @@ public class BankStatementServiceImpl implements BankStatementService {
         if (!StatementStatus.VOUCHER_GENERATED.equals(curStatus) && !StatementStatus.PAYMENT_CREATED.equals(curStatus)) {
             throw BusinessException.badRequest("当前状态 " + curStatus + " 无法核准, 仅支持 voucher_generated/payment_created");
         }
+        // SPEC-P119：制审分离（核准人不得是录入人）
+        assertNotSelfApprove(currentOperatorId(), stmt.getCreatedBy(), "银行流水");
         stmt.setReviewStatus(StatementStatus.APPROVED);
         statementMapper.updateById(stmt);
         log.info("核准过账: statementId={}", statementId);

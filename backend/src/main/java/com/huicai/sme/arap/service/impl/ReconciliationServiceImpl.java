@@ -84,6 +84,49 @@ public class ReconciliationServiceImpl implements ReconciliationService {
         }
     }
 
+    /**
+     * 取当前制单人 —— 无登录态返回 {@code null}。
+     *
+     * <p><b>SPEC-P119 / Q2 裁定</b>：与上面的 {@code currentOperatorId()} 刻意不同。
+     *
+     * <p>本类同时承担两种职责，故必须分成两个 helper：
+     * <ul>
+     *   <li>{@code currentOperatorId()} 用于<b>审计字段</b>（{@code created_by} 等）
+     *       —— 无登录态回退常量，保证审计列不恒为 NULL（P118 判据：恒 NULL
+     *       恰是 P117 缺陷的表征）；</li>
+     *   <li>本方法用于<b>制审分离校验</b> —— 无登录态必须返回 {@code null}，
+     *       让校验放行。若此处也回退常量，则定时任务产出的单据会因
+     *       「制单人 == 兜底值 == 审批人」而被误判自审，或反过来
+     *       凭空认定一个不存在的用户是制单人。</li>
+     * </ul>
+     *
+     * <p>⚠️ <b>两者混用会互相污染</b>，这是本 SPEC 实施中实际踩到的点。
+     */
+    private Long currentMakerIdOrNull() {
+        try {
+            return com.huicai.base.system.util.SecurityUtils.getCurrentUserId();
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /**
+     * 制审分离：制单人不能审批自己提交的单据。
+     *
+     * <p><b>SPEC-P119</b>：本校验此前完全不存在。与 P116 已补的凭证层、
+     * 业务单据层口径逐字对齐 —— 含 {@code created_by} 为 NULL 时放行。
+     *
+     * <p>NULL 放行是刻意为之：Excel 导入 / 定时任务 / 系统初始化无登录态，
+     * 本就没有「录入人」概念（Q2 裁定），此时若反过来说「他自审」是错的。
+     * 代价是这些单据永远无法做制审分离校验，属已登记的已知局限。
+     */
+    private void assertNotSelfApprove(Long userId, Long createdBy, String docName) {
+        if (userId != null && createdBy != null && userId.equals(createdBy)) {
+            throw BusinessException.badRequest(
+                    "制单人不能审批自己提交的" + docName + "（制审分离）");
+        }
+    }
+
     private static final BigDecimal SCORE_THRESHOLD = new BigDecimal("0.70");
     private static final BigDecimal DEFAULT_TOLERANCE_RATE = new BigDecimal("0.10");
     private static final long DEFAULT_USER_ID = 1L;
@@ -713,6 +756,7 @@ public class ReconciliationServiceImpl implements ReconciliationService {
         if (!ArapStatus.isConfirmed(reconLog.getStatus())) {
             throw new BusinessException("仅已确认(CONFIRMED)的核销可审批执行, 当前状态: " + reconLog.getStatus());
         }
+        assertNotSelfApprove(currentMakerIdOrNull(), reconLog.getCreatedBy(), "核销单");
         reconLog.setStatus(ArapStatus.EXECUTED);
         reconLog.setOperationType("CONFIRM");
         logMapper.updateById(reconLog);

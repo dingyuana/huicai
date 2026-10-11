@@ -34,6 +34,26 @@ import com.huicai.base.business.util.ColumnMappingResolver;
 @RequiredArgsConstructor
 public class BankStatementExcelImportService {
 
+    /**
+     * 取当前制单人 —— 有登录态用真实用户。
+     *
+     * <p><b>SPEC-P119</b>：P117 把 created_by 修成真实落库列后，本类多条创建
+     * 路径此前无人写入该列，导致制审分离校验恒不触发（恒绿门禁形态）。
+     *
+     * <p><b>Q2 裁定：无登录态返回 null，不写兜底常量。</b>
+     * Excel 导入 / 定时任务 / 系统初始化本就没有「录入人」概念，
+     * 填 DEFAULT_USER_ID 等于凭空造一个假用户（与 P118 清理的问题同型）。
+     * 代价是这些单据永远无法做制审分离校验 —— 属已登记的已知局限，
+     * 校验对 created_by IS NULL 放行，与凭证层/业务单据层口径一致。
+     */
+    private Long currentOperatorId() {
+        try {
+            return com.huicai.base.system.util.SecurityUtils.getCurrentUserId();
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
     private final BankStatementMapper statementMapper;
     private final BankStatementService bankStatementService;
     private final ColumnMappingResolver columnMappingResolver;
@@ -502,6 +522,7 @@ public class BankStatementExcelImportService {
             }
             try {
                 stmt.setImportedAt(LocalDateTime.now());
+        stmt.setCreatedBy(currentOperatorId());
                 statementMapper.insert(stmt);
                 inserted++;
             } catch (Exception e) {
