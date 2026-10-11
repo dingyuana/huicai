@@ -60,6 +60,17 @@ public class LedgerChainRealDBTest extends AbstractMapperTest {
     private SubjectBalanceMapper subjectBalanceMapper;
 
     private static final Long USER_ID = 1L;
+
+    /**
+     * SPEC-P117：审核人必须与制单人不同。
+     *
+     * <p>此前本夹具用同一个 {@code USER_ID} 建单并审核，能通过**只因为**
+     * {@code created_by} 是幽灵字段、制审分离校验从未真正触发。
+     * 该字段修复后（V178 + 去掉 {@code exist=false}），此处如实反映
+     * 铁律「人是唯一审核主体」下的合规操作序列。
+     */
+    private static final Long AUDITOR_ID = 2L;
+
     private static final Long VOUCHER_TYPE_ID = 1L;
     private static final String TEST_PERIOD = "202608";
     private Long debitSubjectId;
@@ -136,7 +147,7 @@ public class LedgerChainRealDBTest extends AbstractMapperTest {
         VoucherVO created = voucherService.create(dto, USER_ID);
         Long id = created.getId();
         voucherService.submit(id, USER_ID);
-        voucherService.audit(id, USER_ID);
+        voucherService.audit(id, AUDITOR_ID);
         voucherService.post(id, USER_ID);
         return voucherService.getDetail(id);
     }
