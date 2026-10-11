@@ -69,6 +69,21 @@ import java.util.stream.Collectors;
 @Transactional
 public class ReconciliationServiceImpl implements ReconciliationService {
 
+    /**
+     * 取当前操作人 —— 有登录态用真实用户，无登录态（定时任务/初始化）回退兜底值。
+     *
+     * <p><b>SPEC-P118</b>：created_by 在 P117 修复后已是真实落库列，
+     * 写死常量会使审计字段丢失真实操作人。
+     */
+    private Long currentOperatorId() {
+        try {
+            Long uid = com.huicai.base.system.util.SecurityUtils.getCurrentUserId();
+            return uid != null ? uid : DEFAULT_USER_ID;
+        } catch (Exception e) {
+            return DEFAULT_USER_ID;
+        }
+    }
+
     private static final BigDecimal SCORE_THRESHOLD = new BigDecimal("0.70");
     private static final BigDecimal DEFAULT_TOLERANCE_RATE = new BigDecimal("0.10");
     private static final long DEFAULT_USER_ID = 1L;
@@ -451,7 +466,7 @@ public class ReconciliationServiceImpl implements ReconciliationService {
         voucher.setSource("GENERATED");
         voucher.setSummary(request.remark() != null ? request.remark() : "核销自动生成");
         voucher.setTemplateId(template.getId());
-        voucher.setCreatedBy(DEFAULT_USER_ID);
+        voucher.setCreatedBy(currentOperatorId());
         // P38-F7: 来源追溯字段（凭证→核销来源）
         voucher.setSourceDocType("RECONCILIATION");
         voucher.setSourceDocId(request.sourceDocId());
@@ -788,7 +803,7 @@ public class ReconciliationServiceImpl implements ReconciliationService {
         adjustLog.setMatchMethod("ADJUSTMENT");
         adjustLog.setStatus(ArapStatus.EXECUTED); // 差额调整自动执行
         adjustLog.setRemark("差额调整(" + adjustType + "), 科目=" + adjustSubjectId + ", 金额=" + adjustAmount);
-        adjustLog.setCreatedBy(DEFAULT_USER_ID);
+        adjustLog.setCreatedBy(currentOperatorId());
         logMapper.insert(adjustLog);
 
         log.info("带差额核销完成: sourceId={}, targetId={}, mainAmount={}, adjustAmount={}, adjustType={}",
@@ -929,7 +944,7 @@ public class ReconciliationServiceImpl implements ReconciliationService {
         ex.setMatchSuggestion(matchSuggestion);
         ex.setStatus("OPEN");
         ex.setRetryCount(0);
-        ex.setCreatedBy(DEFAULT_USER_ID);
+        ex.setCreatedBy(currentOperatorId());
         // enterprise_id 交给 MyMetaObjectHandler.insertFill 按上下文覆盖（AGENTS §4.5 第 34 条）：
         // 本 Entity 继承 BaseEntity，其 enterpriseId 是 @TableField(fill = INSERT) ⇒ insertFill 会触发。
         exceptionMapper.insert(ex);

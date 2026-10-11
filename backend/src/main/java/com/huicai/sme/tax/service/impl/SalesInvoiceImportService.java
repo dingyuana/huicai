@@ -1,4 +1,5 @@
 package com.huicai.sme.tax.service.impl;
+import com.huicai.base.system.util.SecurityUtils;
 import com.huicai.base.business.util.ColumnMappingResolver;
 
 import cn.hutool.core.util.StrUtil;
@@ -46,6 +47,21 @@ import java.util.concurrent.ConcurrentHashMap;
 @Service
 @RequiredArgsConstructor
 public class SalesInvoiceImportService {
+
+    /**
+     * 取当前操作人 —— 有登录态用真实用户，无登录态（定时任务/初始化）回退兜底值。
+     *
+     * <p><b>SPEC-P118</b>：created_by 在 P117 修复后已是真实落库列，
+     * 写死常量会使审计字段丢失真实操作人。
+     */
+    private Long currentOperatorId() {
+        try {
+            Long uid = com.huicai.base.system.util.SecurityUtils.getCurrentUserId();
+            return uid != null ? uid : DEFAULT_USER_ID;
+        } catch (Exception e) {
+            return DEFAULT_USER_ID;
+        }
+    }
 
     private static final long DEFAULT_USER_ID = 1L;
     private static final long DEFAULT_VOUCHER_TYPE_ID = VoucherType.SK;
@@ -473,7 +489,7 @@ public class SalesInvoiceImportService {
         doc.setStatus("DRAFT");
         doc.setSource("INVOICE_IMPORT");
         doc.setInvoiceNo(row.invoiceNo);
-        doc.setCreatedBy(DEFAULT_USER_ID);
+        doc.setCreatedBy(currentOperatorId());
         // 新导入应收单未核销金额 = 总金额（P34 核销工作台筛选条件）
         doc.setSettledAmount(BigDecimal.ZERO);
         doc.setUnsettledAmount(row.totalAmount);
@@ -515,7 +531,7 @@ public class SalesInvoiceImportService {
         voucher.setSummary("发票导入: " + row.invoiceNo + " " + row.goodsName);
         voucher.setTotalDebit(totalAmount.abs());
         voucher.setTotalCredit(totalAmount.abs());
-        voucher.setCreatedBy(DEFAULT_USER_ID);
+        voucher.setCreatedBy(currentOperatorId());
         // 新增：溯源字段（销售发票 → 凭证）
         voucher.setSourceDocType("OUTPUT_INVOICE");
         voucher.setSourceDocNo(row.invoiceNo);
@@ -654,7 +670,7 @@ public class SalesInvoiceImportService {
         inv.setDocId(null);
         inv.setVoucherId(null);
         inv.setRemark(row.remark);
-        inv.setCreatedBy(DEFAULT_USER_ID);
+        inv.setCreatedBy(currentOperatorId());
         inv.setUpdatedAt(LocalDateTime.now());
         if (StrUtil.isNotBlank(row.originalInvoiceNo)) {
             inv.setOriginalInvoiceNo(row.originalInvoiceNo);

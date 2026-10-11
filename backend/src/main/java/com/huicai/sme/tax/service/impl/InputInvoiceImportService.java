@@ -53,6 +53,21 @@ import java.util.concurrent.ConcurrentHashMap;
 @RequiredArgsConstructor
 public class InputInvoiceImportService {
 
+    /**
+     * 取当前操作人 —— 有登录态用真实用户，无登录态（定时任务/初始化）回退兜底值。
+     *
+     * <p><b>SPEC-P118</b>：created_by 在 P117 修复后已是真实落库列，
+     * 写死常量会使审计字段丢失真实操作人。
+     */
+    private Long currentOperatorId() {
+        try {
+            Long uid = com.huicai.base.system.util.SecurityUtils.getCurrentUserId();
+            return uid != null ? uid : DEFAULT_USER_ID;
+        } catch (Exception e) {
+            return DEFAULT_USER_ID;
+        }
+    }
+
     private static final long DEFAULT_USER_ID = 1L;
     private static final long DEFAULT_VOUCHER_TYPE_ID = VoucherType.FK;
 
@@ -378,7 +393,7 @@ public class InputInvoiceImportService {
         doc.setStatus("DRAFT");
         doc.setSource("INVOICE_IMPORT");
         doc.setInvoiceNo(row.invoiceNo);
-        doc.setCreatedBy(DEFAULT_USER_ID);
+        doc.setCreatedBy(currentOperatorId());
         docMapper.insert(doc);
 
         // 创建业务单分录（供 generateVoucher 使用），带入发票号
@@ -410,7 +425,7 @@ public class InputInvoiceImportService {
         voucher.setTotalCredit(row.totalAmount);
         voucher.setSummary(row.goodsName);
         voucher.setSource("INVOICE_IMPORT");
-        voucher.setCreatedBy(DEFAULT_USER_ID);
+        voucher.setCreatedBy(currentOperatorId());
         // 新增：溯源字段（采购发票 → 凭证）
         voucher.setSourceDocType("INPUT_INVOICE");
         voucher.setSourceDocNo(row.invoiceNo);
@@ -456,7 +471,7 @@ public class InputInvoiceImportService {
         inv.setInvoiceType("SPECIAL");
         // P21-b 重构 2026-06-22 修 P0 bug: 原 PENDING 违反 V8 CHECK 约束
         inv.setCertificationStatus("UNCERTIFIED");
-        inv.setCreatedBy(DEFAULT_USER_ID);
+        inv.setCreatedBy(currentOperatorId());
         inputInvoiceMapper.insert(inv);
     }
 

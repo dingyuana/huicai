@@ -1,5 +1,6 @@
 package com.huicai.sme.arap.service.impl;
 
+import com.huicai.base.system.util.SecurityUtils;
 import cn.hutool.core.util.IdUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.huicai.common.exception.BusinessException;
@@ -41,6 +42,21 @@ import java.util.List;
  */
 @Transactional
 public class PurchaseReturnServiceImpl implements PurchaseReturnService {
+
+    /**
+     * 取当前操作人 —— 有登录态用真实用户，无登录态（定时任务/初始化）回退兜底值。
+     *
+     * <p><b>SPEC-P118</b>：created_by 在 P117 修复后已是真实落库列，
+     * 写死常量会使审计字段丢失真实操作人。
+     */
+    private Long currentOperatorId() {
+        try {
+            Long uid = com.huicai.base.system.util.SecurityUtils.getCurrentUserId();
+            return uid != null ? uid : DEFAULT_USER_ID;
+        } catch (Exception e) {
+            return DEFAULT_USER_ID;
+        }
+    }
 
     private static final long DEFAULT_USER_ID = 1L;
 
@@ -88,7 +104,7 @@ public class PurchaseReturnServiceImpl implements PurchaseReturnService {
         entity.setTaxAmount(request.taxAmount() != null ? request.taxAmount() : BigDecimal.ZERO);
         entity.setReason(request.reason());
         entity.setStatus("DRAFT");
-        entity.setCreatedBy(DEFAULT_USER_ID);
+        entity.setCreatedBy(currentOperatorId());
         returnMapper.insert(entity);
 
         // 4. 更新原始应付单未清金额
@@ -114,7 +130,7 @@ public class PurchaseReturnServiceImpl implements PurchaseReturnService {
         entity.setTaxAmount(request.taxAmount() != null ? request.taxAmount() : BigDecimal.ZERO);
         entity.setReason(request.reason());
         entity.setStatus("DRAFT");
-        entity.setCreatedBy(DEFAULT_USER_ID);
+        entity.setCreatedBy(currentOperatorId());
         returnMapper.insert(entity);
 
         confirmAndGenerateVoucher(entity);
@@ -140,7 +156,7 @@ public class PurchaseReturnServiceImpl implements PurchaseReturnService {
         voucher.setSummary("采购退货: " + (entity.getReason() != null ? entity.getReason() : "退货"));
         voucher.setTotalDebit(entity.getReturnAmount());
         voucher.setTotalCredit(entity.getReturnAmount());
-        voucher.setCreatedBy(DEFAULT_USER_ID);
+        voucher.setCreatedBy(currentOperatorId());
         voucherMapper.insert(voucher);
 
         BigDecimal netAmount = entity.getReturnAmount().subtract(entity.getTaxAmount());
