@@ -290,6 +290,7 @@ public class VoucherServiceImpl extends ServiceImpl<VoucherMapper, VoucherEntity
         VoucherEntity entity = getValidVoucher(id);
         voucherStateMachineService.assertAuditable(entity);
         assertPeriodOpen(entity.getPeriod());
+        assertNotSelfReview(entity, userId, "审核");
         voucherMapper.batchUpdateStatus(Collections.singletonList(id), "AUDITED", userId, entity.getVersion());
         log.info("审核凭证: id={}, userId={}, version={}", id, userId, entity.getVersion());
     }
@@ -301,9 +302,38 @@ public class VoucherServiceImpl extends ServiceImpl<VoucherMapper, VoucherEntity
             VoucherEntity entity = getValidVoucher(id);
             assertStatus(entity, "SUBMITTED");
             assertPeriodOpen(entity.getPeriod());
+            assertNotSelfReview(entity, userId, "批量审核");
         }
         voucherMapper.batchUpdateStatus(ids, "AUDITED", userId, null);
         log.info("批量审核凭证: ids={}, userId={}", ids, userId);
+    }
+
+    /**
+     * 制审分离：制单人不能审核自己提交的凭证。
+     *
+     * <p><b>SPEC-P116 / 缺陷 4</b>：本校验此前只存在于业务单据层
+     * （{@code BusinessDocServiceImpl#approve}），凭证层没有 ——
+     * 同为审核动作却一个拦一个不拦，属一致性缺口而非新功能。
+     *
+     * <p>⚠️ <b>与业务单据层逐字对齐</b>（含 null 判断），不另造口径：
+     * <ul>
+     *   <li>{@code created_by} 由 {@code BaseEntity} 提供，<b>不加 fill 注解</b>
+     *       （见 {@code BaseEntity} 类注释），由 {@link #create} 手动 set
+     *       ⇒ 经 API 新建的凭证有值。</li>
+     *   <li>⚠️ <b>存量 Flyway 种子行 created_by 为 NULL</b>（实测 37/37 全空），
+     *       此时本校验<b>不触发</b>。这是已知局限，与业务单据层行为一致 ——
+     *       「不知道谁制的」不能反过来说「他自审」。已知局限已登记 SPEC-P116 §7。</li>
+     * </ul>
+     *
+     * @param entity 凭证
+     * @param userId 当前审核人
+     * @param action 动作名，用于报错文案
+     */
+    private void assertNotSelfReview(VoucherEntity entity, Long userId, String action) {
+        if (userId != null && entity.getCreatedBy() != null && userId.equals(entity.getCreatedBy())) {
+            throw BusinessException.badRequest(
+                    "制单人不能审核自己提交的凭证（" + action + "）：voucherId=" + entity.getId());
+        }
     }
 
     @Override

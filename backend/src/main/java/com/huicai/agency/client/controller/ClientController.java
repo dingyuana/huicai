@@ -51,7 +51,6 @@ public class ClientController {
         requireContractAccess();
         return R.ok(contractService.page(page, size));
     }
-
     @GetMapping("/renewal-reminders")
     public R<List<RenewalReminderVO>> getRenewalReminders() {
         requireContractAccess();
