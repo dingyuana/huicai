@@ -90,9 +90,27 @@ describe('SPEC-P120：代理端入口角色标注一致性', () => {
   }
 
   for (const item of OPEN_TO_ACCOUNTANT) {
-    it(`侧边栏「${item.label}」必须对所有代理角色可见（后端按角色收敛）`, () => {
-      const re = new RegExp(`el-menu-item\\s+index="${item.path}"[^>]*>`)
-      expect(re.test(sidebar), `侧边栏应包含无条件的 ${item.path}`).toBe(true)
+    it(`侧边栏「${item.label}」必须存在且不限于经理角色（后端按角色收敛可见集）`, () => {
+      // SPEC-P121 更新：本项此前断言「无条件显示」，但侧边栏已改为按
+      // `canAccess` 过滤（P121 消除「看得见却点不开」）。
+      // ⇒ 断言改为：菜单项存在，且**没有** isAgencyAdmin 限制。
+      const exists = sidebar.includes(`index="${item.path}"`)
+      expect(exists, `侧边栏应包含 ${item.path}`).toBe(true)
+
+      const guardedByAdmin = new RegExp(
+        `el-menu-item[^>]*v-if="authStore\\.isAgencyAdmin"[^>]*index="${item.path}"` +
+          `|el-menu-item[^>]*index="${item.path}"[^>]*v-if="authStore\\.isAgencyAdmin"`
+      )
+      expect(
+        guardedByAdmin.test(sidebar),
+        `「${item.label}」被限定为 isAgencyAdmin —— 该页对所有代理角色可见（后端收敛可见集）`
+      ).toBe(false)
+
+      // 且必须有权限过滤（与路由守卫同口径），否则回归成「看得见点不开」
+      expect(
+        sidebar.includes(`canAccess('${item.path}')`),
+        `「${item.label}」缺少 canAccess 过滤 ⇒ 会计会看到却点不开（SPEC-P121）`
+      ).toBe(true)
     })
 
     it(`路由「${item.label}」不得带 agencyRole 限制`, () => {
@@ -113,5 +131,46 @@ describe('SPEC-P120：代理端入口角色标注一致性', () => {
       roleGuard,
       '角色守卫晚于企业门槛 ⇒ 会计是否被正确拒绝会取决于「是否选了企业」'
     ).toBeLessThan(enterpriseGate)
+  })
+
+  // ── SPEC-P121：菜单可见性必须与路由守卫同口径 ──
+
+  it('侧边栏菜单项必须按 canAccess 过滤（消除「看得见却点不开」）', () => {
+    // 取所有 el-menu-item，断言每一个都带 canAccess
+    const items = sidebar.match(/<el-menu-item[^>]*index="[^"]+"[^>]*>/g) || []
+    expect(items.length, '未解析到任何菜单项').toBeGreaterThan(0)
+
+    const unguarded = items.filter((t) => !t.includes('canAccess('))
+    expect(
+      unguarded.length === 0,
+      `以下菜单项没有权限过滤，代理端会计会看到却点不开（SPEC-P121）：\n  ` +
+        unguarded.map((t) => t.replace(/\s+/g, ' ')).join('\n  ')
+    )
+  })
+
+  it('canAccess 必须从路由表反查权限码，不得在菜单里手写字符串', () => {
+    const store = readFileSync(resolve(ROOT, 'src/stores/auth.store.ts'), 'utf-8')
+    expect(store).toContain('canAccess')
+    // 手写权限码会与路由脱节（改路由忘改菜单 = 又一个恒绿缺陷）
+    expect(
+      /getRoutes\(\)\s*\.find/.test(store),
+      'canAccess 未从路由表反查 meta.permission —— 菜单里手写权限码必然与路由脱节'
+    )
+  })
+
+  it('分组菜单必须在无可见子项时整体隐藏（不留空壳）', () => {
+    expect(sidebar, '缺少 hasVisible 辅助函数').toContain('hasVisible')
+    const groups = sidebar.match(/<el-sub-menu[^>]*>/g) || []
+    const noGuard = groups.filter(
+      (g) =>
+        !g.includes('v-if') &&
+        !g.includes('isSuperAdmin') &&
+        !g.includes('isAgency') &&
+        !g.includes('hasVisible')
+    )
+    expect(
+      noGuard.length === 0,
+      '以下分组无任何显示条件，且未做空壳过滤：\n  ' + noGuard.join('\n  ')
+    )
   })
 })

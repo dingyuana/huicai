@@ -13,136 +13,136 @@
       class="sidebar-menu"
     >
       <!-- 首页 -->
-      <el-menu-item index="/dashboard">
+      <el-menu-item v-if="authStore.canAccess('/dashboard')" index="/dashboard">
         <el-icon><HomeFilled /></el-icon>
         <template #title>首页</template>
       </el-menu-item>
 
       <!-- 总账 -->
-      <el-sub-menu index="finance">
+      <el-sub-menu v-if="hasVisible(['/finance/voucher', '/finance/ledger', '/finance/beginning-balance', '/finance/period-close', '/finance/carryover-guide'])"  index="finance">
         <template #title>
           <el-icon><Coin /></el-icon>
           <span>总账</span>
         </template>
-        <el-menu-item index="/finance/voucher">凭证管理</el-menu-item>
-        <el-menu-item index="/finance/ledger">账簿查询</el-menu-item>
-        <el-menu-item index="/finance/beginning-balance">期初建账</el-menu-item>
-        <el-menu-item index="/finance/period-close">期末结账</el-menu-item>
-        <el-menu-item index="/finance/carryover-guide">结转向导</el-menu-item>
+        <el-menu-item v-if="authStore.canAccess('/finance/voucher')" index="/finance/voucher">凭证管理</el-menu-item>
+        <el-menu-item v-if="authStore.canAccess('/finance/ledger')" index="/finance/ledger">账簿查询</el-menu-item>
+        <el-menu-item v-if="authStore.canAccess('/finance/beginning-balance')" index="/finance/beginning-balance">期初建账</el-menu-item>
+        <el-menu-item v-if="authStore.canAccess('/finance/period-close')" index="/finance/period-close">期末结账</el-menu-item>
+        <el-menu-item v-if="authStore.canAccess('/finance/carryover-guide')" index="/finance/carryover-guide">结转向导</el-menu-item>
       </el-sub-menu>
 
       <!-- 资金管理 -->
-      <el-sub-menu index="cash">
+      <el-sub-menu v-if="hasVisible(['/finance/bank-account', '/finance/bank-journal', '/finance/bank-statement', '/finance/pending-pool', '/finance/bank-reconciliation', '/finance/cash-journal', '/finance/ticket'])"  index="cash">
         <template #title>
           <el-icon><Wallet /></el-icon>
           <span>资金管理</span>
         </template>
-        <el-menu-item index="/finance/bank-account">银行账户</el-menu-item>
-        <el-menu-item index="/finance/bank-journal">银行日记账</el-menu-item>
-        <el-menu-item index="/finance/bank-statement">银行对账单</el-menu-item>
-        <el-menu-item index="/finance/pending-pool">待处理流水</el-menu-item>
-        <el-menu-item index="/finance/bank-reconciliation">银行对账</el-menu-item>
-        <el-menu-item index="/finance/cash-journal">现金日记账</el-menu-item>
+        <el-menu-item v-if="authStore.canAccess('/finance/bank-account')" index="/finance/bank-account">银行账户</el-menu-item>
+        <el-menu-item v-if="authStore.canAccess('/finance/bank-journal')" index="/finance/bank-journal">银行日记账</el-menu-item>
+        <el-menu-item v-if="authStore.canAccess('/finance/bank-statement')" index="/finance/bank-statement">银行对账单</el-menu-item>
+        <el-menu-item v-if="authStore.canAccess('/finance/pending-pool')" index="/finance/pending-pool">待处理流水</el-menu-item>
+        <el-menu-item v-if="authStore.canAccess('/finance/bank-reconciliation')" index="/finance/bank-reconciliation">银行对账</el-menu-item>
+        <el-menu-item v-if="authStore.canAccess('/finance/cash-journal')" index="/finance/cash-journal">现金日记账</el-menu-item>
         <!-- 票据管理暂时隐藏（路由仍保留，恢复时取消注释） -->
-        <!-- <el-menu-item index="/finance/ticket">票据管理</el-menu-item> -->
+        <!-- <el-menu-item v-if="authStore.canAccess('/finance/ticket')" index="/finance/ticket">票据管理</el-menu-item> -->
       </el-sub-menu>
 
       <!-- 往来管理 -->
-      <el-sub-menu index="arap">
+      <el-sub-menu v-if="hasVisible(['/arap/reconciliation', '/arap/balance-summary', '/finance/prepayment', '/arap/prepayment-balance-summary'])"  index="arap">
         <template #title>
           <el-icon><Connection /></el-icon>
           <span>往来管理</span>
         </template>
-        <el-menu-item index="/arap/reconciliation">核销管理</el-menu-item>
-        <el-menu-item index="/arap/balance-summary">应收应付余额汇总</el-menu-item>
-        <el-menu-item index="/finance/prepayment">预收预付</el-menu-item>
-        <el-menu-item index="/arap/prepayment-balance-summary">预收预付余额</el-menu-item>
+        <el-menu-item v-if="authStore.canAccess('/arap/reconciliation')" index="/arap/reconciliation">核销管理</el-menu-item>
+        <el-menu-item v-if="authStore.canAccess('/arap/balance-summary')" index="/arap/balance-summary">应收应付余额汇总</el-menu-item>
+        <el-menu-item v-if="authStore.canAccess('/finance/prepayment')" index="/finance/prepayment">预收预付</el-menu-item>
+        <el-menu-item v-if="authStore.canAccess('/arap/prepayment-balance-summary')" index="/arap/prepayment-balance-summary">预收预付余额</el-menu-item>
       </el-sub-menu>
 
       <!-- 费用管理 -->
-      <el-sub-menu index="expense">
+      <el-sub-menu v-if="hasVisible(['/arap/expense', '/arap/expense-summary'])"  index="expense">
         <template #title>
           <el-icon><Files /></el-icon>
           <span>费用管理</span>
         </template>
-        <el-menu-item index="/arap/expense">费用报销</el-menu-item>
-        <el-menu-item index="/arap/expense-summary">费用汇总</el-menu-item>
+        <el-menu-item v-if="authStore.canAccess('/arap/expense')" index="/arap/expense">费用报销</el-menu-item>
+        <el-menu-item v-if="authStore.canAccess('/arap/expense-summary')" index="/arap/expense-summary">费用汇总</el-menu-item>
       </el-sub-menu>
 
       <!-- 业务单据 -->
-      <el-sub-menu index="business">
+      <el-sub-menu v-if="hasVisible(['/finance/business-doc'])"  index="business">
         <template #title>
           <el-icon><Document /></el-icon>
           <span>业务单据</span>
         </template>
-        <el-menu-item index="/finance/business-doc">业务单据</el-menu-item>
+        <el-menu-item v-if="authStore.canAccess('/finance/business-doc')" index="/finance/business-doc">业务单据</el-menu-item>
       </el-sub-menu>
 
       <!-- 发票税务 -->
-      <el-sub-menu index="tax">
+      <el-sub-menu v-if="hasVisible(['/tax/input-invoice', '/tax/output-invoice', '/tax/vat', '/tax/invoice-reconcile'])"  index="tax">
         <template #title>
           <el-icon><Ticket /></el-icon>
           <span>发票税务</span>
         </template>
-        <el-menu-item index="/tax/input-invoice">进项发票</el-menu-item>
-        <el-menu-item index="/tax/output-invoice">销项发票</el-menu-item>
-        <el-menu-item index="/tax/vat">增值税计算</el-menu-item>
-        <el-menu-item index="/tax/invoice-reconcile">发票勾稽</el-menu-item>
+        <el-menu-item v-if="authStore.canAccess('/tax/input-invoice')" index="/tax/input-invoice">进项发票</el-menu-item>
+        <el-menu-item v-if="authStore.canAccess('/tax/output-invoice')" index="/tax/output-invoice">销项发票</el-menu-item>
+        <el-menu-item v-if="authStore.canAccess('/tax/vat')" index="/tax/vat">增值税计算</el-menu-item>
+        <el-menu-item v-if="authStore.canAccess('/tax/invoice-reconcile')" index="/tax/invoice-reconcile">发票勾稽</el-menu-item>
       </el-sub-menu>
 
       <!-- 固定资产 -->
-      <el-sub-menu index="asset">
+      <el-sub-menu v-if="hasVisible(['/asset/category', '/asset/card', '/asset/depreciation', '/asset/disposal', '/asset/inventory', '/asset/report'])"  index="asset">
         <template #title>
           <el-icon><Box /></el-icon>
           <span>固定资产</span>
         </template>
-        <el-menu-item index="/asset/category">资产类别</el-menu-item>
-        <el-menu-item index="/asset/card">资产卡片</el-menu-item>
-        <el-menu-item index="/asset/depreciation">折旧计提</el-menu-item>
-        <el-menu-item index="/asset/disposal">资产处置</el-menu-item>
-        <el-menu-item index="/asset/inventory">资产盘点</el-menu-item>
-        <el-menu-item index="/asset/report">折旧与资产统计</el-menu-item>
+        <el-menu-item v-if="authStore.canAccess('/asset/category')" index="/asset/category">资产类别</el-menu-item>
+        <el-menu-item v-if="authStore.canAccess('/asset/card')" index="/asset/card">资产卡片</el-menu-item>
+        <el-menu-item v-if="authStore.canAccess('/asset/depreciation')" index="/asset/depreciation">折旧计提</el-menu-item>
+        <el-menu-item v-if="authStore.canAccess('/asset/disposal')" index="/asset/disposal">资产处置</el-menu-item>
+        <el-menu-item v-if="authStore.canAccess('/asset/inventory')" index="/asset/inventory">资产盘点</el-menu-item>
+        <el-menu-item v-if="authStore.canAccess('/asset/report')" index="/asset/report">折旧与资产统计</el-menu-item>
       </el-sub-menu>
 
       <!-- 报表中心 -->
-      <el-sub-menu index="report">
+      <el-sub-menu v-if="hasVisible(['/report/subject-balance', '/report/balance-sheet', '/report/income-statement', '/report/cash-flow'])"  index="report">
         <template #title>
           <el-icon><DataAnalysis /></el-icon>
           <span>报表中心</span>
         </template>
-        <el-menu-item index="/report/subject-balance">科目余额表</el-menu-item>
-        <el-menu-item index="/report/balance-sheet">资产负债表</el-menu-item>
-        <el-menu-item index="/report/income-statement">利润表</el-menu-item>
-        <el-menu-item index="/report/cash-flow">现金流量表</el-menu-item>
+        <el-menu-item v-if="authStore.canAccess('/report/subject-balance')" index="/report/subject-balance">科目余额表</el-menu-item>
+        <el-menu-item v-if="authStore.canAccess('/report/balance-sheet')" index="/report/balance-sheet">资产负债表</el-menu-item>
+        <el-menu-item v-if="authStore.canAccess('/report/income-statement')" index="/report/income-statement">利润表</el-menu-item>
+        <el-menu-item v-if="authStore.canAccess('/report/cash-flow')" index="/report/cash-flow">现金流量表</el-menu-item>
       </el-sub-menu>
 
       <!-- 基础资料 -->
-      <el-sub-menu index="basis">
+      <el-sub-menu v-if="hasVisible(['/basis/account-and-summary', '/basis/period', '/basis/party', '/finance/voucher-setup?tab=type', '/finance/voucher-template-ref', '/system/classification-rule'])"  index="basis">
         <template #title>
           <el-icon><Notebook /></el-icon>
           <span>基础资料</span>
         </template>
-        <el-menu-item index="/basis/account-and-summary">科目摘要</el-menu-item>
-        <el-menu-item index="/basis/period">会计期间</el-menu-item>
-        <el-menu-item index="/basis/party">客商档案</el-menu-item>
-        <el-menu-item index="/finance/voucher-setup?tab=type">凭证类型</el-menu-item>
-        <el-menu-item index="/finance/voucher-template-ref">模板参考库</el-menu-item>
-        <el-menu-item index="/system/classification-rule">分类规则</el-menu-item>
+        <el-menu-item v-if="authStore.canAccess('/basis/account-and-summary')" index="/basis/account-and-summary">科目摘要</el-menu-item>
+        <el-menu-item v-if="authStore.canAccess('/basis/period')" index="/basis/period">会计期间</el-menu-item>
+        <el-menu-item v-if="authStore.canAccess('/basis/party')" index="/basis/party">客商档案</el-menu-item>
+        <el-menu-item v-if="authStore.canAccess('/finance/voucher-setup?tab=type')" index="/finance/voucher-setup?tab=type">凭证类型</el-menu-item>
+        <el-menu-item v-if="authStore.canAccess('/finance/voucher-template-ref')" index="/finance/voucher-template-ref">模板参考库</el-menu-item>
+        <el-menu-item v-if="authStore.canAccess('/system/classification-rule')" index="/system/classification-rule">分类规则</el-menu-item>
       </el-sub-menu>
 
       <!-- 系统管理（所有用户可见） -->
-      <el-sub-menu index="system-mgmt">
+      <el-sub-menu v-if="hasVisible(['/system/user', '/system/role', '/system/menu', '/system/dept', '/system/audit-log', '/basis/config', '/system/clear-data'])"  index="system-mgmt">
         <template #title>
           <el-icon><Setting /></el-icon>
           <span>系统管理</span>
         </template>
-        <el-menu-item index="/system/user">用户管理</el-menu-item>
-        <el-menu-item index="/system/role">角色管理</el-menu-item>
-        <el-menu-item index="/system/menu">菜单管理</el-menu-item>
-        <el-menu-item index="/system/dept">部门管理</el-menu-item>
-        <el-menu-item index="/system/audit-log">操作日志</el-menu-item>
-        <el-menu-item index="/basis/config">系统参数</el-menu-item>
-        <el-menu-item index="/system/clear-data">数据维护</el-menu-item>
+        <el-menu-item v-if="authStore.canAccess('/system/user')" index="/system/user">用户管理</el-menu-item>
+        <el-menu-item v-if="authStore.canAccess('/system/role')" index="/system/role">角色管理</el-menu-item>
+        <el-menu-item v-if="authStore.canAccess('/system/menu')" index="/system/menu">菜单管理</el-menu-item>
+        <el-menu-item v-if="authStore.canAccess('/system/dept')" index="/system/dept">部门管理</el-menu-item>
+        <el-menu-item v-if="authStore.canAccess('/system/audit-log')" index="/system/audit-log">操作日志</el-menu-item>
+        <el-menu-item v-if="authStore.canAccess('/basis/config')" index="/basis/config">系统参数</el-menu-item>
+        <el-menu-item v-if="authStore.canAccess('/system/clear-data')" index="/system/clear-data">数据维护</el-menu-item>
       </el-sub-menu>
 
       <!-- 代理公司（SUPER_ADMIN / AGENCY 可见） -->
@@ -151,7 +151,7 @@
           <el-icon><OfficeBuilding /></el-icon>
           <span>代理公司</span>
         </template>
-        <el-menu-item index="/agency/enterprise-list">客户列表</el-menu-item>
+        <el-menu-item v-if="authStore.canAccess('/agency/enterprise-list')" index="/agency/enterprise-list">客户列表</el-menu-item>
         <!-- 代理经理专属：会计/助理无跨客户管理操作权（SPEC-P120）。
              后端 /batch/close 的入参是调用方自填的企业 id 列表且无角色守卫，
              故本入口仅对经理开放，与 accountant-list / assignment-manage 等
@@ -171,12 +171,12 @@
           <el-icon><MagicStick /></el-icon>
           <span>实验室</span>
         </template>
-        <el-menu-item index="/budget">预算管理</el-menu-item>
-        <el-menu-item index="/analysis/key-metrics">关键指标</el-menu-item>
-        <el-menu-item index="/analysis/dupont">杜邦分析</el-menu-item>
-        <el-menu-item index="/salary">工资薪酬</el-menu-item>
-        <el-menu-item index="/ai/task">AI 任务</el-menu-item>
-        <el-menu-item index="/ai/anomaly">AI 异常</el-menu-item>
+        <el-menu-item v-if="authStore.canAccess('/budget')" index="/budget">预算管理</el-menu-item>
+        <el-menu-item v-if="authStore.canAccess('/analysis/key-metrics')" index="/analysis/key-metrics">关键指标</el-menu-item>
+        <el-menu-item v-if="authStore.canAccess('/analysis/dupont')" index="/analysis/dupont">杜邦分析</el-menu-item>
+        <el-menu-item v-if="authStore.canAccess('/salary')" index="/salary">工资薪酬</el-menu-item>
+        <el-menu-item v-if="authStore.canAccess('/ai/task')" index="/ai/task">AI 任务</el-menu-item>
+        <el-menu-item v-if="authStore.canAccess('/ai/anomaly')" index="/ai/anomaly">AI 异常</el-menu-item>
       </el-sub-menu>
     </el-menu>
   </div>
@@ -193,6 +193,16 @@ import {
 } from '@element-plus/icons-vue'
 
 const route = useRoute()
+
+/**
+ * 分组内是否还有可见子项 —— 避免留下空壳分组。
+ *
+ * <p>SPEC-P121：会计（ACCOUNTANT，24 菜单）看不到银行/税务/系统管理等分组，
+ * 若不做空壳过滤，侧边栏会出现「点开是空的」分组。
+ */
+function hasVisible(paths: string[]): boolean {
+  return paths.some((p) => authStore.canAccess(p))
+}
 const appStore = useAppStore()
 const authStore = useAuthStore()
 const labStore = useLabStore()

@@ -49,6 +49,32 @@ export const useAuthStore = defineStore('auth', () => {
     return permissions.value.includes(perm)
   }
 
+  /**
+   * 菜单/路由是否应展示 —— 与路由守卫**同一套口径**。
+   *
+   * <p>SPEC-P121：此前侧边栏 58 个菜单项**全部无条件渲染**，只按 userType 分组；
+   * 而路由守卫按 `meta.permission` 拦截 ⇒ 用户「看得见却点不开」，
+   * 点了只会被送进 /403，感知为「点了没反应」。
+   *
+   * <p>⚠️ 关键设计：**从路由表反查 `meta.permission`**，而不是在菜单里
+   *   手写权限码字符串。后者必然与路由脱节（改路由忘改菜单 = 又一个恒绿缺陷）。
+   *
+   * @param path 路由 path，如 '/finance/voucher'
+   * @param requiredPerm 路由声明的权限码；无权限码的路由一律放行
+   */
+  function canAccess(path: string, requiredPerm?: string): boolean {
+    // 优先用调用方传入的权限码（与路由 meta 一致）
+    let perm = requiredPerm
+    if (!perm) {
+      // 从路由表反查，避免在菜单里手写权限码字符串而与路由脱节
+      const resolved = router.getRoutes().find((r) => r.path === path)
+      perm = resolved?.meta?.permission as string | undefined
+    }
+    // 未声明 permission 的路由不拦（与 router/index.ts 的守卫一致）
+    if (!perm) return true
+    return permissions.value.includes(perm)
+  }
+
   async function login(credentials: LoginParams) {
     const result = await loginApi(credentials)
     token.value = result.token
@@ -115,6 +141,6 @@ export const useAuthStore = defineStore('auth', () => {
     currentEnterpriseId, userType, agencyId, agencyRole, enterpriseList,
     isLoggedIn, isSuperAdmin, isAgency,
     isAgencyAdmin, isAccountant, isReviewer, isAssistant,
-    hasPermission, login, switchEnterprise, fetchUserInfo, logout,
+    hasPermission, canAccess, login, switchEnterprise, fetchUserInfo, logout,
   }
 })
