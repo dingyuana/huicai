@@ -26,6 +26,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 
 import java.util.List;
+import java.util.stream.Collectors;
 import java.util.Map;
 import java.util.LinkedHashMap;
 import org.springframework.web.bind.annotation.*;
@@ -43,6 +44,8 @@ public class EnterpriseController {
     private final AgencyUserEnterpriseMapper agencyUserEnterpriseMapper;
     private final PeriodMapper periodMapper;
     private final AgencyEnterpriseRoleGuard roleGuard;
+    private final com.huicai.config.security.JwtProvider jwtProvider;
+    private final com.huicai.base.system.mapper.UserRoleMapper userRoleMapper;
 
     // ========== 切换接口 (Sprint 2) ==========
 
@@ -57,8 +60,7 @@ public class EnterpriseController {
                 throw BusinessException.notFound("企业不存在");
             }
             EnterpriseContextHolder.set(enterpriseId);
-            return R.ok(new EnterpriseSwitchVO(
-                    enterprise.getId(), enterprise.getEnterpriseName(), enterprise.getSeedDataDone(), enterprise.getStartPeriod()));
+            return R.ok(buildSwitchVO(enterprise));
         }
 
         if (!"AGENCY".equals(userType)) {
@@ -102,12 +104,7 @@ public class EnterpriseController {
 
         EnterpriseContextHolder.set(enterpriseId);
 
-        return R.ok(new EnterpriseSwitchVO(
-                enterprise.getId(),
-                enterprise.getEnterpriseName(),
-                enterprise.getSeedDataDone(),
-                enterprise.getStartPeriod()
-        ));
+        return R.ok(buildSwitchVO(enterprise));
     }
 
     // ========== 客户企业 CRUD (Sprint 3) ==========
@@ -201,6 +198,37 @@ public class EnterpriseController {
         roleGuard.requireVisibleEnterprise(id);
         enterpriseService.delete(id);
         return R.ok();
+    }
+
+    /**
+     * SPEC-P124 切片3：切换企业时**重签 access 与 refresh 双 token**。
+     *
+     * <p><b>为什么必须重签</b>：企业上下文此前只存在于前端 localStorage 与
+     * {@code X-Enterprise-Id} 请求头，服务端 token 里的 {@code enterpriseId}
+     * 永远是登录时的值。二者一旦废止（切片5），切换就会在 access token 过期、
+     * 走 {@code /auth/refresh} 续期时被<b>静默退回旧企业</b>。
+     *
+     * <p><b>为何两个都要换</b>：refresh token 同样带 {@code enterpriseId}，
+     * 只换 access 等于把回退推迟到下一次续期。
+     *
+     * <p>授权判定（绑定关系 / 派工关系校验）仍在原处，此处只负责签发。
+     */
+    private EnterpriseSwitchVO buildSwitchVO(EnterpriseEntity enterprise) {
+        Long userId = SecurityUtils.getCurrentUserId();
+        String username = SecurityUtils.getCurrentUsername();
+        String userType = SecurityUtils.getCurrentUserType();
+        String agencyRole = SecurityUtils.getCurrentAgencyRole();
+        Long agencyId = SecurityUtils.getCurrentAgencyId();
+        List<String> roles = userRoleMapper.getRoleIdsByUserId(userId).stream()
+                .map(String::valueOf).collect(Collectors.toList());
+
+        String token = jwtProvider.generateAccessToken(username, userId, roles,
+                enterprise.getId(), agencyId, userType, agencyRole);
+        String refreshToken = jwtProvider.generateRefreshToken(username, userId, roles,
+                enterprise.getId(), agencyId, userType, agencyRole);
+
+        return new EnterpriseSwitchVO(enterprise.getId(), enterprise.getEnterpriseName(),
+                enterprise.getSeedDataDone(), enterprise.getStartPeriod(), token, refreshToken);
     }
 
     @PostMapping("/api/v1/agency/enterprises/{id}/bind")

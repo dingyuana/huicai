@@ -178,6 +178,53 @@ class EnterpriseControllerTest {
                 .andExpect(jsonPath("$.data.enterpriseName").value("测试企业"));
     }
 
+    /**
+     * SPEC-P124 切片3：切换企业必须**以目标企业号重签 access 与 refresh 双 token**。
+     *
+     * <p><b>为什么这是必须的</b>：企业上下文此前只存在于前端 localStorage 与
+     * {@code X-Enterprise-Id} 请求头，服务端 token 里的 {@code enterpriseId}
+     * 永远是登录时的值。一旦废止请求头（切片5），切换就会在 access token 过期、
+     * 走 {@code /auth/refresh} 续期时被<b>静默退回旧企业</b>。
+     *
+     * <p><b>为何两个都要断言</b>：refresh token 同样带 {@code enterpriseId}，
+     * 只换 access 等于把回退推迟到下一次续期 —— 那不算修好。
+     */
+    @Test
+    @DisplayName("切片3: 切换企业必须以目标企业号重签 access 与 refresh")
+    void switchReissuesBothTokensForTargetEnterprise() throws Exception {
+        stubAccountant();
+        when(userRoleMapper.getRoleIdsByUserId(2L)).thenReturn(List.of(3L));
+
+        AgencyUserEntity agencyUser = new AgencyUserEntity();
+        agencyUser.setId(10L);
+        agencyUser.setUserId(2L);
+        when(agencyUserMapper.selectOne(any())).thenReturn(agencyUser);
+        when(agencyUserEnterpriseMapper.getEnterpriseIdsByAgencyUserId(10L)).thenReturn(List.of(7L));
+
+        EnterpriseEntity enterprise = new EnterpriseEntity();
+        enterprise.setId(7L);
+        enterprise.setEnterpriseName("客户企业7");
+        enterprise.setSeedDataDone(true);
+        enterprise.setDeleted(0);
+        when(enterpriseMapper.selectById(7L)).thenReturn(enterprise);
+
+        mvc.perform(post("/api/v1/enterprise/switch")
+                        .header("Authorization", "Bearer " + TOKEN_ACCOUNTANT)
+                        .param("enterpriseId", "7"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.enterpriseId").value(7));
+
+        // 两个签发都必须以「目标企业 7」为参数，且响应必须带上它们
+        // ⚠️ username 用 anyString()：它取自 SecurityContext 的 Authentication
+        //    principal 名，而非 jwtProvider.getUsernameFromToken 的 mock 值
+        //    （首版写成 eq("acc1") 而实际为 "accountant"，是我的断言假设错误，
+        //      不是实现缺陷 —— 企业号 7 才是本用例的验证重点）。
+        verify(jwtProvider).generateAccessToken(
+                anyString(), eq(2L), anyList(), eq(7L), eq(1L), eq("AGENCY"), eq("ACCOUNTANT"));
+        verify(jwtProvider).generateRefreshToken(
+                anyString(), eq(2L), anyList(), eq(7L), eq(1L), eq("AGENCY"), eq("ACCOUNTANT"));
+    }
+
     @Test
     @DisplayName("场景11: ACCOUNTANT 不能切换到未分配的企业")
     void testAccountantSwitchBlocked() throws Exception {

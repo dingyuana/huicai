@@ -98,9 +98,30 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   async function switchEnterprise(enterpriseId: number) {
-    await request.post('/v1/enterprise/switch', null, { params: { enterpriseId } })
+    // ⚠️ request 的响应拦截器在运行期已返回 `body.data`（后端 R 结构解包），
+    // 但其 TS 类型仍标注为 AxiosResponse<T>，故此处按运行期实际形态断言。
+    // （依据：src/api/request.ts:38 `return body.data`）
+    const res = (await request.post('/v1/enterprise/switch', null, {
+      params: { enterpriseId },
+    })) as unknown as { token?: string; refreshToken?: string }
     currentEnterpriseId.value = enterpriseId
     localStorage.setItem('huicai_current_enterprise_id', String(enterpriseId))
+
+    // SPEC-P124 切片3：切换企业由服务端**重签** access 与 refresh 双 token。
+    //
+    // 此前企业上下文只存在于 localStorage 与 X-Enterprise-Id 请求头，
+    // 服务端 token 里的 enterpriseId 永远是登录时的值 —— 一旦废止请求头，
+    // 切换会在 access token 过期、走 /refresh 续期时被静默退回旧企业。
+    // 故必须用返回的新 token 覆盖本地两个凭证。
+    //
+    // ⚠️ refreshToken 一并覆盖：它同样带 enterpriseId，只换 access 会把回退推迟到下次续期。
+    if (res?.token) {
+      token.value = res.token
+      localStorage.setItem('huicai_token', res.token)
+    }
+    if (res?.refreshToken) {
+      localStorage.setItem('huicai_refresh_token', res.refreshToken)
+    }
   }
 
   async function fetchUserInfo() {
