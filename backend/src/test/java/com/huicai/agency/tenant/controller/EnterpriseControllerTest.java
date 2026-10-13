@@ -99,6 +99,10 @@ class EnterpriseControllerTest {
     @MockBean
     private PeriodMapper periodMapper;
 
+    /** SPEC-P124 切片5：切换审计改由 switchEnterprise 记录（原先在请求头分支里） */
+    @MockBean
+    private com.huicai.base.system.service.EnterpriseSwitchAuditService switchAuditService;
+
     @SuppressWarnings("unchecked")
     private void stubToken(String token, Long userId, String username, String userType,
                            Long agencyId, String agencyRole) {

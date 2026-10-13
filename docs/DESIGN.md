@@ -126,7 +126,7 @@ com.huicai
 ### 5.1 多租户隔离（三层防线）
 
 ```
-请求 → JWT 解析 → X-Enterprise-Id 校验（三源并集）
+请求 → JWT 解析（企业上下文随 token，SPEC-P124 切片5 起不再有请求头通道）
                               ↓
                     第一层：DTO 隔离
                     （Controller 不直收 Entity，enterpriseId 不可传）
@@ -232,7 +232,7 @@ frontend/src/
 
 ### 7.2 关键特性
 
-- **企业切换**：`EnterpriseSwitcher` + `X-Enterprise-Id` 请求头
+- **企业切换**：`EnterpriseSwitcher` → `POST /v1/enterprise/switch` 校验并重签 token（`X-Enterprise-Id` 请求头已于 SPEC-P124 切片5 废止）
 - **权限控制**：路由 `meta.permission` + 指令 `v-permission`
 - **期间管理**：`PeriodNavigator` 全局期间切换
 - **报表打印**：`@media print` + A4 排版

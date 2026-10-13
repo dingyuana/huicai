@@ -2,8 +2,6 @@ package com.huicai.config.security;
 
 import com.huicai.common.context.EnterpriseContextHolder;
 import com.huicai.common.response.R;
-import com.huicai.base.system.service.EnterpriseSwitchAuditService;
-import com.huicai.common.security.EnterpriseMembershipChecker;
 import com.huicai.base.system.service.impl.UserDetailsServiceImpl;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -44,27 +42,12 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private final UserDetailsServiceImpl userDetailsService;
     private final StringRedisTemplate redisTemplate;
 
-    /**
-     * P102 新增的两个依赖用 {@code @Lazy} 延迟解析：
-     * {@code @WebMvcTest} 切片会把 {@code Filter} 类型 Bean 实例化，却不扫描
-     * {@code @Component/@Service}，若构造期强制解析会导致 12 个契约测试类
-     * 上下文加载失败（NoSuchBeanDefinitionException）。切片本身
-     * {@code addFilters = false}，过滤器不会执行，故永不触发解析。
-     * 生产上下文中二者必然存在，且缺失时表现为异常而非静默跳过（fail-closed）。
-     */
-    private final EnterpriseMembershipChecker enterpriseMembershipChecker;
-    private final EnterpriseSwitchAuditService auditService;
-
     public JwtAuthenticationFilter(JwtProvider jwtProvider,
                                    UserDetailsServiceImpl userDetailsService,
-                                   StringRedisTemplate redisTemplate,
-                                   @Lazy EnterpriseMembershipChecker enterpriseMembershipChecker,
-                                   @Lazy EnterpriseSwitchAuditService auditService) {
+                                   StringRedisTemplate redisTemplate) {
         this.jwtProvider = jwtProvider;
         this.userDetailsService = userDetailsService;
         this.redisTemplate = redisTemplate;
-        this.enterpriseMembershipChecker = enterpriseMembershipChecker;
-        this.auditService = auditService;
     }
 
     @Override
@@ -95,42 +78,17 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 // 切换到任意企业。现按 EnterpriseMembershipChecker 的三源并集校验
                 // （直属企业 ∪ 代理成员授权 ∪ SUPER_ADMIN），不通过即 403。
                 // 失败时不区分「企业不存在」与「无权限」，避免泄露企业存在性。
-                String xEnterpriseId = request.getHeader("X-Enterprise-Id");
-                if (xEnterpriseId != null) {
-                    Long requested;
-                    try {
-                        requested = Long.parseLong(xEnterpriseId);
-                    } catch (NumberFormatException e) {
-                        requested = null;
-                    }
-                    if (requested != null && !requested.equals(enterpriseId)) {
-                        LoginUser loginUser = (LoginUser) userDetails;
-                        boolean allowed = enterpriseMembershipChecker.isMember(
-                                loginUser.getUserId(), loginUser.getEnterpriseId(),
-                                loginUser.getUserType(), requested);
-                        if (!allowed) {
-                            log.warn("越权切换企业被拒: user={}, target={}", username, requested);
-                            response.setStatus(HttpServletResponse.SC_FORBIDDEN);
-                            response.setContentType("application/json;charset=UTF-8");
-                            response.getWriter().write(
-                                    "{\"code\":403,\"msg\":\"无权访问该企业\",\"data\":null}");
-                            return;
-                        }
-                        auditService.recordEnterpriseSwitch(loginUser.getUserId(),
-                                enterpriseId, requested);
-                    }
-                    if (requested != null) {
-                        enterpriseId = requested;
-                    }
-                }
-
                 UsernamePasswordAuthenticationToken authentication =
                         new UsernamePasswordAuthenticationToken(userDetails, null, userDetails.getAuthorities());
                 authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
 
                 SecurityContextHolder.getContext().setAuthentication(authentication);
 
-                // S-26: 设置企业上下文（SUPER_ADMIN 随 X-Enterprise-Id 头切换）
+                // SPEC-P124 切片5：企业上下文<b>只来自 JWT</b>。
+                // X-Enterprise-Id 请求头已废止 —— 它曾使「当前企业」有三个来源且
+                // 其中一个由客户端可控（3 源 2 义 0 权威）。切换改为由
+                // /enterprise/switch 校验并重签 token，权威收敛到服务端。
+                // 授权判定在该切换端点完成（绑定/派工校验 + 切换审计）。
                 if (enterpriseId != null) {
                     EnterpriseContextHolder.set(enterpriseId);
                 }

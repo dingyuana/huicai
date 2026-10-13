@@ -46,6 +46,7 @@ public class EnterpriseController {
     private final AgencyEnterpriseRoleGuard roleGuard;
     private final com.huicai.config.security.JwtProvider jwtProvider;
     private final com.huicai.base.system.mapper.UserRoleMapper userRoleMapper;
+    private final com.huicai.base.system.service.EnterpriseSwitchAuditService switchAuditService;
 
     // ========== 切换接口 (Sprint 2) ==========
 
@@ -59,7 +60,9 @@ public class EnterpriseController {
             if (enterprise == null || enterprise.getDeleted() == 1) {
                 throw BusinessException.notFound("企业不存在");
             }
+            Long fromEnterpriseId = SecurityUtils.getCurrentEnterpriseId();
             EnterpriseContextHolder.set(enterpriseId);
+            recordSwitchAudit(fromEnterpriseId, enterpriseId);
             return R.ok(buildSwitchVO(enterprise));
         }
 
@@ -102,7 +105,9 @@ public class EnterpriseController {
             throw BusinessException.notFound("企业不存在");
         }
 
+        Long fromEnterpriseId = SecurityUtils.getCurrentEnterpriseId();
         EnterpriseContextHolder.set(enterpriseId);
+        recordSwitchAudit(fromEnterpriseId, enterpriseId);
 
         return R.ok(buildSwitchVO(enterprise));
     }
@@ -213,6 +218,25 @@ public class EnterpriseController {
      *
      * <p>授权判定（绑定关系 / 派工关系校验）仍在原处，此处只负责签发。
      */
+    /**
+     * SPEC-P124 切片5：切换审计在**切换发生处**记录。
+     *
+     * <p>此前审计写在 {@code JwtAuthenticationFilter} 的 {@code X-Enterprise-Id}
+     * 覆盖分支里，即「每请求记一次」，且切换端点本身不记。请求头一旦废止，
+     * 审计会<b>整体丢失</b> —— 故必须先把它搬到真正的切换发生处。
+     *
+     * <p>语义也更正确：从「每请求都记一条」变为「切换时才记」，噪音大幅降低。
+     */
+    private void recordSwitchAudit(Long fromEnterpriseId, Long toEnterpriseId) {
+        if (toEnterpriseId == null || toEnterpriseId.equals(fromEnterpriseId)) {
+            return;
+        }
+        Long userId = SecurityUtils.getCurrentUserId();
+        if (userId != null) {
+            switchAuditService.recordEnterpriseSwitch(userId, fromEnterpriseId, toEnterpriseId);
+        }
+    }
+
     private EnterpriseSwitchVO buildSwitchVO(EnterpriseEntity enterprise) {
         Long userId = SecurityUtils.getCurrentUserId();
         String username = SecurityUtils.getCurrentUsername();

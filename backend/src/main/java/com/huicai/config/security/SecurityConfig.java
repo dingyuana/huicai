@@ -1,8 +1,6 @@
 package com.huicai.config.security;
 
-import com.huicai.base.system.service.EnterpriseSwitchAuditService;
 import com.huicai.base.system.service.impl.UserDetailsServiceImpl;
-import com.huicai.common.security.EnterpriseMembershipChecker;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -44,11 +42,8 @@ public class SecurityConfig {
     public JwtAuthenticationFilter jwtAuthenticationFilter(
             JwtProvider jwtProvider,
             UserDetailsServiceImpl userDetailsService,
-            StringRedisTemplate stringRedisTemplate,
-            EnterpriseMembershipChecker enterpriseMembershipChecker,
-            EnterpriseSwitchAuditService enterpriseSwitchAuditService) {
-        return new JwtAuthenticationFilter(jwtProvider, userDetailsService, stringRedisTemplate,
-                enterpriseMembershipChecker, enterpriseSwitchAuditService);
+            StringRedisTemplate stringRedisTemplate) {
+        return new JwtAuthenticationFilter(jwtProvider, userDetailsService, stringRedisTemplate);
     }
 
     @Bean

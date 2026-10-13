@@ -8,16 +8,18 @@ const request = axios.create({
   headers: { 'Content-Type': 'application/json' },
 })
 
-// 请求拦截器：注入 JWT + X-Enterprise-Id
-request.interceptors.request.use((config) => {
+// 请求拦截器：注入 JWT
+//
+// SPEC-P124 切片5：<b>不再注入 X-Enterprise-Id</b>。
+// 该头曾使「当前企业」有三个来源且其中之一由客户端可控（3 源 2 义 0 权威）。
+// 现在切换由 POST /v1/enterprise/switch 校验并<b>重签 token</b>，
+// 企业上下文只来自 JWT，服务端为唯一权威。
+request.interceptors.request.use(
+  (requestConfig) => {
+  const config = requestConfig
   const token = localStorage.getItem('huicai_token')
   if (token) {
-    config.headers.Authorization = `Bearer ${token}`
-  }
-  // S-26: 企业上下文 header
-  const enterpriseId = localStorage.getItem('huicai_current_enterprise_id')
-  if (enterpriseId) {
-    config.headers['X-Enterprise-Id'] = enterpriseId
+    config.headers['Authorization'] = `Bearer ${token}`
   }
   return config
 })
