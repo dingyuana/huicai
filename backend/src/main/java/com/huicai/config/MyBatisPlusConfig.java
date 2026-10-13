@@ -41,11 +41,13 @@ public class MyBatisPlusConfig {
      * （AGENTS §4.5 第 40 条）。
      */
     @Bean
-    public MybatisPlusInterceptor mybatisPlusInterceptor(DataPermissionInterceptor dataPermissionInterceptor) {
+    public MybatisPlusInterceptor mybatisPlusInterceptor(
+            DataPermissionInterceptor dataPermissionInterceptor,
+            javax.sql.DataSource dataSource) {
         MybatisPlusInterceptor interceptor = new MybatisPlusInterceptor();
         // ── 顺序要求（DIR-004）：条件注入类必须在分页之前 ──
         // S-26: 企业级数据权限（enterprise_id 隔离）
-        interceptor.addInnerInterceptor(new EnterpriseDataPermissionInterceptor());
+        interceptor.addInnerInterceptor(new EnterpriseDataPermissionInterceptor(dataSource));
         // 部门级数据权限（dept_id/created_by 隔离）
         interceptor.addInnerInterceptor(dataPermissionInterceptor);
         // 分页（必须在条件注入之后，否则 COUNT 拿不到 enterprise_id）

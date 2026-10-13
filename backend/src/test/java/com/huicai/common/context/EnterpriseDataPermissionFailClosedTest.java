@@ -37,8 +37,14 @@ class EnterpriseDataPermissionFailClosedTest {
 
     private static final String BROKEN_SQL = "SELECT * FROM (( t_business_doc WHERE";
 
+    /**
+     * SPEC-P122：拦截器构造器需要 {@code DataSource}，用于在每条查询前把企业
+     * GUC 写入事务连接。此处是纯 Mockito 单测、<b>没有活动事务</b>，
+     * 而 {@code TenantGucSetter#apply} 在无事务时先行返回、根本不会碰 DataSource，
+     * 故用 mock 即可，无需真实数据库。
+     */
     private final EnterpriseDataPermissionInterceptor interceptor =
-            new EnterpriseDataPermissionInterceptor();
+            new EnterpriseDataPermissionInterceptor(Mockito.mock(javax.sql.DataSource.class));
 
     @BeforeEach
     void setUp() {

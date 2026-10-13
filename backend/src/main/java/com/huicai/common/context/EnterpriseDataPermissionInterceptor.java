@@ -1,6 +1,7 @@
 package com.huicai.common.context;
 
 import com.baomidou.mybatisplus.extension.plugins.inner.InnerInterceptor;
+import com.huicai.common.security.TenantGucSetter;
 import net.sf.jsqlparser.JSQLParserException;
 import net.sf.jsqlparser.parser.CCJSqlParserUtil;
 import net.sf.jsqlparser.schema.Table;
@@ -38,6 +39,18 @@ public class EnterpriseDataPermissionInterceptor implements InnerInterceptor {
 
     private static final ThreadLocal<Boolean> RECURSIVE_GUARD = ThreadLocal.withInitial(() -> false);
 
+    /**
+     * SPEC-P122：本拦截器是<b>所有 MyBatis 查询的必经之路</b>，因此企业 GUC
+     * 必须在此兜底设置 —— 切面 {@code TenantRlsInitializer} 拦不到
+     * {@code IService#list(Wrapper)} 这类 MyBatis-Plus <b>default 接口方法</b>
+     * （声明在 {@code IService} 上，类级 {@code @Transactional} 不被 AOP 采信）。
+     */
+    private final javax.sql.DataSource dataSource;
+
+    public EnterpriseDataPermissionInterceptor(javax.sql.DataSource dataSource) {
+        this.dataSource = dataSource;
+    }
+
     private static final Set<String> SHARED_TABLES = Set.of(
         "t_user", "t_role", "t_user_role", "t_menu", "t_role_menu",
         "t_agency", "t_enterprise", "t_agency_enterprise",
@@ -61,11 +74,14 @@ public class EnterpriseDataPermissionInterceptor implements InnerInterceptor {
     @Override
     public void beforeQuery(Executor executor, MappedStatement ms, Object parameter,
                             RowBounds rowBounds, ResultHandler resultHandler, BoundSql boundSql) throws SQLException {
+        TenantGucSetter.apply(dataSource);
         injectEnterpriseIdCondition(boundSql);
     }
 
     @Override
     public void beforeUpdate(Executor executor, MappedStatement ms, Object parameter) throws SQLException {
+        // 写路径同样需要 GUC：RLS 的 WITH CHECK 依赖它，否则跨企业写入会被拒
+        TenantGucSetter.apply(dataSource);
         BoundSql boundSql = ms.getBoundSql(parameter);
         injectEnterpriseIdCondition(boundSql);
     }
