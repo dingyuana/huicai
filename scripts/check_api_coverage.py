@@ -164,6 +164,22 @@ def normalize(path):
     return "/" + p
 
 
+# SPEC-P124：内部端点名单 —— 这些端点**设计上就不该有 UI**。
+#
+# 门禁原本只给出「接入前端或登记为内部」的提示文案，却**没有实现该登记机制**，
+# 于是运维/系统类端点无法合法豁免，棘轮只能靠放宽上限过关 —— 恰是门禁自己反对的做法。
+# 实现本名单即把那条提示落到实处。
+#
+# ⚠️ 登记即豁免，必须逐条写明理由；若某条其实该有 UI，应撤出本名单。
+INTERNAL_ENDPOINTS = {
+    # SPEC-P126：账套种子数据重播。运维用操作（经理在数据异常时手动触发），
+    # 不面向业务用户，且已限代理经理角色。
+    "/api/v1/agency/enterprises/{id}/reseed",
+    # 健康检查：供容器编排探针使用，无业务 UI
+    "/api/v1/system/health",
+}
+
+
 def check_coverage(max_uncovered: int = DEFAULT_MAX_UNCOVERED,
                    max_orphan: int = DEFAULT_MAX_ORPHAN,
                    report_only: bool = False) -> int:
@@ -217,6 +233,15 @@ def check_coverage(max_uncovered: int = DEFAULT_MAX_UNCOVERED,
             print(f"  ⚠️ {fp}")
 
     # 棘轮判定：只在**倒退**（超过上限）时红。存量未接端点是清理项，不是门禁失败。
+    internal = [(bn, bp) for bn, bp in backend_not_covered
+                if any(bp == k or bp.endswith(k) or k.endswith(bp) for k in INTERNAL_ENDPOINTS)]
+    if internal:
+        print(f"\n--- 已登记为内部端点（设计上无 UI，不计入棘轮）{len(internal)} 个 ---")
+        for _, bp in sorted(internal):
+            print(f"  [i] {bp}")
+        internal_set = set(internal)
+        backend_not_covered = [x for x in backend_not_covered if x not in internal_set]
+
     n_uncovered = len(backend_not_covered)
     n_orphan = len(frontend_orphan)
     over_uncovered = n_uncovered - max_uncovered
