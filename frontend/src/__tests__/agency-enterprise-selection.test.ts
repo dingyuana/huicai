@@ -125,3 +125,67 @@ describe('SPEC-P123：当前工作企业不被「归属企业」覆盖', () => {
     expect(localStorage.getItem(KEY)).toBe(null)
   })
 })
+/**
+ * SPEC-P124：跨标签页同步。
+ *
+ * <p>实测复现（双标签页）：A 切到企业2 后，B 未刷新时 store 仍是旧状态，
+ * 用内存里的旧 token 请求 → <b>HTTP 200 + 0 条</b>，无任何报错
+ * ——旧 token 没有企业号 ⇒ GUC 设不上 ⇒ RLS 静默过滤全部。
+ *
+ * <p>localStorage 本身跨标签页是同步的，缺的是 Pinia 内存态的跟随。
+ */
+describe('SPEC-P124：跨标签页跟随切换', () => {
+  beforeEach(() => {
+    localStorage.clear()
+    getUserInfo.mockReset()
+    setActivePinia(createPinia())
+  })
+
+  /** 模拟「其它标签页改写了 localStorage 后浏览器派发的 storage 事件」。 */
+  function fireStorage(key: string, newValue: string | null) {
+    window.dispatchEvent(new StorageEvent('storage', { key, newValue }))
+  }
+
+  it('AT-124-1 其它标签页切换企业后，本标签页 store 应跟随', async () => {
+    const store = await newStore()
+    getUserInfo.mockResolvedValue({
+      permissions: ['voucher:list'], userType: 'AGENCY',
+      agencyId: 1, agencyRole: 'ACCOUNTANT',
+      homeEnterpriseId: null, currentEnterpriseId: null,
+      enterpriseSelectionRequired: true,
+    })
+    await store.fetchUserInfo()
+    expect(store.currentEnterpriseId).toBe(null)
+
+    // 模拟 A 标签页完成切换：写入新 token 与新企业号，然后派发事件
+    const newToken = 'header.payload.sig-new'
+    localStorage.setItem(KEY, '2')
+    localStorage.setItem('huicai_token', newToken)
+    fireStorage('huicai_token', newToken)
+    await new Promise((r) => setTimeout(r, 0))
+
+    expect(store.token).toBe(newToken)
+    expect(store.currentEnterpriseId).toBe(2)
+  })
+
+  it('AT-124-2 无关的 storage 事件不得触发同步', async () => {
+    const store = await newStore()
+    const before = store.token
+    fireStorage('some_unrelated_key', 'x')
+    await new Promise((r) => setTimeout(r, 0))
+    expect(store.token).toBe(before)
+  })
+
+  it('AT-124-3 其它标签页登出后，本标签页不得继续持有旧 token', async () => {
+    localStorage.setItem(KEY, '2')
+    localStorage.setItem('huicai_token', 'old.token.sig')
+    const store = await newStore()
+    expect(store.token).toBe('old.token.sig')
+
+    localStorage.removeItem('huicai_token')
+    fireStorage('huicai_token', null)
+    await new Promise((r) => setTimeout(r, 0))
+
+    expect(store.token).toBe('')
+  })
+})

@@ -170,6 +170,41 @@ export const useAuthStore = defineStore('auth', () => {
     () => isAgency.value && !currentEnterpriseId.value,
   )
 
+  /**
+   * SPEC-P124：跨标签页同步企业上下文与登录态。
+   *
+   * <p><b>为什么需要</b>：localStorage 本身是跨标签页同步的，但 Pinia 的<b>内存态</b>
+   * 不会自动跟上。实测（2026-10-13，双标签页）：
+   * <pre>
+   *   A 切到企业2 → B 未刷新：B 的 store 仍是 curEnt=null / 旧 token
+   *   B 用内存里的旧 token 取科目 → HTTP 200 + 0 条，无任何报错
+   * </pre>
+   * 原因是旧 token 里没有企业号 ⇒ 企业 GUC 设不上 ⇒ RLS 静默过滤全部。
+   * 用户会误判成「这个客户没有数据」——这是比报错更难排查的形态。
+   *
+   * <p>浏览器的 {@code storage} 事件正是为跨文档同步设计的，且<b>只在其它标签页</b>
+   * 触发（发起变更的标签页自身不会收到），语义与需求恰好吻合。
+   */
+  if (typeof window !== 'undefined') {
+    window.addEventListener('storage', (e: StorageEvent) => {
+      if (e.key !== 'huicai_token' && e.key !== 'huicai_current_enterprise_id') return
+
+      const newToken = localStorage.getItem('huicai_token') || ''
+      if (!newToken) {
+        // 其它标签页已登出 —— 本标签页同步失效，避免继续用失效 token 反复 401
+        if (token.value) logout()
+        return
+      }
+      if (newToken === token.value) return
+
+      token.value = newToken
+      currentEnterpriseId.value =
+        Number(localStorage.getItem('huicai_current_enterprise_id')) || null
+      // 权限等随用户身份而来，一并刷新，避免沿用切换前的旧权限
+      fetchUserInfo().catch(() => logout())
+    })
+  }
+
   function logout() {
     token.value = ''
     userInfo.value = null
