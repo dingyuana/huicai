@@ -16,14 +16,28 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
-import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
 
 @Slf4j
-@Component
+/**
+ * ⚠️ SPEC-P124：**刻意不加 {@code @Component}**。
+ *
+ * <p>本类原先既带 {@code @Component}（被 Spring Boot 当作 Servlet Filter 自动注册进容器），
+ * 又在 {@code SecurityConfig} 里 {@code addFilterBefore(...)} 显式加入安全链 ——
+ * <b>双注册</b>，每次请求过滤器完整跑两遍。
+ *
+ * <p>实测（2026-10-13，单次业务请求统计 {@code SELECT ... t_user WHERE username} 次数）：
+ * 带 {@code @Component} = <b>4</b> 次；去掉后 = <b>2</b> 次。
+ * 即鉴权相关的数据库查询<b>翻倍</b>，且第二次登录态装载纯属浪费。
+ *
+ * <p>改由 {@code SecurityConfig} 中的 {@code @Bean} 显式创建并传入
+ * {@code securityFilterChain(...)}，保证<b>只有一条注册路径</b>。
+ *
+ * <p>注意：不能简单删掉这个 Bean —— {@code SecurityConfig} 需要注入它。
+ */
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private final JwtProvider jwtProvider;

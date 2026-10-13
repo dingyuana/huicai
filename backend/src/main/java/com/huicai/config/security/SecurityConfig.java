@@ -1,5 +1,8 @@
 package com.huicai.config.security;
 
+import com.huicai.base.system.service.EnterpriseSwitchAuditService;
+import com.huicai.base.system.service.impl.UserDetailsServiceImpl;
+import com.huicai.common.security.EnterpriseMembershipChecker;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -13,6 +16,7 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
@@ -25,10 +29,27 @@ import java.util.List;
 @RequiredArgsConstructor
 public class SecurityConfig {
 
-    private final JwtAuthenticationFilter jwtAuthenticationFilter;
     private final JwtAuthEntryPoint jwtAuthEntryPoint;
     private final JwtAccessDeniedHandler jwtAccessDeniedHandler;
     private final JwtLogoutHandler jwtLogoutHandler;
+
+    /**
+     * SPEC-P124：在此显式创建过滤器，而不是给它加 {@code @Component}。
+     *
+     * <p>加 {@code @Component} 会让 Spring Boot 把它自动注册为 Servlet Filter，
+     * 与 {@code addFilterBefore} 叠加成<b>双注册</b>（实测鉴权 DB 查询翻倍）。
+     * 在此用 {@code @Bean} 定义可保证<b>唯一注册路径</b>。
+     */
+    @Bean
+    public JwtAuthenticationFilter jwtAuthenticationFilter(
+            JwtProvider jwtProvider,
+            UserDetailsServiceImpl userDetailsService,
+            StringRedisTemplate stringRedisTemplate,
+            EnterpriseMembershipChecker enterpriseMembershipChecker,
+            EnterpriseSwitchAuditService enterpriseSwitchAuditService) {
+        return new JwtAuthenticationFilter(jwtProvider, userDetailsService, stringRedisTemplate,
+                enterpriseMembershipChecker, enterpriseSwitchAuditService);
+    }
 
     @Bean
     public PasswordEncoder passwordEncoder() {
@@ -52,7 +73,8 @@ public class SecurityConfig {
     }
 
     @Bean
-    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+    public SecurityFilterChain securityFilterChain(HttpSecurity http,
+                                               JwtAuthenticationFilter jwtAuthenticationFilter) throws Exception {
         http
                 .csrf(csrf -> csrf.disable())
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
