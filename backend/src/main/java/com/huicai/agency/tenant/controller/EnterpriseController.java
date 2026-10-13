@@ -26,6 +26,8 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 
 import java.util.List;
+import java.util.Map;
+import java.util.LinkedHashMap;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -34,6 +36,7 @@ public class EnterpriseController {
 
     private final AgencyEnterpriseMapper agencyEnterpriseMapper;
     private final EnterpriseMapper enterpriseMapper;
+    private final com.huicai.agency.tenant.service.SeedDataService seedDataService;
     private final EnterpriseService enterpriseService;
     private final EnterpriseStateMachineService stateMachineService;
     private final AgencyUserMapper agencyUserMapper;
@@ -205,6 +208,27 @@ public class EnterpriseController {
         roleGuard.requireAgencyAdmin("绑定客户企业");
         enterpriseService.bind(id, agencyId);
         return R.ok();
+    }
+
+    /**
+     * SPEC-P126：强制重跑客户账套的种子数据克隆。
+     *
+     * <p><b>为什么需要这个入口</b>：修复前「复制 0 行」也会被标记为已播种，
+     * 且已播种即短路跳过 ⇒ 一旦克隆失败，该企业<b>永远无法自愈</b>。
+     * 本入口允许跳过该短路重跑；克隆本身幂等（唯一键去重），可安全重复调用。
+     *
+     * <p>限代理经理 —— 它会写入客户账套的标准数据。
+     */
+    @PostMapping("/api/v1/agency/enterprises/{id}/reseed")
+    public R<Map<String, Object>> reseed(@PathVariable Long id) {
+        roleGuard.requireAgencyAdmin("重跑客户账套种子数据");
+        roleGuard.requireVisibleEnterprise(id);
+        boolean done = seedDataService.cloneSeedData(id, true);
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("enterpriseId", id);
+        result.put("seeded", done);
+        result.put("seedDataDone", enterpriseMapper.selectById(id).getSeedDataDone());
+        return R.ok(result);
     }
 
     @PostMapping("/api/v1/agency/enterprises/{id}/activate")
