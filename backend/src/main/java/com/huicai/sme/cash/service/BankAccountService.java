@@ -12,4 +12,14 @@ public interface BankAccountService {
     BankAccountEntity create(BankAccountEntity entity);
     BankAccountEntity update(Long id, BankAccountEntity entity);
     void delete(Long id);
+
+    /**
+     * 系统管理员专用：列出全部企业的银行账户。
+     *
+     * <p>t_bank_account 开启 FORCE RLS，跨企业读取被按设计挡住，
+     * 故实现须<b>逐企业建立上下文后聚合</b>（每段查询仍在该企业 RLS 约束下执行）。
+     *
+     * <p>⚠️ 调用方必须校验 SUPER_ADMIN。
+     */
+    List<BankAccountEntity> listAllEnterprisesForSuperAdmin();
 }

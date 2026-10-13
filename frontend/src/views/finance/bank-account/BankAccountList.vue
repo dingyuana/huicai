@@ -13,6 +13,12 @@
         <el-form-item label="关键字">
           <el-input v-model="query.keyword" placeholder="账号/名称/开户行" clearable style="width:240px" />
         </el-form-item>
+        <el-form-item v-if="authStore.isSuperAdmin" label="查看范围">
+          <el-radio-group v-model="scope" @change="fetchData">
+            <el-radio-button value="current">当前企业</el-radio-button>
+            <el-radio-button value="all">全部企业</el-radio-button>
+          </el-radio-group>
+        </el-form-item>
         <el-form-item>
           <el-button type="primary" @click="onSearch">查询</el-button>
           <el-button @click="onReset">重置</el-button>
@@ -20,6 +26,15 @@
       </el-form>
 
       <el-table :data="list" v-loading="loading" border stripe>
+        <el-table-column
+          v-if="scope === 'all'"
+          prop="enterpriseName"
+          label="所属公司"
+          width="200"
+          show-overflow-tooltip
+        >
+          <template #default="{ row }">{{ row.enterpriseName || '—' }}</template>
+        </el-table-column>
         <el-table-column prop="accountNo" label="账号" width="200" />
         <el-table-column prop="accountName" label="账户名称" min-width="180" />
         <el-table-column prop="bankName" label="开户银行" min-width="180" />
@@ -102,7 +117,8 @@
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import type { FormInstance } from 'element-plus'
-import { getBankAccountPage, createBankAccount, updateBankAccount, deleteBankAccount, type BankAccountVO } from '@/api/modules/bankAccount'
+import { getBankAccountPage, allEnterprisesBankAccounts, createBankAccount, updateBankAccount, deleteBankAccount, type BankAccountVO } from '@/api/modules/bankAccount'
+import { useAuthStore } from '@/stores/auth.store'
 import { getSubjectTree, type SubjectVO } from '@/api/modules/subject'
 
 const loading = ref(false)
@@ -111,6 +127,16 @@ const dialogVisible = ref(false)
 const isEdit = ref(false)
 const editId = ref<number | null>(null)
 const formRef = ref<FormInstance>()
+const authStore = useAuthStore()
+
+/**
+ * 查看范围：'current' 当前企业 / 'all' 全部企业（仅系统管理员）
+ *
+ * 跨企业视图为**只读总览** —— 新建/修改仍绑定当前企业上下文，
+ * 避免开一个客户端可控的跨租户写入口。
+ */
+const scope = ref<'current' | 'all'>('current')
+
 const list = ref<BankAccountVO[]>([])
 const total = ref(0)
 const subjectTree = ref<SubjectVO[]>([])
@@ -149,6 +175,19 @@ function fmtAmount(v: number) {
 async function fetchData() {
   loading.value = true
   try {
+    if (scope.value === 'all') {
+      // 系统管理员跨企业只读总览：后端逐企业建立上下文后聚合，
+      // 写入仍绑定当前企业（刻意不提供「指定企业写入」）
+      const rows = await allEnterprisesBankAccounts()
+      const kw = (query.value.keyword || '').trim().toLowerCase()
+      list.value = kw
+        ? rows.filter((r) =>
+            [r.accountNo, r.accountName, r.bankName, r.enterpriseName]
+              .some((v) => (v || '').toLowerCase().includes(kw)))
+        : rows
+      total.value = list.value.length
+      return
+    }
     const res = await getBankAccountPage(query.value)
     list.value = res.records
     total.value = res.total

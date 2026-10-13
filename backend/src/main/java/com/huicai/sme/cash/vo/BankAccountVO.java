@@ -21,6 +21,19 @@ import lombok.Data;
 public class BankAccountVO {
 
     private Long id;
+
+    /**
+     * 所属企业名称。
+     *
+     * <p><b>为什么需要</b>：银行账户列表此前只返回当前企业的账户，界面上
+     * <b>无从判断这条账户属于哪家公司</b>，系统管理员无法跨公司核对与管理。
+     *
+     * <p><b>为何只给名称、不给 {@code enterpriseId}</b>：租户列属内部状态，
+     * {@code MasterDataVoContractTest#internalFieldsNeverLeak} 明确禁止其出现在 VO。
+     * 展示需求用企业名称即可满足，<b>不为此放宽既有安全守卫</b>。
+     */
+    private String enterpriseName;
+
     private String accountNo;
     private String accountName;
     private String bankName;

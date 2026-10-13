@@ -6,12 +6,16 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.huicai.common.exception.BusinessException;
+import com.huicai.agency.tenant.entity.EnterpriseEntity;
+import com.huicai.agency.tenant.mapper.EnterpriseMapper;
+import com.huicai.common.context.EnterpriseContextHolder;
 import com.huicai.sme.cash.entity.BankAccountEntity;
 import com.huicai.sme.cash.mapper.BankAccountMapper;
 import com.huicai.sme.cash.service.BankAccountService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
 import java.util.List;
 
 @Service
@@ -24,6 +28,49 @@ import java.util.List;
 public class BankAccountServiceImpl implements BankAccountService {
 
     private final BankAccountMapper mapper;
+    private final EnterpriseMapper enterpriseMapper;
+
+    /**
+     * 系统管理员专用：列出<b>全部企业</b>的银行账户。
+     *
+     * <p><b>为什么不能一条 SQL 直出</b>：{@code t_bank_account} 开着
+     * <b>FORCE RLS</b>，谓词为 {@code enterprise_id = current_setting('app.enterprise_id')}，
+     * 实测无 GUC 时恒返 <b>0 行</b> —— 跨企业读取被 RLS 按设计挡住。
+     *
+     * <p><b>因此逐企业建立上下文再聚合</b>：每段查询都在该企业自己的 RLS 约束下执行，
+     * 与它被单独访问时的可见集合<b>完全一致</b>，不需要任何特权连接或绕过 RLS。
+     *
+     * <p>必须在一个事务内：企业 GUC 用的是 {@code SET LOCAL}，仅在事务块内有效。
+     *
+     * <p>⚠️ 调用方必须校验 SUPER_ADMIN —— ��是一个跨企业读取入口。
+     */
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public List<BankAccountEntity> listAllEnterprisesForSuperAdmin() {
+        List<Long> enterpriseIds = enterpriseMapper
+                .selectList(new LambdaQueryWrapper<EnterpriseEntity>()
+                        .eq(EnterpriseEntity::getDeleted, 0))
+                .stream().map(EnterpriseEntity::getId).toList();
+
+        List<BankAccountEntity> all = new ArrayList<>();
+        Long original = EnterpriseContextHolder.get();
+        try {
+            for (Long enterpriseId : enterpriseIds) {
+                EnterpriseContextHolder.set(enterpriseId);
+                // 每家企业单独建 wrapper，避免条件与上轮状态串味
+                all.addAll(mapper.selectList(new LambdaQueryWrapper<BankAccountEntity>()
+                        .eq(BankAccountEntity::getDeleted, 0)
+                        .orderByDesc(BankAccountEntity::getId)));
+            }
+        } finally {
+            if (original != null) {
+                EnterpriseContextHolder.set(original);
+            } else {
+                EnterpriseContextHolder.clear();
+            }
+        }
+        return all;
+    }
 
     @Override
     public IPage<BankAccountEntity> pageQuery(String keyword, Integer current, Integer size) {
