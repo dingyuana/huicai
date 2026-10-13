@@ -112,12 +112,39 @@ export const useAuthStore = defineStore('auth', () => {
       if (info.userType) userType.value = info.userType
       if (info.agencyId !== undefined) agencyId.value = info.agencyId
       if (info.agencyRole !== undefined) agencyRole.value = info.agencyRole
-      if (info.enterpriseId !== undefined) currentEnterpriseId.value = info.enterpriseId
+      // SPEC-P123：企业上下文有三层语义，此处是**第三层（归属企业，最低优先级）**。
+      //
+      // ⚠️ 原写法 `if (info.enterpriseId !== undefined)` 是**缺陷本身**：
+      //   null !== undefined 为真 ⇒ 代理会计（t_user.enterprise_id 按设计恒为 NULL）
+      //   的有效「当前工作企业」会被 null 覆盖 ⇒ 刷新后被路由守卫弹回客户列表。
+      //
+      // 判据（§4.5 第 43 条）：**「归属企业」与「当前工作企业」是两个概念**，
+      // 前者来自 t_user.enterprise_id（归属），后者是代理会计跨客户派工下的
+      // 会话态选择（localStorage / X-Enterprise-Id 请求头）。
+      //
+      // 只有服务端**真的带了**归属企业时，才允许它覆盖本地选择；
+      // 为 null 时一律保留本地已有的当前工作企业。
+      if (info.enterpriseId != null) {
+        currentEnterpriseId.value = info.enterpriseId
+      }
       if (info.enterpriseList) enterpriseList.value = info.enterpriseList
     } catch {
       logout()
     }
   }
+
+  /**
+   * SPEC-P123：代理端**尚未选择当前客户**。
+   *
+   * <p>会计登录时 `t_user.enterprise_id` 按设计为 NULL（他跨客户服务，不「归属」任何一家），
+   * 必须先在客户列表点「进入」选定当前客户才能进入业务页面。因此侧边栏要把业务菜单
+   * 置灰并说明出路，而不是让用户点了没反应。
+   *
+   * <p>仅对 AGENCY 生效：企业自有用户的 `enterprise_id` 即其归属企业，不存在此状态。
+   */
+  const needsEnterpriseSelection = computed(
+    () => isAgency.value && !currentEnterpriseId.value,
+  )
 
   function logout() {
     token.value = ''
@@ -141,6 +168,7 @@ export const useAuthStore = defineStore('auth', () => {
     currentEnterpriseId, userType, agencyId, agencyRole, enterpriseList,
     isLoggedIn, isSuperAdmin, isAgency,
     isAgencyAdmin, isAccountant, isReviewer, isAssistant,
+    needsEnterpriseSelection,
     hasPermission, canAccess, login, switchEnterprise, fetchUserInfo, logout,
   }
 })

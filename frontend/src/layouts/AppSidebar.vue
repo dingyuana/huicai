@@ -6,11 +6,29 @@
       </div>
       <span v-else class="logo-icon">慧</span>
     </div>
+    <!--
+      SPEC-P123：代理端会计尚未选择当前客户时，业务菜单整体置灰。
+      ⚠️ 必须同时回答「为什么灰」与「怎么才能点」（§4.5 第 50 条）：
+      此前点任何菜单都被路由守卫弹回客户列表、URL 不变、无任何提示，
+      用户感知为「菜单坏了」。这里给出原因与出路。
+    -->
+    <div
+      v-if="authStore.needsEnterpriseSelection"
+      class="menu-lock-hint"
+      :class="{ 'is-collapsed': appStore.sidebarCollapsed }"
+      title="尚未选择当前客户，菜单暂不可用。请在「客户列表」点击「进入」后再操作。"
+    >
+      <template v-if="!appStore.sidebarCollapsed">
+        尚未选择当前客户，菜单暂不可用。
+        <router-link class="menu-lock-link" to="/agency/enterprise-list">去客户列表选择 →</router-link>
+      </template>
+      <span v-else>🔒</span>
+    </div>
     <el-menu
       :default-active="route.path"
       :collapse="appStore.sidebarCollapsed"
       :router="true"
-      class="sidebar-menu"
+      :class="['sidebar-menu', { 'menu-locked': authStore.needsEnterpriseSelection }]"
     >
       <!-- 首页 -->
       <el-menu-item v-if="authStore.canAccess('/dashboard')" index="/dashboard">
@@ -151,7 +169,11 @@
           <el-icon><OfficeBuilding /></el-icon>
           <span>代理公司</span>
         </template>
-        <el-menu-item v-if="authStore.canAccess('/agency/enterprise-list')" index="/agency/enterprise-list">客户列表</el-menu-item>
+        <el-menu-item
+          v-if="authStore.canAccess('/agency/enterprise-list')"
+          index="/agency/enterprise-list"
+          class="is-unlocked"
+        >客户列表</el-menu-item>
         <!-- 代理经理专属：会计/助理无跨客户管理操作权（SPEC-P120）。
              后端 /batch/close 的入参是调用方自填的企业 id 列表且无角色守卫，
              故本入口仅对经理开放，与 accountant-list / assignment-manage 等
@@ -209,6 +231,47 @@ const labStore = useLabStore()
 </script>
 
 <style scoped lang="scss">
+/* SPEC-P123：未选当前客户时的置灰态 */
+.menu-lock-hint {
+  padding: 8px 12px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: #ffd591;
+  background: #422006;
+  border-bottom: 1px solid #595959;
+
+  &.is-collapsed {
+    text-align: center;
+    padding: 6px 0;
+  }
+}
+
+.menu-lock-link {
+  color: #ffa940;
+  text-decoration: underline;
+
+  &:hover {
+    color: #ffc069;
+  }
+}
+
+.sidebar-menu.menu-locked {
+  /* 置灰且不可点：让「点不动」在视觉上成立，而不是点了没反应 */
+  :deep(.el-menu-item) {
+    opacity: 0.4;
+    cursor: not-allowed;
+    pointer-events: none;
+  }
+
+  /* ⚠️ 唯一出路必须保留可点，否则用户彻底卡死 */
+  :deep(.el-menu-item.is-unlocked) {
+    opacity: 1;
+    cursor: pointer;
+    pointer-events: auto;
+    color: #ffa940;
+  }
+}
+
 .sidebar {
   width: 200px;
   height: 100vh;
