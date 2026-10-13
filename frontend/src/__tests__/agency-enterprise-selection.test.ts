@@ -42,7 +42,9 @@ describe('SPEC-P123：当前工作企业不被「归属企业」覆盖', () => {
     // 代理会计的 t_user.enterprise_id 按设计为 NULL —— 这正是线上情形
     getUserInfo.mockResolvedValue({
       permissions: ['voucher:list'], userType: 'AGENCY',
-      agencyId: 1, agencyRole: 'ACCOUNTANT', enterpriseId: null,
+      agencyId: 1, agencyRole: 'ACCOUNTANT',
+      homeEnterpriseId: null, currentEnterpriseId: null,
+      enterpriseSelectionRequired: true,
     })
 
     await store.fetchUserInfo()
@@ -51,13 +53,23 @@ describe('SPEC-P123：当前工作企业不被「归属企业」覆盖', () => {
     expect(localStorage.getItem(KEY)).toBe('2')
   })
 
-  it('AT-123-5a 企业自有用户：服务端返回非空归属企业时仍以服务端为准（回归锁）', async () => {
+  /**
+   * AT-123-5a（SPEC-P124 切片4 后已改写）：服务端返回**当前工作企业**时以其为准。
+   *
+   * 🔴 原用例断言「服务端返回非空**归属企业**时覆盖本地选择」。切片4 已把
+   * `enterpriseId` 拆成 `homeEnterpriseId`（归属）与 `currentEnterpriseId`（当前），
+   * 该前提不再成立 —— 若继续用 `enterpriseId` 字段名，恰好是切片4 要消灭的
+   * 「同名不同义」。故改为断言**当前工作企业**这一语义。
+   */
+  it('AT-123-5a 服务端返回非空 currentEnterpriseId 时以其为准（回归锁）', async () => {
     localStorage.setItem(KEY, '99')
     const store = await newStore()
 
     getUserInfo.mockResolvedValue({
       permissions: [], userType: 'ENTERPRISE',
-      agencyId: null, agencyRole: '', enterpriseId: 5,
+      agencyId: null, agencyRole: '',
+      homeEnterpriseId: 5, currentEnterpriseId: 5,
+      enterpriseSelectionRequired: false,
     })
 
     await store.fetchUserInfo()
@@ -65,12 +77,31 @@ describe('SPEC-P123：当前工作企业不被「归属企业」覆盖', () => {
     expect(store.currentEnterpriseId).toBe(5)
   })
 
+  /** 切片4 新增：归属企业非空但当前为空时，**不得**用归属冒充当前。 */
+  it('AT-123-4a 仅有归属企业时不得用它冒充当前工作企业', async () => {
+    localStorage.setItem(KEY, '2')
+    const store = await newStore()
+
+    getUserInfo.mockResolvedValue({
+      permissions: [], userType: 'AGENCY',
+      agencyId: 1, agencyRole: 'ACCOUNTANT',
+      homeEnterpriseId: 9, currentEnterpriseId: null,
+      enterpriseSelectionRequired: true,
+    })
+
+    await store.fetchUserInfo()
+
+    expect(store.currentEnterpriseId).toBe(2)
+  })
+
   it('AT-123-1a 未选客户时 needsEnterpriseSelection 为真；选定后为假', async () => {
     const store = await newStore()
 
     getUserInfo.mockResolvedValue({
       permissions: [], userType: 'AGENCY',
-      agencyId: 1, agencyRole: 'ACCOUNTANT', enterpriseId: null,
+      agencyId: 1, agencyRole: 'ACCOUNTANT',
+      homeEnterpriseId: null, currentEnterpriseId: null,
+      enterpriseSelectionRequired: true,
     })
     await store.fetchUserInfo()
     expect(store.needsEnterpriseSelection).toBe(true)

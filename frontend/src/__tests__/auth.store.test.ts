@@ -19,7 +19,9 @@ const mockLoginResult = {
   refreshToken: 'test-refresh-token',
   tokenType: 'Bearer',
   userType: 'ENTERPRISE',
-  enterpriseId: 1,
+  homeEnterpriseId: null,
+  currentEnterpriseId: 1,
+  enterpriseSelectionRequired: false,
   agencyId: null,
   enterpriseList: [],
   userInfo: {

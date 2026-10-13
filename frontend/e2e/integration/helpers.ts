@@ -53,7 +53,14 @@ export async function login(request: APIRequestContext): Promise<LoginResult> {
 
   cachedToken = body.data.token
   cachedUserInfo = body.data.userInfo
-  return { token: cachedToken, userInfo: cachedUserInfo, enterpriseId: body.data.enterpriseId || '1' }
+  // SPEC-P124 切片4：字段已拆名。原写法 `body.data.enterpriseId || '1'` 带兜底，
+    // 契约变更后会**静默**回落到 '1' 而不报错 —— 那正是「契约改了却没人发现」的形态。
+    // 这里改为读 currentEnterpriseId，并在解析失败时**显式抛错**。
+    const current = body.data.currentEnterpriseId ?? body.data.homeEnterpriseId
+    if (current == null) {
+      throw new Error(`登录响应缺少企业字段，无法继续: ${JSON.stringify(body.data)}`)
+    }
+    return { token: cachedToken, userInfo: cachedUserInfo, enterpriseId: String(current) }
 }
 
 /**

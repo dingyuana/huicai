@@ -86,9 +86,12 @@ export const useAuthStore = defineStore('auth', () => {
     agencyId.value = result.agencyId || null
     agencyRole.value = result.agencyRole || ''
     enterpriseList.value = result.enterpriseList || []
-    if (result.enterpriseId) {
-      currentEnterpriseId.value = result.enterpriseId
-      localStorage.setItem('huicai_current_enterprise_id', String(result.enterpriseId))
+    // SPEC-P124 切片4：登录响应的企业字段已拆名。
+    // 登录时尚未切换客户，故 currentEnterpriseId 即登录时生效的企业；
+    // homeEnterpriseId 是「归属企业」，代理会计为 null，**不可**用来初始化当前企业。
+    if (result.currentEnterpriseId) {
+      currentEnterpriseId.value = result.currentEnterpriseId
+      localStorage.setItem('huicai_current_enterprise_id', String(result.currentEnterpriseId))
     }
 
     localStorage.setItem('huicai_token', result.token)
@@ -145,8 +148,8 @@ export const useAuthStore = defineStore('auth', () => {
       //
       // 只有服务端**真的带了**归属企业时，才允许它覆盖本地选择；
       // 为 null 时一律保留本地已有的当前工作企业。
-      if (info.enterpriseId != null) {
-        currentEnterpriseId.value = info.enterpriseId
+      if (info.currentEnterpriseId != null) {
+        currentEnterpriseId.value = info.currentEnterpriseId
       }
       if (info.enterpriseList) enterpriseList.value = info.enterpriseList
     } catch {

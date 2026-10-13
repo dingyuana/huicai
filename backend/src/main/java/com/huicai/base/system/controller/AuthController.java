@@ -173,14 +173,26 @@ public class AuthController {
         response.setRefreshToken(refreshToken);
         response.setTokenType("Bearer");
         response.setUserType(userType);
-        response.setEnterpriseId(enterpriseId);
+        // 切片4：登录时企业上下文尚未被切换，归属与当前相同。
+        // enterpriseSelectionRequired 不能写死 false —— 代理会计登录时
+        // enterprise_id 按设计为 null，此时确实**需要**先选客户，
+        // 写死会让前端拿不到「为什么菜单是灰的」这一原因。
+        response.setHomeEnterpriseId(enterpriseId);
+        response.setCurrentEnterpriseId(enterpriseId);
+        response.setEnterpriseSelectionRequired(
+                "AGENCY".equals(userType) && enterpriseId == null);
         response.setAgencyId(agencyId);
         response.setAgencyRole(agencyRole);
         response.setEnterpriseList(enterpriseList);
-        response.setUserInfo(new UserInfoResponse(user.getId(), user.getUsername(),
+        UserInfoResponse loginInfo = new UserInfoResponse(user.getId(), user.getUsername(),
                 user.getRealName(), user.getNickname(), user.getEmail(), user.getPhone(),
                 user.getAvatar(), user.getDeptId(), roleIds, permissions,
-                userType, agencyId, enterpriseId, agencyRole, enterpriseList));
+                userType, agencyId, null, enterpriseId, false, agencyRole, enterpriseList);
+        loginInfo.setHomeEnterpriseId(enterpriseId);
+        loginInfo.setCurrentEnterpriseId(enterpriseId);
+        loginInfo.setEnterpriseSelectionRequired(
+                "AGENCY".equals(userType) && enterpriseId == null);
+        response.setUserInfo(loginInfo);
 
         return R.ok(response);
     }
@@ -257,7 +269,14 @@ public class AuthController {
         UserInfoResponse userInfo = new UserInfoResponse(user.getId(), user.getUsername(),
                 user.getRealName(), user.getNickname(), user.getEmail(), user.getPhone(),
                 user.getAvatar(), user.getDeptId(), roleIds, permissions,
-                userType, agencyId, enterpriseId, agencyRole, enterpriseList);
+                userType, agencyId, null, enterpriseId, false, agencyRole, enterpriseList);
+
+        // 切片4：此处 enterpriseId 取自**当前生效上下文**（过滤器已按 JWT/请求头解析），
+        // 与「归属企业」是两个概念，必须分开给出，否则前端无从判断该信哪个。
+        userInfo.setHomeEnterpriseId(user.getEnterpriseId());
+        userInfo.setCurrentEnterpriseId(enterpriseId);
+        userInfo.setEnterpriseSelectionRequired(
+                "AGENCY".equals(userType) && enterpriseId == null);
 
         return R.ok(userInfo);
     }
@@ -288,7 +307,25 @@ public class AuthController {
         private String refreshToken;
         private String tokenType;
         private String userType;
-        private Long enterpriseId;
+
+        /**
+         * SPEC-P124 切片4：<b>归属企业</b> —— 他属于哪家（{@code t_user.enterprise_id}）。
+     * 代理会计的该值按设计为 NULL：他跨客户服务，不「归属」任何一家。
+     */
+        private Long homeEnterpriseId;
+
+        /**
+         * SPEC-P124 切片4：<b>当前工作企业</b> —— 他正在为哪家干活。
+     * 与 {@code homeEnterpriseId} 是<b>两个概念</b>；此前二者共用 {@code enterpriseId}
+     * 一个名字，任何误用都会造成「把归属当当前」的覆盖事故。
+     */
+        private Long currentEnterpriseId;
+
+        /**
+         * SPEC-P124 切片4：是否需要先选择当前客户（仅代理端可能为 true）。
+     * 让<b>原因由后端给出</b>，前端据此渲染引导态，而非靠 localStorage 推断。
+     */
+        private Boolean enterpriseSelectionRequired;
         private Long agencyId;
         private String agencyRole;
         private List<EnterpriseSimpleVO> enterpriseList;
@@ -311,7 +348,25 @@ public class AuthController {
         // S-26: 多租户字段
         private String userType;
         private Long agencyId;
-        private Long enterpriseId;
+
+        /**
+         * SPEC-P124 切片4：<b>归属企业</b> —— 他属于哪家（{@code t_user.enterprise_id}）。
+     * 代理会计的该值按设计为 NULL：他跨客户服务，不「归属」任何一家。
+     */
+        private Long homeEnterpriseId;
+
+        /**
+         * SPEC-P124 切片4：<b>当前工作企业</b> —— 他正在为哪家干活。
+     * 与 {@code homeEnterpriseId} 是<b>两个概念</b>；此前二者共用 {@code enterpriseId}
+     * 一个名字，任何误用都会造成「把归属当当前」的覆盖事故。
+     */
+        private Long currentEnterpriseId;
+
+        /**
+         * SPEC-P124 切片4：是否需要先选择当前客户（仅代理端可能为 true）。
+     * 让<b>原因由后端给出</b>，前端据此渲染引导态，而非靠 localStorage 推断。
+     */
+        private Boolean enterpriseSelectionRequired;
         private String agencyRole;
         private List<EnterpriseSimpleVO> enterpriseList;
     }

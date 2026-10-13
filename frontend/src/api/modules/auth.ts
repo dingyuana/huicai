@@ -20,7 +20,12 @@ export interface UserInfo {
   userType?: string
   agencyId?: number | null
   agencyRole?: string
-  enterpriseId?: number | null
+  // SPEC-P124 切片4：归属企业 与 当前工作企业 是两个概念，不可再共用一个字段名。
+  // 代理会计的 homeEnterpriseId 按设计为 null（跨客户服务，不归属任何一家）。
+  homeEnterpriseId?: number | null
+  currentEnterpriseId?: number | null
+  /** 是否需要先选择当前客户（仅代理端可能为 true）；让原因由后端给出 */
+  enterpriseSelectionRequired?: boolean
   enterpriseList?: EnterpriseSimple[]
 }
 
@@ -38,7 +43,9 @@ export interface LoginResult {
   tokenType: string
   userType: string
   agencyRole?: string
-  enterpriseId: number | null
+  homeEnterpriseId: number | null
+  currentEnterpriseId: number | null
+  enterpriseSelectionRequired: boolean
   agencyId: number | null
   enterpriseList: EnterpriseSimple[]
   userInfo: UserInfo
