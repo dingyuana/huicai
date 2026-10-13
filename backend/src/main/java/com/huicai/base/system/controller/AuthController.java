@@ -9,6 +9,7 @@ import com.huicai.agency.user.mapper.AgencyUserEnterpriseMapper;
 import com.huicai.agency.user.mapper.AgencyUserMapper;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.huicai.common.context.EnterpriseContextHolder;
+import com.huicai.common.exception.BusinessException;
 import com.huicai.common.response.R;
 import com.huicai.config.security.JwtProvider;
 import com.huicai.base.system.entity.MenuEntity;
@@ -52,6 +53,46 @@ public class AuthController {
     private final EnterpriseMapper enterpriseMapper;
     private final AgencyUserMapper agencyUserMapper;
     private final AgencyUserEnterpriseMapper agencyUserEnterpriseMapper;
+
+    /**
+     * SPEC-P124：用 refresh token 换新的 access token。
+     *
+     * <p><b>此前为何没有它</b>：登录一直会签发 refresh token（有效期 7 天），
+     * 但<b>没有任何端点能兑换它</b>，前端 401 只清 localStorage 直接登出 ——
+     * 即 refresh 机制「签发了却从未被使用」。这正是「缩短 access token 有效期」
+     * 迟迟不能落地的前置障碍。
+     *
+     * <p><b>企业上下文必须延续</b>：refresh token 携带与 access token 相同的 claim
+     * （含 {@code enterpriseId}），换证后代理会计仍停留在切换后的客户，
+     * 不会因 token 过期被无声弹回客户列表。
+     *
+     * <p><b>失败一律 401</b>：refresh 无效/过期时不得降级放行。
+     */
+    @PostMapping("/refresh")
+    public R<TokenResponse> refresh(@RequestBody RefreshRequest request) {
+        String refreshToken = request.getRefreshToken();
+        if (refreshToken == null || !jwtProvider.validateRefreshToken(refreshToken)) {
+            throw BusinessException.unauthorized("登录已过期，请重新登录");
+        }
+
+        String username = jwtProvider.getUsernameFromToken(refreshToken);
+        // 重新核对账号状态：refresh token 有效期内账号可能已被停用/锁定
+        UserEntity user = userMapper.selectByUsername(username);
+        if (user == null || !Integer.valueOf(0).equals(user.getDeleted())
+                || !"ACTIVE".equals(user.getStatus())) {
+            throw BusinessException.unauthorized("账号不可用，请重新登录");
+        }
+
+        List<Long> roleIds = userRoleMapper.getRoleIdsByUserId(user.getId());
+        String accessToken = jwtProvider.generateAccessToken(username, user.getId(),
+                roleIds.stream().map(String::valueOf).collect(Collectors.toList()),
+                jwtProvider.getEnterpriseIdFromToken(refreshToken),
+                user.getAgencyId(),
+                user.getUserType() != null ? user.getUserType() : "ENTERPRISE",
+                user.getAgencyRole());
+
+        return R.ok(new TokenResponse(accessToken, "Bearer"));
+    }
 
     @PostMapping("/login")
     public R<LoginResponse> login(@RequestBody LoginRequest request) {
@@ -123,7 +164,9 @@ public class AuthController {
         String accessToken = jwtProvider.generateAccessToken(username, user.getId(),
                 roleIds.stream().map(String::valueOf).collect(Collectors.toList()),
                 enterpriseId, agencyId, userType, agencyRole);
-        String refreshToken = jwtProvider.generateRefreshToken(username);
+        String refreshToken = jwtProvider.generateRefreshToken(username, user.getId(),
+                roleIds.stream().map(String::valueOf).collect(Collectors.toList()),
+                enterpriseId, agencyId, userType, agencyRole);
 
         LoginResponse response = new LoginResponse();
         response.setToken(accessToken);
@@ -217,6 +260,20 @@ public class AuthController {
                 userType, agencyId, enterpriseId, agencyRole, enterpriseList);
 
         return R.ok(userInfo);
+    }
+
+    /** SPEC-P124：refresh 请求体 */
+    @Data
+    public static class RefreshRequest {
+        private String refreshToken;
+    }
+
+    /** SPEC-P124：续期响应 */
+    @Data
+    @AllArgsConstructor
+    public static class TokenResponse {
+        private String token;
+        private String tokenType;
     }
 
     @Data

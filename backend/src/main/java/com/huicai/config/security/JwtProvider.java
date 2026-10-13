@@ -59,15 +59,47 @@ public class JwtProvider {
                 .compact();
     }
 
-    public String generateRefreshToken(String username) {
+    /**
+     * 签发 refresh token。
+     *
+     * <p><b>SPEC-P124 为何必须带上完整 claim</b>：refresh 的用途是「凭长期凭证换新的
+     * access token」。若它只带 {@code subject}，换证时就无法还原<b>当前企业上下文</b> ——
+     * 代理会计切到客户 2 后一旦 access token 过期，续期拿回的却是企业为 null 的 token，
+     * 用户会被无声地弹回客户列表。故此处与 access token 携带同一组 claim。
+     */
+    public String generateRefreshToken(String username, Long userId, List<String> roles,
+                                       Long enterpriseId, Long agencyId,
+                                       String userType, String agencyRole) {
         Date now = new Date();
         return Jwts.builder()
                 .subject(username)
                 .claim("type", "refresh")
+                .claim("userId", userId)
+                .claim("roles", roles)
+                .claim("enterpriseId", enterpriseId)
+                .claim("agencyId", agencyId)
+                .claim("userType", userType)
+                .claim("agencyRole", agencyRole)
                 .issuedAt(now)
                 .expiration(new Date(now.getTime() + refreshTokenExpiration))
                 .signWith(key)
                 .compact();
+    }
+
+    /**
+     * 校验 refresh token。
+     *
+     * <p>与 {@link #validateToken} 分开：两者分别把关 access / refresh 两种用途，
+     * 混用会导致任一方向都可冒用（SPEC-P124 P0 已修过一次）。
+     */
+    public boolean validateRefreshToken(String token) {
+        try {
+            Claims claims = Jwts.parser().verifyWith(key).build()
+                    .parseSignedClaims(token).getPayload();
+            return "refresh".equals(claims.get("type", String.class));
+        } catch (Exception e) {
+            return false;
+        }
     }
 
     /**

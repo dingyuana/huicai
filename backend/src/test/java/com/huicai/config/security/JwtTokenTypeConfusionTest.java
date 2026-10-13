@@ -34,10 +34,32 @@ class JwtTokenTypeConfusionTest {
     @Test
     @DisplayName("refresh token 必须被 validateToken 判为不可用")
     void refreshTokenMustNotAuthenticate() {
-        String refresh = provider().generateRefreshToken("someuser");
+        String refresh = newRefreshToken();
         assertFalse(provider().validateToken(refresh),
                 "refresh token 被当作 access token 接受 ⇒ token 类型混淆成立，"
                         + "access token 有效期形同虚设");
+    }
+
+    /** SPEC-P124：refresh 端点的前置，refresh 自己也必须能被独立校验。 */
+    @Test
+    @DisplayName("refresh token 必须被 validateRefreshToken 接受（否则 /refresh 无法兑换）")
+    void refreshTokenIsAcceptedByItsOwnValidator() {
+        assertTrue(provider().validateRefreshToken(newRefreshToken()));
+    }
+
+    /** 反向：access token 不得被 refresh 校验器接受，否则等于没修类型混淆。 */
+    @Test
+    @DisplayName("access token 必须被 validateRefreshToken 判为不可用")
+    void accessTokenMustNotAuthenticateAsRefresh() {
+        String access = provider().generateAccessToken(
+                "someuser", 1L, List.of("ADMIN"), 7L, null, "SUPER_ADMIN", null);
+        assertFalse(provider().validateRefreshToken(access),
+                "access token 被当 refresh 接受 ⇒ 凭 30 分钟的 access token 即可无限续期");
+    }
+
+    private String newRefreshToken() {
+        return provider().generateRefreshToken(
+                "someuser", 1L, List.of("ACCOUNTANT"), 2L, 1L, "AGENCY", "ACCOUNTANT");
     }
 
     @Test
