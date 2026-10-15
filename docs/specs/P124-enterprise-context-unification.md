@@ -167,3 +167,46 @@ homeEnterpriseId, currentEnterpriseId, enterpriseSelectionRequired, permissions,
 1. P122 遗留的「MP default 方法缺事务」仍待立项。
 2. `tenant_id` 双列并存债（§7.7）不在本 SPEC。
 3. P123 已验证的 UX 修复**保留**，但它在本 SPEC 落地后属**兜底**，不再是主要防线。
+
+---
+
+# MACHINE-READABLE CONTRACT
+
+contract_version: "1.0"
+
+entity: LoginUser
+module: auth
+table: t_user
+
+# 契约以「规则型」表达：语义拆分与唯一权威均可机械校验。
+rules:
+  - id: C-01
+    source: "P124 §1①"
+    rule: "/auth/userinfo 必须返回 homeEnterpriseId（归属企业）与 currentEnterpriseId（当前工作企业）两个语义自明的字段，且不得再出现裸 enterpriseId"
+    mapping: { required: [homeEnterpriseId, currentEnterpriseId], forbidden: enterpriseId }
+    implementation: "EnterpriseContextSemanticsTest"
+  - id: C-02
+    source: "P124 §1②"
+    rule: "POST /v1/enterprise/switch 成功后必须重签并返回新 token，且新 token 解出的 enterpriseId 为目标企业"
+    mapping: { reissue: required, new_token_must_differ: true }
+    implementation: "SwitchReissuesTokenTest"
+  - id: C-03
+    source: "P124 §1②"
+    rule: "JWT 是企业上下文的唯一权威；X-Enterprise-Id 降级为过渡兼容，不得成为权威来源"
+    mapping: { sole_authority: jwt, deprecated: X-Enterprise-Id }
+    implementation: "JwtAuthenticationFilter + EnterpriseMembershipChecker"
+  - id: C-04
+    source: "P124 §6"
+    rule: "只带 JWT（不带 X-Enterprise-Id）也必须能解析出企业上下文"
+    mapping: { header_required: false }
+    implementation: "JwtEnterpriseContextRealDBTest"
+  - id: C-05
+    source: "P124 §1③"
+    rule: "/auth/userinfo 必须显式返回 enterpriseSelectionRequired，前端不得靠 localStorage 推断"
+    mapping: { required_field: enterpriseSelectionRequired, forbidden: infer_from_localStorage }
+    implementation: "AuthController.userinfo"
+  - id: C-06
+    source: "P124 §6"
+    rule: "守卫必须逐条可反证；E2E 空断言视为无效反证"
+    mapping: { each_guard_requires: counter_proof }
+    implementation: "EnterpriseContextSemanticsTest / SwitchReissuesTokenTest / JwtEnterpriseContextRealDBTest"

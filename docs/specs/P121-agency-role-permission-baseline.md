@@ -99,3 +99,40 @@
 | 版本 | 日期 | 变更 |
 |---|---|---|
 | V1.0 | 2026-10-12 | 首版。取证三层断裂 + E2E 覆盖漏洞；定映射表与独立口径 |
+| V1.1 | 2026-10-14 | 补机器可读契约（rules 型），此前契约内容存在但门禁不可见 |
+
+# MACHINE-READABLE CONTRACT
+
+contract_version: "1.0"
+
+entity: AgencyUser
+module: agency
+table: t_agency_user
+
+# 本 SPEC 不涉及业务状态机（角色映射为一次性数据迁移），契约以「规则型」表达。
+rules:
+  - id: C-01
+    source: "P121 §3.1"
+    rule: "agency_role 与平台角色正交，禁止级联同步 —— 改 agency_role 不得自动改 t_user_role"
+    mapping: { cascade_sync: forbidden, reason: "级联会引入第二处角色写入方，与 P115 单一事实源冲突" }
+    implementation: "V179 migration"
+  - id: C-02
+    source: "P121 §3.2"
+    rule: "角色映射表只写在 Flyway 迁移中，禁止硬编码进业务逻辑"
+    mapping: { location: flyway_only, forbidden_in: business_code }
+    implementation: "V179 migration"
+  - id: C-03
+    source: "P121 §4"
+    rule: "迁移须幂等：按 agency_role 绑定平台角色使用 INSERT ... SELECT ... WHERE NOT EXISTS，并受 uq_user_role 约束保护"
+    mapping: { idempotent: true, unique_guard: uq_user_role }
+    implementation: "V179 migration"
+  - id: C-04
+    source: "P121 §3.2 映射表"
+    rule: "映射固定为 ACCOUNTANT→ACCOUNTANT(3)、REVIEWER→FINANCE_MGR(2)、ASSISTANT→CASHIER(4)、AGENCY_ADMIN→ADMIN(1)"
+    mapping: { ACCOUNTANT: 3, REVIEWER: 2, ASSISTANT: 4, AGENCY_ADMIN: 1 }
+    implementation: "V179 migration"
+  - id: C-05
+    source: "P121 §4"
+    rule: "前端菜单可见性与路由守卫必须用同一套 permission 口径，消除「看得见却点不开」"
+    mapping: { single_source: permission, forbidden: dual_criteria }
+    implementation: "frontend sidebar menu filter"

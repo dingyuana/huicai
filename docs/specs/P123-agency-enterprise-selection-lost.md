@@ -174,4 +174,47 @@ if (info.enterpriseId != null && info.enterpriseId !== currentEnterpriseId)
    业务菜单置灰，用提示条说明**为什么灰**与**怎么才能点**，并给**可点击的跳转入口**
    直达 `/agency/enterprise-list`。判据：§4.5 第 50 条「禁用一个控件时必须同时回答
    『为什么灰』与『怎么才能点』」，只置灰不给出路，等于把「点了没反应」换成
-   「点不动且不解释」，后者更难定位。
+    「点不动且不解释」，后者更难定位。
+
+---
+
+# MACHINE-READABLE CONTRACT
+
+contract_version: "1.0"
+
+entity: AuthStore
+module: auth
+table: null
+
+# 契约以「规则型」表达：覆盖规则与禁用态提示均可机械校验。
+rules:
+  - id: C-01
+    source: "P123 §2.2"
+    rule: "userinfo.enterpriseId 仅在为非 null 且与当前值不同时才覆盖；为 null 时必须保留本地选择"
+    mapping: { overwrite_when: "info.enterpriseId != null && info.enterpriseId !== currentEnterpriseId", null_means: keep_local }
+    implementation: "frontend auth.store fetchUserInfo"
+  - id: C-02
+    source: "P123 §2.2"
+    rule: "禁止用 !== undefined 判空（null !== undefined 为真，正是本缺陷本身）"
+    mapping: { forbidden_operator: strict_inequality_undefined }
+    implementation: "frontend auth.store fetchUserInfo"
+  - id: C-03
+    source: "P123 §2.2"
+    rule: "禁止用 || 作兜底（企业号恒为正数，|| 语义含糊）"
+    mapping: { forbidden_operator: logical_or_fallback }
+    implementation: "frontend auth.store fetchUserInfo"
+  - id: C-04
+    source: "P123 §2.1"
+    rule: "企业上下文优先级固定：localStorage(1) > X-Enterprise-Id(2) > userinfo.enterpriseId(3)"
+    mapping: { priority: [localStorage, X-Enterprise-Id, userinfo.enterpriseId] }
+    implementation: "frontend auth.store"
+  - id: C-05
+    source: "P123 §7.3 第 4 条 / §4"
+    rule: "未选企业时业务菜单禁用态必须同时给出「为什么灰」与「怎么才能点」，并提供可点击入口直达 /agency/enterprise-list"
+    mapping: { disabled_requires: [reason, remedy_link], remedy_target: /agency/enterprise-list }
+    implementation: "frontend router guard + layout menu"
+  - id: C-06
+    source: "P123 §0.4"
+    rule: "本 SPEC 不得修改 AuthController（已取证推翻该前提）"
+    mapping: { forbidden_change: AuthController }
+    implementation: "n/a"

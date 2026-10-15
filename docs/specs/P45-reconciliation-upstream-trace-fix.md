@@ -134,6 +134,11 @@ reconLog.setTargetBusinessDocId(request.targetDocId());
 
 ## 5. MACHINE-READABLE CONTRACT
 
+> ⚠️ **解锁前提**：本段是 `contracts:` 端点型契约，且 ```yaml 围栏未正确闭合
+> （抽取出的 YAML 含第二个文档 `---`，解析报 `expected a single document`）。
+> 标记保持**不可见**，是**校验器能力缺口 + 文档缺陷**，不是契约写错。
+> 解锁需：① 补齐围栏 ② 校验器支持 `contracts:` 类型。参见 AGENTS §0。
+
 ```yaml
 contract_version: "1.0"
 module: arap
