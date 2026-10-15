@@ -1,6 +1,7 @@
 package com.huicai.sme.asset.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.huicai.base.voucher.VoucherTypeStub;
 import com.huicai.base.system.service.VoucherTypeService;
 import com.huicai.base.system.entity.PeriodEntity;
 import com.huicai.base.system.entity.Subject;
@@ -75,6 +76,9 @@ class DepreciationVoucherRealDBTest extends AbstractMapperTest {
     @BeforeEach
     void setUp() {
         EnterpriseContextHolder.set(ENTERPRISE_ID);
+        // SPEC-P128：制证改为按 code 解析凭证类型，mock 必须打桩，
+        // 否则 requireByCode 返回 null ⇒ .getId() NPE，报错完全看不出是「未打桩」。
+        VoucherTypeStub.install(voucherTypeService);
         service = new DepreciationVoucherServiceImpl(depreciationMapper, subjectMapper,
                 periodService, voucherMapper, voucherEntryMapper, voucherTypeService);
         insertPeriod(PERIOD, "open");
