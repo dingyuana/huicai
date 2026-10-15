@@ -155,6 +155,12 @@ public class VoucherServiceImpl extends ServiceImpl<VoucherMapper, VoucherEntity
         validateAssistJson(dto.getEntries());
         validateVoucherTypeLimit(dto.getVoucherTypeId(), dto.getEntries());
 
+        // SPEC-P128 §7 已登记的排除项收口：voucher_type_id 由前端传入，
+        // 原先直接信任。🔴 后果与 setVoucherTypeId(1L) 同型：凭证会挂到**别的企业**的
+        // 凭证类型上，而外键约束照样成立 ⇒ 不报错但归属错乱（写路径静默比抛异常更危险）。
+        // 实测存量 0 条错挂（开发库原有 0 张凭证），但「前端传了别人的 id」这条路没有闸门。
+        requireVoucherTypeOfCurrentEnterprise(dto.getVoucherTypeId());
+
         // 生成凭证号
         String voucherNo = voucherNoService.generateNextNo(dto.getPeriod(), dto.getVoucherTypeId());
 
@@ -601,6 +607,27 @@ public class VoucherServiceImpl extends ServiceImpl<VoucherMapper, VoucherEntity
 
         if (totalDebit.compareTo(totalCredit) != 0) {
             throw BusinessException.badRequest("借贷不平衡: 借方=" + totalDebit + ", 贷方=" + totalCredit);
+        }
+    }
+
+    /**
+     * 断言传入的凭证类型属于<b>当前企业</b>。
+     *
+     * <p>不复用 {@code VoucherTypeService.requireByCode}：那里按 <b>code</b> 解析，
+     * 而此处前端给的是<b>主键 id</b>。因此只能按 id 取，再核对企业归属 ——
+     * 该查询同样受 RLS 收敛，若 id 属于他企业则<b>本就查不到</b>，直接判不存在即可。
+     *
+     * @throws BusinessException id 不存在或不属于当前企业时抛出，文案指明是凭证类型问题
+     */
+    private void requireVoucherTypeOfCurrentEnterprise(Long voucherTypeId) {
+        if (voucherTypeId == null) {
+            throw new BusinessException("凭证类型不能为空");
+        }
+        VoucherTypeEntity type = voucherTypeService.getById(voucherTypeId);
+        if (type == null) {
+            // RLS 已把「属于他企业」的行过滤掉 ⇒ 查不到即等于「本企业没有这个凭证类型」
+            throw new BusinessException(
+                    "凭证类型不存在或不属于当前企业，请重新选择本企业的凭证类型");
         }
     }
 

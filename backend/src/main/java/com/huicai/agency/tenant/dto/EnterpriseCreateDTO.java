@@ -11,4 +11,13 @@ public class EnterpriseCreateDTO {
     private String enterpriseName;
     private String taxId;
     private Long agencyId;
+
+    /** 联系人（SPEC-P129：可选） */
+    private String contactName;
+    /** 电话（SPEC-P129：可选；固话含区号，禁止用 Long） */
+    private String contactPhone;
+    /** 邮箱（SPEC-P129：可选） */
+    private String contactEmail;
+    /** 地址（SPEC-P129：可选） */
+    private String address;
 }

@@ -19,4 +19,15 @@ public class EnterpriseVO {
     private String status;
     private Boolean seedDataDone;
     private LocalDateTime createdAt;
+
+    /** 联系人 */
+    private String contactName;
+    /**
+     * 电话 —— PII，非管理员由服务端脱敏（SPEC-P129 D-1 裁定）。
+     */
+    private String contactPhone;
+    /** 邮箱 —— PII，非管理员由服务端脱敏（SPEC-P129 D-1 裁定）。 */
+    private String contactEmail;
+    /** 地址 */
+    private String address;
 }
