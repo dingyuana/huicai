@@ -1,5 +1,6 @@
 package com.huicai.concurrency;
 
+import com.huicai.base.system.service.VoucherTypeService;
 import com.huicai.base.business.entity.ArapSettlementEntity;
 import com.huicai.base.business.entity.ArapSettlementEntryEntity;
 import com.huicai.base.business.entity.BusinessDocEntity;
@@ -76,6 +77,8 @@ class CoreWriteOperationConcurrencyTest {
     @Mock private com.huicai.base.business.service.OutputInvoiceStateMachineService outputInvoiceStateMachineService;
     @Mock private com.huicai.sme.tax.service.InputInvoiceStateMachineService inputInvoiceStateMachineService;
     @Mock private com.huicai.base.business.mapper.BankStatementMapper bankStatementMapper;
+    @Mock
+    private VoucherTypeService voucherTypeService;
 
     private ArapSettlementServiceImpl service;
 
@@ -89,7 +92,7 @@ class CoreWriteOperationConcurrencyTest {
         service = new ArapSettlementServiceImpl(
                 mapper, entryMapper, businessDocMapper, customerMapper, vendorMapper,
                 voucherTemplateService, voucherMapper, voucherEntryMapper,
-                voucherNoService, logMapper, outputInvoiceStateMachineService, inputInvoiceStateMachineService, bankStatementMapper);
+                voucherNoService, logMapper, outputInvoiceStateMachineService, inputInvoiceStateMachineService, bankStatementMapper, voucherTypeService);
     }
 
     /**

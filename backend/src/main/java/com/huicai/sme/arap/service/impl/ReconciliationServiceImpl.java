@@ -2,6 +2,7 @@ package com.huicai.sme.arap.service.impl;
 
 import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.huicai.base.system.service.VoucherTypeService;
 import com.huicai.common.context.EnterpriseContextHolder;
 import com.huicai.common.exception.BusinessException;
 import com.huicai.base.system.util.SecurityUtils;
@@ -498,7 +499,8 @@ public class ReconciliationServiceImpl implements ReconciliationService {
 
         String period = request.period() != null ? request.period()
                 : java.time.LocalDate.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyyMM"));
-        long voucherTypeId = "reconciliation_receipt".equals(classification) ? VoucherType.SK : VoucherType.FK;
+        long voucherTypeId = voucherTypeService.requireByCode(
+                "reconciliation_receipt".equals(classification) ? "SK" : "FK").getId();
         String voucherNo = voucherNoService.generateNextNo(period, voucherTypeId);
 
         VoucherEntity voucher = new VoucherEntity();
@@ -950,6 +952,8 @@ public class ReconciliationServiceImpl implements ReconciliationService {
      */
     private static final Set<String> EXCEPTION_TYPE_ALLOWED = Set.of(
             "AMOUNT_DIFF", "DATE_DIFF", "UNMATCHED", "DUPLICATE");
+
+    private final VoucherTypeService voucherTypeService;
 
     @Override
     @Transactional(rollbackFor = Exception.class)

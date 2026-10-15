@@ -1,6 +1,7 @@
 package com.huicai.sme.asset.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.huicai.base.voucher.VoucherTypeStub;import com.huicai.base.system.service.VoucherTypeService;
 import com.huicai.base.system.entity.PeriodEntity;
 import com.huicai.base.system.entity.Subject;
 import com.huicai.base.system.mapper.SubjectMapper;
@@ -64,13 +65,15 @@ class DepreciationVoucherServiceImplTest {
     @Mock private PeriodService periodService;
     @Mock private VoucherMapper voucherMapper;
     @Mock private VoucherEntryMapper voucherEntryMapper;
+    @Mock
+    private VoucherTypeService voucherTypeService;
 
     private DepreciationVoucherServiceImpl service;
 
     @BeforeEach
     void setUp() {
         service = new DepreciationVoucherServiceImpl(depreciationMapper, subjectMapper,
-                periodService, voucherMapper, voucherEntryMapper);
+                periodService, voucherMapper, voucherEntryMapper, voucherTypeService);
     }
 
     // ==================== stub helpers ====================
@@ -292,4 +295,9 @@ class DepreciationVoucherServiceImplTest {
             verify(voucherMapper, never()).insert(any(VoucherEntity.class));
         }
     }
+    @BeforeEach
+    void stubVoucherTypeByCode() {
+        VoucherTypeStub.install(voucherTypeService);
+    }
+
 }

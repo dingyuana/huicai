@@ -1,4 +1,5 @@
 package com.huicai.sme.tax.service.impl;
+import com.huicai.base.system.service.VoucherTypeService;
 import com.huicai.base.system.util.SecurityUtils;
 import com.huicai.base.business.util.ColumnMappingResolver;
 
@@ -64,8 +65,7 @@ public class SalesInvoiceImportService {
     }
 
     private static final long DEFAULT_USER_ID = 1L;
-    private static final long DEFAULT_VOUCHER_TYPE_ID = VoucherType.SK;
-
+    
     private final BusinessDocMapper docMapper;
     private final BusinessDocEntryMapper docEntryMapper;
     private final VoucherMapper voucherMapper;
@@ -84,6 +84,8 @@ public class SalesInvoiceImportService {
     private boolean autoFlowAfterImport;
 
     private final Map<String, List<ParsedInvoiceRow>> batchCache = new ConcurrentHashMap<>();
+
+    private final VoucherTypeService voucherTypeService;
 
     public Map<String, Object> previewInvoices(MultipartFile file) {
         if (file == null || file.isEmpty()) {
@@ -509,7 +511,7 @@ public class SalesInvoiceImportService {
 
     @Transactional
     protected void createVoucher(BusinessDocEntity doc, ParsedInvoiceRow row, Long customerId, String period) {
-        String voucherNo = voucherNoService.generateNextNo(period, DEFAULT_VOUCHER_TYPE_ID);
+        String voucherNo = voucherNoService.generateNextNo(period, voucherTypeService.requireByCode("SK").getId());
         Subject subjectBank = findSubjectByCode("1122");
         Subject subjectRevenue = findSubjectByCode("6001");
         Subject subjectOutputTax = findSubjectByCode("2221.01");
@@ -525,7 +527,7 @@ public class SalesInvoiceImportService {
         VoucherEntity voucher = new VoucherEntity();
         voucher.setVoucherNo(voucherNo);
         voucher.setPeriod(period);
-        voucher.setVoucherTypeId(DEFAULT_VOUCHER_TYPE_ID);
+        voucher.setVoucherTypeId(voucherTypeService.requireByCode("SK").getId());
         voucher.setStatus("DRAFT");
         voucher.setSource("GENERATED");
         voucher.setSummary("发票导入: " + row.invoiceNo + " " + row.goodsName);

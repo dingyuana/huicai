@@ -1,6 +1,6 @@
 package com.huicai.sme.tax.service.impl;
 
-import com.huicai.common.exception.BusinessException;
+import com.huicai.base.voucher.VoucherTypeStub;import com.huicai.base.system.service.VoucherTypeService;import com.huicai.common.exception.BusinessException;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.huicai.base.business.entity.InputInvoiceEntity;
 import com.huicai.base.business.entity.OutputInvoiceEntity;
@@ -20,6 +20,7 @@ import com.huicai.base.business.util.TemplateMatcher;
 import com.huicai.sme.tax.mapper.TaxDeclarationMapper;
 import com.huicai.sme.tax.mapper.TaxTypeMapper;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
@@ -52,6 +53,8 @@ class TaxServiceImplTest {
     @Mock private SubjectMapper subjectMapper;
     @Mock private TemplateMatcher templateMatcher;
     @Mock private ApplicationEventPublisher eventPublisher;
+    @Mock
+    private VoucherTypeService voucherTypeService;
     @InjectMocks private TaxServiceImpl service;
 
     private InputInvoiceEntity stubInput(Long id, String status) {
@@ -846,4 +849,9 @@ class TaxServiceImplTest {
         assertEquals(0, service.toBigDecimalSafe("abc").compareTo(BigDecimal.ZERO));
         assertEquals(0, service.toBigDecimalSafe(null).compareTo(BigDecimal.ZERO));
     }
+    @BeforeEach
+    void stubVoucherTypeByCode() {
+        VoucherTypeStub.install(voucherTypeService);
+    }
+
 }

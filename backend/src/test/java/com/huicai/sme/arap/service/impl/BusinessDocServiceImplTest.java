@@ -4,7 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.Wrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.conditions.query.LambdaQueryChainWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
-import com.huicai.base.business.dto.BusinessDocDTO;
+import com.huicai.base.voucher.VoucherTypeStub;import com.huicai.base.business.dto.BusinessDocDTO;
 import com.huicai.base.business.dto.BusinessDocQueryDTO;
 import com.huicai.base.business.dto.BusinessDocVO;
 import com.huicai.base.business.entity.BusinessDocEntity;
@@ -1157,4 +1157,9 @@ class BusinessDocServiceImplTest {
         assertNotNull(docNo);
         assertEquals("QT2026060005", docNo);
     }
+    @BeforeEach
+    void stubVoucherTypeByCode() {
+        VoucherTypeStub.install(voucherTypeService);
+    }
+
 }

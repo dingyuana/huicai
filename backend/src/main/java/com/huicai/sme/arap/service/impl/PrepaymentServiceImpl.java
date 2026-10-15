@@ -5,6 +5,7 @@ import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.huicai.base.system.service.VoucherTypeService;
 import com.huicai.common.context.EnterpriseContextHolder;
 import com.huicai.common.exception.BusinessException;
 import com.huicai.sme.arap.constant.ArapStatus;
@@ -79,6 +80,7 @@ public class PrepaymentServiceImpl implements PrepaymentService {
     private final VendorMapper vendorMapper;
     private final CustomerMapper customerMapper;
 
+    private final VoucherTypeService voucherTypeService;
     @Override
     public IPage<PrepaymentEntity> pageQuery(Long vendorId, Long customerId, String status, String scope,
                                              LocalDate startDate, LocalDate endDate, Integer current, Integer size) {
@@ -260,11 +262,11 @@ public class PrepaymentServiceImpl implements PrepaymentService {
         settlementMapper.updateById(settlement);
 
         // 7. 创建凭证 (借:应付账款 / 贷:预付账款)
-        String voucherNo = voucherNoService.generateNextNo(effectivePeriod, VoucherType.FK);
+        String voucherNo = voucherNoService.generateNextNo(effectivePeriod, voucherTypeService.requireByCode("FK").getId());
         VoucherEntity voucher = new VoucherEntity();
         voucher.setVoucherNo(voucherNo);
         voucher.setPeriod(effectivePeriod);
-        voucher.setVoucherTypeId(VoucherType.FK);
+        voucher.setVoucherTypeId(voucherTypeService.requireByCode("FK").getId());
         voucher.setStatus("DRAFT");
         voucher.setSource("GENERATED");
         voucher.setSummary(effectiveSummary);
@@ -398,11 +400,11 @@ public class PrepaymentServiceImpl implements PrepaymentService {
         settlement.setStatus(ArapStatus.CONFIRMED);
         settlementMapper.updateById(settlement);
 
-        String voucherNo = voucherNoService.generateNextNo(effectivePeriod, VoucherType.SK);
+        String voucherNo = voucherNoService.generateNextNo(effectivePeriod, voucherTypeService.requireByCode("SK").getId());
         VoucherEntity voucher = new VoucherEntity();
         voucher.setVoucherNo(voucherNo);
         voucher.setPeriod(effectivePeriod);
-        voucher.setVoucherTypeId(VoucherType.SK);
+        voucher.setVoucherTypeId(voucherTypeService.requireByCode("SK").getId());
         voucher.setStatus("DRAFT");
         voucher.setSource("GENERATED");
         voucher.setSummary(effectiveSummary);

@@ -43,7 +43,9 @@ class VoucherNoServiceImplTest {
     private static final String PERIOD = "202607";
     private static final Long VOUCHER_TYPE_ID = 1L;
     private static final String TYPE_CODE = "JZ";
-    private static final String REDIS_KEY = "voucher:no:202607:1";
+    // SPEC-P128（老丁裁定）：键改用 {enterpriseId}:{code}，与主键 id 解耦，
+    // 否则企业 2/3/4 各自的主键不同，新旧键并存会产生重号窗口。
+    private static final String REDIS_KEY = "voucher:no:202607:1:JZ";
 
     @BeforeEach
     void setUp() {
@@ -54,6 +56,8 @@ class VoucherNoServiceImplTest {
         VoucherTypeEntity type = new VoucherTypeEntity();
         type.setId(VOUCHER_TYPE_ID);
         type.setCode(TYPE_CODE);
+        // 新键含 enterpriseId（来自 RLS 收敛后的本企业行）
+        type.setEnterpriseId(1L);
         type.setName("记账凭证");
         return type;
     }

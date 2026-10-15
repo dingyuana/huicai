@@ -1,4 +1,5 @@
 package com.huicai.sme.tax.service.impl;
+import com.huicai.base.system.service.VoucherTypeService;
 import com.huicai.base.business.util.ColumnMappingResolver;
 
 import cn.hutool.core.util.StrUtil;
@@ -69,8 +70,7 @@ public class InputInvoiceImportService {
     }
 
     private static final long DEFAULT_USER_ID = 1L;
-    private static final long DEFAULT_VOUCHER_TYPE_ID = VoucherType.FK;
-
+    
     private final BusinessDocMapper docMapper;
     private final BusinessDocEntryMapper docEntryMapper;
     private final VoucherMapper voucherMapper;
@@ -84,6 +84,8 @@ public class InputInvoiceImportService {
     private final ApplicationEventPublisher eventPublisher; // P79：INTAKE 节点推进事件
 
     private final Map<String, List<ParsedInputInvoiceRow>> batchCache = new ConcurrentHashMap<>();
+
+    private final VoucherTypeService voucherTypeService;
 
     public Map<String, Object> previewInvoices(MultipartFile file) {
         if (file == null || file.isEmpty()) {
@@ -411,7 +413,7 @@ public class InputInvoiceImportService {
 
     @Transactional
     String createVoucher(BusinessDocEntity doc, ParsedInputInvoiceRow row, Long vendorId, String period) {
-        String voucherNo = voucherNoService.generateNextNo(period, DEFAULT_VOUCHER_TYPE_ID);
+        String voucherNo = voucherNoService.generateNextNo(period, voucherTypeService.requireByCode("FK").getId());
         Subject subjectPayable = requireSubjectByCode("2202");
         Subject subjectInventory = requireSubjectByCode("1405");
         Subject subjectInputTax = requireSubjectByCode("2221.02");
@@ -419,7 +421,7 @@ public class InputInvoiceImportService {
         VoucherEntity voucher = new VoucherEntity();
         voucher.setVoucherNo(voucherNo);
         voucher.setPeriod(period);
-        voucher.setVoucherTypeId(DEFAULT_VOUCHER_TYPE_ID);
+        voucher.setVoucherTypeId(voucherTypeService.requireByCode("FK").getId());
         voucher.setStatus("DRAFT");
         voucher.setTotalDebit(row.totalAmount);
         voucher.setTotalCredit(row.totalAmount);

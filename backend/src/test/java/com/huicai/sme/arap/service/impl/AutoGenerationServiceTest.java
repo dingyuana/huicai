@@ -1,7 +1,7 @@
 package com.huicai.sme.arap.service.impl;
 
 import cn.hutool.core.util.StrUtil;
-import com.huicai.common.exception.BusinessException;
+import com.huicai.base.voucher.VoucherTypeStub;import com.huicai.base.system.service.VoucherTypeService;import com.huicai.common.exception.BusinessException;
 import com.huicai.base.masterdata.entity.CustomerEntity;
 import com.huicai.base.masterdata.entity.EmployeeEntity;
 import com.huicai.sme.arap.entity.ExpenseReimbursementEntity;
@@ -86,6 +86,8 @@ class AutoGenerationServiceTest {
     @Mock private EmployeeService employeeService;
     @Mock private ExpenseReimbursementService expenseReimbursementService;
     @Mock private TemplateMatcher templateMatcher;
+    @Mock
+    private VoucherTypeService voucherTypeService;
 
     @InjectMocks
     private AutoGenerationService service;
@@ -868,4 +870,9 @@ class AutoGenerationServiceTest {
 
         verify(docMapper, atLeastOnce()).insert(any(BusinessDocEntity.class));
     }
+    @BeforeEach
+    void stubVoucherTypeByCode() {
+        VoucherTypeStub.install(voucherTypeService);
+    }
+
 }

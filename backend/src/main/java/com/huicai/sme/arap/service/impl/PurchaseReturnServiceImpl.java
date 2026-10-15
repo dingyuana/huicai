@@ -1,5 +1,6 @@
 package com.huicai.sme.arap.service.impl;
 
+import com.huicai.base.system.service.VoucherTypeService;
 import com.huicai.base.system.util.SecurityUtils;
 import cn.hutool.core.util.IdUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
@@ -71,6 +72,8 @@ public class PurchaseReturnServiceImpl implements PurchaseReturnService {
     private final VoucherEntryMapper voucherEntryMapper;
     private final VoucherNoService voucherNoService;
     private final SubjectMapper subjectMapper;
+
+    private final VoucherTypeService voucherTypeService;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -146,11 +149,11 @@ public class PurchaseReturnServiceImpl implements PurchaseReturnService {
 
         // 生成凭证
         String period = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMM"));
-        String voucherNo = voucherNoService.generateNextNo(period, VoucherType.ZZ);
+        String voucherNo = voucherNoService.generateNextNo(period, voucherTypeService.requireByCode("ZZ").getId());
         VoucherEntity voucher = new VoucherEntity();
         voucher.setVoucherNo(voucherNo);
         voucher.setPeriod(period);
-        voucher.setVoucherTypeId(VoucherType.ZZ);
+        voucher.setVoucherTypeId(voucherTypeService.requireByCode("ZZ").getId());
         voucher.setStatus("DRAFT");
         voucher.setSource("GENERATED");
         voucher.setSummary("采购退货: " + (entity.getReason() != null ? entity.getReason() : "退货"));

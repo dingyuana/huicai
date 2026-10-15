@@ -100,9 +100,13 @@ VoucherTypeEntity requireByCode(String code);
 | `VoucherType.FK` / `3L` | `requireByCode("FK")` |
 | `VoucherType.ZZ` / `4L` | `requireByCode("ZZ")` |
 
-**波及面（实施前须逐点确认，见 §6）**：`VoucherServiceImpl`(2)、`TaxServiceImpl`(4)、`InputInvoiceStateMachineServiceImpl`(2)、`InputInvoiceImportService`(1)、`SalesInvoiceImportService`(1)、`PurchaseReturnServiceImpl`(1)、`ReconciliationServiceImpl`(1)、`ArapSettlementServiceImpl`(1)、`BusinessDocServiceImpl`(3)、`PrepaymentServiceImpl`(2)、`BankJournalServiceImpl`(1)。
+**波及面（实施前须逐点确认，见 §6）** —— ⚠️ **2026-10-14 守卫实测更正为 20 处调用点**（原估 19 漏了 `AutoGenerationService:603`），扣除 §7 登记的 2 处排除项（`VoucherServiceImpl:159/477`）= **18 处待改**：
+
+`VoucherServiceImpl`(2，**均为排除项**)、`TaxServiceImpl`(4)、`InputInvoiceStateMachineServiceImpl`(2)、`InputInvoiceImportService`(1)、`SalesInvoiceImportService`(1)、`PurchaseReturnServiceImpl`(1)、`ReconciliationServiceImpl`(1)、`ArapSettlementServiceImpl`(1)、`BusinessDocServiceImpl`(3)、`PrepaymentServiceImpl`(2)、`BankJournalServiceImpl`(1)、`AutoGenerationService`(1)。
 
 `VoucherServiceImpl:159/477` 取的是 `dto.getVoucherTypeId()` / `original.getVoucherTypeId()`（**前端传入或库中已有**），**不在本批改动范围** —— 但须核实入库的 `voucher_type_id` 是否也指向全局 id（登记为 §7 已知局限）。
+
+⚠️ **`ReconciliationServiceImpl:502` / `ArapSettlementServiceImpl:382` / `AutoGenerationService:603` 传的是局部变量 `voucherTypeId`** —— 实施前须逐个追其来源，确认它同样是硬编码而非按 code 解析，否则改错层级。
 
 ### ③ 按企业补种子（Flyway）
 

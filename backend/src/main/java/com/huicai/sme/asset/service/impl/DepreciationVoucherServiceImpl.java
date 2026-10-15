@@ -1,6 +1,7 @@
 package com.huicai.sme.asset.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.huicai.base.system.service.VoucherTypeService;
 import com.huicai.base.system.entity.PeriodEntity;
 import com.huicai.base.system.entity.Subject;
 import com.huicai.base.system.mapper.SubjectMapper;
@@ -69,6 +70,7 @@ public class DepreciationVoucherServiceImpl implements DepreciationVoucherServic
     private final VoucherMapper voucherMapper;
     private final VoucherEntryMapper voucherEntryMapper;
 
+    private final VoucherTypeService voucherTypeService;
     @Override
     @Transactional(rollbackFor = Exception.class)
     public DepreciationVoucherResult generate(String period, Long userId) {
@@ -128,7 +130,7 @@ public class DepreciationVoucherServiceImpl implements DepreciationVoucherServic
         VoucherEntity voucher = new VoucherEntity();
         voucher.setVoucherNo(voucherNo);
         voucher.setPeriod(period);
-        voucher.setVoucherTypeId(VoucherType.ZZ);
+        voucher.setVoucherTypeId(voucherTypeService.requireByCode("ZZ").getId());
         voucher.setStatus("DRAFT");
         voucher.setSource("GENERATED");
         voucher.setSummary("自动计提折旧: " + period);

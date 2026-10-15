@@ -4,6 +4,7 @@ import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.huicai.base.system.service.VoucherTypeService;
 import com.huicai.common.exception.BusinessException;
 import com.huicai.sme.arap.dto.ExpenseReimbursementVO;
 import com.huicai.base.masterdata.entity.EmployeeEntity;
@@ -93,6 +94,8 @@ public class ExpenseReimbursementServiceImpl implements ExpenseReimbursementServ
     private final EmployeeMapper employeeMapper;
     private final UserMapper userMapper;
     private final DeptMapper deptMapper;
+
+    private final VoucherTypeService voucherTypeService;
 
     @Override
     public IPage<ExpenseReimbursementVO> pageQuery(Long employeeId, String status, Integer current, Integer size, String scope, LocalDate startDate, LocalDate endDate) {
@@ -261,7 +264,7 @@ public class ExpenseReimbursementServiceImpl implements ExpenseReimbursementServ
         VoucherEntity voucher = new VoucherEntity();
         voucher.setVoucherNo(generateVoucherNo());
         voucher.setPeriod(LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMM")));
-        voucher.setVoucherTypeId(1L);
+        voucher.setVoucherTypeId(voucherTypeService.requireByCode("JZ").getId());
         voucher.setStatus("DRAFT");
         voucher.setTotalDebit(e.getAmount());
         voucher.setTotalCredit(e.getAmount());

@@ -2,6 +2,7 @@ package com.huicai.base.voucher.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.conditions.query.LambdaQueryChainWrapper;
+import com.huicai.base.voucher.VoucherTypeStub;import com.huicai.base.system.service.VoucherTypeService;
 import com.huicai.agency.tenant.entity.EnterpriseEntity;
 import com.huicai.agency.tenant.mapper.EnterpriseMapper;
 import com.huicai.common.context.EnterpriseContextHolder;
@@ -59,6 +60,8 @@ class PeriodCloseServiceImplTest {
     @Mock private ApplicationEventPublisher eventPublisher;
     @Mock private CloseLogMapper closeLogMapper; // P85 结账日志
     @Mock private VoucherService voucherService; // P84 一键审核记账
+    @Mock
+    private VoucherTypeService voucherTypeService;
 
     private PeriodCloseServiceImpl service;
 
@@ -66,7 +69,7 @@ class PeriodCloseServiceImplTest {
     void setUp() {
         service = new PeriodCloseServiceImpl(voucherMapper, voucherEntryMapper,
                 subjectBalanceService, periodService, subjectService, subjectMapper,
-                enterpriseMapper, reportService, eventPublisher, closeLogMapper, voucherService);
+                enterpriseMapper, reportService, eventPublisher, closeLogMapper, voucherService, voucherTypeService);
     }
 
     private PeriodEntity stubPeriod(String status) {
@@ -809,4 +812,9 @@ class PeriodCloseServiceImplTest {
         verify(voucherService).batchAudit(List.of(31L), 1L);
         verify(voucherService, never()).batchPost(anyList(), anyLong());
     }
+    @BeforeEach
+    void stubVoucherTypeByCode() {
+        VoucherTypeStub.install(voucherTypeService);
+    }
+
 }

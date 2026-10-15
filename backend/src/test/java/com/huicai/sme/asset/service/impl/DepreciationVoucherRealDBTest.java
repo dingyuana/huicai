@@ -1,6 +1,7 @@
 package com.huicai.sme.asset.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.huicai.base.system.service.VoucherTypeService;
 import com.huicai.base.system.entity.PeriodEntity;
 import com.huicai.base.system.entity.Subject;
 import com.huicai.base.system.mapper.SubjectMapper;
@@ -68,12 +69,14 @@ class DepreciationVoucherRealDBTest extends AbstractMapperTest {
     @Autowired private AssetDepreciationMapper depreciationMapper;
 
     private DepreciationVoucherServiceImpl service;
+    private final VoucherTypeService voucherTypeService =
+            org.mockito.Mockito.mock(VoucherTypeService.class);
 
     @BeforeEach
     void setUp() {
         EnterpriseContextHolder.set(ENTERPRISE_ID);
         service = new DepreciationVoucherServiceImpl(depreciationMapper, subjectMapper,
-                periodService, voucherMapper, voucherEntryMapper);
+                periodService, voucherMapper, voucherEntryMapper, voucherTypeService);
         insertPeriod(PERIOD, "open");
     }
 

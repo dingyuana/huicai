@@ -1,5 +1,6 @@
 package com.huicai.sme.tax.service.impl;
 
+import com.huicai.base.system.service.VoucherTypeService;
 import com.huicai.base.business.mapper.BusinessDocEntryMapper;
 import com.huicai.base.business.mapper.BusinessDocMapper;
 import com.huicai.base.business.mapper.InputInvoiceMapper;
@@ -55,6 +56,8 @@ class InputInvoiceImportRealDataTest {
     @Mock private InputInvoiceMapper inputInvoiceMapper;
     @Mock private InvoiceDedupUtil invoiceDedupUtil;
     @Mock private ApplicationEventPublisher eventPublisher;
+    @Mock
+    private VoucherTypeService voucherTypeService;
 
     private InputInvoiceImportService service;
     private final ColumnMappingResolver realResolver = new ColumnMappingResolver();
@@ -65,7 +68,7 @@ class InputInvoiceImportRealDataTest {
         service = new InputInvoiceImportService(
                 docMapper, docEntryMapper, voucherMapper, voucherEntryMapper,
                 voucherNoService, vendorMapper, subjectMapper, inputInvoiceMapper,
-                realResolver, invoiceDedupUtil, eventPublisher);
+                realResolver, invoiceDedupUtil, eventPublisher, voucherTypeService);
 
         lenient().when(invoiceDedupUtil.findExisting(any())).thenReturn(Collections.emptySet());
         lenient().when(vendorMapper.selectList(any())).thenReturn(Collections.emptyList());
@@ -106,7 +109,7 @@ class InputInvoiceImportRealDataTest {
         service = new InputInvoiceImportService(
                 docMapper, docEntryMapper, voucherMapper, voucherEntryMapper,
                 voucherNoService, vendorMapper, subjectMapper, inputInvoiceMapper,
-                realResolver, invoiceDedupUtil, eventPublisher);
+                realResolver, invoiceDedupUtil, eventPublisher, voucherTypeService);
 
         lenient().when(invoiceDedupUtil.findExisting(any())).thenReturn(Collections.emptySet());
         lenient().when(vendorMapper.selectList(any())).thenReturn(Collections.emptyList());
@@ -134,7 +137,7 @@ class InputInvoiceImportRealDataTest {
         service = new InputInvoiceImportService(
                 docMapper, docEntryMapper, voucherMapper, voucherEntryMapper,
                 voucherNoService, vendorMapper, subjectMapper, inputInvoiceMapper,
-                realResolver, invoiceDedupUtil, eventPublisher);
+                realResolver, invoiceDedupUtil, eventPublisher, voucherTypeService);
 
         return Stream.of(
                 DynamicTest.dynamicTest("空文件抛异常", () -> {

@@ -439,9 +439,9 @@ public class BusinessDocServiceImpl implements BusinessDocService {
         String enrichedSummary = enrichSummary(entity);
 
         VoucherEntity voucher = new VoucherEntity();
-        voucher.setVoucherNo(voucherNoService.generateNextNo(entity.getPeriod(), 1L));
+        voucher.setVoucherNo(voucherNoService.generateNextNo(entity.getPeriod(), voucherTypeService.requireByCode("JZ").getId()));
         voucher.setPeriod(entity.getPeriod());
-        voucher.setVoucherTypeId(1L);
+        voucher.setVoucherTypeId(voucherTypeService.requireByCode("JZ").getId());
         voucher.setStatus("DRAFT");
         voucher.setSource("GENERATED");
         voucher.setSummary(enrichedSummary);
@@ -561,9 +561,9 @@ public class BusinessDocServiceImpl implements BusinessDocService {
         String enrichedSummary = enrichSummary(entity);
 
         VoucherEntity voucher = new VoucherEntity();
-        voucher.setVoucherNo(voucherNoService.generateNextNo(entity.getPeriod(), 1L));
+        voucher.setVoucherNo(voucherNoService.generateNextNo(entity.getPeriod(), voucherTypeService.requireByCode("JZ").getId()));
         voucher.setPeriod(entity.getPeriod());
-        voucher.setVoucherTypeId(1L);
+        voucher.setVoucherTypeId(voucherTypeService.requireByCode("JZ").getId());
         voucher.setStatus("DRAFT");
         voucher.setSource("GENERATED");
         voucher.setSummary(enrichedSummary);
@@ -646,9 +646,9 @@ public class BusinessDocServiceImpl implements BusinessDocService {
         String enrichedSummary = enrichSummary(entity);
 
         VoucherEntity voucher = new VoucherEntity();
-        voucher.setVoucherNo(voucherNoService.generateNextNo(entity.getPeriod(), 1L));
+        voucher.setVoucherNo(voucherNoService.generateNextNo(entity.getPeriod(), voucherTypeService.requireByCode("JZ").getId()));
         voucher.setPeriod(entity.getPeriod());
-        voucher.setVoucherTypeId(1L);
+        voucher.setVoucherTypeId(voucherTypeService.requireByCode("JZ").getId());
         voucher.setStatus("DRAFT");
         voucher.setSource("GENERATED");
         voucher.setSummary(enrichedSummary);

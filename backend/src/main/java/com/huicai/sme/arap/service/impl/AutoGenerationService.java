@@ -2,6 +2,7 @@ package com.huicai.sme.arap.service.impl;
 
 import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.huicai.base.system.service.VoucherTypeService;
 import com.huicai.common.exception.BusinessException;
 import com.huicai.base.system.util.SecurityUtils;
 import com.huicai.sme.arap.dto.ExpenseReimbursementVO;
@@ -94,6 +95,7 @@ public class AutoGenerationService {
     @Value("${huicai.bank.smallAmountThreshold:1000.00}")
     private BigDecimal smallAmountThreshold;
 
+    private final VoucherTypeService voucherTypeService;
     /**
      * 对已确认分类的银行流水执行自动生单/制证.
      * 调用时机: 出纳在 review() 确认后触发.
@@ -588,18 +590,23 @@ public class AutoGenerationService {
      *   internal_transfer → 转账凭证 (ZZ)
      *   其余（工资、税费、利息等）→ 记账凭证 (JZ)
      */
-    private static long resolveVoucherType(String classification) {
-        if (classification == null) return VoucherType.JZ;
+    /**
+     * SPEC-P128：返回**业务编码**而非主键 id —— t_voucher_type 是租户表，
+     * 主键随企业而变，编码才是跨企业稳定的业务概念。
+     */
+    private static String resolveVoucherTypeCode(String classification) {
+        if (classification == null) return "JZ";
         return switch (classification) {
-            case BankClassification.BUSINESS_RECEIPT -> VoucherType.SK;
-            case BankClassification.BUSINESS_PAYMENT -> VoucherType.FK;
-            case BankClassification.INTERNAL_TRANSFER -> VoucherType.ZZ;
-            default -> VoucherType.JZ;
+            case BankClassification.BUSINESS_RECEIPT -> "SK";
+            case BankClassification.BUSINESS_PAYMENT -> "FK";
+            case BankClassification.INTERNAL_TRANSFER -> "ZZ";
+            default -> "JZ";
         };
     }
 
     private VoucherEntity createVoucher(BankStatementEntity stmt, String period, BigDecimal amount, Long userId) {
-        long voucherTypeId = resolveVoucherType(stmt.getClassification());
+        long voucherTypeId = voucherTypeService
+                .requireByCode(resolveVoucherTypeCode(stmt.getClassification())).getId();
         String voucherNo = voucherNoService.generateNextNo(period, voucherTypeId);
         VoucherEntity voucher = new VoucherEntity();
         voucher.setVoucherNo(voucherNo);

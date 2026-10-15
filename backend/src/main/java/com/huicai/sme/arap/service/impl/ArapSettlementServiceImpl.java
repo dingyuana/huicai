@@ -6,6 +6,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.huicai.base.system.service.VoucherTypeService;
 import com.huicai.common.exception.BusinessException;
 import com.huicai.sme.arap.constant.ArapStatus;
 import com.huicai.base.business.dto.vo.ArapSettlementVO;
@@ -78,6 +79,7 @@ public class ArapSettlementServiceImpl implements ArapSettlementService {
     private final com.huicai.sme.tax.service.InputInvoiceStateMachineService inputInvoiceStateMachineService;
     private final com.huicai.base.business.mapper.BankStatementMapper bankStatementMapper;
 
+    private final VoucherTypeService voucherTypeService;
     @Override
     public IPage<ArapSettlementEntity> pageQuery(String status, String voucherNo, Integer current, Integer size) {
         Page<ArapSettlementEntity> page = new Page<>(
@@ -378,7 +380,8 @@ public class ArapSettlementServiceImpl implements ArapSettlementService {
 
         String period = entity.getPeriod() != null ? entity.getPeriod()
                 : java.time.LocalDate.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyyMM"));
-        long voucherTypeId = "payment".equals(classifySuffix) ? VoucherType.FK : VoucherType.SK;
+        long voucherTypeId = voucherTypeService.requireByCode(
+                "payment".equals(classifySuffix) ? "FK" : "SK").getId();
         String voucherNo = voucherNoService.generateNextNo(period, voucherTypeId);
 
         VoucherEntity voucher = new VoucherEntity();
