@@ -124,6 +124,11 @@ class EnterpriseIdInjectionTest extends AbstractMapperTest {
 
         java.util.Set<String> expected = new java.util.LinkedHashSet<>(java.util.List.of(
                 "/api/v1/auth/login",
+                // SPEC-P124（P0 修复 401 自动续期）：refresh 必须匿名 —— 调用它时
+                // access token 往往已过期，带不上 Authorization 就无从校验。
+                // 已逐行核 AuthController#refresh：只 validateRefreshToken + 查账号状态
+                // + 重签，**无任何业务写**，故不涉及「无企业上下文的写请求」这一风险。
+                "/api/v1/auth/refresh",
                 "/api/v1/auth/test-password",
                 "/api/v1/system/health",
                 "/actuator/health",

@@ -79,6 +79,9 @@ class TenantSwitchRealDBTest extends AbstractMapperTest {
 
     private static final String PREPAY_SUMMARY_PREFIX = "9999.P106.B2.";
 
+    /** 与 grantThroughAgency 建夹具时使用的代理公司一致（种子行 agency_id=1） */
+    private static final Long AGENCY_ID = 1L;
+
     @Autowired
     private MockMvc mockMvc;
 
@@ -126,6 +129,14 @@ class TenantSwitchRealDBTest extends AbstractMapperTest {
         user.setStatus("ACTIVE");       // chk_user_status
         user.setUserType(userType);     // chk_user_type: SUPER_ADMIN / AGENCY / ENTERPRISE
         user.setEnterpriseId(homeEnterpriseId);
+        // 🔴 AGENCY 用户必须带 agencyId/agencyRole：请求期的 LoginUser 由
+        // UserDetailsServiceImpl:89 从 **DB 的 UserEntity** 构造（不从 JWT 读），
+        // 而 switchEnterprise 对 AGENCY 的第一道校验就是 `agencyId == null ⇒ 无权切换`。
+        // 夹具漏设这两列 ⇒ 恒 403，且报错文案是「无权切换企业」，完全指错方向。
+        if ("AGENCY".equals(userType)) {
+            user.setAgencyId(AGENCY_ID);
+            user.setAgencyRole("ACCOUNTANT");
+        }
         user.setDeleted(0);
         withoutEnterpriseContext(() -> userMapper.insert(user));
         return user.getId();
@@ -174,9 +185,66 @@ class TenantSwitchRealDBTest extends AbstractMapperTest {
         return e.getId();
     }
 
+    /**
+     * SPEC-P124：企业上下文的<b>唯一权威是 JWT</b>，切换 = 换证。
+     *
+     * <p>⚠️ 本 helper 取代原先「带 {@code X-Enterprise-Id} 头」的做法：该头已在
+     * {@code 1c9078c9} 废止，保留它会让本类 7 例长期红 —— <b>红灯不是缺陷，是测试没跟上破坏性变更</b>。
+     * 判据：契约变更必须同步改「断言该契约的测试」，否则 CI 常红会淹没真实回归。
+     *
+     * @return 切换成功后的新 access token（其企业号为目标企业）
+     */
+    private String switchTo(String token, Long targetEnterpriseId) throws Exception {
+        MvcResult r = mockMvc.perform(post("/api/v1/enterprise/switch")
+                        .param("enterpriseId", String.valueOf(targetEnterpriseId))
+                        .header("Authorization", "Bearer " + token))
+                .andReturn();
+        String body = r.getResponse().getContentAsString(java.nio.charset.StandardCharsets.UTF_8);
+        int code = new com.fasterxml.jackson.databind.ObjectMapper()
+                .readTree(body).path("code").asInt();
+        assertEquals(200, code, "切换应成功（body code=200），实际响应=" + body);
+        String newToken = new com.fasterxml.jackson.databind.ObjectMapper()
+                .readTree(body).path("data").path("token").asText(null);
+        assertNotNull(newToken, "switch 必须重签并返回新 token（JWT 是企业上下文唯一权威）");
+        return newToken;
+    }
+
+    /**
+     * 切换的<b>业务码</b>。
+     *
+     * <p>🔴 <b>不能读 HTTP 状态</b>：本项目 {@code R<T>} 约定下，被拒响应是
+     * HTTP 200 + body {@code {"code":403}}。首版误用 {@code getResponse().getStatus()}
+     * 得到 200，报 {@code expected 403 but was 200}，<b>报错完全指错方向</b> ——
+     * 看上去像「鉴权放行了」，实际是取错了字段（AGENTS §4.5 第 36 条同族）。
+     */
+    private int businessCodeOf(String token, Long targetEnterpriseId) throws Exception {
+        MvcResult r = mockMvc.perform(post("/api/v1/enterprise/switch")
+                        .param("enterpriseId", String.valueOf(targetEnterpriseId))
+                        .header("Authorization", "Bearer " + token))
+                .andReturn();
+        return new com.fasterxml.jackson.databind.ObjectMapper()
+                .readTree(r.getResponse().getContentAsString(java.nio.charset.StandardCharsets.UTF_8))
+                .path("code").asInt();
+    }
+
+    /**
+     * SPEC-P124 + switch 端点的真实前置：<b>AGENCY 用户必须带 {@code agencyId} 与
+     * {@code agencyRole}</b>，否则 {@code switchEnterprise} 会因 {@code agencyId == null}
+     * 直接判「无权切换企业」。
+     *
+     * <p>原实现把这两个参数一律传 {@code null} —— 那在「用请求头切企业」的旧模型下无所谓，
+     * 换成「换证」模型后它就是硬性前置了。
+     *
+     * <p>{@code agencyRole=ACCOUNTANT} 与 {@code grantThroughAgency} 建夹具时写入的值一致：
+     * 控制器对会计/助理走 {@code t_agency_user_enterprise} 分支。
+     */
     private String tokenFor(Long userId, String username, Long jwtEnterpriseId, String userType) {
+        boolean agency = "AGENCY".equals(userType);
         return jwtProvider.generateAccessToken(username, userId, List.of(),
-                jwtEnterpriseId, null, userType, null);
+                jwtEnterpriseId,
+                agency ? AGENCY_ID : null,
+                userType,
+                agency ? "ACCOUNTANT" : null);
     }
 
     private String usernameOf(Long userId) {
@@ -203,11 +271,13 @@ class TenantSwitchRealDBTest extends AbstractMapperTest {
     // ==================== AT-106-6：成员切换成功 ====================
 
     @Test
-    @DisplayName("AT-106-6 成员切换到已授权企业 ⇒ 上下文被改写为该企业，且只返回该企业的数据")
+    @DisplayName("AT-106-6 成员经 switch 换证到已授权企业 ⇒ 上下文为该企业，且只返回该企业的数据")
     void memberSwitchRewritesContextAndIsolatesData() throws Exception {
-        Long uid = createUserWithHomeEnterprise("P106.MEMBER", enterpriseA, "ENTERPRISE");
+        // SPEC-P124：switch 端点只放行 SUPER_ADMIN / AGENCY。经代理授权的客户用户
+        // 本身就是 AGENCY，故这里必须用 AGENCY —— 原用 ENTERPRISE 是废止前的遗留前提。
+        Long uid = createUserWithHomeEnterprise("P106.MEMBER", enterpriseA, "AGENCY");
         grantThroughAgency(uid, enterpriseB);
-        String token = tokenFor(uid, usernameOf(uid), enterpriseA, "ENTERPRISE");
+        String token = tokenFor(uid, usernameOf(uid), enterpriseA, "AGENCY");
 
         // 先在 A / B 各造一行预付款，用于验证「切到 B 后看不到 A 的行」
         Long prepayA = createPrepayment(enterpriseA, "ISO-A");
@@ -215,21 +285,20 @@ class TenantSwitchRealDBTest extends AbstractMapperTest {
         assertNotNull(prepayA);
         assertNotNull(prepayB);
 
-        // 带 X-Enterprise-Id: B 发起请求 ⇒ 上下文应被改写成 B
+        // SPEC-P124：切换 = 换证。新 token 的企业号即上下文来源，无需任何请求头。
+        String tokenB = switchTo(token, enterpriseB);
+
         MvcResult result = mockMvc.perform(get("/api/v1/enterprise/current-period")
-                        .header("Authorization", "Bearer " + token)
-                        .header("X-Enterprise-Id", String.valueOf(enterpriseB)))
+                        .header("Authorization", "Bearer " + tokenB))
                 .andExpect(status().isOk())
                 .andReturn();
 
         assertEquals(START_PERIOD_B, observedStartPeriod(result),
-                "带 X-Enterprise-Id=" + enterpriseB + " 时上下文应被改写为该企业，"
-                        + "响应的 startPeriod 即上下文企业的建账期间");
+                "换证后上下文应为 " + enterpriseB + "，响应的 startPeriod 即上下文企业的建账期间");
 
         // 负向：切换到 B 后，A 的预付款不得出现在查询结果里
         String body = mockMvc.perform(get("/api/sme/arap/v1/prepayment/page")
-                        .header("Authorization", "Bearer " + token)
-                        .header("X-Enterprise-Id", String.valueOf(enterpriseB)))
+                        .header("Authorization", "Bearer " + tokenB))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString(java.nio.charset.StandardCharsets.UTF_8);
 
@@ -242,15 +311,15 @@ class TenantSwitchRealDBTest extends AbstractMapperTest {
     @Test
     @DisplayName("AT-106-6 前提守卫：切换成功后必须留下审计记录（否则「拒绝时无记录」恒真）")
     void allowedSwitchIsAudited() throws Exception {
-        Long uid = createUserWithHomeEnterprise("P106.AUDIT", enterpriseA, "ENTERPRISE");
+        Long uid = createUserWithHomeEnterprise("P106.AUDIT", enterpriseA, "AGENCY");
         grantThroughAgency(uid, enterpriseB);
-        String token = tokenFor(uid, usernameOf(uid), enterpriseA, "ENTERPRISE");
+        String token = tokenFor(uid, usernameOf(uid), enterpriseA, "AGENCY");
 
         int before = auditTrailCount(uid);
 
-        mockMvc.perform(get("/api/v1/enterprise/current-period")
-                        .header("Authorization", "Bearer " + token)
-                        .header("X-Enterprise-Id", String.valueOf(enterpriseB)))
+        mockMvc.perform(post("/api/v1/enterprise/switch")
+                        .param("enterpriseId", String.valueOf(enterpriseB))
+                        .header("Authorization", "Bearer " + token))
                 .andExpect(status().isOk());
 
         assertEquals(before + 1, auditTrailCount(uid),
@@ -264,14 +333,13 @@ class TenantSwitchRealDBTest extends AbstractMapperTest {
     @DisplayName("AT-106-7 非成员切换到未授权企业 ⇒ 403 且审计无成功记录")
     void nonMemberSwitchDeniedWithNoAuditTrail() throws Exception {
         Long uid = createStranger();
-        String token = tokenFor(uid, usernameOf(uid), null, "ENTERPRISE");
+        String token = tokenFor(uid, usernameOf(uid), null, "AGENCY");
 
         int before = auditTrailCount(uid);
 
-        mockMvc.perform(get("/api/v1/enterprise/current-period")
-                        .header("Authorization", "Bearer " + token)
-                        .header("X-Enterprise-Id", String.valueOf(enterpriseB)))
-                .andExpect(status().isForbidden());
+        // ⚠️ 断言业务码而非 HTTP 状态：被拒是 HTTP 200 + body code=403
+        assertEquals(403, businessCodeOf(token, enterpriseB),
+                "未授权切换应被拒（body code=403）");
 
         assertEquals(before, auditTrailCount(uid),
                 "越权切换被拒却留下了成功留痕 ⇒ 审计记录的是「尝试过」而非「成功」，"
@@ -281,14 +349,15 @@ class TenantSwitchRealDBTest extends AbstractMapperTest {
     @Test
     @DisplayName("AT-106-7 前提守卫：被拒请求不得改写上下文（否则「拒绝」只是装饰）")
     void deniedSwitchDoesNotRewriteContext() throws Exception {
-        Long uid = createUserWithHomeEnterprise("P106.DENIED-CTX", enterpriseA, "ENTERPRISE");
-        String token = tokenFor(uid, usernameOf(uid), enterpriseA, "ENTERPRISE");
+        Long uid = createUserWithHomeEnterprise("P106.DENIED-CTX", enterpriseA, "AGENCY");
+        // ⚠️ 必须给一条对 A 的授权：本类的观测点 `/enterprise/current-period` 自身带
+        // 「无权访问企业列表」守卫，未获任何授权的代理用户连观测端点都读不到，
+        // 于是「上下文是否被改写」根本无从观测（报错会是 403，与被测行为无关）。
+        grantThroughAgency(uid, enterpriseA);
+        String token = tokenFor(uid, usernameOf(uid), enterpriseA, "AGENCY");
 
-        // 该用户只隶属 A，未获授权 B ⇒ 切 B 必须被拒，且上下文仍应是 JWT 里的 A
-        mockMvc.perform(get("/api/v1/enterprise/current-period")
-                        .header("Authorization", "Bearer " + token)
-                        .header("X-Enterprise-Id", String.valueOf(enterpriseB)))
-                .andExpect(status().isForbidden());
+        // 该用户只隶属/被授权 A，未获授权 B ⇒ 切 B 必须被拒，且上下文仍应是 A
+        assertEquals(403, businessCodeOf(token, enterpriseB), "未获授权的切换应被拒");
 
         MvcResult after = mockMvc.perform(get("/api/v1/enterprise/current-period")
                         .header("Authorization", "Bearer " + token))
@@ -302,24 +371,23 @@ class TenantSwitchRealDBTest extends AbstractMapperTest {
     // ==================== AT-106-8：SUPER_ADMIN 切换 ====================
 
     @Test
-    @DisplayName("AT-106-8 SUPER_ADMIN 带 X-Enterprise-Id ⇒ 会设置上下文为该企业")
+    @DisplayName("AT-106-8 SUPER_ADMIN 经 switch 换证 ⇒ 上下文为该企业")
     void superAdminSwitchSetsContext() throws Exception {
         Long uid = createUserWithHomeEnterprise("P106.SUPER", enterpriseA, "SUPER_ADMIN");
         String token = tokenFor(uid, usernameOf(uid), enterpriseA, "SUPER_ADMIN");
 
+        String tokenB = switchTo(token, enterpriseB);
         MvcResult result = mockMvc.perform(get("/api/v1/enterprise/current-period")
-                        .header("Authorization", "Bearer " + token)
-                        .header("X-Enterprise-Id", String.valueOf(enterpriseB)))
+                        .header("Authorization", "Bearer " + tokenB))
                 .andExpect(status().isOk())
                 .andReturn();
 
         assertEquals(START_PERIOD_B, observedStartPeriod(result),
-                "SUPER_ADMIN 应可切换到任意企业，上下文须被改写为 " + enterpriseB
-                        + "（V1.1 曾误写「不设置上下文」，已按 JwtAuthenticationFilter:120-122 修正）");
+                "SUPER_ADMIN 应可切换到任意企业，上下文须被改写为 " + enterpriseB);
     }
 
     @Test
-    @DisplayName("AT-106-8 负向：不带 X-Enterprise-Id 时，上下文按 JWT 内的企业")
+    @DisplayName("AT-106-8 负向：不换证时，上下文按 JWT 内的企业")
     void superAdminWithoutHeaderUsesJwtEnterprise() throws Exception {
         Long uid = createUserWithHomeEnterprise("P106.SUPER-NOHD", enterpriseA, "SUPER_ADMIN");
         String token = tokenFor(uid, usernameOf(uid), enterpriseA, "SUPER_ADMIN");
@@ -339,14 +407,13 @@ class TenantSwitchRealDBTest extends AbstractMapperTest {
     @Test
     @DisplayName("跨企业写拒绝：A 企业的记录在 B 上下文下不可确认（写入隔离的最后一环）")
     void crossEnterpriseWriteIsRejected() throws Exception {
-        Long uid = createUserWithHomeEnterprise("P106.XWRITE", enterpriseA, "ENTERPRISE");
+        Long uid = createUserWithHomeEnterprise("P106.XWRITE", enterpriseA, "AGENCY");
         grantThroughAgency(uid, enterpriseB);
-        String token = tokenFor(uid, usernameOf(uid), enterpriseA, "ENTERPRISE");
+        String token = tokenFor(uid, usernameOf(uid), enterpriseA, "AGENCY");
 
         // 在 A 上下文下建一笔预付款
         MvcResult created = mockMvc.perform(post("/api/sme/arap/v1/prepayment")
                         .header("Authorization", "Bearer " + token)
-                        .header("X-Enterprise-Id", String.valueOf(enterpriseA))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"period\":\"209801\",\"amount\":100.00,"
                                 + "\"summary\":\"" + PREPAY_SUMMARY_PREFIX + "XWRITE\"}"))
@@ -358,11 +425,11 @@ class TenantSwitchRealDBTest extends AbstractMapperTest {
                 .readTree(createdBody).path("data").path("id").asLong();
         assertTrue(prepayId > 0, "未取到预付款 id：" + createdBody);
 
-        // 切到 B 上下文后，该记录必须不可见 ⇒ 确认动作应失败
+        // 换证到 B 后，该记录必须不可见 ⇒ 确认动作应失败
+        String tokenB = switchTo(token, enterpriseB);
         MvcResult confirm = mockMvc.perform(
                         post("/api/sme/arap/v1/prepayment/" + prepayId + "/confirm")
-                                .header("Authorization", "Bearer " + token)
-                                .header("X-Enterprise-Id", String.valueOf(enterpriseB)))
+                                .header("Authorization", "Bearer " + tokenB))
                 .andReturn();
         String confirmBody = confirm.getResponse().getContentAsString(java.nio.charset.StandardCharsets.UTF_8);
         assertTrue(!confirmBody.contains("\"code\":200"),
@@ -447,16 +514,16 @@ class TenantSwitchRealDBTest extends AbstractMapperTest {
                                 .header("Authorization", "Bearer " + token))
                 .andExpect(status().isOk())
                 .andReturn());
-        String withHeaderB = observedStartPeriod(mockMvc.perform(
+        // SPEC-P124：换证到 B 后的上下文（X-Enterprise-Id 已废止，不再作为观测手段）
+        String afterSwitch = observedStartPeriod(mockMvc.perform(
                         get("/api/v1/enterprise/current-period")
-                                .header("Authorization", "Bearer " + token)
-                                .header("X-Enterprise-Id", String.valueOf(enterpriseB)))
+                                .header("Authorization", "Bearer " + switchTo(token, enterpriseB)))
                 .andExpect(status().isOk())
                 .andReturn());
 
         assertEquals(START_PERIOD_A, withoutHeader, "JWT 上下文为企业 A");
-        assertEquals(START_PERIOD_B, withHeaderB, "带头切到企业 B");
-        assertTrue(!withoutHeader.equals(withHeaderB),
+        assertEquals(START_PERIOD_B, afterSwitch, "换证到企业 B 后上下文应为 B");
+        assertTrue(!withoutHeader.equals(afterSwitch),
                 "两次请求返回了同一个 startPeriod=" + withoutHeader
                         + " ⇒ 该端点无法区分上下文，本类 AT-106-6/8 的断言全部恒真");
     }
