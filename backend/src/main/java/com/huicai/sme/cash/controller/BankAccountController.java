@@ -38,7 +38,9 @@ public class BankAccountController {
         if (enterpriseId != null) {
             roleGuard.requireVisibleEnterprise(enterpriseId);
         }
-        return R.ok(BankAccountVO.from(service.pageQuery(keyword, current, size, enterpriseId)));
+        // 跨企业读取：必须逐企业建立上下文，否则 RLS 会把结果滤成空列表且不报错
+        return R.ok(BankAccountVO.from(
+                service.pageQueryAcrossEnterprise(keyword, current, size, enterpriseId)));
     }
 
     /**

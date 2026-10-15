@@ -18,6 +18,19 @@ public interface BankAccountService {
      */
     IPage<BankAccountEntity> pageQuery(String keyword, Integer current, Integer size,
                                        Long enterpriseId);
+
+    /**
+     * SPEC-P129 §1③：<b>跨企业</b>分页查询（会逐企业建立上下文）。
+     *
+     * <p>🔴 与上一方法的区别不是「多传了个 id」，而是<b>能不能真的查到别的企业的数据</b>：
+     * {@code t_bank_account} 开了 FORCE RLS，只加 {@code eq(enterpriseId, X)} 时，
+     * X ≠ 当前企业会被滤成空列表且<b>不报错</b>。
+     *
+     * <p>⚠️ 调用方<b>必须先做可见集校验</b> —— 本方法只负责让 RLS 放行，
+     * 不负责判断「该不该给这个人看」。
+     */
+    IPage<BankAccountEntity> pageQueryAcrossEnterprise(String keyword, Integer current,
+                                                       Integer size, Long enterpriseId);
     List<BankAccountEntity> listActive();
     BankAccountEntity getById(Long id);
     BankAccountEntity create(BankAccountEntity entity);

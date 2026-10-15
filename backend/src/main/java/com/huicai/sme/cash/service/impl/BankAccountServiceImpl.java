@@ -96,6 +96,42 @@ public class BankAccountServiceImpl implements BankAccountService {
         return mapper.selectPage(page, wrapper);
     }
 
+    /**
+     * SPEC-P129 §1③：跨企业分页查询。
+     *
+     * <p>🔴 <b>为什么不能只加一个 {@code eq(enterpriseId, X)}</b>：{@code t_bank_account}
+     * 开了 <b>FORCE RLS</b>，谓词是 {@code enterprise_id = app.enterprise_id}，而该 GUC
+     * 来自<b>当前上下文</b>。于是当 X ≠ 当前企业时，行会被 RLS 过滤成空 ——
+     * <b>接口返 200 + 空列表且不报任何错</b>（实测：企业 2 明明有账号，传 enterpriseId=2 返 0）。
+     * 这是「读路径静默失效」，比抛错危险得多：用户只会以为「这家没账号」。
+     *
+     * <p>解法与 {@link #listAllEnterprisesForSuperAdmin()} 同一套：<b>逐企业建立上下文</b>后查询，
+     * 查完复原 —— <b>不需要特权连接、也不绕过 RLS</b>。
+     *
+     * <p>⚠️ <b>必须在事务内</b>：企业 GUC 用 {@code SET LOCAL} 写入，仅在事务块内有效；
+     * 事务外切换会被下一次查询立刻丢弃（本项目 P122/P127 两次栽在这条边界上）。
+     */
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public IPage<BankAccountEntity> pageQueryAcrossEnterprise(String keyword, Integer current,
+                                                               Integer size, Long enterpriseId) {
+        Long original = EnterpriseContextHolder.get();
+        if (enterpriseId == null || enterpriseId.equals(original)) {
+            // 当前企业（或未指定）：不切上下文，行为与改动前完全一致
+            return pageQuery(keyword, current, size, enterpriseId);
+        }
+        try {
+            EnterpriseContextHolder.set(enterpriseId);
+            return pageQuery(keyword, current, size, enterpriseId);
+        } finally {
+            if (original != null) {
+                EnterpriseContextHolder.set(original);
+            } else {
+                EnterpriseContextHolder.clear();
+            }
+        }
+    }
+
     @Override
     public List<BankAccountEntity> listActive() {
         return mapper.selectList(new LambdaQueryWrapper<BankAccountEntity>()
