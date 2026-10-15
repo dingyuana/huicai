@@ -17,7 +17,7 @@ export interface BankAccountVO {
   enterpriseName?: string
 }
 
-export function getBankAccountPage(params: { keyword?: string; current?: number; size?: number }): Promise<PageResult<BankAccountVO>> {
+export function getBankAccountPage(params: { keyword?: string; current?: number; size?: number; enterpriseId?: number }): Promise<PageResult<BankAccountVO>> {
   return request.get('/sme/cash/v1/bank-accounts/page', { params })
 }
 /**

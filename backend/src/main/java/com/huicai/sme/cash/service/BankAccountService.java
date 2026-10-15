@@ -7,6 +7,17 @@ import java.util.List;
 
 public interface BankAccountService {
     IPage<BankAccountEntity> pageQuery(String keyword, Integer current, Integer size);
+
+    /**
+     * SPEC-P129 §1③：按企业过滤的分页查询。
+     *
+     * <p>{@code enterpriseId} 为 {@code null} 时行为与原方法<b>完全一致</b>（AT-129-9 回归锁）。
+     *
+     * <p>🔴 本方法<b>不做</b>可见集校验 —— 那是 Controller 的职责：校验必须落在入口，
+     * 否则被内部调用绕过就等于没校验。
+     */
+    IPage<BankAccountEntity> pageQuery(String keyword, Integer current, Integer size,
+                                       Long enterpriseId);
     List<BankAccountEntity> listActive();
     BankAccountEntity getById(Long id);
     BankAccountEntity create(BankAccountEntity entity);

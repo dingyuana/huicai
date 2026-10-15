@@ -11,6 +11,11 @@ export interface EnterpriseVO {
   status: string
   seedDataDone: boolean
   createdAt: string
+  /** SPEC-P129：联系信息（后端按角色脱敏，非管理员拿到的是掩码串） */
+  contactName?: string
+  contactPhone?: string
+  contactEmail?: string
+  address?: string
 }
 
 export interface EnterpriseCreateDTO {
@@ -18,6 +23,11 @@ export interface EnterpriseCreateDTO {
   enterpriseName: string
   taxId?: string
   agencyId?: number
+  /** SPEC-P129：联系信息，全部可选 */
+  contactName?: string
+  contactPhone?: string
+  contactEmail?: string
+  address?: string
 }
 
 export interface BatchResult {

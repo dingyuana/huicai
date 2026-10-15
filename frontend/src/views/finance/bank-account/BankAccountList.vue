@@ -19,6 +19,40 @@
             <el-radio-button value="all">全部企业</el-radio-button>
           </el-radio-group>
         </el-form-item>
+        <!-- SPEC-P129 §1③：企业下拉（数据源 = 当前用户可见企业） -->
+        <el-form-item label="所属企业">
+          <el-select
+            v-model="selectedEnterpriseId"
+            placeholder="选择企业"
+            clearable
+            style="width:240px"
+            :disabled="scope === 'all'"
+            @change="fetchData"
+          >
+            <el-option
+              v-for="e in enterpriseOptions"
+              :key="e.id"
+              :label="e.enterpriseName"
+              :value="e.id"
+            />
+          </el-select>
+          <!-- ⚠️ 禁用必须同时回答「为什么灰」与「怎么才能点」（§4.5 第 50 条）。
+               隐藏下拉会让用户以为「按企业筛选」不存在；只置灰不给出路同理。 -->
+          <el-tooltip
+            v-if="scope === 'all'"
+            content="「全部企业」视图本身就是跨企业总览，无需再按企业筛选。切回「当前企业」即可按企业收敛。"
+            placement="top"
+          >
+            <span class="ml-2 text-xs text-gray-400">全部企业视图下不可用</span>
+          </el-tooltip>
+          <el-tooltip
+            v-else-if="enterpriseOptions.length <= 1"
+            content="当前角色仅可见 1 个企业，无需筛选。切换工作企业即可管理它的银行账号。"
+            placement="top"
+          >
+            <span class="ml-2 text-xs text-gray-400">仅可见 1 个企业</span>
+          </el-tooltip>
+        </el-form-item>
         <el-form-item>
           <el-button type="primary" @click="onSearch">查询</el-button>
           <el-button @click="onReset">重置</el-button>
@@ -120,6 +154,7 @@ import type { FormInstance } from 'element-plus'
 import { getBankAccountPage, allEnterprisesBankAccounts, createBankAccount, updateBankAccount, deleteBankAccount, type BankAccountVO } from '@/api/modules/bankAccount'
 import { useAuthStore } from '@/stores/auth.store'
 import { getSubjectTree, type SubjectVO } from '@/api/modules/subject'
+import { useRoute } from 'vue-router'
 
 const loading = ref(false)
 const saving = ref(false)
@@ -128,6 +163,7 @@ const isEdit = ref(false)
 const editId = ref<number | null>(null)
 const formRef = ref<FormInstance>()
 const authStore = useAuthStore()
+const router = useRoute()
 
 /**
  * 查看范围：'current' 当前企业 / 'all' 全部企业（仅系统管理员）
@@ -142,6 +178,31 @@ const total = ref(0)
 const subjectTree = ref<SubjectVO[]>([])
 
 const query = ref({ keyword: '', current: 1, size: 20 })
+
+/**
+ * SPEC-P129 §1③：页面级企业选择。
+ *
+ * <p>⚠️ 它<b>只控制「看哪家企业」</b>，不改变「新建账户归属哪家企业」——
+ * 写入仍绑定当前企业上下文（见上方 scope 的说明）。
+ * 两者刻意分开：混在一起就会开出客户端可控的跨租户写入口。
+ *
+ * <p>🔴 可见集由<b>后端</b>计算并下发，前端不自行拼装 ——
+ * 前端过滤等于没有过滤（改一下 devtools 就能越权）。
+ */
+const selectedEnterpriseId = ref<number | null>(null)
+const enterpriseOptions = ref<{ id: number; enterpriseName: string }[]>([])
+
+async function loadEnterpriseOptions() {
+  try {
+    // 复用 store 的企业列表：它本就来自后端按角色收敛的可见集
+    const list = (authStore as unknown as { enterpriseList?: { id: number; enterpriseName: string }[] })
+      .enterpriseList
+    enterpriseOptions.value = Array.isArray(list) ? list : []
+  } catch {
+    enterpriseOptions.value = []
+  }
+}
+
 const form = ref({
   accountNo: '',
   accountName: '',
@@ -180,6 +241,9 @@ async function fetchData() {
       // 写入仍绑定当前企业（刻意不提供「指定企业写入」）
       const rows = await allEnterprisesBankAccounts()
       const kw = (query.value.keyword || '').trim().toLowerCase()
+      // ⚠️ 「全部企业」视图<b>不</b>按 enterpriseId 做客户端过滤：VO 不含该字段
+      //   （BankAccountVO 明确「租户 id 不外露」，且有守卫 MasterDataVoContractTest 钉住）。
+      //   宁可让该视图不做二次收敛，也不为它放宽既有安全守卫。
       list.value = kw
         ? rows.filter((r) =>
             [r.accountNo, r.accountName, r.bankName, r.enterpriseName]
@@ -188,7 +252,11 @@ async function fetchData() {
       total.value = list.value.length
       return
     }
-    const res = await getBankAccountPage(query.value)
+    const res = await getBankAccountPage({
+      ...query.value,
+      // SPEC-P129 §1③：按页面企业下拉收敛；未选时不传（后端行为与改动前一致）
+      enterpriseId: selectedEnterpriseId.value ?? undefined,
+    })
     list.value = res.records
     total.value = res.total
   } catch {
@@ -260,6 +328,14 @@ onMounted(async () => {
     subjectTree.value = await getSubjectTree()
   } catch {
     // ignore
+  }
+  // SPEC-P129 §1③：先取可见企业，才能确定「下拉只有 1 项」还是「可多选」
+  await loadEnterpriseOptions()
+  // 支持从建档引导带参进入：/finance/bank-account?enterpriseId=123
+  const qp = router.query.enterpriseId
+  if (qp) {
+    const n = Number(qp)
+    if (Number.isFinite(n)) selectedEnterpriseId.value = n
   }
   await fetchData()
 })

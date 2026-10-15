@@ -74,12 +74,23 @@ public class BankAccountServiceImpl implements BankAccountService {
 
     @Override
     public IPage<BankAccountEntity> pageQuery(String keyword, Integer current, Integer size) {
+        return pageQuery(keyword, current, size, null);
+    }
+
+    @Override
+    public IPage<BankAccountEntity> pageQuery(String keyword, Integer current, Integer size,
+                                             Long enterpriseId) {
         Page<BankAccountEntity> page = new Page<>(current == null ? 1 : current, size == null ? 20 : size);
         LambdaQueryWrapper<BankAccountEntity> wrapper = new LambdaQueryWrapper<>();
         if (StrUtil.isNotBlank(keyword)) {
             wrapper.and(w -> w.like(BankAccountEntity::getAccountNo, keyword)
                     .or().like(BankAccountEntity::getAccountName, keyword)
                     .or().like(BankAccountEntity::getBankName, keyword));
+        }
+        // SPEC-P129 §1③：按企业收敛。enterpriseId 为 null 时不加条件，
+        // 行为与改动前逐字一致（AT-129-9 回归锁）。
+        if (enterpriseId != null) {
+            wrapper.eq(BankAccountEntity::getEnterpriseId, enterpriseId);
         }
         wrapper.orderByDesc(BankAccountEntity::getId);
         return mapper.selectPage(page, wrapper);

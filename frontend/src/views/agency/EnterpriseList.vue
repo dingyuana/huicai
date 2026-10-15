@@ -117,11 +117,81 @@
         <el-form-item label="纳税人识别号" prop="taxId">
           <el-input v-model="form.taxId" placeholder="纳税人识别号" />
         </el-form-item>
+        <!-- SPEC-P129 §1①：联系信息，全部可选（§7 排除项：不因格式或缺失阻断建档） -->
+        <el-divider content-position="left">联系信息（选填）</el-divider>
+        <el-alert
+          v-if="dialogMode === 'edit' && contactMasked"
+          type="info"
+          :closable="false"
+          show-icon
+          style="margin-bottom: 12px"
+          title="你看到的是脱敏后的联系方式"
+          description="留空表示不修改。如需改为新的号码或邮箱，直接覆盖填写即可。"
+        />
+        <el-form-item label="联系人" prop="contactName">
+          <el-input v-model="form.contactName" placeholder="联系人" />
+        </el-form-item>
+        <el-form-item label="电话" prop="contactPhone">
+          <el-input v-model="form.contactPhone" placeholder="手机或含区号固话" maxlength="32" />
+        </el-form-item>
+        <el-form-item label="邮箱" prop="contactEmail">
+          <el-input v-model="form.contactEmail" placeholder="邮箱" maxlength="128" />
+        </el-form-item>
+        <el-form-item label="地址" prop="address">
+          <el-input v-model="form.address" placeholder="地址" maxlength="255" />
+        </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="dialogVisible = false">取消</el-button>
         <el-button type="primary" @click="handleSubmit" :loading="submitting">
           {{ dialogMode === 'create' ? '创建' : '保存' }}
+        </el-button>
+      </template>
+    </el-dialog>
+
+    <!-- SPEC-P129 §1②：建档后就绪度面板 -->
+    <el-dialog
+      v-model="readinessVisible"
+      :title="`企业「${readiness.enterpriseName}」创建成功`"
+      width="520px"
+    >
+      <el-alert
+        type="success"
+        :closable="false"
+        show-icon
+        title="基本信息已完成"
+        description="编码、名称、纳税人识别号已建档。下面两项主数据会影响后续业务操作。"
+      />
+      <el-descriptions :column="1" border style="margin-top: 16px">
+        <el-descriptions-item label="基本信息">
+          <span style="color: #67c23a">✅ 已完成</span>
+        </el-descriptions-item>
+        <el-descriptions-item label="银行账号">
+          <span :style="{ color: readiness.bankAccount ? '#67c23a' : '#e6a23c' }">
+            {{ readiness.bankAccount ? '✅ 已配置' : '⚠️ 未配置' }}
+          </span>
+          <span v-if="!readiness.bankAccount" style="margin-left: 8px; color: #909399; font-size: 12px">
+            影响收款单、付款单、银行对账与自动制证
+          </span>
+        </el-descriptions-item>
+        <el-descriptions-item label="凭证类型">
+          <span :style="{ color: readiness.voucherType ? '#67c23a' : '#e6a23c' }">
+            {{ readiness.voucherType ? '✅ 已配置' : '⚠️ 未配置' }}
+          </span>
+          <span v-if="!readiness.voucherType" style="margin-left: 8px; color: #909399; font-size: 12px">
+            影响凭证生成；可在【基础资料 → 凭证类型】配置
+          </span>
+        </el-descriptions-item>
+      </el-descriptions>
+      <template #footer>
+        <el-button @click="readinessVisible = false">稍后再说</el-button>
+        <el-button
+          v-if="!readiness.bankAccount"
+          type="primary"
+          :disabled="readiness.enterpriseId == null"
+          @click="goConfigureBankAccount"
+        >
+          去配置银行账号
         </el-button>
       </template>
     </el-dialog>
@@ -133,6 +203,7 @@ import { ref, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth.store'
 import { getEnterpriseList, createEnterprise, updateEnterprise, deleteEnterprise, activateEnterprise, suspendEnterprise, type EnterpriseVO, type EnterpriseCreateDTO } from '@/api/modules/agency'
+import { hasBankAccount, hasVoucherType } from '@/api/modules/readiness'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
 
@@ -152,17 +223,26 @@ const dialogVisible = ref(false)
 const dialogMode = ref<'create' | 'edit'>('create')
 const submitting = ref(false)
 const editingId = ref<number | null>(null)
+/** 编辑态下当前看到的是否是脱敏串（SPEC-P129 D-1） */
+const contactMasked = ref(false)
 const formRef = ref<FormInstance>()
 
 const form = reactive<EnterpriseCreateDTO>({
   enterpriseCode: '',
   enterpriseName: '',
   taxId: '',
+  // SPEC-P129：联系信息全部可选
+  contactName: '',
+  contactPhone: '',
+  contactEmail: '',
+  address: '',
 })
 
 const formRules: FormRules = {
   enterpriseCode: [{ required: true, message: '请输入企业编码', trigger: 'blur' }],
   enterpriseName: [{ required: true, message: '请输入企业名称', trigger: 'blur' }],
+  // ⚠️ 联系信息一律不设 required（SPEC-P129 §7 排除项）：
+  // 建档是高频轻操作，强制填全是门槛倒退；格式问题也不阻断建档。
 }
 
 const stats = reactive({
@@ -241,7 +321,19 @@ function openEditDialog(enterprise: EnterpriseVO) {
   form.enterpriseCode = enterprise.enterpriseCode
   form.enterpriseName = enterprise.enterpriseName
   form.taxId = enterprise.taxId || ''
+  // SPEC-P129：回填联系信息。非管理员看到的是**脱敏值**（后端 D-1），
+  // 因此编辑框标注「留空表示不修改」，避免把掩码串回写进库。
+  form.contactName = enterprise.contactName || ''
+  form.contactPhone = enterprise.contactPhone || ''
+  form.contactEmail = enterprise.contactEmail || ''
+  form.address = enterprise.address || ''
+  contactMasked.value = isMasked(enterprise.contactPhone) || isMasked(enterprise.contactEmail)
   dialogVisible.value = true
+}
+
+/** 是否是脱敏串（含 **** 或 *** 片段） */
+function isMasked(v?: string | null) {
+  return !!v && (v.includes('****') || v.includes('***'))
 }
 
 async function handleSubmit() {
@@ -255,22 +347,78 @@ async function handleSubmit() {
       enterpriseName: form.enterpriseName,
       taxId: form.taxId || undefined,
       agencyId: authStore.agencyId ?? undefined,
+      // SPEC-P129：空串转 undefined，让后端落 NULL 而非空串
+      // （空串会与「已填但为空」混淆，见 §1①）
+      contactName: form.contactName || undefined,
+      contactPhone: form.contactPhone || undefined,
+      contactEmail: form.contactEmail || undefined,
+      address: form.address || undefined,
     }
 
     if (dialogMode.value === 'create') {
-      await createEnterprise(payload)
-      ElMessage.success('创建成功')
+      const created = await createEnterprise(payload)
+      // SPEC-P129 §1②：创建成功不静默返回列表，而是给「就绪度 + 下一步」面板。
+      // 判据（§4.5 第 50 条）：必须同时回答「为什么现在要配」与「点了会发生什么」。
+      // 只弹一句「创建成功」再让人自己找入口，等于把「找不到」换成「不知道为什么要找」。
+      dialogVisible.value = false
+      await showReadiness(created?.id ?? null, created?.enterpriseName ?? form.enterpriseName)
     } else {
       await updateEnterprise(editingId.value!, payload)
       ElMessage.success('保存成功')
+      dialogVisible.value = false
     }
-    dialogVisible.value = false
     fetchList()
   } catch {
     ElMessage.error(dialogMode.value === 'create' ? '创建失败' : '保存失败')
   } finally {
     submitting.value = false
   }
+}
+
+// ===== SPEC-P129 §1②：建档后就绪度面板 =====
+
+const readinessVisible = ref(false)
+const readiness = reactive({
+  enterpriseId: null as number | null,
+  enterpriseName: '',
+  bankAccount: false,
+  voucherType: false,
+  checking: false,
+})
+
+/**
+ * 展示「企业 X 创建成功」+ 就绪度清单 + 可点击的下一步。
+ *
+ * <p>⚠️ 就绪度是**派生事实**（由「有没有」计算），SPEC-P129 §3 明确禁止把它
+ * 持久化成列或状态 —— 一旦固化就会与实际配置漂移（这正是 P128 里
+ * `enterprise_id=0` 死数据的成因）。
+ */
+async function showReadiness(enterpriseId: number | null, enterpriseName: string) {
+  readiness.enterpriseId = enterpriseId
+  readiness.enterpriseName = enterpriseName
+  readiness.bankAccount = false
+  readiness.voucherType = false
+  readiness.checking = true
+  readinessVisible.value = true
+  try {
+    if (enterpriseId != null) {
+      // 并行探测两项主数据；任一失败都按「未配置」呈现，不让面板卡死
+      const [bank, voucherType] = await Promise.all([
+        hasBankAccount(enterpriseId).catch(() => false),
+        hasVoucherType(enterpriseId).catch(() => false),
+      ])
+      readiness.bankAccount = bank
+      readiness.voucherType = voucherType
+    }
+  } finally {
+    readiness.checking = false
+  }
+}
+
+function goConfigureBankAccount() {
+  if (readiness.enterpriseId == null) return
+  readinessVisible.value = false
+  router.push({ path: '/finance/bank-account', query: { enterpriseId: String(readiness.enterpriseId) } })
 }
 
 // ===== 删除 =====

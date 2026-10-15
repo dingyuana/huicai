@@ -22,14 +22,23 @@ public class BankAccountController {
 
     private final BankAccountService service;
     private final com.huicai.agency.tenant.mapper.EnterpriseMapper enterpriseMapper;
+    private final com.huicai.agency.security.AgencyEnterpriseRoleGuard roleGuard;
 
-    @Operation(summary = "分页查询")
+    @Operation(summary = "分页查询（可按企业过滤，SPEC-P129）")
     @GetMapping("/page")
     public R<IPage<BankAccountVO>> page(
             @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) Long enterpriseId,
             @RequestParam(defaultValue = "1") Integer current,
             @RequestParam(defaultValue = "20") Integer size) {
-        return R.ok(BankAccountVO.from(service.pageQuery(keyword, current, size)));
+        // SPEC-P129 §1③：允许按企业收敛列表。
+        // ⚠️ 必须先过可见集校验：否则「客户端自填 enterpriseId」就是一个可控的跨租户读入口
+        //    （这正是本类 /all-enterprises 注释里已明确的边界）。
+        //    不传时行为与改动前完全一致（AT-129-9 回归锁）。
+        if (enterpriseId != null) {
+            roleGuard.requireVisibleEnterprise(enterpriseId);
+        }
+        return R.ok(BankAccountVO.from(service.pageQuery(keyword, current, size, enterpriseId)));
     }
 
     /**
