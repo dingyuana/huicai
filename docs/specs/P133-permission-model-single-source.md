@@ -1,0 +1,287 @@
+# SPEC-P133：权限模型单一事实源 —— 后端端点强制鉴权 + 前后端共用一份清单
+
+| 项 | 内容 |
+|---|---|
+| 状态 | 🔴 **方案草案，待老丁审核**（根基建，**不得先实施**） |
+| REQ | REQ-2026-149 |
+| 前序 | SPEC-P130/P131（幽灵权限码 —— 本项目权限模型缺校验的**直接后果**） |
+| 关联 | AGENTS §4.5 第 43 条（豁免理由须逐路径）、第 45 条（用门禁自己的口径）、§1 铁律 #14、§7 风险边界 #2 |
+
+---
+
+## §0 取证（全部实测，非推断）
+
+### 0.1 现状：数据层完整，后端执行层**几乎不存在**
+
+| 层 | 状态 | 证据 |
+|---|---|---|
+| **权限码数据** | ✅ **完整且单一来源** | `t_menu.permission` → `t_role_menu` → `t_user_role`；`MenuServiceImpl#getUserButtonPermissions` 是唯一解析口 |
+| **JWT authorities** | ✅ 装的是**权限码**（不是角色 id） | `UserDetailsServiceImpl:84-87` 逐条 `new SimpleGrantedAuthority(perm)` |
+| **前端执行** | ✅ **完整** | 路由守卫按 `meta.permission`；`v-permission` 指令；侧边栏同口径过滤（P121 已对齐） |
+| **后端端点鉴权** | 🔴 **11 / 543** | `@PreAuthorize` 全仓仅 11 处，集中在 `SystemClearController`(10) + `PeriodCloseController`(1) |
+
+### 0.2 爆炸半径
+
+```
+写端点 POST/PUT/DELETE/PATCH : 307     ← 风险最高（铁律：写路径优先）
+读端点 GET                   : 236
+受保护                       :  11
+未受保护                     : 532
+```
+
+`SecurityConfig` 的授权配置只有：
+
+```java
+.requestMatchers( /* 9 条匿名白名单 */ ).permitAll()
+.anyRequest().authenticated()          // ← 到此为止
+```
+
+⇒ **任何已登录用户可直接调用任意端点**。前端守卫是**装饰性的** —— 改个 devtools 参数或直接 curl 即可绕过。
+
+### 0.3 🔴 根因：权限模型**没有单一事实源**
+
+前端路由 `meta.permission` 与后端端点是**两份独立手写的清单**，二者之间无任何校验。这正是 P131 查出 **11 个幽灵权限码**的机制：前端写了一个后端/菜单表里不存在的码，页面静默 403，且症状形似「权限不足」。
+
+**判据沉淀**：任何「A 处声明、B 处执行」的机制，若无机器校验，**必然漂移**，且漂移的症状总是「看起来像正常的权限不足」而极难定位。
+
+### 0.4 为什么不能给 543 个端点逐个加注解
+
+逐个加 `@PreAuthorize` 有三个问题：①**必然漏**（§4.5 第 43 条：逐点加守卫必漏）；②**无法机械校验完整性**（没有清单可查「是否每个写端点都覆盖了」）；③**前后端仍是两份清单**，漂移照旧。
+
+### 0.5 🔴 删除端点取证（2026-10-16 实测，35 个 DELETE 逐点查证）
+
+P133 是基建、要时间，而越权现在就敞着，故先做了一轮**止血**（commit `6c49fbb5`），本节记录取证结论与止血边界。
+
+**关键发现一：35 个 DELETE 端点全部零权限保护**，而 `SecurityConfig` 只到 `authenticated()` ⇒ 任何已登录用户（含出纳、0 权限码账号）可直接调用。
+
+**关键发现二：服务层有兜底，但没有一个是权限兜底。** 逐点查证（`@DeleteMapping` → `service.delete()` → 实现）：
+
+| 端点 | 服务层兜底 | 性质 |
+|---|---|---|
+| `DELETE /subjects/{id}` | 有子科目则拒删 | **业务**约束，非权限 |
+| `DELETE /system/role/{id}` | 角色下有用户则拒删 | **业务**约束，非权限 |
+| `DELETE /vouchers/{id}` | 仅 `DRAFT` 可删 | **状态**约束，非权限 |
+| `DELETE /system/user/{id}`、`DELETE /system/menu/{id}` | 无 | — |
+
+⇒ **状态/引用/父子约束能挡住「删错对象」，挡不住「无权限者删除」。** 一个出纳可以删掉**别人的**草稿凭证，只要它是 `DRAFT`。
+
+**关键发现三（最有说服力的一条）：已受保护的 11 处，恰好是破坏性最高的** —— 清库（`SystemClearController` 10 处）与反结账。它们被保护**不是因为设计更严谨，而是当初有人想起来加了注解**。⇒ 逐点加注解的必然结果就是这种「记得的地方严了、忘了的地方全裸」的分布，这是 P133 必须清单化的**实证**，而非理论偏好。
+
+**关键发现四：业务兜底的边界不可由代码推断。** `SubjectServiceImpl.delete` 只查子科目、**不查是否已被凭证分录引用**；`t_voucher_entry` 上是否存在外键约束决定了删用中的科目是「报错」还是「静默悬空引用」。**本轮未实测，不下结论** —— 已登记为 P133 取证清单第 1 项（须在真库上验证，不得在 SPEC 里预判）。
+
+**止血范围与边界（须如实声明）**：
+
+- 止血覆盖 8 个端点：科目、角色、菜单、部门、用户、客商 ×3（客户/供应商/员工）。
+- **复用页面级权限码**（`subjects:manage` / `system:*:list` / `party:list`），语义是「能进该页 = 能做该页操作」—— **粗粒度**。其中 `system:role/menu/user/dept:list` 仅 ADMIN 持有 ⇒ 立刻形成实质屏障。
+- 🔴 **剩余 27 个 DELETE 未覆盖**，P133 批次 3 必须包含。
+- 🔴 **止血期间不得宣称「权限管控已建立」**：全站 307 个写端点中仍只有 19 个受保护。
+- 顺带修掉两个被实测暴露的返回码缺陷（`@PreAuthorize` 的 `AccessDeniedException` 与无认证上下文的 `AuthenticationCredentialsNotFoundException` 此前均落兜底返回 **500「系统繁忙」**，把权限拒绝伪装成服务端故障；已补 403/401 处理器）。**判据：鉴权类异常必须有自己的处理器，不能靠兜底 —— 兜底会把「拒绝」变成「故障」。**
+
+---
+
+## §1 方案：机器可读权限清单作为唯一事实源
+
+### ① 清单文件（新增）
+
+`backend/src/main/resources/permission-manifest.yml`：
+
+```yaml
+version: 1
+endpoints:
+  - method: POST
+    path: /api/base/voucher/v1/vouchers
+    permission: voucher:create
+    write: true
+  - method: PUT
+    path: /api/base/voucher/v1/vouchers/{id}
+    permission: voucher:update
+    write: true
+  ...
+```
+
+**一份清单，两处消费**：
+- **后端**：`PermissionEnforcementInterceptor` 读它并强制拦截
+- **守卫**：校验它与前端路由、`t_menu` 三方一致
+
+### ② 后端执行（新增拦截器，不侵入 543 个方法）
+
+```
+请求 → JwtAuthenticationFilter（解析 LoginUser，authorities 已是权限码）
+     → PermissionEnforcementInterceptor
+         ├ 清单命中且持有权限 → 放行
+         ├ 清单命中但缺权限   → 403「缺少权限：xxx」
+         └ 清单未命中         → 按 §1③ 处置
+```
+
+⚠️ **不绕过 RLS、不改动数据权限**（`EnterpriseDataPermissionInterceptor` 与本拦截器职责正交：前者管**数据**，本管**动作**）。
+
+### ③ 清单未命中的端点怎么办（关键决策）
+
+| 策略 | 行为 | 后果 |
+|---|---|---|
+| **fail-open**（放行） | 未登记 = 不管 | 等于没做，且清单会悄悄腐化 |
+| **fail-closed**（拒绝） | 未登记 = 403 | 一旦漏登记就**功能不可用** |
+| **warn-only + 守卫**（**建议**） | 未登记 = 放行，但**结构守卫转红并列出清单** | 存量 532 个端点不至于一夜全废，同时缺口**可见** |
+
+**裁定请求**：老丁是否同意先走 **warn-only**，待清单补齐后**再切 fail-closed**？
+
+### ④ 守卫（三条，防漂移）
+
+| 守卫 | 不变量 | 反证手法 |
+|---|---|---|
+| `G1` 清单权限码须存在于 `t_menu` | 复用 P131 守卫的口径 | 注入假码 |
+| `G2` **所有写端点必须在清单中** | 缺口可见、不可增长（棘轮） | 删一条清单项 |
+| `G3` 前端路由 `meta.permission` 须在清单中 | 前后端**不得**各写一份 | 改前端 meta |
+
+⚠️ **G2 是本 SPEC 的核心**：它把「是否漏保护」从**人工检查**变成**CI 红**。存量缺口以**棘轮**记录实测值，只许减不许增。
+
+---
+
+## §2 输入 / 输出契约
+
+### 2.1 新增（无破坏性）
+
+| 项 | 内容 |
+|---|---|
+| `permission-manifest.yml` | 端点 → 权限码清单，版本化 |
+| `GET /api/v1/system/permission-manifest`（SUPER_ADMIN） | 导出清单，便于前端/排障对齐 |
+
+### 2.2 行为变更（**有破坏性，须裁定**）
+
+| 场景 | 现状 | 切换到 fail-closed 后 |
+|---|---|---|
+| 已登录用户调用**已登记**且无权限的端点 | ✅ 200 | 🔴 **403「缺少权限：xxx」** |
+| 已登录用户调用**未登记**端点 | ✅ 200 | 🔴 **403** |
+
+> ⚠️ 这是**行为破坏性变更**：任何清单登记错误都会立刻表现为功能不可用。因此**必须先 warn-only 跑通、再切 fail-closed**，两步都要各自跑全量 L1/L2。
+
+---
+
+## §3 状态流转
+
+**不涉及业务状态机**。本 SPEC 只增加一道**动作级授权层**，与既有状态机、RLS、数据权限并列：
+
+```
+请求
+ ├─ [认证] JwtAuthenticationFilter        → 未登录 401
+ ├─ [动作] PermissionEnforcementInterceptor → 无权限 403     ← 本 SPEC 新增
+ ├─ [账套] EnterpriseWriteGuard            → 非 ACTIVE 拒绝（P113）
+ ├─ [数据] EnterpriseDataPermissionInterceptor → SQL 注入企业条件
+ └─ [隔离] RLS（t_bank_account 等 FORCE RLS）→ 行级过滤
+```
+
+四层职责**正交、不可互相替代**。特别地：**动作权限不能替代数据隔离** —— 会计「能打开银行对账单页」不代表「能看别家企业的流水」。
+
+---
+
+## §4 异常处理
+
+| 场景 | 处理 |
+|---|---|
+| 缺权限 | `403 缺少权限：voucher:update`（须点名权限码，便于排障） |
+| 清单未命中（warn-only 期） | 放行 + `log.warn` + 守卫转红 |
+| 清单格式错误 | **启动即失败**（fail-fast）—— 配置文件错误必须在启动时暴露，不能等到运行时 |
+| 用户 authorities 为空 | 按「无任何权限」处理，不放行任何受保护端点 |
+
+---
+
+## §5 BDD 验收场景
+
+| # | Given | When | Then |
+|---|---|---|---|
+| AT-133-1 | 会计（无 `voucher:update`） | `PUT /vouchers/{id}` | **403 缺少权限**（与 SPEC-P132 的归属校验**是两道不同的闸**，都要覆盖） |
+| AT-133-2 | 管理员（有该码） | 同一请求 | 允许 |
+| AT-133-3 | 任意角色 | 调用**未登记**端点 | warn-only 期放行，**且 G2 守卫转红点名该端点** |
+| AT-133-4 | 清单里写一个不存在的权限码 | 跑 G1 | 转红 |
+| AT-133-5 | 从清单删掉一条写端点 | 跑 G2 | 转红并指出缺口 |
+| AT-133-6 | 前端 meta 写一个清单外的权限码 | 跑 G3 | 转红 |
+| AT-133-7 | 清单文件语法错误 | 应用启动 | **启动失败**（非静默降级） |
+
+---
+
+## §6 实施批次（**必须分批，每批独立验证**）
+
+| 批次 | 内容 | 风险 |
+|---|---|---|
+| 1 | 清单骨架 + 三个守卫（G1/G2/G3），**清单先只登记已受保护的 11 个** | 低；G2 以棘轮记录 532 缺口，**不失败** |
+| 2 | `PermissionEnforcementInterceptor`（warn-only） | 低；行为不变 |
+| 3 | 按模块**分批**补清单：①系统管理 ②凭证/总账 ③arap ④cash ⑤其余 | 中；每批跑全量 L1/L2 |
+| 4 | 切换 **fail-closed**，G2 缺口归零 | 高；此刻才真正拦住越权 |
+
+⚠️ **批次 3 的顺序按「越权危害 × 可用性影响」排**：先做**写端点**（307 个），再做读端点；先做**高危模块**（system 清理、凭证审核），后做低危。
+
+---
+
+## §7 明确排除与已知局限（§7.7）
+
+**排除**：
+- ❌ 不做**数据级**权限（行级/字段级）—— RLS 与 `EnterpriseDataPermissionInterceptor` 已承担
+- ❌ 不改 5 个角色的权限集合是否「业务上正确」—— P131 只修了「引用不存在的码」
+- ❌ 不改代理端 `agencyRole` 体系（P120/P121 已收敛）
+
+**已知局限**：
+1. **动作权限 ≠ 数据隔离** —— 本 SPEC 保证「不能做某个动作」，不保证「看不到别人的数据」。后者靠 RLS/数据权限，**两者不可互相替代**。
+2. **清单的准确性取决于人工登记** —— 守卫只能保证「清单与 t_menu/前端一致」，**不能保证权限分配在业务上恰当**。一个码存在但未授予任何角色时，G1/G3 都通过而页面仍 403（P131 已登记同一局限）。
+3. **批次 1~3 期间后端仍未真正拦住越权**（warn-only）—— **不得对外宣称「已完成权限管控」**。
+4. **543 个端点的清单登记量很大** —— 这是本 SPEC 的主要成本，也是必须机器化（而非逐点加注解）的根本原因。
+5. 🔴 **权限 ≠ 引用完整性** —— §0.5 实测证明：服务层的状态/引用/父子约束能挡「删错对象」，**挡不住「无权限者删除」**；反过来，加了 `@PreAuthorize` 也**不会**阻止有权限者删掉仍被引用的数据（如删用中的会计科目）。**两者是正交问题**，本 SPEC 只解决前者；后者是数据完整性范畴，须单独立项。
+
+---
+
+## §8 待老丁裁定
+
+| # | 议题 | 我的建议 |
+|---|---|---|
+| D-1 | 清单未命中端点的初始策略 | **warn-only + 守卫转红**，清单补齐后再切 fail-closed（避免一夜全废） |
+| D-2 | 守卫 G2 存量缺口的棘轮初值 | 钉在**实测值**（307 写端点中已登记数），只许减不许增 |
+| D-3 | 批次 3 的模块顺序 | 高危写端点优先：system → voucher/总账 → arap → cash → 其余 |
+| D-4 | 是否要求前端按钮也全部接 `v-permission` | 建议**是**，但可排在后端之后 —— 前端是体验层，后端才是安全层 |
+| **D-5** | **27 个未止血 DELETE 端点的优先级** | 建议**与批次 1 同批**：清空零新增成本，且 DELETE 是破坏性最高的写操作（§0.5） |
+| **D-6** | **删「被凭证引用中的会计科目」是否拦** | 🔴 **本轮不预判**。先在真库查证 `t_voucher_entry` 是否存在外键，再决定「补引用检查」还是「依赖 FK」；**不得凭代码推断下结论**（§0.5 关键发现四） |
+
+---
+
+# MACHINE-READABLE CONTRACT
+
+contract_version: "1.0"
+
+entity: EndpointPermissionManifest
+module: security
+table: null
+
+rules:
+  - id: C-01
+    source: "P133 §1①"
+    rule: "权限清单是端点权限的唯一事实源，前端路由 meta 与后端执行均从它派生，不得各写一份"
+    mapping: { single_source: permission-manifest.yml, consumers: [backend_enforcement, frontend_guard_G3] }
+    implementation: "permission-manifest.yml + PermissionEnforcementInterceptor"
+  - id: C-02
+    source: "P133 §1④ G2"
+    rule: "所有 POST/PUT/DELETE/PATCH 端点必须登记在清单中；存量缺口以棘轮记录，只许减不许增"
+    mapping: { coverage_required: write_endpoints, ratchet: only_shrink }
+    implementation: "ManifestWriteCoverageTest"
+  - id: C-03
+    source: "P133 §0.3 / P131"
+    rule: "清单中的每个权限码必须在 t_menu 中存在对应行"
+    mapping: { invariant: permission_exists_in_menu }
+    implementation: "RoutePermissionGhostCodeRealDBTest（P131 G1）"
+  - id: C-04
+    source: "P133 §1③"
+    rule: "清单未命中的端点：warn-only 期放行但必须留痕并使 G2 转红；fail-closed 期一律拒绝"
+    mapping: { warn_only: allow_and_flag, fail_closed: deny, must_log: true }
+    implementation: "PermissionEnforcementInterceptor"
+  - id: C-05
+    source: "P133 §4"
+    rule: "清单文件格式错误必须导致应用启动失败，不得静默降级为放行"
+    mapping: { on_parse_error: fail_fast }
+    implementation: "PermissionManifestLoader"
+  - id: C-06
+    source: "P133 §2.2"
+    rule: "缺权限时须返回 403 并点名权限码，便于排障"
+    mapping: { status: 403, message_must_contain: permission_code }
+    implementation: "PermissionEnforcementInterceptor"
+  - id: C-07
+    source: "P133 §3"
+    rule: "动作权限不得替代数据隔离：数据级仍由 RLS 与 EnterpriseDataPermissionInterceptor 承担"
+    mapping: { orthogonal_layers: [authentication, action_permission, book_status, data_permission, rls] }
+    implementation: "n/a"
