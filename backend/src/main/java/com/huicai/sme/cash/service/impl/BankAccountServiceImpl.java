@@ -72,6 +72,41 @@ public class BankAccountServiceImpl implements BankAccountService {
         return all;
     }
 
+    /**
+     * 系统管理员跨企业读取银行账户，可按企业收敛。
+     *
+     * <p>{@code enterpriseId} 为 {@code null} 时行为与改动前完全一致（遍历全部企业）。
+     *
+     * <p>🔴 <b>为什么不靠前端过滤</b>：{@code BankAccountVO} 明确「租户 id 不外露」，
+     * 且有 {@code MasterDataVoContractTest#internalFieldsNeverLeak} 钉住 —— 若为了前端筛选
+     * 把 {@code enterpriseId} 塞进 VO，等于为一个便利性需求<b>放宽既有安全守卫</b>。
+     * 而 {@code /all-enterprises} 本就是 SUPER_ADMIN 入口，收敛在服务端做，
+     * <b>响应结构一字不改</b>，守卫不用动。
+     *
+     * <p>⚠️ 必须在一个事务内：企业 GUC 用 {@code SET LOCAL}，仅在事务块内有效。
+     */
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public List<BankAccountEntity> listAccountsForSuperAdmin(Long enterpriseId) {
+        if (enterpriseId != null) {
+            Long original = EnterpriseContextHolder.get();
+            try {
+                EnterpriseContextHolder.set(enterpriseId);
+                // 每家企业单独建 wrapper，避免条件与上轮状态串味
+                return new ArrayList<>(mapper.selectList(new LambdaQueryWrapper<BankAccountEntity>()
+                        .eq(BankAccountEntity::getDeleted, 0)
+                        .orderByDesc(BankAccountEntity::getId)));
+            } finally {
+                if (original != null) {
+                    EnterpriseContextHolder.set(original);
+                } else {
+                    EnterpriseContextHolder.clear();
+                }
+            }
+        }
+        return listAllEnterprisesForSuperAdmin();
+    }
+
     @Override
     public IPage<BankAccountEntity> pageQuery(String keyword, Integer current, Integer size) {
         return pageQuery(keyword, current, size, null);

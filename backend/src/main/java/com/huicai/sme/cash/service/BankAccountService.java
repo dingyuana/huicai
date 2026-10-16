@@ -46,4 +46,13 @@ public interface BankAccountService {
      * <p>⚠️ 调用方必须校验 SUPER_ADMIN。
      */
     List<BankAccountEntity> listAllEnterprisesForSuperAdmin();
+
+    /**
+     * SPEC-P129 §1③：系统管理员跨企业读取银行账户，{@code enterpriseId} 可用于收敛。
+     *
+     * <p>为 {@code null} 时与 {@link #listAllEnterprisesForSuperAdmin()} 完全一致。
+     *
+     * <p>⚠️ 调用方必须校验 SUPER_ADMIN —— 本方法不做任何权限判定。
+     */
+    List<BankAccountEntity> listAccountsForSuperAdmin(Long enterpriseId);
 }

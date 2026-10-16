@@ -2,7 +2,7 @@
 
 | 项 | 内容 |
 |---|---|
-| 状态 | ✅ **已审核通过**（2026-10-14，老丁）。**D-1 裁定：手机号/邮箱对非管理员脱敏**（见 §4.1） |
+| 状态 | ✅ **已审核通过并实施**（2026-10-14 老丁审核；2026-10-15 实施完毕，见 **§6.1**）。**D-1 裁定：手机号/邮箱对非管理员脱敏**（见 §4.1） |
 | REQ | REQ-2026-145 |
 | 前序 | 无；与 **SPEC-P128**（凭证类型租户化）同源 |
 | 关联 | AGENTS §4.5 第 50 条（禁用/中断必须给出路）、第 43 条（豁免理由须逐路径）、§4.2 第 13 条（NOT NULL 列在 Entity 缺失 ⇒ 写入必挂）、§4.5 第 34 条（Entity 无 fill ⇒ enterprise_id 落默认值） |
@@ -185,6 +185,33 @@ P128 的根因是「新企业没有凭证类型 ⇒ 制证报『凭证类型不�
 | 5 | 银行账号页企业下拉 + 列表过滤 + 新增归属 | 去掉过滤 ⇒ AT-129-7 转红 |
 
 **回归**：L1 `mvn clean test` + L2 `mvn test -DexcludedGroups=`（先 `docker start huicai-redis`）。⚠️ 前端 `MasterDataVoContractTest` 须同步（新增字段可能撞 `NEVER_EXPOSE`）。
+
+### §6.1 实施结果回写（2026-10-15，全部完成）
+
+| 批次 | 状态 | 实际落地与偏差 |
+|---|---|---|
+| 1 | ✅ | **`V184__spec_p129_enterprise_contact_fields.sql`**（实际版本号 V184，非 V1xx）。4 列全 `ADD COLUMN IF NOT EXISTS` + `COMMENT ON` |
+| 2 | ✅ | Entity/CreateDTO/VO/create/update **六处**同步。🔴 实施时发现 create/update 原先**完全没有**这些赋值 —— 补列不补赋值会「页面显示有、库里是 NULL」 |
+| 3 | ✅ | 前端表单 4 字段 + `el-divider` 分组；空串转 `undefined` 让后端落 NULL 而非空串 |
+| 4 | ✅ | 就绪度面板 + CTA。另**真实探测**凭证类型（SPEC 原写「不做探测」，因 P128 的 `requireByCode` 已就绪而升级） |
+| 5 | ✅ | 企业下拉 + 服务端过滤。⚠️ 偏差见下 |
+
+**⚠️ 批次 5 的重大偏差（实施中查出）**：
+
+原方案「列表过滤」用应用层 `eq(enterpriseId, X)` 实现，**端到端实测发现它根本不生效**：`t_bank_account` 开了 **FORCE RLS**，谓词取自**当前上下文**，`X ≠ 当前企业` 时行被滤成**空列表且返回 200**。
+
+> 🔴 这是**读路径静默失效** —— 用户选企业 → 列表变空 → 「这家没账号」，真相是权限层把行藏了。写路径抛错反而是幸运（§4.5 第 48 条）。
+
+**修法**（commit `b30a9876`）：新增 `pageQueryAcrossEnterprise`，复用 `listAllEnterprisesForSuperAdmin` 已验证的「逐企业建立上下文」做法，`save/set/query/restore`，`@Transactional(rollbackFor = Exception.class)`（企业 GUC 用 `SET LOCAL`，仅事务内有效 —— P122/P127 两次栽在此）。**不需要特权连接，也不绕过 RLS**；可见集校验仍在 Controller 且**先于**上下文放宽。
+
+**⚠️ 另一处实现约束**：`BankAccountVO` 明确「租户 id 不外露」且有 `MasterDataVoContractTest#internalFieldsNeverLeak` 钉住。**没有为「前端要按 id 过滤」而放宽它** —— 改为把收敛做在**服务端**：`/all-enterprises?enterpriseId=X` 只返回该企业的行，**响应结构一字不改**，守卫不用动。
+
+**D-1 脱敏实施补充**（实施中由真库测试查出）：`canSeeFullContact()` 初版直接调 `SecurityUtils`，**无登录态抛「未登录」**；而 `toVO` 被列表/详情/定时任务复用，会打断这些路径。已改为 **fail-closed**：判不出角色 ⇒ 掩码。
+> **授权闸门要 fail-loud，脱敏只要 fail-closed。** 「缺企业上下文必须报错」是对的；「我判不出你是谁」不该是错误。
+
+**验证**：L1 `1754/0/0/5` + `All coverage checks have been met`；L2 `2273/0/0/5`。
+**守卫**：`EnterpriseContactMaskRealDBTest` 4 例、`BankAccountEnterpriseFilterRealDBTest` 4 例，后者反证（去掉上下文切换）**1 例转红**。
+**端到端**（重建镜像后实测）：新建企业 `id=5` → 联系信息真落库（JDBC 直查）→ 就绪度 `bankAccount=False / voucherType=False` → 跨企业筛选 `=1/=2/=4` 各返回 1 条且账户名正确 → 会计账号对未派工企业仍 **403**。
 
 ---
 

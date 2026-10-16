@@ -57,13 +57,18 @@ public class BankAccountController {
      * <p>限 SUPER_ADMIN：这是跨企业读取入口。
      */
     @GetMapping("/all-enterprises")
-    public R<List<BankAccountVO>> allEnterprises() {
+    public R<List<BankAccountVO>> allEnterprises(
+            @RequestParam(required = false) Long enterpriseId) {
         String userType = com.huicai.base.system.util.SecurityUtils.getCurrentUserType();
         if (!"SUPER_ADMIN".equals(userType)) {
             throw com.huicai.common.exception.BusinessException.forbidden(
                     "仅系统管理员可查看全部企业的银行账户");
         }
-        List<BankAccountVO> list = BankAccountVO.from(service.listAllEnterprisesForSuperAdmin());
+        // 只查一次：原实现调了两遍 listAllEnterprisesForSuperAdmin（一次取数、一次回填企业名），
+        // 等于把「逐企业建上下文」的代价翻倍
+        List<com.huicai.sme.cash.entity.BankAccountEntity> rows =
+                service.listAccountsForSuperAdmin(enterpriseId);
+        List<BankAccountVO> list = BankAccountVO.from(rows);
         // t_enterprise 未开 RLS，可直接读；补企业名便于管理员辨认
         java.util.Map<Long, String> names = enterpriseMapper
                 .selectList(new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<com.huicai.agency.tenant.entity.EnterpriseEntity>()
@@ -73,7 +78,7 @@ public class BankAccountController {
                         com.huicai.agency.tenant.entity.EnterpriseEntity::getEnterpriseName,
                         (a, b) -> a));
         // 企业名按实体自身的 enterprise_id 回填；不把租户列放进 VO
-        service.listAllEnterprisesForSuperAdmin().forEach(e ->
+        rows.forEach(e ->
                 list.stream().filter(vo -> vo.getId().equals(e.getId()))
                         .forEach(vo -> vo.setEnterpriseName(names.get(e.getEnterpriseId()))));
         return R.ok(list);

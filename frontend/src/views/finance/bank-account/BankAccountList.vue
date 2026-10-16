@@ -26,7 +26,7 @@
             placeholder="选择企业"
             clearable
             style="width:240px"
-            :disabled="scope === 'all'"
+            :disabled="scope === 'all' && !selectedEnterpriseId && enterpriseOptions.length <= 1"
             @change="fetchData"
           >
             <el-option
@@ -39,11 +39,11 @@
           <!-- ⚠️ 禁用必须同时回答「为什么灰」与「怎么才能点」（§4.5 第 50 条）。
                隐藏下拉会让用户以为「按企业筛选」不存在；只置灰不给出路同理。 -->
           <el-tooltip
-            v-if="scope === 'all'"
+            v-if="scope === 'all' && enterpriseOptions.length <= 1"
             content="「全部企业」视图本身就是跨企业总览，无需再按企业筛选。切回「当前企业」即可按企业收敛。"
             placement="top"
           >
-            <span class="ml-2 text-xs text-gray-400">全部企业视图下不可用</span>
+            <span class="ml-2 text-xs text-gray-400">仅可见 1 个企业</span>
           </el-tooltip>
           <el-tooltip
             v-else-if="enterpriseOptions.length <= 1"
@@ -239,11 +239,11 @@ async function fetchData() {
     if (scope.value === 'all') {
       // 系统管理员跨企业只读总览：后端逐企业建立上下文后聚合，
       // 写入仍绑定当前企业（刻意不提供「指定企业写入」）
-      const rows = await allEnterprisesBankAccounts()
+      const rows = await allEnterprisesBankAccounts(selectedEnterpriseId.value ?? undefined)
       const kw = (query.value.keyword || '').trim().toLowerCase()
-      // ⚠️ 「全部企业」视图<b>不</b>按 enterpriseId 做客户端过滤：VO 不含该字段
-      //   （BankAccountVO 明确「租户 id 不外露」，且有守卫 MasterDataVoContractTest 钉住）。
-      //   宁可让该视图不做二次收敛，也不为它放宽既有安全守卫。
+      // 🔴 收敛在<b>服务端</b>完成（all-enterprises?enterpriseId=X）：
+      //   BankAccountVO 明确「租户 id 不外露」且有 MasterDataVoContractTest 钉住，
+      //   若为了前端筛选把 enterpriseId 塞进 VO，等于为便利性放宽既有安全守卫。
       list.value = kw
         ? rows.filter((r) =>
             [r.accountNo, r.accountName, r.bankName, r.enterpriseName]
