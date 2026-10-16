@@ -213,6 +213,23 @@ public class VoucherServiceImpl extends ServiceImpl<VoucherMapper, VoucherEntity
             throw BusinessException.badRequest("仅草稿状态的凭证可修改");
         }
 
+        // SPEC-P132：只有制单人能改自己的草稿凭证。
+        //
+        // 🔴 本校验此前**完全不存在** —— update 只查 status=DRAFT 与期间开启，
+        // 因此任何有访问权的人都能改**别人**的草稿凭证，且全程无报错。
+        // P130 修的是「进不去编辑页」（前端路由 403）；本条修的是「进去之后能改谁的」。
+        // 两者是同一缺陷链上的两个环节，缺一则内控仍然形同虚设。
+        //
+        // ⚠️ null 判断与既有 assertNotSelfReview **逐字对齐**：created_by 为 NULL 时放行。
+        // 自动生成（source=GENERATED）的凭证可能无 created_by，此时无法判断归属，
+        // 按「不误伤合法路径」放行，并在此登记为已知局限而非静默。
+        if (userId != null && entity.getCreatedBy() != null
+                && userId.equals(entity.getCreatedBy()) == false) {
+            throw BusinessException.forbidden(
+                    "只能修改本人录入的凭证：制单人为 " + entity.getCreatedBy()
+                            + "，当前操作人为 " + userId + "（voucherId=" + entity.getId() + "）");
+        }
+
         // 校验期间是否可操作
         assertPeriodOpen(entity.getPeriod());
 
