@@ -60,6 +60,42 @@ public class GlobalExceptionHandler {
     }
 
     /**
+     * 方法级鉴权拒绝（{@code @PreAuthorize} 抛出）— 403。
+     *
+     * <p>🔴 <b>此前无此处理器，被兜底的 {@code Exception} 捕获并返回 500「系统繁忙」</b>。
+     * 后果：权限拒绝看起来像<b>服务端故障</b>，排障方向被完全带偏 ——
+     * 实测（2026-10-16）会计调用受保护的删除端点，日志里是
+     * {@code 系统异常: Access Denied}，HTTP 500。
+     *
+     * <p>⚠️ 注意与<b>过滤器层</b>的 {@code AccessDeniedException} 区分：后者由
+     * {@code SecurityConfig} 的 {@code accessDeniedHandler} 处理（返回 403）；
+     * 本处理器只补<b>方法级</b>（{@code @PreAuthorize}）这一路。
+     */
+    @ExceptionHandler(org.springframework.security.access.AccessDeniedException.class)
+    @ResponseStatus(HttpStatus.FORBIDDEN)
+    public R<Void> handleAccessDenied(org.springframework.security.access.AccessDeniedException e) {
+        log.warn("权限不足: {}", e.getMessage());
+        return R.fail(HttpStatus.FORBIDDEN.value(), "权限不足，无法执行该操作");
+    }
+
+    /**
+     * 方法级鉴权时<b>完全没有认证上下文</b>（无 SecurityContext）—— 401。
+     *
+     * <p>⚠️ 与 {@link #handleAccessDenied} 是<b>两回事</b>：有身份但权限不够 ⇒ 403；
+     * <b>根本没身份</b>（如 {@code @AutoConfigureMockMvc(addFilters = false)} 的测试、
+     * 或过滤器链被绕过）⇒ Spring Security 抛的是
+     * {@code AuthenticationCredentialsNotFoundException}，
+     * 它<b>不是</b> {@code AccessDeniedException}，故上一处理器接不住，会落到兜底变 500。
+     */
+    @ExceptionHandler(org.springframework.security.authentication.AuthenticationCredentialsNotFoundException.class)
+    @ResponseStatus(HttpStatus.UNAUTHORIZED)
+    public R<Void> handleNoAuthenticationContext(
+            org.springframework.security.authentication.AuthenticationCredentialsNotFoundException e) {
+        log.warn("缺少认证上下文: {}", e.getMessage());
+        return R.fail(HttpStatus.UNAUTHORIZED.value(), "未登录或缺少认证信息");
+    }
+
+    /**
      * 路由不存在 (404) — 前端请求了不存在的 API 路径
      */
     @ExceptionHandler(NoHandlerFoundException.class)

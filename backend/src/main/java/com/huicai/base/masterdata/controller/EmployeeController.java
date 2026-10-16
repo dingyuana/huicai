@@ -7,6 +7,7 @@ import com.huicai.base.masterdata.service.EmployeeService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -66,6 +67,11 @@ public class EmployeeController {
 
     @Operation(summary = "删除（逻辑）")
     @DeleteMapping("/{id}")
+    // 止血（P133 之前）：该删除操作原先<b>无任何权限保护</b>，
+    // 而 SecurityConfig 只到 anyRequest().authenticated() ⇒ 任何已登录用户都能删。
+    // ⚠️ 复用**页面级**权限码做粗粒度闸门（「能进该页 = 能做该页操作」），
+    //   真正的动作级模型见 SPEC-P133 权限清单。
+    @PreAuthorize("hasAuthority('party:list')")
     public R<Void> delete(@PathVariable Long id) {
         service.delete(id);
         return R.ok();

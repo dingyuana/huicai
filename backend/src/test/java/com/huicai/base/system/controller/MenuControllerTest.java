@@ -2,6 +2,7 @@ package com.huicai.base.system.controller;
 
 import com.huicai.base.system.entity.MenuEntity;
 import com.huicai.base.system.service.MenuService;
+import org.springframework.security.test.context.support.WithMockUser;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -117,6 +118,9 @@ class MenuControllerTest {
     }
 
     @Test
+    // 止血后该端点受 @PreAuthorize 保护：测试须带权限上下文，否则
+    // 方法级鉴权因**无认证**抛 AuthenticationCredentialsNotFoundException。
+    @WithMockUser(authorities = "system:menu:list")
     @DisplayName("删除菜单_PathVariable正确解析_返回200")
     void delete_pathVariable_boundCorrectly() throws Exception {
         doNothing().when(menuService).delete(anyLong());

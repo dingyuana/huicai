@@ -2,6 +2,7 @@ package com.huicai.base.system.controller;
 
 import com.huicai.base.system.entity.DeptEntity;
 import com.huicai.base.system.service.DeptService;
+import org.springframework.security.test.context.support.WithMockUser;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -106,6 +107,9 @@ class DeptControllerTest {
     }
 
     @Test
+    // 止血后该端点受 @PreAuthorize 保护：测试须带权限上下文，否则
+    // 方法级鉴权因**无认证**抛 AuthenticationCredentialsNotFoundException。
+    @WithMockUser(authorities = "system:dept:list")
     @DisplayName("删除部门_PathVariable正确解析_返回200")
     void delete_pathVariable_boundCorrectly() throws Exception {
         doNothing().when(deptService).delete(anyLong());
