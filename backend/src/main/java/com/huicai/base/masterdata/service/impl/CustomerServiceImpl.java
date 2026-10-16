@@ -4,6 +4,8 @@ import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.huicai.common.security.Ref;
+import com.huicai.common.security.ReferenceGuard;
 import com.huicai.common.exception.BusinessException;
 import com.huicai.base.masterdata.entity.CustomerEntity;
 import com.huicai.base.masterdata.mapper.CustomerMapper;
@@ -122,6 +124,13 @@ public class CustomerServiceImpl implements CustomerService {
     }
 
     @Override
+    @ReferenceGuard(
+            parent = "t_customer",
+            label = "客户",
+            children = {
+                    @Ref(table = "t_customer_statement", column = "customer_id", label = "客户对账单"),
+                    @Ref(table = "t_output_invoice", column = "customer_id", label = "销项发票")
+            })
     public void delete(Long id) {
         mapper.deleteById(id);
     }

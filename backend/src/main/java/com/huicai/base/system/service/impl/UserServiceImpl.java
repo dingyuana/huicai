@@ -4,6 +4,8 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.huicai.common.security.Ref;
+import com.huicai.common.security.ReferenceGuard;
 import com.huicai.common.context.EnterpriseContextHolder;
 import com.huicai.common.exception.BusinessException;
 import com.huicai.base.system.entity.UserEntity;
@@ -175,6 +177,13 @@ public class UserServiceImpl implements UserService {
     }
 
     @Override
+    @ReferenceGuard(
+            parent = "t_user",
+            label = "用户",
+            children = {
+                    @Ref(table = "t_user_role", column = "user_id", label = "用户角色", scopedByEnterprise = false),
+                    @Ref(table = "t_agency_user", column = "user_id", label = "代理用户", scopedByEnterprise = false)
+            })
     public void delete(Long id) {
         assertOwnedByCurrentEnterprise(userMapper.selectById(id));
         userMapper.update(null, new LambdaUpdateWrapper<UserEntity>()

@@ -197,6 +197,77 @@ from pg_constraint where contype='f' group by 1;
 | D-3 | 被引用时是否允许「强制删除」 | **不允许**。需要时应**停用**科目而非删除；强制删除若确有场景须单独立项，且须二次确认 + 审计 |
 | D-4 | 是否同时拦 `role`/`menu` 等系统表 | **拦**，但须先实测确认有无合法删除场景（已并入批次 2 的前置条件） |
 
+### 8.2 批次 2 的**选表依据**：真库「活引用数」（而非按 `t_subject` 同型推定）
+
+D-1 要求「每张表须独立实测」。原计划的猜测清单是错的 —— 实测（plpgsql 逐外键执行真查询，
+统计「子表列值非空**且能对上父表主键**」的行数）得到 **19 条外键确有活引用**：
+
+| 父表 ← 子表 | 活引用 | 对应 DELETE 端点 | 原实现有无检查 |
+|---|---|---|---|
+| `t_menu` ← `t_role_menu` | **150** | `MenuController` | 🔴 无（且**手动物理删** `t_role_menu`） |
+| `t_role` ← `t_role_menu` | **150** | `RoleController` | ⚠️ **只查了 `t_user_role`，漏掉 150 条授权** |
+| `t_bank_account` ← `t_bank_statement` | **80** | `BankAccountController` | 🔴 零检查 |
+| `t_subject` ← `t_voucher_entry` | 90 | `SubjectController` | ✅ 批次 1 已修 |
+| `t_voucher` ← `t_voucher_entry` | 90 | `VoucherController` | ⚠️ 仅「DRAFT 可删」 |
+| `t_voucher_template` ← `_line` | 50 | `VoucherTemplateController` | 🔴 手动物理删行 |
+| `t_voucher_type` ← `t_voucher` | 45 | `VoucherTypeController` | 🔴 零检查 |
+| `t_agency` ← 3 子表 | 13 | `AgencyController` | 🔴 零检查 |
+| `t_user` ← `t_user_role`/`t_agency_user` | 12 | `UserController` | 🔴 零检查 |
+| `t_enterprise` ← 2 子表 | 9 | `EnterpriseController` | ⚠️ 仅角色/可见性守卫 |
+
+⇒ **原 SPEC 里「`t_customer`/`t_vendor` 排在前面」的猜测是错的**：`t_customer`、`t_vendor`、
+`t_ticket`、`t_menu`（其引用方）等**活引用为 0**；真正的高危是 `t_role`/`t_menu`（150）、
+`t_bank_account`（80）、`t_agency`、`t_user`。批次 2 按实测重排。
+
+⚠️ **`t_menu` 与 `t_voucher_template` 是另一种危险**：`MenuServiceImpl#delete` 会
+`roleMenuMapper.delete(...)` **物理删掉 150 行角色授权**，`VoucherTemplateServiceImpl#delete`
+会 `lineMapper.deleteByTemplateId(id)` 级联删行。**硬删无软删可逆性** ——
+这不是「静默孤儿」，是**即时数据损失**。已登记为批次 3 的**最高优先级**，需老丁单独裁定
+「菜单删除是否应连带删授权」。
+
+### 8.3 批次 2 实施结果（2026-10-16）
+
+**应用 `@ReferenceGuard` 的 6 个服务**（子表声明数 15）：
+
+| 服务 | 父表 | 子表 |
+|---|---|---|
+| `BankAccountServiceImpl` | `t_bank_account` | 流水 / 银行日记账 / 对账异常 |
+| `AgencyServiceImpl` | `t_agency` | 代理用户 / 代理客户关系 / 客户企业 / 合同 |
+| `UserServiceImpl` | `t_user` | 用户角色 / 代理用户 |
+| `RoleServiceImpl` | `t_role` | **角色菜单授权**（补上原实现漏掉的 150 条）/ 用户角色 |
+| `CustomerServiceImpl` | `t_customer` | 客户对账单 / 销项发票 |
+| `VendorServiceImpl` | `t_vendor` | 进项发票 / 采购退货 |
+
+**守卫** `MultiEntityReferenceGuardRealDBTest` **8 例**（L2 真库），含**正控**（无引用的银行账户仍可删）
+与**自证**（6 个服务缺任一注解即红）。
+**✅ 反证**：摘除 `BankAccountServiceImpl` 的 `@ReferenceGuard` ⇒ **2 例转红**，还原后 8/8 绿。
+
+🔴 **踩坑登记（本轮最密集的一次夹具排错，全部同型）**：
+1. 🔴 **`bean.getClass()` 在 AOP 代理下拿到的是代理类**，JDK 代理上**看不到 impl 的注解**
+   ⇒ 自证假红。正解 `AopUtils.getTargetClass(bean)`。**判据：反射断言注解前，先确认
+   拿到的类是不是实现类。**
+2. 🔴 `t_agency` **没有 `enterprise_id` 列**（凭印象加会直接语法错）。
+3. 🔴 `chk_stmt_type` 允许集是 `INCOME/EXPENSE/TRANSFER_IN/TRANSFER_OUT`（我写的 `DEPOSIT` 违规）。
+4. 🔴 `chk_invoice_type` 允许集是 `SPECIAL/PLAIN/CUSTOMS/TRANSPORT`（我写的 `VAT_SPECIAL` 违规）。
+5. 🔴 `t_input_invoice` 有 **8 个必填列**（`invoice_date`/`period`/金额三件套/类型）。
+6. ⚠️ `t_customer` 活引用为 0 ⇒ 用例**必须自己造引用**，否则「不抛异常」是**正确行为**，
+   按错误预期写断言会把守卫误判为失效。
+   **判据：断言「必须被拒」前，先确认测试库里确实造出了引用。**
+
+**判据沉淀**：本轮 6 个坑有 5 个是「凭语感/印象写 schema」——
+与 `AGENTS §4.2 第 9/14 条`（同名状态跨表不同、CHECK 大小写敏感、必填列缺失）完全同型。
+**测试夹具优先用 Entity 造数**；必须裸 SQL 时，
+**一条 `information_schema.columns` + `pg_get_constraintdef` 能省掉 5 次试错**。
+
+### 8.4 批次 3 遗留（需老丁单独裁定）
+
+- `t_menu` / `t_voucher_template` 的**级联硬删**（见 §8.2 末）—— 优先级最高
+- `t_voucher`（仅 DRAFT 可删，但他人 DRAFT 仍可删 —— 需归属校验，形态同 P132）
+- `t_enterprise`、`t_ticket` 等
+- 结构守卫 G7 + 棘轮
+
+---
+
 ### 8.1 批次 1 实施结果（2026-10-16）
 
 **新增 3 个生产类**：

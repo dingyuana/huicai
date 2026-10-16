@@ -5,6 +5,8 @@ import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.huicai.common.security.Ref;
+import com.huicai.common.security.ReferenceGuard;
 import com.huicai.common.exception.BusinessException;
 import com.huicai.agency.tenant.entity.EnterpriseEntity;
 import com.huicai.agency.tenant.mapper.EnterpriseMapper;
@@ -207,6 +209,14 @@ public class BankAccountServiceImpl implements BankAccountService {
     }
 
     @Override
+    @ReferenceGuard(
+            parent = "t_bank_account",
+            label = "银行账户",
+            children = {
+                    @Ref(table = "t_bank_statement", column = "account_id", label = "银行流水"),
+                    @Ref(table = "t_bank_journal", column = "account_id", label = "银行日记账"),
+                    @Ref(table = "t_reconciliation_exception", column = "account_id", label = "对账异常")
+            })
     public void delete(Long id) {
         mapper.deleteById(id);
     }

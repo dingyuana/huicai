@@ -4,6 +4,8 @@ import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.huicai.common.security.Ref;
+import com.huicai.common.security.ReferenceGuard;
 import com.huicai.common.exception.BusinessException;
 import com.huicai.base.masterdata.entity.VendorEntity;
 import com.huicai.base.masterdata.mapper.VendorMapper;
@@ -119,6 +121,13 @@ public class VendorServiceImpl implements VendorService {
     }
 
     @Override
+    @ReferenceGuard(
+            parent = "t_vendor",
+            label = "供应商",
+            children = {
+                    @Ref(table = "t_input_invoice", column = "vendor_id", label = "进项发票"),
+                    @Ref(table = "t_purchase_return", column = "vendor_id", label = "采购退货")
+            })
     public void delete(Long id) {
         mapper.deleteById(id);
     }
