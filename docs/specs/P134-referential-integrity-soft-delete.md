@@ -394,6 +394,83 @@ D-1 要求「每张表须独立实测」。原计划的猜测清单是错的 —
 
 ---
 
+### 8.6 批次 4 实施结果：结构守卫 G7
+
+**守卫** `ReferenceGuardStructureRealDBTest` **4 例**（L2 真库）：
+
+| ID | 断言 | 真值源 |
+|---|---|---|
+| G7-1 | 全部 DELETE 端点都已登记（新增端点未登记 ⇒ 红） | **Spring 运行时** `RequestMappingHandlerMapping` |
+| G7-2 | 必须守卫的 10 个 Service 实现类都带 `@ReferenceGuard` | Spring 上下文 + 反射 |
+| G7-3 | 每个守卫的 `parent` 是真实存在且**有入向外键**的表 | **数据库** `pg_constraint` |
+| G7-4 | 登记表与必需清单的规模棘轮（35 / 10） | 常量 |
+
+**✅ 反证**：摘除 `MenuServiceImpl` 的 `@ReferenceGuard` ⇒ **G7-2 转红**，还原后 4/4 绿。
+
+**✅ 守卫当场抓到一个真实漏项**：G7-1 首次运行报「实际 35 个 DELETE 端点，登记表 33」
+⇒ 漏登记了 `AssignmentController`（撤销派工）与 `TaxController` 的第二个端点
+（销项发票删除）。**这两个是此前 4 版静态扫描器都没找出来的** ——
+静态扫描把 `TaxController` 的两个端点当成一个，而完全没看见 `AssignmentController`。
+
+#### 🔴 实现过程中踩的 4 个坑，全部是「错误信息指错方向」
+
+1. 🔴 **裸 `@SpringBootTest` 拿到的是 H2 内存库** ⇒ 查 `pg_constraint` 报
+   `Table "PG_CONSTRAINT" not found (this database is empty)`，
+   看起来像「SQL 写错了」，实则是**连错数据库**。
+   正解：继承 `AbstractMapperTest` 走 Testcontainers。
+   **判据：报「某个系统表/方言不存在」时，先确认连的是不是目标数据库。**
+2. 🔴 `ctx.getBean("AgencyService")` 抛 `NoSuchBeanDefinition` ——
+   **字符串是 bean 名（`agencyServiceImpl`），不是类型名**。
+3. 🔴 `Class.forName("AgencyServiceImpl")` 缺包名，且实现类分散 **9 个包**；
+   有接口**根本没有 Impl 类**（`AttachmentService`）。硬编码包列表每加一个 Service 就要改。
+   正解：**遍历上下文里所有 bean，按目标类简名匹配**。
+   **判据：定位「某个类」时优先用已经在运行的容器作索引，而不是靠名字反推坐标。**
+4. 🔴 `RequestMethod` 没有 `getName()`（是 `name()`）。
+
+#### ⚠️ 刻意砍掉的能力（不掩盖）
+
+本守卫**不做**「Controller → Service 方法」的自动解析，
+因而**不能**自动回答「某个新加的删除端点，其目标表是否需要守卫」。
+`REQUIRED_GUARDED_SERVICES` 是**按实测证据人工维护**的清单。
+
+**理由**：§8.7 记录的 4 版扫描器里，**有 2 版正是卡在这一步**（实现类分散、有接口无 Impl）。
+宁可用一份**人工核实但稳定**的清单，也不用一个**自动但经常算错**的解析器 ——
+后者一旦算错，守卫会给出**误导性的绿灯**。
+
+能自动检出的部分是：端点漏登记、守卫指向不存在的表、守卫被摘掉、清单被悄悄改动。
+
+
+### 8.6 批次 4（结构守卫 G7）待办
+
+尚未实现「所有引用型 DELETE 端点必须有 `@ReferenceGuard`」的**结构性**棘轮。
+现状：已手工覆盖 10 个服务（`t_subject`/`t_bank_account`/`t_agency`/`t_user`/`t_role`/
+`t_customer`/`t_vendor`/`t_menu`/`t_enterprise`/`t_voucher_type`），
+但**无机器校验** ⇒ 下一张表仍可能被漏掉。
+⚠️ 本轮已三次证明静态扫描器不可靠（见 §8.7），故 G7 的实现方式需先裁定。
+
+### 8.7 🔴 方法论：静态扫描器在本项目**连续三次产出错误结论**
+
+本轮为「哪些表有删除入口 / 哪些有引用检查」写了 4 版静态扫描脚本，**全部产出错误**：
+
+| 版本 | 方法 | 错误形态 |
+|---|---|---|
+| 1 | 按 Entity 名全文匹配 Service | `VoucherServiceImpl` 被算到 `t_user` 头上 |
+| 2 | 严格按 Mapper 归属 | 实体名剥了 `Entity` 后缀再去比对完整类名 ⇒ **全部匹配落空** |
+| 3 | 按 Controller 反查 Service | 方法体窗口串到下��个方法；`mapper2ent` 再次落空 |
+| 4 | plpgsql 真查询 | ✅ 唯一正确的口径（DB 里数真实引用行） |
+
+> **判据**：§4.5 第 45 条「必须用门禁自己的口径」在此处的推论是 ——
+> **代码结构的「事实」（哪些方法被调用、哪些列有引用）应以运行时/数据库为真值源，
+> 不要用文本解析推断。** 静态扫描在**格式规整**时可用，在本项目这种
+> 实体命名不统一、Service 注入交叉、Mapper 泛型多种写法的代码库里**不可靠**，
+> 且失败形态是「静默产出错误清单」而非报错。
+> 🔴 讽刺点：脚本 2 和 3 的失败**都是我自己引入的 bug**，而第 1 版的错误清单
+> 我差点直接写进 SPEC —— 若如此，会得到一份**看似严谨、实则全错**的选表依据。
+
+---
+
+---
+
 # MACHINE-READABLE CONTRACT
 
 contract_version: "1.0"
