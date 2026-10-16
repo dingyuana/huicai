@@ -105,8 +105,8 @@ public class RoleServiceImpl implements RoleService {
             parent = "t_role",
             label = "角色",
             children = {
-                    @Ref(table = "t_role_menu", column = "role_id", label = "角色菜单授权", scopedByEnterprise = false),
-                    @Ref(table = "t_user_role", column = "role_id", label = "用户角色", scopedByEnterprise = false)
+                    @Ref(table = "t_role_menu", column = "role_id", label = "角色菜单授权"),
+                    @Ref(table = "t_user_role", column = "role_id", label = "用户角色")
             })
     public void delete(Long id) {
         Long userCount = userRoleMapper.selectCount(

@@ -3,6 +3,8 @@ package com.huicai.agency.tenant.service.impl;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.huicai.common.security.ReferenceGuard;
+import com.huicai.common.security.Ref;
 import com.huicai.agency.tenant.dto.EnterpriseCreateDTO;
 import com.huicai.agency.tenant.dto.EnterpriseVO;
 import com.huicai.agency.tenant.entity.AgencyEnterpriseEntity;
@@ -125,6 +127,14 @@ public class EnterpriseServiceImpl implements EnterpriseService {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
+    @ReferenceGuard(
+            parent = "t_enterprise",
+            label = "客户企业",
+            children = {
+                    @Ref(table = "t_agency_enterprise", column = "enterprise_id", label = "代理客户关系"),
+                    @Ref(table = "t_agency_user_enterprise", column = "enterprise_id", label = "代理用户企业"),
+                    @Ref(table = "t_contract", column = "enterprise_id", label = "合同"),
+            })
     public void delete(Long id) {
         EnterpriseEntity entity = enterpriseMapper.selectById(id);
         if (entity == null) {

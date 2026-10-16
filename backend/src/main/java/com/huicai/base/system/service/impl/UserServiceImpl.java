@@ -181,8 +181,8 @@ public class UserServiceImpl implements UserService {
             parent = "t_user",
             label = "用户",
             children = {
-                    @Ref(table = "t_user_role", column = "user_id", label = "用户角色", scopedByEnterprise = false),
-                    @Ref(table = "t_agency_user", column = "user_id", label = "代理用户", scopedByEnterprise = false)
+                    @Ref(table = "t_user_role", column = "user_id", label = "用户角色"),
+                    @Ref(table = "t_agency_user", column = "user_id", label = "代理用户")
             })
     public void delete(Long id) {
         assertOwnedByCurrentEnterprise(userMapper.selectById(id));

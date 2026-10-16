@@ -3,6 +3,10 @@ package com.huicai.base.system.service.impl;
 import org.springframework.transaction.annotation.Transactional;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+
+import java.io.Serializable;
+import com.huicai.common.security.ReferenceGuard;
+import com.huicai.common.security.Ref;
 import com.huicai.base.system.entity.VoucherTypeEntity;
 import com.huicai.base.system.mapper.VoucherTypeMapper;
 import com.huicai.base.system.service.VoucherTypeService;
@@ -56,5 +60,26 @@ public class VoucherTypeServiceImpl extends ServiceImpl<VoucherTypeMapper, Vouch
                     cn, normalized));
         }
         return type;
+    }
+
+    /**
+     * 🔴 覆写 MyBatis-Plus 的 {@code removeById} —— 控制器原先调的是<b>继承来的</b>实现，
+     * 没有任何业务校验，而 {@code t_voucher.voucher_type_id} 实测有 **45 条活引用**
+     * ⇒ 删一个在用的凭证类型会静默掏空 45 张凭证的类型指向。
+     *
+     * <p>⚠️ 覆写而非新增：控制器已绑定 {@code removeById}，另起一个名字等于不生效；
+     * 而本方法在父类上被调用时<b>不会</b>经过本类覆写（自调用绕过），
+     * 故本类内若有其它路径调 {@code removeById} 需自查。</p>
+     */
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    @ReferenceGuard(
+            parent = "t_voucher_type",
+            label = "凭证类型",
+            children = {
+                    @Ref(table = "t_voucher", column = "voucher_type_id", label = "凭证"),
+            })
+    public boolean removeById(Serializable id) {
+        return super.removeById(id);
     }
 }

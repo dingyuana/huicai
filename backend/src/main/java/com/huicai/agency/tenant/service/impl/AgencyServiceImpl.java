@@ -85,9 +85,9 @@ public class AgencyServiceImpl implements AgencyService {
             parent = "t_agency",
             label = "代理公司",
             children = {
-                    @Ref(table = "t_agency_user", column = "agency_id", label = "代理用户", scopedByEnterprise = false),
+                    @Ref(table = "t_agency_user", column = "agency_id", label = "代理用户"),
                     @Ref(table = "t_agency_enterprise", column = "agency_id", label = "代理客户关系"),
-                    @Ref(table = "t_enterprise", column = "agency_id", label = "客户企业", scopedByEnterprise = false),
+                    @Ref(table = "t_enterprise", column = "agency_id", label = "客户企业"),
                     @Ref(table = "t_contract", column = "agency_id", label = "合同")
             })
     public void delete(Long id) {

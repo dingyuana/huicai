@@ -116,23 +116,46 @@ class SubjectReferenceGuardRealDBTest extends AbstractMapperTest {
     }
 
     @Test
-    @DisplayName("AT-134-6 其它企业的引用不得导致误杀")
-    void referencesFromOtherEnterpriseDoNotBlock() {
-        Long subjectId = createSubject("ISO");
+    @DisplayName("AT-134-6（2026-10-16 修正）跨企业的引用**同样**必须阻止删除")
+    void crossEnterpriseReferenceStillBlocks() {
+        // 🔴 原用例写成「其它企业的引用不得导致误杀」，那是 **fail-open 语义**：
+        //    若把检查限定在当前租户，别的租户对同一父记录的引用会被**静默漏报**，
+        //    守卫就会说「无引用可以删」而实际有引用。
+        //    跨租户引用同一条父记录本身就是**已损坏的数据**，此时**应当**阻止删除。
+        Long subjectId = createSubject("XENT");
 
-        // 在**另一个企业**下造引用
+        // 造一条**属于其它企业、但指向本企业科目**的分录（模拟既有损坏数据）
+        // ⚠️ fk_entry_voucher 是**真外键**（本次唯一还在生效的外键，因为凭证行是真插入的）
+        //    ⇒ voucher_id 必须指向真实凭证行，不能填假 id。
+        Long otherVoucherId = jdbcTemplate.queryForObject(
+                "INSERT INTO t_voucher (voucher_no, period, voucher_type_id, status, total_debit, "
+                        + "total_credit, enterprise_id, deleted) "
+                        + "VALUES ('P134-XENT-V', '202601', 1, 'DRAFT', 100, 100, 990077, 0) "
+                        + "RETURNING id", Long.class);
+        jdbcTemplate.update(
+                "INSERT INTO t_voucher_entry (voucher_id, subject_id, debit, credit, sort_order, "
+                        + "enterprise_id, deleted) VALUES (?, ?, 0, 100, 1, 990077, 0)",
+                otherVoucherId, subjectId);
+
+        assertThrows(BusinessException.class, () -> subjectService.delete(subjectId),
+                "跨企业的引用同样属于「有引用」，必须阻止删除");
+        assertEquals(0, deletedFlag(subjectId),
+                "科目不得被删除（跨企业引用被漏报 ⇒ fail-open）");
+    }
+
+    @Test
+    @DisplayName("正控：确实无人引用的科目在其它租户存在数据时仍可删")
+    void trulyUnreferencedSubjectStillDeletable() {
+        Long subjectId = createSubject("CLEAN");
         useEnterprise(990077L);
         try {
-            Long otherSubject = createSubject("OTHER");
-            createVoucherWithEntry(otherSubject, "OTHER");
+            Long other = createSubject("CLEANOTHER");
+            createVoucherWithEntry(other, "CLEANOTHER");
         } finally {
             useEnterprise(DEFAULT_ENTERPRISE_ID);
         }
-
-        // 本企业的科目与其它企业的分录无任何关系 —— 必须能删
         subjectService.delete(subjectId);
-        assertEquals(1, deletedFlag(subjectId),
-                "其它企业的引用不应导致本企业科目被拒（AT-134-6）");
+        assertEquals(1, deletedFlag(subjectId), "确实无引用的科目应能删除");
     }
 
     @Test

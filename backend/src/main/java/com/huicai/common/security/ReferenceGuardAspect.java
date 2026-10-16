@@ -100,6 +100,9 @@ public class ReferenceGuardAspect {
     }
 
     private Long countReferences(Ref ref, Long id, Long enterpriseId) {
+        // 🔴 2026-10-16 修正：完整性检查**默认全局**，不加 enterprise_id 过滤。
+        //    加了就会「过滤掉的那部分引用被静默漏报」⇒ 守卫误判为「无引用可删」，
+        //    这是 fail-open，方向与 fail-closed 相反。详见 @Ref#scopedByEnterprise。
         boolean scoped = ref.scopedByEnterprise() && hasEnterpriseColumn(ref.table());
 
         if (ref.scopedByEnterprise() && !hasEnterpriseColumn(ref.table())) {
