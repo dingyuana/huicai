@@ -96,6 +96,28 @@ public class GlobalExceptionHandler {
     }
 
     /**
+     * 数据完整性冲突（唯一键 / 外键 / NOT NULL）—— 400。
+     *
+     * <p>🔴 <b>此前无此处理器，被兜底的 {@code Exception} 捕获并返回 500「系统繁忙」</b>。
+     * 后果：删除被引用的会计科目（{@code t_voucher_entry.fk_entry_subject} 为 {@code NO ACTION}）
+     * 会返回 500，而根因是业务规则冲突 —— <b>排障方向被完全带偏</b>
+     * （运维会去查服务可用性，而不是查是谁在引用该科目）。
+     *
+     * <p>与 {@link #handleAccessDenied} 是<b>同一形态的缺陷</b>：
+     * <b>兜底会把「拒绝」变成「故障」</b>。凡「有明确原因、且原因是业务规则」的失败，
+     * 都必须有自己的处理器，不能靠兜底。
+     *
+     * <p>⚠️ 这里<b>只提示不暴露细节</b>：不把约束名/表名/列名回给前端（避免泄漏库结构），
+     * 仅在服务端日志留完整信息。
+     */
+    @ExceptionHandler(org.springframework.dao.DataIntegrityViolationException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public R<Void> handleDataIntegrity(org.springframework.dao.DataIntegrityViolationException e) {
+        log.warn("数据完整性冲突: {}", e.getMostSpecificCause().getMessage());
+        return R.fail(HttpStatus.BAD_REQUEST.value(), "该记录已被其它数据引用，无法完成此操作");
+    }
+
+    /**
      * 路由不存在 (404) — 前端请求了不存在的 API 路径
      */
     @ExceptionHandler(NoHandlerFoundException.class)
