@@ -1,0 +1,260 @@
+# SPEC-P134 —— 逻辑删除使外键保护结构性失效（引用完整性守卫）
+
+> **状态**：草案，待老丁审核（铁律 #10 三步闭环：SPEC → 审核 → 执行）
+> **REQ**：`REQ-2026-150`
+> **优先级**：P0（会计数据完整性，无报错、无告警、不可逆）
+> **前置**：本 SPEC 由 `SPEC-P133` 的 D-6 取证**派生**（裁定 D-6 时发现首版结论错误）
+> **竞品对标**（铁律 #15）：用友 U8 / 金蝶云星空 的基础档案删除均有「引用检查」开关，删除被引用的科目时**明确列出引用单据并拒绝**，不提供静默软删。
+
+---
+
+## §0 取证（全部实测，非推断）
+
+### 0.1 实测证明：外键**从未**保护过本项目
+
+对**被 45 条凭证分录引用**的科目 `4583 / 1002 银行存款` 执行 `DELETE /api/v1/subjects/4583`：
+
+```
+HTTP  code=200  msg=ok
+t_subject 4583            → deleted=1（逻辑删除，行仍在）
+t_voucher_entry 指向它的 45 条分录 → 原样保留，零报错
+```
+
+### 0.2 根因：铁律 #12 让**所有外键的参照完整性保护归零**
+
+外键检查**只在父行被物理删除或父键被更新时触发**。
+而铁律 #12 规定「关键财务表禁止物理删除，统一使用 `deleted` 字段」
+⇒ 本项目**没有任何财务表会被物理删除**
+⇒ **表上写 `FOREIGN KEY ... NO ACTION` 也永远不会执行。**
+
+### 0.3 这是**类缺陷**，不是单表缺陷
+
+```sql
+select confrelid::regclass::text, count(*),
+       bool_or(pg_get_constraintdef(oid) like '%ON DELETE CASCADE%')
+from pg_constraint where contype='f' group by 1;
+```
+
+实测：**25 张表**同时满足「持有入向外键」+「有 `deleted` 列」
+⇒ 25 张表的外键保护**全部归零**。
+
+⚠️ 部分由 grep 匹配 Controller 得出，**可能含误判**（如 `t_user` 命中 `AssignmentController`
+是「用户-企业分配」而非「删用户」）⇒ 逐表核实是**实施时**的任务，本 SPEC 不预判。
+
+### 0.4 🔴 首版推理错在哪（本轮最贵的判据）
+
+首版裁定「依赖 DB 外键即可」，理由是查到 `fk_entry_subject` 无 `CASCADE`/`SET NULL`
+⇒ 默认 `NO ACTION` ⇒ 「DB 会直接拒删」。
+
+**错在：查了外键"存不存在"，没查外键"会不会触发"。**
+
+**判据沉淀**：
+> 裁定「DB 是否会替我兜底」时，查到外键存在**不等于**查到兜底有效；
+> 必须再问「**该表会不会被物理删除**」。
+> 在本项目答案恒为「永远不会」⇒ **任何「表上有 NO ACTION 外键所以安全」的结论都是安全感假象**。
+> 与 `AGENTS §4.5 第 27 条`同型：结论若只在最优条件下验证，就无法证伪。
+
+---
+
+## §1 问题定义与范围
+
+### 1.1 一句话
+
+**软删让数据库静默吞掉所有引用完整性检查，导致「删掉仍在使用的会计主数据」全程无报错。**
+
+### 1.2 危害排序
+
+| 危害 | 说明 |
+|---|---|
+| 🔴 **报表静默缺数** | 分录仍在，但 `JOIN t_subject ON deleted=0` 取不到科目名 ⇒ 科目明细列空/缺行 |
+| 🔴 **不可逆** | 逻辑删除无级联，恢复需人工逐条 |
+| 🔴 **无告警** | 返回 200 `ok`，运维与业务都以为删成功了 |
+| 🟡 权限再严也无用 | 这是完整性问题，**ADMIN 一样能删** —— 与 P133 正交 |
+
+### 1.3 明确不做（§7.7）
+
+- ❌ 不改逻辑删除机制本身（铁律 #12 是设计决策，不是缺陷）
+- ❌ 不做**级联软删**（"删科目连带删凭证"是业务决策，须单独裁定）
+- ❌ 不补 `ON DELETE CASCADE`（对软删**无效**，属装饰）
+- ❌ 不在 P134 内做权限改造（属 P133）
+
+---
+
+## §2 输入契约 / §3 输出契约
+
+### 2.1 新增输入契约：声明式注解
+
+```java
+@ReferenceGuard(
+    parent = "t_subject",
+    label  = "会计科目",
+    children = {
+        @Ref("t_voucher_entry",   "subject_id", "凭证分录"),
+        @Ref("t_subject_balance", "subject_id", "科目余额"),
+        @Ref("t_business_doc_entry", "subject_id", "业务单分录"),
+        @Ref("t_bank_account",    "subject_id", "银行账户"),
+        @Ref("t_customer",        "subject_id", "客户档案"),
+        @Ref("t_vendor",          "subject_id", "供应商档案"),
+        @Ref("t_employee",        "subject_id", "员工档案"),
+        @Ref("t_account_mapping_rule", "target_subject_id", "科目映射"),
+        @Ref("t_voucher_template_line", "subject_id", "凭证模板行"),
+        @Ref("t_budget_entry",    "subject_id", "预算明细"),
+    })
+```
+
+**设计要点**：
+- 复用 P113 `EnterpriseWriteGuard` 的**切面范式**（一次覆盖全仓写端点，逐点加必漏）
+- 声明式 ⇒ 引用关系写在代码里、可 review、可 grep；**不靠运行时反射扫 FK**（那会让「表结构」与「业务引用」混淆）
+
+### 2.2 运行时输出契约（被引用时）
+
+```json
+{ "code": 400, "msg": "该会计科目已被以下数据引用，无法删除：凭证分录(45条)、银行账户(1条)" }
+```
+
+**要求**：
+- HTTP **400**（业务规则冲突），**不是 500**
+- 消息**指名被引用的子表与条数** —— 让用户知道该先处理什么
+- 🔴 **不得回显表结构细节**给前端（`ConstraintName` 等只进日志），避免泄漏库结构
+
+### 2.3 契约测试
+
+| ID | Given-When-Then |
+|---|---|
+| AT-134-1 | **被引用的科目删除 ⇒ 拒绝**：科目被 45 条分录引用时删除 ⇒ 抛 `BusinessException`，且**科目 `deleted` 仍为 0** |
+| AT-134-2 | **负向断言（关键）**：删除被拒后，`t_subject` 该行 `deleted` 仍为 0、引用它的分录数不变 |
+| AT-134-3 | **未被引用的科目可删**：无引用的科目删除 ⇒ 成功，`deleted=1` |
+| AT-134-4 | **消息含引用方**：抛出的消息同时包含子表中文名与条数 |
+| AT-134-5 | **多子表**：科目同时被分录与银行账户引用 ⇒ 消息列出**两者**（不是只报第一个） |
+| AT-134-6 | **跨企业不误伤**：企业 A 的科目被企业 B 的数据引用 ⇒ **不计入**（引用检查必须带 `enterprise_id`） |
+| AT-134-7 | **结构守卫**：所有「可软删 + 有入向 FK + 有 DELETE 端点」的表，必须有 `@ReferenceGuard` |
+| AT-134-8 | **守卫自证**：注入一个未标注的引用型 DELETE 端点 ⇒ AT-134-7 转红 |
+
+🔴 **AT-134-6 不可省**：`t_voucher_entry` 有 45 条指向 4583 的分录，若引用检查不带企业维度，
+企业 B 的任何科目都会被「全局有引用」误杀 ⇒ **功能不可用**。
+
+---
+
+## §4 状态流转
+
+```
+删除请求
+   │
+   ├─ 未标注 @ReferenceGuard ──────────────► 放行（warn 日志，守卫 G7 转红）
+   │
+   └─ 已标注
+        ├─ 无企业上下文 ───────────────────► 放行 + warn（系统路径，不误伤定时任务）
+        ├─ 逐个子表 count(子表.列 = id AND 企业一致)
+        │     ├─ 全部为 0 ───────────────► 执行删除（成功）
+        │     └─ 任一 > 0 ───────────────► 抛 BusinessException(400)，**不删**
+        └─ 事务保证：抛异常 ⇒ 删除未发生
+```
+
+---
+
+## §5 异常处理
+
+| 场景 | 处理 |
+|---|---|
+| 子表查询失败（表不存在等） | 🔴 **fail-loud**：抛 `BusinessException` 并**指明缺哪个子表**，不得静默跳过（§4.5 第 49 条同型：静默跳过 = 用一个洞换另一个洞） |
+| 子表无 `enterprise_id` | 以父表企业为准；守卫测试须显式登记该例外 |
+| 守卫自身抛异常 | 删除**不得**执行 |
+
+---
+
+## §6 实施批次（必须分批，每批独立验证）
+
+| 批次 | 内容 | 依据 |
+|---|---|---|
+| **1** | 切面机制 + `t_subject`（**已实测证明**）+ AT-134-1~6 | §0.1 实测 |
+| **2** | 客商/系统：`t_customer`、`t_vendor`、`t_role`、`t_menu`、`t_user` | §0.3 待逐表核实 |
+| **3** | 其余取证后补：`t_agency`、`t_enterprise`、`t_ticket`、`t_bank_statement` … | ⚠️ **必须先实测**，不得按同型推定 |
+| **4** | 结构守卫 G7 + 棘轮（防类缺陷复发） | §2.3 AT-134-7/8 |
+
+**批次 3 的前置条件（硬性）**：每张表都必须有**独立的真库实测**证明「删了会静默丢数据」，
+**不得由 `t_subject` 同型推定** —— §0.3 已声明 grep 结果可能含误判。
+
+---
+
+## §7 已知局限（§7.7）
+
+1. **不解决物理删除的级联问题** —— 若将来引入物理删除，FK 才会重新生效，本守卫仍是有益的第二层。
+2. **引用清单依赖人工登记** —— 守卫 G7 只能保证「有引用型 DELETE 端点就有标注」，
+   **不能保证标注里的子表列名写对** ⇒ AT 须逐个覆盖已登记的子表。
+3. **不覆盖无 DELETE 端点的表** —— 25 张里有相当一部分没有删除入口（如 `t_budget`、`t_asset_card`），
+   本 SPEC **不为其新增端点**，仅在守卫中标注「无入口」以免后人误加。
+4. 🔴 **与 P133 正交**：本 SPEC 不解决「谁不能删」，只解决「什么不能被删」。
+   **P133 完成后本 SPEC 依然必要** —— ADMIN 依然能删掉仍被引用的数据。
+
+---
+
+## §8 待老丁裁定
+
+| # | 议题 | 我的建议 |
+|---|---|---|
+| D-1 | 是否覆盖全部 25 张表 | **否**，按批次 1~3 分批，每表须独立实测 |
+| D-2 | 引用检查是否带 `enterprise_id` | **必须带**（否则功能不可用，见 AT-134-6） |
+| D-3 | 被引用时是否允许「强制删除」 | **不允许**。需要时应先停用/停用科目而非删除 —— 若老丁要强制删除，须单独立项并要求二次确认 + 审计 |
+| D-4 | 是否同时拦截 `t_role`/`t_menu` 等系统表 | 建议**拦截**，但需先实测确认其是否有合法删除场景 |
+
+---
+
+# MACHINE-READABLE CONTRACT
+
+contract_version: "1.0"
+
+entity: ReferenceGuard
+module: common
+table: null
+
+rules:
+  - id: C-01
+    source: "P134 §0.1/§0.2"
+    rule: "逻辑删除使外键约束永不触发，删除被引用的父行必须由应用层拒绝"
+    mapping: { mechanism: ReferenceGuardAspect, check: child_count_before_soft_delete }
+    implementation: "@ReferenceGuard 注解 + ReferenceGuardAspect"
+  - id: C-02
+    source: "P134 §2.2"
+    rule: "被引用时返回 HTTP 400，业务消息须指名子表与条数，且不回显库结构细节"
+    mapping: { http: 400, payload: [child_label, count] }
+    implementation: "ReferenceGuardAspect + GlobalExceptionHandler(BusinessException)"
+  - id: C-03
+    source: "P134 §5"
+    rule: "子表查询失败或守卫异常时必须 fail-loud，不得静默跳过"
+    mapping: { on_error: throw, forbid_silent_skip: true }
+    implementation: "ReferenceGuardAspect"
+  - id: C-04
+    source: "P134 §6 批次4 / §2.3 AT-134-7"
+    rule: "所有可软删且有入向外键且有 DELETE 端点的表必须标注 @ReferenceGuard，缺口以棘轮记录"
+    mapping: { guard: structural_ratchet, forbid_unregistered: true }
+    implementation: "ReferenceGuardStructureTest"
+
+acceptance_tests:
+  - id: AT-134-1
+    given: "科目被 45 条凭证分录引用"
+    when: "调用 DELETE /api/v1/subjects/{id}"
+    then: "抛 BusinessException(400) 且科目 deleted 仍为 0"
+  - id: AT-134-2
+    given: "删除被拒后"
+    when: "复查数据库"
+    then: "科目 deleted=0 且引用它的分录数不变（负向断言）"
+  - id: AT-134-3
+    given: "科目无任何引用"
+    when: "调用 DELETE"
+    then: "删除成功，deleted=1"
+  - id: AT-134-4
+    given: "科目被引用"
+    when: "捕获异常消息"
+    then: "消息含子表中文名与条数"
+  - id: AT-134-5
+    given: "科目同时被两类数据引用"
+    when: "删除"
+    then: "消息同时列出两类引用方"
+  - id: AT-134-6
+    given: "企业 A 的科目被企业 B 的数据引用"
+    when: "删除企业 A 的科目"
+    then: "不因企业 B 的引用而被拒（引用检查须带 enterprise_id）"
+  - id: AT-134-7
+    given: "扫描全仓"
+    when: "存在可软删+有入向FK+有DELETE端点但未标注的表"
+    then: "结构守卫转红"
