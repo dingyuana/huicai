@@ -72,12 +72,24 @@ class PermissionEnforcementInterceptorRealDBTest extends AbstractMapperTest {
     // ───────── 逻辑 ─────────
 
     @Test
-    @DisplayName("清单已加载：批次 1 登记的 19 条（全是写端点）")
+    @DisplayName("清单已加载：批次 3 模块 1 登记后为 48 条（全是写端点）")
     void manifestLoads() {
         assertNotNull(manifest);
-        assertEquals(19, manifest.size(), "批次 1 清单条数应为 19（变更时同步改本断言）");
+        assertEquals(48, manifest.size(),
+                "清单条数应为 48（批次 1 的 19 条 + 批次 3 模块 1 的 29 条）；"
+                        + "变更时同步改本断言 —— 这正是清单条数漂移的第一道信号");
         long writes = manifest.entries().stream().filter(PermissionManifest.Entry::write).count();
-        assertEquals(19, writes, "这 19 条全是写端点（清库 9 + 高危删除 8 + 结账 2）");
+        assertEquals(48, writes,
+                "当前登记的应**全是写端点**（读端点留待批次 3 后续），实际非写端点 "
+                        + (48 - writes) + " 条");
+    }
+
+    @Test
+    @DisplayName("执行模式：批次 4 之前必须是 warn-only（登记 ≠ 拦截）")
+    void enforcementModeIsWarnOnlyBeforeBatch4() {
+        assertFalse(manifest.isEnforcing(),
+                "enforcement 仍是 enforcing —— 在批次 3 逐步登记端点期间切 fail-closed，"
+                        + "等于**跳过批次 4**、让「登记清单」这个纯文档动作变成破坏性变更");
     }
 
     @Test
@@ -91,13 +103,60 @@ class PermissionEnforcementInterceptorRealDBTest extends AbstractMapperTest {
     }
 
     @Test
-    @DisplayName("命中清单但缺权限 ⇒ 403 且响应体含所需权限码")
-    void registeredEndpointWithoutAuthorityGets403() throws Exception {
+    @DisplayName("命中清单但缺权限：warn-only 下只告警放行（批次 3/4 之前）")
+    void missingAuthorityIsWarnOnlyBeforeBatch4() throws Exception {
         loginAs("nobody");
         MockHttpServletResponse res = invoke("DELETE", "/api/v1/system/role/1");
+        assertTrue(res.getContentAsString().isEmpty(),
+                "enforcement=" + mode() + " 时，缺权限不得写 403 响应体。实际："
+                        + res.getContentAsString());
+    }
+
+    @Test
+    @DisplayName("enforcing 模式下缺权限 ⇒ 403 且响应体指名所需权限码（批次 4 的行为）")
+    void enforcingModeRejectsWith403() throws Exception {
+        // 强制切到 enforcing，验证的是**同一段逻辑**的 fail-closed 分支。
+        // 正解：直接构造一个 enforcing 的清单实例，而不是改全局配置文件 ——
+        // 改配置文件会让其它用例的执行顺序影响本用例（§4.5 第 29 条）。
+        var enforcingManifest = new PermissionManifest();
+        // ⚠️ 顺序要紧：**先加载、后置位**。loadForTest() 会从配置文件读回 enforcement，
+        // 若先置 true 再加载，会被文件的 warn-only 覆盖 ⇒ 用例假红
+        // （症状是「以为已切 enforcing 却仍放行」，错误信息完全指错方向）。
+        enforcingManifest.loadForTest();
+        java.lang.reflect.Field f = PermissionManifest.class.getDeclaredField("enforcing");
+        f.setAccessible(true);
+        f.set(enforcingManifest, true);
+        assertTrue(enforcingManifest.isEnforcing(), "置位失败：本用例将失去意义");
+        var provider = fixedProvider(enforcingManifest);
+        PermissionEnforcementInterceptor enforcing =
+                new PermissionEnforcementInterceptor(provider);
+
+        loginAs("nobody");
+        MockHttpServletRequest req = new MockHttpServletRequest("DELETE", "/api/v1/system/role/1");
+        req.setRequestURI("/api/v1/system/role/1");
+        MockHttpServletResponse res = new MockHttpServletResponse();
+        boolean proceed = enforcing.preHandle(req, res, SOME_HANDLER);
+
+        assertFalse(proceed, "enforcing 模式下缺权限必须中断请求（preHandle 返回 false）");
         assertEquals(403, res.getStatus(), "缺权限必须 403");
         assertTrue(res.getContentAsString().contains("system:role:list"),
                 "403 响应须指名所需权限码，实际：" + res.getContentAsString());
+    }
+
+
+    /** 固定返回某个实例的 {@link org.springframework.beans.factory.ObjectProvider}。 */
+    private static org.springframework.beans.factory.ObjectProvider<PermissionManifest>
+            fixedProvider(PermissionManifest instance) {
+        return new org.springframework.beans.factory.ObjectProvider<>() {
+            @Override public PermissionManifest getObject(Object... args) { return instance; }
+            @Override public PermissionManifest getObject() { return instance; }
+            @Override public PermissionManifest getIfAvailable() { return instance; }
+            @Override public PermissionManifest getIfUnique() { return instance; }
+        };
+    }
+
+    private String mode() {
+        return manifest.isEnforcing() ? "enforcing" : "warn-only";
     }
 
     @Test

@@ -32,6 +32,7 @@ public class PermissionManifest {
     }
 
     private List<Entry> entries = new ArrayList<>();
+    private boolean enforcing;
 
     /**
      * 🔴 踩坑留证（两轮，两轮报错都指错方向）：
@@ -53,10 +54,24 @@ public class PermissionManifest {
      */
     @PostConstruct
     public void load() {
+        loadForTest();
+    }
+
+    /**
+     * 加载清单（可被测试直接调用）。
+     *
+     * <p>之所以把实现体单独拆出来：测试需要构造一个「强制 enforcing」的清单实例来验证
+     * fail-closed 分支，而 {@code load()} 上挂着 {@code @PostConstruct}（那是容器回调，
+     * 对手工 new 的实例不会触发）。</p>
+     */
+    public void loadForTest() {
         entries = doLoad();
         long writes = entries.stream().filter(Entry::write).count();
-        log.info("权限清单已加载：共 {} 条（其中写端点 {} 条）—— 批次 1 阶段仅登记已受保护端点，"
-                + "**尚未完成权限管控**", entries.size(), writes);
+        log.warn("权限清单已加载：共 {} 条（写端点 {} 条），执行模式={} —— {}",
+                entries.size(), writes, enforcing ? "enforcing" : "warn-only",
+                enforcing
+                        ? "命中但缺权限将返回 403"
+                        : "命中但缺权限**只告警仍放行**，**尚未完成权限管控**");
     }
 
     @SuppressWarnings("unchecked")
@@ -69,6 +84,18 @@ public class PermissionManifest {
         }
         try (InputStream in = res.getInputStream()) {
             Map<String, Object> root = new Yaml().load(in);
+            Object mode = root.get("enforcement");
+            if (mode == null) {
+                throw new IllegalStateException(
+                        "permission-manifest.yml 缺少 enforcement 段 —— 执行模式必须**显式声明**，"
+                                + "不得靠默认值，否则将来切 fail-closed 时没人知道现值是什么");
+            }
+            enforcing = "enforcing".equalsIgnoreCase(String.valueOf(mode));
+            if (!enforcing && !"warn-only".equalsIgnoreCase(String.valueOf(mode))) {
+                throw new IllegalStateException("enforcement 取值非法：" + mode
+                        + "（只允许 warn-only / enforcing）");
+            }
+
             List<Map<String, Object>> raw =
                     (List<Map<String, Object>>) root.get("endpoints");
             if (raw == null) {
@@ -129,6 +156,11 @@ public class PermissionManifest {
             }
         }
         return null;
+    }
+
+    /** 当前是否 fail-closed。批次 4 之前恒为 false。 */
+    public boolean isEnforcing() {
+        return enforcing;
     }
 
     public List<Entry> entries() {

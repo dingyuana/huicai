@@ -61,6 +61,8 @@ public class PermissionEnforcementInterceptor implements HandlerInterceptor {
 
     /** 未命中端点的告警计数：按 (METHOD uri 前缀) 聚合，避免刷屏把日志淹掉。 */
     private final Map<String, AtomicLong> unregisteredHits = new ConcurrentHashMap<>();
+    /** 「命中但缺权限」的告警计数（warn-only 下会被大量触发，必须去重）。 */
+    private final Map<String, AtomicLong> missingPermissionHits = new ConcurrentHashMap<>();
     private static final int MAX_WARN_PER_ENDPOINT = 1;
 
     /** 清单缺失只告警一次，避免刷屏。 */
@@ -104,10 +106,24 @@ public class PermissionEnforcementInterceptor implements HandlerInterceptor {
         }
 
         String msg = "权限不足：该操作需要权限 " + entry.permission();
-        log.warn("端点权限拒绝: {} {} 需要={} 当前={}", request.getMethod(), uri,
-                entry.permission(), authorities);
+        if (!manifest.isEnforcing()) {
+            // warn-only：登记 ≠ 拦截。此处若直接 403，等于**跳过批次 4 就 fail-closed**，
+            // 与 D-1 裁定冲突（且会让「登记清单」这个纯文档动作变成破坏性变更）。
+            warnMissingPermission(request.getMethod(), uri, entry.permission());
+            return true;
+        }
+        log.warn("端点权限拒绝: {} {} 需要={}", request.getMethod(), uri, entry.permission());
         writeJson(response, R.forbidden(msg));
         return false;
+    }
+
+    /** 命中清单但缺权限的告警，同样按端点聚合去重。 */
+    private void warnMissingPermission(String method, String uri, String permission) {
+        String key = "缺权限 " + method + " " + shorten(uri);
+        AtomicLong counter = missingPermissionHits.computeIfAbsent(key, k -> new AtomicLong());
+        if (counter.incrementAndGet() <= MAX_WARN_PER_ENDPOINT) {
+            log.warn("端点权限不足但当前为 warn-only 放行: {} 需要权限={}", key, permission);
+        }
     }
 
     private void warnUnregistered(String method, String uri) {

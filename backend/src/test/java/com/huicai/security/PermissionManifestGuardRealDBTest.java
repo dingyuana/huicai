@@ -37,7 +37,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 class PermissionManifestGuardRealDBTest extends AbstractMapperTest {
 
     /** 写端点缺口的棘轮：批次 1 实测值，只许减不许增（§4.5 第 21/25 条）。 */
-    private static final int MAX_UNREGISTERED_WRITE_ENDPOINTS = 288;
+    private static final int MAX_UNREGISTERED_WRITE_ENDPOINTS = 259;
 
     private static final String MANIFEST = "permission-manifest.yml";
 
@@ -98,7 +98,7 @@ class PermissionManifestGuardRealDBTest extends AbstractMapperTest {
     // ─────────────────────────── G3 ───────────────────────────
 
     /** 前端路由权限码的缺口棘轮：批次 1 实测值（清单只登记 19 个端点，缺口必然存在）。 */
-    private static final int MAX_ORPHAN_FRONTEND_PERMISSIONS = 33;
+    private static final int MAX_ORPHAN_FRONTEND_PERMISSIONS = 28;
 
     @Test
     @DisplayName("G3 前端路由 meta.permission 的清单缺口不得增长（棘轮）")
@@ -168,6 +168,34 @@ class PermissionManifestGuardRealDBTest extends AbstractMapperTest {
             }
         }
         return n;
+    }
+
+
+    @Test
+    @DisplayName("G4 清单内不得有重复的 METHOD+path（重复项会让缺口统计失真）")
+    void manifestHasNoDuplicateEntries() {
+        List<String> all = new ArrayList<>();
+        List<String> lines = manifestRaw();
+        String method = null;
+        for (String line : lines) {
+            Matcher mm = Pattern.compile("^\\s*-\\s*method:\\s*(\\S+)\\s*$").matcher(line);
+            if (mm.find()) {
+                method = mm.group(1);
+                continue;
+            }
+            Matcher mp = Pattern.compile("^\\s*path:\\s*(\\S+)\\s*$").matcher(line);
+            if (mp.find() && method != null) {
+                all.add(method + " " + mp.group(1));
+                method = null;
+            }
+        }
+        long unique = all.stream().distinct().count();
+        assertEquals(unique, all.size(),
+                "清单里有重复的 METHOD+path：共 " + all.size() + " 条，唯一 " + unique
+                        + " 条。重复项不会让 G2 的缺口变小，却会让清单看起来更全 —— "
+                        + "即「用一个重复项冒充一次覆盖」。"
+                        + "🔴 本守卫的由来：我自己写登记脚本时把 method/path 配对写错，"
+                        + "一次混进 9 条重复的 clear-* 端点，正是靠它发现的。");
     }
 
     // ─────────────────────── 清单解析（唯一解析实现） ───────────────────────

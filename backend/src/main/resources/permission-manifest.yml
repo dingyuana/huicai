@@ -5,7 +5,7 @@
 #    **前端路由 meta.permission 也必须来自这里**（G3 校验）—— 不得各写一份。
 #
 # ⚠️ 批次 1 状态：**清单尚未补齐**，仅登记已受 @PreAuthorize 保护的端点。
-#    此刻后端行为 = 拦截器 warn-only（D-1 裁定），**不得对外宣称已完成权限管控**。
+#    当前已登记 57 条（批次 1 = 19 条，批次 3 模块 1 = 系统管理）。
 #    写端点缺口以 G2 棘轮记录，只许减不许增。
 #
 # 字段说明：
@@ -15,6 +15,15 @@
 #   write      —— 是否写端点；true 的必须全部登记（G2 校验）
 
 version: 1
+
+# 🔴 执行模式（D-1 裁定；批次 4 才切 enforcing）
+#   warn-only : 清单命中但缺权限 ⇒ **只告警、仍放行**。
+#               批次 3 逐步登记端点时用它，保证「登记」本身**不改变任何现有行为** ——
+#               否则一旦把 288 个写端点登记进去，拦截器立刻开始 403，
+#               等于**跳过批次 4 就 fail-closed**，与 D-1 裁定直接冲突。
+#   enforcing : 清单命中但缺权限 ⇒ 403。批次 4（G2 缺口归零）才切。
+enforcement: warn-only
+
 endpoints:
   - method: POST
     path: /api/base/voucher/v1/period-close/reopen
@@ -109,4 +118,149 @@ endpoints:
   - method: DELETE
     path: /api/v1/vendors/{id}
     permission: party:list
+    write: true
+
+  - method: POST
+    path: /api/v1/system/user
+    permission: system:user:list
+    write: true
+
+  - method: PUT
+    path: /api/v1/system/user/{id}
+    permission: system:user:list
+    write: true
+
+  - method: PUT
+    path: /api/v1/system/user/{id}/status
+    permission: system:user:list
+    write: true
+
+  - method: PUT
+    path: /api/v1/system/user/{id}/roles
+    permission: system:user:list
+    write: true
+
+  - method: PUT
+    path: /api/v1/system/user/{id}/reset-pwd
+    permission: system:user:list
+    write: true
+
+  - method: POST
+    path: /api/v1/system/role
+    permission: system:role:list
+    write: true
+
+  - method: PUT
+    path: /api/v1/system/role/{id}
+    permission: system:role:list
+    write: true
+
+  - method: PUT
+    path: /api/v1/system/role/{id}/status
+    permission: system:role:list
+    write: true
+
+  - method: PUT
+    path: /api/v1/system/role/{id}/menus
+    permission: system:role:list
+    write: true
+
+  - method: POST
+    path: /api/v1/system/menu
+    permission: system:menu:list
+    write: true
+
+  - method: PUT
+    path: /api/v1/system/menu/{id}
+    permission: system:menu:list
+    write: true
+
+  - method: POST
+    path: /api/v1/system/dept
+    permission: system:dept:list
+    write: true
+
+  - method: PUT
+    path: /api/v1/system/dept/{id}
+    permission: system:dept:list
+    write: true
+
+  - method: POST
+    path: /api/v1/periods
+    permission: periods:manage
+    write: true
+
+  - method: PUT
+    path: /api/v1/periods/{id}
+    permission: periods:manage
+    write: true
+
+  - method: DELETE
+    path: /api/v1/periods/{id}
+    permission: periods:manage
+    write: true
+
+  - method: POST
+    path: /api/v1/periods/{id}/open
+    permission: periods:manage
+    write: true
+
+  - method: POST
+    path: /api/v1/periods/{id}/lock
+    permission: periods:manage
+    write: true
+
+  - method: POST
+    path: /api/v1/periods/{id}/unlock
+    permission: periods:manage
+    write: true
+
+  - method: POST
+    path: /api/v1/periods/{id}/close
+    permission: period:close
+    write: true
+
+  - method: POST
+    path: /api/v1/voucher-types
+    permission: voucher:type:list
+    write: true
+
+  - method: PUT
+    path: /api/v1/voucher-types/{id}
+    permission: voucher:type:list
+    write: true
+
+  - method: DELETE
+    path: /api/v1/voucher-types/{id}
+    permission: voucher:type:list
+    write: true
+
+  - method: POST
+    path: /api/v1/summary-lib
+    permission: summary:lib:list
+    write: true
+
+  - method: PUT
+    path: /api/v1/summary-lib/{id}
+    permission: summary:lib:list
+    write: true
+
+  - method: DELETE
+    path: /api/v1/summary-lib/{id}
+    permission: summary:lib:list
+    write: true
+
+  - method: POST
+    path: /api/v1/configs
+    permission: sys:config:list
+    write: true
+
+  - method: PUT
+    path: /api/v1/configs/{id}
+    permission: sys:config:list
+    write: true
+
+  - method: DELETE
+    path: /api/v1/configs/{id}
+    permission: sys:config:list
     write: true
