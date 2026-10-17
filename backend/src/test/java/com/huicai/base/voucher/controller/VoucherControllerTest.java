@@ -50,7 +50,9 @@ class VoucherControllerTest {
         user.setPassword("test123");
         user.setEnterpriseId(1L);
         user.setUserType("ENTERPRISE");
-        LoginUser loginUser = new LoginUser(user, List.of(new SimpleGrantedAuthority("ROLE_USER")));
+        LoginUser loginUser = new LoginUser(user, List.of(new SimpleGrantedAuthority("ROLE_USER"), new SimpleGrantedAuthority("voucher:audit"), new SimpleGrantedAuthority("voucher:close"), new SimpleGrantedAuthority("voucher:create"), new SimpleGrantedAuthority("voucher:list"), new SimpleGrantedAuthority("voucher:post"), new SimpleGrantedAuthority("voucher:reject"), new SimpleGrantedAuthority("voucher:reverse"), new SimpleGrantedAuthority("voucher:submit"), new SimpleGrantedAuthority("voucher:unpost"), new SimpleGrantedAuthority("voucher:update")));
+        // 🔴 批次 4 全局切 enforcing 后本类所需权限码。
+        //    缺它会 403 —— 这正是拦截器生效的证明（38 例曾因此红）。
         SecurityContextHolder.getContext().setAuthentication(
                 new UsernamePasswordAuthenticationToken(loginUser, null, loginUser.getAuthorities()));
     }

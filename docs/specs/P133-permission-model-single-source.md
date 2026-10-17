@@ -946,9 +946,61 @@ enforcement: warn-only   # warn-only | enforcing，批次 4 才切 enforcing
 
 | # | 议题 | 我的建议 |
 |---|---|---|
-| **D-7** | 切换方式：全局一次性 vs **逐条 `enforce` 分层** | ✅ **建议分层**。全局切换会把 54 条粗粒度变成「看着在管、其实没管」的假屏障 |
+| **D-7** | 切换方式 | 🔴 **老丁裁定：全局一次性切换**（不走逐条 `enforce` 分层）。⚠️ 风险已在 §8.9.3 登记：54 条粗粒度会形成「看着在管、其实没管」的假屏障，且是 54 个新可用性风险点 |
 | **D-8** | 首批切哪些 | 建议 **system/masterdata + base/voucher + sme/budget**（78 条，全动作级） |
 | **D-9** | `sme/tax`（39）与 `sme/asset`（15）是否补动作码 | 建议**单独立项**：这两个模块共 54 条，缺码最多、收益最低。补码需按模块逐一裁定角色分配 |
+
+
+---
+
+### 8.10 D-7 全局切换已实施（2026-10-17）：实测影响面
+
+`enforcement: warn-only` → **`enforcing`**。269 条登记端点全部进入 403 判定。
+
+#### 🔴 实测印证了 §8.9.3 的预测（不是事后诸葛，是切换前就登记的数字）
+
+| 预测（切换前登记） | 实测 |
+|---|---|
+| 粗粒度码会造成可用性冲击 | ✅ **L1 立即 38 例红**，全部是 `expected:<200> but was:<403>` |
+| 风险集中在已登记写端点的测试 | ✅ 7 个测试类：`PeriodControllerTest`(7)、`VoucherControllerTest`(7)、`BankStatementControllerTest`(7)、`BusinessDocControllerTest`(9)、`BankJournalControllerTest`(4)、`CashJournalControllerTest`(2)、`PeriodCloseControllerTest`(2) |
+| 症状是「权限不足」，难定位 | ✅ 确认：38/38 的失败症状都是 403，无一是真断言错 |
+
+⇒ **「切换会挡住测试」这一预测被量化验证**，而且**38 例里 0 例是功能缺陷** ——
+全部是测试夹具未声明权限码。**这反而是最强的正面证据：拦截器真的在生效。**
+
+#### 🔴 L2 另暴露一个**夹具失真**（差点被误判成产品缺陷）
+
+`TenantSwitchRealDBTest#crossEnterpriseWriteIsRejected` 报 403，调用的是
+`POST /api/sme/arap/v1/prepayment`（清单归 `doc:list`）。
+
+第一反应是「**代理端被权限体系误伤**」—— 若照此改生产逻辑，会造出一个
+「给代理端开后门」的**真实漏洞**（而根因只是夹具）。
+
+取证结论（生产库实测）：
+- 代理用户经 `t_user_role` 关联 `ADMIN` / `FINANCE_MGR` / `ACCOUNTANT`
+- **持有 61 个权限码**，`doc:list` 的持有角色里代理用户数为 5
+⇒ **真实用户根本不会被挡**。
+
+真实根因是**夹具与生产不符**：
+1. `tokenFor(...)` 传 **`List.of()`**（空 authorities），而生产的
+   `UserDetailsServiceImpl` 会按 `t_user_role → t_role_menu → t_menu.permission` 装载
+2. `createUserWithHomeEnterprise` **不建任何角色关联** ⇒ 新用户本就无码
+
+⇒ 已修两处，让夹具**与生产同源**（`tokenFor` 从 DB 装载权限码；新建用户挂 `ACCOUNTANT` 角色）。
+
+> **判据沉淀**：夹具必须与生产**同源取数**，否则它验证的是「夹具自己造的 worlds」。
+> 🔴 危险形态：夹具失真 + 权限体系生效 = **症状指向产品、根因在测试** ——
+> 此时若顺着症状改生产，等于**为测试开后门**。
+> （与 §4.3 第 9 条「fixture 必须用 DB 真实取值，否则测试是在给 bug 背书」同型，
+> 但方向相反：那次是 fixture 复制了缺陷，这次是 fixture **缺了**生产本来就有的东西。）
+
+#### 切换后的真实边界（据实登记）
+
+- ✅ **269 条已登记写端点真正开始 403**（其中 170 条为粗粒度屏障）
+- ⚠️ `sme/tax`(39) 与 `sme/asset`(15) 共 **54 条**仍是粗粒度 ——
+  「能看发票就能删发票」，**管控增益极低**，但**可用性风险已真实发生**（见上 38 例）
+- ⚠️ **未登记的 11 个 AI 端点**不受本拦截器管辖（由 P135 配额层治理）
+- ⚠️ **显式排除的 27 个**（代理端 24 + 自助 3）由 `roleGuard` / 自助行为治理
 
 
 ---

@@ -139,7 +139,30 @@ class TenantSwitchRealDBTest extends AbstractMapperTest {
         }
         user.setDeleted(0);
         withoutEnterpriseContext(() -> userMapper.insert(user));
+
+        // 🔴 批次 4 全局切 enforcing 后，新用户**必须**有关联角色，否则 authorities 为空
+        //    ⇒ 任何已登记写端点都 403。
+        //    ⚠️ 这是**夹具与生产对齐**，不是给测试放水：
+        //    实测生产里 AGENCY 用户经 t_user_role 关联 ADMIN/FINANCE_MGR/ACCOUNTANT，
+        //    持有 **61 个**权限码；而本夹具原本不建角色关联 ⇒ 与生产不符。
+        //    判据：夹具必须与生产同源（§4.3 第 9 条「fixture 必须用 DB 真实取值」）。
+        grantPlatformRole(user.getId(), "ACCOUNTANT");
         return user.getId();
+    }
+
+    /** 给用户挂一个平台角色（使其权限码与生产一致）。 */
+    private void grantPlatformRole(Long userId, String roleCode) {
+        withoutEnterpriseContext(() -> {
+            Integer roleId = jdbcTemplate.queryForObject(
+                    "SELECT id FROM t_role WHERE role_code = ? AND deleted = 0",
+                    Integer.class, roleCode);
+            if (roleId == null) {
+                throw new IllegalStateException("角色不存在：" + roleCode);
+            }
+            jdbcTemplate.update(
+                    "INSERT INTO t_user_role (user_id, role_id, created_by, created_at) "
+                            + "VALUES (?, ?, 1, NOW())", userId, roleId);
+        });
     }
 
     /** 造一个「与任何企业都无关联」的普通用户 */
@@ -238,9 +261,28 @@ class TenantSwitchRealDBTest extends AbstractMapperTest {
      * <p>{@code agencyRole=ACCOUNTANT} 与 {@code grantThroughAgency} 建夹具时写入的值一致：
      * 控制器对会计/助理走 {@code t_agency_user_enterprise} 分支。
      */
+    /**
+     * 构造访问令牌 —— 🔴 <b>权限码必须来自真实角色关联</b>，不能传空列表。
+     *
+     * <p>🔴 本方法首版传的是 {@code List.of()}（空 authorities）。那是<b>夹具失真</b>：
+     * 生产里 {@code UserDetailsServiceImpl} 会按 {@code t_user_role → t_role_menu →
+     * t_menu.permission} 装载权限码（实测代理用户持有 <b>61 个</b>码）。
+     * 一旦全局切 enforcing（批次 4），空 authorities 会让该用例恒 403，
+     * 而<b>真实用户并不会被挡</b> ⇒ 症状与原因分处两地，极易误判成
+     * 「代理端被权限体系误伤」并去改生产逻辑。</p>
+     *
+     * <p><b>判据</b>：夹具必须与生产同源取数，否则它验证的是「夹具自己造的 worlds」，
+     * 不是系统。（与 §4.3 第 9 条「fixture 必须用 DB 真实取值」同型。）</p>
+     */
     private String tokenFor(Long userId, String username, Long jwtEnterpriseId, String userType) {
         boolean agency = "AGENCY".equals(userType);
-        return jwtProvider.generateAccessToken(username, userId, List.of(),
+        List<String> codes = jdbcTemplate.queryForList(
+                "SELECT DISTINCT m.permission FROM t_user_role ur "
+                        + "JOIN t_role_menu rm ON rm.role_id = ur.role_id "
+                        + "JOIN t_menu m ON m.id = rm.menu_id AND m.deleted = 0 "
+                        + "WHERE ur.user_id = ? AND m.permission IS NOT NULL",
+                String.class, userId);
+        return jwtProvider.generateAccessToken(username, userId, codes,
                 jwtEnterpriseId,
                 agency ? AGENCY_ID : null,
                 userType,

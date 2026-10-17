@@ -54,7 +54,9 @@ class BusinessDocControllerTest {
         user.setPassword("test123");
         user.setEnterpriseId(1L);
         user.setUserType("ENTERPRISE");
-        LoginUser loginUser = new LoginUser(user, List.of(new SimpleGrantedAuthority("ROLE_USER")));
+        LoginUser loginUser = new LoginUser(user, List.of(new SimpleGrantedAuthority("ROLE_USER"), new SimpleGrantedAuthority("doc:list")));
+        // 🔴 批次 4 全局切 enforcing 后本类所需权限码。
+        //    缺它会 403 —— 这正是拦截器生效的证明（38 例曾因此红）。
         SecurityContextHolder.getContext().setAuthentication(
                 new UsernamePasswordAuthenticationToken(loginUser, null, loginUser.getAuthorities()));
     }

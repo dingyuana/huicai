@@ -48,7 +48,9 @@ class CashJournalControllerTest {
         UserEntity u = new UserEntity();
         u.setId(1L); u.setUsername("test"); u.setPassword("test123");
         u.setEnterpriseId(1L); u.setUserType("ENTERPRISE");
-        LoginUser lu = new LoginUser(u, List.of(new SimpleGrantedAuthority("ROLE_USER")));
+        LoginUser lu = new LoginUser(u, List.of(new SimpleGrantedAuthority("ROLE_USER"), new SimpleGrantedAuthority("cash:journal:list")));
+        // 🔴 批次 4 全局切 enforcing 后本类所需权限码。
+        //    缺它会 403 —— 这正是拦截器生效的证明（38 例曾因此红）。
         SecurityContextHolder.getContext().setAuthentication(
                 new UsernamePasswordAuthenticationToken(lu, null, lu.getAuthorities()));
     }

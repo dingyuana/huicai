@@ -85,11 +85,12 @@ class PermissionEnforcementInterceptorRealDBTest extends AbstractMapperTest {
     }
 
     @Test
-    @DisplayName("执行模式：批次 4 之前必须是 warn-only（登记 ≠ 拦截）")
-    void enforcementModeIsWarnOnlyBeforeBatch4() {
-        assertFalse(manifest.isEnforcing(),
-                "enforcement 仍是 enforcing —— 在批次 3 逐步登记端点期间切 fail-closed，"
-                        + "等于**跳过批次 4**、让「登记清单」这个纯文档动作变成破坏性变更");
+    @DisplayName("执行模式：批次 4 已全局切 enforcing（D-7 裁定，2026-10-17）")
+    void enforcementModeIsEnforcingAfterBatch4() {
+        assertTrue(manifest.isEnforcing(),
+                "enforcement 已回退 warn-only —— 老丁 2026-10-17 裁定 D-7 = **全局一次性切换**。"
+                        + "⚠️ 若要回退，须先在 SPEC-P133 §8.9 写明理由（169/269 条为粗粒度码，"
+                        + "切回等于把已生效的拦截全部撤销）。");
     }
 
     @Test
@@ -103,12 +104,12 @@ class PermissionEnforcementInterceptorRealDBTest extends AbstractMapperTest {
     }
 
     @Test
-    @DisplayName("命中清单但缺权限：warn-only 下只告警放行（批次 3/4 之前）")
-    void missingAuthorityIsWarnOnlyBeforeBatch4() throws Exception {
+    @DisplayName("命中清单但缺权限：enforcing 下必须 403（批次 4 已生效）")
+    void missingAuthorityIsRejectedAfterBatch4() throws Exception {
         loginAs("nobody");
         MockHttpServletResponse res = invoke("DELETE", "/api/v1/system/role/1");
-        assertTrue(res.getContentAsString().isEmpty(),
-                "enforcement=" + mode() + " 时，缺权限不得写 403 响应体。实际："
+        assertEquals(403, res.getStatus(),
+                "enforcement=" + mode() + " 时缺权限必须 403。实际响应体："
                         + res.getContentAsString());
     }
 
