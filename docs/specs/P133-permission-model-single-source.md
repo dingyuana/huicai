@@ -473,6 +473,60 @@ t_voucher_entry 中指向它的 45 条分录 → 原样保留，无任何报错
 
 ---
 
+### 8.2 批次 2 实施结果：`PermissionEnforcementInterceptor`（warn-only）
+
+**新增 3 个生产类**：
+- `PermissionManifest` —— 清单加载器（snakeyaml，**唯一解析实现**）
+- `PermissionEnforcementInterceptor` —— 端点权限执行
+- `PermissionWebMvcConfig` —— 注册（本项目**首个** `WebMvcConfigurer`）
+
+**三条分支（D-1 裁定）**：
+| 情形 | 行为 | 理由 |
+|---|---|---|
+| 命中清单且持有权限 | 放行 | — |
+| 命中清单但缺权限 | **403**，响应体指名所需权限码 | 与这 19 个端点既有的 `@PreAuthorize` **行为一致** ⇒ 本阶段**不改变任何现有行为** |
+| **清单未命中** | **放行 + 告警（聚合去重）** | 存量 288 个写端点未登记，此刻 fail-closed 会**全站功能一夜全废** |
+
+⚠️ **不得对外宣称「已完成权限管控」** —— 批次 4 切 fail-closed 之前越权仍畅通。
+
+**守卫** `PermissionEnforcementInterceptorRealDBTest` **9 例**：
+逻辑 8 例（缺权限 403 / 持有放行 / 未登记 warn-only 放行 / 匿名跳过 /
+非 HandlerMethod 跳过 / `{id}` 单段匹配 / 清单加载 / `find` 可空）
++ **注册 1 例**（证明它真被接进请求链，而非只是一段正确的死代码）。
+**✅ 反证**：摘除 `addInterceptors` 注册 ⇒ 注册断言转红。
+
+🔴 **判据沉淀：逻辑对 ≠ 生效。** 只断言「清单里有这 19 条」只能证明清单存在，
+证明不了它在拦截任何东西（§4.5 第 21 条）。故必须同时验
+①`preHandle` 的分支行为 ②它确实被注册进拦截器链 —— 两者合起来才等价于「生效」。
+
+#### 🔴 本轮踩的 5 个坑，其中 4 个「报错指错方向」
+
+1. 🔴 **L1 一次 97 个用例全挂**，报 `NoSuchBeanDefinitionException: PermissionManifest`。
+   根因：清单是普通 `@Component`，而 **`@WebMvcTest` 是切片上下文，只加载白名单 bean**
+   （Controller / WebMvcConfigurer / Filter / HandlerInterceptor…），**不扫描普通 `@Component`**。
+   🔴 **判断依据**：97 个失败里 86 个是 `ApplicationContext failure threshold exceeded`
+   的**级联**，真正的首因只有 1 个。**只看错误汇总会被级联淹没、误判成 97 个不同缺陷。**
+2. 🔴 **把清单声明成 `WebMvcConfigurer` 里的 `@Bean`** ⇒
+   `BeanCurrentlyInCreationException: unresolvable circular reference`
+   （配置创建中 → 需要拦截器 → 需要清单 → 清单的 `@Bean` 方法在本配置里）。
+   **判据：同一个配置类内的多个 bean 应彼此不注入，让容器排序。**
+3. 🔴 **守卫自身的错断言**：`InterceptorRegistry` 里装的是 `InterceptorRegistration`
+   **包装器**而非拦截器，我直接 `instanceof` 断言必然失败 ——
+   而这红灯一度让我以为是「注册没生效」，差点去改生产代码。
+   **判据：守卫报错时先问「是代码错还是断言错」。**
+4. 🔴 **`@PostConstruct` 不是注册注解** —— 只写它而忘了 `@Component`，
+   对象压根不进容器（报错说的是「缺 bean」，真因是「我以为回调等于注册」）。
+5. 🔴 **我自己的脚本用 `if "@Component" not in s` 判断是否加注解**，
+   而 **javadoc 里本就出现该字符串** ⇒ 条件恒为假 ⇒ 注解一直没加上，我据此以为已修好。
+   **判据：不要用「字符串是否出现」判断「注解是否存在」，要用行首匹配。**
+
+**最终解法（三者都是切片友好的形态）**：清单 = 普通 `@Component`；
+拦截器 = `@Component` 且用 **`ObjectProvider` 可选依赖**清单（切片里没有清单就不安装执行）；
+配置 = 构造器注入拦截器。
+
+
+---
+
 # MACHINE-READABLE CONTRACT
 
 contract_version: "1.0"
