@@ -35,3 +35,14 @@ mybatis-plus:
       id-type: auto
   configuration:
     map-underscore-to-camel-case: true
+
+# ── SPEC-P135 AI 配额 ──
+# 🔴 本文件是**独立的最小测试配置**（H2），它与 src/main/resources/application.yml
+#    **同名且在 classpath 上优先**，因此主配置里的键在测试中**全部不可见**。
+#    任何「主配置必填」的键都必须在此镜像 —— 由 AiQuotaConfigMirrorTest 守卫防漂移。
+ai:
+  quota:
+    enabled: true
+    daily: ${AI_QUOTA_DAILY:200}
+    exempt-permissions:
+      - system:user:list

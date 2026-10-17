@@ -154,6 +154,68 @@ ai:
 
 ---
 
+### D-1~D-5 裁定（老丁 2026-10-17）
+
+| # | 裁定 |
+|---|---|
+| **D-1** | 🔴 **每日额度 = 200 次 / 账套 / 日**（「同意 200 次」）。⚠️ 仍登记为**试运行初值**，建议一周后按真实用量复核 |
+| **D-2** | 计数维度**按账套**（`enterpriseId`），ADMIN 豁免 |
+| **D-3** | Redis 不可用 ⇒ **fail-open + 告警**（护栏失效但不阻断业务） |
+| **D-4** | **豁免实现**：持有 `system:user:list` 者不计数。🔴 这是「ADMIN 豁免」的**代理实现** —— `LoginUser` **不含平台角色**（实测只有 `userType`/`agencyId`/`agencyRole`），而 authorities 里放的是**权限码**（P131 实测）；故只能取一个**仅 ADMIN 持有**的码（实测持有者 = 1）做代理。⚠️ 若将来该码授予更多角色，豁免范围会随之扩大 |
+| **D-5** | 本期**不做**提额入口 |
+
+### 实施结果（2026-10-17）
+
+**新增 4 个类**：`AiQuotaProperties` / `AiQuotaGuard` / `AiQuotaInterceptor` / `AiQuotaController`
+（`GET /api/ai/quota` 查询**不消耗**额度）。
+配置写入 `application.yml` 与 `src/test/resources/application.yml` 两处。
+
+**守卫**：
+- `AiQuotaGuardRealDBTest` **9 例**（打真 Redis）—— AT-135-1~8 + 结构守卫
+- `AiQuotaConfigMirrorTest` **2 例**（配置镜像守卫）
+- ✅ **反证已做且成立**：从 key 中移除 `enterpriseId` ⇒ **AT-135-8 转红**
+  （证明「一个账套用满会拖垮所有账套」这一风险被真实守住）
+
+#### 🔴 本轮踩的三个坑，其中两个是「同一个坑第二次咬人」
+
+**① 🔴 切片上下文坑（P133 已沉淀，本轮仍踩）**
+`AiQuotaController` 是 `@RestController`（在 `@WebMvcTest` 白名单内），
+但它依赖的 `AiQuotaGuard` 是普通 `@Component`（**切片不扫**）
+⇒ **一次性 97 个用例全挂** `NoSuchBeanDefinitionException: AiQuotaGuard`。
+且 `AiQuotaInterceptor` 恰好**也在**白名单里（它实现了 `HandlerInterceptor`）⇒ 同样受影响。
+正解与 P133 一致：`ObjectProvider` **可选依赖**，切片里没有就**不安装执行**。
+> **判据：新增的拦截器/控制器若依赖非白名单 bean，一律用可选依赖。**
+> ⚠️ 这个坑的特征是「一次改动挂掉近百家用例」，且报错只说「缺 bean」、
+> 完全不提「谁依赖了谁」—— 排查成本极高。
+
+**② 🔴 测试配置同名遮蔽主配置**
+`src/test/resources/application.yml` 是**独立的最小测试配置**（H2），
+它与主配置**同名**且在 classpath 上**优先** ⇒ 主配置的键在测试里**全部不可见**。
+症状极具欺骗性：报 `Field error on field 'daily': rejected value [null]`，
+看起来像「配置写错了」或「`@NotNull` 用错地方」，真实原因是**测试根本没读那份配置**。
+
+🔴 **若当初没给 `daily` 加 `@NotNull`**：该键会静默缺省为 null ⇒
+`limit <= 0` ⇒ 配额守卫**一律拒绝或一律放行**，AT-135-2（超限 429）会
+以「额度为 0 ⇒ 一律 429」的方式**假绿** —— 而真机上配额从未被测过。
+
+⇒ 新增 **`AiQuotaConfigMirrorTest`** 断言两份配置都声明 `ai.quota.daily`
+且**默认值一致**。
+
+> **判据沉淀：当一份配置<b>同名地</b>存在多份（主/测试/环境），
+> 「必填校验」的实际覆盖面<b>只等于被加载的那一份</b>。
+> 凡「必填」是设计的一部分，就必须<b>逐份声明 + 机器校验</b>。**
+
+**③ key 格式与 SPEC 逐字一致**
+首版实现用 ISO 日期（`2026-10-17`），SPEC 写 `yyyyMMdd`。
+两者都能实现「跨日重置」，但不一致会让**按 SPEC 写的运维排查命令**
+（如 `redis-cli get ai:quota:1:20261017`）查不到数据 ⇒ 已统一为 `yyyyMMdd`。
+
+（另：另有两处**守卫自身**的错 —— 配置解析器 `break` 写错导致误报「主配置缺 exempt-permissions」；
+结构守卫误把「控制器必须是 AiQuotaController」当作覆盖条件，而配额实际按**路径前缀**覆盖。）
+
+
+---
+
 # MACHINE-READABLE CONTRACT
 
 contract_version: "1.0"

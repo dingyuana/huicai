@@ -138,6 +138,19 @@ ai:
   # 不可写成 8000 —— 那是后端自身端口，会形成自引用
   service-url: ${AI_SERVICE_URL:http://localhost:8001}
   enabled: true
+
+  # ── SPEC-P135 AI 调用配额（成本护栏，非业务授权）──
+  # 老丁 2026-10-17 裁定：**200 次 / 账套 / 日**。
+  # ⚠️ daily 刻意不给代码默认值（AiQuotaProperties 用 @NotNull），
+  #    缺失即拒绝启动 —— 花钱的数字必须落在配置里、可审计。
+  quota:
+    enabled: true
+    daily: ${AI_QUOTA_DAILY:200}
+    # 豁免权限码：持有者不计数。
+    # ⚠️ 这是「ADMIN 豁免」的**代理实现** —— LoginUser 不含平台角色，
+    #    而 system:user:list 实测**仅 ADMIN 持有**，故用它做代理。
+    exempt-permissions:
+      - system:user:list
   ocr-enabled: false
   embedding-enabled: false
   # NVIDIA API 配置 (minimaxai/minimax-m3 多模态模型)
