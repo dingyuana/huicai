@@ -587,6 +587,74 @@ enforcement: warn-only   # warn-only | enforcing，批次 4 才切 enforcing
 
 ---
 
+### 8.4 批次 3 模块 2（总账/凭证）：🔴 撞上真正的阻塞，改为提出裁定
+
+按 D-3 顺序本轮做总账/凭证（31 个写端点，含 report/balance）。结果**只登记了 4 个**，
+其余 27 个**刻意不登记** —— 因为它们需要一个**还不存在的权限码**。
+
+#### 撞上的问题：凭证生命周期**没有动作级权限码**
+
+`t_menu` 里凭证类权限码只有两个：`voucher:list`、`voucher:update`（`voucher:type:list` 属类型）。
+而这批端点涉及**人审铁律 #1**（审核/过账/红冲必须由人触发）与**铁律 #3**（已审核凭证只能红冲）：
+
+| 端点族 | 需要的动作码 | 现有码能否诚实对应 |
+|---|---|---|
+| `/vouchers/{id}/audit`、`batch-audit` | `voucher:audit` | ❌ 不存在 |
+| `/vouchers/{id}/post`、`batch-post` | `voucher:post` | ❌ 不存在 |
+| `/vouchers/{id}/unpost` | `voucher:unpost` | ❌ 不存在 |
+| `/vouchers/{id}/reverse` | `voucher:reverse` | ❌ 不存在 |
+| `/vouchers/{id}/reject` | `voucher:reject` | ❌ 不存在 |
+| `/vouchers/{id}/submit` | `voucher:submit` | ❌ 不存在 |
+| `/vouchers/{id}/close` | `voucher:close` | ❌ 不存在 |
+| `/vouchers`（创建） | `voucher:create` | ❌ 不存在（只有 update） |
+
+#### 🔴 为什么**不能**先用粗粒度码顶上（这是本节最重要的一条）
+
+在 warn-only 阶段，登记 `voucher:list` 给审核端点**毫无拦截效果** ——
+看起来零成本。但批次 4 切 fail-closed 那一刻，它会变成
+**「能看凭证就能审核凭证」**的静默漏洞，而此时：
+
+- 清单**看起来是齐的**（G2 缺口已补）
+- G1 **绿的**（`voucher:list` 确实存在于 `t_menu`）
+- G2 **绿的**（端点已登记）
+- G3 **绿的**
+- **没有任何守卫会报错**
+
+> **判据沉淀：权限码的语义错配属于「不会自己暴露的缺陷」** ——
+> 它不会让任何现有守卫变红，只会在**守卫全绿时**悄悄放行越权。
+> 因此这类缺口必须**显式登记为「待裁定」并加锁**，而不是用近似值填平 ——
+> 填平会让「未完成」看起来像「已完成」。
+
+#### 已登记的 4 个（现有码能精确对应）
+
+| 端点 | 权限码 |
+|---|---|
+| `POST /period-close/close` | `period:close` |
+| `POST /period-close/batch-review-post` | `period:close` |
+| `POST /period-close/profit-distribution` | `period:close` |
+| `POST /period-close/profit-carryover` | `period:carryover:guide` |
+
+清单现有 **52 条**，棘轮 **G2 255 / G3 27**。
+
+#### 新增两条守卫（把「未完成」钉成可见红灯）
+
+- **G5**：10 个人审生命周期端点**在裁定前不得被登记** ——
+  防止后人顺手用 `voucher:list` 交差。断言消息直接指向本节的裁定项。
+- **G5b**：这 10 个端点**确实仍存在于运行时** ——
+  防止端点改名后 G5 **空转**（清单里的端点都不存在了，断言恒成立）。
+  **判据：守卫的清单必须与真值源保持同步，否则它锁的是空气。**
+
+#### 🔴 待老丁裁定（阻塞批次 3 剩余 255 个写端点的大部分）
+
+| # | 议题 | 我的建议 |
+|---|---|---|
+| **D-7** | 是否新增凭证动作级权限码（`voucher:create/audit/post/unpost/reverse/reject/submit/close` 共 8 个） | **建议新增**。⚠️ 角色分配是**业务裁定**，我不擅自决定；建议按「同页面既有码的角色集合」给默认值（`voucher:list` 的持有者 = ACCOUNTANT/ADMIN/FINANCE_MGR），再由老丁按「制单/审核/反审核是否要分权」调整 |
+| **D-8** | 审核与过账是否**必须分权**（制单人不得审自己的凭证 = 铁律 #1） | 🔴 **强烈建议分权**：`voucher:audit` 与 `voucher:post` 分属不同角色，否则「能审就能过账」，制单人可自审自过 |
+| **D-9** | `voucher:reverse`（红冲）是否独立成码 | 建议**独立**。红冲是最高危的反记账操作，不应与普通修改同权 |
+
+
+---
+
 # MACHINE-READABLE CONTRACT
 
 contract_version: "1.0"

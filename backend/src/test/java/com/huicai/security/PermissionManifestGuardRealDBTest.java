@@ -37,7 +37,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 class PermissionManifestGuardRealDBTest extends AbstractMapperTest {
 
     /** 写端点缺口的棘轮：批次 1 实测值，只许减不许增（§4.5 第 21/25 条）。 */
-    private static final int MAX_UNREGISTERED_WRITE_ENDPOINTS = 259;
+    private static final int MAX_UNREGISTERED_WRITE_ENDPOINTS = 255;
 
     private static final String MANIFEST = "permission-manifest.yml";
 
@@ -98,7 +98,7 @@ class PermissionManifestGuardRealDBTest extends AbstractMapperTest {
     // ─────────────────────────── G3 ───────────────────────────
 
     /** 前端路由权限码的缺口棘轮：批次 1 实测值（清单只登记 19 个端点，缺口必然存在）。 */
-    private static final int MAX_ORPHAN_FRONTEND_PERMISSIONS = 28;
+    private static final int MAX_ORPHAN_FRONTEND_PERMISSIONS = 27;
 
     @Test
     @DisplayName("G3 前端路由 meta.permission 的清单缺口不得增长（棘轮）")
@@ -196,6 +196,69 @@ class PermissionManifestGuardRealDBTest extends AbstractMapperTest {
                         + "即「用一个重复项冒充一次覆盖」。"
                         + "🔴 本守卫的由来：我自己写登记脚本时把 method/path 配对写错，"
                         + "一次混进 9 条重复的 clear-* 端点，正是靠它发现的。");
+    }
+
+
+    /**
+     * 🔴 人审生命周期端点：**刻意不登记**，直到权限码的业务裁定落地。
+     *
+     * <p>这些端点涉及<b>人审铁律 #1</b>（审核/过账/红冲必须由人触发）与
+     * <b>铁律 #3</b>（已审核凭证不可改，只能红冲）。而 {@code t_menu} 中
+     * 只有 {@code voucher:list} / {@code voucher:update} 两个凭证类权限码，
+     * <b>没有</b> {@code voucher:audit} / {@code voucher:post} / {@code voucher:reverse}
+     * 这类动作码。</p>
+     *
+     * <p><b>为什么不能先用粗粒度码顶上</b>：warn-only 阶段登记它毫无拦截效果，
+     * 但批次 4 切 fail-closed 后，「能看凭证就能审核凭证」会成为<b>静默的真实漏洞</b> ——
+     * 清单看起来是齐的，G2 也是绿的，没有任何地方会提示语义不对。
+     * <b>判据：权限码的语义错配属于「不会自己暴露的缺陷」——
+     * 它不会让任何现有守卫变红，只会在守卫全绿时悄悄放行越权。</b></p>
+     */
+    private static final List<String> HUMAN_APPROVAL_ENDPOINTS = List.of(
+            "POST /api/base/voucher/v1/vouchers/{id}/audit",
+            "POST /api/base/voucher/v1/vouchers/{id}/post",
+            "POST /api/base/voucher/v1/vouchers/{id}/unpost",
+            "POST /api/base/voucher/v1/vouchers/{id}/reverse",
+            "POST /api/base/voucher/v1/vouchers/{id}/reject",
+            "POST /api/base/voucher/v1/vouchers/{id}/submit",
+            "POST /api/base/voucher/v1/vouchers/{id}/close",
+            "POST /api/base/voucher/v1/vouchers/batch-audit",
+            "POST /api/base/voucher/v1/vouchers/batch-post",
+            "POST /api/base/voucher/v1/vouchers/batch-submit");
+
+    @Test
+    @DisplayName("G5 人审生命周期端点在裁定前不得被登记（防用粗粒度码冒充动作码）")
+    void humanApprovalEndpointsMustNotBeRegisteredYet() {
+        Set<String> keys = manifestKeys();
+        List<String> wrongly = new ArrayList<>();
+        for (String ep : HUMAN_APPROVAL_ENDPOINTS) {
+            if (keys.contains(ep)) {
+                wrongly.add(ep);
+            }
+        }
+        assertTrue(wrongly.isEmpty(),
+                "以下人审动作端点已被登记，但它们需要**动作级**权限码（voucher:audit / post / "
+                        + "reverse …），而 t_menu 中尚不存在这些码：" + wrongly
+                        + "。用 voucher:list 之类的粗粒度码顶替，会在批次 4 切 fail-closed 后"
+                        + "变成「能看凭证就能审核凭证」的静默漏洞，且**没有任何守卫会报错**。"
+                        + "正解：先完成动作码的业务裁定（见 SPEC-P133 §8 待裁定项），再登记。");
+    }
+
+    @Test
+    @DisplayName("G5b 人审端点确实存在于运行时（防止本守卫因端点改名而空转）")
+    void humanApprovalEndpointsStillExist() {
+        Set<String> real = realWriteEndpoints();
+        List<String> gone = new ArrayList<>();
+        for (String ep : HUMAN_APPROVAL_ENDPOINTS) {
+            if (!real.contains(ep)) {
+                gone.add(ep);
+            }
+        }
+        assertTrue(gone.isEmpty(),
+                "以下被 G5 锁住的端点在运行时已不存在（可能改名或删除）：" + gone
+                        + "。若确已下线，请同步删除 G5 清单，**否则 G5 会空转**"
+                        + "（清单里的端点都不存在了，断言恒成立）。"
+                        + "判据：守卫的清单必须与真值源保持同步，否则它锁的是空气。");
     }
 
     // ─────────────────────── 清单解析（唯一解析实现） ───────────────────────

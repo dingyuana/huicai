@@ -72,16 +72,16 @@ class PermissionEnforcementInterceptorRealDBTest extends AbstractMapperTest {
     // ───────── 逻辑 ─────────
 
     @Test
-    @DisplayName("清单已加载：批次 3 模块 1 登记后为 48 条（全是写端点）")
+    @DisplayName("清单已加载：批次 3 模块 2 登记后为 52 条（全是写端点）")
     void manifestLoads() {
         assertNotNull(manifest);
-        assertEquals(48, manifest.size(),
-                "清单条数应为 48（批次 1 的 19 条 + 批次 3 模块 1 的 29 条）；"
+        assertEquals(52, manifest.size(),
+                "清单条数应为 52（批次 1 的 19 + 模块 1 的 29 + 模块 2 的 4）；"
                         + "变更时同步改本断言 —— 这正是清单条数漂移的第一道信号");
         long writes = manifest.entries().stream().filter(PermissionManifest.Entry::write).count();
-        assertEquals(48, writes,
+        assertEquals(52, writes,
                 "当前登记的应**全是写端点**（读端点留待批次 3 后续），实际非写端点 "
-                        + (48 - writes) + " 条");
+                        + (52 - writes) + " 条");
     }
 
     @Test
