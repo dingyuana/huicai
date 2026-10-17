@@ -730,6 +730,57 @@ enforcement: warn-only   # warn-only | enforcing，批次 4 才切 enforcing
 
 ---
 
+### 8.6 D-10 裁定草案：6 组模块的权限码（待老丁逐条裁定）
+
+60 个写端点无法登记，因其模块在 `t_menu` 中**一个权限码都没有**。
+下表按**建议处置方式**分三类，**不擅自决定**。
+
+#### A 类：建议**新增权限码**（模块本身是业务功能，只缺码）
+
+| 模块 | 端点 | 建议码 | 说明 |
+|---|---|---|---|
+| **预算** `sme/budget` | 6 | `budget:list` + `budget:create/update/submit/approve/adjust` | 🔴 含 `approve`（审批）—— 与凭证同理须**审批权与编制权分权** |
+| **分类规则** `sme/cash/.../classification-rules` | 6 | `bank:classification:manage` | 含 `match`（自动匹配规则）与 `reorder`/`seed`，影响自动入账 |
+| **客户对账单** | 4 | `arap:statement:list` + `:generate/confirm/dispute/send` | 🔴 `dispute`（客户异议）与 `send`（对外发送）影响对账时效，误发即对外承诺 |
+| **账龄分析** | 3 | `arap:aging:manage` | 含 `dismiss`（忽略告警）—— 属「掩盖风险」的动作，须单独看 |
+| **附件** | 3 | `file:attachment:manage` | `ocr` 会触发外部调用 |
+| **AI 任务 / 异常** | 6 | `ai:task:create/review`、`ai:anomaly:resolve` | 🔴 与业务权限正交 —— AI 是**辅助能力**（铁律 #2），建议按**成本/配额**治理而非业务角色 |
+
+⚠️ **AI 端点建议单独定性**：铁律 #2 规定「AI 输出 = 建议，不自动应用」，
+其风险是**成本与配额**（`analyze-multiple-images` / `analyze-video`），不是数据越权。
+把 AI 端点混入业务权限码体系，会让「谁能调 AI」与「谁能改账」纠缠在一起。
+
+#### B 类：建议**明确排除在清单外**，并登记理由（不翻译成码）
+
+| 模块 | 端点 | 理由 |
+|---|---|---|
+| **代理端** `/api/v1/agency/**`（20） | 企业 CRUD/绑定/激活/停用、代理公司 CRUD、代理用户增停终、派工增删 | 🔴 **已由代码内的 `roleGuard`（`AgencyEnterpriseRoleGuard`）管辖** —— P114/P120 三轮加固的产物。**把在运行的授权模型翻译成码，不是机械翻译**：一旦两套并存，会出现「两边都松」的缝隙（`roleGuard` 放行 + 清单无码 ⇒ 实际无人管；反之则要维护两处）。**建议**：清单显式登记这些端点为「由 roleGuard 管辖」，并在 G8 中断言「凡 `roleGuard` 管辖的端点，清单**不得**登记权限码」—— 用机器校验**杜绝两套并存** |
+| **认证端点** `/api/v1/auth/**`（2） | login / refresh | 🔴 **本就不该受动作权限码约束** —— 否则无法登录。建议清单标注 `scope: auth` 并从 G2 统计中排除 |
+| **企业切换** `/api/v1/enterprise/switch`（1） | 切换当前账套 | 自助行为，任何登录用户都应可切。建议同样标注排除 |
+
+#### C 类：**需老丁单独确认**的高危动作（不进 A/B 直接登记）
+
+| 端点 | 风险 |
+|---|---|
+| `POST /api/v1/agency/batch/close` 等 4 个 | ⚠️ 实测它们是 **501 未实现桩**（P107 D3，`BatchServiceNotImplementedTest` 7 例锁死）⇒ **今天并非活洞**。建议**保持 501 不动**，登记为「未实现，不参与授权」 |
+| `POST /api/v1/agency/users/{id}/terminate` | 终止代理用户 = 不可逆的人事动作，须确认归属与留痕 |
+| `POST /api/sme/budget/v1/budgets/{id}/approve` | 预算审批，须与编制权分权 |
+| `POST /api/sme/arap/v1/customer-statements/{id}/send` | 对外发送 = 对客户的正式承诺 |
+
+#### 🔴 裁定前先钉住「已知缺口」
+
+无论 D-10 怎么裁定，下述事实必须**机器可见**，否则 60 个缺口会悄悄被忘掉：
+
+- 新增 **G8**：`roleGuard` 管辖的端点**不得**在清单登记权限码（防两套授权并存）
+- 新增 **G9**：清单里 `scope: auth` 的端点从 G2 缺口统计中排除（认证端点本不该受动作码约束）
+- G2 缺口维持 **60** 的棘轮，直到 D-10 裁定落地
+
+> **判据：一个已知缺口若只写在文档里，它会在三次迭代后变成「没人记得的洞」。
+> 缺口必须由**棘轮数字 + 守卫**持续可见，文档只是解释。**
+
+
+---
+
 # MACHINE-READABLE CONTRACT
 
 contract_version: "1.0"

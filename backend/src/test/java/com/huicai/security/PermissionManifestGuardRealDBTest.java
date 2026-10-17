@@ -356,6 +356,91 @@ class PermissionManifestGuardRealDBTest extends AbstractMapperTest {
                         + "。这类条目不会让 G2 缺口变小，却会让清单看起来更全。");
     }
 
+
+    /**
+     * 🔴 G8：`roleGuard` 管辖的端点**不得**在清单里登记权限码。
+     *
+     * <p>代理端 20 个写端点的授权由代码内的 {@code AgencyEnterpriseRoleGuard}
+     * （P114/P120 三轮加固的产物）负责，<b>不是</b>权限码体系。
+     * 两套并存会出现「两边都松」的缝隙：
+     * {@code roleGuard} 放行 + 清单无码 ⇒ 实际无人管；
+     * 反之则要同时维护两处，改一处漏一处。</p>
+     *
+     * <p>本守卫把这条约定<b>变成机器校验</b>，而不是文档里的一句话。</p>
+     */
+    @Test
+    @DisplayName("G8 roleGuard 管辖的端点不得在清单登记权限码（防两套授权并存）")
+    void roleGuardManagedEndpointsMustNotBeInManifest() {
+        Set<String> byAgency = new LinkedHashSet<>();
+        for (String ep : realWriteEndpoints()) {
+            if (ep.contains(" /api/v1/agency/")) {
+                byAgency.add(ep);
+            }
+        }
+        assertTrue(byAgency.size() >= 20,
+                "代理端写端点只认出 " + byAgency.size() + " 个（预期 >= 20）—— "
+                        + "本守卫的前提已失效（端点改名或被删），它会变成空转。"
+                        + "判据：守卫的清单必须与真值源同步，否则它锁的是空气。");
+
+        java.util.Map<String, String> byKey = manifestPermissionByKey();
+        List<String> wrongly = new ArrayList<>();
+        for (String ep : byAgency) {
+            if (byKey.containsKey(ep)) {
+                wrongly.add(ep + " => " + byKey.get(ep));
+            }
+        }
+        assertTrue(wrongly.isEmpty(),
+                "以下代理端写端点在清单里登记了权限码，但它们的授权由 roleGuard 管辖：" + wrongly
+                        + "。两套授权并存会产生「两边都松」的缝隙。"
+                        + "正解：见 SPEC-P133 §8.6 B 类 —— 显式排除并登记理由，"
+                        + "而不是把在运行的 roleGuard 模型翻译成码。");
+    }
+
+    /**
+     * 🔴 G9：认证端点与自助切换**不参与** G2 缺口统计。
+     *
+     * <p>登录 / 刷新 / 账套切换是<b>自助行为</b>，任何登录用户都应可执行；
+     * 给它们加动作权限码会导致「无法登录」「无法切换账套」这类荒谬故障。</p>
+     *
+     * <p>本守卫确保它们<b>既不被要求登记、也不被登记</b> —— 即缺口统计不把它们算进去，
+     * 清单里也不该出现它们。</p>
+     */
+    @Test
+    @DisplayName("G9 认证端点与账套切换既不计入缺口也不得登记（自助行为不该受动作码约束）")
+    void selfServiceEndpointsAreNeitherCountedNorRegistered() {
+        java.util.Set<String> selfService = new LinkedHashSet<>();
+        for (String ep : realWriteEndpoints()) {
+            if (ep.contains(" /api/v1/auth/") || ep.endsWith(" /api/v1/enterprise/switch")) {
+                selfService.add(ep);
+            }
+        }
+        assertTrue(selfService.size() >= 3,
+                "自助端点只认出 " + selfService.size() + " 个（预期 >= 3），G9 前提失效");
+
+        java.util.Map<String, String> byKey = manifestPermissionByKey();
+        List<String> wrongly = new ArrayList<>();
+        for (String ep : selfService) {
+            if (byKey.containsKey(ep)) {
+                wrongly.add(ep);
+            }
+        }
+        assertTrue(wrongly.isEmpty(),
+                "以下自助端点被登记了权限码，会导致「无法登录 / 无法切换账套」：" + wrongly);
+
+        // 缺口统计必须已排除它们
+        Set<String> registered = manifestKeys();
+        int gap = 0;
+        for (String ep : realWriteEndpoints()) {
+            if (!registered.contains(ep)) {
+                gap++;
+            }
+        }
+        assertTrue(gap <= MAX_UNREGISTERED_WRITE_ENDPOINTS,
+                "缺口=" + gap + " 已超棘轮 " + MAX_UNREGISTERED_WRITE_ENDPOINTS
+                        + "。G9 要求自助端点不计入缺口 —— 若它们被计入，"
+                        + "棘轮值必须相应下调，否则本守卫的语义与 G2 不一致。");
+    }
+
     // ─────────────────────── 清单解析（唯一解析实现） ───────────────────────
 
     private List<String> manifestRaw() {
