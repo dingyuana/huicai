@@ -831,6 +831,51 @@ enforcement: warn-only   # warn-only | enforcing，批次 4 才切 enforcing
 
 ---
 
+### 8.8 D-10 第 4~6 条已落地：V189 新增 15 个权限码，22 个端点登记，缺口 33 → 11
+
+**`V189`**（幂等已验：连续执行两次，第二次 `INSERT 0 0`）新增 **15 个权限码**、**39 条授权**：
+
+| 模块 | 权限码 | 编制族持有者 | 审批族持有者 |
+|---|---|---|---|
+| 预算 | `budget:list/create/submit/adjust` | ADMIN, FINANCE_MGR, **OPERATOR** | — |
+| 预算 | `budget:approve/activate` | — | **ADMIN, FINANCE_MGR** |
+| 流水分类规则 | `bank:classification:manage` | ACCOUNTANT, ADMIN, **CASHIER**, FINANCE_MGR | — |
+| 附件 | `file:attachment:manage` | ACCOUNTANT, ADMIN, FINANCE_MGR | — |
+| 对账单 | `arap:statement:generate` | ADMIN, FINANCE_MGR, **OPERATOR** | — |
+| 对账单 | `arap:statement:confirm/dispute/send` | — | **ADMIN, FINANCE_MGR** |
+| 账龄 | `arap:aging:generate` | ADMIN, FINANCE_MGR, OPERATOR | — |
+| 账龄 | `arap:aging:dismiss/resolve` | — | **ADMIN, FINANCE_MGR** |
+
+**分权规则延续 V188 的 D-8**：`approve/activate/confirm/dispute/send/dismiss/resolve`
+**一律不给编制族**（ACCOUNTANT / OPERATOR），只给 ADMIN + FINANCE_MGR。
+
+两处特别说明：
+- **`bank:classification:manage` 给 CASHIER** —— 分类规则直接驱动银行流水**自动匹配**，
+  与对账岗同权；参照 `bank:reconciliation:list` 的持有者集合。
+- **`dismiss`（忽略账龄告警）划入审批族** —— 它的实质是「**掩盖风险**」，
+  能忽略告警的人必须是有权处置的人。
+
+⚠️ 以上均为**可审计的默认值，非业务终裁**；改角色须先在 §8 写明理由。
+
+**清单现状**：`写端点 307 / 已登记 269 / 显式排除 27 / 真实缺口 11`。
+
+#### 🔴 又一次「追加位置」错误，被 G10 当场抓住
+
+本轮追加 22 条时用了 `s += ...`（追加到**文件末尾**），而末尾此时已是 `excluded:` 段
+⇒ 22 条被解析成**排除项**（G2 显示「已登记 247 / 排除 49」，G10 报 22 条声明不完整）。
+
+🔴 我随后写了一个「搬移」脚本去修复，**它自己的分块逻辑写坏了，把清单搅成 592 行**，
+只好 `git checkout` 回滚重来。
+
+> **判据：对**分段**配置做增删，必须按段落标记切分后插入，绝不能用「追加到末尾」或
+> 「逐行扫描搬运」。** 前者会落进错误的段，后者一旦逻辑出错就是**大面积数据损坏**
+> —— 而 `git checkout` 是唯一的救命手段。
+> ⚠️ 兜底纪律：批量改文档/配置前先 `git status` 确认干净，改完立刻 `grep -c` 复核条数
+> （本轮 `path:` 应为 296、`permission:` 269、`governed_by:` 29，实际已核对）。
+
+
+---
+
 # MACHINE-READABLE CONTRACT
 
 contract_version: "1.0"

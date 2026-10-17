@@ -37,8 +37,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 class PermissionManifestGuardRealDBTest extends AbstractMapperTest {
 
     /** 写端点缺口的棘轮：批次 1 实测值，只许减不许增（§4.5 第 21/25 条）。 */
-    /** D-10 第 1、2 条裁定后：60 缺口 - 27 显式排除 = 33 真实缺口。 */
-    private static final int MAX_UNREGISTERED_WRITE_ENDPOINTS = 33;
+    /** D-10 第 1~6 条裁定后：60 - 27(排除) - 22(已登记) = 11 真实缺口（全部为 AI 端点）。 */
+    private static final int MAX_UNREGISTERED_WRITE_ENDPOINTS = 11;
 
     private static final String MANIFEST = "permission-manifest.yml";
 

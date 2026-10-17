@@ -1445,6 +1445,95 @@ endpoints:
 #        （roleGuard 放行 + 清单无码 ⇒ 实际无人管；反之要维护两处）。
 #   governed_by: self-service —— 自助行为，任何登录用户都应可执行
 #        （登录 / 刷新 / 切账套）。加动作码会导致「无法登录 / 无法切账套」。
+  - method: POST
+    path: /api/sme/budget/v1/budgets
+    permission: budget:create
+    write: true
+  - method: POST
+    path: /api/sme/budget/v1/budgets/{id}/submit
+    permission: budget:submit
+    write: true
+  - method: POST
+    path: /api/sme/budget/v1/budgets/{id}/approve
+    permission: budget:approve
+    write: true
+  - method: POST
+    path: /api/sme/budget/v1/budgets/{id}/activate
+    permission: budget:activate
+    write: true
+  - method: POST
+    path: /api/sme/budget/v1/budgets/adjustments
+    permission: budget:adjust
+    write: true
+  - method: POST
+    path: /api/sme/budget/v1/budgets/adjustments/{id}/approve
+    permission: budget:approve
+    write: true
+  - method: POST
+    path: /api/sme/cash/v1/classification-rules
+    permission: bank:classification:manage
+    write: true
+  - method: PUT
+    path: /api/sme/cash/v1/classification-rules/{id}
+    permission: bank:classification:manage
+    write: true
+  - method: DELETE
+    path: /api/sme/cash/v1/classification-rules/{id}
+    permission: bank:classification:manage
+    write: true
+  - method: POST
+    path: /api/sme/cash/v1/classification-rules/match
+    permission: bank:classification:manage
+    write: true
+  - method: POST
+    path: /api/sme/cash/v1/classification-rules/reorder
+    permission: bank:classification:manage
+    write: true
+  - method: POST
+    path: /api/sme/cash/v1/classification-rules/seed
+    permission: bank:classification:manage
+    write: true
+  - method: POST
+    path: /api/v1/attachments/upload
+    permission: file:attachment:manage
+    write: true
+  - method: POST
+    path: /api/v1/attachments/{id}/ocr
+    permission: file:attachment:manage
+    write: true
+  - method: DELETE
+    path: /api/v1/attachments/{id}
+    permission: file:attachment:manage
+    write: true
+  - method: POST
+    path: /api/sme/arap/v1/customer-statements/generate
+    permission: arap:statement:generate
+    write: true
+  - method: POST
+    path: /api/sme/arap/v1/customer-statements/{id}/confirm
+    permission: arap:statement:confirm
+    write: true
+  - method: POST
+    path: /api/sme/arap/v1/customer-statements/{id}/dispute
+    permission: arap:statement:dispute
+    write: true
+  - method: POST
+    path: /api/sme/arap/v1/customer-statements/{id}/send
+    permission: arap:statement:send
+    write: true
+  - method: POST
+    path: /api/sme/arap/v1/aging-analysis/alerts/generate
+    permission: arap:aging:generate
+    write: true
+  - method: POST
+    path: /api/sme/arap/v1/aging-analysis/alerts/{id}/dismiss
+    permission: arap:aging:dismiss
+    write: true
+  - method: POST
+    path: /api/sme/arap/v1/aging-analysis/alerts/{id}/resolve
+    permission: arap:aging:resolve
+    write: true
+
 excluded:
   - method: DELETE
     path: /api/v1/agency/agencies/{id}
