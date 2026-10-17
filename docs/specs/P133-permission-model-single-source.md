@@ -655,6 +655,81 @@ enforcement: warn-only   # warn-only | enforcing，批次 4 才切 enforcing
 
 ---
 
+### 8.5 批次 3 收尾：D-7/D-8/D-9 落地 + 247 条登记 + 🔴 新的阻塞（D-10）
+
+#### D-7/D-8/D-9 已实施（`V188`）
+
+新增 **8 个凭证动作级权限码**，角色分配按裁定分权：
+
+| 权限码 | 持有角色 | 依据 |
+|---|---|---|
+| `voucher:create` / `voucher:submit` | ACCOUNTANT, ADMIN, FINANCE_MGR | D-7 默认取 `voucher:list` 的持有者 |
+| `voucher:audit` / `reject` / `post` / `unpost` / `reverse` / `close` | **ADMIN, FINANCE_MGR** | 🔴 **D-8 分权：刻意不给 ACCOUNTANT** |
+
+⚠️ 这是**可审计的默认值，不是业务终裁** —— 若会计岗确需审核权，须在 §8 写明理由后再改，
+**不得在迁移里静默扩权**（沿用 V186 的口径）。
+
+#### 清单登记：247 / 307
+
+按模块规则为 **195** 个剩余端点分配权限码，全部**复用现有码**，无新增。
+其中 **170 条是粗粒度（页面级）码**，已在清单里用 `coarse: true` **显式标记**。
+
+**为什么必须显式标记**：粗粒度码让 G2 的缺口看起来在缩小，但**切 fail-closed 时它们
+只形成粗粒度屏障**（「能看凭证的人也能改凭证」在清单里是绿的）。
+不标记的话，「缺口率下降」会**掩盖「管控强度没提升」**。
+
+> **判据沉淀：缺口率的下降 ≠ 管控强度的提升。**
+> 「覆盖率」与「有效性」必须各自独立可见，否则总量指标会掩盖质量退化。
+
+#### 新增两条守卫
+
+| ID | 不变量 | 现状 |
+|---|---|---|
+| **G6** | 粗粒度条目数**只许减不许增**（棘轮 170） | 170 / 247 |
+| **G7** | 清单条目必须都能对上**真实**端点（反向漂移） | 通过 |
+
+🔴 G6 首版把 coarse 数成 **0**（逐行状态机解析写错了，且**没有任何报错**——
+它只是安静地报告了一个漂亮数字）。若不是清单里明确写了 `coarse: true`、
+且我同时打印了 `[G6] 粗粒度条目`，这个假绿会一直存在。
+**判据：守卫输出的数字若与被测事实的常识量级不符，先怀疑解析器。**
+
+**G5 同步升级**：由「裁定前**不得**登记」改为「**必须用动作级码登记**」，
+并逐条核对「该端点 ⇒ 期望的码」（原先只查「有没有登记」，无法查出「登记错了码」）。
+
+#### 🔴 新阻塞（D-10）：6 组模块**没有任何权限码**
+
+60 个写端点无法登记 —— 它们所属模块在 `t_menu` 中**一个权限码都没有**：
+
+| 模块 | 端点数 | 控制器 |
+|---|---|---|
+| **预算** `sme/budget` | 6 | `BudgetController` |
+| **代理端** `v1/agency` | 20 | `EnterpriseController` / `AgencyController` / `AgencyUserController` / `AssignmentController` / `ClientController` / `ServiceProgressController` / `BatchOperationController` |
+| **AI** `v1/ai` / `ai/` | 15 | `NvidiaAiController` / `AiTaskController` / `AiFeedbackLogController` |
+| **对账单 / 账龄 / 预付款** | 12 | `CustomerStatementController` / `AgingAnalysisController` / `PrepaymentController` |
+| **分类规则** | 6 | `ClassificationRuleController` |
+| **附件** | 3 | `AttachmentController` |
+| **认证端点** | 2 | `AuthController`（登录/刷新 —— **本就不该受动作权限码约束**） |
+
+🔴 **其中代理端 20 个最需要警惕**：P114/P120 已在那里做过三轮鉴权加固，
+用的一直是**代码内的 `roleGuard`**（代理管理员/可见企业），**不是权限码体系**。
+把「代理端该有哪些权限码」提出来裁定，等于把一套已在运行的授权模型**翻译**成码 ——
+**这不是机械翻译**，需要老丁确认哪些动作该给代理管理员、哪些只能平台侧做。
+
+#### 下一步（批次 4 的真实阻塞）
+
+⚠️ **G2 缺口 60 ≠ 0 ⇒ 按 SPEC §6 的定义，批次 4（切 fail-closed）的前置条件未满足。**
+
+- 若现在切 `enforcement: enforcing`：247 条已登记端点**立即开始 403**，
+  其中 **170 条是粗粒度** ⇒ 会形成大面积粗粒度拦截，**可用性风险高**且管控质量低；
+  同时 60 个未登记端点仍放行（warn 分支）⇒ **「最危险的部分没关、较安全的部分先关」**。
+- 故本轮**保留 `warn-only`**。这不是拖延，而是因为 SPEC 自己定的批次 4 条件（G2 归零）未达成。
+
+> **判据：切 fail-closed 的价值来自「无洞」，不来自「有拦截」。
+> 在缺口未归零时切换，得到的是「一半严一半松」，比全松更难以排查。**
+
+
+---
+
 # MACHINE-READABLE CONTRACT
 
 contract_version: "1.0"

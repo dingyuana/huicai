@@ -37,7 +37,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 class PermissionManifestGuardRealDBTest extends AbstractMapperTest {
 
     /** 写端点缺口的棘轮：批次 1 实测值，只许减不许增（§4.5 第 21/25 条）。 */
-    private static final int MAX_UNREGISTERED_WRITE_ENDPOINTS = 255;
+    private static final int MAX_UNREGISTERED_WRITE_ENDPOINTS = 60;
 
     private static final String MANIFEST = "permission-manifest.yml";
 
@@ -98,7 +98,7 @@ class PermissionManifestGuardRealDBTest extends AbstractMapperTest {
     // ─────────────────────────── G3 ───────────────────────────
 
     /** 前端路由权限码的缺口棘轮：批次 1 实测值（清单只登记 19 个端点，缺口必然存在）。 */
-    private static final int MAX_ORPHAN_FRONTEND_PERMISSIONS = 27;
+    private static final int MAX_ORPHAN_FRONTEND_PERMISSIONS = 8;
 
     @Test
     @DisplayName("G3 前端路由 meta.permission 的清单缺口不得增长（棘轮）")
@@ -200,48 +200,47 @@ class PermissionManifestGuardRealDBTest extends AbstractMapperTest {
 
 
     /**
-     * 🔴 人审生命周期端点：**刻意不登记**，直到权限码的业务裁定落地。
+     * 🔴 人审生命周期端点：**必须用动作级权限码登记**，不得用页面级码顶替。
      *
-     * <p>这些端点涉及<b>人审铁律 #1</b>（审核/过账/红冲必须由人触发）与
-     * <b>铁律 #3</b>（已审核凭证不可改，只能红冲）。而 {@code t_menu} 中
-     * 只有 {@code voucher:list} / {@code voucher:update} 两个凭证类权限码，
-     * <b>没有</b> {@code voucher:audit} / {@code voucher:post} / {@code voucher:reverse}
-     * 这类动作码。</p>
+     * <p>这条守卫最初是「在裁定前**不得被登记**」的临时锁（D-7 落地后已升级为
+     * 正向断言）。它挡住的是一个**不会自己暴露的缺陷**：用 {@code voucher:list}
+     * 给审核端点交差时，清单是齐的、G1 绿、G2 绿、G3 绿，
+     * 只有切 fail-closed 之后才会变成「能看凭证就能审核凭证」的静默漏洞。</p>
      *
-     * <p><b>为什么不能先用粗粒度码顶上</b>：warn-only 阶段登记它毫无拦截效果，
-     * 但批次 4 切 fail-closed 后，「能看凭证就能审核凭证」会成为<b>静默的真实漏洞</b> ——
-     * 清单看起来是齐的，G2 也是绿的，没有任何地方会提示语义不对。
-     * <b>判据：权限码的语义错配属于「不会自己暴露的缺陷」——
-     * 它不会让任何现有守卫变红，只会在守卫全绿时悄悄放行越权。</b></p>
+     * <p><b>判据：权限码的语义错配不会让任何现有守卫变红</b>，
+     * 只会在守卫全绿时悄悄放行越权 ⇒ 必须有一条守卫<b>显式核对「该码对不对得上这个动作」</b>。</p>
      */
-    private static final List<String> HUMAN_APPROVAL_ENDPOINTS = List.of(
-            "POST /api/base/voucher/v1/vouchers/{id}/audit",
-            "POST /api/base/voucher/v1/vouchers/{id}/post",
-            "POST /api/base/voucher/v1/vouchers/{id}/unpost",
-            "POST /api/base/voucher/v1/vouchers/{id}/reverse",
-            "POST /api/base/voucher/v1/vouchers/{id}/reject",
-            "POST /api/base/voucher/v1/vouchers/{id}/submit",
-            "POST /api/base/voucher/v1/vouchers/{id}/close",
-            "POST /api/base/voucher/v1/vouchers/batch-audit",
-            "POST /api/base/voucher/v1/vouchers/batch-post",
-            "POST /api/base/voucher/v1/vouchers/batch-submit");
+    private static final java.util.Map<String, String> HUMAN_APPROVAL_EXPECTED = java.util.Map.of(
+            "POST /api/base/voucher/v1/vouchers/{id}/audit", "voucher:audit",
+            "POST /api/base/voucher/v1/vouchers/{id}/post", "voucher:post",
+            "POST /api/base/voucher/v1/vouchers/{id}/unpost", "voucher:unpost",
+            "POST /api/base/voucher/v1/vouchers/{id}/reverse", "voucher:reverse",
+            "POST /api/base/voucher/v1/vouchers/{id}/reject", "voucher:reject",
+            "POST /api/base/voucher/v1/vouchers/{id}/submit", "voucher:submit",
+            "POST /api/base/voucher/v1/vouchers/{id}/close", "voucher:close",
+            "POST /api/base/voucher/v1/vouchers/batch-audit", "voucher:audit",
+            "POST /api/base/voucher/v1/vouchers/batch-post", "voucher:post",
+            "POST /api/base/voucher/v1/vouchers/batch-submit", "voucher:submit");
 
     @Test
-    @DisplayName("G5 人审生命周期端点在裁定前不得被登记（防用粗粒度码冒充动作码）")
-    void humanApprovalEndpointsMustNotBeRegisteredYet() {
-        Set<String> keys = manifestKeys();
-        List<String> wrongly = new ArrayList<>();
-        for (String ep : HUMAN_APPROVAL_ENDPOINTS) {
-            if (keys.contains(ep)) {
-                wrongly.add(ep);
+    @DisplayName("G5 人审生命周期端点必须用动作级权限码登记（不得用页面级码顶替）")
+    void humanApprovalEndpointsUseActionLevelCodes() {
+        java.util.Map<String, String> byKey = manifestPermissionByKey();
+        List<String> wrong = new ArrayList<>();
+        List<String> missing = new ArrayList<>();
+        for (var e : HUMAN_APPROVAL_EXPECTED.entrySet()) {
+            String actual = byKey.get(e.getKey());
+            if (actual == null) {
+                missing.add(e.getKey());
+            } else if (!actual.equals(e.getValue())) {
+                wrong.add(e.getKey() + " => " + actual + "（应为 " + e.getValue() + "）");
             }
         }
-        assertTrue(wrongly.isEmpty(),
-                "以下人审动作端点已被登记，但它们需要**动作级**权限码（voucher:audit / post / "
-                        + "reverse …），而 t_menu 中尚不存在这些码：" + wrongly
-                        + "。用 voucher:list 之类的粗粒度码顶替，会在批次 4 切 fail-closed 后"
-                        + "变成「能看凭证就能审核凭证」的静默漏洞，且**没有任何守卫会报错**。"
-                        + "正解：先完成动作码的业务裁定（见 SPEC-P133 §8 待裁定项），再登记。");
+        assertTrue(missing.isEmpty(), "以下人审端点未登记（裁定后必须登记）：" + missing);
+        assertTrue(wrong.isEmpty(),
+                "以下人审端点登记了**错误的**权限码：" + wrong
+                        + "。用 voucher:list 之类的页面级码顶替，会在批次 4 切 fail-closed 后"
+                        + "变成「能看凭证就能审核凭证」的静默漏洞，且没有任何其它守卫会报错。");
     }
 
     @Test
@@ -249,7 +248,7 @@ class PermissionManifestGuardRealDBTest extends AbstractMapperTest {
     void humanApprovalEndpointsStillExist() {
         Set<String> real = realWriteEndpoints();
         List<String> gone = new ArrayList<>();
-        for (String ep : HUMAN_APPROVAL_ENDPOINTS) {
+        for (String ep : HUMAN_APPROVAL_EXPECTED.keySet()) {
             if (!real.contains(ep)) {
                 gone.add(ep);
             }
@@ -259,6 +258,102 @@ class PermissionManifestGuardRealDBTest extends AbstractMapperTest {
                         + "。若确已下线，请同步删除 G5 清单，**否则 G5 会空转**"
                         + "（清单里的端点都不存在了，断言恒成立）。"
                         + "判据：守卫的清单必须与真值源保持同步，否则它锁的是空气。");
+    }
+
+
+    /**
+     * 🔴 G6：**粗粒度（页面级）权限码的条目数**只许减不许增。
+     *
+     * <p>为什么必须单独盯：这些条目登记的是「能进该页 = 能做该页操作」，
+     * <b>不是动作级授权</b>。它们让 G2 的缺口看起来在缩小，但
+     * <b>切 fail-closed 时它们只形成粗粒度屏障</b> ——
+     * 「能看凭证的人也能改凭证」在清单里是绿的。</p>
+     *
+     * <p><b>判据：缺口率的下降不等于管控强度的提升。</b>
+     * 必须让「粗粒度覆盖率」与「缺口率」各自独立可见，
+     * 否则总量下降会掩盖质量的下降。</p>
+     */
+    private static final int MAX_COARSE_ENTRIES = 170;
+
+    @Test
+    @DisplayName("G6 粗粒度（页面级）权限码条目数不得增长（棘轮）")
+    void coarseEntriesMustNotGrow() {
+        int coarse = coarseEntryCount();
+        assertTrue(coarse <= MAX_COARSE_ENTRIES,
+                "粗粒度条目数=" + coarse + " > 棘轮 " + MAX_COARSE_ENTRIES
+                        + "。粗粒度码是「能进该页 = 能做该页操作」，不是动作级授权；"
+                        + "增加它们会让缺口率下降但**管控强度不升**。"
+                        + "正解：补动作级权限码，而不是继续挂页面码。");
+        System.out.println("[G6] 粗粒度条目 " + coarse + " / 清单 " + manifestKeys().size());
+    }
+
+    /** 按条目块统计 {@code coarse: true} 的数量（上一版逐行状态机解析，数出 0 是错）。 */
+    private int coarseEntryCount() {
+        int count = 0;
+        boolean inEntry = false;
+        for (String line : manifestRaw()) {
+            if (line.matches("^\\s*-\\s*method:.*$")) {
+                inEntry = true;
+                continue;
+            }
+            if (!inEntry) {
+                continue;
+            }
+            if (line.matches("^\\s*coarse:\\s*true\\s*$")) {
+                count++;
+            }
+            // 条目结束（下一个条目起点或空行后出现新字段）：这里按「见到新 method 即结算」处理
+        }
+        return count;
+    }
+
+    /** 清单的 METHOD+path => permission 映射。 */
+    private java.util.Map<String, String> manifestPermissionByKey() {
+        java.util.Map<String, String> out = new java.util.LinkedHashMap<>();
+        String method = null;
+        String path = null;
+        for (String line : manifestRaw()) {
+            var mm = Pattern.compile("^\\s*-\\s*method:\\s*(\\S+)\\s*$").matcher(line);
+            if (mm.find()) {
+                if (method != null && path != null) {
+                    out.put(method + " " + path, pendingPermission);
+                }
+                method = mm.group(1);
+                path = null;
+                continue;
+            }
+            var mp = Pattern.compile("^\\s*path:\\s*(\\S+)\\s*$").matcher(line);
+            if (mp.find()) {
+                path = mp.group(1);
+                continue;
+            }
+            var pp = Pattern.compile("^\\s*permission:\\s*(\\S+)\\s*$").matcher(line);
+            if (pp.find()) {
+                pendingPermission = pp.group(1);
+            }
+        }
+        if (method != null && path != null) {
+            out.put(method + " " + path, pendingPermission);
+        }
+        return out;
+    }
+
+    private String pendingPermission;
+
+    @Test
+    @DisplayName("G7 清单条目必须都能对上真实端点（反向漂移：清单有、运行时无）")
+    void manifestEntriesMustExistAtRuntime() {
+        Set<String> real = realWriteEndpoints();
+        List<String> stale = new ArrayList<>();
+        for (String key : manifestKeys()) {
+            if (!real.contains(key)) {
+                stale.add(key);
+            }
+        }
+        assertTrue(stale.isEmpty(),
+                "清单里有 " + stale.size() + " 条对不上任何真实写端点（端点已改名/删除）："
+                        + stale.subList(0, Math.min(10, stale.size()))
+                        + "。这类条目不会让 G2 缺口变小，却会让清单看起来更全。");
     }
 
     // ─────────────────────── 清单解析（唯一解析实现） ───────────────────────

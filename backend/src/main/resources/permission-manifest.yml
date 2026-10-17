@@ -13,6 +13,11 @@
 #   path       —— 完整路径（含类级 @RequestMapping 前缀）
 #   permission —— 所需权限码，必须存在于 t_menu.permission（G1 校验）
 #   write      —— 是否写端点；true 的必须全部登记（G2 校验）
+#   coarse     —— true 表示该权限码是**页面级**（:list / :view / :workbench），
+#                 语义是「能进该页 = 能做该页操作」，**不是动作级授权**。
+#                 ⚠️ coarse 条目在 warn-only 下无害，但**切 fail-closed 时它们
+#                 只会形成粗粒度屏障**，不等于「每个动作都有人管」。
+#                 G6 对 coarse 数量做棘轮，只许减不许增。
 
 version: 1
 
@@ -283,4 +288,1149 @@ endpoints:
     path: /api/base/voucher/v1/period-close/profit-carryover
     permission: period:carryover:guide
     write: true
+
+  - method: DELETE
+    path: /api/base/voucher/v1/voucher-templates/{id}
+    permission: voucher:list
+    write: true
+    coarse: true
+
+  - method: DELETE
+    path: /api/base/voucher/v1/vouchers/{id}
+    permission: voucher:update
+    write: true
+
+  - method: DELETE
+    path: /api/sme/arap/v1/arap-settlements/{id}
+    permission: arap:settlement:list
+    write: true
+    coarse: true
+
+  - method: DELETE
+    path: /api/sme/arap/v1/bad-debts/{id}
+    permission: arap:settlement:list
+    write: true
+    coarse: true
+
+  - method: DELETE
+    path: /api/sme/arap/v1/business-docs/{id}
+    permission: doc:list
+    write: true
+    coarse: true
+
+  - method: DELETE
+    path: /api/sme/arap/v1/reconciliation/tolerance/{id}
+    permission: arap:reconciliation:workbench
+    write: true
+    coarse: true
+
+  - method: DELETE
+    path: /api/sme/asset/v1/asset-cards/{id}
+    permission: asset:card:list
+    write: true
+    coarse: true
+
+  - method: DELETE
+    path: /api/sme/asset/v1/asset-categories/{id}
+    permission: asset:category:list
+    write: true
+    coarse: true
+
+  - method: DELETE
+    path: /api/sme/asset/v1/asset-disposals/{id}
+    permission: asset:disposal:list
+    write: true
+    coarse: true
+
+  - method: DELETE
+    path: /api/sme/asset/v1/asset-inventories/{id}
+    permission: asset:inventory:list
+    write: true
+    coarse: true
+
+  - method: DELETE
+    path: /api/sme/cash/v1/bank-accounts/{id}
+    permission: bank:account:list
+    write: true
+    coarse: true
+
+  - method: DELETE
+    path: /api/sme/cash/v1/bank-journals/{id}
+    permission: bank:journal:list
+    write: true
+    coarse: true
+
+  - method: DELETE
+    path: /api/sme/cash/v1/bank-statements/{id}
+    permission: bank:statement:list
+    write: true
+    coarse: true
+
+  - method: DELETE
+    path: /api/sme/cash/v1/cash-journals/{id}
+    permission: cash:journal:list
+    write: true
+    coarse: true
+
+  - method: DELETE
+    path: /api/sme/cash/v1/tickets/{id}
+    permission: ticket:list
+    write: true
+    coarse: true
+
+  - method: DELETE
+    path: /api/sme/tax/v1/tax/output-invoices/{id}
+    permission: tax:output:list
+    write: true
+    coarse: true
+
+  - method: DELETE
+    path: /api/sme/tax/v1/tax/types/{id}
+    permission: tax:output:list
+    write: true
+    coarse: true
+
+  - method: POST
+    path: /api/base/balance/v1/subject-balances/clear
+    permission: ledger:list
+    write: true
+    coarse: true
+
+  - method: POST
+    path: /api/base/balance/v1/subject-balances/init
+    permission: beginning:balance:init
+    write: true
+
+  - method: POST
+    path: /api/base/balance/v1/subject-balances/lock
+    permission: ledger:list
+    write: true
+    coarse: true
+
+  - method: POST
+    path: /api/base/balance/v1/subject-balances/unlock
+    permission: ledger:list
+    write: true
+    coarse: true
+
+  - method: POST
+    path: /api/base/report/v1/reports/cash-flow/rebuild
+    permission: report:cashflow:view
+    write: true
+    coarse: true
+
+  - method: POST
+    path: /api/base/voucher/v1/voucher-templates
+    permission: voucher:list
+    write: true
+    coarse: true
+
+  - method: POST
+    path: /api/base/voucher/v1/voucher-templates/import-from-reference
+    permission: voucher:list
+    write: true
+    coarse: true
+
+  - method: POST
+    path: /api/base/voucher/v1/voucher-templates/{id}/toggle-active
+    permission: voucher:list
+    write: true
+    coarse: true
+
+  - method: POST
+    path: /api/base/voucher/v1/vouchers
+    permission: voucher:create
+    write: true
+
+  - method: POST
+    path: /api/base/voucher/v1/vouchers/batch-audit
+    permission: voucher:audit
+    write: true
+
+  - method: POST
+    path: /api/base/voucher/v1/vouchers/batch-post
+    permission: voucher:post
+    write: true
+
+  - method: POST
+    path: /api/base/voucher/v1/vouchers/batch-submit
+    permission: voucher:submit
+    write: true
+
+  - method: POST
+    path: /api/base/voucher/v1/vouchers/page
+    permission: voucher:list
+    write: true
+    coarse: true
+
+  - method: POST
+    path: /api/base/voucher/v1/vouchers/{id}/audit
+    permission: voucher:audit
+    write: true
+
+  - method: POST
+    path: /api/base/voucher/v1/vouchers/{id}/close
+    permission: voucher:close
+    write: true
+
+  - method: POST
+    path: /api/base/voucher/v1/vouchers/{id}/post
+    permission: voucher:post
+    write: true
+
+  - method: POST
+    path: /api/base/voucher/v1/vouchers/{id}/reject
+    permission: voucher:reject
+    write: true
+
+  - method: POST
+    path: /api/base/voucher/v1/vouchers/{id}/reverse
+    permission: voucher:reverse
+    write: true
+
+  - method: POST
+    path: /api/base/voucher/v1/vouchers/{id}/submit
+    permission: voucher:submit
+    write: true
+
+  - method: POST
+    path: /api/base/voucher/v1/vouchers/{id}/unpost
+    permission: voucher:unpost
+    write: true
+
+  - method: POST
+    path: /api/sme/arap/v1/arap-settlements
+    permission: arap:settlement:list
+    write: true
+    coarse: true
+
+  - method: POST
+    path: /api/sme/arap/v1/arap-settlements/{id}/approve
+    permission: arap:settlement:list
+    write: true
+    coarse: true
+
+  - method: POST
+    path: /api/sme/arap/v1/arap-settlements/{id}/cancel
+    permission: arap:settlement:list
+    write: true
+    coarse: true
+
+  - method: POST
+    path: /api/sme/arap/v1/arap-settlements/{id}/confirm
+    permission: arap:settlement:list
+    write: true
+    coarse: true
+
+  - method: POST
+    path: /api/sme/arap/v1/arap-settlements/{id}/generate-voucher
+    permission: arap:settlement:list
+    write: true
+    coarse: true
+
+  - method: POST
+    path: /api/sme/arap/v1/arap-settlements/{id}/reject
+    permission: arap:settlement:list
+    write: true
+    coarse: true
+
+  - method: POST
+    path: /api/sme/arap/v1/arap-settlements/{id}/reject-simple
+    permission: arap:settlement:list
+    write: true
+    coarse: true
+
+  - method: POST
+    path: /api/sme/arap/v1/arap-settlements/{id}/reverse
+    permission: arap:settlement:list
+    write: true
+    coarse: true
+
+  - method: POST
+    path: /api/sme/arap/v1/arap-settlements/{id}/submit
+    permission: arap:settlement:list
+    write: true
+    coarse: true
+
+  - method: POST
+    path: /api/sme/arap/v1/bad-debts/provision/aging
+    permission: arap:settlement:list
+    write: true
+    coarse: true
+
+  - method: POST
+    path: /api/sme/arap/v1/bad-debts/provision/percentage
+    permission: arap:settlement:list
+    write: true
+    coarse: true
+
+  - method: POST
+    path: /api/sme/arap/v1/bad-debts/recovery
+    permission: arap:settlement:list
+    write: true
+    coarse: true
+
+  - method: POST
+    path: /api/sme/arap/v1/bad-debts/write-off
+    permission: arap:settlement:list
+    write: true
+    coarse: true
+
+  - method: POST
+    path: /api/sme/arap/v1/bad-debts/{id}/confirm
+    permission: arap:settlement:list
+    write: true
+    coarse: true
+
+  - method: POST
+    path: /api/sme/arap/v1/business-docs
+    permission: doc:list
+    write: true
+    coarse: true
+
+  - method: POST
+    path: /api/sme/arap/v1/business-docs/page
+    permission: doc:list
+    write: true
+    coarse: true
+
+  - method: POST
+    path: /api/sme/arap/v1/business-docs/{id}/approve
+    permission: doc:list
+    write: true
+    coarse: true
+
+  - method: POST
+    path: /api/sme/arap/v1/business-docs/{id}/generate-voucher
+    permission: doc:list
+    write: true
+    coarse: true
+
+  - method: POST
+    path: /api/sme/arap/v1/business-docs/{id}/reject
+    permission: doc:list
+    write: true
+    coarse: true
+
+  - method: POST
+    path: /api/sme/arap/v1/business-docs/{id}/reverse
+    permission: doc:list
+    write: true
+    coarse: true
+
+  - method: POST
+    path: /api/sme/arap/v1/business-docs/{id}/submit
+    permission: doc:list
+    write: true
+    coarse: true
+
+  - method: POST
+    path: /api/sme/arap/v1/disputes/{id}/resolve
+    permission: doc:list
+    write: true
+    coarse: true
+
+  - method: POST
+    path: /api/sme/arap/v1/expense-reimbursements
+    permission: arap:expense:create
+    write: true
+
+  - method: POST
+    path: /api/sme/arap/v1/expense-reimbursements/{id}/approve
+    permission: arap:expense:create
+    write: true
+
+  - method: POST
+    path: /api/sme/arap/v1/expense-reimbursements/{id}/auto-voucher
+    permission: arap:expense:create
+    write: true
+
+  - method: POST
+    path: /api/sme/arap/v1/expense-reimbursements/{id}/generate-voucher
+    permission: arap:expense:create
+    write: true
+
+  - method: POST
+    path: /api/sme/arap/v1/expense-reimbursements/{id}/reject
+    permission: arap:expense:create
+    write: true
+
+  - method: POST
+    path: /api/sme/arap/v1/expense-reimbursements/{id}/submit
+    permission: arap:expense:create
+    write: true
+
+  - method: POST
+    path: /api/sme/arap/v1/outstanding-items/{id}/cancel
+    permission: doc:list
+    write: true
+    coarse: true
+
+  - method: POST
+    path: /api/sme/arap/v1/outstanding-items/{id}/resolve
+    permission: doc:list
+    write: true
+    coarse: true
+
+  - method: POST
+    path: /api/sme/arap/v1/payables/{id}/confirm
+    permission: doc:list
+    write: true
+    coarse: true
+
+  - method: POST
+    path: /api/sme/arap/v1/payables/{id}/reverse
+    permission: doc:list
+    write: true
+    coarse: true
+
+  - method: POST
+    path: /api/sme/arap/v1/prepayment
+    permission: doc:list
+    write: true
+    coarse: true
+
+  - method: POST
+    path: /api/sme/arap/v1/prepayment/{id}/confirm
+    permission: doc:list
+    write: true
+    coarse: true
+
+  - method: POST
+    path: /api/sme/arap/v1/prepayment/{id}/reverse
+    permission: doc:list
+    write: true
+    coarse: true
+
+  - method: POST
+    path: /api/sme/arap/v1/prepayment/{prepayId}/apply-to-payable/{payableId}
+    permission: doc:list
+    write: true
+    coarse: true
+
+  - method: POST
+    path: /api/sme/arap/v1/prepayment/{prepayId}/apply-to-receivable/{receivableId}
+    permission: doc:list
+    write: true
+    coarse: true
+
+  - method: POST
+    path: /api/sme/arap/v1/purchase-returns
+    permission: doc:list
+    write: true
+    coarse: true
+
+  - method: POST
+    path: /api/sme/arap/v1/receivables/{id}/confirm
+    permission: doc:list
+    write: true
+    coarse: true
+
+  - method: POST
+    path: /api/sme/arap/v1/receivables/{id}/reverse
+    permission: doc:list
+    write: true
+    coarse: true
+
+  - method: POST
+    path: /api/sme/arap/v1/reconciliation/auto-fifo
+    permission: arap:reconciliation:workbench
+    write: true
+    coarse: true
+
+  - method: POST
+    path: /api/sme/arap/v1/reconciliation/batch-execute
+    permission: arap:reconciliation:workbench
+    write: true
+    coarse: true
+
+  - method: POST
+    path: /api/sme/arap/v1/reconciliation/exceptions/{id}/ignore
+    permission: arap:reconciliation:workbench
+    write: true
+    coarse: true
+
+  - method: POST
+    path: /api/sme/arap/v1/reconciliation/exceptions/{id}/resolve
+    permission: arap:reconciliation:workbench
+    write: true
+    coarse: true
+
+  - method: POST
+    path: /api/sme/arap/v1/reconciliation/exceptions/{id}/retry
+    permission: arap:reconciliation:workbench
+    write: true
+    coarse: true
+
+  - method: POST
+    path: /api/sme/arap/v1/reconciliation/execute
+    permission: arap:reconciliation:workbench
+    write: true
+    coarse: true
+
+  - method: POST
+    path: /api/sme/arap/v1/reconciliation/execute-with-adjustment
+    permission: arap:reconciliation:workbench
+    write: true
+    coarse: true
+
+  - method: POST
+    path: /api/sme/arap/v1/reconciliation/payment/{paymentId}/recommend
+    permission: arap:reconciliation:workbench
+    write: true
+    coarse: true
+
+  - method: POST
+    path: /api/sme/arap/v1/reconciliation/pre-check
+    permission: arap:reconciliation:workbench
+    write: true
+    coarse: true
+
+  - method: POST
+    path: /api/sme/arap/v1/reconciliation/receipt/{receiptId}/recommend
+    permission: arap:reconciliation:workbench
+    write: true
+    coarse: true
+
+  - method: POST
+    path: /api/sme/arap/v1/reconciliation/smart-allocate
+    permission: arap:reconciliation:workbench
+    write: true
+    coarse: true
+
+  - method: POST
+    path: /api/sme/arap/v1/reconciliation/split-allocate
+    permission: arap:reconciliation:workbench
+    write: true
+    coarse: true
+
+  - method: POST
+    path: /api/sme/arap/v1/reconciliation/tolerance
+    permission: arap:reconciliation:workbench
+    write: true
+    coarse: true
+
+  - method: POST
+    path: /api/sme/arap/v1/reconciliation/{id}/approve
+    permission: arap:reconciliation:workbench
+    write: true
+    coarse: true
+
+  - method: POST
+    path: /api/sme/arap/v1/reconciliation/{id}/reject
+    permission: arap:reconciliation:workbench
+    write: true
+    coarse: true
+
+  - method: POST
+    path: /api/sme/arap/v1/reconciliation/{id}/reverse
+    permission: arap:reconciliation:workbench
+    write: true
+    coarse: true
+
+  - method: POST
+    path: /api/sme/asset/v1/asset-cards
+    permission: asset:card:list
+    write: true
+    coarse: true
+
+  - method: POST
+    path: /api/sme/asset/v1/asset-cards/depreciate/{period}
+    permission: asset:card:list
+    write: true
+    coarse: true
+
+  - method: POST
+    path: /api/sme/asset/v1/asset-cards/depreciation-voucher/{period}
+    permission: asset:card:list
+    write: true
+    coarse: true
+
+  - method: POST
+    path: /api/sme/asset/v1/asset-cards/{id}/depreciate
+    permission: asset:card:list
+    write: true
+    coarse: true
+
+  - method: POST
+    path: /api/sme/asset/v1/asset-categories
+    permission: asset:category:list
+    write: true
+    coarse: true
+
+  - method: POST
+    path: /api/sme/asset/v1/asset-disposals
+    permission: asset:disposal:list
+    write: true
+    coarse: true
+
+  - method: POST
+    path: /api/sme/asset/v1/asset-disposals/{id}/approve
+    permission: asset:disposal:list
+    write: true
+    coarse: true
+
+  - method: POST
+    path: /api/sme/asset/v1/asset-inventories
+    permission: asset:inventory:list
+    write: true
+    coarse: true
+
+  - method: POST
+    path: /api/sme/asset/v1/asset-inventories/{id}/complete
+    permission: asset:inventory:list
+    write: true
+    coarse: true
+
+  - method: POST
+    path: /api/sme/cash/v1/bank-accounts
+    permission: bank:account:list
+    write: true
+    coarse: true
+
+  - method: POST
+    path: /api/sme/cash/v1/bank-journals
+    permission: bank:journal:list
+    write: true
+    coarse: true
+
+  - method: POST
+    path: /api/sme/cash/v1/bank-journals/{id}/generate-voucher
+    permission: bank:journal:list
+    write: true
+    coarse: true
+
+  - method: POST
+    path: /api/sme/cash/v1/bank-reconciliation/confirm
+    permission: bank:account:list
+    write: true
+    coarse: true
+
+  - method: POST
+    path: /api/sme/cash/v1/bank-reconciliation/lock
+    permission: bank:account:list
+    write: true
+    coarse: true
+
+  - method: POST
+    path: /api/sme/cash/v1/bank-reconciliation/reject
+    permission: bank:account:list
+    write: true
+    coarse: true
+
+  - method: POST
+    path: /api/sme/cash/v1/bank-reconciliation/run-matching
+    permission: bank:account:list
+    write: true
+    coarse: true
+
+  - method: POST
+    path: /api/sme/cash/v1/bank-reconciliation/unlock
+    permission: bank:account:list
+    write: true
+    coarse: true
+
+  - method: POST
+    path: /api/sme/cash/v1/bank-statements/batch-audit
+    permission: bank:statement:list
+    write: true
+    coarse: true
+
+  - method: POST
+    path: /api/sme/cash/v1/bank-statements/batch-generate
+    permission: bank:statement:list
+    write: true
+    coarse: true
+
+  - method: POST
+    path: /api/sme/cash/v1/bank-statements/batch-review
+    permission: bank:statement:list
+    write: true
+    coarse: true
+
+  - method: POST
+    path: /api/sme/cash/v1/bank-statements/confirm-import
+    permission: bank:statement:list
+    write: true
+    coarse: true
+
+  - method: POST
+    path: /api/sme/cash/v1/bank-statements/import-csv
+    permission: bank:statement:list
+    write: true
+    coarse: true
+
+  - method: POST
+    path: /api/sme/cash/v1/bank-statements/import-excel
+    permission: bank:statement:list
+    write: true
+    coarse: true
+
+  - method: POST
+    path: /api/sme/cash/v1/bank-statements/parse-headers
+    permission: bank:statement:list
+    write: true
+    coarse: true
+
+  - method: POST
+    path: /api/sme/cash/v1/bank-statements/preview-excel
+    permission: bank:statement:list
+    write: true
+    coarse: true
+
+  - method: POST
+    path: /api/sme/cash/v1/bank-statements/{id}/approve
+    permission: bank:statement:list
+    write: true
+    coarse: true
+
+  - method: POST
+    path: /api/sme/cash/v1/bank-statements/{id}/audit
+    permission: bank:statement:list
+    write: true
+    coarse: true
+
+  - method: POST
+    path: /api/sme/cash/v1/bank-statements/{id}/classify
+    permission: bank:statement:list
+    write: true
+    coarse: true
+
+  - method: POST
+    path: /api/sme/cash/v1/bank-statements/{id}/generate
+    permission: bank:statement:list
+    write: true
+    coarse: true
+
+  - method: POST
+    path: /api/sme/cash/v1/bank-statements/{id}/process-manual
+    permission: bank:statement:list
+    write: true
+    coarse: true
+
+  - method: POST
+    path: /api/sme/cash/v1/bank-statements/{id}/review
+    permission: bank:statement:list
+    write: true
+    coarse: true
+
+  - method: POST
+    path: /api/sme/cash/v1/bank-statements/{statementId}/confirm-match
+    permission: bank:statement:list
+    write: true
+    coarse: true
+
+  - method: POST
+    path: /api/sme/cash/v1/bank-statements/{statementId}/ignore
+    permission: bank:statement:list
+    write: true
+    coarse: true
+
+  - method: POST
+    path: /api/sme/cash/v1/cash-journals
+    permission: cash:journal:list
+    write: true
+    coarse: true
+
+  - method: POST
+    path: /api/sme/cash/v1/cash-journals/{id}/generate-voucher
+    permission: cash:journal:list
+    write: true
+    coarse: true
+
+  - method: POST
+    path: /api/sme/cash/v1/tickets
+    permission: ticket:list
+    write: true
+    coarse: true
+
+  - method: POST
+    path: /api/sme/cash/v1/tickets/{id}/cash
+    permission: ticket:list
+    write: true
+    coarse: true
+
+  - method: POST
+    path: /api/sme/cash/v1/tickets/{id}/issue
+    permission: ticket:list
+    write: true
+    coarse: true
+
+  - method: POST
+    path: /api/sme/cash/v1/tickets/{id}/void
+    permission: ticket:list
+    write: true
+    coarse: true
+
+  - method: POST
+    path: /api/sme/tax/v1/input-invoices/confirm-import
+    permission: tax:input:list
+    write: true
+    coarse: true
+
+  - method: POST
+    path: /api/sme/tax/v1/input-invoices/import
+    permission: tax:input:list
+    write: true
+    coarse: true
+
+  - method: POST
+    path: /api/sme/tax/v1/input-invoices/preview
+    permission: tax:input:list
+    write: true
+    coarse: true
+
+  - method: POST
+    path: /api/sme/tax/v1/sales-invoices/batch-link-red-flush
+    permission: tax:output:list
+    write: true
+    coarse: true
+
+  - method: POST
+    path: /api/sme/tax/v1/sales-invoices/confirm-import
+    permission: tax:output:list
+    write: true
+    coarse: true
+
+  - method: POST
+    path: /api/sme/tax/v1/sales-invoices/import
+    permission: tax:output:list
+    write: true
+    coarse: true
+
+  - method: POST
+    path: /api/sme/tax/v1/sales-invoices/preview
+    permission: tax:output:list
+    write: true
+    coarse: true
+
+  - method: POST
+    path: /api/sme/tax/v1/tax/declarations
+    permission: tax:output:list
+    write: true
+    coarse: true
+
+  - method: POST
+    path: /api/sme/tax/v1/tax/declarations/{id}/approve
+    permission: tax:output:list
+    write: true
+    coarse: true
+
+  - method: POST
+    path: /api/sme/tax/v1/tax/declarations/{id}/reject
+    permission: tax:output:list
+    write: true
+    coarse: true
+
+  - method: POST
+    path: /api/sme/tax/v1/tax/declarations/{id}/submit
+    permission: tax:output:list
+    write: true
+    coarse: true
+
+  - method: POST
+    path: /api/sme/tax/v1/tax/input-invoices
+    permission: tax:input:list
+    write: true
+    coarse: true
+
+  - method: POST
+    path: /api/sme/tax/v1/tax/input-invoices/{id}/certify
+    permission: tax:input:list
+    write: true
+    coarse: true
+
+  - method: POST
+    path: /api/sme/tax/v1/tax/input-invoices/{id}/confirm
+    permission: tax:input:list
+    write: true
+    coarse: true
+
+  - method: POST
+    path: /api/sme/tax/v1/tax/input-invoices/{id}/reject
+    permission: tax:input:list
+    write: true
+    coarse: true
+
+  - method: POST
+    path: /api/sme/tax/v1/tax/input-invoices/{id}/reverse
+    permission: tax:input:list
+    write: true
+    coarse: true
+
+  - method: POST
+    path: /api/sme/tax/v1/tax/input-invoices/{id}/revert
+    permission: tax:input:list
+    write: true
+    coarse: true
+
+  - method: POST
+    path: /api/sme/tax/v1/tax/input-invoices/{id}/submit-review
+    permission: tax:input:list
+    write: true
+    coarse: true
+
+  - method: POST
+    path: /api/sme/tax/v1/tax/input-invoices/{id}/void
+    permission: tax:input:list
+    write: true
+    coarse: true
+
+  - method: POST
+    path: /api/sme/tax/v1/tax/invoice/batch/generate-voucher
+    permission: tax:output:list
+    write: true
+    coarse: true
+
+  - method: POST
+    path: /api/sme/tax/v1/tax/output-invoices
+    permission: tax:output:list
+    write: true
+    coarse: true
+
+  - method: POST
+    path: /api/sme/tax/v1/tax/output-invoices/batch/confirm
+    permission: tax:output:list
+    write: true
+    coarse: true
+
+  - method: POST
+    path: /api/sme/tax/v1/tax/output-invoices/batch/mark-vouchered
+    permission: tax:output:list
+    write: true
+    coarse: true
+
+  - method: POST
+    path: /api/sme/tax/v1/tax/output-invoices/batch/reject
+    permission: tax:output:list
+    write: true
+    coarse: true
+
+  - method: POST
+    path: /api/sme/tax/v1/tax/output-invoices/batch/reverse
+    permission: tax:output:list
+    write: true
+    coarse: true
+
+  - method: POST
+    path: /api/sme/tax/v1/tax/output-invoices/batch/revert
+    permission: tax:output:list
+    write: true
+    coarse: true
+
+  - method: POST
+    path: /api/sme/tax/v1/tax/output-invoices/batch/submit-review
+    permission: tax:output:list
+    write: true
+    coarse: true
+
+  - method: POST
+    path: /api/sme/tax/v1/tax/output-invoices/batch/void
+    permission: tax:output:list
+    write: true
+    coarse: true
+
+  - method: POST
+    path: /api/sme/tax/v1/tax/output-invoices/{id}/confirm
+    permission: tax:output:list
+    write: true
+    coarse: true
+
+  - method: POST
+    path: /api/sme/tax/v1/tax/output-invoices/{id}/mark-vouchered
+    permission: tax:output:list
+    write: true
+    coarse: true
+
+  - method: POST
+    path: /api/sme/tax/v1/tax/output-invoices/{id}/reject
+    permission: tax:output:list
+    write: true
+    coarse: true
+
+  - method: POST
+    path: /api/sme/tax/v1/tax/output-invoices/{id}/reverse
+    permission: tax:output:list
+    write: true
+    coarse: true
+
+  - method: POST
+    path: /api/sme/tax/v1/tax/output-invoices/{id}/revert
+    permission: tax:output:list
+    write: true
+    coarse: true
+
+  - method: POST
+    path: /api/sme/tax/v1/tax/output-invoices/{id}/submit-review
+    permission: tax:output:list
+    write: true
+    coarse: true
+
+  - method: POST
+    path: /api/sme/tax/v1/tax/output-invoices/{id}/void
+    permission: tax:output:list
+    write: true
+    coarse: true
+
+  - method: POST
+    path: /api/sme/tax/v1/tax/types
+    permission: tax:output:list
+    write: true
+    coarse: true
+
+  - method: POST
+    path: /api/v1/customers
+    permission: party:list
+    write: true
+    coarse: true
+
+  - method: POST
+    path: /api/v1/customers/import
+    permission: party:list
+    write: true
+    coarse: true
+
+  - method: POST
+    path: /api/v1/employees
+    permission: party:list
+    write: true
+    coarse: true
+
+  - method: POST
+    path: /api/v1/subjects
+    permission: subjects:manage
+    write: true
+
+  - method: POST
+    path: /api/v1/subjects/import
+    permission: subjects:manage
+    write: true
+
+  - method: POST
+    path: /api/v1/subjects/import-standard
+    permission: subjects:manage
+    write: true
+
+  - method: POST
+    path: /api/v1/vendors
+    permission: party:list
+    write: true
+    coarse: true
+
+  - method: POST
+    path: /api/v1/vendors/import
+    permission: party:list
+    write: true
+    coarse: true
+
+  - method: PUT
+    path: /api/base/voucher/v1/voucher-templates/{id}
+    permission: voucher:list
+    write: true
+    coarse: true
+
+  - method: PUT
+    path: /api/base/voucher/v1/voucher-templates/{id}/lines
+    permission: voucher:list
+    write: true
+    coarse: true
+
+  - method: PUT
+    path: /api/base/voucher/v1/vouchers/{id}
+    permission: voucher:update
+    write: true
+
+  - method: PUT
+    path: /api/sme/arap/v1/bad-debts/scheme
+    permission: arap:settlement:list
+    write: true
+    coarse: true
+
+  - method: PUT
+    path: /api/sme/arap/v1/business-docs/{id}
+    permission: doc:list
+    write: true
+    coarse: true
+
+  - method: PUT
+    path: /api/sme/arap/v1/expense-reimbursements/{id}
+    permission: arap:expense:create
+    write: true
+
+  - method: PUT
+    path: /api/sme/arap/v1/reconciliation/tolerance/{id}
+    permission: arap:reconciliation:workbench
+    write: true
+    coarse: true
+
+  - method: PUT
+    path: /api/sme/asset/v1/asset-cards/{id}
+    permission: asset:card:list
+    write: true
+    coarse: true
+
+  - method: PUT
+    path: /api/sme/asset/v1/asset-categories/{id}
+    permission: asset:category:list
+    write: true
+    coarse: true
+
+  - method: PUT
+    path: /api/sme/cash/v1/bank-accounts/{id}
+    permission: bank:account:list
+    write: true
+    coarse: true
+
+  - method: PUT
+    path: /api/sme/cash/v1/bank-journals/{id}
+    permission: bank:journal:list
+    write: true
+    coarse: true
+
+  - method: PUT
+    path: /api/sme/cash/v1/bank-statements/{id}/classification
+    permission: bank:statement:list
+    write: true
+    coarse: true
+
+  - method: PUT
+    path: /api/sme/cash/v1/cash-journals/{id}
+    permission: cash:journal:list
+    write: true
+    coarse: true
+
+  - method: PUT
+    path: /api/sme/cash/v1/tickets/{id}
+    permission: ticket:list
+    write: true
+    coarse: true
+
+  - method: PUT
+    path: /api/sme/tax/v1/tax/types/{id}
+    permission: tax:output:list
+    write: true
+    coarse: true
+
+  - method: PUT
+    path: /api/v1/customers/{id}
+    permission: party:list
+    write: true
+    coarse: true
+
+  - method: PUT
+    path: /api/v1/employees/{id}
+    permission: party:list
+    write: true
+    coarse: true
+
+  - method: PUT
+    path: /api/v1/subjects/{id}
+    permission: subjects:manage
+    write: true
+
+  - method: PUT
+    path: /api/v1/vendors/{id}
+    permission: party:list
+    write: true
+    coarse: true
 
