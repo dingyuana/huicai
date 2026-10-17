@@ -1434,3 +1434,150 @@ endpoints:
     write: true
     coarse: true
 
+# ─────────────────────────────────────────────────────────────
+# 显式排除（D-10 第 1、2 条裁定）：以下端点**刻意不登记权限码**。
+#
+# 排除不是「忘记登记」—— 排除项必须写明管辖机制与理由，
+# 并由守卫 G8/G9/G10 机械校验（少写理由、越权登记都会红）。
+#
+#   governed_by: role-guard —— 授权由代码内的 roleGuard 负责（代理端）。
+#        ⚠️ **刻意不翻译成权限码**：两套授权并存会产生「两边都松」的缝隙
+#        （roleGuard 放行 + 清单无码 ⇒ 实际无人管；反之要维护两处）。
+#   governed_by: self-service —— 自助行为，任何登录用户都应可执行
+#        （登录 / 刷新 / 切账套）。加动作码会导致「无法登录 / 无法切账套」。
+excluded:
+  - method: DELETE
+    path: /api/v1/agency/agencies/{id}
+    controller: AgencyController
+    governed_by: role-guard
+    reason: 代理端授权由 AgencyEnterpriseRoleGuard 管辖（P114/P120 加固）
+  - method: DELETE
+    path: /api/v1/agency/assignments/{id}
+    controller: AssignmentController
+    governed_by: role-guard
+    reason: 代理端授权由 AgencyEnterpriseRoleGuard 管辖（P114/P120 加固）
+  - method: DELETE
+    path: /api/v1/agency/enterprises/{id}
+    controller: EnterpriseController
+    governed_by: role-guard
+    reason: 代理端授权由 AgencyEnterpriseRoleGuard 管辖（P114/P120 加固）
+  - method: POST
+    path: /api/v1/agency/agencies
+    controller: AgencyController
+    governed_by: role-guard
+    reason: 代理端授权由 AgencyEnterpriseRoleGuard 管辖（P114/P120 加固）
+  - method: POST
+    path: /api/v1/agency/assignments
+    controller: AssignmentController
+    governed_by: role-guard
+    reason: 代理端授权由 AgencyEnterpriseRoleGuard 管辖（P114/P120 加固）
+  - method: POST
+    path: /api/v1/agency/batch/audit-invoices
+    controller: BatchOperationController
+    governed_by: role-guard
+    reason: 代理端授权由 AgencyEnterpriseRoleGuard 管辖（P114/P120 加固）
+  - method: POST
+    path: /api/v1/agency/batch/audit-vouchers
+    controller: BatchOperationController
+    governed_by: role-guard
+    reason: 代理端授权由 AgencyEnterpriseRoleGuard 管辖（P114/P120 加固）
+  - method: POST
+    path: /api/v1/agency/batch/close
+    controller: BatchOperationController
+    governed_by: role-guard
+    reason: 代理端授权由 AgencyEnterpriseRoleGuard 管辖（P114/P120 加固）
+  - method: POST
+    path: /api/v1/agency/batch/import
+    controller: BatchOperationController
+    governed_by: role-guard
+    reason: 代理端授权由 AgencyEnterpriseRoleGuard 管辖（P114/P120 加固）
+  - method: POST
+    path: /api/v1/agency/contracts
+    controller: ClientController
+    governed_by: role-guard
+    reason: 代理端授权由 AgencyEnterpriseRoleGuard 管辖（P114/P120 加固）
+  - method: POST
+    path: /api/v1/agency/enterprises
+    controller: EnterpriseController
+    governed_by: role-guard
+    reason: 代理端授权由 AgencyEnterpriseRoleGuard 管辖（P114/P120 加固）
+  - method: POST
+    path: /api/v1/agency/enterprises/{id}/activate
+    controller: EnterpriseController
+    governed_by: role-guard
+    reason: 代理端授权由 AgencyEnterpriseRoleGuard 管辖（P114/P120 加固）
+  - method: POST
+    path: /api/v1/agency/enterprises/{id}/bind
+    controller: EnterpriseController
+    governed_by: role-guard
+    reason: 代理端授权由 AgencyEnterpriseRoleGuard 管辖（P114/P120 加固）
+  - method: POST
+    path: /api/v1/agency/enterprises/{id}/reseed
+    controller: EnterpriseController
+    governed_by: role-guard
+    reason: 代理端授权由 AgencyEnterpriseRoleGuard 管辖（P114/P120 加固）
+  - method: POST
+    path: /api/v1/agency/enterprises/{id}/suspend
+    controller: EnterpriseController
+    governed_by: role-guard
+    reason: 代理端授权由 AgencyEnterpriseRoleGuard 管辖（P114/P120 加固）
+  - method: POST
+    path: /api/v1/agency/enterprises/{id}/unbind
+    controller: EnterpriseController
+    governed_by: role-guard
+    reason: 代理端授权由 AgencyEnterpriseRoleGuard 管辖（P114/P120 加固）
+  - method: POST
+    path: /api/v1/agency/service-progress/{id}/force-done
+    controller: ServiceProgressController
+    governed_by: role-guard
+    reason: 代理端授权由 AgencyEnterpriseRoleGuard 管辖（P114/P120 加固）
+  - method: POST
+    path: /api/v1/agency/users
+    controller: AgencyUserController
+    governed_by: role-guard
+    reason: 代理端授权由 AgencyEnterpriseRoleGuard 管辖（P114/P120 加固）
+  - method: POST
+    path: /api/v1/agency/users/{id}/reactivate
+    controller: AgencyUserController
+    governed_by: role-guard
+    reason: 代理端授权由 AgencyEnterpriseRoleGuard 管辖（P114/P120 加固）
+  - method: POST
+    path: /api/v1/agency/users/{id}/suspend
+    controller: AgencyUserController
+    governed_by: role-guard
+    reason: 代理端授权由 AgencyEnterpriseRoleGuard 管辖（P114/P120 加固）
+  - method: POST
+    path: /api/v1/agency/users/{id}/terminate
+    controller: AgencyUserController
+    governed_by: role-guard
+    reason: 代理端授权由 AgencyEnterpriseRoleGuard 管辖（P114/P120 加固）
+  - method: PUT
+    path: /api/v1/agency/agencies/{id}
+    controller: AgencyController
+    governed_by: role-guard
+    reason: 代理端授权由 AgencyEnterpriseRoleGuard 管辖（P114/P120 加固）
+  - method: PUT
+    path: /api/v1/agency/contracts/{id}/renew
+    controller: ClientController
+    governed_by: role-guard
+    reason: 代理端授权由 AgencyEnterpriseRoleGuard 管辖（P114/P120 加固）
+  - method: PUT
+    path: /api/v1/agency/enterprises/{id}
+    controller: EnterpriseController
+    governed_by: role-guard
+    reason: 代理端授权由 AgencyEnterpriseRoleGuard 管辖（P114/P120 加固）
+  - method: POST
+    path: /api/v1/auth/login
+    controller: AuthController
+    governed_by: self-service
+    reason: 自助行为，任何登录用户都应可执行
+  - method: POST
+    path: /api/v1/auth/refresh
+    controller: AuthController
+    governed_by: self-service
+    reason: 自助行为，任何登录用户都应可执行
+  - method: POST
+    path: /api/v1/enterprise/switch
+    controller: EnterpriseController
+    governed_by: self-service
+    reason: 自助行为，任何登录用户都应可执行

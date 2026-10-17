@@ -37,7 +37,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 class PermissionManifestGuardRealDBTest extends AbstractMapperTest {
 
     /** 写端点缺口的棘轮：批次 1 实测值，只许减不许增（§4.5 第 21/25 条）。 */
-    private static final int MAX_UNREGISTERED_WRITE_ENDPOINTS = 60;
+    /** D-10 第 1、2 条裁定后：60 缺口 - 27 显式排除 = 33 真实缺口。 */
+    private static final int MAX_UNREGISTERED_WRITE_ENDPOINTS = 33;
 
     private static final String MANIFEST = "permission-manifest.yml";
 
@@ -75,12 +76,13 @@ class PermissionManifestGuardRealDBTest extends AbstractMapperTest {
     @DisplayName("G2 写端点缺口不得增长（棘轮：把未登记的写端点接进清单只许做加法）")
     void unregisteredWriteEndpointGapMustNotGrow() {
         Set<String> registered = manifestKeys();
+        Set<String> excluded = excludedKeys();
         int writeTotal = 0;
         int unregistered = 0;
         List<String> sample = new ArrayList<>();
         for (String ep : realWriteEndpoints()) {
             writeTotal++;
-            if (!registered.contains(ep)) {
+            if (!registered.contains(ep) && !excluded.contains(ep)) {
                 unregistered++;
                 if (sample.size() < 8) {
                     sample.add(ep);
@@ -91,8 +93,9 @@ class PermissionManifestGuardRealDBTest extends AbstractMapperTest {
                 "写端点未登记数=" + unregistered + " > 棘轮上限 " + MAX_UNREGISTERED_WRITE_ENDPOINTS
                         + "（样例：" + sample + "）。缺口只许减少：要么给它接权限码并登记，"
                         + "要么证明它无需权限后调整本棘轮并写明理由。");
-        System.out.println("[G2] 写端点 " + writeTotal + " / 已登记 " + (writeTotal - unregistered)
-                + " / 缺口 " + unregistered);
+        System.out.println("[G2] 写端点 " + writeTotal + " / 已登记 "
+                + (writeTotal - unregistered - excluded.size())
+                + " / 显式排除 " + excluded.size() + " / 真实缺口 " + unregistered);
     }
 
     // ─────────────────────────── G3 ───────────────────────────
@@ -141,13 +144,21 @@ class PermissionManifestGuardRealDBTest extends AbstractMapperTest {
         Set<String> registered = manifestKeys();
         int before = countUnregisteredWriteEndpoints(registered);
         int after;
+        // 🔴 必须挑「既未登记、也未被显式排除」的端点。
+        //    早前版本只判 `!registered.contains(ep)`，结果挑中了**排除项** ——
+        //    而缺口统计本就跳过排除项，于是「补一条登记」不会让缺口减少，
+        //    自证断言反而报「计数逻辑无效」。症状指错方向：错的是取样，不是计数。
+        Set<String> excludedNow = excludedKeys();
         String someUnregistered = null;
         for (String ep : realWriteEndpoints()) {
-            if (!registered.contains(ep)) {
+            if (!registered.contains(ep) && !excludedNow.contains(ep)) {
                 someUnregistered = ep;
                 break;
             }
         }
+        assertTrue(someUnregistered != null,
+                "找不到「既未登记也未排除」的写端点，G2 自证将失去意义"
+                        + "（登记 " + registered.size() + " / 排除 " + excludedNow.size() + "）");
         registered.add(someUnregistered);
         after = countUnregisteredWriteEndpoints(registered);
         assertEquals(before - 1, after,
@@ -160,10 +171,18 @@ class PermissionManifestGuardRealDBTest extends AbstractMapperTest {
         System.out.println("[自证] G1 假码可判 / G2 缺口可减 / G3 缺口可判");
     }
 
+    /**
+     * 统计「未登记且未被显式排除」的写端点数 = 真实缺口。
+     *
+     * <p>🔴 D-10 第 1、2 条裁定后，代理端 24 个（roleGuard 管辖）与自助端点 3 个
+     * 属<b>刻意排除</b>，不是缺口。把它们算进缺口会让「缺口 60」这个数字失真，
+     * 从而掩盖真正的 33 个未覆盖端点。</p>
+     */
     private int countUnregisteredWriteEndpoints(Set<String> registered) {
+        Set<String> excluded = excludedKeys();
         int n = 0;
         for (String ep : realWriteEndpoints()) {
-            if (!registered.contains(ep)) {
+            if (!registered.contains(ep) && !excluded.contains(ep)) {
                 n++;
             }
         }
@@ -292,6 +311,9 @@ class PermissionManifestGuardRealDBTest extends AbstractMapperTest {
         int count = 0;
         boolean inEntry = false;
         for (String line : manifestRaw()) {
+            if (line.startsWith("excluded:")) {
+                break;
+            }
             if (line.matches("^\\s*-\\s*method:.*$")) {
                 inEntry = true;
                 continue;
@@ -312,7 +334,11 @@ class PermissionManifestGuardRealDBTest extends AbstractMapperTest {
         java.util.Map<String, String> out = new java.util.LinkedHashMap<>();
         String method = null;
         String path = null;
+        pendingPermission = null;
         for (String line : manifestRaw()) {
+            if (line.startsWith("excluded:")) {
+                break;
+            }
             var mm = Pattern.compile("^\\s*-\\s*method:\\s*(\\S+)\\s*$").matcher(line);
             if (mm.find()) {
                 if (method != null && path != null) {
@@ -320,6 +346,8 @@ class PermissionManifestGuardRealDBTest extends AbstractMapperTest {
                 }
                 method = mm.group(1);
                 path = null;
+                // 🔴 每条**重置**：否则条目缺 permission 字段时会「顺延」上一条的码
+                pendingPermission = null;
                 continue;
             }
             var mp = Pattern.compile("^\\s*path:\\s*(\\S+)\\s*$").matcher(line);
@@ -350,6 +378,11 @@ class PermissionManifestGuardRealDBTest extends AbstractMapperTest {
                 stale.add(key);
             }
         }
+        for (String key : excludedKeys()) {
+            if (!real.contains(key)) {
+                stale.add("excluded: " + key);
+            }
+        }
         assertTrue(stale.isEmpty(),
                 "清单里有 " + stale.size() + " 条对不上任何真实写端点（端点已改名/删除）："
                         + stale.subList(0, Math.min(10, stale.size()))
@@ -372,15 +405,24 @@ class PermissionManifestGuardRealDBTest extends AbstractMapperTest {
     @DisplayName("G8 roleGuard 管辖的端点不得在清单登记权限码（防两套授权并存）")
     void roleGuardManagedEndpointsMustNotBeInManifest() {
         Set<String> byAgency = new LinkedHashSet<>();
-        for (String ep : realWriteEndpoints()) {
-            if (ep.contains(" /api/v1/agency/")) {
-                byAgency.add(ep);
+        for (Excluded e : manifestExcluded()) {
+            if ("role-guard".equals(e.governedBy())) {
+                byAgency.add(e.method() + " " + e.path());
             }
         }
         assertTrue(byAgency.size() >= 20,
-                "代理端写端点只认出 " + byAgency.size() + " 个（预期 >= 20）—— "
-                        + "本守卫的前提已失效（端点改名或被删），它会变成空转。"
-                        + "判据：守卫的清单必须与真值源同步，否则它锁的是空气。");
+                "排除段里 role-guard 条目只认出 " + byAgency.size() + " 个（预期 >= 20）—— "
+                        + "前提失效，本守卫会空转。判据：守卫的清单必须与真值源同步，否则它锁的是空气。");
+
+        // 前提自检：这些端点在运行时确实存在
+        Set<String> real = realWriteEndpoints();
+        List<String> gone = new ArrayList<>();
+        for (String ep : byAgency) {
+            if (!real.contains(ep)) {
+                gone.add(ep);
+            }
+        }
+        assertTrue(gone.isEmpty(), "排除段里的端点在运行时已不存在：" + gone);
 
         java.util.Map<String, String> byKey = manifestPermissionByKey();
         List<String> wrongly = new ArrayList<>();
@@ -390,10 +432,11 @@ class PermissionManifestGuardRealDBTest extends AbstractMapperTest {
             }
         }
         assertTrue(wrongly.isEmpty(),
-                "以下代理端写端点在清单里登记了权限码，但它们的授权由 roleGuard 管辖：" + wrongly
-                        + "。两套授权并存会产生「两边都松」的缝隙。"
-                        + "正解：见 SPEC-P133 §8.6 B 类 —— 显式排除并登记理由，"
-                        + "而不是把在运行的 roleGuard 模型翻译成码。");
+                "以下代理端写端点既被 roleGuard 管辖、又在清单登记了权限码：" + wrongly
+                        + "。两套授权并存会产生「两边都松」的缝隙 —— "
+                        + "roleGuard 放行 + 清单有码但没人持有 ⇒ 实际无人管；"
+                        + "反之则要同时维护两处，改一处漏一处。"
+                        + "正解：见 SPEC-P133 §8.6 B 类。");
     }
 
     /**
@@ -406,16 +449,25 @@ class PermissionManifestGuardRealDBTest extends AbstractMapperTest {
      * 清单里也不该出现它们。</p>
      */
     @Test
-    @DisplayName("G9 认证端点与账套切换既不计入缺口也不得登记（自助行为不该受动作码约束）")
+    @DisplayName("G9 自助端点既不计入缺口也不得登记（登录/刷新/切账套不该受动作码约束）")
     void selfServiceEndpointsAreNeitherCountedNorRegistered() {
-        java.util.Set<String> selfService = new LinkedHashSet<>();
-        for (String ep : realWriteEndpoints()) {
-            if (ep.contains(" /api/v1/auth/") || ep.endsWith(" /api/v1/enterprise/switch")) {
-                selfService.add(ep);
+        Set<String> selfService = new LinkedHashSet<>();
+        for (Excluded e : manifestExcluded()) {
+            if ("self-service".equals(e.governedBy())) {
+                selfService.add(e.method() + " " + e.path());
             }
         }
         assertTrue(selfService.size() >= 3,
-                "自助端点只认出 " + selfService.size() + " 个（预期 >= 3），G9 前提失效");
+                "排除段里 self-service 条目只认出 " + selfService.size() + " 个（预期 >= 3），前提失效");
+
+        Set<String> real = realWriteEndpoints();
+        List<String> gone = new ArrayList<>();
+        for (String ep : selfService) {
+            if (!real.contains(ep)) {
+                gone.add(ep);
+            }
+        }
+        assertTrue(gone.isEmpty(), "排除段里的自助端点在运行时已不存在：" + gone);
 
         java.util.Map<String, String> byKey = manifestPermissionByKey();
         List<String> wrongly = new ArrayList<>();
@@ -426,19 +478,111 @@ class PermissionManifestGuardRealDBTest extends AbstractMapperTest {
         }
         assertTrue(wrongly.isEmpty(),
                 "以下自助端点被登记了权限码，会导致「无法登录 / 无法切换账套」：" + wrongly);
+    }
 
-        // 缺口统计必须已排除它们
-        Set<String> registered = manifestKeys();
-        int gap = 0;
-        for (String ep : realWriteEndpoints()) {
-            if (!registered.contains(ep)) {
-                gap++;
+    /**
+     * 🔴 G10：每个排除项都必须写明<b>管辖机制</b>与<b>理由</b>。
+     *
+     * <p><b>判据：排除是最容易被滥用的机制</b> —— 只要能写一行
+     * {@code governed_by} 就把端点踢出授权体系，而「踢出」比「漏保护」更难被发现。
+     * 因此排除必须比登记<b>更</b>严格：写不全就不通过。</p>
+     */
+    @Test
+    @DisplayName("G10 每个排除项都必须声明 controller / governed_by / reason")
+    void everyExclusionIsJustified() {
+        List<String> bad = new ArrayList<>();
+        for (Excluded e : manifestExcluded()) {
+            String key = e.method() + " " + e.path();
+            if (e.path() == null || e.controller() == null
+                    || e.governedBy() == null || e.reason() == null
+                    || e.reason().length() < 8) {
+                bad.add(key + "（缺 controller/governed_by/reason 或理由过短）");
+            } else if (!Set.of("role-guard", "self-service").contains(e.governedBy())) {
+                bad.add(key + "（governed_by=" + e.governedBy() + " 不在受控词表 "
+                        + "[role-guard, self-service]）");
             }
         }
-        assertTrue(gap <= MAX_UNREGISTERED_WRITE_ENDPOINTS,
-                "缺口=" + gap + " 已超棘轮 " + MAX_UNREGISTERED_WRITE_ENDPOINTS
-                        + "。G9 要求自助端点不计入缺口 —— 若它们被计入，"
-                        + "棘轮值必须相应下调，否则本守卫的语义与 G2 不一致。");
+        assertTrue(bad.isEmpty(),
+                "以下排除项声明不完整：" + bad
+                        + "。排除比登记更危险（踢出授权体系比漏保护更难发现），故要求更严："
+                        + "必须写明管辖机制与理由，且 governed_by 只能在受控词表内。");
+        System.out.println("[G10] 排除项 " + manifestExcluded().size()
+                + " 条，全部已声明管辖机制与理由");
+    }
+
+
+    /** 清单 {@code excluded:} 段解析出的条目。 */
+    public record Excluded(String method, String path, String controller,
+                           String governedBy, String reason) {}
+
+    /**
+     * 解析清单的排除段 —— <b>单一事实源</b>。
+     *
+     * <p>🔴 此前 G8/G9 把「代理端」「自助端点」<b>硬编码在测试里</b>（靠路径前缀匹配），
+     * 而清单里并无对应声明 —— 于是「排除」这件事只存在于测试的常量里，
+     * 清单看起来仍是「缺 60 个」。
+     * <b>判据：排除也必须落进配置</b>，否则「已知缺口」与「显式排除」
+     * 在两处各存一份，迟早分叉。</p>
+     */
+    private List<Excluded> manifestExcluded() {
+        List<Excluded> out = new ArrayList<>();
+        boolean inSection = false;
+        Excluded cur = null;
+        for (String line : manifestRaw()) {
+            if (line.startsWith("excluded:")) {
+                inSection = true;
+                continue;
+            }
+            if (!inSection) {
+                continue;
+            }
+            var mm = Pattern.compile("^\\s*-\\s*method:\\s*(\\S+)\\s*$").matcher(line);
+            if (mm.find()) {
+                if (cur != null) {
+                    out.add(cur);
+                }
+                cur = new Excluded(mm.group(1), null, null, null, null);
+                continue;
+            }
+            if (cur == null) {
+                continue;
+            }
+            var p1 = Pattern.compile("^\\s*path:\\s*(\\S+)\\s*$").matcher(line);
+            if (p1.find()) {
+                cur = new Excluded(cur.method(), p1.group(1), cur.controller(),
+                        cur.governedBy(), cur.reason());
+                continue;
+            }
+            var p2 = Pattern.compile("^\\s*controller:\\s*(\\S+)\\s*$").matcher(line);
+            if (p2.find()) {
+                cur = new Excluded(cur.method(), cur.path(), p2.group(1), cur.governedBy(), cur.reason());
+                continue;
+            }
+            var p3 = Pattern.compile("^\\s*governed_by:\\s*(\\S+)\\s*$").matcher(line);
+            if (p3.find()) {
+                cur = new Excluded(cur.method(), cur.path(), cur.controller(), p3.group(1), cur.reason());
+                continue;
+            }
+            var p4 = Pattern.compile("^\\s*reason:\\s*(.+)$").matcher(line);
+            if (p4.find()) {
+                cur = new Excluded(cur.method(), cur.path(), cur.controller(), cur.governedBy(),
+                        p4.group(1).trim());
+            }
+        }
+        if (cur != null) {
+            out.add(cur);
+        }
+        return out;
+    }
+
+    private Set<String> excludedKeys() {
+        Set<String> out = new LinkedHashSet<>();
+        for (Excluded e : manifestExcluded()) {
+            if (e.path() != null) {
+                out.add(e.method() + " " + e.path());
+            }
+        }
+        return out;
     }
 
     // ─────────────────────── 清单解析（唯一解析实现） ───────────────────────
@@ -462,6 +606,11 @@ class PermissionManifestGuardRealDBTest extends AbstractMapperTest {
     private List<String> manifestPermissions() {
         List<String> out = new ArrayList<>();
         for (String line : manifestRaw()) {
+            // 🔴 只读 endpoints 段 —— excluded 段没有 permission 字段，
+            //    若不截断会把上一条的 permission「顺延」给排除项（真实踩过）。
+            if (line.startsWith("excluded:")) {
+                break;
+            }
             Matcher m = Pattern.compile("^\\s*permission:\\s*(\\S+)\\s*$").matcher(line);
             if (m.find()) {
                 out.add(m.group(1));
@@ -476,6 +625,11 @@ class PermissionManifestGuardRealDBTest extends AbstractMapperTest {
         List<String> lines = manifestRaw();
         String method = null;
         for (String line : lines) {
+            // 🔴 只读 endpoints 段，否则 excluded 的条目会被算成「已登记」，
+            //    使 G2 的缺口凭空少 27 条（真实踩过：已登记 274 = 247 + 27）。
+            if (line.startsWith("excluded:")) {
+                break;
+            }
             Matcher mm = Pattern.compile("^\\s*-\\s*method:\\s*(\\S+)\\s*$").matcher(line);
             if (mm.find()) {
                 method = mm.group(1);
