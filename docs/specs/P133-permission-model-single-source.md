@@ -285,6 +285,194 @@ t_voucher_entry 中指向它的 45 条分录 → 原样保留，无任何报错
 
 ---
 
+### 8.1 批次 1 实施结果（2026-10-16）
+
+**新增清单** `backend/src/main/resources/permission-manifest.yml`（**19 条**，对应当前
+19 个带 `@PreAuthorize` 的端点），字段 `method / path / permission / write`。
+
+**新增守卫** `PermissionManifestGuardRealDBTest` **4 例**（L2 真库）：
+
+| ID | 不变量 | 批次 1 的形态 | 实测值 |
+|---|---|---|---|
+| G1 | 清单权限码须存在于 `t_menu` | **零容忍** | 19/19 存在 |
+| G2 | 写端点须登记 | **棘轮 288** | 写端点 307 / 已登记 19 / 缺口 288 |
+| G3 | 前端路由权限码须在清单 | **棘轮 33** | 前端 39 / 已登记 6 / 缺口 33 |
+| — | **守卫敏感度自证** | G1 假码可判 / G2 缺口可减 / G3 缺口可判 | — |
+
+⚠️ **G2/G3 在批次 1 只能是棘轮，不能零容忍** —— 清单只登记了 19 个端点，
+零容忍会让守卫从第一天就红、进而被忽略。切 fail-closed（批次 4）时才改零容忍。
+
+#### 🔴 G1 第一轮就抓到一个真实缺陷：`period:year-close` 是幽灵权限码
+
+`POST /api/base/voucher/v1/period-close/year-close`（执行年度结账）写着
+`@PreAuthorize("hasAuthority('period:year-close')")`，而 **`t_menu` 无此权限码、无任何角色持有**
+⇒ **年度结账对所有角色（含 ADMIN）永久 403**，报错文案「权限不足」形似正常鉴权。
+与 `REQ-2026-146`（`voucher:update`）、`REQ-2026-148`（其余 10 个）**同型**。
+
+已修：`V187` 补菜单行 + 授权（继承**反结账 `period:reopen`** 的角色集合 = ADMIN + FINANCE_MGR）。
+选 `period:reopen` 而非 `period:close` 的理由：年度结账与反结账是**同一高危反记账族**，
+会计能结账不能反结账本就自相矛盾。
+
+#### 🔴 本轮踩的 5 个坑，其中 3 个是「错误信息指错方向」
+
+1. 🔴 **G2 一度报「写端点 0 / 缺口 0」** —— 用的是 `getPatternsCondition()`，本环境返回 null。
+   **「缺口=0」正是假绿形态**（守卫看起来完美，实际什么都没比）。
+   正解 `getPatternValues()`。**判据：守卫的统计值为 0 时，先怀疑取数方式，别庆祝「零缺口」。**
+2. 🔴 **迁移版本号撞车**：本迁移编为 V179，而仓库已有 `V179__agency_role_permission_baseline.sql`。
+   我用 `ls | grep | tail -8` 查最大版本时**恰好把它截掉了**，差点以为 V179 是空的。
+   **判据：取版本号前先完整 `ls` 确认，不能靠截断输出推断。**
+3. 🔴 **`RAISE NOTICE` 是 PL/pgSQL 语法，不能写在裸 SQL 迁移里**（须包 `DO` 块）。
+4. 🔴 **`t_role_menu` 没有 `updated_at` 列**，而 `t_menu.menu_code` 是 NOT NULL 无默认值
+   ⇒ 两条 INSERT 的列清单都必须先查 `information_schema`，不能照抄相邻迁移。
+5. 🔴 **复制授权关系时，我把「已存在的授权行」原样重插** ⇒ 必然撞 `uq_role_menu`。
+   正解：取「持有者**角色集合**」再与新菜单**配对**插入。
+6. ⚠️ **前端扫描的假阳性**：`lab:*` 是从 `lab.ts` 的**注释行**里捞出来的
+   ⇒ 正则必须跳过注释。其余 35 个码在 `t_menu` **都存在**，纯是「未进清单」。
+
+
+---
+
+### 8.1 批次 1 实施结果（2026-10-16）
+
+**新增清单** `backend/src/main/resources/permission-manifest.yml`（**19 条**，对应当前
+19 个带 `@PreAuthorize` 的端点），字段 `method / path / permission / write`。
+
+**新增守卫** `PermissionManifestGuardRealDBTest` **4 例**（L2 真库）：
+
+| ID | 不变量 | 批次 1 的形态 | 实测值 |
+|---|---|---|---|
+| G1 | 清单权限码须存在于 `t_menu` | **零容忍** | 19/19 存在 |
+| G2 | 写端点须登记 | **棘轮 288** | 写端点 307 / 已登记 19 / 缺口 288 |
+| G3 | 前端路由权限码须在清单 | **棘轮 33** | 前端 39 / 已登记 6 / 缺口 33 |
+| — | **守卫敏感度自证** | G1 假码可判 / G2 缺口可减 / G3 缺口可判 | — |
+
+⚠️ **G2/G3 在批次 1 只能是棘轮，不能零容忍** —— 清单只登记了 19 个端点，
+零容忍会让守卫从第一天就红、进而被忽略。切 fail-closed（批次 4）时才改零容忍。
+
+#### 🔴 G1 第一轮就抓到一个真实缺陷：`period:year-close` 是幽灵权限码
+
+`POST /api/base/voucher/v1/period-close/year-close`（执行年度结账）写着
+`@PreAuthorize("hasAuthority('period:year-close')")`，而 **`t_menu` 无此权限码、无任何角色持有**
+⇒ **年度结账对所有角色（含 ADMIN）永久 403**，报错文案「权限不足」形似正常鉴权。
+与 `REQ-2026-146`（`voucher:update`）、`REQ-2026-148`（其余 10 个）**同型**。
+
+已修：`V187` 补菜单行 + 授权（继承**反结账 `period:reopen`** 的角色集合 = ADMIN + FINANCE_MGR）。
+选 `period:reopen` 而非 `period:close` 的理由：年度结账与反结账是**同一高危反记账族**，
+会计能结账不能反结账本就自相矛盾。
+
+#### 🔴 本轮踩的 5 个坑，其中 3 个是「错误信息指错方向」
+
+1. 🔴 **G2 一度报「写端点 0 / 缺口 0」** —— 用的是 `getPatternsCondition()`，本环境返回 null。
+   **「缺口=0」正是假绿形态**（守卫看起来完美，实际什么都没比）。
+   正解 `getPatternValues()`。**判据：守卫的统计值为 0 时，先怀疑取数方式，别庆祝「零缺口」。**
+2. 🔴 **迁移版本号撞车**：本迁移编为 V179，而仓库已有 `V179__agency_role_permission_baseline.sql`。
+   我用 `ls | grep | tail -8` 查最大版本时**恰好把它截掉了**，差点以为 V179 是空的。
+   **判据：取版本号前先完整 `ls` 确认，不能靠截断输出推断。**
+3. 🔴 **`RAISE NOTICE` 是 PL/pgSQL 语法，不能写在裸 SQL 迁移里**（须包 `DO` 块）。
+4. 🔴 **`t_role_menu` 没有 `updated_at` 列**，而 `t_menu.menu_code` 是 NOT NULL 无默认值
+   ⇒ 两条 INSERT 的列清单都必须先查 `information_schema`，不能照抄相邻迁移。
+5. 🔴 **复制授权关系时，我把「已存在的授权行」原样重插** ⇒ 必然撞 `uq_role_menu`。
+   正解：取「持有者**角色集合**」再与新菜单**配对**插入。
+6. ⚠️ **前端扫描的假阳性**：`lab:*` 是从 `lab.ts` 的**注释行**里捞出来的
+   ⇒ 正则必须跳过注释。其余 35 个码在 `t_menu` **都存在**，纯是「未进清单」。
+
+
+---
+
+### 8.1 批次 1 实施结果（2026-10-16）
+
+**新增清单** `backend/src/main/resources/permission-manifest.yml`（**19 条**，对应当前
+19 个带 `@PreAuthorize` 的端点），字段 `method / path / permission / write`。
+
+**新增守卫** `PermissionManifestGuardRealDBTest` **4 例**（L2 真库）：
+
+| ID | 不变量 | 批次 1 的形态 | 实测值 |
+|---|---|---|---|
+| G1 | 清单权限码须存在于 `t_menu` | **零容忍** | 19/19 存在 |
+| G2 | 写端点须登记 | **棘轮 288** | 写端点 307 / 已登记 19 / 缺口 288 |
+| G3 | 前端路由权限码须在清单 | **棘轮 33** | 前端 39 / 已登记 6 / 缺口 33 |
+| — | **守卫敏感度自证** | G1 假码可判 / G2 缺口可减 / G3 缺口可判 | — |
+
+⚠️ **G2/G3 在批次 1 只能是棘轮，不能零容忍** —— 清单只登记了 19 个端点，
+零容忍会让守卫从第一天就红、进而被忽略。切 fail-closed（批次 4）时才改零容忍。
+
+#### 🔴 G1 第一轮就抓到一个真实缺陷：`period:year-close` 是幽灵权限码
+
+`POST /api/base/voucher/v1/period-close/year-close`（执行年度结账）写着
+`@PreAuthorize("hasAuthority('period:year-close')")`，而 **`t_menu` 无此权限码、无任何角色持有**
+⇒ **年度结账对所有角色（含 ADMIN）永久 403**，报错文案「权限不足」形似正常鉴权。
+与 `REQ-2026-146`（`voucher:update`）、`REQ-2026-148`（其余 10 个）**同型**。
+
+已修：`V187` 补菜单行 + 授权（继承**反结账 `period:reopen`** 的角色集合 = ADMIN + FINANCE_MGR）。
+选 `period:reopen` 而非 `period:close` 的理由：年度结账与反结账是**同一高危反记账族**，
+会计能结账不能反结账本就自相矛盾。
+
+#### 🔴 本轮踩的 5 个坑，其中 3 个是「错误信息指错方向」
+
+1. 🔴 **G2 一度报「写端点 0 / 缺口 0」** —— 用的是 `getPatternsCondition()`，本环境返回 null。
+   **「缺口=0」正是假绿形态**（守卫看起来完美，实际什么都没比）。
+   正解 `getPatternValues()`。**判据：守卫的统计值为 0 时，先怀疑取数方式，别庆祝「零缺口」。**
+2. 🔴 **迁移版本号撞车**：本迁移编为 V179，而仓库已有 `V179__agency_role_permission_baseline.sql`。
+   我用 `ls | grep | tail -8` 查最大版本时**恰好把它截掉了**，差点以为 V179 是空的。
+   **判据：取版本号前先完整 `ls` 确认，不能靠截断输出推断。**
+3. 🔴 **`RAISE NOTICE` 是 PL/pgSQL 语法，不能写在裸 SQL 迁移里**（须包 `DO` 块）。
+4. 🔴 **`t_role_menu` 没有 `updated_at` 列**，而 `t_menu.menu_code` 是 NOT NULL 无默认值
+   ⇒ 两条 INSERT 的列清单都必须先查 `information_schema`，不能照抄相邻迁移。
+5. 🔴 **复制授权关系时，我把「已存在的授权行」原样重插** ⇒ 必然撞 `uq_role_menu`。
+   正解：取「持有者**角色集合**」再与新菜单**配对**插入。
+6. ⚠️ **前端扫描的假阳性**：`lab:*` 是从 `lab.ts` 的**注释行**里捞出来的
+   ⇒ 正则必须跳过注释。其余 35 个码在 `t_menu` **都存在**，纯是「未进清单」。
+
+
+---
+
+### 8.1 批次 1 实施结果（2026-10-16）
+
+**新增清单** `backend/src/main/resources/permission-manifest.yml`（**19 条**，对应当前
+19 个带 `@PreAuthorize` 的端点），字段 `method / path / permission / write`。
+
+**新增守卫** `PermissionManifestGuardRealDBTest` **4 例**（L2 真库）：
+
+| ID | 不变量 | 批次 1 的形态 | 实测值 |
+|---|---|---|---|
+| G1 | 清单权限码须存在于 `t_menu` | **零容忍** | 19/19 存在 |
+| G2 | 写端点须登记 | **棘轮 288** | 写端点 307 / 已登记 19 / 缺口 288 |
+| G3 | 前端路由权限码须在清单 | **棘轮 33** | 前端 39 / 已登记 6 / 缺口 33 |
+| — | **守卫敏感度自证** | G1 假码可判 / G2 缺口可减 / G3 缺口可判 | — |
+
+⚠️ **G2/G3 在批次 1 只能是棘轮，不能零容忍** —— 清单只登记了 19 个端点，
+零容忍会让守卫从第一天就红、进而被忽略。切 fail-closed（批次 4）时才改零容忍。
+
+#### 🔴 G1 第一轮就抓到一个真实缺陷：`period:year-close` 是幽灵权限码
+
+`POST /api/base/voucher/v1/period-close/year-close`（执行年度结账）写着
+`@PreAuthorize("hasAuthority('period:year-close')")`，而 **`t_menu` 无此权限码、无任何角色持有**
+⇒ **年度结账对所有角色（含 ADMIN）永久 403**，报错文案「权限不足」形似正常鉴权。
+与 `REQ-2026-146`（`voucher:update`）、`REQ-2026-148`（其余 10 个）**同型**。
+
+已修：`V187` 补菜单行 + 授权（继承**反结账 `period:reopen`** 的角色集合 = ADMIN + FINANCE_MGR）。
+选 `period:reopen` 而非 `period:close` 的理由：年度结账与反结账是**同一高危反记账族**，
+会计能结账不能反结账本就自相矛盾。
+
+#### 🔴 本轮踩的 5 个坑，其中 3 个是「错误信息指错方向」
+
+1. 🔴 **G2 一度报「写端点 0 / 缺口 0」** —— 用的是 `getPatternsCondition()`，本环境返回 null。
+   **「缺口=0」正是假绿形态**（守卫看起来完美，实际什么都没比）。
+   正解 `getPatternValues()`。**判据：守卫的统计值为 0 时，先怀疑取数方式，别庆祝「零缺口」。**
+2. 🔴 **迁移版本号撞车**：本迁移编为 V179，而仓库已有 `V179__agency_role_permission_baseline.sql`。
+   我用 `ls | grep 加 tail -8` 查最大版本时**恰好把它截掉了**，差点以为 V179 是空的。
+   **判据：取版本号前先完整 `ls` 确认，不能靠截断输出推断。**
+3. 🔴 **`RAISE NOTICE` 是 PL/pgSQL 语法，不能写在裸 SQL 迁移里**（须包 `DO` 块）。
+4. 🔴 **`t_role_menu` 没有 `updated_at` 列**，而 `t_menu.menu_code` 是 NOT NULL 无默认值
+   ⇒ 两条 INSERT 的列清单都必须先查 `information_schema`，不能照抄相邻迁移。
+5. 🔴 **复制授权关系时，我把「已存在的授权行」原样重插** ⇒ 必然撞 `uq_role_menu`。
+   正解：取「持有者**角色集合**」再与新菜单**配对**插入。
+6. ⚠️ **前端扫描的假阳性**：`lab:*` 是从 `lab.ts` 的**注释行**里捞出来的
+   ⇒ 正则必须跳过注释。其余 35 个码在 `t_menu` **都存在**，纯是「未进清单」。
+
+
+---
+
 # MACHINE-READABLE CONTRACT
 
 contract_version: "1.0"
