@@ -292,7 +292,7 @@ class PermissionManifestGuardRealDBTest extends AbstractMapperTest {
      * 必须让「粗粒度覆盖率」与「缺口率」各自独立可见，
      * 否则总量下降会掩盖质量的下降。</p>
      */
-    private static final int MAX_COARSE_ENTRIES = 170;
+    private static final int MAX_COARSE_ENTRIES = 116;
 
     @Test
     @DisplayName("G6 粗粒度（页面级）权限码条目数不得增长（棘轮）")
