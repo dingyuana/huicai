@@ -541,7 +541,16 @@
      - 🔴 **判据④：「零回归」也可能是假象**。P119 加了 6 处制审分离校验后 L2 `2213/0/0/5` 零回归 —— 但既有用例**全部无登录态** ⇒ `created_by` 落 NULL ⇒ 校验按设计放行。**零回归无法区分「校验正确放行」与「校验根本没生效」**；必须另建真库行为测试，并让测试**自证前提**（`createdByIsPersisted` 断言 `created_by` 真能读回，否则校验失效时该测试仍会绿）。
      - 🔴 **同 SPEC 内查出第二处同类缺口，但结论须据实收窄：`BatchOperationController`** —— 4 个端点**全无角色守卫**，且 `POST /agency/batch/close` 入参是**调用方自填的 `List<Long> enterpriseIds`**。**判据①：修完一处端点鉴权后，必须把同一控制器/同一功能的其余端点一并扫一遍**（本例 P120 修了 `EnterpriseController`，同批功能域的 `BatchOperationController` 就漏了）。
   - 🔴 **判据②（比判据①更贵）：「端点没有守卫」不等于「可被打」，判定前先看它是实现还是桩**。我曾据「无守卫」直接写成「会计仍可跨客户批量结账/审核」，**属过度断言** —— 取证后发现 4 个端点**全是 501 未实现桩**（P107 D3 / REQ-2026-134 为避免假成功而显式禁用，`BatchServiceNotImplementedTest` 7 例锁死），会计调用只会拿到 501，**今天并无活洞**。**修法是把「端点必须有角色校验」钉成机械不变量**（`BatchOperationControllerGuardStructureTest` 4 例，反证：撤守卫即精确列出漏保护的端点），而非宣称修了一个洞。**判据：把形态当行为，是无证据推断最常见的出口。**
-- ⚠️ **夹具连踩三次「凭语感写列名」**（§4.2 第 4 条的老对手）：`t_asset_card.asset_category_id`→实为 `category_id`；漏 NOT NULL 的 `residual_value`/`useful_life`；`t_asset_category.category_name`/`category_type`/`sort_order`/`status`→实为 `code`/`name`/`level`。**判据：测试夹具优先用 Entity 造数而非裸 SQL**，让列名随映射自动对齐；必须裸 SQL 时先 `information_schema.columns` 查证。
+ - ⚠️ **夹具连踩三次「凭语感写列名」**（§4.2 第 4 条的老对手）：`t_asset_card.asset_category_id`→实为 `category_id`；漏 NOT NULL 的 `residual_value`/`useful_life`；`t_asset_category.category_name`/`category_type`/`sort_order`/`status`→实为 `code`/`name`/`level`。**判据：测试夹具优先用 Entity 造数而非裸 SQL**，让列名随映射自动对齐；必须裸 SQL 时先 `information_schema.columns` 查证。
+55. 🔴 **YAML 结构破坏 = 启动即挂（2026-10-17 D-9 实测）**：首次批量改 `permission-manifest.yml` 的脚本**把 `enforcement`/`endpoints` 包装段整体丢掉**，只写了裸列表 + `excluded:` 段 ⇒ snakeyaml 报 `expected <block end>, but found '?'`，应用起不来。**PermissionManifest.java 硬依赖 `root.get("endpoints")` 和 `root.get("enforcement")`** —— 两者缺一即 fail-loud。
+     - **判据**：批量改 YAML 结构文件前，**先读解析器代码**（或至少跑一遍 `yaml.safe_load` 自测），确认写入格式与读取格式一致。不要假设「YAML 就是缩进文本」—— 本项目的解析器是**强结构**的（必须含 `enforcement` + `endpoints` 键）。
+     - **配套教训**：`git checkout HEAD -- permission-manifest.yml` 可在破坏后**瞬间恢复**，但**恢复后必须立刻重跑解析测试**（不是光看文件恢复了就安全）—— 因为恢复后的文件可能有隐藏差异（如缩进、BOM、换行符）。
+56. 🔴 **VALUES 列数不一致 = 迁移静默失败（2026-10-17 D-9 实测）**：V190 角色授权 INSERT 的 VALUES 列表里**混写了 3 列与 4 列元组**（`('A','B','C','perm')` vs `('A','B','perm')`）⇒ PostgreSQL 报 `VALUES lists must all be the same length`。**更隐蔽的是**：首次运行时 ①菜单 INSERT 成功了（列数一致），②③授权 INSERT 失败了（列数不一致）⇒ **部分生效、部分失败**，数据库留下 32 个孤儿菜单行 + 0 条授权关系。
+     - **判据**：批量 INSERT 的 VALUES **必须统一列数**（用「每行 (role, perm) 两列」的规范形状），**不要**为了节省行数而混用不同 arity 的元组。写完后**立刻幂等重跑一次**（`INSERT ... WHERE NOT EXISTS` 模式），确认第二次全 0 才算合格。
+     - **同源提醒**：本项目的 `t_role_menu` **没有 `updated_at` 列**，所以 `INSERT INTO t_role_menu (role_id, menu_id, created_by, created_at, updated_by)` 必须**显式列名**，不能靠位置匹配 —— 否则列数错配时 PostgreSQL 报错信息很难定位。
+57. 🔴 **路径前缀错位 = 跨模块误替换（2026-10-17 D-9 实测）**：权限码映射脚本用 `"confirm-import" in path` 作判定，**没有限定模块前缀** ⇒ `cash/v1/bank-statements/confirm-import` 被错映射为 `tax:output:import`。**同类高危**：`"input" in path` 会命中 `cash` 模块里任何含 "input" 字样的路径。
+     - **判据**：批量权限码映射脚本**必须按模块前缀限定作用域**（`path.startswith("/api/sme/tax/")` 或 `path.startswith("/api/sme/asset/")`），**不要在通用字符串匹配后做模块无关的关键词替换**。改完后立刻 grep 同模块名以外的路径，确认没有误伤。
+     - **配套**：此类脚本应输出**全量 diff**（不只是变更行），review 时逐行确认路径归属。本轮若先 diff 再写，能当场发现 `bank-statements` 在 tax 作用域外。
 
 ### 4.6 工作流执行类
 20. **起步跳过三步闭环**：收到"开发/继续开发/写代码"指令时，Hermes 必须先走 SPEC→审核门→再执行，禁止直接写 SPEC 文档或代码。**三次纠正沉淀：** 2026-07-09 ai-evolution-v2 起步时直接写计划文档+commit，跳过老丁审核（违反铁律 #10）。修正：收到任何开发指令，第一条输出必须是 SPEC 草案或要求确认需求，不是代码/计划文档。
