@@ -25,6 +25,14 @@ import java.util.Map;
 @Slf4j
 @Service
 @RequiredArgsConstructor
+// 🔴 类级事务（SPEC-P128 §7.1 同型缺陷修复）：t_ai_task 是 RLS 租户表
+//   （ENABLE + FORCE，谓词 enterprise_id = app.enterprise_id），而读路径若无事务，
+//   TenantGucSetter#apply 会因 !isActualTransactionActive() 提前 return
+//   ⇒ GUC 恒 NULL ⇒ 谓词取 NULL ⇒ **整表被过滤**。
+//   实测症状（服务器 2026-10-18）：DB 有 3 行时
+//   GET /api/v1/ai/tasks/page 返回 total=0、GET /api/v1/ai/tasks/{id} 报「AI 任务不存在」。
+//   本类原先只有 4 个写方法各自挂了 @Transactional，唯独 getById 等读方法裸奔。
+@Transactional(rollbackFor = Exception.class)
 public class AiTaskService {
 
     private final AiTaskMapper taskMapper;
