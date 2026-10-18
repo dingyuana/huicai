@@ -1,6 +1,8 @@
 package com.huicai.sme.asset.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.huicai.base.voucher.VoucherTypeStub;
+import com.huicai.base.system.service.VoucherTypeService;
 import com.huicai.base.system.entity.PeriodEntity;
 import com.huicai.base.system.entity.Subject;
 import com.huicai.base.system.mapper.SubjectMapper;
@@ -68,12 +70,17 @@ class DepreciationVoucherRealDBTest extends AbstractMapperTest {
     @Autowired private AssetDepreciationMapper depreciationMapper;
 
     private DepreciationVoucherServiceImpl service;
+    private final VoucherTypeService voucherTypeService =
+            org.mockito.Mockito.mock(VoucherTypeService.class);
 
     @BeforeEach
     void setUp() {
         EnterpriseContextHolder.set(ENTERPRISE_ID);
+        // SPEC-P128：制证改为按 code 解析凭证类型，mock 必须打桩，
+        // 否则 requireByCode 返回 null ⇒ .getId() NPE，报错完全看不出是「未打桩」。
+        VoucherTypeStub.install(voucherTypeService);
         service = new DepreciationVoucherServiceImpl(depreciationMapper, subjectMapper,
-                periodService, voucherMapper, voucherEntryMapper);
+                periodService, voucherMapper, voucherEntryMapper, voucherTypeService);
         insertPeriod(PERIOD, "open");
     }
 
@@ -172,11 +179,14 @@ class DepreciationVoucherRealDBTest extends AbstractMapperTest {
         assertEquals(PERIOD, voucher.getPeriod());
         assertEquals("DRAFT", voucher.getStatus());
         assertEquals("GENERATED", voucher.getSource());
-        // 注意：t_voucher.created_by 不落库。BaseEntity.createdBy 标了 @TableField(exist=false)，
-        // MyBatis-Plus 不生成该列的 INSERT —— 这是项目既有行为（库里既有的 CLOSE-* 凭证
-        // created_by 同样为 NULL，非 P85-C 引入）。审计追溯靠 t_close_log.operator_id 与应用日志。
-        assertNull(voucher.getCreatedBy(),
-                "createdBy 是 exist=false 字段，不会落库（与既有 CLOSE-* 凭证一致）");
+        // SPEC-P117：created_by 现在是**真实映射列**，制单人必须落库且可读回。
+        //
+        // 本断言此前是 assertNull(...)，把一个缺陷当规范锁死了 —— 它断言的
+        // 「exist=false 不落库」正是本次修复掉的根因（BaseEntity.createdBy
+        // 被误标 @TableField(exist=false)，使全仓 57 处 setCreatedBy 全成死代码，
+        // 并使制审分离内控从未生效）。详见 V178 迁移注释。
+        assertEquals(USER_ID, voucher.getCreatedBy(),
+                "折旧凭证的制单人必须落库并可读回（SPEC-P117 修复幽灵字段）");
         assertNotNull(voucher.getCreatedAt(), "created_at 应有 DB 默认值 CURRENT_TIMESTAMP");
         // 核心断言：enterprise_id 由 MyMetaObjectHandler 自动填充，未显式设置
         assertEquals(ENTERPRISE_ID, voucher.getEnterpriseId(),

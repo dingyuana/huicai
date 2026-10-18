@@ -56,6 +56,15 @@ public class VoucherIntegrationTest extends AbstractMapperTest {
     private SubjectBalanceService subjectBalanceService;
 
     private static final Long USER_ID = 1L;
+
+    /**
+     * SPEC-P117：审核人须与制单人不同。
+     *
+     * <p>此前建单与审核同为 {@code USER_ID}，能通过只因 {@code created_by}
+     * 是幽灵字段、制审分离从未真正触发（V178 修复后暴露）。
+     */
+    private static final Long AUDITOR_ID = 2L;
+
     private static final Long VOUCHER_TYPE_ID = 1L;
     private static final String TEST_PERIOD = "202608";
     private Long debitSubjectId;
@@ -163,7 +172,7 @@ public class VoucherIntegrationTest extends AbstractMapperTest {
         assertEquals("SUBMITTED", submitted.getStatus(), "提交后状态应为 SUBMITTED");
 
         // 审核: SUBMITTED → AUDITED
-        voucherService.audit(id, USER_ID);
+        voucherService.audit(id, AUDITOR_ID);
         VoucherVO audited = voucherService.getDetail(id);
         assertEquals("AUDITED", audited.getStatus(), "审核后状态应为 AUDITED");
 
@@ -226,7 +235,7 @@ public class VoucherIntegrationTest extends AbstractMapperTest {
 
         // 过账全流程
         voucherService.submit(id, USER_ID);
-        voucherService.audit(id, USER_ID);
+        voucherService.audit(id, AUDITOR_ID);
         voucherService.post(id, USER_ID);
         VoucherVO posted = voucherService.getDetail(id);
         assertEquals("POSTED", posted.getStatus());

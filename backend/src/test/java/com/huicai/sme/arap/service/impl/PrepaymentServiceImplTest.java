@@ -1,5 +1,6 @@
 package com.huicai.sme.arap.service.impl;
 
+import com.huicai.base.voucher.VoucherTypeStub;import com.huicai.base.system.service.VoucherTypeService;
 import com.huicai.base.business.entity.ArapSettlementEntity;
 import com.huicai.base.business.entity.ArapSettlementEntryEntity;
 import com.huicai.base.business.entity.BusinessDocEntity;
@@ -76,6 +77,8 @@ class PrepaymentServiceImplTest {
 
     @Mock
     private CustomerMapper customerMapper;
+    @Mock
+    private VoucherTypeService voucherTypeService;
 
     private PrepaymentServiceImpl service;
 
@@ -91,7 +94,7 @@ class PrepaymentServiceImplTest {
                 prepaymentMapper, businessDocMapper, settlementService,
                 settlementMapper, settlementEntryMapper,
                 voucherMapper, voucherEntryMapper, voucherNoService, subjectMapper,
-                vendorMapper, customerMapper);
+                vendorMapper, customerMapper, voucherTypeService);
     }
 
     // ==================== create ====================
@@ -335,4 +338,9 @@ class PrepaymentServiceImplTest {
         assertNotNull(result);
         verify(prepaymentMapper).selectList(any());
     }
+    @BeforeEach
+    void stubVoucherTypeByCode() {
+        VoucherTypeStub.install(voucherTypeService);
+    }
+
 }

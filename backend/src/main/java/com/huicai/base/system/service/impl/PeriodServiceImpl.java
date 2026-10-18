@@ -1,6 +1,7 @@
 package com.huicai.base.system.service.impl;
 
 import org.springframework.transaction.annotation.Transactional;
+import com.baomidou.mybatisplus.core.conditions.Wrapper;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.huicai.base.system.entity.PeriodEntity;
@@ -10,6 +11,7 @@ import com.huicai.common.context.EnterpriseContextHolder;
 import com.huicai.common.exception.BusinessException;
 import org.springframework.stereotype.Service;
 
+import java.util.List;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 
@@ -20,6 +22,35 @@ import java.time.LocalDateTime;
  */
 @Transactional
 public class PeriodServiceImpl extends ServiceImpl<PeriodMapper, PeriodEntity> implements PeriodService {
+
+    /**
+     * SPEC-P122：显式覆盖 MyBatis-Plus 的 default 方法以确保事务开启。
+     *
+     * <p><b>为什么类级 {@code @Transactional} 不够</b>：Spring AOP 与事务拦截器求值时
+     * 先看<b>被调用方法的声明类型</b>。{@code list(Wrapper)} 是 {@code IService} 的
+     * <b>default 接口方法</b>，{@code ServiceImpl} 也不覆盖它 —— 尽管本类有类级
+     * {@code @Transactional}，事务<b>不会被开启</b>。
+     *
+     * <p><b>为什么必须开事务</b>：企业隔离 GUC 用的是 {@code SET LOCAL}，
+     * 而 {@code SET LOCAL} 仅在事务块内有效。无事务 ⇒ GUC 设不上 ⇒
+     * 非超级用户下 RLS 谓词取到 NULL ⇒ <b>静默返回 0 行且无任何报错</b>
+     * （2026-10-12 实测 {@code GET /api/v1/periods/all} 返回空数组）。
+     *
+     * <p>覆盖后该方法变为本类<b>自身声明</b>，方法级 {@code @Transactional} 被采信，
+     * {@code TenantRlsInitializer} 切面亦随之触发。
+     */
+    @Override
+    @Transactional
+    public List<PeriodEntity> list(Wrapper<PeriodEntity> queryWrapper) {
+        return super.list(queryWrapper);
+    }
+
+    /** 同上：无参重载亦为 {@code IService} 的 default 方法。 */
+    @Override
+    @Transactional
+    public List<PeriodEntity> list() {
+        return super.list();
+    }
 
     @Override
     public boolean save(PeriodEntity entity) {

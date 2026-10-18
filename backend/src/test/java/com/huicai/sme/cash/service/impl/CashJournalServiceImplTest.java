@@ -1,5 +1,6 @@
 package com.huicai.sme.cash.service.impl;
 
+import com.huicai.base.system.service.VoucherTypeService;
 import com.huicai.common.exception.BusinessException;
 import com.huicai.sme.cash.entity.CashJournalEntity;
 import com.huicai.sme.cash.mapper.CashJournalMapper;
@@ -23,10 +24,12 @@ class CashJournalServiceImplTest {
     @Mock private CashJournalMapper mapper;
     @Mock private VoucherService voucherService;
     private CashJournalServiceImpl service;
+    @Mock
+    private VoucherTypeService voucherTypeService;
 
     @BeforeEach
     void setUp() throws Exception {
-        service = new CashJournalServiceImpl(mapper, voucherService);
+        service = new CashJournalServiceImpl(mapper, voucherService, voucherTypeService);
         Field baseMapper = com.baomidou.mybatisplus.extension.service.impl.ServiceImpl.class
                 .getDeclaredField("baseMapper");
         baseMapper.setAccessible(true);

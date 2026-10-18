@@ -20,6 +20,16 @@ public class EnterpriseEntity {
     private Boolean seedDataDone;
     private String startPeriod;
 
+    // ── SPEC-P129：联系信息（V184 补列，全部可空）────────────────────────
+    /** 联系人 */
+    private String contactName;
+    /** 电话（手机或含区号固话，故用 String 不用 Long） */
+    private String contactPhone;
+    /** 邮箱 */
+    private String contactEmail;
+    /** 地址 */
+    private String address;
+
     @TableField(fill = FieldFill.INSERT)
     private LocalDateTime createdAt;
 

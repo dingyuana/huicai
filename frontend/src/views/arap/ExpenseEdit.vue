@@ -3,8 +3,11 @@
     <el-card shadow="never">
       <div class="page-header">
         <span class="page-title">{{ isEdit ? '编辑报销单' : '新增报销单' }}</span>
+        <el-tag v-if="currentStatus" :type="STATUS_TAG_MAP[currentStatus] || 'info'" size="small">{{ STATUS_MAP[currentStatus] }}</el-tag>
       </div>
-      <el-form :model="form" label-width="100px" style="max-width:600px" ref="formRef" :rules="rules">
+      <el-alert v-if="rejectReason" :title="'驳回原因：' + rejectReason" type="error" show-icon :closable="false" style="margin-bottom:16px" />
+      <el-alert v-if="readOnly" title="该单据状态不可编辑，仅可查看" type="info" show-icon :closable="false" style="margin-bottom:16px" />
+      <el-form :model="form" label-width="100px" style="max-width:600px" ref="formRef" :rules="rules" :disabled="readOnly">
         <el-form-item label="员工" prop="employeeId">
           <el-select v-model="form.employeeId" filterable placeholder="按工号/姓名搜索" style="width:100%">
             <el-option v-for="e in employees" :key="e.id" :value="e.id as number"
@@ -16,6 +19,8 @@
             <el-option label="差旅费" value="TRAVEL" />
             <el-option label="办公费" value="OFFICE" />
             <el-option label="招待费" value="ENTERTAINMENT" />
+            <el-option label="交通费" value="TRANSPORT" />
+            <el-option label="餐饮费" value="MEAL" />
             <el-option label="其他" value="OTHER" />
           </el-select>
         </el-form-item>
@@ -38,7 +43,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { ElMessage, type FormInstance } from 'element-plus'
 import { useRoute, useRouter } from 'vue-router'
 import { createExpense, updateExpense, getExpense } from '@/api/modules/expense'
@@ -51,6 +56,11 @@ const saving = ref(false)
 const employees = ref<Employee[]>([])
 const formRef = ref<FormInstance>()
 const form = ref({ employeeId: undefined as unknown as number, expenseType: 'OTHER', amount: 0, summary: '', remark: '' })
+const currentStatus = ref('')
+const rejectReason = ref('')
+const readOnly = computed<boolean>(() => !!currentStatus.value && !['DRAFT', 'REJECTED'].includes(currentStatus.value))
+const STATUS_MAP: Record<string, string> = { DRAFT: '草稿', SUBMITTED: '已提交', APPROVED: '已审核', REJECTED: '已驳回', VOUCHERED: '已制证' }
+const STATUS_TAG_MAP: Record<string, 'success' | 'warning' | 'info' | 'primary' | 'danger'> = { DRAFT: 'info', SUBMITTED: 'warning', APPROVED: 'success', REJECTED: 'danger', VOUCHERED: 'primary' }
 const rules = {
   employeeId: [{ required: true, message: '请输入员工ID', trigger: 'blur' }],
   expenseType: [{ required: true, message: '请选择费用类型', trigger: 'change' }],
@@ -89,6 +99,8 @@ onMounted(async () => {
     isEdit.value = true
     const data: any = await getExpense(Number(id))
     form.value = { employeeId: data.employeeId, expenseType: data.expenseType, amount: data.amount, summary: data.summary, remark: data.remark }
+    currentStatus.value = data.status || ''
+    rejectReason.value = data.rejectReason || ''
   }
 })
 </script>

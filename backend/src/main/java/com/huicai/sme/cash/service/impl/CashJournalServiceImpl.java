@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.huicai.base.system.service.VoucherTypeService;
 import com.huicai.common.exception.BusinessException;
 import com.huicai.base.voucher.dto.VoucherCreateDTO;
 import com.huicai.sme.cash.entity.CashJournalEntity;
@@ -37,6 +38,7 @@ public class CashJournalServiceImpl extends ServiceImpl<CashJournalMapper, CashJ
     private final CashJournalMapper cashJournalMapper;
     private final VoucherService voucherService;
 
+    private final VoucherTypeService voucherTypeService;
     @Override
     public IPage<CashJournalEntity> pageQuery(String period, LocalDate startDate, LocalDate endDate,
                                               Integer current, Integer size) {
@@ -111,8 +113,9 @@ public class CashJournalServiceImpl extends ServiceImpl<CashJournalMapper, CashJ
             throw new BusinessException("该记录已生成凭证，不能重复生成");
         }
 
-        // Get default voucher type for cash journal
-        Long voucherTypeId = getDefaultVoucherType();
+        // SPEC-P128：原为 getDefaultVoucherType() -> return 1L —— 那是企业 1 的 JZ 主键，
+        // 在其它企业会被 RLS 过滤，且外键会挂到别的企业的凭证类型上（不报错，静默错归属）。
+        Long voucherTypeId = voucherTypeService.requireByCode("JZ").getId();
 
         // Build voucher DTO
         VoucherCreateDTO dto = new VoucherCreateDTO();
@@ -167,10 +170,5 @@ public class CashJournalServiceImpl extends ServiceImpl<CashJournalMapper, CashJ
 
         log.info("现金日记账生成凭证: journalId={}, voucherId={}", id, voucherVO.getId());
         return voucherVO.getId();
-    }
-
-    private Long getDefaultVoucherType() {
-        // Return first active voucher type - in production, this could be configurable
-        return 1L;
     }
 }

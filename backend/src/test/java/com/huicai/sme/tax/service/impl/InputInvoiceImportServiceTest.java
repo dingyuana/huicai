@@ -1,5 +1,6 @@
 package com.huicai.sme.tax.service.impl;
 
+import com.huicai.base.voucher.VoucherTypeStub;import com.huicai.base.system.service.VoucherTypeService;
 import com.huicai.base.business.entity.BusinessDocEntity;
 import com.huicai.base.business.entity.InputInvoiceEntity;
 import com.huicai.base.business.mapper.BusinessDocEntryMapper;
@@ -54,6 +55,8 @@ class InputInvoiceImportServiceTest {
     @Mock private ColumnMappingResolver columnMappingResolver;
     @Mock private InvoiceDedupUtil invoiceDedupUtil;
     @Mock private ApplicationEventPublisher eventPublisher;
+    @Mock
+    private VoucherTypeService voucherTypeService;
 
     @Captor private ArgumentCaptor<InputInvoiceEntity> invoiceCaptor;
     @Captor private ArgumentCaptor<VoucherEntryEntity> entryCaptor;
@@ -65,7 +68,7 @@ class InputInvoiceImportServiceTest {
         service = new InputInvoiceImportService(
                 docMapper, docEntryMapper, voucherMapper, voucherEntryMapper,
                 voucherNoService, vendorMapper, subjectMapper, inputInvoiceMapper,
-                columnMappingResolver, invoiceDedupUtil, eventPublisher);
+                columnMappingResolver, invoiceDedupUtil, eventPublisher, voucherTypeService);
     }
 
     private InputInvoiceImportService.ParsedInputInvoiceRow stubRow(int rowNum, String invoiceNo,
@@ -489,4 +492,9 @@ class InputInvoiceImportServiceTest {
         assertTrue(ex.getMessage().contains("2221.02"));
         verify(subjectMapper, never()).insert(any(Subject.class));
     }
+    @BeforeEach
+    void stubVoucherTypeByCode() {
+        VoucherTypeStub.install(voucherTypeService);
+    }
+
 }

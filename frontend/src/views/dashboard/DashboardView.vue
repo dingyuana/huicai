@@ -41,6 +41,22 @@
         <el-button>结账体检</el-button>
       </el-space>
     </el-card>
+
+    <el-card class="alert-card" v-if="alerts.length > 0">
+      <template #header>
+        <span>异常指标告警 <el-tag size="small" type="danger">{{ alerts.length }}</el-tag></span>
+      </template>
+      <el-alert
+        v-for="a in alerts"
+        :key="a.ruleId"
+        :title="a.title"
+        :description="a.detail"
+        type="warning"
+        show-icon
+        :closable="false"
+        style="margin-bottom:8px"
+      />
+    </el-card>
   </div>
 </template>
 
@@ -48,9 +64,11 @@
 import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { getPendingSettlementCount } from '@/api/modules/bankStatement'
+import { reportDiagnostics } from '@/api/modules/report'
 
 const router = useRouter()
 const pendingSettlementCount = ref<number | null>(null)
+const alerts = ref<any[]>([])
 
 onMounted(async () => {
   try {
@@ -58,6 +76,14 @@ onMounted(async () => {
     pendingSettlementCount.value = Number(n) || 0
   } catch {
     pendingSettlementCount.value = null
+  }
+  // REQ-037：加载异常指标告警（取当前月份作为期间）
+  try {
+    const now = new Date()
+    const period = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}`
+    alerts.value = await reportDiagnostics(period)
+  } catch {
+    alerts.value = []
   }
 })
 

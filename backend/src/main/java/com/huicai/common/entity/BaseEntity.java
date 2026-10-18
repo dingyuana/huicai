@@ -23,16 +23,25 @@ public abstract class BaseEntity {
     @TableField(fill = FieldFill.INSERT)
     private Long enterpriseId;
 
-    /** 创建人 — 由 Service 层手动 set，不参与 MyBatis-Plus 自动 SQL */
-    @TableField(exist = false)
+    /**
+     * 创建人 — 由 Service 层手动 set（不配 fill，见 {@code MyMetaObjectHandler}）。
+     *
+     * <p><b>SPEC-P117</b>：此前本字段标了 {@code @TableField(exist = false)}，
+     * 使其成为幽灵字段 —— MyBatis-Plus 既不写入也不读回，导致全仓 57 处
+     * {@code setCreatedBy(...)} 全不落库，制审分离校验恒不触发。
+     * 现恢复为真实映射列（DB 侧由 V178 补齐）。
+     */
     private Long createdBy;
 
     /** 创建时间 */
     @TableField(fill = FieldFill.INSERT)
     private LocalDateTime createdAt;
 
-    /** 更新人 — 由 Service 层手动 set，不参与 MyBatis-Plus 自动 SQL */
-    @TableField(exist = false)
+    /**
+     * 更新人 — 由 Service 层手动 set（不配 fill）。
+     *
+     * <p><b>SPEC-P117</b>：同 {@link #createdBy}，此前误标 exist=false。
+     */
     private Long updatedBy;
 
     /** 更新时间 */

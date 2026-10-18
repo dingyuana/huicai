@@ -4,6 +4,8 @@ import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.huicai.common.exception.BusinessException;
+import com.huicai.common.security.Ref;
+import com.huicai.common.security.ReferenceGuard;
 import com.huicai.base.system.entity.Subject;
 import com.huicai.base.system.mapper.SubjectMapper;
 import com.huicai.base.system.model.dto.ImportResult;
@@ -137,6 +139,21 @@ public class SubjectServiceImpl implements SubjectService {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
+    @ReferenceGuard(
+            parent = "t_subject",
+            label = "会计科目",
+            children = {
+                    @Ref(table = "t_voucher_entry", column = "subject_id", label = "凭证分录"),
+                    @Ref(table = "t_subject_balance", column = "subject_id", label = "科目余额"),
+                    @Ref(table = "t_business_doc_entry", column = "subject_id", label = "业务单分录"),
+                    @Ref(table = "t_bank_account", column = "subject_id", label = "银行账户"),
+                    @Ref(table = "t_customer", column = "subject_id", label = "客户档案"),
+                    @Ref(table = "t_vendor", column = "subject_id", label = "供应商档案"),
+                    @Ref(table = "t_employee", column = "subject_id", label = "员工档案"),
+                    @Ref(table = "t_account_mapping_rule", column = "target_subject_id", label = "科目映射"),
+                    @Ref(table = "t_voucher_template_line", column = "subject_id", label = "凭证模板行"),
+                    @Ref(table = "t_budget_entry", column = "subject_id", label = "预算明细"),
+            })
     public void delete(Long id) {
         Subject subject = subjectMapper.selectById(id);
         if (subject == null) {

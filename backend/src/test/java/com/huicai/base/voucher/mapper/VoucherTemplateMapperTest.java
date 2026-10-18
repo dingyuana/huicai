@@ -2,117 +2,90 @@ package com.huicai.base.voucher.mapper;
 
 import com.huicai.base.voucher.entity.VoucherTemplateEntity;
 import com.huicai.base.voucher.mapper.VoucherTemplateMapper;
-import org.junit.jupiter.api.Test;
+import com.huicai.common.test.AbstractMapperTest;
+import com.huicai.common.test.SlowTest;
 import org.junit.jupiter.api.DisplayName;
-import org.mockito.Mockito;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * VoucherTemplateMapper 方法签名验证测试
+ * VoucherTemplateMapper 真实 DB 测试（替代原 Mockito 同义反复自测）
+ *
+ * <p>覆盖 insert / selectById / updateById / deleteById 四个核心操作的真实落库往返。
+ * 基于 {@link AbstractMapperTest}，事务自动回滚，不污染数据库。
+ *
+ * @SlowTest — 需要 Docker + Testcontainers
  */
-public class VoucherTemplateMapperTest {
+@SlowTest
+@DisplayName("VoucherTemplateMapper 真实 DB 测试")
+public class VoucherTemplateMapperTest extends AbstractMapperTest {
 
-    @Test
-    @DisplayName("VoucherTemplateMapper insert 方法应接受正确参数")
-    void insert_shouldAcceptValidParams() {
-        VoucherTemplateMapper mapper = Mockito.mock(VoucherTemplateMapper.class);
-        VoucherTemplateEntity entity = new VoucherTemplateEntity();
-        
-        // 设置必要字段
-        entity.setName("测试模板");
-        entity.setBusinessType("PAYMENT");
-        entity.setTemplateCode("TPL_001");
-        entity.setVoucherTypeCode("FK");
-        entity.setSummary("测试模板");
-        entity.setEntries("[]");
-        entity.setIsActive(true);
-        entity.setRemark("测试模板描述");
-        
-        // 验证方法可调用且返回正确类型
-        Mockito.when(mapper.insert(entity)).thenReturn(1);
-        int rows = mapper.insert(entity);
-        
-        assertEquals(1, rows);
-        Mockito.verify(mapper).insert(entity);
-    }
+    @Autowired
+    private VoucherTemplateMapper mapper;
 
-    @Test
-    @DisplayName("VoucherTemplateMapper selectById 方法应返回实体")
-    void selectById_shouldReturnEntity() {
-        VoucherTemplateMapper mapper = Mockito.mock(VoucherTemplateMapper.class);
-        VoucherTemplateEntity entity = new VoucherTemplateEntity();
-        entity.setName("测试模板");
-        entity.setBusinessType("PAYMENT");
-        entity.setTemplateCode("TPL_001");
-        entity.setVoucherTypeCode("FK");
-        entity.setSummary("测试模板");
-        entity.setEntries("[]");
-        entity.setIsActive(true);
-        entity.setRemark("测试模板描述");
-        Mockito.when(mapper.selectById(1L)).thenReturn(entity);
-        
-        VoucherTemplateEntity result = mapper.selectById(1L);
-        
-        assertNotNull(result);
-        Mockito.verify(mapper).selectById(1L);
-    }
-
-    @Test
-    @DisplayName("VoucherTemplateMapper updateById 方法应接受实体参数")
-    void updateById_shouldAcceptEntity() {
-        VoucherTemplateMapper mapper = Mockito.mock(VoucherTemplateMapper.class);
-        VoucherTemplateEntity entity = new VoucherTemplateEntity();
-        entity.setName("测试模板");
-        entity.setBusinessType("PAYMENT");
-        entity.setTemplateCode("TPL_001");
-        entity.setVoucherTypeCode("FK");
-        entity.setSummary("测试模板");
-        entity.setEntries("[]");
-        entity.setIsActive(true);
-        entity.setRemark("测试模板描述");
-        Mockito.when(mapper.updateById(entity)).thenReturn(1);
-        
-        int rows = mapper.updateById(entity);
-        
-        assertEquals(1, rows);
-        Mockito.verify(mapper).updateById(entity);
-    }
-
-    @Test
-    @DisplayName("VoucherTemplateMapper deleteById 方法应接受ID参数")
-    void deleteById_shouldAcceptId() {
-        VoucherTemplateMapper mapper = Mockito.mock(VoucherTemplateMapper.class);
-        Mockito.when(mapper.deleteById(1L)).thenReturn(1);
-        
-        int rows = mapper.deleteById(1L);
-        
-        assertEquals(1, rows);
-        Mockito.verify(mapper).deleteById(1L);
-    }
-
-    @Test
-    @DisplayName("VoucherTemplateMapper 所有方法定义应正确")
-    void allMethods_shouldBeDefined() {
-        VoucherTemplateMapper mapper = Mockito.mock(VoucherTemplateMapper.class);
-        
-        // 验证所有常用方法存在
+    private VoucherTemplateEntity buildEntity() {
         VoucherTemplateEntity e = new VoucherTemplateEntity();
         e.setName("测试模板");
         e.setBusinessType("PAYMENT");
-        e.setTemplateCode("TPL_001");
+        e.setTemplateCode("TPL_TEST_001");
         e.setVoucherTypeCode("FK");
-        e.setSummary("测试模板");
+        e.setSummary("测试模板摘要");
         e.setEntries("[]");
         e.setIsActive(true);
         e.setRemark("测试模板描述");
-        Mockito.when(mapper.insert(e)).thenReturn(1);
-        Mockito.when(mapper.selectById(1L)).thenReturn(e);
-        Mockito.when(mapper.updateById(e)).thenReturn(1);
-        Mockito.when(mapper.deleteById(1L)).thenReturn(1);
-        
-        assertEquals(1, mapper.insert(e));
-        assertNotNull(mapper.selectById(1L));
-        assertEquals(1, mapper.updateById(e));
-        assertEquals(1, mapper.deleteById(1L));
+        return e;
+    }
+
+    @Test
+    @DisplayName("insert 真实落库并返回主键")
+    void insert_shouldPersistAndReturnId() {
+        VoucherTemplateEntity entity = buildEntity();
+        int rows = mapper.insert(entity);
+
+        assertEquals(1, rows);
+        assertNotNull(entity.getId(), "insert 后应回填主键 id");
+    }
+
+    @Test
+    @DisplayName("selectById 能查出 insert 的数据")
+    void selectById_shouldReturnInsertedEntity() {
+        VoucherTemplateEntity entity = buildEntity();
+        mapper.insert(entity);
+
+        VoucherTemplateEntity result = mapper.selectById(entity.getId());
+
+        assertNotNull(result);
+        assertEquals(entity.getName(), result.getName());
+        assertEquals(entity.getTemplateCode(), result.getTemplateCode());
+        assertEquals(entity.getBusinessType(), result.getBusinessType());
+    }
+
+    @Test
+    @DisplayName("updateById 真实更新并影响行")
+    void updateById_shouldUpdatePersistedRow() {
+        VoucherTemplateEntity entity = buildEntity();
+        mapper.insert(entity);
+
+        entity.setName("更新后的模板名");
+        int rows = mapper.updateById(entity);
+
+        assertEquals(1, rows);
+        VoucherTemplateEntity updated = mapper.selectById(entity.getId());
+        assertEquals("更新后的模板名", updated.getName());
+    }
+
+    @Test
+    @DisplayName("deleteById 真实删除（逻辑删除）")
+    void deleteById_shouldMarkDeleted() {
+        VoucherTemplateEntity entity = buildEntity();
+        mapper.insert(entity);
+
+        int rows = mapper.deleteById(entity.getId());
+
+        assertEquals(1, rows);
+        // MyBatis-Plus 逻辑删除后 selectById 应返回 null
+        assertNull(mapper.selectById(entity.getId()));
     }
 }

@@ -166,8 +166,18 @@ async function handleSave() {
   } finally { saving.value = false }
 }
 
+// 后端 TicketController 的三个动作是三个独立端点（issue/cash/void），
+// 不存在 `/tickets/{id}/{action}` 这样的动态段端点 —— 原实现拼接路径必然 404。
+// 此处改为显式映射，同时让路径字面量对接口覆盖门禁可见。
+function buildActionUrl(id: number, action: string): string {
+  if (action === 'issue') return `/sme/cash/v1/tickets/${id}/issue`
+  if (action === 'cash') return `/sme/cash/v1/tickets/${id}/cash`
+  if (action === 'void') return `/sme/cash/v1/tickets/${id}/void`
+  throw new Error(`未知票据动作: ${action}`)
+}
+
 async function doAction(id: number, action: string) {
-  await request.post(`/tickets/${id}/${action}`)
+  await request.post(buildActionUrl(id, action))
   ElMessage.success(`${ {issue:'已领用',cash:'已兑现',void:'已作废'}[action] || '操作成功' }`)
   fetchData()
 }

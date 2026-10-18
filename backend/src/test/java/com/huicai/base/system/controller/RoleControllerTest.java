@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.huicai.base.system.entity.RoleEntity;
 import com.huicai.base.system.service.MenuService;
 import com.huicai.base.system.service.RoleService;
+import org.springframework.security.test.context.support.WithMockUser;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -167,6 +168,9 @@ class RoleControllerTest {
     }
 
     @Test
+    // 止血后该端点受 @PreAuthorize 保护：测试须带权限上下文，否则
+    // 方法级鉴权因**无认证**抛 AuthenticationCredentialsNotFoundException。
+    @WithMockUser(authorities = "system:role:list")
     @DisplayName("删除角色_PathVariable正确解析_返回200")
     void delete_pathVariable_boundCorrectly() throws Exception {
         doNothing().when(roleService).delete(anyLong());

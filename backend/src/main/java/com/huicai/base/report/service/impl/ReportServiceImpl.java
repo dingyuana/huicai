@@ -92,6 +92,33 @@ public class ReportServiceImpl implements ReportService {
                     continuity.get("mismatchCount") + " 个科目本期期初与上期期末不符，最大差额 "
                             + continuity.get("maxAbsDiff") + "；结账前须核对期初建账或补齐衔接凭证"));
         }
+
+        // REQ-037：存货占比过高预警（存货=1401/1403/1405/1406/1408 等 14xx 存货类）
+        Map<String, Object> bs = balanceSheet(period);
+        BigDecimal totalAssets = toBigDecimal(bs.get("totalAssets"));
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> assets = (List<Map<String, Object>>) bs.get("assets");
+        BigDecimal inventory = BigDecimal.ZERO;
+        BigDecimal receivable = BigDecimal.ZERO;
+        if (assets != null) {
+            for (Map<String, Object> a : assets) {
+                String code = String.valueOf(a.get("code"));
+                BigDecimal bal = toBigDecimal(a.get("end_balance"));
+                if (code.startsWith("14")) inventory = inventory.add(bal);
+                if (code.startsWith("1122")) receivable = receivable.add(bal);
+            }
+        }
+        if (totalAssets.signum() > 0 && inventory.compareTo(totalAssets.multiply(new BigDecimal("0.3"))) > 0) {
+            BigDecimal ratio = inventory.multiply(new BigDecimal("100")).divide(totalAssets, 1, java.math.RoundingMode.HALF_UP);
+            out.add(diagnostic("R_INVENTORY_HIGH", "存货占资产比例过高",
+                    "存货 " + inventory + " 占总资产 " + totalAssets + " 的 " + ratio + "%，超过 30% 阈值，关注积压与跌价风险"));
+        }
+        if (totalAssets.signum() > 0 && receivable.compareTo(totalAssets.multiply(new BigDecimal("0.25"))) > 0) {
+            BigDecimal ratio = receivable.multiply(new BigDecimal("100")).divide(totalAssets, 1, java.math.RoundingMode.HALF_UP);
+            out.add(diagnostic("R_RECEIVABLE_HIGH", "应收账款占资产比例过高",
+                    "应收账款 " + receivable + " 占总资产 " + totalAssets + " 的 " + ratio + "%，超过 25% 阈值，关注回款与坏账风险"));
+        }
+
         return out;
     }
 
@@ -548,6 +575,40 @@ public class ReportServiceImpl implements ReportService {
         result.put("closingCashYtd", closingCashYtd);
         result.put("cashCheckDiffYtd", cashCheckDiffYtd);
         result.put("cashCheckOkYtd", cashCheckDiffYtd.abs().compareTo(new BigDecimal("0.01")) < 0);
+
+        // P96 REQ-096：间接法补充资料（将净利润调节为经营活动现金流量净额）
+        // 公式：净利润 + 非付现费用(折旧/摊销) + 财务费用 - 经营性应收增加 + 经营性应付增加 - 存货增加
+        Map<String, Object> adj = reportDataMapper.indirectMethodAdjustments(period);
+        BigDecimal nonCashExpense = toBigDecimal(getOrNull(adj, "non_cash_expense"));
+        BigDecimal financialExpense = toBigDecimal(getOrNull(adj, "financial_expense"));
+        BigDecimal arChange = toBigDecimal(getOrNull(adj, "ar_change"));
+        BigDecimal apChange = toBigDecimal(getOrNull(adj, "ap_change"));
+        BigDecimal inventoryChange = toBigDecimal(getOrNull(adj, "inventory_change"));
+        // 净利润从利润表取
+        Map<String, Object> income = incomeStatement(period);
+        BigDecimal netProfit = toBigDecimal(income.get("netProfit"));
+        BigDecimal indirectOperatingNet = netProfit
+                .add(nonCashExpense)
+                .add(financialExpense)
+                .subtract(arChange)
+                .add(apChange)
+                .subtract(inventoryChange);
+        BigDecimal indirectCheckDiff = indirectOperatingNet.subtract(cur.opNet());
+        List<Map<String, Object>> supplement = new ArrayList<>();
+        supplement.add(Map.of("label", "净利润", "amount", netProfit));
+        supplement.add(Map.of("label", "加：固定资产折旧、油气资产折耗、生产性生物资产折旧", "amount", nonCashExpense));
+        supplement.add(Map.of("label", "    无形资产摊销", "amount", BigDecimal.ZERO));
+        supplement.add(Map.of("label", "    长期待摊费用摊销", "amount", BigDecimal.ZERO));
+        supplement.add(Map.of("label", "财务费用（收益以\"－\"号填列）", "amount", financialExpense));
+        supplement.add(Map.of("label", "经营性应收项目的减少（增加以\"－\"号填列）", "amount", arChange.negate()));
+        supplement.add(Map.of("label", "经营性应付项目的增加（减少以\"－\"号填列）", "amount", apChange));
+        supplement.add(Map.of("label", "存货的减少（增加以\"－\"号填列）", "amount", inventoryChange.negate()));
+        supplement.add(Map.of("label", "经营活动产生的现金流量净额", "amount", indirectOperatingNet, "bold", true));
+        result.put("supplement", supplement);
+        result.put("indirectOperatingNet", indirectOperatingNet);
+        result.put("indirectCheckDiff", indirectCheckDiff);
+        result.put("indirectCheckOk", indirectCheckDiff.abs().compareTo(new BigDecimal("0.01")) < 0);
+
         return result;
     }
 
@@ -765,5 +826,43 @@ public class ReportServiceImpl implements ReportService {
                     + "（期末现金计算值 vs 科目余额 1001+1002+1009+1012）", ""));
         }
         writeExcel(response, "现金流量表", period, headers, rows);
+    }
+
+    @Override
+    public List<Map<String, Object>> customSubjectBalance(String period, Integer level, String codePrefix, Boolean onlyWithBalance) {
+        List<Map<String, Object>> data = subjectBalanceTable(period);
+        return data.stream()
+                .filter(row -> {
+                    if (level != null) {
+                        Object lv = row.get("level");
+                        if (lv == null || !level.toString().equals(lv.toString())) return false;
+                    }
+                    if (codePrefix != null && !codePrefix.isEmpty()) {
+                        Object code = row.get("code");
+                        if (code == null || !code.toString().startsWith(codePrefix)) return false;
+                    }
+                    if (Boolean.TRUE.equals(onlyWithBalance)) {
+                        BigDecimal end = toBigDecimal(row.get("end_balance"));
+                        BigDecimal begin = toBigDecimal(row.get("begin_balance"));
+                        if (end.signum() == 0 && begin.signum() == 0) return false;
+                    }
+                    return true;
+                })
+                .toList();
+    }
+
+    @Override
+    public void exportCustomSubjectBalance(String period, Integer level, String codePrefix, Boolean onlyWithBalance, HttpServletResponse response) throws IOException {
+        List<Map<String, Object>> data = customSubjectBalance(period, level, codePrefix, onlyWithBalance);
+        String[] headers = {"科目编码", "科目名称", "级次", "余额方向", "期初余额", "本期借方", "本期贷方", "期末余额"};
+        List<List<Object>> rows = new ArrayList<>();
+        for (Map<String, Object> row : data) {
+            rows.add(List.of(
+                    row.get("code"), row.get("name"), row.get("level"), directionLabel(row.get("direction")),
+                    row.get("begin_balance"), row.get("debit_total"),
+                    row.get("credit_total"), row.get("end_balance")
+            ));
+        }
+        writeExcel(response, "自定义科目余额表", period, headers, rows);
     }
 }

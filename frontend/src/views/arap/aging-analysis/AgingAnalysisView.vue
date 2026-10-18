@@ -172,7 +172,7 @@ const onDismissAlert = async (id: number) => {
 }
 
 const onResolveAlert = async (id: number) => {
-  await request.post(`/aging-analysis/alerts/${id}/resolve`)
+  await request.post(`/sme/arap/v1/aging-analysis/alerts/${id}/resolve`)
   ElMessage.success('已解决')
   fetchAlerts()
 }

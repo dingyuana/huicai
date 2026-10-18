@@ -35,12 +35,17 @@ public class SeedDataServiceImpl implements SeedDataService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public boolean cloneSeedData(Long enterpriseId) {
+        return cloneSeedData(enterpriseId, false);
+    }
+
+    @Override
+    public boolean cloneSeedData(Long enterpriseId, boolean force) {
         EnterpriseEntity enterprise = enterpriseMapper.selectById(enterpriseId);
         if (enterprise == null) {
             log.warn("SeedData: enterprise {} not found", enterpriseId);
             return false;
         }
-        if (Boolean.TRUE.equals(enterprise.getSeedDataDone())) {
+        if (!force && Boolean.TRUE.equals(enterprise.getSeedDataDone())) {
             log.info("SeedData: enterprise {} already seeded, skip", enterpriseId);
             return false;
         }
@@ -54,7 +59,15 @@ public class SeedDataServiceImpl implements SeedDataService {
         totalRows += cloneTemplateLines(enterpriseId);
 
         if (totalRows == 0) {
-            log.warn("SeedData: no template data cloned for enterprise {} — template may be empty", enterpriseId);
+            // SPEC-P126：此前此处只 warn，随后**仍会**执行 setSeedDataDone(true)，
+            // 于是「一行没复制到」被标记成「已播种」；再加上开头的
+            // `seedDataDone==true 即返回` 短路，该企业从此再也无法自愈。
+            // 实测后果：代理端客户企业 seed_data_done=true 但 t_subject 为 0 条，
+            // GET /api/v1/subjects/tree 返空，期初建账页科目下拉为空。
+            // 此处必须**不置标记并返回 false**，保留重试可能。
+            log.error("SeedData: enterprise {} cloned 0 rows (template may be empty) — "
+                    + "not marking seedDataDone, keeping it retryable", enterpriseId);
+            return false;
         }
 
         // 标记种子数据已初始化

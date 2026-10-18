@@ -38,7 +38,11 @@ public class VoucherNoServiceImpl implements VoucherNoService {
             throw BusinessException.notFound("凭证类型不存在");
         }
 
-        String redisKey = REDIS_KEY_PREFIX + period + ":" + voucherTypeId;
+        // SPEC-P128（老丁裁定）：键改用 {enterpriseId}:{code}，与主键 id 解耦。
+        // 主键随企业而变（企业2 的 JZ 是 9、企业4 的是 13），用 id 组键会导致
+        // 新旧键并存、计数互不可见 ⇒ 重号窗口。code 是跨企业稳定的业务概念。
+        String redisKey = REDIS_KEY_PREFIX + period + ":"
+                + type.getEnterpriseId() + ":" + type.getCode();
 
         // 从数据库初始化 Redis 计数器（防止 Redis 重启/清空后重复）
         Boolean existed = redisTemplate.hasKey(redisKey);
@@ -71,7 +75,11 @@ public class VoucherNoServiceImpl implements VoucherNoService {
             throw BusinessException.notFound("凭证类型不存在");
         }
 
-        String redisKey = REDIS_KEY_PREFIX + period + ":" + voucherTypeId;
+        // SPEC-P128（老丁裁定）：键改用 {enterpriseId}:{code}，与主键 id 解耦。
+        // 主键随企业而变（企业2 的 JZ 是 9、企业4 的是 13），用 id 组键会导致
+        // 新旧键并存、计数互不可见 ⇒ 重号窗口。code 是跨企业稳定的业务概念。
+        String redisKey = REDIS_KEY_PREFIX + period + ":"
+                + type.getEnterpriseId() + ":" + type.getCode();
         String value = redisTemplate.opsForValue().get(redisKey);
         if (value != null) {
             long serial = Long.parseLong(value);

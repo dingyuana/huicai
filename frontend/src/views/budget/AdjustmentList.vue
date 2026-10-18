@@ -114,7 +114,7 @@ const onSubmit = async (row: any) => {
 }
 
 const onApprove = async (row: any) => {
-  await request.post(`/budgets/adjustments/${row.id}/approve`)
+  await request.post(`/sme/budget/v1/budgets/adjustments/${row.id}/approve`)
   ElMessage.success('已审批')
   fetchData()
 }

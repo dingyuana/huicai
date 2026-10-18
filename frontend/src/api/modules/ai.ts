@@ -64,6 +64,25 @@ export function reviewAiTask(id: number, reviewerId: number, approved: boolean):
   return request.post(`/v1/ai/tasks/${id}/review`, null, { params: { reviewerId, approved } })
 }
 
+/**
+ * 今日 AI 额度（SPEC-P135）。**只读，不消耗额度**。
+ *
+ * 🔴 `available: false` 时 `used = -1` / `limit = 0` 是**如实报告「配额守卫不可用」**，
+ * 而非「额度为 0」—— 两者在页面上必须区别显示，否则用户会以为被限流了。
+ * 契约字段照抄 `AiQuotaController#quota` 的 Map.of(...)。
+ */
+export interface AiQuota {
+  available: boolean
+  used: number
+  limit: number
+  resetAt: string
+  enforcement: string
+}
+
+export function getAiQuota(): Promise<AiQuota> {
+  return request.get('/ai/quota')
+}
+
 export function listAnomalies(bizType?: string, resolved?: boolean): Promise<AiAnomalyTag[]> {
   return request.get('/v1/ai/anomalies', { params: { bizType, resolved } })
 }

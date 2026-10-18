@@ -35,4 +35,16 @@ public interface ReportService {
     void exportBalanceSheet(String period, HttpServletResponse response) throws IOException;
     void exportIncomeStatement(String period, HttpServletResponse response) throws IOException;
     void exportCashFlow(String period, HttpServletResponse response) throws IOException;
+
+    /**
+     * REQ-035 自定义报表：基于科目余额表的灵活查询
+     * @param period 期间
+     * @param level 科目级次（null=全部，1/2/3/4=指定级次）
+     * @param codePrefix 科目编码前缀过滤（null=不过滤）
+     * @param onlyWithBalance 是否只显示有余额的科目
+     */
+    List<Map<String, Object>> customSubjectBalance(String period, Integer level, String codePrefix, Boolean onlyWithBalance);
+
+    /** 自定义报表 Excel 导出 */
+    void exportCustomSubjectBalance(String period, Integer level, String codePrefix, Boolean onlyWithBalance, HttpServletResponse response) throws IOException;
 }

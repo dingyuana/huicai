@@ -1,4 +1,5 @@
 package com.huicai.sme.tax.service.impl;
+import com.huicai.base.system.service.VoucherTypeService;
 import com.huicai.base.business.util.ColumnMappingResolver;
 
 import cn.hutool.core.util.StrUtil;
@@ -53,9 +54,23 @@ import java.util.concurrent.ConcurrentHashMap;
 @RequiredArgsConstructor
 public class InputInvoiceImportService {
 
-    private static final long DEFAULT_USER_ID = 1L;
-    private static final long DEFAULT_VOUCHER_TYPE_ID = VoucherType.FK;
+    /**
+     * 取当前操作人 —— 有登录态用真实用户，无登录态（定时任务/初始化）回退兜底值。
+     *
+     * <p><b>SPEC-P118</b>：created_by 在 P117 修复后已是真实落库列，
+     * 写死常量会使审计字段丢失真实操作人。
+     */
+    private Long currentOperatorId() {
+        try {
+            Long uid = com.huicai.base.system.util.SecurityUtils.getCurrentUserId();
+            return uid != null ? uid : DEFAULT_USER_ID;
+        } catch (Exception e) {
+            return DEFAULT_USER_ID;
+        }
+    }
 
+    private static final long DEFAULT_USER_ID = 1L;
+    
     private final BusinessDocMapper docMapper;
     private final BusinessDocEntryMapper docEntryMapper;
     private final VoucherMapper voucherMapper;
@@ -69,6 +84,8 @@ public class InputInvoiceImportService {
     private final ApplicationEventPublisher eventPublisher; // P79：INTAKE 节点推进事件
 
     private final Map<String, List<ParsedInputInvoiceRow>> batchCache = new ConcurrentHashMap<>();
+
+    private final VoucherTypeService voucherTypeService;
 
     public Map<String, Object> previewInvoices(MultipartFile file) {
         if (file == null || file.isEmpty()) {
@@ -378,7 +395,7 @@ public class InputInvoiceImportService {
         doc.setStatus("DRAFT");
         doc.setSource("INVOICE_IMPORT");
         doc.setInvoiceNo(row.invoiceNo);
-        doc.setCreatedBy(DEFAULT_USER_ID);
+        doc.setCreatedBy(currentOperatorId());
         docMapper.insert(doc);
 
         // 创建业务单分录（供 generateVoucher 使用），带入发票号
@@ -396,7 +413,7 @@ public class InputInvoiceImportService {
 
     @Transactional
     String createVoucher(BusinessDocEntity doc, ParsedInputInvoiceRow row, Long vendorId, String period) {
-        String voucherNo = voucherNoService.generateNextNo(period, DEFAULT_VOUCHER_TYPE_ID);
+        String voucherNo = voucherNoService.generateNextNo(period, voucherTypeService.requireByCode("FK").getId());
         Subject subjectPayable = requireSubjectByCode("2202");
         Subject subjectInventory = requireSubjectByCode("1405");
         Subject subjectInputTax = requireSubjectByCode("2221.02");
@@ -404,13 +421,13 @@ public class InputInvoiceImportService {
         VoucherEntity voucher = new VoucherEntity();
         voucher.setVoucherNo(voucherNo);
         voucher.setPeriod(period);
-        voucher.setVoucherTypeId(DEFAULT_VOUCHER_TYPE_ID);
+        voucher.setVoucherTypeId(voucherTypeService.requireByCode("FK").getId());
         voucher.setStatus("DRAFT");
         voucher.setTotalDebit(row.totalAmount);
         voucher.setTotalCredit(row.totalAmount);
         voucher.setSummary(row.goodsName);
         voucher.setSource("INVOICE_IMPORT");
-        voucher.setCreatedBy(DEFAULT_USER_ID);
+        voucher.setCreatedBy(currentOperatorId());
         // 新增：溯源字段（采购发票 → 凭证）
         voucher.setSourceDocType("INPUT_INVOICE");
         voucher.setSourceDocNo(row.invoiceNo);
@@ -456,7 +473,7 @@ public class InputInvoiceImportService {
         inv.setInvoiceType("SPECIAL");
         // P21-b 重构 2026-06-22 修 P0 bug: 原 PENDING 违反 V8 CHECK 约束
         inv.setCertificationStatus("UNCERTIFIED");
-        inv.setCreatedBy(DEFAULT_USER_ID);
+        inv.setCreatedBy(currentOperatorId());
         inputInvoiceMapper.insert(inv);
     }
 

@@ -2,6 +2,7 @@ package com.huicai.sme.tax.service.impl;
 
 import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.huicai.base.system.service.VoucherTypeService;
 import com.huicai.common.exception.BusinessException;
 import com.huicai.base.business.entity.BusinessDocEntity;
 import com.huicai.base.voucher.entity.VoucherEntity;
@@ -58,7 +59,10 @@ public class InputInvoiceStateMachineServiceImpl implements InputInvoiceStateMac
     private final SubjectMapper subjectMapper;
     private final StringRedisTemplate redisTemplate;
 
-    private static final long VOUCHER_TYPE_ID = 2L; // FK 付款凭证
+    private final VoucherTypeService voucherTypeService;
+        // SPEC-P128：原为 2L(=SK 收款凭证) 却注释 FK —— 同域 InputInvoiceImportService 用
+    // VoucherType.FK、且业务上属采购付款，三方证据一致指向 FK，故 2L 为笔误。
+    // ⚠️ 本次由「收款凭证」更正为「付款凭证」，属行为变更。
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -319,12 +323,12 @@ public class InputInvoiceStateMachineServiceImpl implements InputInvoiceStateMac
             BigDecimal taxAmt = invoice.getTaxAmount() != null ? invoice.getTaxAmount() : BigDecimal.ZERO;
             BigDecimal totalAmt = invoice.getTotalAmount() != null ? invoice.getTotalAmount() : exclTax.add(taxAmt);
 
-            String voucherNo = voucherNoService.generateNextNo(invoice.getPeriod(), VOUCHER_TYPE_ID);
+            String voucherNo = voucherNoService.generateNextNo(invoice.getPeriod(), voucherTypeService.requireByCode("FK").getId());
 
             VoucherEntity voucher = new VoucherEntity();
             voucher.setVoucherNo(voucherNo);
             voucher.setPeriod(invoice.getPeriod());
-            voucher.setVoucherTypeId(VOUCHER_TYPE_ID);
+            voucher.setVoucherTypeId(voucherTypeService.requireByCode("FK").getId());
             voucher.setStatus("DRAFT");
             voucher.setSource("GENERATED");
             String summary = "进项发票: " + (invoice.getInvoiceNo() != null ? invoice.getInvoiceNo() : "")
@@ -434,12 +438,12 @@ public class InputInvoiceStateMachineServiceImpl implements InputInvoiceStateMac
             throw new BusinessException(500, "缺少基础科目配置(2202 应付账款)");
         }
 
-        String voucherNo = voucherNoService.generateNextNo(redInvoice.getPeriod(), VOUCHER_TYPE_ID);
+        String voucherNo = voucherNoService.generateNextNo(redInvoice.getPeriod(), voucherTypeService.requireByCode("FK").getId());
 
         VoucherEntity voucher = new VoucherEntity();
         voucher.setVoucherNo(voucherNo);
         voucher.setPeriod(redInvoice.getPeriod());
-        voucher.setVoucherTypeId(VOUCHER_TYPE_ID);
+        voucher.setVoucherTypeId(voucherTypeService.requireByCode("FK").getId());
         voucher.setStatus("DRAFT");
         voucher.setSource("REVERSAL");
         voucher.setReversedFrom(redInvoice.getOriginalVoucherId());

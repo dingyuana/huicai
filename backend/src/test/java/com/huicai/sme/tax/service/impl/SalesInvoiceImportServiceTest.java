@@ -1,6 +1,6 @@
 package com.huicai.sme.tax.service.impl;
 
-import com.huicai.base.masterdata.entity.CustomerEntity;
+import com.huicai.base.voucher.VoucherTypeStub;import com.huicai.base.system.service.VoucherTypeService;import com.huicai.base.masterdata.entity.CustomerEntity;
 import com.huicai.base.masterdata.mapper.CustomerMapper;
 import com.huicai.base.business.entity.BusinessDocEntity;
 import com.huicai.base.business.mapper.BusinessDocEntryMapper;
@@ -13,6 +13,7 @@ import com.huicai.base.system.entity.Subject;
 import com.huicai.base.system.mapper.SubjectMapper;
 import com.huicai.base.business.mapper.OutputInvoiceMapper;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
@@ -42,6 +43,8 @@ class SalesInvoiceImportServiceTest {
     @Mock private SubjectMapper subjectMapper;
     @Mock private OutputInvoiceMapper outputInvoiceMapper;
     @Mock private com.huicai.base.business.util.ColumnMappingResolver columnMappingResolver;
+    @Mock
+    private VoucherTypeService voucherTypeService;
 
     @InjectMocks private com.huicai.sme.tax.service.impl.SalesInvoiceImportService service;
 
@@ -363,4 +366,9 @@ class SalesInvoiceImportServiceTest {
         assertEquals(subject6001.getId(), revenueEntry.getSubjectId(),
                 "销项收入科目应为6001(主营业务收入)而非5001(生产成本)");
     }
+    @BeforeEach
+    void stubVoucherTypeByCode() {
+        VoucherTypeStub.install(voucherTypeService);
+    }
+
 }

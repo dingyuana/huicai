@@ -3,6 +3,8 @@ package com.huicai.agency.tenant.service.impl;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.huicai.common.security.Ref;
+import com.huicai.common.security.ReferenceGuard;
 import com.huicai.agency.tenant.dto.AgencyCreateDTO;
 import com.huicai.agency.tenant.dto.AgencyUpdateDTO;
 import com.huicai.agency.tenant.dto.AgencyVO;
@@ -79,6 +81,15 @@ public class AgencyServiceImpl implements AgencyService {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
+    @ReferenceGuard(
+            parent = "t_agency",
+            label = "代理公司",
+            children = {
+                    @Ref(table = "t_agency_user", column = "agency_id", label = "代理用户"),
+                    @Ref(table = "t_agency_enterprise", column = "agency_id", label = "代理客户关系"),
+                    @Ref(table = "t_enterprise", column = "agency_id", label = "客户企业"),
+                    @Ref(table = "t_contract", column = "agency_id", label = "合同")
+            })
     public void delete(Long id) {
         AgencyEntity entity = agencyMapper.selectById(id);
         if (entity == null) {

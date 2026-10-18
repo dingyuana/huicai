@@ -4,6 +4,7 @@ import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.huicai.base.system.service.VoucherTypeService;
 import com.huicai.common.exception.BusinessException;
 import com.huicai.sme.cash.entity.BankAccountEntity;
 import com.huicai.sme.cash.entity.BankJournalEntity;
@@ -48,6 +49,7 @@ public class BankJournalServiceImpl implements BankJournalService {
     private final PeriodService periodService;
     private final SubjectMapper subjectMapper;
 
+    private final VoucherTypeService voucherTypeService;
     @Override
     public IPage<BankJournalEntity> pageQuery(Long accountId, String period, String txType, Integer current, Integer size) {
         Page<BankJournalEntity> page = new Page<>(current == null ? 1 : current, size == null ? 20 : size);
@@ -150,10 +152,14 @@ public class BankJournalServiceImpl implements BankJournalService {
             default -> throw BusinessException.badRequest("暂不支持该交易类型自动生成凭证: " + journal.getTxType());
         }
 
+        // SPEC-P128：凭证类型按 code 在本企业解析。原先两处都写死 1L —— 那是企业 1 的
+        // JZ 主键，其它企业下会被 RLS 过滤，且 voucher_type_id 外键会指向他企业行。
+        Long voucherTypeId = voucherTypeService.requireByCode("JZ").getId();
+
         VoucherEntity voucher = new VoucherEntity();
-        voucher.setVoucherNo(voucherNoService.generateNextNo(journal.getPeriod(), 1L));
+        voucher.setVoucherNo(voucherNoService.generateNextNo(journal.getPeriod(), voucherTypeId));
         voucher.setPeriod(journal.getPeriod());
-        voucher.setVoucherTypeId(1L);
+        voucher.setVoucherTypeId(voucherTypeId);
         voucher.setStatus("DRAFT");
         voucher.setSource("GENERATED");
         voucher.setSummary(journal.getSummary() != null ? journal.getSummary() : ("银行日记账: " + account.getAccountName()));

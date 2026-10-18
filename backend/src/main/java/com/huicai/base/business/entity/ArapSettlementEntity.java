@@ -31,6 +31,17 @@ public class ArapSettlementEntity extends BaseEntity {
     /** 来源单据ID（收付款业务单/银行流水）(V140) */
     private Long sourceDocId;
     /**
+     * 备注 —— V175 补列。
+ *
+     * <p>此前前端 {@code views/arap/reconciliation/SettlementPanel.vue} 有「新建备注输入框」
+     * （:88）与「详情备注展示位」（:115）两处真的在用，而后端无此列
+     * ⇒ 备注提交后无处落库、详情恒显 {@code '-'}。
+     * 按 AGENTS §4.5 第 39 条判据（页面真的在用 ⇒ 必须接上真实数据）补列，
+     * 而非从前端契约里删掉这个字段。
+     */
+    private String remark;
+
+    /**
      * 凭证编号（冗余存储，用于快速查询）— DB 无此列
      */
     @TableField(exist = false)

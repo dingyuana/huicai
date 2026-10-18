@@ -100,7 +100,14 @@ CREATE INDEX idx_sp_due ON t_service_progress (agency_id, due_date, status);
 
 **进度端点** `GET /api/v1/agency/service-progress`：
 - 可选参数：`period`（YYYYMM）、`enterprise_id`、`stage`、`status`
-- 权限：经理（AGENCY_ADMIN/REVIEWER）见全租户；会计/助理仅见自己分配的企业（数据权限 S-26 三层防线）
+- ⚠️ **权限声明与实现不符（2026-10-10 更正，原表述删除）**：
+  原文写「经理（AGENCY_ADMIN/REVIEWER）见全租户；会计/助理仅见自己分配的企业（数据权限 S-26 三层防线）」。
+  **实测该数据范围收窄不存在**：`ServiceProgressController:53` 只按
+  `SecurityUtils.getCurrentAgencyId()` 聚合，**无任何按 `agency_role` 的过滤**
+  ⇒ 会计/助理当前**同样看到整个代理公司的全部客户**。
+  本 SPEC 唯一真正实现的是 §3.2 force-done 的**动作权限**
+  （`ServiceProgressServiceImpl:59` `FORCE_DONE_DENIED_ROLES`），不是数据范围。
+  S-26 V2.1 已把该数据权限条款标为未落地；此处同步更正，避免继续被当作既成事实引用。
 
 **超期预警** `GET /api/v1/agency/service-progress/overtime`：
 - 返回 `due_date < 今天 且 status != DONE` 的行

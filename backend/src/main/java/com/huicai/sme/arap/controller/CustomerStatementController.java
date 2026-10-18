@@ -2,8 +2,8 @@ package com.huicai.sme.arap.controller;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.huicai.common.response.R;
-import com.huicai.sme.arap.entity.CustomerStatementEntity;
 import com.huicai.sme.arap.service.CustomerStatementService;
+import com.huicai.sme.arap.vo.CustomerStatementVO;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
@@ -24,26 +24,26 @@ public class CustomerStatementController {
 
     @Operation(summary = "生成对账单")
     @PostMapping("/customer-statements/generate")
-    public R<List<CustomerStatementEntity>> generate(@RequestBody Map<String, Object> body) {
+    public R<List<CustomerStatementVO>> generate(@RequestBody Map<String, Object> body) {
         @SuppressWarnings("unchecked")
         List<Long> customerIds = (List<Long>) body.get("customerIds");
         String period = (String) body.get("period");
-        return R.ok(service.generateStatements(customerIds, period));
+        return R.ok(CustomerStatementVO.from(service.generateStatements(customerIds, period)));
     }
 
     @Operation(summary = "对账单详情")
     @GetMapping("/customer-statements/{id}")
-    public R<CustomerStatementEntity> getById(@PathVariable Long id) {
-        return R.ok(service.getById(id));
+    public R<CustomerStatementVO> getById(@PathVariable Long id) {
+        return R.ok(CustomerStatementVO.from(service.getById(id)));
     }
 
     @Operation(summary = "对账单分页查询")
     @GetMapping("/customer-statements/page")
-    public R<IPage<CustomerStatementEntity>> page(
+    public R<IPage<CustomerStatementVO>> page(
             @RequestParam(required = false) String status,
             @RequestParam(defaultValue = "1") Integer current,
             @RequestParam(defaultValue = "20") Integer size) {
-        return R.ok(service.pageQuery(status, current, size));
+        return R.ok(CustomerStatementVO.from(service.pageQuery(status, current, size)));
     }
 
     @Operation(summary = "发送对账单")

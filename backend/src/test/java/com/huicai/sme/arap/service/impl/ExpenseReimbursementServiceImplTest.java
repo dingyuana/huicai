@@ -1,6 +1,6 @@
 package com.huicai.sme.arap.service.impl;
 
-import com.huicai.common.exception.BusinessException;
+import com.huicai.base.voucher.VoucherTypeStub;import com.huicai.base.system.service.VoucherTypeService;import com.huicai.common.exception.BusinessException;
 import com.huicai.sme.arap.dto.ExpenseReimbursementVO;
 import com.huicai.sme.arap.entity.ExpenseReimbursementEntity;
 import com.huicai.base.masterdata.mapper.EmployeeMapper;
@@ -14,6 +14,7 @@ import com.huicai.base.system.mapper.DeptMapper;
 import com.huicai.base.system.mapper.SubjectMapper;
 import com.huicai.base.system.mapper.UserMapper;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
@@ -39,6 +40,8 @@ class ExpenseReimbursementServiceImplTest {
     @Mock private EmployeeMapper employeeMapper;
     @Mock private UserMapper userMapper;
     @Mock private DeptMapper deptMapper;
+    @Mock
+    private VoucherTypeService voucherTypeService;
     @InjectMocks private ExpenseReimbursementServiceImpl service;
 
     private ExpenseReimbursementEntity stub(Long id, String status) {
@@ -262,4 +265,9 @@ class ExpenseReimbursementServiceImplTest {
     }
 
 // NOTE: generateVoucherForApproved_费用科目不存在_throw removed - unreachable path due to lookupSubject fallback
+    @BeforeEach
+    void stubVoucherTypeByCode() {
+        VoucherTypeStub.install(voucherTypeService);
+    }
+
 }

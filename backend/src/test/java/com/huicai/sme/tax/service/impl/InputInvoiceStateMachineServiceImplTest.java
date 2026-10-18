@@ -1,5 +1,6 @@
 package com.huicai.sme.tax.service.impl;
 
+import com.huicai.base.voucher.VoucherTypeStub;import com.huicai.base.system.service.VoucherTypeService;
 import com.huicai.common.exception.BusinessException;
 import com.huicai.common.test.StateMachineTestHelper;
 import com.huicai.base.business.entity.BusinessDocEntity;
@@ -50,6 +51,8 @@ class InputInvoiceStateMachineServiceImplTest {
     @Mock private SubjectMapper subjectMapper;
     @Mock private StringRedisTemplate redisTemplate;
     @Mock private ValueOperations<String, String> valueOps;
+    @Mock
+    private VoucherTypeService voucherTypeService;
 
     private InputInvoiceStateMachineServiceImpl service;
 
@@ -60,7 +63,7 @@ class InputInvoiceStateMachineServiceImplTest {
     void setup() {
         service = new InputInvoiceStateMachineServiceImpl(
                 invoiceMapper, businessDocMapper, voucherMapper, voucherEntryMapper,
-                voucherNoService, subjectMapper, redisTemplate);
+                voucherNoService, subjectMapper, redisTemplate, voucherTypeService);
         lenient().when(redisTemplate.opsForValue()).thenReturn(valueOps);
         lenient().when(valueOps.increment(anyString())).thenReturn(1L);
         lenient().when(voucherNoService.generateNextNo(anyString(), anyLong())).thenReturn("FK-TEST-001");
@@ -469,4 +472,9 @@ class InputInvoiceStateMachineServiceImplTest {
         assertThrows(BusinessException.class, () -> service.reverseInvoice(INVOICE_ID, USER_ID, "原因"));
         verify(invoiceMapper, never()).insert(any(InputInvoiceEntity.class));
     }
+    @BeforeEach
+    void stubVoucherTypeByCode() {
+        VoucherTypeStub.install(voucherTypeService);
+    }
+
 }

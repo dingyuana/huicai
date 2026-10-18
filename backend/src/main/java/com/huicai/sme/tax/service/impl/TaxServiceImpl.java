@@ -1,5 +1,6 @@
 package com.huicai.sme.tax.service.impl;
 
+import com.huicai.base.system.service.VoucherTypeService;
 import com.huicai.sme.tax.dto.TaxDeclarationCreateDTO;
 import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
@@ -88,6 +89,7 @@ public class TaxServiceImpl implements TaxService {
     private final OutputInvoiceStateMachineService outputInvoiceStateMachineService;
     private final ApplicationEventPublisher eventPublisher; // P79：FILING 节点推进事件
 
+    private final VoucherTypeService voucherTypeService;
     // ========== 税种 ==========
     @Override
     public IPage<TaxTypeEntity> pageQueryTaxType(String keyword, Integer current, Integer size) {
@@ -511,8 +513,7 @@ public class TaxServiceImpl implements TaxService {
         outputMapper.deleteById(id);
     }
 
-    private static final long VOUCHER_TYPE_ID = 1L;
-
+    
     @Override
     @Transactional
     public void generateVoucherFromInvoice(Long invoiceId, Long userId) {
@@ -542,7 +543,7 @@ public class TaxServiceImpl implements TaxService {
         }
 
         // 2. 降级: 硬编码科目 — 1 次批量查询替代 3 次串行查询
-        String voucherNo = voucherNoService.generateNextNo(inv.getPeriod(), VOUCHER_TYPE_ID);
+        String voucherNo = voucherNoService.generateNextNo(inv.getPeriod(), voucherTypeService.requireByCode("JZ").getId());
         java.util.Map<String, Subject> subjects = findSubjectsByCodes(java.util.List.of("1122", "6001", "2221.01"));
         Subject subjectAr = subjects.get("1122");
         Subject subjectRevenue = subjects.get("6001");
@@ -559,7 +560,7 @@ public class TaxServiceImpl implements TaxService {
         VoucherEntity voucher = new VoucherEntity();
         voucher.setVoucherNo(voucherNo);
         voucher.setPeriod(inv.getPeriod());
-        voucher.setVoucherTypeId(VOUCHER_TYPE_ID);
+        voucher.setVoucherTypeId(voucherTypeService.requireByCode("JZ").getId());
         voucher.setStatus("DRAFT");
         voucher.setSource("GENERATED");
         String summaryBase = "发票转凭证: " + (inv.getInvoiceNo() != null ? inv.getInvoiceNo() : "") + " - " + (inv.getCustomerName() != null ? inv.getCustomerName() : "");
@@ -660,11 +661,11 @@ public class TaxServiceImpl implements TaxService {
                                        List<VoucherTemplateLineEntity> tplLines,
                                        TemplateContext ctx,
                                        Long userId) {
-        String voucherNo = voucherNoService.generateNextNo(inv.getPeriod(), VOUCHER_TYPE_ID);
+        String voucherNo = voucherNoService.generateNextNo(inv.getPeriod(), voucherTypeService.requireByCode("JZ").getId());
         VoucherEntity voucher = new VoucherEntity();
         voucher.setVoucherNo(voucherNo);
         voucher.setPeriod(inv.getPeriod());
-        voucher.setVoucherTypeId(VOUCHER_TYPE_ID);
+        voucher.setVoucherTypeId(voucherTypeService.requireByCode("JZ").getId());
         voucher.setStatus("DRAFT");
         voucher.setSource("GENERATED");
         voucher.setSummary(TemplateEngine.renderSummary("发票转凭证: {发票号} - {客户名称}", ctx));
@@ -1057,7 +1058,7 @@ public class TaxServiceImpl implements TaxService {
 
         String period = entity.getPeriod() != null ? entity.getPeriod()
                 : LocalDate.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyyMM"));
-        String voucherNo = voucherNoService.generateNextNo(period, VOUCHER_TYPE_ID);
+        String voucherNo = voucherNoService.generateNextNo(period, voucherTypeService.requireByCode("JZ").getId());
 
         // 尝试按模板匹配
         TemplateContext ctx = new TemplateContext()
@@ -1089,7 +1090,7 @@ public class TaxServiceImpl implements TaxService {
         VoucherEntity voucher = new VoucherEntity();
         voucher.setVoucherNo(voucherNo);
         voucher.setPeriod(period);
-        voucher.setVoucherTypeId(VOUCHER_TYPE_ID);
+        voucher.setVoucherTypeId(voucherTypeService.requireByCode("JZ").getId());
         voucher.setStatus("DRAFT");
         voucher.setSource("GENERATED");
         voucher.setSummary("缴税: " + (entity.getTaxType() != null ? entity.getTaxType() : "") + " " + entity.getPeriod());
@@ -1137,7 +1138,7 @@ public class TaxServiceImpl implements TaxService {
         VoucherEntity voucher = new VoucherEntity();
         voucher.setVoucherNo(voucherNo);
         voucher.setPeriod(period);
-        voucher.setVoucherTypeId(VOUCHER_TYPE_ID);
+        voucher.setVoucherTypeId(voucherTypeService.requireByCode("JZ").getId());
         voucher.setStatus("DRAFT");
         voucher.setSource("GENERATED");
         voucher.setSummary("缴税: " + (entity.getTaxType() != null ? entity.getTaxType() : ""));
@@ -1231,7 +1232,7 @@ public class TaxServiceImpl implements TaxService {
                 .map(OutputInvoiceEntity::getInvoiceNo)
                 .filter(java.util.Objects::nonNull)
                 .reduce((a, b) -> a + ", " + b).orElse("");
-        String voucherNo = voucherNoService.generateNextNo(period, VOUCHER_TYPE_ID);
+        String voucherNo = voucherNoService.generateNextNo(period, voucherTypeService.requireByCode("JZ").getId());
         java.util.Map<String, Subject> subjects = findSubjectsByCodes(java.util.List.of("1122", "6001", "2221.01"));
         Subject subjectAr = subjects.get("1122");
         Subject subjectRevenue = subjects.get("6001");
@@ -1242,7 +1243,7 @@ public class TaxServiceImpl implements TaxService {
         VoucherEntity voucher = new VoucherEntity();
         voucher.setVoucherNo(voucherNo);
         voucher.setPeriod(period);
-        voucher.setVoucherTypeId(VOUCHER_TYPE_ID);
+        voucher.setVoucherTypeId(voucherTypeService.requireByCode("JZ").getId());
         voucher.setStatus("DRAFT");
         voucher.setSource("GENERATED");
         voucher.setSummary("合并凭证: " + invoiceNoList + " - " + (customerName != null ? customerName : ""));

@@ -32,7 +32,43 @@ import com.huicai.base.business.util.ColumnMappingResolver;
 @Slf4j
 @Service
 @RequiredArgsConstructor
+/**
+ * SPEC-P127：类级事务。
+ *
+ * <p>企业隔离开关 {@code app.enterprise_id} 由 {@code TenantGucSetter} 用
+ * {@code SET LOCAL} 写入，而 <b>{@code SET LOCAL} 只在事务内有效</b>，
+ * 且其 {@code apply()} 首行即 {@code if (!isActualTransactionActive()) return;}。
+ * 无事务 ⇒ GUC 恒为 NULL ⇒ RLS 谓词 {@code enterprise_id = NULL} 恒不成立。
+ *
+ * <p>实测后果（生产实证：{@code t_bank_statement} 恒为 0 行，该功能从未成功导入过）：
+ * <ul>
+ *   <li>INSERT ⇒ {@code new row violates row-level security policy}</li>
+ *   <li>SELECT（{@code previewExcel} 的 {@code countDuplicate}）⇒ <b>静默返 0 行</b>
+ *       ⇒ 重复检测结构上必然失效</li>
+ * </ul>
+ */
+@Transactional(rollbackFor = Exception.class)
 public class BankStatementExcelImportService {
+
+    /**
+     * 取当前制单人 —— 有登录态用真实用户。
+     *
+     * <p><b>SPEC-P119</b>：P117 把 created_by 修成真实落库列后，本类多条创建
+     * 路径此前无人写入该列，导致制审分离校验恒不触发（恒绿门禁形态）。
+     *
+     * <p><b>Q2 裁定：无登录态返回 null，不写兜底常量。</b>
+     * Excel 导入 / 定时任务 / 系统初始化本就没有「录入人」概念，
+     * 填 DEFAULT_USER_ID 等于凭空造一个假用户（与 P118 清理的问题同型）。
+     * 代价是这些单据永远无法做制审分离校验 —— 属已登记的已知局限，
+     * 校验对 created_by IS NULL 放行，与凭证层/业务单据层口径一致。
+     */
+    private Long currentOperatorId() {
+        try {
+            return com.huicai.base.system.util.SecurityUtils.getCurrentUserId();
+        } catch (Exception e) {
+            return null;
+        }
+    }
 
     private final BankStatementMapper statementMapper;
     private final BankStatementService bankStatementService;
@@ -175,7 +211,13 @@ public class BankStatementExcelImportService {
                     if (StrUtil.isNotBlank(stmt.getExternalNo()) && stmt.getAmount() != null && stmt.getTxDate() != null) {
                         try {
                             isDup = statementMapper.countDuplicate(accountId, stmt.getTxDate(), stmt.getExternalNo(), stmt.getAmount()) > 0;
-                        } catch (Exception ignored) {}
+                        } catch (Exception e) {
+                            // SPEC-P127：原为 catch (Exception ignored) {} —— 静默吞异常。
+                            // 该查询是重复检测的唯一来源，吞掉异常会让 isDup 恒 false，
+                            // 且外面连报错都没有，属「静默失效」典型形态。
+                            log.warn("重复检测查询失败，按非重复处理: externalNo={}, error={}",
+                                    stmt.getExternalNo(), e.getMessage());
+                        }
                     }
                     stmt.setReviewStatus(isDup ? StatementStatus.DUPLICATE : StatementStatus.PENDING);
 
@@ -314,7 +356,13 @@ public class BankStatementExcelImportService {
                     if (StrUtil.isNotBlank(stmt.getExternalNo()) && stmt.getAmount() != null && stmt.getTxDate() != null) {
                         try {
                             isDup = statementMapper.countDuplicate(accountId, stmt.getTxDate(), stmt.getExternalNo(), stmt.getAmount()) > 0;
-                        } catch (Exception ignored) {}
+                        } catch (Exception e) {
+                            // SPEC-P127：原为 catch (Exception ignored) {} —— 静默吞异常。
+                            // 该查询是重复检测的唯一来源，吞掉异常会让 isDup 恒 false，
+                            // 且外面连报错都没有，属「静默失效」典型形态。
+                            log.warn("重复检测查询失败，按非重复处理: externalNo={}, error={}",
+                                    stmt.getExternalNo(), e.getMessage());
+                        }
                     }
                     stmt.setReviewStatus(isDup ? StatementStatus.DUPLICATE : StatementStatus.PENDING);
 
@@ -485,9 +533,20 @@ public class BankStatementExcelImportService {
         try { return LocalDate.parse(clean); } catch (DateTimeParseException e) { return null; }
     }
 
+    /**
+     * SPEC-P127：方法级事务（D-1 选项 1）。
+     *
+     * <p>类级已标注，此处仍显式标注的原因：守卫用
+     * {@code AnnotatedElementUtils.findMergedAnnotation(Method, ...)} 判定，
+     * 该方法<b>不继承</b>类级注解；且「整批原子」是本方法的独立语义
+     * （{@code rollbackFor = Exception.class}），显式写出比隐式继承更可读。
+     */
+    @Transactional(rollbackFor = Exception.class)
     public Map<String, Object> confirmImport(String batchId) {
         if (StrUtil.isBlank(batchId)) throw BusinessException.badRequest("batchId 不能为空");
-        List<BankStatementEntity> records = batchCache.remove(batchId);
+        // D-3 选项 A：批次「仅成功后消费」—— 先 get 而非 remove。
+        // 原实现用 remove，若中途抛异常批次已被消费，用户无法重试且无法排查。
+        List<BankStatementEntity> records = batchCache.get(batchId);
         if (records == null) throw BusinessException.notFound("批次不存在或已过期");
         if (records.isEmpty()) return buildImportResult(0, 0, 0, 0, 0, List.of(), batchId);
 
@@ -500,8 +559,13 @@ public class BankStatementExcelImportService {
                 duplicate++;
                 continue;
             }
+            stmt.setImportedAt(LocalDateTime.now());
+            stmt.setCreatedBy(currentOperatorId());
+            // D-2 选项 A：整批原子 —— 不再逐行 catch 吞异常。
+            // 原实现 catch 后继续下一行，配合「无事务」会造成「部分行落库 + 报成功」；
+            // 且 swallow 掉 RLS 拒绝，症状与「业务重复」无法区分（§4.5 第 48 条：
+            // 写路径抛错反而是幸运，静默才是最危险）。
             try {
-                stmt.setImportedAt(LocalDateTime.now());
                 statementMapper.insert(stmt);
                 inserted++;
             } catch (Exception e) {
@@ -512,6 +576,11 @@ public class BankStatementExcelImportService {
                 err.put("row", stmt.getExternalNo());
                 err.put("message", "插入失败: " + e.getMessage());
                 errors.add(err);
+                // 抛出使整批回滚；错误信息带定位所需四要素
+                throw new BusinessException(String.format(
+                        "第 %d 行导入失败（流水号=%s, 日期=%s, 金额=%s）：%s。已整批回滚，未写入任何数据",
+                        inserted + duplicate + failed, stmt.getExternalNo(),
+                        stmt.getTxDate(), stmt.getAmount(), e.getMessage()));
             }
         }
 
@@ -526,6 +595,9 @@ public class BankStatementExcelImportService {
                 }
             }
         }
+
+        // 仅在全部成功后才消费批次
+        batchCache.remove(batchId);
 
         return buildImportResult(records.size(), inserted, duplicate, failed, classified, errors, batchId);
     }

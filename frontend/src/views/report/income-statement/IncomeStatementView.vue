@@ -14,6 +14,7 @@
         <el-form-item>
           <el-button type="primary" @click="fetchData">查询</el-button>
           <el-button @click="onExport">导出</el-button>
+          <el-button @click="onPrintPreview">打印预览</el-button>
         </el-form-item>
         <!-- 利润表不提供"隐藏零值行"：它是法定报表，7 行标准模板行全部固定呈现。
              隐藏任何一行（如营业收入为 0 时）都会破坏「营业收入 − 营业成本 = 毛利」的法定勾稽关系，
@@ -35,7 +36,7 @@
         style="margin-bottom: 16px"
       />
 
-      <el-table v-if="result" :data="visibleRows" border>
+      <el-table v-if="result" :data="visibleRows" border @row-click="drillToLedger" :row-class-name="incomeRowClassName">
         <el-table-column prop="label" label="项目" min-width="180" />
         <el-table-column v-if="prevAvailable" label="上期金额" align="right" width="180">
           <template #default="{ row }">
@@ -54,17 +55,50 @@
         </el-table-column>
       </el-table>
     </el-card>
+
+    <!-- P95 REQ-094：A4 打印预览 -->
+    <el-dialog v-model="printDialogVisible" title="打印预览" width="80%" top="5vh" :close-on-click-modal="false">
+      <div class="print-area">
+        <div class="print-header">
+          <h2>利润表</h2>
+          <p>所属期间：{{ query.period }} | 金额单位：元</p>
+        </div>
+        <table class="print-table">
+          <thead><tr><th>项目</th><th>上期金额</th><th>本期金额</th><th>本年累计</th></tr></thead>
+          <tbody>
+            <tr v-for="(row, i) in visibleRows" :key="i" :class="{ bold: row.bold }">
+              <td>{{ row.label }}</td>
+              <td class="num">{{ fmtAmount(row.prev) }}</td>
+              <td class="num">{{ fmtAmount(row.current) }}</td>
+              <td class="num">{{ fmtAmount(row.cumulative) }}</td>
+            </tr>
+          </tbody>
+        </table>
+        <div class="print-footer">
+          <span>制表人：__________</span>
+          <span>审核人：__________</span>
+          <span>法定代表人：__________</span>
+        </div>
+      </div>
+      <template #footer>
+        <el-button @click="printDialogVisible = false">关闭</el-button>
+        <el-button type="primary" @click="doPrint">打印</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
 import { onMounted, reactive, ref, computed } from 'vue'
+import { useRouter } from 'vue-router'
 import { resolveLatestClosedPeriod, prevPeriod } from '@/utils/period'
 import { ElMessage } from 'element-plus'
 import { incomeStatement, exportIncomeStatement } from '@/api/modules/report'
 import { amountClass, formatAmount } from '@/utils/format'
 import PeriodNavigator from '@/components/finance/PeriodNavigator.vue'
 import DiagnosticAlert from '@/components/report/DiagnosticAlert.vue'
+
+const router = useRouter()
 
 const query = reactive({ period: '' })
 const result = ref<any>(null)
@@ -154,6 +188,44 @@ const onExport = async () => {
   }
 }
 
+// P95 REQ-093：利润表行下钻明细账。label → 科目编码映射（企业会计准则科目表）
+// 小计/合计行（bold=true）不可下钻
+const LABEL_TO_SUBJECT: Record<string, string> = {
+  '一、营业收入': '6001',
+  '减:营业成本': '6401',
+  '减:税金及附加': '6403',
+  '减:销售费用': '6601',
+  '减:管理费用': '6602',
+  '减:研发费用': '6601',
+  '减:财务费用': '6603',
+  '加:其他收益': '6117',
+  '加:投资收益': '6111',
+  '加:公允价值变动收益': '6101',
+  '加:资产处置收益': '6115',
+  '减:资产减值损失': '6701',
+  '加:营业外收入': '6301',
+  '减:营业外支出': '6711',
+  '减:所得税费用': '6801',
+}
+const incomeRowClassName = ({ row }: { row: any }) => row.bold ? 'subtotal-row' : 'drillable-row'
+const drillToLedger = (row: any) => {
+  if (row.bold) return // 小计/合计行不可点
+  const subjectCode = LABEL_TO_SUBJECT[row.label]
+  if (!subjectCode) return
+  router.push({
+    name: 'LedgerView',
+    query: { period: query.period, subjectCode },
+  })
+}
+
+// P95 REQ-094：打印预览
+const printDialogVisible = ref(false)
+const onPrintPreview = () => {
+  if (!query.period) { ElMessage.warning('请先选择期间'); return }
+  printDialogVisible.value = true
+}
+const doPrint = () => window.print()
+
 onMounted(async () => {
   query.period = await resolveLatestClosedPeriod()
   fetchData()
@@ -161,6 +233,25 @@ onMounted(async () => {
 </script>
 
 <style scoped>
+/* P95 REQ-093：可下钻行手型，小计行不可点 */
+:deep(.drillable-row) { cursor: pointer; }
+:deep(.drillable-row:hover) { background: #ecf5ff !important; }
+:deep(.subtotal-row) { cursor: default; font-weight: 600; background: #f5f7fa; }
+/* P95 REQ-094：打印样式 */
+.print-header { text-align: center; margin-bottom: 16px; }
+.print-header h2 { margin: 0 0 8px; }
+.print-header p { margin: 0; color: #606266; font-size: 14px; }
+.print-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.print-table th, .print-table td { border: 1px solid #303133; padding: 4px 8px; text-align: left; }
+.print-table th { background: #f5f7fa; }
+.print-table .num { text-align: right; font-variant-numeric: tabular-nums; }
+.print-table .bold { font-weight: 600; }
+.print-footer { display: flex; justify-content: space-around; margin-top: 40px; padding-top: 20px; border-top: 1px solid #dcdfe6; }
+@media print {
+  .el-dialog__header, .el-dialog__footer { display: none !important; }
+  .print-table thead { display: table-header-group; }
+  .print-table tr { break-inside: avoid; }
+}
 .statutory-hint {
   color: #909399;
   font-size: 13px;

@@ -11,6 +11,7 @@ import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 
@@ -89,8 +90,8 @@ class SubjectBalanceControllerTest {
     }
 
     @Test
-    @DisplayName("期初建账_参数正确绑定_返回200")
-    void initOpening_paramsBoundCorrectly() throws Exception {
+    @DisplayName("期初建账_日期格式为年月日时分秒_参数正确绑定")
+    void initOpening_dateTimeParamsBoundCorrectly() throws Exception {
         doNothing().when(subjectBalanceService).initOpeningBalances(anyString(), any(), anyMap());
 
         mvc.perform(post("/api/base/balance/v1/subject-balances/init")
@@ -103,6 +104,26 @@ class SubjectBalanceControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(200));
 
-        verify(subjectBalanceService).initOpeningBalances(eq("202607"), any(), anyMap());
+        verify(subjectBalanceService).initOpeningBalances(
+                eq("202607"), eq(LocalDateTime.of(2026, 7, 1, 0, 0)), anyMap());
+    }
+
+    @Test
+    @DisplayName("期初建账_日期格式为年月日_按当天零点绑定")
+    void initOpening_dateOnlyParamsBoundAtStartOfDay() throws Exception {
+        doNothing().when(subjectBalanceService).initOpeningBalances(anyString(), any(), anyMap());
+
+        mvc.perform(post("/api/base/balance/v1/subject-balances/init")
+                        .param("period", "202407")
+                        .param("openedAt", "2024-07-01")
+                        .contentType("application/json")
+                        .content("""
+                                {"1001": 1000}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(200));
+
+        verify(subjectBalanceService).initOpeningBalances(
+                eq("202407"), eq(LocalDateTime.of(2024, 7, 1, 0, 0)), anyMap());
     }
 }

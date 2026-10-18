@@ -276,7 +276,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { getSubjectBalance, getGeneralLedger, getSubsidiaryLedger, getTrialBalance, getAuxiliaryLedger, getMultiColumnLedger, getQuantityAmountLedger, type SubjectBalanceRow, type LedgerRow, type TrialBalance, type AuxiliaryLedgerRow, type AuxiliaryDimensionType, type QuantityAmountLedgerRow } from '@/api/modules/ledger'
 import { getSubjectTree, type SubjectVO } from '@/api/modules/subject'
@@ -285,6 +285,7 @@ import { getDeptTree, type DeptVO } from '@/api/modules/system'
 import { listEmployee } from '@/api/modules/employee'
 
 const router = useRouter()
+const route = useRoute()
 const activeTab = ref('balance')
 const currentPeriod = new Date().toISOString().slice(0, 7).replace('-', '')
 
@@ -492,6 +493,38 @@ onMounted(async () => {
     subjectTree.value = await getSubjectTree()
   } catch {
     // ignore
+  }
+  // P95 REQ-093：报表下钻穿透 —— 从 query 读取 period + subjectCode，自动定位到总账
+  const qPeriod = route.query.period as string
+  const qSubjectCode = route.query.subjectCode as string
+  if (qPeriod) {
+    balancePeriod.value = qPeriod
+    glPeriod.value = qPeriod
+    slPeriod.value = qPeriod
+    auxPeriod.value = qPeriod
+    mcPeriod.value = qPeriod
+    qaPeriod.value = qPeriod
+  }
+  if (qSubjectCode) {
+    // 从科目树中按 code 找到对应 id
+    const findSubject = (nodes: SubjectVO[]): SubjectVO | undefined => {
+      for (const n of nodes) {
+        if (String(n.code) === String(qSubjectCode)) return n
+        if (n.children?.length) {
+          const found = findSubject(n.children)
+          if (found) return found
+        }
+      }
+      return undefined
+    }
+    const subject = findSubject(subjectTree.value)
+    if (subject) {
+      glSubjectId.value = Number(subject.id)
+      slSubjectId.value = Number(subject.id)
+      activeTab.value = 'general'
+      await loadGeneral()
+      return
+    }
   }
   await loadBalance()
 })

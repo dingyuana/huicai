@@ -2,8 +2,8 @@ package com.huicai.sme.arap.controller;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.huicai.common.response.R;
-import com.huicai.sme.arap.entity.BadDebtProvisionEntity;
 import com.huicai.sme.arap.service.BadDebtService;
+import com.huicai.sme.arap.vo.BadDebtProvisionVO;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
@@ -22,40 +22,40 @@ public class BadDebtController {
 
     @Operation(summary = "分页查询")
     @GetMapping("/page")
-    public R<IPage<BadDebtProvisionEntity>> page(
+    public R<IPage<BadDebtProvisionVO>> page(
             @RequestParam(required = false) String status,
             @RequestParam(defaultValue = "1") Integer current,
             @RequestParam(defaultValue = "20") Integer size) {
-        return R.ok(service.pageQuery(status, current, size));
+        return R.ok(BadDebtProvisionVO.from(service.pageQuery(status, current, size)));
     }
 
     @Operation(summary = "详情")
     @GetMapping("/{id}")
-    public R<BadDebtProvisionEntity> getById(@PathVariable Long id) {
-        return R.ok(service.getById(id));
+    public R<BadDebtProvisionVO> getById(@PathVariable Long id) {
+        return R.ok(BadDebtProvisionVO.from(service.getById(id)));
     }
 
     @Operation(summary = "账龄比例法计提")
     @PostMapping("/provision/aging")
-    public R<BadDebtProvisionEntity> provisionByAging(
+    public R<BadDebtProvisionVO> provisionByAging(
             @RequestParam String period,
             @RequestBody Map<String, BigDecimal> ratios) {
-        return R.ok(service.provisionByAging(period, ratios));
+        return R.ok(BadDebtProvisionVO.from(service.provisionByAging(period, ratios)));
     }
 
     @Operation(summary = "余额百分比法计提")
     @PostMapping("/provision/percentage")
-    public R<BadDebtProvisionEntity> provisionByPercentage(
+    public R<BadDebtProvisionVO> provisionByPercentage(
             @RequestParam String period,
             @RequestParam BigDecimal ratio) {
-        return R.ok(service.provisionByPercentage(period, ratio));
+        return R.ok(BadDebtProvisionVO.from(service.provisionByPercentage(period, ratio)));
     }
 
     @Operation(summary = "确认（自动生成凭证）")
     @PostMapping("/{id}/confirm")
-    public R<BadDebtProvisionEntity> confirm(@PathVariable Long id,
-                                             @RequestParam(defaultValue = "1") Long userId) {
-        return R.ok(service.confirm(id, userId));
+    public R<BadDebtProvisionVO> confirm(@PathVariable Long id,
+                                         @RequestParam(defaultValue = "1") Long userId) {
+        return R.ok(BadDebtProvisionVO.from(service.confirm(id, userId)));
     }
 
     @Operation(summary = "删除")

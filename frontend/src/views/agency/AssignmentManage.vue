@@ -102,7 +102,8 @@ async function onSelect(agencyUserId: number) {
   try {
     const [assignments, allEnterprises] = await Promise.all([
       getAssignments(agencyUserId),
-      getEnterpriseList(authStore.agencyId!, 1, 999),
+      // SPEC-P120：不再自填 agencyId
+      getEnterpriseList(1, 999),
     ])
     assignedList.value = assignments
     const assignedIds = new Set(assignments.map(a => a.enterpriseId))

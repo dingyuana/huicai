@@ -33,6 +33,23 @@ export function reopenPeriod(period: string): Promise<void> {
   return request.post('/base/voucher/v1/period-close/reopen', null, { params: { period } })
 }
 
+// ===== 年度结账（方案 B 轻量年结）=====
+
+export interface YearCheckResult {
+  year: number
+  allClosed: boolean
+  unclosedMonths: number[]
+  message: string
+}
+
+export function yearCheck(year: number): Promise<YearCheckResult> {
+  return request.get('/base/voucher/v1/period-close/year-check', { params: { year } })
+}
+
+export function yearClose(year: number): Promise<void> {
+  return request.post('/base/voucher/v1/period-close/year-close', null, { params: { year } })
+}
+
 // ===== P84 结账工作台 =====
 
 export interface SequenceVoucher {

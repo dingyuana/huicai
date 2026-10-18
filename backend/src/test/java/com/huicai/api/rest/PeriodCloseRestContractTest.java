@@ -11,6 +11,7 @@ import com.huicai.common.exception.BusinessException;
 import com.huicai.base.system.entity.UserEntity;
 import com.huicai.config.security.LoginUser;
 import com.huicai.base.voucher.service.PeriodCloseService;
+import com.huicai.base.voucher.service.YearCloseService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -36,6 +37,12 @@ class PeriodCloseRestContractTest {
 
     @Autowired private MockMvc mvc;
     @MockBean private PeriodCloseService service;
+    // commit 3aec47fd「年度结账」给 PeriodCloseController 加了第二个构造依赖
+    // YearCloseService，但本类是 @WebMvcTest(PeriodCloseController.class) ——
+    // 它只注册该 Controller，不扫描 @Service，故未 mock 的构造参数会直接让
+    // ApplicationContext 起不来（4 个用例全报 IllegalState）。
+    // 症状与本测试断言的任何行为都无关 ⇒ 排查时极易误判为「框架问题」。
+    @MockBean private YearCloseService yearCloseService;
     private static final String BASE = "/api/base/voucher/v1/period-close";
 
     @MockBean private com.huicai.config.security.JwtProvider jwtProvider;

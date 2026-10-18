@@ -1,6 +1,7 @@
 package com.huicai.base.voucher.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.huicai.base.system.service.VoucherTypeService;
 import com.huicai.agency.tenant.entity.EnterpriseEntity;
 import com.huicai.agency.tenant.mapper.EnterpriseMapper;
 import com.huicai.common.context.EnterpriseContextHolder;
@@ -64,6 +65,7 @@ public class PeriodCloseServiceImpl implements PeriodCloseService {
     private final CloseLogMapper closeLogMapper; // P85：结账日志（t_close_log），须追加在末尾避免改既有构造顺序
     private final VoucherService voucherService; // P84：一键审核记账（batchSubmit/batchAudit/batchPost）
 
+    private final VoucherTypeService voucherTypeService;
     @Override
     public Map<String, Object> checkBeforeClose(String period) {
         Map<String, Object> result = new HashMap<>();
@@ -167,7 +169,7 @@ public class PeriodCloseServiceImpl implements PeriodCloseService {
         VoucherEntity voucher = new VoucherEntity();
         voucher.setVoucherNo("CLOSE-" + period + "-" + System.currentTimeMillis() % 10000);
         voucher.setPeriod(period);
-        voucher.setVoucherTypeId(VoucherType.ZZ);
+        voucher.setVoucherTypeId(voucherTypeService.requireByCode("ZZ").getId());
         voucher.setStatus("DRAFT");
         voucher.setSource("GENERATED");
         voucher.setSummary("自动结转损益: " + period);
@@ -295,7 +297,7 @@ public class PeriodCloseServiceImpl implements PeriodCloseService {
         VoucherEntity voucher = new VoucherEntity();
         voucher.setVoucherNo("DISTRIB-" + period + "-" + System.currentTimeMillis() % 10000);
         voucher.setPeriod(period);
-        voucher.setVoucherTypeId(VoucherType.ZZ);
+        voucher.setVoucherTypeId(voucherTypeService.requireByCode("ZZ").getId());
         voucher.setStatus("DRAFT");
         voucher.setSource("GENERATED");
         voucher.setSummary("自动利润分配: " + period);

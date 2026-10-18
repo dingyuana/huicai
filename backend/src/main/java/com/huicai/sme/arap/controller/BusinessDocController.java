@@ -5,7 +5,7 @@ import com.huicai.common.response.R;
 import com.huicai.base.business.dto.BusinessDocDTO;
 import com.huicai.base.business.dto.BusinessDocQueryDTO;
 import com.huicai.base.business.dto.BusinessDocVO;
-import com.huicai.base.voucher.entity.VoucherTemplateEntity;
+import com.huicai.base.voucher.dto.VoucherTemplateVO;
 import com.huicai.base.voucher.mapper.VoucherTemplateMapper;
 import com.huicai.base.business.service.BusinessDocService;
 import com.huicai.base.system.util.SecurityUtils;
@@ -92,7 +92,10 @@ public class BusinessDocController {
 
     @Operation(summary = "查询所有有效凭证模板")
     @GetMapping("/templates")
-    public R<List<VoucherTemplateEntity>> templates() {
-        return R.ok(templateMapper.selectAllActive());
+    public R<List<VoucherTemplateVO>> templates() {
+        // 第二参传 null：分录行需逐模板再查一次 N+1，此处只要模板头（P102 批次 15）
+        return R.ok(templateMapper.selectAllActive().stream()
+                .map(t -> VoucherTemplateVO.fromEntity(t, null))
+                .toList());
     }
 }

@@ -11,6 +11,11 @@ export interface EnterpriseVO {
   status: string
   seedDataDone: boolean
   createdAt: string
+  /** SPEC-P129：联系信息（后端按角色脱敏，非管理员拿到的是掩码串） */
+  contactName?: string
+  contactPhone?: string
+  contactEmail?: string
+  address?: string
 }
 
 export interface EnterpriseCreateDTO {
@@ -18,6 +23,11 @@ export interface EnterpriseCreateDTO {
   enterpriseName: string
   taxId?: string
   agencyId?: number
+  /** SPEC-P129：联系信息，全部可选 */
+  contactName?: string
+  contactPhone?: string
+  contactEmail?: string
+  address?: string
 }
 
 export interface BatchResult {
@@ -27,8 +37,15 @@ export interface BatchResult {
   details: { id: number; success: boolean; message: string }[]
 }
 
-export function getEnterpriseList(agencyId: number, page = 1, size = 10): Promise<PageResult<EnterpriseVO>> {
-  return request.get('/v1/agency/enterprises/page', { params: { agencyId, page, size } })
+/**
+ * 客户企业列表。
+ *
+ * <p><b>SPEC-P120</b>：不再接收 `agencyId`。原签名接受调用方自填的代理 id，
+ * 会计传任意值即可列出**其它代理**的全部客户企业。可见范围由后端按角色收敛：
+ * 经理/审核员见本代理全部，会计/助理仅见派工给自己的。
+ */
+export function getEnterpriseList(page = 1, size = 10): Promise<PageResult<EnterpriseVO>> {
+  return request.get('/v1/agency/enterprises/page', { params: { page, size } })
 }
 
 export function createEnterprise(data: EnterpriseCreateDTO): Promise<EnterpriseVO> {

@@ -3,6 +3,8 @@ package com.huicai.base.system.service.impl;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.huicai.common.security.Ref;
+import com.huicai.common.security.ReferenceGuard;
 import com.huicai.common.exception.BusinessException;
 import com.huicai.base.system.entity.RoleEntity;
 import com.huicai.base.system.entity.RoleMenuEntity;
@@ -99,6 +101,13 @@ public class RoleServiceImpl implements RoleService {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
+    @ReferenceGuard(
+            parent = "t_role",
+            label = "角色",
+            children = {
+                    @Ref(table = "t_role_menu", column = "role_id", label = "角色菜单授权"),
+                    @Ref(table = "t_user_role", column = "role_id", label = "用户角色")
+            })
     public void delete(Long id) {
         Long userCount = userRoleMapper.selectCount(
                 new LambdaQueryWrapper<UserRoleEntity>().eq(UserRoleEntity::getRoleId, id));
@@ -110,10 +119,20 @@ public class RoleServiceImpl implements RoleService {
 
     @Override
     public List<RoleEntity> listAll() {
+        // ⚠️ status 字面量必须是**大写 ACTIVE**。
+        //
+        // 缺陷（2026-10-12 实测）：原写 `.eq(getStatus, "active")`（小写），
+        // 而 t_role.status 实际存 `ACTIVE`（6 字符）⇒ SQL 恒不匹配 ⇒ 返回空列表。
+        // 症状：用户管理页「角色」下拉框空白，且**前端不报错** ——
+        // `getAllRoles()` 无 try/catch，空数组被当作合法结果静默渲染。
+        //
+        // ⚠️ 与 §4.2 第 14 条同型：同名 status 在不同表的 CHECK 允许集与大小写不同，
+        //   禁止照抄别处字符串或凭语感猜。改前先查真实值：
+        //   SELECT DISTINCT status, length(status) FROM t_role;  ⇒ ACTIVE / 6
         return roleMapper.selectList(
                 new LambdaQueryWrapper<RoleEntity>()
                         .eq(RoleEntity::getDeleted, 0)
-                        .eq(RoleEntity::getStatus, "active")
+                        .eq(RoleEntity::getStatus, "ACTIVE")
                         .orderByAsc(RoleEntity::getSortOrder));
     }
 }

@@ -4,6 +4,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import com.huicai.base.report.service.AnalysisService;
 import com.huicai.base.report.service.ReportService;
+import com.huicai.base.report.service.VoucherCashFlowService;
 import com.huicai.common.response.R;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
@@ -21,6 +22,7 @@ public class ReportController {
 
     private final ReportService reportService;
     private final AnalysisService analysisService;
+    private final VoucherCashFlowService voucherCashFlowService;
 
     @Operation(summary = "科目余额表")
     @GetMapping("/subject-balance/auxiliary")
@@ -93,6 +95,27 @@ public class ReportController {
         reportService.exportSubjectBalance(period, response);
     }
 
+    @Operation(summary = "REQ-035 自定义科目余额表查询")
+    @GetMapping("/custom/subject-balance")
+    public R<List<Map<String, Object>>> customSubjectBalance(
+            @RequestParam String period,
+            @RequestParam(required = false) Integer level,
+            @RequestParam(required = false) String codePrefix,
+            @RequestParam(required = false, defaultValue = "false") Boolean onlyWithBalance) {
+        return R.ok(reportService.customSubjectBalance(period, level, codePrefix, onlyWithBalance));
+    }
+
+    @Operation(summary = "REQ-035 自定义科目余额表导出")
+    @GetMapping("/custom/subject-balance/export")
+    public void exportCustomSubjectBalance(
+            @RequestParam String period,
+            @RequestParam(required = false) Integer level,
+            @RequestParam(required = false) String codePrefix,
+            @RequestParam(required = false, defaultValue = "false") Boolean onlyWithBalance,
+            HttpServletResponse response) throws IOException {
+        reportService.exportCustomSubjectBalance(period, level, codePrefix, onlyWithBalance, response);
+    }
+
     @Operation(summary = "资产负债表导出")
     @GetMapping("/balance-sheet/export")
     public void exportBalanceSheet(@RequestParam String period, HttpServletResponse response) throws IOException {
@@ -126,5 +149,12 @@ public class ReportController {
                     return map;
                 }).toList();
         return R.ok(list);
+    }
+
+    @Operation(summary = "P96 REQ-095: 按期间批量重建现金流量分配")
+    @PostMapping("/cash-flow/rebuild")
+    public R<Integer> rebuildCashFlow(@RequestParam String period) {
+        int count = voucherCashFlowService.rebuildByPeriod(period);
+        return R.ok(count);
     }
 }

@@ -6,6 +6,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.huicai.base.system.service.VoucherTypeService;
 import com.huicai.common.exception.BusinessException;
 import com.huicai.sme.arap.constant.ArapStatus;
 import com.huicai.base.business.dto.vo.ArapSettlementVO;
@@ -53,7 +54,16 @@ import java.util.List;
 public class ArapSettlementServiceImpl implements ArapSettlementService {
 
     private static final Logger log = LoggerFactory.getLogger(ArapSettlementServiceImpl.class);
-    private static final long DEFAULT_USER_ID = 0L;
+
+    /**
+     * 无登录态路径（定时任务 / 系统初始化）的兜底操作人。
+     *
+     * <p><b>SPEC-P118</b>：原为 {@code 0L} —— 而 {@code created_by} 在 P117
+     * 修复后已是**真实落库列**，写 0 会造出「用户 id=0」这种永不存在的幽灵记录，
+     * 比写 1 更糟（1 是真实存在的管理员，0 谁都不是）。其余 Service 的同名常量
+     * 均为 {@code 1L}，本类此前是唯一的例外，属笔误。
+     */
+    private static final long DEFAULT_USER_ID = 1L;
 
     private final ArapSettlementMapper mapper;
     private final ArapSettlementEntryMapper entryMapper;
@@ -69,6 +79,7 @@ public class ArapSettlementServiceImpl implements ArapSettlementService {
     private final com.huicai.sme.tax.service.InputInvoiceStateMachineService inputInvoiceStateMachineService;
     private final com.huicai.base.business.mapper.BankStatementMapper bankStatementMapper;
 
+    private final VoucherTypeService voucherTypeService;
     @Override
     public IPage<ArapSettlementEntity> pageQuery(String status, String voucherNo, Integer current, Integer size) {
         Page<ArapSettlementEntity> page = new Page<>(
@@ -178,19 +189,30 @@ public class ArapSettlementServiceImpl implements ArapSettlementService {
         }
         entity.setStatus(ArapStatus.SUBMITTED);
         mapper.updateById(entity);
-        logReconciliationLog(entity, "SUBMIT", null, null, DEFAULT_USER_ID);
+        logReconciliationLog(entity, "SUBMIT", null, null, currentOperatorId());
+    }
+
+    /**
+     * 取当前操作人 —— 有登录态用真实用户，无登录态（定时任务/初始化）回退兜底值。
+     *
+     * <p><b>SPEC-P118</b>：原先仅 {@code approve} 一处这样取，其余 5 处
+     * （submit / reject / cancel / generateVoucher / reverse）一律写死
+     * {@code DEFAULT_USER_ID}，而 {@code created_by} 在 P117 修复后已真实落库
+     * ⇒ 审计字段写的是常量而非实际操作人。
+     */
+    private Long currentOperatorId() {
+        try {
+            Long uid = com.huicai.base.system.util.SecurityUtils.getCurrentUserId();
+            return uid != null ? uid : DEFAULT_USER_ID;
+        } catch (Exception e) {
+            return DEFAULT_USER_ID;
+        }
     }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
     public ArapSettlementEntity approve(Long id) {
-        // P1-fix: 操作人从登录上下文获取
-        Long operatorId;
-        try {
-            operatorId = com.huicai.base.system.util.SecurityUtils.getCurrentUserId();
-        } catch (Exception e) {
-            operatorId = DEFAULT_USER_ID;
-        }
+        Long operatorId = currentOperatorId();
         ArapSettlementEntity entity = getById(id);
         if (!ArapStatus.isApprovable(entity.getStatus())) {
             throw new BusinessException("核销单状态不允许审批: " + entity.getStatus());
@@ -301,7 +323,7 @@ public class ArapSettlementServiceImpl implements ArapSettlementService {
         }
         entity.setStatus(ArapStatus.REJECTED);
         mapper.updateById(entity);
-        logReconciliationLog(entity, "REJECT", reason, null, DEFAULT_USER_ID);
+        logReconciliationLog(entity, "REJECT", reason, null, currentOperatorId());
     }
 
     @Override
@@ -313,7 +335,7 @@ public class ArapSettlementServiceImpl implements ArapSettlementService {
         }
         entity.setStatus(ArapStatus.CANCELLED);
         mapper.updateById(entity);
-        logReconciliationLog(entity, "CANCEL", null, null, DEFAULT_USER_ID);
+        logReconciliationLog(entity, "CANCEL", null, null, currentOperatorId());
     }
 
     @Override
@@ -358,7 +380,8 @@ public class ArapSettlementServiceImpl implements ArapSettlementService {
 
         String period = entity.getPeriod() != null ? entity.getPeriod()
                 : java.time.LocalDate.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyyMM"));
-        long voucherTypeId = "payment".equals(classifySuffix) ? VoucherType.FK : VoucherType.SK;
+        long voucherTypeId = voucherTypeService.requireByCode(
+                "payment".equals(classifySuffix) ? "FK" : "SK").getId();
         String voucherNo = voucherNoService.generateNextNo(period, voucherTypeId);
 
         VoucherEntity voucher = new VoucherEntity();
@@ -369,7 +392,7 @@ public class ArapSettlementServiceImpl implements ArapSettlementService {
         voucher.setSource("GENERATED");
         voucher.setSummary("往来核销生成 — " + (entity.getSettlementNo() != null ? entity.getSettlementNo() : ""));
         if (template != null) voucher.setTemplateId(template.getId());
-        voucher.setCreatedBy(DEFAULT_USER_ID);
+        voucher.setCreatedBy(currentOperatorId());
         // 新增：溯源字段（核销单 → 凭证）
         voucher.setSourceDocType("SETTLEMENT");
         voucher.setSourceDocNo(entity.getSettlementNo());
@@ -415,7 +438,7 @@ public class ArapSettlementServiceImpl implements ArapSettlementService {
         entity.setVoucherNo(voucherNo);      // 新增：回写凭证编号到核销单
         entity.setStatus(ArapStatus.VOUCHERED);
         mapper.updateById(entity);
-        logReconciliationLog(entity, "GENERATE_VOUCHER", null, voucherNo, DEFAULT_USER_ID);
+        logReconciliationLog(entity, "GENERATE_VOUCHER", null, voucherNo, currentOperatorId());
 
         // 新增：回写凭证编号到所有核销明细对应的业务单据/应收/应付单
         for (ArapSettlementEntryEntity entry : entries) {
@@ -469,7 +492,7 @@ public class ArapSettlementServiceImpl implements ArapSettlementService {
         reverseSettlement.setSourceDocId(entity.getSourceDocId());
         reverseSettlement.setSourceDocType(entity.getSourceDocType());
         reverseSettlement.setReversedFromSettlementId(id);
-        reverseSettlement.setCreatedBy(DEFAULT_USER_ID);
+        reverseSettlement.setCreatedBy(currentOperatorId());
         mapper.insert(reverseSettlement);
 
         // 复制原核销明细，金额取负
@@ -498,10 +521,10 @@ public class ArapSettlementServiceImpl implements ArapSettlementService {
                         boolean isOutput = "INVOICE_OUT".equals(doc.getDocType());
                         if (isOutput) {
                             outputInvoiceStateMachineService.onReconciliationUpdate(
-                                    doc.getInvoiceId(), doc.getUnsettledAmount(), DEFAULT_USER_ID);
+                                    doc.getInvoiceId(), doc.getUnsettledAmount(), currentOperatorId());
                         } else {
                             inputInvoiceStateMachineService.onReconciliationUpdate(
-                                    doc.getInvoiceId(), doc.getUnsettledAmount(), DEFAULT_USER_ID);
+                                    doc.getInvoiceId(), doc.getUnsettledAmount(), currentOperatorId());
                         }
                         log.info("反核销同步发票状态回滚: invoiceId={}, unsettled={}",
                                 doc.getInvoiceId(), doc.getUnsettledAmount());
@@ -556,7 +579,7 @@ public class ArapSettlementServiceImpl implements ArapSettlementService {
         } else {
             mapper.updateById(entity);
         }
-        logReconciliationLog(entity, "REVERSE", "红冲反核销，创建对冲单据 id=" + reverseSettlement.getId(), null, DEFAULT_USER_ID);
+        logReconciliationLog(entity, "REVERSE", "红冲反核销，创建对冲单据 id=" + reverseSettlement.getId(), null, currentOperatorId());
     }
 
     private Long voidDraftVoucherIfAny(ArapSettlementEntity entity) {

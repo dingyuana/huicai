@@ -12,11 +12,32 @@ export interface BankAccountVO {
   isActive: boolean
   remark?: string
   createdAt?: string
+
+  /** 所属企业名称（系统管理员跨企业视图用；租户 id 不外露） */
+  enterpriseName?: string
 }
 
-export function getBankAccountPage(params: { keyword?: string; current?: number; size?: number }): Promise<PageResult<BankAccountVO>> {
+export function getBankAccountPage(params: { keyword?: string; current?: number; size?: number; enterpriseId?: number }): Promise<PageResult<BankAccountVO>> {
   return request.get('/sme/cash/v1/bank-accounts/page', { params })
 }
+/**
+ * 系统管理员专用：查看**全部企业**的银行账户（只读）。
+ *
+ * <p>银行账户列表此前只返回当前企业的账户，且返回体不含企业信息，
+ * 管理员无法判断一条账户属于哪家公司。新建/修改仍绑定当前企业上下文。
+ */
+/**
+ * 系统管理员专用：查看**全部企业**的银行账户（只读）。
+ *
+ * <p>`enterpriseId` 用于<b>服务端</b>收敛（SPEC-P129 §1③）：不传则返回全部。
+ * ⚠️ 不在前端按 id 过滤 —— VO 不含该字段，且 `MasterDataVoContractTest` 钉住了它。
+ */
+export function allEnterprisesBankAccounts(enterpriseId?: number): Promise<BankAccountVO[]> {
+  return request.get('/sme/cash/v1/bank-accounts/all-enterprises', {
+    params: { enterpriseId },
+  }) as Promise<BankAccountVO[]>
+}
+
 export function getActiveBankAccounts(): Promise<BankAccountVO[]> {
   return request.get('/sme/cash/v1/bank-accounts/active')
 }

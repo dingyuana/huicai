@@ -108,6 +108,11 @@ public class AgencyUserEnterpriseServiceImpl implements AgencyUserEnterpriseServ
 
     @Override
     public List<AssignmentVO> listByAgencyUserId(Long agencyUserId) {
+        // V176 起本表不开 RLS（enterprise_id 是「被服务客户」而非「归属租户」），
+        // 故**必须**在此按 agency_id 收敛，否则任何登录用户都能查别人的派工。
+        // AGENTS §4.5 第 43 条：整表豁免后必须在每条路径自己补隔离。
+        requireSameAgency(agencyUserId);
+
         List<Long> enterpriseIds = agencyUserEnterpriseMapper.getEnterpriseIdsByAgencyUserId(agencyUserId);
         List<AssignmentVO> result = new ArrayList<>();
 
@@ -141,5 +146,42 @@ public class AgencyUserEnterpriseServiceImpl implements AgencyUserEnterpriseServ
     @Override
     public List<Long> getEnterpriseIdsByAgencyUserId(Long agencyUserId) {
         return agencyUserEnterpriseMapper.getEnterpriseIdsByAgencyUserId(agencyUserId);
+    }
+
+    /**
+     * 断言目标代理用户属于当前操作者所属的代理公司。
+     *
+     * <p><b>为什么必须有</b>：V176 撤掉了本表的 RLS（其 {@code enterprise_id}
+     * 语义是「被服务客户」，用 {@code = app.enterprise_id} 过滤会与「代理跨客户派工」
+     * 直接矛盾，实测导致 POST 500 且读路径静默丢行）。撤掉 DB 层兜底后，
+     * 隔离责任落到应用层 —— 若此处不校验，任何登录用户都能按 id 遍历
+     * {@code GET /assignments?agencyUserId=} 读出别家代理的派工名单。
+     *
+     * <p><b>超管豁免</b>：{@code SUPER_ADMIN} 本就跨代理（与
+     * {@link #assign} 的口径保持一致），否则超管将无法运维。
+     *
+     * @throws BusinessException 目标用户不存在，或不属于当前代理公司
+     */
+    private void requireSameAgency(Long agencyUserId) {
+        if ("SUPER_ADMIN".equals(SecurityUtils.getCurrentUserType())) {
+            return;
+        }
+        Long currentAgencyId = SecurityUtils.getCurrentAgencyId();
+        if (currentAgencyId == null) {
+            // fail-loud：agencyId 缺失说明登录上下文构造有问题（历史上 LoginUser
+            // 的 2 参构造器把它硬编码成 null，见该类注释）。此时若静默按
+            // 「无权」处理，会变成**所有代理管理员被锁在门外**且报错文案
+            // 指向「权限不足」，极难定位（§4.3 第 10 条「静默失败」形态）。
+            throw new BusinessException(500,
+                    "登录上下文缺少代理公司信息(agencyId)，无法校验派工归属；"
+                            + "请检查 LoginUser 构造是否传入 t_user.agency_id");
+        }
+        AgencyUserEntity target = agencyUserMapper.selectById(agencyUserId);
+        if (target == null || target.getDeleted() == 1) {
+            throw BusinessException.notFound("代理用户不存在");
+        }
+        if (!currentAgencyId.equals(target.getAgencyId())) {
+            throw BusinessException.forbidden("无权查看其他代理公司的派工记录");
+        }
     }
 }

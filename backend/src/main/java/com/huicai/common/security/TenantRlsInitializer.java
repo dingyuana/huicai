@@ -55,6 +55,24 @@ public class TenantRlsInitializer {
 
     private final DataSource dataSource;
 
+    /**
+     * 三个分支<b>仍不能删</b>，但<b>都不足以覆盖全量</b>（SPEC-P122 实测）。
+     *
+     * <p><b>为什么不够</b>：Spring AOP 求值 {@code @within} / {@code @annotation} 时，
+     * 依据的是<b>被调用方法的声明类型</b>。而 {@code IService#list(Wrapper)} 等
+     * MyBatis-Plus 方法是 <b>default 接口方法</b>，声明在 {@code IService} 上，
+     * {@code ServiceImpl} 也不覆盖它们 —— 尽管 {@code PeriodServiceImpl} 类上确有
+     * {@code @Transactional}，前两个分支依然不命中。
+     *
+     * <p><b>连 {@code target()} 也不够</b>：它需要运行期目标对象，
+     * 而 Spring 在<b>方法匹配阶段</b>就要求判断是否应用该 advice，拿不到实例
+     * （2026-10-12 实测：加上该分支后 {@code IService#list} 的 GUC 仍为 {@code null}）。
+     *
+     * <p><b>因此真正的补位在拦截器</b>：
+     * {@code EnterpriseDataPermissionInterceptor#beforeQuery} 是所有 MyBatis 查询的
+     *必经之路，已在其中调用 {@link TenantGucSetter#apply}，与本切面共用同一实现。
+     * 本切面保留的意义是「事务一开启就先设好」，属效率优化而非唯一保障。
+     */
     @Around("@annotation(org.springframework.transaction.annotation.Transactional) "
             + "|| @within(org.springframework.transaction.annotation.Transactional)")
     public Object applyTenantRls(ProceedingJoinPoint pjp) throws Throwable {
@@ -63,24 +81,6 @@ public class TenantRlsInitializer {
     }
 
     private void setLocalEnterpriseId() {
-        Long enterpriseId = EnterpriseContextHolder.get();
-        if (enterpriseId == null) {
-            return;
-        }
-        Connection connection = DataSourceUtils.getConnection(dataSource);
-        try (Statement statement = connection.createStatement()) {
-            // enterpriseId 来自 EnterpriseContextHolder<Long>，非外部输入；
-            // 仍用参数化不可行（SET 不支持占位符），故显式转 long 消除注入面
-            statement.execute("SET LOCAL app.enterprise_id = " + enterpriseId.longValue());
-        } catch (SQLException e) {
-            // fail-closed：设置失败意味着 RLS 谓词取不到值，查询将返 0 行。
-            // 此时若继续执行，业务会以「查不到数据」的形式失败，且原因难定位，
-            // 故直接抛出并附带明确信息。
-            throw new IllegalStateException(
-                    "设置 app.enterprise_id 失败，RLS 将过滤全部数据（enterpriseId="
-                            + enterpriseId + "）", e);
-        } finally {
-            DataSourceUtils.releaseConnection(connection, dataSource);
-        }
+        TenantGucSetter.apply(dataSource);
     }
 }

@@ -36,7 +36,6 @@ import com.huicai.base.system.mapper.UserMapper;
 import com.huicai.base.system.service.PeriodService;
 import com.huicai.base.system.service.SubjectService;
 import com.huicai.base.system.service.VoucherTypeService;
-import com.huicai.base.voucher.constant.VoucherType;
 import com.huicai.base.system.util.SecurityUtils;
 import com.huicai.common.event.ServiceProgressStageEvent;
 import com.huicai.base.business.entity.OutputInvoiceEntity;
@@ -92,6 +91,7 @@ public class VoucherServiceImpl extends ServiceImpl<VoucherMapper, VoucherEntity
     private final VoucherStateMachineService voucherStateMachineService;
     private final OutputInvoiceMapper outputInvoiceMapper;
     private final BusinessDocMapper businessDocMapper;
+    private final com.huicai.base.report.service.VoucherCashFlowService voucherCashFlowService;
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final ApplicationEventPublisher eventPublisher; // P79：BOOKING 节点推进事件
 
@@ -152,7 +152,18 @@ public class VoucherServiceImpl extends ServiceImpl<VoucherMapper, VoucherEntity
         validateLeafSubjects(dto.getEntries());
         // P1-4: 辅助核算强校验拦截
         validateAssistJson(dto.getEntries());
-        validateVoucherTypeLimit(dto.getVoucherTypeId(), dto.getEntries());
+
+        // SPEC-P128 §7 已登记的排除项收口：voucher_type_id 由前端传入，
+        // 原先直接信任。🔴 后果与 setVoucherTypeId(1L) 同型：凭证会挂到**别的企业**的
+        // 凭证类型上，而外键约束照样成立 ⇒ 不报错但归属错乱（写路径静默比抛异常更危险）。
+        // 实测存量 0 条错挂（开发库原有 0 张凭证），但「前端传了别人的 id」这条路没有闸门。
+        //
+        // 🔴 顺序不可调换：本方法返回的实体是 validateVoucherTypeLimit 按 **code** 分支的
+        // 唯一来源（id 上没有 code）。若校验在前，voucherTypeId 为 null 时会先 NPE
+        // 而不是给出「凭证类型不能为空」。
+        VoucherTypeEntity voucherType = requireVoucherTypeOfCurrentEnterprise(dto.getVoucherTypeId());
+
+        validateVoucherTypeLimit(voucherType, dto.getEntries());
 
         // 生成凭证号
         String voucherNo = voucherNoService.generateNextNo(dto.getPeriod(), dto.getVoucherTypeId());
@@ -204,6 +215,23 @@ public class VoucherServiceImpl extends ServiceImpl<VoucherMapper, VoucherEntity
         }
         if (!"DRAFT".equals(entity.getStatus())) {
             throw BusinessException.badRequest("仅草稿状态的凭证可修改");
+        }
+
+        // SPEC-P132：只有制单人能改自己的草稿凭证。
+        //
+        // 🔴 本校验此前**完全不存在** —— update 只查 status=DRAFT 与期间开启，
+        // 因此任何有访问权的人都能改**别人**的草稿凭证，且全程无报错。
+        // P130 修的是「进不去编辑页」（前端路由 403）；本条修的是「进去之后能改谁的」。
+        // 两者是同一缺陷链上的两个环节，缺一则内控仍然形同虚设。
+        //
+        // ⚠️ null 判断与既有 assertNotSelfReview **逐字对齐**：created_by 为 NULL 时放行。
+        // 自动生成（source=GENERATED）的凭证可能无 created_by，此时无法判断归属，
+        // 按「不误伤合法路径」放行，并在此登记为已知局限而非静默。
+        if (userId != null && entity.getCreatedBy() != null
+                && userId.equals(entity.getCreatedBy()) == false) {
+            throw BusinessException.forbidden(
+                    "只能修改本人录入的凭证：制单人为 " + entity.getCreatedBy()
+                            + "，当前操作人为 " + userId + "（voucherId=" + entity.getId() + "）");
         }
 
         // 校验期间是否可操作
@@ -289,6 +317,7 @@ public class VoucherServiceImpl extends ServiceImpl<VoucherMapper, VoucherEntity
         VoucherEntity entity = getValidVoucher(id);
         voucherStateMachineService.assertAuditable(entity);
         assertPeriodOpen(entity.getPeriod());
+        assertNotSelfReview(entity, userId, "审核");
         voucherMapper.batchUpdateStatus(Collections.singletonList(id), "AUDITED", userId, entity.getVersion());
         log.info("审核凭证: id={}, userId={}, version={}", id, userId, entity.getVersion());
     }
@@ -300,9 +329,38 @@ public class VoucherServiceImpl extends ServiceImpl<VoucherMapper, VoucherEntity
             VoucherEntity entity = getValidVoucher(id);
             assertStatus(entity, "SUBMITTED");
             assertPeriodOpen(entity.getPeriod());
+            assertNotSelfReview(entity, userId, "批量审核");
         }
         voucherMapper.batchUpdateStatus(ids, "AUDITED", userId, null);
         log.info("批量审核凭证: ids={}, userId={}", ids, userId);
+    }
+
+    /**
+     * 制审分离：制单人不能审核自己提交的凭证。
+     *
+     * <p><b>SPEC-P116 / 缺陷 4</b>：本校验此前只存在于业务单据层
+     * （{@code BusinessDocServiceImpl#approve}），凭证层没有 ——
+     * 同为审核动作却一个拦一个不拦，属一致性缺口而非新功能。
+     *
+     * <p>⚠️ <b>与业务单据层逐字对齐</b>（含 null 判断），不另造口径：
+     * <ul>
+     *   <li>{@code created_by} 由 {@code BaseEntity} 提供，<b>不加 fill 注解</b>
+     *       （见 {@code BaseEntity} 类注释），由 {@link #create} 手动 set
+     *       ⇒ 经 API 新建的凭证有值。</li>
+     *   <li>⚠️ <b>存量 Flyway 种子行 created_by 为 NULL</b>（实测 37/37 全空），
+     *       此时本校验<b>不触发</b>。这是已知局限，与业务单据层行为一致 ——
+     *       「不知道谁制的」不能反过来说「他自审」。已知局限已登记 SPEC-P116 §7。</li>
+     * </ul>
+     *
+     * @param entity 凭证
+     * @param userId 当前审核人
+     * @param action 动作名，用于报错文案
+     */
+    private void assertNotSelfReview(VoucherEntity entity, Long userId, String action) {
+        if (userId != null && entity.getCreatedBy() != null && userId.equals(entity.getCreatedBy())) {
+            throw BusinessException.badRequest(
+                    "制单人不能审核自己提交的凭证（" + action + "）：voucherId=" + entity.getId());
+        }
     }
 
     @Override
@@ -354,6 +412,13 @@ public class VoucherServiceImpl extends ServiceImpl<VoucherMapper, VoucherEntity
         // 更新科目余额
         List<VoucherEntryEntity> entries = voucherEntryMapper.selectByVoucherId(id);
         subjectBalanceService.updateBalanceOnPost(entity, entries);
+
+        // P96 REQ-095：凭证过账时自动分配现金流量项目
+        try {
+            voucherCashFlowService.assignCashFlow(id);
+        } catch (Exception e) {
+            log.warn("现金流分配失败(不阻断过账): voucherId={}, err={}", id, e.getMessage());
+        }
 
         log.info("记账凭证: id={}, userId={}", id, userId);
     }
@@ -566,8 +631,57 @@ public class VoucherServiceImpl extends ServiceImpl<VoucherMapper, VoucherEntity
         }
     }
 
-    private void validateVoucherTypeLimit(long voucherTypeId, List<EntryDTO> entries) {
-        if (voucherTypeId == VoucherType.JZ) {
+    /**
+     * 断言传入的凭证类型属于<b>当前企业</b>，并返回该类型实体。
+     *
+     * <p>不复用 {@code VoucherTypeService.requireByCode}：那里按 <b>code</b> 解析，
+     * 而此处前端给的是<b>主键 id</b>。因此只能按 id 取，再核对企业归属 ——
+     * 该查询同样受 RLS 收敛，若 id 属于他企业则<b>本就查不到</b>，直接判不存在即可。
+     *
+     * <p>🔴 返回实体而非 void：下游 {@code validateVoucherTypeLimit} 需要按
+     * <b>business code</b> 分支，而 code 只在实体上、id 上没有 ——
+     * 这正是 SPEC-P128 §7.3 遗留缺陷的成因（当年只有 id 可用，只好比全局常量）。
+     *
+     * @return 本企业的凭证类型实体
+     * @throws BusinessException id 不存在或不属于当前企业时抛出，文案指明是凭证类型问题
+     */
+    private VoucherTypeEntity requireVoucherTypeOfCurrentEnterprise(Long voucherTypeId) {
+        if (voucherTypeId == null) {
+            throw new BusinessException("凭证类型不能为空");
+        }
+        VoucherTypeEntity type = voucherTypeService.getById(voucherTypeId);
+        if (type == null) {
+            // RLS 已把「属于他企业」的行过滤掉 ⇒ 查不到即等于「本企业没有这个凭证类型」
+            throw new BusinessException(
+                    "凭证类型不存在或不属于当前企业，请重新选择本企业的凭证类型");
+        }
+        return type;
+    }
+
+    /**
+     * 归一化业务编码。
+     *
+     * <p>与 {@code VoucherTypeServiceImpl#requireByCode} 的 {@code toUpperCase()} 同口径 ——
+     * 🔴 若此处不归一而 DB 里存的是小写，分支会<b>静默不匹配</b>：
+     * 校验从「恒不触发」变成「恒不触发」，症状与修复前完全一致，
+     * 但守卫（只查常量引用）已全绿 ⇒ 又一次「看起来修好了」的假象。
+     */
+    private static String normalizeTypeCode(VoucherTypeEntity type) {
+        return type == null || type.getCode() == null
+                ? ""
+                : type.getCode().trim().toUpperCase();
+    }
+
+    /**
+     * 凭证类型的科目限制：收款/付款凭证必须挂现金银行科目，转账凭证不得挂。
+     *
+     * <p>🔴 按 <b>business code</b> 分支，不按 id —— {@code VoucherType.JZ/SK/FK/ZZ}
+     * 是企业 1 的主键（V183 补种子后企业 2/3/4 实际是 5~8），
+     * 比 id 会让这三条校验对非企业 1 <b>一次都不触发</b>，内控静默失效。
+     */
+    private void validateVoucherTypeLimit(VoucherTypeEntity voucherType, List<EntryDTO> entries) {
+        String code = normalizeTypeCode(voucherType);
+        if ("JZ".equals(code)) {
             return;
         }
         List<String> cashBankCodes = subjectMapper.getCashBankCodes();
@@ -588,13 +702,13 @@ public class VoucherServiceImpl extends ServiceImpl<VoucherMapper, VoucherEntity
         boolean hasCashBankInCredit = entries.stream()
                 .filter(e -> e.getCredit().compareTo(BigDecimal.ZERO) > 0)
                 .anyMatch(e -> { Subject s = subjectMap.get(e.getSubjectId()); return s != null && cashBankCodeSet.contains(s.getCode()); });
-        if (voucherTypeId == VoucherType.SK && !hasCashBankInDebit) {
+        if ("SK".equals(code) && !hasCashBankInDebit) {
             throw BusinessException.badRequest("收款凭证借方必须有现金或银行科目");
         }
-        if (voucherTypeId == VoucherType.FK && !hasCashBankInCredit) {
+        if ("FK".equals(code) && !hasCashBankInCredit) {
             throw BusinessException.badRequest("付款凭证贷方必须有现金或银行科目");
         }
-        if (voucherTypeId == VoucherType.ZZ && (hasCashBankInDebit || hasCashBankInCredit)) {
+        if ("ZZ".equals(code) && (hasCashBankInDebit || hasCashBankInCredit)) {
             throw BusinessException.badRequest("转账凭证不能包含现金或银行科目");
         }
     }

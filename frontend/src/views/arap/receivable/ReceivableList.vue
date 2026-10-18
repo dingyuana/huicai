@@ -207,7 +207,7 @@ const detail = ref<any>(null)
 
 const openDetail = async (row: any) => {
   try {
-    detail.value = await request.get(`/receivables/${row.id}`)
+    detail.value = await request.get(`/sme/arap/v1/receivables/${row.id}`)
     detailVisible.value = true
   } catch (e: any) {
     detail.value = null

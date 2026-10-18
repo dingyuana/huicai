@@ -47,8 +47,19 @@ jobs:
       # 忽略门禁（AGENTS §4.5 第 21 条：恒绿与恒红同样有害）。
       # 故改为与 JaCoCo 同款的棘轮：上限写死为实测值，只在**倒退**时红。
       # ⚠️ 每修掉一批端点接入，必须回来下调 --max-uncovered（否则棘轮变固定上限）。
+      #
+      # 2026-10-09：上限 280 → 92。**不是放宽，是把测量口径修对之后重新测量**。
+      # 首版脚本有两处漏扫，导致 280 这个数从一开始就是错的：
+      #   ① `re.finditer(r"...(get|post|put|delete)\s*\(\s*'([^']+)'")` 后取 `group(1)`
+      #      —— group(1) 是 HTTP 方法名（'get'/'post'），URL 在 group(2)；
+      #      取错组后该字面量恰被 normalize() 的噪声过滤丢弃
+      #      ⇒ **所有单引号/双引号写法的调用被整体漏扫**（实测源码 489 处，脚本只认 148）。
+      #   ② 只扫 `src/api/**/*.ts`，不扫 `.vue` —— 本项目有 43 处 `request.*` 直接写在页面里。
+      # 另修 3 处后端漏扫：javadoc 未剥离、无参 `@PostMapping`、`value = "/import"` 形态。
+      # 修完后实测：后端 471 端点 / 前端 390 调用 / 匹配 379 / 未接 92 / 孤儿 0。
+      # 孤儿从 53 → 0 期间修掉 16 处**真实前端 404**（路径缺前缀等，见登记册 V1.87）。
       - name: 运行接口覆盖检测（棘轮模式）
-        run: python scripts/check_api_coverage.py --max-uncovered 280 --max-orphan 0 
+        run: python scripts/check_api_coverage.py --max-uncovered 92 --max-orphan 0 
 
   entity-status-massassignment-check:
     name: 实体入参状态越权检测

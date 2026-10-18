@@ -37,8 +37,14 @@ public class PeriodVO {
     private LocalDate endDate;
     /** DB 列 `status` */
     private String status;
+    /** DB 列 `opening_status` */
+    private String openingStatus;
     /** DB 列 `created_at` */
     private LocalDateTime createdAt;
+    /** DB 列 `opened_at` */
+    private LocalDateTime openedAt;
+    /** DB 列 `opened_by_name` */
+    private String openedByName;
 
     public static PeriodVO from(PeriodEntity e) {
         if (e == null) {
@@ -52,7 +58,10 @@ public class PeriodVO {
         vo.setStartDate(e.getStartDate());
         vo.setEndDate(e.getEndDate());
         vo.setStatus(e.getStatus());
+        vo.setOpeningStatus(e.getOpeningStatus());
         vo.setCreatedAt(e.getCreatedAt());
+        vo.setOpenedAt(e.getOpenedAt());
+        vo.setOpenedByName(e.getOpenedByName());
         return vo;
     }
 

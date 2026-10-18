@@ -46,8 +46,10 @@ class PeriodCloseControllerTest {
         user.setUserType("ENTERPRISE");
         // period:reopen 为 P102 起 /reopen 端点的 @PreAuthorize 权限码（种子见 V163）
         LoginUser loginUser = new LoginUser(user, List.of(
-                new SimpleGrantedAuthority("ROLE_USER"),
+                new SimpleGrantedAuthority("ROLE_USER"), new SimpleGrantedAuthority("period:carryover:guide"), new SimpleGrantedAuthority("period:close"), new SimpleGrantedAuthority("period:reopen"), new SimpleGrantedAuthority("period:year-close"),
                 new SimpleGrantedAuthority("period:reopen")));
+        // 🔴 批次 4 全局切 enforcing 后本类所需权限码。
+        //    缺它会 403 —— 这正是拦截器生效的证明（38 例曾因此红）。
         SecurityContextHolder.getContext().setAuthentication(
                 new UsernamePasswordAuthenticationToken(loginUser, null, loginUser.getAuthorities()));
     }

@@ -4,7 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
-import com.huicai.base.business.dto.vo.ArapSettlementVO;
+import com.huicai.base.voucher.VoucherTypeStub;import com.huicai.base.system.service.VoucherTypeService;import com.huicai.base.business.dto.vo.ArapSettlementVO;
 import com.huicai.base.business.entity.ArapSettlementEntity;
 import com.huicai.base.business.entity.ArapSettlementEntryEntity;
 import com.huicai.base.business.entity.BusinessDocEntity;
@@ -31,6 +31,7 @@ import com.huicai.sme.arap.constant.ArapStatus;
 import com.huicai.sme.arap.entity.ReconciliationLogEntity;
 import com.huicai.sme.arap.mapper.ReconciliationLogMapper;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -62,6 +63,8 @@ class ArapSettlementServiceImplTest {
     @Mock private OutputInvoiceStateMachineService outputInvoiceStateMachineService;
     @Mock private InputInvoiceStateMachineService inputInvoiceStateMachineService;
     @Mock private BankStatementMapper bankStatementMapper;
+    @Mock
+    private VoucherTypeService voucherTypeService;
 
     @InjectMocks
     private ArapSettlementServiceImpl service;
@@ -705,4 +708,9 @@ class ArapSettlementServiceImplTest {
         verify(voucherMapper, never()).deleteById(any(Long.class));
         verify(voucherEntryMapper, never()).deleteByVoucherId(any(Long.class));
     }
+    @BeforeEach
+    void stubVoucherTypeByCode() {
+        VoucherTypeStub.install(voucherTypeService);
+    }
+
 }

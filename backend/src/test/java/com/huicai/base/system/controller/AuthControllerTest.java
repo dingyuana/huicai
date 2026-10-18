@@ -154,7 +154,7 @@ class AuthControllerTest {
         when(userRoleMapper.getRoleIdsByUserId(eq(1L))).thenReturn(List.of(1L, 2L));
         when(menuService.getUserButtonPermissions(eq(1L))).thenReturn(List.of("system:user:list", "system:role:list"));
         when(jwtProvider.generateAccessToken(anyString(), anyLong(), anyList(), any(), any(), any(), any())).thenReturn("mock-access-token");
-        when(jwtProvider.generateRefreshToken(anyString())).thenReturn("mock-refresh-token");
+        when(jwtProvider.generateRefreshToken(anyString(), any(), any(), any(), any(), any(), any())).thenReturn("mock-refresh-token");
 
         AuthController.LoginRequest request = new AuthController.LoginRequest();
         request.setUsername("admin");
@@ -232,7 +232,7 @@ class AuthControllerTest {
         when(userRoleMapper.getRoleIdsByUserId(eq(1L))).thenReturn(java.util.Collections.emptyList());
         when(menuService.getUserButtonPermissions(eq(1L))).thenReturn(java.util.Collections.emptyList());
         when(jwtProvider.generateAccessToken(anyString(), anyLong(), anyList(), any(), any(), any(), any())).thenReturn("token");
-        when(jwtProvider.generateRefreshToken(anyString())).thenReturn("refresh");
+        when(jwtProvider.generateRefreshToken(anyString(), any(), any(), any(), any(), any(), any())).thenReturn("refresh");
 
         AuthController.LoginRequest request = new AuthController.LoginRequest();
         request.setUsername("admin");
@@ -324,7 +324,7 @@ class AuthControllerTest {
         when(menuService.getUserButtonPermissions(eq(1L))).thenReturn(List.of());
 
         when(jwtProvider.generateAccessToken(anyString(), anyLong(), anyList(), any(), any(), any(), any())).thenReturn("mock-access-token");
-        when(jwtProvider.generateRefreshToken(anyString())).thenReturn("mock-refresh-token");
+        when(jwtProvider.generateRefreshToken(anyString(), any(), any(), any(), any(), any(), any())).thenReturn("mock-refresh-token");
 
         // AGENCY_ADMIN 查看全部企业
         when(agencyEnterpriseMapper.getEnterpriseIdsByAgencyId(1L)).thenReturn(List.of(1L, 2L, 3L));
@@ -378,7 +378,7 @@ class AuthControllerTest {
         when(menuService.getUserButtonPermissions(eq(2L))).thenReturn(List.of());
 
         when(jwtProvider.generateAccessToken(anyString(), anyLong(), anyList(), any(), any(), any(), any())).thenReturn("mock-access-token");
-        when(jwtProvider.generateRefreshToken(anyString())).thenReturn("mock-refresh-token");
+        when(jwtProvider.generateRefreshToken(anyString(), any(), any(), any(), any(), any(), any())).thenReturn("mock-refresh-token");
 
         // ACCOUNTANT 通过 t_agency_user 查找分配
         AgencyUserEntity agencyUser = new AgencyUserEntity();
@@ -435,7 +435,7 @@ class AuthControllerTest {
         when(menuService.getUserButtonPermissions(eq(3L))).thenReturn(List.of());
 
         when(jwtProvider.generateAccessToken(anyString(), anyLong(), anyList(), any(), any(), any(), any())).thenReturn("mock-access-token");
-        when(jwtProvider.generateRefreshToken(anyString())).thenReturn("mock-refresh-token");
+        when(jwtProvider.generateRefreshToken(anyString(), any(), any(), any(), any(), any(), any())).thenReturn("mock-refresh-token");
 
         // 无分配企业
         AgencyUserEntity agencyUser = new AgencyUserEntity();

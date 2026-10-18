@@ -4,6 +4,7 @@ import cn.hutool.core.util.IdUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.huicai.base.system.service.VoucherTypeService;
 import com.huicai.common.exception.BusinessException;
 import com.huicai.sme.arap.constant.ArapStatus;
 import com.huicai.sme.arap.entity.BadDebtProvisionDetailEntity;
@@ -64,6 +65,7 @@ public class BadDebtServiceImpl implements BadDebtService {
     private final VoucherEntryMapper voucherEntryMapper;
     private final SubjectMapper subjectMapper;
 
+    private final VoucherTypeService voucherTypeService;
     // ==================== 公共 ====================
 
     @Override
@@ -310,7 +312,7 @@ public class BadDebtServiceImpl implements BadDebtService {
         // 冲回：借 1231（坏账准备） 贷 6701（信用减值损失）
         VoucherCreateDTO dto = new VoucherCreateDTO();
         dto.setPeriod(entity.getPeriod());
-        dto.setVoucherTypeId(1L); // 默认凭证类型ID（记账凭证）
+        dto.setVoucherTypeId(voucherTypeService.requireByCode("JZ").getId()); // 默认凭证类型ID（记账凭证）
         dto.setSummary("坏账准备计提 - " + entity.getPeriod());
 
         List<EntryDTO> entries = new ArrayList<>();
