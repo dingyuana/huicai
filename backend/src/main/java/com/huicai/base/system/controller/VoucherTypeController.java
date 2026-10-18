@@ -10,6 +10,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import com.huicai.base.system.vo.VoucherTypeVO;
 import lombok.RequiredArgsConstructor;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -25,6 +26,7 @@ public class VoucherTypeController {
 
     @Operation(summary = "获取凭证类型列表(分页)")
     @GetMapping
+    @Transactional(rollbackFor = Exception.class)
     public R<IPage<com.huicai.base.system.vo.VoucherTypeVO>> list(
             @RequestParam(defaultValue = "1") Integer current,
             @RequestParam(defaultValue = "20") Integer size) {
@@ -33,6 +35,7 @@ public class VoucherTypeController {
 
     @Operation(summary = "获取凭证类型列表(全量)")
     @GetMapping("/all")
+    @Transactional(rollbackFor = Exception.class)
     public R<List<com.huicai.base.system.vo.VoucherTypeVO>> listAll() {
         return R.ok(VoucherTypeVO.from(voucherTypeService.list()));
     }
