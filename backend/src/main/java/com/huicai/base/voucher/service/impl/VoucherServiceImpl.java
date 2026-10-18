@@ -36,7 +36,6 @@ import com.huicai.base.system.mapper.UserMapper;
 import com.huicai.base.system.service.PeriodService;
 import com.huicai.base.system.service.SubjectService;
 import com.huicai.base.system.service.VoucherTypeService;
-import com.huicai.base.voucher.constant.VoucherType;
 import com.huicai.base.system.util.SecurityUtils;
 import com.huicai.common.event.ServiceProgressStageEvent;
 import com.huicai.base.business.entity.OutputInvoiceEntity;
@@ -153,13 +152,18 @@ public class VoucherServiceImpl extends ServiceImpl<VoucherMapper, VoucherEntity
         validateLeafSubjects(dto.getEntries());
         // P1-4: 辅助核算强校验拦截
         validateAssistJson(dto.getEntries());
-        validateVoucherTypeLimit(dto.getVoucherTypeId(), dto.getEntries());
 
         // SPEC-P128 §7 已登记的排除项收口：voucher_type_id 由前端传入，
         // 原先直接信任。🔴 后果与 setVoucherTypeId(1L) 同型：凭证会挂到**别的企业**的
         // 凭证类型上，而外键约束照样成立 ⇒ 不报错但归属错乱（写路径静默比抛异常更危险）。
         // 实测存量 0 条错挂（开发库原有 0 张凭证），但「前端传了别人的 id」这条路没有闸门。
-        requireVoucherTypeOfCurrentEnterprise(dto.getVoucherTypeId());
+        //
+        // 🔴 顺序不可调换：本方法返回的实体是 validateVoucherTypeLimit 按 **code** 分支的
+        // 唯一来源（id 上没有 code）。若校验在前，voucherTypeId 为 null 时会先 NPE
+        // 而不是给出「凭证类型不能为空」。
+        VoucherTypeEntity voucherType = requireVoucherTypeOfCurrentEnterprise(dto.getVoucherTypeId());
+
+        validateVoucherTypeLimit(voucherType, dto.getEntries());
 
         // 生成凭证号
         String voucherNo = voucherNoService.generateNextNo(dto.getPeriod(), dto.getVoucherTypeId());
@@ -628,15 +632,20 @@ public class VoucherServiceImpl extends ServiceImpl<VoucherMapper, VoucherEntity
     }
 
     /**
-     * 断言传入的凭证类型属于<b>当前企业</b>。
+     * 断言传入的凭证类型属于<b>当前企业</b>，并返回该类型实体。
      *
      * <p>不复用 {@code VoucherTypeService.requireByCode}：那里按 <b>code</b> 解析，
      * 而此处前端给的是<b>主键 id</b>。因此只能按 id 取，再核对企业归属 ——
      * 该查询同样受 RLS 收敛，若 id 属于他企业则<b>本就查不到</b>，直接判不存在即可。
      *
+     * <p>🔴 返回实体而非 void：下游 {@code validateVoucherTypeLimit} 需要按
+     * <b>business code</b> 分支，而 code 只在实体上、id 上没有 ——
+     * 这正是 SPEC-P128 §7.3 遗留缺陷的成因（当年只有 id 可用，只好比全局常量）。
+     *
+     * @return 本企业的凭证类型实体
      * @throws BusinessException id 不存在或不属于当前企业时抛出，文案指明是凭证类型问题
      */
-    private void requireVoucherTypeOfCurrentEnterprise(Long voucherTypeId) {
+    private VoucherTypeEntity requireVoucherTypeOfCurrentEnterprise(Long voucherTypeId) {
         if (voucherTypeId == null) {
             throw new BusinessException("凭证类型不能为空");
         }
@@ -646,10 +655,33 @@ public class VoucherServiceImpl extends ServiceImpl<VoucherMapper, VoucherEntity
             throw new BusinessException(
                     "凭证类型不存在或不属于当前企业，请重新选择本企业的凭证类型");
         }
+        return type;
     }
 
-    private void validateVoucherTypeLimit(long voucherTypeId, List<EntryDTO> entries) {
-        if (voucherTypeId == VoucherType.JZ) {
+    /**
+     * 归一化业务编码。
+     *
+     * <p>与 {@code VoucherTypeServiceImpl#requireByCode} 的 {@code toUpperCase()} 同口径 ——
+     * 🔴 若此处不归一而 DB 里存的是小写，分支会<b>静默不匹配</b>：
+     * 校验从「恒不触发」变成「恒不触发」，症状与修复前完全一致，
+     * 但守卫（只查常量引用）已全绿 ⇒ 又一次「看起来修好了」的假象。
+     */
+    private static String normalizeTypeCode(VoucherTypeEntity type) {
+        return type == null || type.getCode() == null
+                ? ""
+                : type.getCode().trim().toUpperCase();
+    }
+
+    /**
+     * 凭证类型的科目限制：收款/付款凭证必须挂现金银行科目，转账凭证不得挂。
+     *
+     * <p>🔴 按 <b>business code</b> 分支，不按 id —— {@code VoucherType.JZ/SK/FK/ZZ}
+     * 是企业 1 的主键（V183 补种子后企业 2/3/4 实际是 5~8），
+     * 比 id 会让这三条校验对非企业 1 <b>一次都不触发</b>，内控静默失效。
+     */
+    private void validateVoucherTypeLimit(VoucherTypeEntity voucherType, List<EntryDTO> entries) {
+        String code = normalizeTypeCode(voucherType);
+        if ("JZ".equals(code)) {
             return;
         }
         List<String> cashBankCodes = subjectMapper.getCashBankCodes();
@@ -670,13 +702,13 @@ public class VoucherServiceImpl extends ServiceImpl<VoucherMapper, VoucherEntity
         boolean hasCashBankInCredit = entries.stream()
                 .filter(e -> e.getCredit().compareTo(BigDecimal.ZERO) > 0)
                 .anyMatch(e -> { Subject s = subjectMap.get(e.getSubjectId()); return s != null && cashBankCodeSet.contains(s.getCode()); });
-        if (voucherTypeId == VoucherType.SK && !hasCashBankInDebit) {
+        if ("SK".equals(code) && !hasCashBankInDebit) {
             throw BusinessException.badRequest("收款凭证借方必须有现金或银行科目");
         }
-        if (voucherTypeId == VoucherType.FK && !hasCashBankInCredit) {
+        if ("FK".equals(code) && !hasCashBankInCredit) {
             throw BusinessException.badRequest("付款凭证贷方必须有现金或银行科目");
         }
-        if (voucherTypeId == VoucherType.ZZ && (hasCashBankInDebit || hasCashBankInCredit)) {
+        if ("ZZ".equals(code) && (hasCashBankInDebit || hasCashBankInCredit)) {
             throw BusinessException.badRequest("转账凭证不能包含现金或银行科目");
         }
     }

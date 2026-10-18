@@ -311,6 +311,129 @@ class VoucherTypeHardcodeStructureTest {
                 "由 requireByCode 赋值的局部变量在 generateNextNo 规则里也必须放行");
     }
 
+    /**
+     * 🔴 §4.5 第 31 条的跨 SPEC 复发：守卫的判定依据<b>只覆盖了违规的部分形态</b>。
+     *
+     * <p>首版只扫 {@code generateNextNo(...)} 第二参数与 {@code setVoucherTypeId(...)} 实参，
+     * 而 {@code VoucherServiceImpl#validateVoucherTypeLimit} 里
+     * {@code if (voucherTypeId == VoucherType.SK && ...)} 是<b>第三种形态</b> ——
+     * 既不是 generateNextNo 的实参，也不是 setter 的实参，于是<b>完全不在扫描范围内</b>。
+     *
+     * <p>后果（实测 V183 给企业 2/3/4 补种子后）：这 3 条校验在企业 1 恰好成立
+     * （id 恰好 1/2/3/4），在企业 2/3/4 <b>一次都不会触发</b> ——
+     * 收款凭证借方不挂现金科目、转账凭证里塞现金科目，<b>都不拦</b>。
+     *
+     * <p><b>判据</b>：给扫描式门禁扩面时，问的不是「还有哪个方法没扫」，
+     * 而是<b>「违规以什么形态出现」</b> —— 凡是「拿 voucherTypeId 与全局 id 比对」都违规，
+     * 不论它出现在哪个方法的哪一行。
+     */
+    @Test
+    @DisplayName("全仓禁止拿 VoucherType.* 常量与 voucherTypeId 比对（第三形态，注释内亦不放行）")
+    void noVoucherTypeConstantComparisonAnywhere() throws Exception {
+        List<String> violations = new ArrayList<>();
+
+        for (String file : productionSources()) {
+            if (simpleName(file).equals(CONSTANT_DEF_FILE)) {
+                continue; // 常量定义文件本身是唯一合法出处
+            }
+            String stripped = stripComments(Files.readString(Path.of(file), StandardCharsets.UTF_8));
+            Matcher m = CONSTANT_REF.matcher(stripped);
+            while (m.find()) {
+                int line = (int) stripped.substring(0, m.start()).lines().count();
+                violations.add(simpleName(file) + ":" + line + ": " + m.group());
+            }
+        }
+
+        assertTrue(violations.isEmpty(),
+                "拿全局 id 常量与 voucherTypeId 比对（SPEC-P128 §7.3 遗留）："
+                        + "V183 补种子后企业 2/3/4 的 JZ/SK/FK/ZZ 实际 id 是 5~8，"
+                        + "与常量 1~4 永不相等 ⇒ 收款/付款/转账凭证的现金银行校验对非企业 1 完全失效。\n"
+                        + "应改为按 business code 比对（先 requireVoucherTypeOfCurrentEnterprise 拿到 "
+                        + "VoucherTypeEntity，再比 getCode()）。\n违规点（" + violations.size() + " 处）：\n  "
+                        + String.join("\n  ", violations));
+    }
+
+    @Test
+    @DisplayName("常量比对守卫自证：必须命中 4 个常量、跳过定义文件、放过注释内提及")
+    void constantRuleIsSensitive() {
+        // 命中：真实的第三形态
+        String bad = "if (voucherTypeId == VoucherType.SK && !hasCashBankInDebit) { throw new BusinessException(\"x\"); }";
+        Matcher m = CONSTANT_REF.matcher(stripComments(bad));
+        assertTrue(m.find(), "必须命中 VoucherType.SK 比对");
+        assertEquals("VoucherType.SK", m.group());
+
+        // 不命中：字符串字面量里的内容（不是引用）
+        String inString = "String msg = \"凭证类型不存在\"; if (a == b) { }";
+        assertTrue(!CONSTANT_REF.matcher(stripComments(inString)).find(),
+                "字符串字面量不得被当成常量引用");
+
+        // 注释内提及不计入（本项目 InputInvoiceStateMachineServiceImpl:64 就是这类）
+        String inComment = "// 曾经写成 VoucherType.FK，实为笔误\nint x = 1;";
+        assertTrue(!CONSTANT_REF.matcher(stripComments(inComment)).find(),
+                "注释内提及历史笔误是合法的（留痕需要），不得判红 —— "
+                        + "否则守卫会逼后人删掉解释性注释");
+
+        // 行号必须保真：剥离注释不得吞掉换行
+        String multi = "// line1\n// line2\nif (v == VoucherType.ZZ) { }";
+        String s = stripComments(multi);
+        Matcher m2 = CONSTANT_REF.matcher(s);
+        assertTrue(m2.find(), "应命中 ZZ");
+        assertEquals(3, (int) s.substring(0, m2.start()).lines().count(),
+                "剥离注释后行号必须仍指向原始行（否则报错行号会指错地方，等于没有精确定位）");
+    }
+
+    /** 常量引用形态：VoucherType.XXX，且 XXX 是四个已知常量之一 */
+    private static final Pattern CONSTANT_REF =
+            Pattern.compile("VoucherType\\s*\\.\\s*(JZ|SK|FK|ZZ)\\b");
+
+    private static final String CONSTANT_DEF_FILE = "VoucherType.java";
+
+    /**
+     * 剥离注释与字符串字面量，但<b>保留换行</b>以维持行号。
+     *
+     * <p>⚠️ 不剥字符串字面量会让「文案里提到常量名」被误判；
+     * 不保留换行会让报错行号指错地方 —— 后者同样致命：
+     * 一个指错位置的报错等于没有定位信息。
+     */
+    private static String stripComments(String src) {
+        StringBuilder out = new StringBuilder(src.length());
+        int i = 0;
+        int n = src.length();
+        while (i < n) {
+            char c = src.charAt(i);
+            if (c == '/' && i + 1 < n && src.charAt(i + 1) == '/') {
+                while (i < n && src.charAt(i) != '\n') {
+                    i++;
+                }
+            } else if (c == '/' && i + 1 < n && src.charAt(i + 1) == '*') {
+                i += 2;
+                while (i + 1 < n && !(src.charAt(i) == '*' && src.charAt(i + 1) == '/')) {
+                    if (src.charAt(i) == '\n') {
+                        out.append('\n');
+                    }
+                    i++;
+                }
+                i = Math.min(n, i + 2);
+                out.append(' ');
+            } else if (c == '"' || c == '\'') {
+                char quote = c;
+                i++;
+                while (i < n && src.charAt(i) != quote) {
+                    if (src.charAt(i) == '\\') {
+                        i++;
+                    }
+                    i++;
+                }
+                i++;
+                out.append(' ');
+            } else {
+                out.append(c);
+                i++;
+            }
+        }
+        return out.toString();
+    }
+
     // ── 解析工具 ──
 
     /**

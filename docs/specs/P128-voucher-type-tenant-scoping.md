@@ -214,6 +214,64 @@ Redis 键原含 `voucherTypeId`：`voucher:no:{period}:{voucherTypeId}`。企业
 
 ---
 
+## §7.1 2026-10-18 实施补记：§7.3 遗留已收口 + 查出新的 fail-open 缺口
+
+### 已修复：§7.3 的「仍按 id 判断凭证类型」
+
+`VoucherServiceImpl#validateVoucherTypeLimit` 原按全局常量分支：
+
+```java
+if (voucherTypeId == VoucherType.SK && !hasCashBankInDebit) throw ...
+if (voucherTypeId == VoucherType.FK && !hasCashBankInCredit) throw ...
+if (voucherTypeId == VoucherType.ZZ && (hasCashBankInDebit || hasCashBankInCredit)) throw ...
+```
+
+🔴 **在企业 2/3/4 上一次都不触发**（其主键为 5~8，与常量 1~4 永不相等）⇒
+收款凭证不挂现金科目、转账凭证塞现金科目，**都不拦**。企业 1 恰好正常，长期不可见。
+
+修法：`requireVoucherTypeOfCurrentEnterprise` 改为返回 `VoucherTypeEntity`，
+`validateVoucherTypeLimit` 按 `getCode()` 分支（归一化 `trim().toUpperCase()`，与 `requireByCode` 同口径）。
+
+**守卫扩面**：`VoucherTypeHardcodeStructureTest` 原只扫 `generateNextNo` 第二参数与 `setVoucherTypeId` 实参，
+第三形态「拿常量与 id 比对」**完全不在扫描范围内**（§4.5 第 31 条复发）。已新增
+`noVoucherTypeConstantComparisonAnywhere`，剥离注释与字符串后全仓扫描，并自证：命中 4 个常量、
+跳过定义文件、**不误报注释里对历史笔误的说明**。
+
+**真库行为测试** `VoucherTypeLimitByCodeRealDBTest`（9 例）——
+🔴 结构守卫只能证明「不再引用常量」，**不能证明改完校验真会触发**
+（例如 code 归一化写错，守卫照样全绿而校验恒不触发），故必须走 `VoucherService#create` 真实链路。
+含 3 条「自证前提」用例：①本企业四种主键均 ≠ 1/2/3/4 ②现金银行科目集合非空 ③借方科目不属于现金银行。
+**反证**：注入回按 id 比对 ⇒ 恰好 3 条「应被拒」用例转红（`nothing was thrown`），正向对照仍绿。
+
+### 🔴 新缺口（未修，登记待立项）：无现金/银行科目 ⇒ 凭证类型限制整体 fail-open
+
+`validateVoucherTypeLimit` 开头：
+
+```java
+List<String> cashBankCodes = subjectMapper.getCashBankCodes();
+if (cashBankCodes.isEmpty()) { return; }   // ← 直接跳过全部三条规则
+```
+
+🔴 **本项目自建的新企业账套默认没有 1001/1002 科目**（L2 Testcontainers 全新库实测为空集，
+且 `getCashBankCodes` 的裸 SQL 会被 `EnterpriseDataPermissionInterceptor` 注入当前企业过滤
+⇒ 查不到别家的现金科目）。此时收款/付款/转账凭证的科目限制**一条都不生效**，且无任何日志或提示。
+
+**症状**：新账套下制凭证永远不会被科目规则拦住，界面与日志均无异常 ⇒ 静默失效。
+
+**未在本 SPEC 修的理由**：改 fail-open 为 fail-closed 会让「尚在建科目体系的新账套」**完全无法制证**，
+属业务策略变更，须老丁裁定。可选方向：①改为「无现金科目时告警但不拦」②保持现状但在凭证类型配置页提示
+③建账引导期强制要求至少一个现金/银行科目（与 P129 建档引导合并）。
+
+**复现方式**：`VoucherTypeLimitByCodeRealDBTest#premiseCashBankCodesNotEmpty` 自建企业（不建 1001 科目）即红。
+
+### 同批修复：P135 遗留的接口覆盖门禁回归
+
+`/api/ai/quota`（P135 配额查询端点）前端从未接入 ⇒ 接口覆盖棘轮由 92 升至 **93** 越限。
+已接前端并在 AI 任务页展示配额（`AiTaskList.vue` 顶部 tag，剩余 <20% 转 warning，用尽时 tooltip
+说明「何时恢复 + 联系管理员提升」—— §4.5 第 50 条：禁用/限流必须同时给出路）。棘轮回到 92（余量 0）。
+
+---
+
 # MACHINE-READABLE CONTRACT
 
 contract_version: "1.0"

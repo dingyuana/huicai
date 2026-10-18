@@ -3,6 +3,15 @@
     <el-card shadow="never">
       <div class="page-header">
         <span class="page-title">AI 任务</span>
+        <!-- 🔴 配额用尽时必须「说明为什么 + 给出路」，否则用户只会报「AI 功能坏了」 -->
+        <el-tooltip
+          v-if="quota && quota.available && quota.limit > 0 && quota.used >= quota.limit"
+          content="今日 AI 额度已用完，将于 resetAt 后自动恢复；急需可联系管理员提升额度"
+          placement="top"
+        >
+          <el-tag type="danger" size="small">{{ quotaText }}</el-tag>
+        </el-tooltip>
+        <el-tag v-else-if="quota" :type="quotaTagType as any" size="small">{{ quotaText }}</el-tag>
       </div>
 
       <el-form :model="query" inline class="filter-form">
@@ -74,9 +83,9 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import { pageAiTask, reviewAiTask } from '@/api/modules/ai'
+import { pageAiTask, reviewAiTask, getAiQuota, type AiQuota } from '@/api/modules/ai'
 import { useAuthStore } from '@/stores/auth.store'
 
 const TYPE_OPTIONS = [
@@ -123,5 +132,39 @@ const onReview = async (row: any, approved: boolean) => {
   fetchData()
 }
 
-onMounted(fetchData)
+// SPEC-P135：把 AI 配额护栏**显式展示**给用户。
+// 🔴 配额用满时 AI 调用会被服务端 429 拒绝，此前界面上没有任何提示，
+// 用户只会看到「AI 功能坏了」而不知道是当日额度用完 —— 同一个 §4.5 第 50 条形态：
+// 只做「禁用」不给「为什么 + 怎么办」。
+const quota = ref<AiQuota | null>(null)
+const quotaError = ref(false)
+
+const fetchQuota = async () => {
+  try {
+    quota.value = await getAiQuota()
+  } catch {
+    quota.value = null
+    quotaError.value = true
+  }
+}
+
+const quotaText = computed(() => {
+  const q = quota.value
+  if (!q) return ''
+  if (!q.available) return 'AI 配额暂不可用'
+  return `今日 AI 额度 ${q.used} / ${q.limit}`
+})
+
+const quotaTagType = computed(() => {
+  const q = quota.value
+  if (!q || !q.available) return 'info'
+  // 剩余不足 20% 时提前预警，而不是等 429 报错
+  const remain = q.limit - q.used
+  return remain <= Math.max(1, Math.floor(q.limit * 0.2)) ? 'warning' : 'success'
+})
+
+onMounted(() => {
+  fetchData()
+  fetchQuota()
+})
 </script>
