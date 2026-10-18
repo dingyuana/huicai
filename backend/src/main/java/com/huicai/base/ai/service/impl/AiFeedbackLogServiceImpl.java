@@ -21,6 +21,10 @@ import java.util.stream.Collectors;
  */
 @Service
 @RequiredArgsConstructor
+// 🔴 类级事务（SPEC-P128 §7.1 同型缺陷修复）：t_ai_feedback_log 是 RLS 租户表。
+//   读方法无事务 ⇒ TenantGucSetter 提前 return ⇒ GUC 恒 NULL ⇒ 整表被过滤，
+//   表现为 AI 反馈列表恒空。本类原先只有一个写方法挂了 @Transactional。
+@Transactional(rollbackFor = Exception.class)
 public class AiFeedbackLogServiceImpl implements AiFeedbackLogService {
 
     private static final Set<String> VALID_HUMAN_ACTIONS = Set.of(

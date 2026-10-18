@@ -4,6 +4,7 @@ import com.huicai.base.report.entity.FinancialMetricEntity;
 import com.huicai.base.report.mapper.FinancialMetricMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -17,6 +18,11 @@ import java.util.Map;
  */
 @Service
 @RequiredArgsConstructor
+// 🔴 类级事务（SPEC-P128 §7.1 同型缺陷修复）：财务分析读的是 RLS 租户表
+//   （t_financial_metric / 报表底表）。无事务 ⇒ TenantGucSetter 提前 return
+//   ⇒ GUC 恒 NULL ⇒ 谓词取 NULL ⇒ 整表被过滤 ⇒ 指标恒为空。
+//   本类原先全类零 @Transactional。
+@Transactional(rollbackFor = Exception.class)
 public class AnalysisService {
 
     private final FinancialMetricMapper metricMapper;
