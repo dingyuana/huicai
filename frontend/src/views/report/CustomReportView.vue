@@ -79,7 +79,11 @@ const fetchData = async () => {
     const params: any = { period: query.period, onlyWithBalance: query.onlyWithBalance }
     if (query.level) params.level = query.level
     if (query.codePrefix) params.codePrefix = query.codePrefix
-    const res: any = await request.get('/api/base/report/v1/reports/custom/subject-balance', { params })
+    // 🔴 此前误写 '/api/base/report/v1/...'，而 request.ts 的 baseURL 已是 '/api'
+    //    ⇒ 实际请求 '/api/api/base/report/v1/...' ⇒ 404「自定义报表」页永远空白。
+    //    该路径从未被 validate-api-paths.mjs 拦下（它白名单只认 /base/{m}/v1/），
+    //    是「门禁存在但判定依据覆盖不全」——与 §4.5 第 31 条同型。
+    const res: any = await request.get('/base/report/v1/reports/custom/subject-balance', { params })
     list.value = res.data || []
   } finally {
     loading.value = false

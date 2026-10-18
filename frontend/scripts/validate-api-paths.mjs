@@ -21,6 +21,11 @@ const ALLOWED_PREFIXES = [
   /^\/sme\/\w+\/v1\//, // SME 模块: /api/sme/cash/v1/cash-journals
   /^\/base\/\w+\/v1\//,// 基础模块: /api/base/voucher/v1/vouchers
   /^\/agent\//,        // AI Agent 服务: /api/agent/route
+  // SPEC-P135 AI 配额：后端 AiQuotaController 的类级 @RequestMapping 是 "/api/ai"，
+  // 而 baseURL 已是 /api ⇒ 前端须写 /ai/quota。
+  // 🔴 此前漏了这条白名单，导致「新增 AI 端点」在一线城市内必然构建失败 ——
+  //    而 npm test 与 vue-tsc 都不跑本脚本，漏检代价是「本地全绿、服务器构建红」。
+  /^\/ai\//,          // AI 直连: /api/ai/quota
 ]
 
 // 所有 request 方法调用 (匹配字符串字面量路径)
