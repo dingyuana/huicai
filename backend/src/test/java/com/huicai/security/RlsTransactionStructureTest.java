@@ -47,11 +47,23 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *
  * <h2>🔴 本守卫的判定依据与它的盲区（必须如实知道）</h2>
  * 依据是「Service 类上有没有 {@code @Transactional}（类级或该方法级）」。
- * <b>它查不出「注解在但不生效」</b> —— 事实上 {@code VoucherTypeServiceImpl}
- * 早就挂着类级 {@code @Transactional}，实测该路径<b>依然</b>是
- * {@code non transactional SqlSession}。所以本守卫是<b>必要非充分</b>的护栏：
- * 它挡住「压根没写注解」这一大类，剩下的必须靠<b>运行时对照 DB 行数</b>才能发现。
- * <p>登记的白名单同样只允许缩小不允许扩大 —— 扩大等于把爆炸半径藏起来。
+ *
+ * <p><b>🔴 这条依据已被实测推翻过一次，不可当定论</b>：守卫首版正是按此判据把
+ * {@code AiTaskService} 判为「已修」，因为它已挂类级 {@code @Transactional}；
+ * 但部署到服务器后症状<b>丝毫未变</b>（DB 有数据仍 {@code total=0}），日志显示
+ * {@code SqlSession was not registered for synchronization because synchronization is not active}
+ * ⇒ <b>Service 层的事务代理在该路径上没有生效</b>。
+ * {@code VoucherTypeServiceImpl} 同样是「类级注解在、运行时仍无事务」。
+ *
+ * <p><b>目前唯一两次实测有效的修法是把事务上提到 Controller</b>
+ * （{@code VoucherTypeController}、{@code AiTaskController}）——
+ * 那里日志确为 {@code will be managed by Spring} 且能读到数据。
+ *
+ * <p>因此本守卫的正确用法是：<b>它是「必要非充分」的粗筛</b> ——
+ * 挡掉「压根没写注解」这一大类；剩下的必须靠<b>运行时对照 DB 行数</b>才能确认。
+ * 真正的根治（让 Service 层事务代理生效）尚未定位，属未竟项。
+ *
+ * <p>登记的白名单只允许缩小不允许扩大 —— 扩大等于把爆炸半径藏起来（§4.5 第 43 条）。
  */
 @DisplayName("RLS 守卫：访问 RLS 租户表的 Service 必须有事务（否则 GUC 不设 ⇒ 整表被过滤）")
 class RlsTransactionStructureTest {

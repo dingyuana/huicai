@@ -10,6 +10,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import com.huicai.base.ai.vo.AiAnomalyTagVO;
 import com.huicai.base.ai.vo.AiTaskVO;
 import lombok.RequiredArgsConstructor;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -36,6 +37,14 @@ public class AiTaskController {
 
     @Operation(summary = "分页查询")
     @GetMapping("/tasks/page")
+    // 🔴 事务必须挂在 Controller 上（SPEC-P128 §7.1 同型缺陷，2026-10-18 服务器实测）：
+    //   t_ai_task 是 RLS 租户表，而 TenantGucSetter#apply 在无事务时直接 return
+    //   ⇒ GUC 恒 NULL ⇒ 谓词取 NULL ⇒ 整表被过滤。
+    //   🔴 **仅给 Service 加类级 @Transactional 无效**：AiTaskService 已挂类级注解，
+    //   实测日志仍是 "SqlSession was not registered for synchronization because
+    //   synchronization is not active"，症状不变（DB 有数据但 total=0）。
+    //   故与 VoucherTypeController 同法：把事务上提到 Controller。
+    @Transactional(rollbackFor = Exception.class)
     public R<IPage<AiTaskVO>> page(
             @RequestParam(required = false) String taskType,
             @RequestParam(required = false) String status,
@@ -46,6 +55,7 @@ public class AiTaskController {
 
     @Operation(summary = "详情")
     @GetMapping("/tasks/{id}")
+    @Transactional(rollbackFor = Exception.class)
     public R<AiTaskVO> getById(@PathVariable Long id) {
         return R.ok(AiTaskVO.from(service.getById(id)));
     }
