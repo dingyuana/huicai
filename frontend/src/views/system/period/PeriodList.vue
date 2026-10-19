@@ -108,9 +108,15 @@ async function fetchData() {
   loading.value = true
   try {
     const res = await getPeriodPage(query.value)
-    total.value = res.total
-  } catch {
-    // handled
+    // 🔴 原实现只赋 total、**从未给 list 赋值**，而表格绑定的是 :data="list"
+    //    ⇒ 分页器显示条数但表格永远空白（2026-10-19 实测：接口 total=2，页面无数据）。
+    //    同时静默吞掉 catch，使该缺陷在界面上表现为「本来就没数据」而非报错，极难定位。
+    list.value = res.records ?? []
+    total.value = res.total ?? 0
+  } catch (e) {
+    list.value = []
+    total.value = 0
+    ElMessage.error('会计期间加载失败：' + ((e as Error)?.message ?? e))
   } finally {
     loading.value = false
   }
