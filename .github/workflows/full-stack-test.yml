@@ -87,6 +87,21 @@ jobs:
       - name: 登记册结构/状态码/SPEC 引用守卫
         run: python scripts/check_registry_drift.py
 
+  # 🔴 workflow 的错误不会让构建失败，而是等部署那一刻才炸，且日志难读。
+  #   本项目已真实踩过两次：①env 挂进 with（GitHub 不认，变量取不到）
+  #   ②同一 step 内两个 env 键（后者静默覆盖前者，secrets 一并消失）。
+  #   两者肉眼都看不出，只能机械校验（阻断式，不加 continue-on-error）。
+  workflow-structure-check:
+    name: GitHub Actions 结构守卫（阻断式）
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: workflow env 作用域/重复 key/未声明变量守卫
+        run: python scripts/check_workflow_structure.py
+
   tenant-fixture-check:
     name: 租户夹具一致性检测
     runs-on: ubuntu-latest

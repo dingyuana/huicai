@@ -15,6 +15,7 @@ import com.huicai.sme.periodclose.service.CarryoverSequenceService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -38,6 +39,10 @@ import java.util.List;
 @Slf4j
 @Service
 @RequiredArgsConstructor
+// 🔴 类级事务（RLS 守卫 RlsTransactionStructureTest）：本类读 t_voucher / t_voucher_entry，
+//   均为 RLS 租户表。无事务 ⇒ TenantGucSetter#apply 提前 return ⇒ GUC 恒 NULL
+//   ⇒ 谓词取 NULL ⇒ 结转查询与凭证视图恒返 0 行。
+@Transactional(rollbackFor = Exception.class)
 public class CarryoverSequenceServiceImpl implements CarryoverSequenceService {
 
     private final DepreciationVoucherService depreciationVoucherService;

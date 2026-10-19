@@ -9,6 +9,7 @@ import jakarta.annotation.PostConstruct;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -28,6 +29,9 @@ import java.util.List;
  */
 @Service
 @RequiredArgsConstructor
+// 🔴 类级事务（RLS 守卫 RlsTransactionStructureTest）：classify() 读 t_classification_rule，
+//   该表是 RLS 租户表。无事务 ⇒ GUC 恒 NULL ⇒ 分类规则恒查不到 ⇒ 永远退化为启发式。
+@Transactional(rollbackFor = Exception.class)
 public class FallbackHeuristicService {
 
     private final ClassificationRuleMapper ruleMapper;
