@@ -2,6 +2,7 @@ package com.huicai.base.system.service.impl;
 
 import org.springframework.transaction.annotation.Transactional;
 import com.baomidou.mybatisplus.core.conditions.Wrapper;
+import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.huicai.base.system.entity.PeriodEntity;
@@ -50,6 +51,30 @@ public class PeriodServiceImpl extends ServiceImpl<PeriodMapper, PeriodEntity> i
     @Transactional
     public List<PeriodEntity> list() {
         return super.list();
+    }
+
+    /**
+     * 🔴 同上，{@code page(...)} 亦是 {@code IService} 的 default 方法 —— SPEC-P122 当年
+     * 只覆盖了 {@code list(...)}，<b>漏了 {@code page(...)}</b>，导致分页端点
+     * {@code GET /api/v1/periods} 在非超级用户下<b>恒返 total=0</b>，
+     * 而同一张表的 {@code /periods/all} 却正常返回 2 条。
+     *
+     * <p>实测对照（企业 4，账号 liu，2026-10-19）：
+     * <pre>
+     *   GET /api/v1/periods/all            -> len=2     （走已覆盖的 list()）
+     *   GET /api/v1/periods?current=1&size=20 -> total=0  （走未覆盖的 page()）
+     * </pre>
+     * 数据库侧用降权探针（NOSUPERUSER + GUC=4）查得 2 条 ⇒ 数据在、RLS 谓词正确，
+     * 差别只在<b>有无事务</b> ⇒ 无事务时 {@code SET LOCAL} 失效，GUC 为 NULL，
+     * RLS 谓词取 NULL ⇒ 整表被过滤。
+     *
+     * <p>⚠️ {@code PaginationInnerInterceptor} 会自行执行 COUNT 并<b>短路拦截器链</b>，
+     * 故必须覆盖到 {@code page(...)} 本身，Controller 层加事务是另一条已验证可行的路。
+     */
+    @Override
+    @Transactional
+    public <E extends IPage<PeriodEntity>> E page(E page, Wrapper<PeriodEntity> queryWrapper) {
+        return super.page(page, queryWrapper);
     }
 
     @Override
