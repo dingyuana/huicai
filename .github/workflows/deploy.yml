@@ -3,7 +3,14 @@ name: Deploy to Production
 on:
   push:
     branches:
-      - main  # 只有当代码合并到 main 分支时才触发
+      - main
+
+# 🔴 为什么必须加这个：同一分支连续 push 时，GitHub 默认会**取消**先前未完成的运行。
+#   取消掉的正是「正在部署」的那一次 ⇒ 表现为「push 了但没生效，日志显示 cancelled」，
+#   极易被误判成部署脚本坏了。生产部署按序排队，不允许取消。
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
 
 jobs:
   deploy:
@@ -12,16 +19,127 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      # 🔴 先验证再部署：避免把「编译不过」的提交推上生产。
+      #   本地零回归不等于 CI 零回归（CI 是全新 checkout，无 target/）。
+      - name: Verify backend builds
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+        run: mvn -B -f backend/pom.xml clean package -DskipTests
+
+      # 本项目是 Spring Boot jar + 前端静态站 + docker compose 编排，
+      # **不是** Node/pm2 应用 ⇒ 不做 npm install / pm2 restart。
       - name: Deploy via SSH
-        uses: appleboy/ssh-action@v1.0.3
+        uses: appleboy/ssh-action@v1.2.2
+        env:
+          # 🔴 env 必须是 **step 级**作用域，写在别处取不到；
+          #    且同一 step 内重复的 env 会被后者静默覆盖，前者连同其 secrets 一起消失。
+          #    部署目录须与 DEPLOY_PATH secret 一致（生产实测 /data/disk/huicai）。
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
         with:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
-            # 这里就相当于在服务器上帮你执行了 cd 命令
-            cd /var/www/huicai
-            git pull origin main
-            npm install
+            set -euo pipefail
+            cd "$DEPLOY_PATH"
+
+            echo "--- 1. 拉取 main ---"
+            git pull --ff-only origin main
+            git log --oneline -1
+
+            echo "--- 2. 后端打包（堆受限：生产机内存通常只有 3~4G）---"
+            cd backend
+            MAVEN_OPTS="-Xmx900m -XX:MaxMetaspaceSize=256m" mvn clean package -DskipTests -q
+            cd ..
+
+            echo "--- 3. 构建 backend 镜像 ---"
+            docker build -t huicai-backend:latest ./backend
+
+            echo "--- 4. 前端构建（API 路径门禁在 build 脚本第一步，勿绕过）---"
+            cd frontend
+            NODE_OPTIONS="--max-old-space-size=1024" npm ci --no-audit --no-fund
             npm run build
-            pm2 restart huicai
+            cd ..
+
+            echo "--- 5. 拉起 backend（Flyway 在此应用迁移）---"
+            # 用 compose 托管而非手工 docker run：手工方式一旦重建容器就会丢失
+            # SPRING_FLYWAY_* 等关键变量 —— 曾真实发生过：容器缺 Flyway 超级用户身份，
+            # 导致 seed 迁移被 RLS 的 with_check 拒绝、应用启动失败。
+            docker compose up -d backend
+            docker compose ps backend
+
+            echo "--- 6. 等待健康 ---"
+            HEALTHY=0
+            for i in $(seq 1 40); do
+              sleep 3
+              if curl -fsS --max-time 5 http://127.0.0.1:8000/api/v1/system/health >/dev/null 2>&1; then
+                echo "backend healthy after $((i*3))s"
+                HEALTHY=1
+                break
+              fi
+            done
+            if [ "$HEALTHY" != "1" ]; then
+              echo "!! 健康检查未通过，回滚到上一镜像"
+              docker tag huicai-backend:rollback-latest huicai-backend:latest
+              docker compose up -d backend
+              exit 1
+            fi
+
+            echo "--- 7. 核对迁移版本（代码已部署 != 迁移已生效）---"
+            docker compose exec -T postgres psql -U huicai -d huicai -t -c \
+              "SELECT 'latest_migration=' || max(version) FROM flyway_schema_history WHERE success"
+            FAILED=$(docker compose exec -T postgres psql -U huicai -d huicai -t -c \
+              "SELECT count(*) FROM flyway_schema_history WHERE success = false" | tr -d ' \r')
+            echo "  failed_migrations=$FAILED"
+            if [ "$FAILED" != "0" ]; then
+              echo "!! 存在失败迁移，中止并回滚"
+              docker tag huicai-backend:rollback-latest huicai-backend:latest
+              docker compose up -d backend
+              exit 1
+            fi
+
+            echo "--- 8. 打回滚标签（供下次失败时快速回退）---"
+            docker tag huicai-backend:latest huicai-backend:rollback-latest
+
+            echo "--- 9. 前端由 nginx 挂载 dist 目录，无需重启，仅确认可达 ---"
+            curl -s -o /dev/null -w '  frontend HTTP %{http_code}\n' --max-time 10 http://127.0.0.1:3001/ || true
+
+      # 🔴 部署成功 != 功能可用。必须实打实调业务接口，
+      #   否则「RLS 过滤导致列表恒空」这类静默失效会被判成部署成功。
+      #   凭证类型列表是最灵的探针：它一空，用户就无法制证。
+      - name: Verify deployment
+        uses: appleboy/ssh-action@v1.2.2
+        env:
+          DEPLOY_CHECK_USER: ${{ secrets.DEPLOY_CHECK_USER }}
+          DEPLOY_CHECK_PASS: ${{ secrets.DEPLOY_CHECK_PASS }}
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            set -euo pipefail
+            TOKEN=$(curl -s --max-time 15 -X POST http://127.0.0.1:8000/api/v1/auth/login \
+              -H 'Content-Type: application/json' \
+              -d '{"username":"'"$DEPLOY_CHECK_USER"'","password":"'"$DEPLOY_CHECK_PASS"'"}' \
+              | python3 -c "import sys,json;print((json.load(sys.stdin).get('data') or {}).get('token',''))")
+            if [ -z "$TOKEN" ]; then
+              echo "!! 登录失败，无法做业务校验"
+              exit 1
+            fi
+
+            echo "--- 凭证类型（必须非空，否则无法制证）---"
+            curl -s --max-time 20 -H "Authorization: Bearer $TOKEN" \
+              http://127.0.0.1:8000/api/v1/voucher-types \
+              | python3 -c "import sys,json;d=json.load(sys.stdin).get('data') or {};t=d.get('total',0);print('  voucher_types_total=',t);raise SystemExit(0 if t>0 else 1)"
+
+            echo "--- 四个核心报表 ---"
+            for ep in subject-balance balance-sheet income-statement cash-flow; do
+              code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 30 \
+                -H "Authorization: Bearer $TOKEN" \
+                "http://127.0.0.1:8000/api/base/report/v1/reports/$ep?period=$(date +%Y%m)")
+              echo "  HTTP $code  $ep"
+              [ "$code" = "200" ] || exit 1
+            done

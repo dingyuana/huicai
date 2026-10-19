@@ -49,6 +49,10 @@ public class AttachmentService {
         }
     }
 
+    // 🔴 事务（RLS 守卫 RlsTransactionStructureTest）：listByBiz 读 t_attachment（RLS 租户表）。
+    //   无事务 ⇒ TenantGucSetter#apply 提前 return ⇒ GUC 恒 NULL ⇒ 附件列表恒空。
+    //   本类写方法已各自带 @Transactional，故此处只补读方法。
+    @Transactional(rollbackFor = Exception.class)
     public List<AttachmentEntity> listByBiz(String bizType, Long bizId) {
         return mapper.findByBiz(bizType, bizId);
     }
@@ -65,6 +69,10 @@ public class AttachmentService {
         mapper.deleteById(id);
     }
 
+    // 🔴 事务（RLS 守卫）：presignedUrl 先 mapper.selectById 查 t_attachment（RLS 租户表），
+    //   再去对象存储换签名。无事务 ⇒ GUC 恒 NULL ⇒ 恒抛「附件不存在」——
+    //   而真实原因是没读到行，报错文案完全指错方向。
+    @Transactional(rollbackFor = Exception.class)
     public String presignedUrl(Long id) {
         AttachmentEntity entity = mapper.selectById(id);
         if (entity == null) throw new BusinessException("附件不存在");

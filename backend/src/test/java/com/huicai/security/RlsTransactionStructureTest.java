@@ -47,11 +47,23 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *
  * <h2>🔴 本守卫的判定依据与它的盲区（必须如实知道）</h2>
  * 依据是「Service 类上有没有 {@code @Transactional}（类级或该方法级）」。
- * <b>它查不出「注解在但不生效」</b> —— 事实上 {@code VoucherTypeServiceImpl}
- * 早就挂着类级 {@code @Transactional}，实测该路径<b>依然</b>是
- * {@code non transactional SqlSession}。所以本守卫是<b>必要非充分</b>的护栏：
- * 它挡住「压根没写注解」这一大类，剩下的必须靠<b>运行时对照 DB 行数</b>才能发现。
- * <p>登记的白名单同样只允许缩小不允许扩大 —— 扩大等于把爆炸半径藏起来。
+ *
+ * <p><b>🔴 这条依据已被实测推翻过一次，不可当定论</b>：守卫首版正是按此判据把
+ * {@code AiTaskService} 判为「已修」，因为它已挂类级 {@code @Transactional}；
+ * 但部署到服务器后症状<b>丝毫未变</b>（DB 有数据仍 {@code total=0}），日志显示
+ * {@code SqlSession was not registered for synchronization because synchronization is not active}
+ * ⇒ <b>Service 层的事务代理在该路径上没有生效</b>。
+ * {@code VoucherTypeServiceImpl} 同样是「类级注解在、运行时仍无事务」。
+ *
+ * <p><b>目前唯一两次实测有效的修法是把事务上提到 Controller</b>
+ * （{@code VoucherTypeController}、{@code AiTaskController}）——
+ * 那里日志确为 {@code will be managed by Spring} 且能读到数据。
+ *
+ * <p>因此本守卫的正确用法是：<b>它是「必要非充分」的粗筛</b> ——
+ * 挡掉「压根没写注解」这一大类；剩下的必须靠<b>运行时对照 DB 行数</b>才能确认。
+ * 真正的根治（让 Service 层事务代理生效）尚未定位，属未竟项。
+ *
+ * <p>登记的白名单只允许缩小不允许扩大 —— 扩大等于把爆炸半径藏起来（§4.5 第 43 条）。
  */
 @DisplayName("RLS 守卫：访问 RLS 租户表的 Service 必须有事务（否则 GUC 不设 ⇒ 整表被过滤）")
 class RlsTransactionStructureTest {
@@ -69,14 +81,21 @@ class RlsTransactionStructureTest {
     );
 
     /**
-     * 明确豁免：这些 Service 访问的表<b>不在 RLS 名单内</b>，无 GUC 依赖。
-     * 每条须写明理由；只允许缩小不允许扩大（§4.5 第 43 条）。
+     * 明确豁免：这些 Service <b>虽有 Mapper 依赖，但被守卫点名的方法并不触表</b>，
+     * 故不需要事务。每条须写明「哪个方法 + 为什么不触表」——
+     * 🔴 只写「不需要事务」而不写理由，等于把判断权交还给未来的修改者，
+     *    他把一个真读表的方法加进来时不会被拦住。
      */
     private static final Map<String, String> EXEMPT = new LinkedHashMap<>();
 
     static {
-        // 健康检查/纯内存计算：无 Mapper 依赖，不触达任何 RLS 表
-        EXEMPT.put("CodeGeneratorServiceImpl", "纯代码生成，无 Mapper 依赖");
+        // classifyType 是 static 且只调 BankClassification.routeType（纯规则路由），不查库；
+        // isSmallAmountDirectVoucher 同理只读入参。两者无 Mapper 调用。
+        EXEMPT.put("AutoGenerationService", "被点名的 classifyType/isSmallAmountDirectVoucher 是 static 纯规则路由，不触表；"
+                + "其读表方法 generateDocThenVoucher 等已在类内各自带事务");
+        // previewInvoices 只解析上传的 Excel 文件，不查库；写方法 confirmImport/importInvoices 已有事务。
+        EXEMPT.put("SalesInvoiceImportService", "被点名的 previewInvoices 仅解析上传文件不触表；写方法已有 @Transactional");
+        EXEMPT.put("InputInvoiceImportService", "被点名的 previewInvoices 仅解析上传文件不触表；写方法已有 @Transactional");
     }
 
     @Test
@@ -90,14 +109,19 @@ class RlsTransactionStructureTest {
             if (!name.endsWith("Service") && !name.endsWith("ServiceImpl")) {
                 continue;
             }
-            if (!EXEMPT.containsKey(name)) {
-                scanned++;
-            }
+            scanned++;
             String src = stripComments(Files.readString(service, StandardCharsets.UTF_8));
 
             // 只看真正注入 Mapper/Repository 的（无持久化依赖的纯计算 Service 不受 GUC 影响）
             boolean touchesPersistence = hasMapperField(src);
             if (!touchesPersistence) {
+                continue;
+            }
+
+            // 🔴 豁免必须**同时**跳过计数与判定：首版只在计数处判断，
+            // 判定处照常报警 ⇒ 豁免形同虚设，且报错里不提示「已豁免」，
+            // 让人以为豁免没生效而反复改代码（本次即被此绕了一圈）。
+            if (EXEMPT.containsKey(name)) {
                 continue;
             }
 
@@ -193,24 +217,71 @@ class RlsTransactionStructureTest {
         return src.substring(Math.max(0, idx - 1200), idx).contains("@Transactional");
     }
 
-    /** 所有 public 方法体之前都带 @Transactional */
+    /**
+     * 所有 public 方法是否各自带 {@code @Transactional}。
+     *
+     * <p>🔴 <b>首版实现是错的，且错得极其隐蔽</b>：它取「方法所在行行首 → 方法名」之间的文本
+     * 来找注解，而真实 Java 方法都是<b>行首缩进 + 方法声明</b>，该片段 trim 后是空串
+     * ⇒ <b>每个方法都被当成「无注解」跳过</b> ⇒ 判定恒为 false
+     * ⇒ 守卫把全仓所有 Service 都报成违规（实测误报 9 个），连自证用例也一并失败。
+     *
+     * <p><b>教训</b>：这个守卫在本轮之前从未被全量 L1 跑到（它是我上一轮新加的），
+     * 所以「单跑该类时绿/红」都不能替代「在全量里跑一次」——
+     * 单元测试意义上的「通过」与「在全量构建中被执行」是两件事。
+     *
+     * <p>正确做法：<b>按行向上回溯</b>，跳过空行与 {@code @} 注解行，
+     * 遇到第一个非注解行即停（那是方法体或字段声明）。
+     */
     private static boolean allPublicMethodsTransactional(String src) {
-        Matcher m = Pattern.compile("public\\s+(?!class|interface)[\\w<>,\\[\\]\\s\\.]+\\s+\\w+\\s*\\(").matcher(src);
-        int count = 0, ok = 0;
-        while (m.find()) {
-            // 构造器/静态初始化块不算业务方法
-            String head = src.substring(Math.max(0, m.start() - 400), m.start());
-            int lineStart = src.lastIndexOf('\n', m.start()) + 1;
-            String thisLine = src.substring(lineStart, m.start()).trim();
-            if (thisLine.isEmpty() || thisLine.startsWith("//")) {
+        String[] lines = src.split("\n", -1);
+        int total = 0;
+        int annotated = 0;
+
+        for (int i = 0; i < lines.length; i++) {
+            String t = lines[i].trim();
+            if (!t.startsWith("public ")) {
                 continue;
             }
-            count++;
-            if (head.contains("@Transactional")) {
-                ok++;
+            // 类型声明不是方法
+            if (t.startsWith("public class") || t.startsWith("public interface")
+                    || t.startsWith("public enum") || t.startsWith("public @interface")
+                    || t.startsWith("public record")) {
+                continue;
+            }
+            // 必须是方法声明：含 '(' 且 '(' 之前没有 '='（否则是字段初始化）
+            int paren = t.indexOf('(');
+            if (paren < 0) {
+                continue;
+            }
+            if (t.substring(0, paren).contains("=")) {
+                continue;
+            }
+            // 构造器没有返回类型：`public FooServiceImpl(` 的括号前无空格分隔的返回类型
+            String beforeParen = t.substring(0, paren).trim();
+            if (!beforeParen.contains(" ")) {
+                continue;
+            }
+            total++;
+
+            boolean hasTx = false;
+            for (int j = i - 1; j >= 0; j--) {
+                String p = lines[j].trim();
+                if (p.isEmpty()) {
+                    continue;
+                }
+                if (p.startsWith("@")) {
+                    if (p.contains("Transactional")) {
+                        hasTx = true;
+                    }
+                    continue;
+                }
+                break;
+            }
+            if (hasTx) {
+                annotated++;
             }
         }
-        return count > 0 && count == ok;
+        return total > 0 && total == annotated;
     }
 
     private static String stripComments(String src) {

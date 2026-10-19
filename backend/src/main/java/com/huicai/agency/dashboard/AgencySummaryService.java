@@ -11,6 +11,7 @@ import com.huicai.base.voucher.entity.VoucherEntity;
 import com.huicai.base.voucher.mapper.VoucherMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.util.*;
@@ -18,6 +19,10 @@ import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
+// 🔴 类级事务（RLS 守卫 RlsTransactionStructureTest）：代理看板读 t_enterprise /
+//   t_agency_user_enterprise / t_voucher（均为 RLS 租户表）。无事务 ⇒ GUC 恒 NULL
+//   ⇒ 看板数字恒为 0/空，且因「返回 0 行」而非报错，极难被发现。
+@Transactional(rollbackFor = Exception.class)
 public class AgencySummaryService {
 
     private final EnterpriseMapper enterpriseMapper;
