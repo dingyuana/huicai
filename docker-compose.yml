@@ -1,5 +1,3 @@
-version: "3.8"
-
 networks:
   huicai-net:
     driver: bridge
@@ -12,6 +10,12 @@ services:
   postgres16:
     image: pgvector/pgvector:pg16
     container_name: huicai-postgres
+    # 🔴 2026-10-19 实测事故：4 个基础设施容器在 2 秒内被批量干净停止
+    #   （exitCode=0、日志 "terminating connection due to administrator command"，
+    #   非崩溃、非 OOM），而本服务原先**没有 restart 策略** ⇒ 永不自动拉起；
+    #   连带后端进入重启循环并抛 UnknownHostException，整栈静默塌掉且无告警。
+    #   unless-stopped：意外停止会自愈；人工 docker stop 则保持停止（不与运维意图打架）。
+    restart: always
     ports:
       - "5432:5432"
     environment:
@@ -32,6 +36,8 @@ services:
   redis7:
     image: redis:7-alpine
     container_name: huicai-redis
+    # 🔴 同 postgres16：无 restart 策略时，意外停止后不会自愈（2026-10-19 事故）
+    restart: always
     ports:
       - "6379:6379"
     networks:
@@ -45,6 +51,8 @@ services:
   minio:
     image: minio/minio
     container_name: huicai-minio
+    # 🔴 同 postgres16：无 restart 策略时，意外停止后不会自愈（2026-10-19 事故）
+    restart: always
     ports:
       - "9000:9000"
       - "9001:9001"
@@ -65,6 +73,8 @@ services:
   rabbitmq3:
     image: rabbitmq:3-management
     container_name: huicai-rabbitmq
+    # 🔴 同 postgres16：无 restart 策略时，意外停止后不会自愈（2026-10-19 事故）
+    restart: always
     ports:
       - "5672:5672"
       - "15672:15672"
@@ -106,7 +116,7 @@ services:
         condition: service_healthy
     networks:
       - huicai-net
-    restart: unless-stopped
+    restart: always
 
   backend:
     build:
@@ -157,4 +167,4 @@ services:
         condition: service_healthy
     networks:
       - huicai-net
-    restart: unless-stopped
+    restart: always
