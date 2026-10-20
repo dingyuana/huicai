@@ -138,7 +138,9 @@ services:
       SPRING_FLYWAY_URL: jdbc:postgresql://postgres16:5432/huicai
       SPRING_FLYWAY_USER: ${FLYWAY_USER:-${POSTGRES_USER:-huicai}}
       SPRING_FLYWAY_PASSWORD: ${FLYWAY_PASSWORD:-${POSTGRES_PASSWORD:-huicai123}}
-      SPRING_RABBITMQ_HOST: host.docker.internal
+      # ⚠️ 服务名是 rabbitmq3（服务名即 DNS 别名）；此前写 host.docker.internal，
+      #   经宿主网关回环连发布端口，实测循环抛 Socket closed（消费端重连噪音）。
+      SPRING_RABBITMQ_HOST: rabbitmq3
       SPRING_RABBITMQ_PORT: 5672
       SPRING_RABBITMQ_USERNAME: huicai
       SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-huicai123}
