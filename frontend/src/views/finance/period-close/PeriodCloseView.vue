@@ -163,7 +163,7 @@
             type="warning"
             :closable="false"
             show-icon
-            :title="canClose ? '全部结转凭证已记账, 可执行结账' : '仍有未记账凭证或检查未通过, 结账将被拦截'"
+            :title="closeHint(canClose, allVouchers.length)"
             class="step-tip"
           />
           <div class="step-action">
@@ -247,6 +247,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { resolveEarliestUnclosedPeriod } from '@/utils/period'
+import { canClosePeriod, closeHint } from '@/utils/periodClose'
 import PeriodNavigator from '@/components/finance/PeriodNavigator.vue'
 import {
   checkClose, closePeriod, reopenPeriod,
@@ -318,11 +319,17 @@ const reviewableIds = computed(() =>
   allVouchers.value.filter(v => v.status === 'DRAFT').map(v => v.voucherId),
 )
 
-/** 全部结转凭证已记账, 且结账检查通过 */
+/**
+ * 本次会话已执行结转序列且无失败步（SPEC-P138）。
+ * 保留「不允许跳过第 2 步直接结账」的原意图，同时允许三步全 SKIPPED 的空账套结账。
+ */
+const sequenceRan = computed(() =>
+  sequence.value.length > 0 && !sequence.value.some(r => r.status === 'FAILED'),
+)
+
+/** 结账检查通过, 且本次生成的结转凭证全部已记账（0 张凭证视为满足, SPEC-P138） */
 const canClose = computed(() =>
-  checkResult.value?.passed === true &&
-  allVouchers.value.length > 0 &&
-  allVouchers.value.every(v => v.status === 'POSTED'),
+  canClosePeriod(checkResult.value?.passed, sequenceRan.value, allVouchers.value),
 )
 
 const statusTagType = computed(() =>
