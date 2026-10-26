@@ -1,5 +1,5 @@
 import axios from 'axios'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import type { ApiResponse } from '@/types/api'
 
 const request = axios.create({
@@ -97,6 +97,30 @@ async function handleUnauthorized(error: unknown) {
 }
 
 // 响应拦截器：统一错误处理
+/**
+ * SPEC-P136：403 是**预期内的业务结果**（当前账号没有该操作权限），不是系统故障。
+ *
+ * <p>故用对话框（需要用户确认知悉）而非红色 toast（暗示出了错）。
+ *
+ * <p><b>去重是必需的</b>：页面初始化常并发多个请求，一次操作可能同时触发多条 403；
+ * 若每条都弹对话框，用户要点很多次「知道了」。用时间窗内只弹一次的守卫，
+ * 并把后续的合并掉。窗口取 800ms —— 足够覆盖并发请求，又不会把
+ * 「过一会儿再点另一个无权限按钮」也吞掉。
+ */
+let forbiddenDialogAt = 0
+const FORBIDDEN_DIALOG_WINDOW_MS = 800
+
+function showForbiddenDialog() {
+  const now = Date.now()
+  if (now - forbiddenDialogAt < FORBIDDEN_DIALOG_WINDOW_MS) return
+  forbiddenDialogAt = now
+  ElMessageBox.alert(
+    '当前账号缺少该操作权限，请联系管理员开通。',
+    '权限不足',
+    { type: 'warning' },
+  ).catch(() => undefined)
+}
+
 request.interceptors.response.use(
   (response) => {
     // P89-D：文件下载（Excel 导出）直接返回 blob，不走 R 结构解析
@@ -118,7 +142,7 @@ request.interceptors.response.use(
         return handleUnauthorized(error)
       }
       if (status === 403) {
-        ElMessage.error('权限不足，请联系管理员')
+        showForbiddenDialog()
         return Promise.reject(error)
       }
       // S-26: 跨租户/企业暂停错误

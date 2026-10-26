@@ -500,9 +500,12 @@ const selectedFile = ref<File | null>(null)
 const tableRef = ref()
 
 // P67 统一批量操作：状态矩阵基于既有批量刷新语义（PENDING/classified→确认，CONFIRMED→审核）
+//
+// SPEC-P136：两个动作在后端清单中**同为** `bank:statement:list`（coarse，P133 D-9b 范围），
+// 故前端只能做到「有该码才可点」，无法区分确认/审核。已登记为已知局限。
 const BATCH_ACTIONS: BatchActionDef[] = [
-  { key: 'confirm', label: '批量确认' },
-  { key: 'audit', label: '批量审核' },
+  { key: 'confirm', label: '批量确认', permission: 'bank:statement:list' },
+  { key: 'audit', label: '批量审核', permission: 'bank:statement:list' },
 ]
 const BATCH_STATUS_MATRIX: Record<string, string[]> = {
   PENDING: ['confirm'],

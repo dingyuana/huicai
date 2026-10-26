@@ -6,9 +6,27 @@
         <div>
           <el-button @click="goBack">返回</el-button>
           <el-button v-if="voucher?.status === 'DRAFT'" type="primary" @click="goEdit">编辑</el-button>
-          <el-button v-if="voucher?.status === 'DRAFT'" type="success" @click="onSubmit">提交</el-button>
-          <el-button v-if="voucher?.status === 'SUBMITTED'" type="primary" @click="onAudit">审核</el-button>
-          <el-button v-if="voucher?.status === 'AUDITED'" type="warning" @click="onPost">记账</el-button>
+          <el-button
+            v-if="voucher?.status === 'DRAFT'"
+            type="success"
+            :aria-disabled="locked('voucher:submit')"
+            :class="{ 'is-permission-locked': locked('voucher:submit') }"
+            @click="onSubmit"
+          >提交</el-button>
+          <el-button
+            v-if="voucher?.status === 'SUBMITTED'"
+            type="primary"
+            :aria-disabled="locked('voucher:audit')"
+            :class="{ 'is-permission-locked': locked('voucher:audit') }"
+            @click="onAudit"
+          >审核</el-button>
+          <el-button
+            v-if="voucher?.status === 'AUDITED'"
+            type="warning"
+            :aria-disabled="locked('voucher:post')"
+            :class="{ 'is-permission-locked': locked('voucher:post') }"
+            @click="onPost"
+          >记账</el-button>
         </div>
       </div>
 
@@ -73,6 +91,9 @@ import {
   VOUCHER_STATUS_MAP,
   type VoucherVO,
 } from '@/api/modules/voucher'
+import { usePermissionGate } from '@/composables/usePermissionGate'
+
+const { locked, ensure } = usePermissionGate()
 
 const route = useRoute()
 const router = useRouter()
@@ -121,18 +142,21 @@ async function fetchData() {
 }
 
 async function onSubmit() {
+  if (!(await ensure('voucher:submit', '提交'))) return
   await submitVoucher(id)
   ElMessage.success('提交成功')
   await fetchData()
 }
 
 async function onAudit() {
+  if (!(await ensure('voucher:audit', '审核'))) return
   await auditVoucher(id)
   ElMessage.success('审核成功')
   await fetchData()
 }
 
 async function onPost() {
+  if (!(await ensure('voucher:post', '记账'))) return
   await postVoucher(id)
   ElMessage.success('记账成功')
   await fetchData()
@@ -173,5 +197,10 @@ onMounted(fetchData)
   margin-left: 8px;
   color: #e6a23c;
   font-size: 12px;
+}
+
+/* SPEC-P136：无权限的按钮视觉上禁用，但保留可点击以给出解释 */
+.is-permission-locked {
+  opacity: 0.5;
 }
 </style>

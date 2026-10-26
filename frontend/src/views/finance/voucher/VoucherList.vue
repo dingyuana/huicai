@@ -164,10 +164,11 @@ const dateRange = ref<[string, string] | null>(null)
 const periodsSet = ref<Set<string>>(new Set())
 
 // P67 统一批量操作：状态矩阵 + every() 启用语义 + 统一结果弹窗
+// SPEC-P136：permission 与 permission-manifest.yml 的 batch 端点一一对应
 const BATCH_ACTIONS: BatchActionDef[] = [
-  { key: 'submit', label: '批量提交' },
-  { key: 'audit', label: '批量审核' },
-  { key: 'post', label: '批量记账', needConfirm: true, confirmText: '记账后将计入正式账簿（可通过反过账修正）。确认执行批量记账？' },
+  { key: 'submit', label: '批量提交', permission: 'voucher:submit' },
+  { key: 'audit', label: '批量审核', permission: 'voucher:audit' },
+  { key: 'post', label: '批量记账', needConfirm: true, confirmText: '记账后将计入正式账簿（可通过反过账修正）。确认执行批量记账？', permission: 'voucher:post' },
 ]
 const BATCH_STATUS_MATRIX: Record<string, string[]> = {
   DRAFT: ['submit'],
