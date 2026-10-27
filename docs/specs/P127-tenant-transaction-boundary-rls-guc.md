@@ -99,11 +99,29 @@ ERROR: new row violates row-level security policy for table "t_bank_statement"
 - 实测结果：**不能**。`BankStatementExcelImportService.java` 存在异常缩进（`confirmImport` 内
   `stmt.setCreatedBy(...)` 顶格），导致基于括号计数的分方法逻辑失配，F-1 未被命中。
 - 首版扫描器另有假阴性缺陷（只在该行找 `@Transactional`，漏掉标准写法的独占注解行），
-  修正后候选数由 17 降到 6 —— **说明该工具的读数对实现细节高度敏感，不可信**。
+  候选数由 17 降到 6 —— **说明该工具的读数对实现细节高度敏感，不可信**。
 
 ⇒ **结论：F-2~F-7 只能作为「待核实线索」，真实存量未知，可能更多也可能更少。**
 按 AGENTS §4.5 第 21 条，门禁首次上线必须先证明它对真阳性敏感 —— 故本 SPEC 的守卫方案
 （D-1 选项 1）要求**先以 F-1 为真阳性验证守卫能红**，再用于盘点。
+
+---
+
+## 2.4 📋 2026-10-26 全仓 ASM 盘查结论（老丁裁定 D-1 选项 1 实施后复核）
+
+老丁裁定后，新增仓库级守卫 `TenantTableTransactionBoundaryWarehouseTest`（ASM 字节码扫描，
+不受缩进/括号影响），扫描全部 Service 实现类含 Mapper 引用的 public 方法。
+
+**发现**：
+- `AiTaskService` / `AiFeedbackLogServiceImpl` / `AnalysisService` **均有类级 `@Transactional`**，F-2~F-6 全部误报
+- `AttachmentService#presignedUrl()` 有方法级 `@Transactional`，F-7 误报
+- `VoucherStateMachineService` 是**接口**（非实现类），被误扫入，已修正守卫排除
+- **无任何新违规方法**；与 F-1 同类缺陷在 `BankStatementExcelImportService` 之外**不存在**
+
+**诚实声明**：本次全仓扫描仅验证了「现有代码是否还有同类问题」。
+**不保证历史遗留的静默形态已全部清除**（比如某 Service 的方法间接通过另一个无事务 Service
+调 Mapper，这种嵌套路径守卫看不出来）。
+若未来出现新的静默丢数据报障，须重新评估是否把守卫升级为「跨类调用链追踪」。
 
 ---
 
@@ -152,7 +170,7 @@ F-8 的修法：失败时**不消费批次**（`remove` 改为「取出但失败
 | AT-127-2 | 同上 | 复查新行 `enterprise_id` | 等于该会计当前上下文企业（**非 1、非 NULL**） |
 | AT-127-3 | 同上 | 再查 `flyway`/RLS | 无 `row-level security policy` 异常 |
 | AT-127-4（反证） | 摘掉 `@Transactional` | 重跑 AT-127-1 | **必须转红**（证明测试对本次改动敏感） |
-| AT-127-5 | F-2~F-7 中任一 | 触发对应端点 | 不出现「静默 0 行」（须先逐项判定真伪再决定是否纳入） |
+| AT-127-5 | F-2~F-7 中任一 | 触发对应端点 | 已由全仓 ASM 盘查证伪：所有候选类均有类级或方法级事务覆盖；本条改为守卫 `TenantTableTransactionBoundaryWarehouseTest` 持续锁定 |
 | AT-127-6 | 导入含非法行 | 调 confirm-import | 按 D-2 裁定返回（原子⇒全批失败；容错⇒回传失败行明细） |
 
 ---
@@ -180,6 +198,8 @@ F-8 的修法：失败时**不消费批次**（`remove` 改为「取出但失败
 |---|---|---|---|
 | V0.1 | 2026-10-14 | opencode | 初稿：F-1 实证确认 + F-2~F-7 候选（含扫描器自检失败的局限声明）+ F-8/F-9 连带缺陷 + D-1~D-3 待裁定 |
 | V1.0 | 2026-10-14 | opencode | 老丁裁定 **D-1 选项1 / D-2 选项A / D-3 选项A**，实施并闭环（详见 §9） |
+| V1.1 | 2026-10-26 | opencode | **D-1 选项1 全仓盘点**：新增仓库级守卫 `TenantTableTransactionBoundaryWarehouseTest`（ASM 字节码，排除接口），扫描全部 Service 实现类含 Mapper 引用的 public 方法。**F-2~F-7 全部证伪**（均已有类级或方法级 `@Transactional`）；**无任何新违规**。**遗留诚实声明**：守卫只看「当前类直接调 Mapper」，不追踪跨类间接调用链；若未来出现新静默丢数据报障，须升级为调用链追踪 |
+| V1.1 | 2026-10-26 | opencode | **D-1 选项1 全仓盘点**：新增仓库级守卫 `TenantTableTransactionBoundaryWarehouseTest`（ASM 字节码，排除接口），扫描全部 Service 实现类含 Mapper 引用的 public 方法。**F-2~F-7 全部证伪**（均已有类级或方法级 `@Transactional`）；**无任何新违规**。**遗留诚实声明**：守卫只看「当前类直接调 Mapper」，不追踪跨类间接调用链；若未来出现新静默丢数据报障，须升级为调用链追踪 |
 
 ---
 
