@@ -5,12 +5,17 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.huicai.sme.arap.service.BusinessDocAgingService;
 import com.huicai.base.business.dto.BusinessDocVO;
 import com.huicai.base.business.service.BusinessDocService;
+import com.huicai.config.security.LoginUser;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.List;
@@ -32,6 +37,25 @@ class ArapControllerTest {
 
     @MockBean
     private BusinessDocAgingService businessDocAgingService;
+
+    @BeforeEach
+    void setUpSecurityContext() {
+        // 🔴 本类的 4 个 POST 在 permission-manifest.yml 全部 enforcing 且要求 doc:list。
+        //    不得依赖「上一个测试类残留的认证」——那曾让本类第 1 个执行用例 403、
+        //    其余用例依赖 spring-security-test 的方法边界清理而静默假绿（CI L1 实案）。
+        //    自建认证态后，本类行为与执行顺序无关（实测：禁用污染源清理单侧时本类仍绿）。
+        com.huicai.base.system.entity.UserEntity user = new com.huicai.base.system.entity.UserEntity();
+        user.setId(1L);
+        user.setUsername("test");
+        user.setPassword("test123");
+        user.setEnterpriseId(1L);
+        user.setUserType("ENTERPRISE");
+        LoginUser loginUser = new LoginUser(user, List.of(
+                new SimpleGrantedAuthority("ROLE_USER"),
+                new SimpleGrantedAuthority("doc:list")));
+        SecurityContextHolder.getContext().setAuthentication(
+                new UsernamePasswordAuthenticationToken(loginUser, null, loginUser.getAuthorities()));
+    }
 
     @Test
     @DisplayName("应收明细分页查询_默认参数正确生效")

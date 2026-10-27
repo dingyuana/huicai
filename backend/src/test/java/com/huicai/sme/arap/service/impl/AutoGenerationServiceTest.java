@@ -35,6 +35,7 @@ import com.huicai.base.system.mapper.SubjectMapper;
 import com.baomidou.mybatisplus.core.MybatisConfiguration;
 import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
 import org.apache.ibatis.builder.MapperBuilderAssistant;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -136,6 +137,20 @@ class AutoGenerationServiceTest {
         // 通用 1002 银行存款
         lenient().when(subjectMapper.selectList(argThat(w -> w != null && w.getSqlSet() != null && w.getSqlSet().toString().contains("1002"))))
                 .thenReturn(Collections.singletonList(mockSubject(10L, "1002")));
+    }
+
+    /**
+     * 🔴 本类是纯 Mockito 测试（{@code MockitoExtension}，无 Spring TestContext）⇒ 没有
+     * spring-security-test 的 TestExecutionListener 帮它在方法边界清理 SecurityContext，
+     * {@link #setAuth()} 注入的认证会<b>越过类边界</b>残留在线程上：后续 Spring 测试类
+     * 的第 1 个用例继承 ROLE_USER 残留被 {@code PermissionEnforcementInterceptor} 403
+     * （CI L1 {@code ArapControllerTest#reverseReceivable} 红的确根因），其后的用例又因
+     * 方法边界清理「静默通过」⇒ 表现为「恰 1 例红 + 其余假绿」。
+     * <p>同理见 AGENTS §4.5 第 29 条（污染源+受害用例双侧修正）。
+     */
+    @AfterEach
+    void clearSecurityContext() {
+        SecurityContextHolder.clearContext();
     }
 
     // ─── 辅助方法 ───
