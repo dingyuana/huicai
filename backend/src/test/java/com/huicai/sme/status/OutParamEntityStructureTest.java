@@ -66,7 +66,7 @@ class OutParamEntityStructureTest {
      */
     private static final Set<String> ENTITY_BASELINE = Set.of(
             "BankStatementController", "BudgetController",
-            "ReconciliationController", "ReconciliationReportController", "TaxController");
+            "ReconciliationController", "TaxController");
 
     /**
      * 棘轮上限。初始 = 66（2026-10-09 实测）。
@@ -75,7 +75,7 @@ class OutParamEntityStructureTest {
      * <p>⚠️ 上调必须极有理由——<b>只许下不许上</b>；存量清零后把它改成 {@code 0}
      * 并删 {@link #ENTITY_BASELINE}，本类即升级为零容忍守卫。
      */
-    private static final int MAX_ENTITY_RETURN_POINTS = 45;
+    private static final int MAX_ENTITY_RETURN_POINTS = 42;
 
     @Test
     @DisplayName("全仓扫描：Controller 不得直出 Entity（棘轮 = 存量基线）")
