@@ -11,6 +11,7 @@
 package com.huicai.api.rest;
 
 import com.huicai.base.voucher.controller.VoucherController;
+import com.huicai.base.voucher.dto.VoucherPostResultVO;
 import com.huicai.base.voucher.service.VoucherService;
 import com.huicai.base.voucher.service.NumberingTraceService;
 import com.huicai.common.exception.BusinessException;
@@ -112,7 +113,8 @@ class VoucherRestContractTest {
 
     @Test @DisplayName("POST /{id}/post — AUDITED→POSTED")
     void postVoucher() throws Exception {
-        doNothing().when(voucherService).post(anyLong(), anyLong());
+        // P142：post 改为返回 VoucherPostResultVO（携带预算提示），doNothing 仅限 void
+        when(voucherService.post(anyLong(), anyLong())).thenReturn(new VoucherPostResultVO());
         mvc.perform(post(BASE + "/1/post"))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.code").value(200));
     }

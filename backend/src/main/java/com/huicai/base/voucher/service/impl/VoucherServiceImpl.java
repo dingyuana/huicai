@@ -14,6 +14,8 @@ import com.huicai.base.voucher.dto.VoucherQueryDTO;
 import com.huicai.base.voucher.dto.VoucherTemplateVO;
 import com.huicai.base.voucher.dto.VoucherVO;
 import com.huicai.base.voucher.dto.VoucherVO.EntryVO;
+import com.huicai.base.voucher.dto.BudgetWarningDTO;
+import com.huicai.base.voucher.dto.VoucherPostResultVO;
 import com.huicai.base.business.entity.BusinessDocEntity;
 import com.huicai.base.balance.entity.SubjectBalanceEntity;
 import com.huicai.base.voucher.entity.VoucherEntity;
@@ -27,6 +29,7 @@ import com.huicai.base.voucher.service.VoucherNoService;
 import com.huicai.base.voucher.service.VoucherService;
 import com.huicai.base.voucher.service.VoucherStateMachineService;
 import com.huicai.base.voucher.service.VoucherTemplateService;
+import com.huicai.base.voucher.service.VoucherBudgetGuard;
 import com.huicai.base.system.entity.PeriodEntity;
 import com.huicai.base.system.entity.Subject;
 import com.huicai.base.system.entity.UserEntity;
@@ -89,6 +92,12 @@ public class VoucherServiceImpl extends ServiceImpl<VoucherMapper, VoucherEntity
     private final EnterpriseMapper enterpriseMapper;
     private final UserMapper userMapper;
     private final VoucherStateMachineService voucherStateMachineService;
+    /**
+     * P142（REQ-2026-156，D-1~D-7 全 A）：过账时预算强制检查钩子。
+     * 接口在 base、实现在 sme.budget.BudgetEnforcementServiceImpl（接口倒装，
+     * base→sme 依赖全仓 0 先例，不能直接引实现）。
+     */
+    private final VoucherBudgetGuard voucherBudgetGuard;
     private final OutputInvoiceMapper outputInvoiceMapper;
     private final BusinessDocMapper businessDocMapper;
     private final com.huicai.base.report.service.VoucherCashFlowService voucherCashFlowService;
@@ -387,6 +396,9 @@ public class VoucherServiceImpl extends ServiceImpl<VoucherMapper, VoucherEntity
             throw BusinessException.badRequest("仅已记账凭证可反过账");
         }
         assertPeriodOpen(entity.getPeriod());
+        // P142：反过账对称回减（防 post→unpost→post 双重计数）；红冲凭证反过账为回加
+        List<VoucherEntryEntity> entries = voucherEntryMapper.selectByVoucherId(id);
+        voucherBudgetGuard.releasePost(entity, entries);
         voucherMapper.batchUpdateStatus(Collections.singletonList(id), "AUDITED", userId, entity.getVersion());
         log.info("反过账凭证: id={}, userId={}, version={}", id, userId, entity.getVersion());
     }
@@ -400,17 +412,22 @@ public class VoucherServiceImpl extends ServiceImpl<VoucherMapper, VoucherEntity
 
     @Override
     @Transactional
-    public void post(Long id, Long userId) {
+    public VoucherPostResultVO post(Long id, Long userId) {
         VoucherEntity entity = getValidVoucher(id);
         voucherStateMachineService.assertPostable(entity);
         assertPeriodOpen(entity.getPeriod());
         subjectBalanceService.validateOpeningBeforePost(entity.getPeriod());
 
+        // P142（D-1A）：预算检查+回写在置 POSTED **之前**、同一事务内执行；
+        // BLOCK 抛异常 ⇒ 整个过账事务回滚（凭证不落 POSTED）。entries 提前查出
+        // 供 guard 与 updateBalanceOnPost 共用，避免二次 SQL。
+        List<VoucherEntryEntity> entries = voucherEntryMapper.selectByVoucherId(id);
+        List<BudgetWarningDTO> budgetWarnings = voucherBudgetGuard.enforcePost(entity, entries);
+
         // 更新状态
         voucherMapper.batchUpdateStatus(Collections.singletonList(id), "POSTED", userId, entity.getVersion());
 
         // 更新科目余额
-        List<VoucherEntryEntity> entries = voucherEntryMapper.selectByVoucherId(id);
         subjectBalanceService.updateBalanceOnPost(entity, entries);
 
         // P96 REQ-095：凭证过账时自动分配现金流量项目
@@ -421,6 +438,15 @@ public class VoucherServiceImpl extends ServiceImpl<VoucherMapper, VoucherEntity
         }
 
         log.info("记账凭证: id={}, userId={}", id, userId);
+
+        // P142（D-7A）：过账响应体携带预算提示（WARN/REQUIRE_APPROVE）
+        VoucherPostResultVO vo = new VoucherPostResultVO();
+        vo.setVoucherId(id);
+        vo.setStatus("POSTED");
+        vo.setPeriod(entity.getPeriod());
+        vo.setReversedFrom(entity.getReversedFrom());
+        vo.setBudgetWarnings(budgetWarnings);
+        return vo;
     }
 
     @Override
@@ -439,20 +465,26 @@ public class VoucherServiceImpl extends ServiceImpl<VoucherMapper, VoucherEntity
     @Transactional
     public void batchPost(List<Long> ids, Long userId) {
         Set<String> touchedPeriods = new LinkedHashSet<>();
+        // P142：逐张 enforce（D-1A），任一张 BLOCK 抛异常 ⇒ 整批事务回滚；
+        // entries/entity 缓存供第二循环回写余额复用（避免重复 SQL）
+        Map<Long, VoucherEntity> entityCache = new LinkedHashMap<>();
+        Map<Long, List<VoucherEntryEntity>> entriesCache = new LinkedHashMap<>();
         for (Long id : ids) {
             VoucherEntity entity = getValidVoucher(id);
             assertStatus(entity, "AUDITED");
             assertPeriodOpen(entity.getPeriod());
             subjectBalanceService.validateOpeningBeforePost(entity.getPeriod());
             touchedPeriods.add(entity.getPeriod());
+            entityCache.put(id, entity);
+            List<VoucherEntryEntity> entries = voucherEntryMapper.selectByVoucherId(id);
+            entriesCache.put(id, entries);
+            voucherBudgetGuard.enforcePost(entity, entries);
         }
 
         voucherMapper.batchUpdateStatus(ids, "POSTED", userId, null);
 
         for (Long id : ids) {
-            VoucherEntity entity = getValidVoucher(id);
-            List<VoucherEntryEntity> entries = voucherEntryMapper.selectByVoucherId(id);
-            subjectBalanceService.updateBalanceOnPost(entity, entries);
+            subjectBalanceService.updateBalanceOnPost(entityCache.get(id), entriesCache.get(id));
         }
 
         log.info("批量记账凭证: ids={}, userId={}", ids, userId);
