@@ -29,6 +29,7 @@ import java.util.List;
 import java.util.stream.Collectors;
 import java.util.Map;
 import java.util.LinkedHashMap;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -122,41 +123,7 @@ public class EnterpriseController {
         }
         // SPEC-P120：会计/助理不得读取未派给自己的企业期间
         roleGuard.requireVisibleEnterprise(enterpriseId);
-
-        EnterpriseEntity enterprise = enterpriseMapper.selectById(enterpriseId);
-        if (enterprise == null || enterprise.getDeleted() == 1) {
-            throw BusinessException.notFound("企业不存在");
-        }
-
-        String startPeriod = enterprise.getStartPeriod();
-        CurrentPeriodVO vo = new CurrentPeriodVO();
-        vo.setStartPeriod(startPeriod);
-        vo.setEarliestUnclosedPeriod(enterpriseMapper.selectEarliestUnclosedPeriod(enterpriseId));
-        vo.setLatestClosedPeriod(enterpriseMapper.selectLatestClosedPeriod(enterpriseId));
-
-        if (startPeriod != null) {
-            String hasDataPeriod = enterpriseMapper.selectLatestPeriodWithData(enterpriseId);
-            if (hasDataPeriod != null && hasDataPeriod.compareTo(startPeriod) >= 0) {
-                vo.setHasDataPeriod(hasDataPeriod);
-                vo.setCurrentPeriod(hasDataPeriod);
-            } else {
-                vo.setCurrentPeriod(startPeriod);
-            }
-            return R.ok(vo);
-        }
-
-        // 存量企业（start_period 为空）：返回企业期间列表中最新的一个，与改造前行为一致
-        //
-        // ⚠️ SPEC-P120：原实现**未按企业过滤**，取的是全库最新期间 ——
-        // 租户隔离靠 EnterpriseDataPermissionInterceptor 注入，但那层在
-        // 多租户表白名单里对本表不一定生效（§4.5 第 45 条 DIR-004 同型）。
-        PeriodEntity latest = periodMapper.selectOne(
-                new LambdaQueryWrapper<PeriodEntity>()
-                        .eq(PeriodEntity::getEnterpriseId, enterpriseId)
-                        .orderByDesc(PeriodEntity::getPeriodCode)
-                        .last("LIMIT 1"));
-        vo.setCurrentPeriod(latest == null ? null : latest.getPeriodCode());
-        return R.ok(vo);
+        return R.ok(enterpriseService.getCurrentPeriodInfo(enterpriseId));
     }
 
     @PostMapping("/api/v1/agency/enterprises")
