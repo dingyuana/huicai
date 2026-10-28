@@ -3,6 +3,7 @@ package com.huicai.sme.cash.controller;
 import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.huicai.common.response.R;
+import com.huicai.base.business.dto.vo.BankStatementVO;
 import com.huicai.base.business.entity.BankStatementEntity;
 import com.huicai.sme.cash.service.BankStatementService;
 import com.huicai.base.system.util.SecurityUtils;
@@ -36,7 +37,7 @@ public class BankStatementController {
 
     @Operation(summary = "分页查询对账单")
     @GetMapping("/page")
-    public R<IPage<BankStatementEntity>> page(
+    public R<IPage<BankStatementVO>> page(
             @RequestParam(required = false) Long accountId,
             @RequestParam(required = false) String status,
             @RequestParam(required = false) String classification,
@@ -52,9 +53,10 @@ public class BankStatementController {
             @RequestParam(required = false) String scope,
             @RequestParam(defaultValue = "1") Integer current,
             @RequestParam(defaultValue = "20") Integer size) {
-        return R.ok(service.pageQuery(accountId, status, classification, reviewStatus,
+        IPage<BankStatementEntity> pageResult = service.pageQuery(accountId, status, classification, reviewStatus,
                 startDate, endDate, direction, counterAccount, summary, keyword,
-                minAmount, maxAmount, scope, current, size));
+                minAmount, maxAmount, scope, current, size);
+        return R.ok(pageResult == null ? null : pageResult.convert(BankStatementVO::from));
     }
 
     @Operation(summary = "对账单汇总（与分页查询同过滤条件）")
@@ -101,8 +103,9 @@ public class BankStatementController {
 
     @Operation(summary = "获取对账单详情")
     @GetMapping("/{id}")
-    public R<BankStatementEntity> detail(@PathVariable Long id) {
-        return R.ok(service.getDetail(id));
+    public R<BankStatementVO> detail(@PathVariable Long id) {
+        BankStatementEntity e0 = service.getDetail(id);
+        return R.ok(e0 == null ? null : BankStatementVO.from(e0));
     }
 
     @Operation(summary = "导入CSV对账单")
@@ -229,14 +232,16 @@ public class BankStatementController {
 
     @Operation(summary = "手动触发单条分类")
     @PostMapping("/{id}/classify")
-    public R<BankStatementEntity> classify(@PathVariable Long id) {
-        return R.ok(service.classifySingle(id));
+    public R<BankStatementVO> classify(@PathVariable Long id) {
+        BankStatementEntity e1 = service.classifySingle(id);
+        return R.ok(e1 == null ? null : BankStatementVO.from(e1));
     }
 
     @Operation(summary = "出纳单条审核确认（仅改状态，不生成凭证）")
     @PostMapping("/{id}/review")
-    public R<BankStatementEntity> review(@PathVariable Long id) {
-        return R.ok(service.review(id, SecurityUtils.getCurrentUserId()));
+    public R<BankStatementVO> review(@PathVariable Long id) {
+        BankStatementEntity e2 = service.review(id, SecurityUtils.getCurrentUserId());
+        return R.ok(e2 == null ? null : BankStatementVO.from(e2));
     }
 
     @Operation(summary = "批量审核确认")
@@ -249,8 +254,9 @@ public class BankStatementController {
 
     @Operation(summary = "主管审核并制证（CONFIRMED → voucher_generated / payment_created）")
     @PostMapping("/{id}/audit")
-    public R<BankStatementEntity> audit(@PathVariable Long id) {
-        return R.ok(service.audit(id, SecurityUtils.getCurrentUserId()));
+    public R<BankStatementVO> audit(@PathVariable Long id) {
+        BankStatementEntity e3 = service.audit(id, SecurityUtils.getCurrentUserId());
+        return R.ok(e3 == null ? null : BankStatementVO.from(e3));
     }
 
     @Operation(summary = "批量主管审核")
@@ -263,8 +269,9 @@ public class BankStatementController {
 
     @Operation(summary = "生成凭证/单据（audit() 失败后的恢复重试，仅 CONFIRMED 可达）")
     @PostMapping("/{id}/generate")
-    public R<BankStatementEntity> generate(@PathVariable Long id) {
-        return R.ok(service.generateVoucher(id, SecurityUtils.getCurrentUserId()));
+    public R<BankStatementVO> generate(@PathVariable Long id) {
+        BankStatementEntity e4 = service.generateVoucher(id, SecurityUtils.getCurrentUserId());
+        return R.ok(e4 == null ? null : BankStatementVO.from(e4));
     }
 
     @Operation(summary = "批量生成凭证")
@@ -291,19 +298,21 @@ public class BankStatementController {
 
     @Operation(summary = "手动修改流水分类")
     @PutMapping("/{id}/classification")
-    public R<BankStatementEntity> updateClassification(
+    public R<BankStatementVO> updateClassification(
             @PathVariable Long id,
             @RequestBody Map<String, String> body) {
         String classification = body.get("classification");
-        return R.ok(service.updateClassification(id, classification));
+        BankStatementEntity e5 = service.updateClassification(id, classification);
+        return R.ok(e5 == null ? null : BankStatementVO.from(e5));
     }
 
     @Operation(summary = "P2: C类人工处理 - 指定 A/B 类型后自动生成")
     @PostMapping("/{id}/process-manual")
-    public R<BankStatementEntity> processManual(@PathVariable Long id,
+    public R<BankStatementVO> processManual(@PathVariable Long id,
                                                  @RequestParam String targetType,
                                                  @RequestParam(required = false) String paymentType) {
-        return R.ok(service.processManual(id, targetType, paymentType, SecurityUtils.getCurrentUserId()));
+        BankStatementEntity e6 = service.processManual(id, targetType, paymentType, SecurityUtils.getCurrentUserId());
+        return R.ok(e6 == null ? null : BankStatementVO.from(e6));
     }
 
     @Operation(summary = "P2: 预览凭证草稿 (只计算不写入)")
