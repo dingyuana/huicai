@@ -205,9 +205,9 @@ public class AuthController {
 
             return R.ok(response);
         } catch (BadCredentialsException e) {
-            // 密码错误：记录失败计数
+            // 密码错误：记录失败计数，然后抛异常让 GlobalExceptionHandler 统一处理（返 400）
             bruteForceGuard.onLoginFailure(ip, username);
-            return R.fail(401, "用户名或密码错误");
+            throw e;
         }
     }
 
