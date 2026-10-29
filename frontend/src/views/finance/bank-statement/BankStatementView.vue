@@ -79,9 +79,8 @@
       <div v-if="query.accountId" class="status-summary">
         <el-tag size="small" type="info">共 {{ totalCount }} 条</el-tag>
         <el-tag size="small" type="warning">待确认 {{ statusCounts.pending }}</el-tag>
-        <el-tag size="small" type="success">已确认 {{ statusCounts.confirmed }}</el-tag>
-        <el-tag size="small" type="primary">待制证 {{ statusCounts.paymentCreated }}</el-tag>
-        <el-tag size="small" type="primary">已制证 {{ statusCounts.voucherGenerated }}</el-tag>
+        <el-tag size="small" type="success">已确认/待制证 {{ statusCounts.confirmed }}</el-tag>
+        <el-tag size="small" type="primary">已制证 {{ statusCounts.paymentCreated + statusCounts.voucherGenerated }}</el-tag>
         <el-tag v-if="statusCounts.approved > 0" size="small" type="success">已过账 {{ statusCounts.approved }}</el-tag>
       </div>
 
@@ -584,7 +583,7 @@ const query = ref<{
   current: 1, size: 20,
 })
 
-const scope = ref<'pending' | 'vouchered' | 'all'>('pending')
+const scope = ref<'pending' | 'vouchered' | 'all'>('all')
 const monthGroups = ref<BankStatementMonthGroup[]>([])
 const expandedMonths = ref<string[]>([])
 const quickDate = ref('')
