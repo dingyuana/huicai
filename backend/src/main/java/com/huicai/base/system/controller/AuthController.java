@@ -20,16 +20,17 @@ import com.huicai.base.system.mapper.RoleMenuMapper;
 import com.huicai.base.system.mapper.UserMapper;
 import com.huicai.base.system.mapper.UserRoleMapper;
 import com.huicai.base.system.service.MenuService;
+import com.huicai.base.system.service.LoginBruteForceGuard;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.ArrayList;
@@ -48,11 +49,11 @@ public class AuthController {
     private final RoleMenuMapper roleMenuMapper;
     private final MenuMapper menuMapper;
     private final MenuService menuService;
-    private final PasswordEncoder passwordEncoder;
     private final AgencyEnterpriseMapper agencyEnterpriseMapper;
     private final EnterpriseMapper enterpriseMapper;
     private final AgencyUserMapper agencyUserMapper;
     private final AgencyUserEnterpriseMapper agencyUserEnterpriseMapper;
+    private final LoginBruteForceGuard bruteForceGuard;
 
     /**
      * SPEC-P124：用 refresh token 换新的 access token。
@@ -95,113 +96,134 @@ public class AuthController {
     }
 
     @PostMapping("/login")
-    public R<LoginResponse> login(@RequestBody LoginRequest request) {
-        Authentication authentication = authenticationManager.authenticate(
-                new UsernamePasswordAuthenticationToken(request.getUsername(), request.getPassword()));
-
-        SecurityContextHolder.getContext().setAuthentication(authentication);
-
+    public R<LoginResponse> login(@RequestBody LoginRequest request, HttpServletRequest httpRequest) {
+        String ip = getClientIp(httpRequest);
         String username = request.getUsername();
-        UserEntity user = userMapper.selectByUsername(username);
 
-        // Get roles
-        List<Long> roleIds = userRoleMapper.getRoleIdsByUserId(user.getId());
+        // R2: 暴力破解防护 —— 先检查锁定状态，未锁才允许走认证
+        try {
+            bruteForceGuard.onLoginFailure(ip, username); // 仅检查不计数（失败后才计数）
+        } catch (BusinessException e) {
+            return R.fail(e.getCode(), e.getMessage());
+        }
 
-        // Get permissions
-        List<String> permissions = menuService.getUserButtonPermissions(user.getId());
+        try {
+            Authentication authentication = authenticationManager.authenticate(
+                    new UsernamePasswordAuthenticationToken(username, request.getPassword()));
 
-        // S-26: 多租户字段
-        String userType = user.getUserType() != null ? user.getUserType() : "ENTERPRISE";
-        Long enterpriseId = user.getEnterpriseId();
-        Long agencyId = user.getAgencyId();
-        String agencyRole = user.getAgencyRole();
+            // 登录成功：清除计数
+            bruteForceGuard.onLoginSuccess(ip, username);
+            SecurityContextHolder.getContext().setAuthentication(authentication);
 
-        // 登录时获取企业列表
-        List<EnterpriseSimpleVO> enterpriseList = new ArrayList<>();
-        if ("SUPER_ADMIN".equals(userType)) {
-            // 超级管理员看全部企业
-            List<EnterpriseEntity> allEnterprises = enterpriseMapper.selectList(
-                    new LambdaQueryWrapper<EnterpriseEntity>()
-                            .eq(EnterpriseEntity::getDeleted, 0));
-            for (EnterpriseEntity ent : allEnterprises) {
-                enterpriseList.add(new EnterpriseSimpleVO(
-                        ent.getId(), ent.getEnterpriseName(),
-                        ent.getTaxId(), ent.getStatus(), ent.getSeedDataDone()));
-            }
-        } else if ("AGENCY".equals(userType) && agencyId != null) {
-            // V2.0: 按 agencyRole 过滤企业列表
-            List<Long> enterpriseIds;
-            if ("AGENCY_ADMIN".equals(agencyRole) || "REVIEWER".equals(agencyRole)) {
-                // 经理和审核员看代理公司下全部企业
-                enterpriseIds = agencyEnterpriseMapper.getEnterpriseIdsByAgencyId(agencyId);
-            } else {
-                // 会计和助理只看分配给自己的企业
-                AgencyUserEntity agencyUser = agencyUserMapper.selectOne(
-                        new LambdaQueryWrapper<AgencyUserEntity>()
-                                .eq(AgencyUserEntity::getUserId, user.getId())
-                                .eq(AgencyUserEntity::getDeleted, 0));
-                if (agencyUser != null) {
-                    enterpriseIds = agencyUserEnterpriseMapper.getEnterpriseIdsByAgencyUserId(agencyUser.getId());
-                } else {
-                    enterpriseIds = List.of();
-                }
-            }
-            for (Long eid : enterpriseIds) {
-                EnterpriseEntity ent = enterpriseMapper.selectById(eid);
-                if (ent != null) {
+            UserEntity user = userMapper.selectByUsername(username);
+
+            // Get roles
+            List<Long> roleIds = userRoleMapper.getRoleIdsByUserId(user.getId());
+
+            // Get permissions
+            List<String> permissions = menuService.getUserButtonPermissions(user.getId());
+
+            // S-26: 多租户字段
+            String userType = user.getUserType() != null ? user.getUserType() : "ENTERPRISE";
+            Long enterpriseId = user.getEnterpriseId();
+            Long agencyId = user.getAgencyId();
+            String agencyRole = user.getAgencyRole();
+
+            // 登录时获取企业列表
+            List<EnterpriseSimpleVO> enterpriseList = new ArrayList<>();
+            if ("SUPER_ADMIN".equals(userType)) {
+                // 超级管理员看全部企业
+                List<EnterpriseEntity> allEnterprises = enterpriseMapper.selectList(
+                        new LambdaQueryWrapper<EnterpriseEntity>()
+                                .eq(EnterpriseEntity::getDeleted, 0));
+                for (EnterpriseEntity ent : allEnterprises) {
                     enterpriseList.add(new EnterpriseSimpleVO(
                             ent.getId(), ent.getEnterpriseName(),
                             ent.getTaxId(), ent.getStatus(), ent.getSeedDataDone()));
                 }
+            } else if ("AGENCY".equals(userType) && agencyId != null) {
+                // V2.0: 按 agencyRole 过滤企业列表
+                List<Long> enterpriseIds;
+                if ("AGENCY_ADMIN".equals(agencyRole) || "REVIEWER".equals(agencyRole)) {
+                    // 经理和审核员看代理公司下全部企业
+                    enterpriseIds = agencyEnterpriseMapper.getEnterpriseIdsByAgencyId(agencyId);
+                } else {
+                    // 会计和助理只看分配给自己的企业
+                    AgencyUserEntity agencyUser = agencyUserMapper.selectOne(
+                            new LambdaQueryWrapper<AgencyUserEntity>()
+                                    .eq(AgencyUserEntity::getUserId, user.getId())
+                                    .eq(AgencyUserEntity::getDeleted, 0));
+                    if (agencyUser != null) {
+                        enterpriseIds = agencyUserEnterpriseMapper.getEnterpriseIdsByAgencyUserId(agencyUser.getId());
+                    } else {
+                        enterpriseIds = List.of();
+                    }
+                }
+                for (Long eid : enterpriseIds) {
+                    EnterpriseEntity ent = enterpriseMapper.selectById(eid);
+                    if (ent != null) {
+                        enterpriseList.add(new EnterpriseSimpleVO(
+                                ent.getId(), ent.getEnterpriseName(),
+                                ent.getTaxId(), ent.getStatus(), ent.getSeedDataDone()));
+                    }
+                }
             }
+
+            // 设置企业上下文（SUPER_ADMIN 不设，跳过数据权限拦截）
+            if (enterpriseId != null && !"SUPER_ADMIN".equals(userType)) {
+                EnterpriseContextHolder.set(enterpriseId);
+            }
+
+            String accessToken = jwtProvider.generateAccessToken(username, user.getId(),
+                    roleIds.stream().map(String::valueOf).collect(Collectors.toList()),
+                    enterpriseId, agencyId, userType, agencyRole);
+            String refreshToken = jwtProvider.generateRefreshToken(username, user.getId(),
+                    roleIds.stream().map(String::valueOf).collect(Collectors.toList()),
+                    enterpriseId, agencyId, userType, agencyRole);
+
+            LoginResponse response = new LoginResponse();
+            response.setToken(accessToken);
+            response.setRefreshToken(refreshToken);
+            response.setTokenType("Bearer");
+            response.setUserType(userType);
+            response.setHomeEnterpriseId(enterpriseId);
+            response.setCurrentEnterpriseId(enterpriseId);
+            response.setEnterpriseSelectionRequired(
+                    "AGENCY".equals(userType) && enterpriseId == null);
+            response.setAgencyId(agencyId);
+            response.setAgencyRole(agencyRole);
+            response.setEnterpriseList(enterpriseList);
+            UserInfoResponse loginInfo = new UserInfoResponse(user.getId(), user.getUsername(),
+                    user.getRealName(), user.getNickname(), user.getEmail(), user.getPhone(),
+                    user.getAvatar(), user.getDeptId(), roleIds, permissions,
+                    userType, agencyId, null, enterpriseId, false, agencyRole, enterpriseList);
+            loginInfo.setHomeEnterpriseId(enterpriseId);
+            loginInfo.setCurrentEnterpriseId(enterpriseId);
+            loginInfo.setEnterpriseSelectionRequired(
+                    "AGENCY".equals(userType) && enterpriseId == null);
+            response.setUserInfo(loginInfo);
+
+            return R.ok(response);
+        } catch (BadCredentialsException e) {
+            // 密码错误：记录失败计数
+            bruteForceGuard.onLoginFailure(ip, username);
+            return R.fail(401, "用户名或密码错误");
         }
-
-        // 设置企业上下文（SUPER_ADMIN 不设，跳过数据权限拦截）
-        if (enterpriseId != null && !"SUPER_ADMIN".equals(userType)) {
-            EnterpriseContextHolder.set(enterpriseId);
-        }
-
-        String accessToken = jwtProvider.generateAccessToken(username, user.getId(),
-                roleIds.stream().map(String::valueOf).collect(Collectors.toList()),
-                enterpriseId, agencyId, userType, agencyRole);
-        String refreshToken = jwtProvider.generateRefreshToken(username, user.getId(),
-                roleIds.stream().map(String::valueOf).collect(Collectors.toList()),
-                enterpriseId, agencyId, userType, agencyRole);
-
-        LoginResponse response = new LoginResponse();
-        response.setToken(accessToken);
-        response.setRefreshToken(refreshToken);
-        response.setTokenType("Bearer");
-        response.setUserType(userType);
-        // 切片4：登录时企业上下文尚未被切换，归属与当前相同。
-        // enterpriseSelectionRequired 不能写死 false —— 代理会计登录时
-        // enterprise_id 按设计为 null，此时确实**需要**先选客户，
-        // 写死会让前端拿不到「为什么菜单是灰的」这一原因。
-        response.setHomeEnterpriseId(enterpriseId);
-        response.setCurrentEnterpriseId(enterpriseId);
-        response.setEnterpriseSelectionRequired(
-                "AGENCY".equals(userType) && enterpriseId == null);
-        response.setAgencyId(agencyId);
-        response.setAgencyRole(agencyRole);
-        response.setEnterpriseList(enterpriseList);
-        UserInfoResponse loginInfo = new UserInfoResponse(user.getId(), user.getUsername(),
-                user.getRealName(), user.getNickname(), user.getEmail(), user.getPhone(),
-                user.getAvatar(), user.getDeptId(), roleIds, permissions,
-                userType, agencyId, null, enterpriseId, false, agencyRole, enterpriseList);
-        loginInfo.setHomeEnterpriseId(enterpriseId);
-        loginInfo.setCurrentEnterpriseId(enterpriseId);
-        loginInfo.setEnterpriseSelectionRequired(
-                "AGENCY".equals(userType) && enterpriseId == null);
-        response.setUserInfo(loginInfo);
-
-        return R.ok(response);
     }
 
-    @GetMapping("/test-password")
-    public R<String> testPassword(@RequestParam String rawPassword, @RequestParam String encodedPassword) {
-        boolean matches = passwordEncoder.matches(rawPassword, encodedPassword);
-        String encoded = passwordEncoder.encode(rawPassword);
-        return R.ok("matches: " + matches + ", newEncoded: " + encoded);
+    /**
+     * 获取客户端 IP（兼容代理场景）。
+     */
+    private String getClientIp(HttpServletRequest request) {
+        String xff = request.getHeader("X-Forwarded-For");
+        if (xff != null && !xff.isEmpty() && !"unknown".equalsIgnoreCase(xff)) {
+            return xff.split(",")[0].trim();
+        }
+        String realIp = request.getHeader("X-Real-IP");
+        if (realIp != null && !realIp.isEmpty() && !"unknown".equalsIgnoreCase(realIp)) {
+            return realIp.trim();
+        }
+        return request.getRemoteAddr();
     }
 
     @GetMapping("/userinfo")
