@@ -164,10 +164,11 @@ const dateRange = ref<[string, string] | null>(null)
 const periodsSet = ref<Set<string>>(new Set())
 
 // P67 统一批量操作：状态矩阵 + every() 启用语义 + 统一结果弹窗
+// SPEC-P136：permission 与 permission-manifest.yml 的 batch 端点一一对应
 const BATCH_ACTIONS: BatchActionDef[] = [
-  { key: 'submit', label: '批量提交' },
-  { key: 'audit', label: '批量审核' },
-  { key: 'post', label: '批量记账', needConfirm: true, confirmText: '记账后将计入正式账簿（可通过反过账修正）。确认执行批量记账？' },
+  { key: 'submit', label: '批量提交', permission: 'voucher:submit' },
+  { key: 'audit', label: '批量审核', permission: 'voucher:audit' },
+  { key: 'post', label: '批量记账', needConfirm: true, confirmText: '记账后将计入正式账簿（可通过反过账修正）。确认执行批量记账？', permission: 'voucher:post' },
 ]
 const BATCH_STATUS_MATRIX: Record<string, string[]> = {
   DRAFT: ['submit'],
@@ -338,7 +339,15 @@ function goEdit(row: VoucherVO) {
 }
 
 function goDetail(row: VoucherVO) {
-  sessionStorage.setItem('voucherListFilter', JSON.stringify(query.value))
+  // 保存完整浏览上下文（含分类标签状态与日期范围），供详情页"第一条/上一条/下一条/末一条"
+  // 与同筛选集的凭证序列导航；列表 onMounted 亦从此恢复筛选。
+  const navCtx: Record<string, unknown> = { ...query.value }
+  if (tabType.value) navCtx.status = tabType.value
+  if (dateRange.value) {
+    navCtx.startDate = dateRange.value[0]
+    navCtx.endDate = dateRange.value[1]
+  }
+  sessionStorage.setItem('voucherListFilter', JSON.stringify(navCtx))
   router.push({ name: 'VoucherDetail', query: { id: String(row.id) } })
 }
 
@@ -433,11 +442,17 @@ async function handleExport() {
     if (query.value.voucherTypeId) params.set('voucherTypeId', String(query.value.voucherTypeId))
     if (query.value.keyword) params.set('keyword', query.value.keyword)
 
-    const token = localStorage.getItem('token')
+    // 🔴 键名必须与 api/request.ts 拦截器一致（huicai_token）：
+    // 此前误读 localStorage['token']（全站从未写过该键）⇒ 请求头恒为 Bearer null ⇒ 导出 401
+    const token = localStorage.getItem('huicai_token')
+    if (!token) {
+      ElMessage.error('登录已失效，请重新登录后再导出')
+      return
+    }
     const res = await fetch(`/api/base/voucher/v1/vouchers/export?${params}`, {
       headers: { Authorization: `Bearer ${token}` }
     })
-    if (!res.ok) throw new Error('导出失败')
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
     const blob = await res.blob()
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')

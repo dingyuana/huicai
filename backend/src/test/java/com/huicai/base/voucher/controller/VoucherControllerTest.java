@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.huicai.base.voucher.dto.VoucherCreateDTO;
 import com.huicai.base.voucher.dto.VoucherQueryDTO;
+import com.huicai.base.voucher.dto.VoucherPostResultVO;
 import com.huicai.base.voucher.dto.VoucherVO;
 import com.huicai.base.voucher.service.VoucherService;
 import com.huicai.config.security.LoginUser;
@@ -165,7 +166,8 @@ class VoucherControllerTest {
     @Test
     @DisplayName("过账凭证_过账端点")
     void post_postEndpoint() throws Exception {
-        doNothing().when(voucherService).post(eq(1L), anyLong());
+        // P142：post 改为返回 VoucherPostResultVO（携带预算提示），doNothing 仅限 void
+        when(voucherService.post(eq(1L), anyLong())).thenReturn(new VoucherPostResultVO());
 
         mvc.perform(post("/api/base/voucher/v1/vouchers/1/post"))
                 .andExpect(status().isOk())

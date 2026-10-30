@@ -8,6 +8,7 @@
       </PageHeader>
 
       <el-tabs v-model="scope" class="scope-root-tabs" @tab-change="onScopeChange">
+        <el-tab-pane label="全部" name="all" />
         <el-tab-pane label="待处理" name="pending" />
         <el-tab-pane label="已制证" name="vouchered" />
       </el-tabs>
@@ -79,9 +80,8 @@
       <div v-if="query.accountId" class="status-summary">
         <el-tag size="small" type="info">共 {{ totalCount }} 条</el-tag>
         <el-tag size="small" type="warning">待确认 {{ statusCounts.pending }}</el-tag>
-        <el-tag size="small" type="success">已确认 {{ statusCounts.confirmed }}</el-tag>
-        <el-tag size="small" type="primary">待制证 {{ statusCounts.paymentCreated }}</el-tag>
-        <el-tag size="small" type="primary">已制证 {{ statusCounts.voucherGenerated }}</el-tag>
+        <el-tag size="small" type="success">已确认/待制证 {{ statusCounts.confirmed }}</el-tag>
+        <el-tag size="small" type="primary">已制证 {{ statusCounts.paymentCreated + statusCounts.voucherGenerated }}</el-tag>
         <el-tag v-if="statusCounts.approved > 0" size="small" type="success">已过账 {{ statusCounts.approved }}</el-tag>
       </div>
 
@@ -92,7 +92,7 @@
         { label: '净额', value: `¥ ${fmtAmount(statementSummary.net)}` },
       ]" />
 
-        <el-space v-if="scope === 'pending'" style="margin-bottom: 12px" wrap>
+        <el-space v-if="scope !== 'vouchered'" style="margin-bottom: 12px" wrap>
           <el-button type="primary" @click="openImport">导入对账单</el-button>
           <el-button :disabled="!query.accountId" @click="onAutoClassify">自动分类全部</el-button>
           <BatchActionBar
@@ -500,9 +500,12 @@ const selectedFile = ref<File | null>(null)
 const tableRef = ref()
 
 // P67 统一批量操作：状态矩阵基于既有批量刷新语义（PENDING/classified→确认，CONFIRMED→审核）
+//
+// SPEC-P136：两个动作在后端清单中**同为** `bank:statement:list`（coarse，P133 D-9b 范围），
+// 故前端只能做到「有该码才可点」，无法区分确认/审核。已登记为已知局限。
 const BATCH_ACTIONS: BatchActionDef[] = [
-  { key: 'confirm', label: '批量确认' },
-  { key: 'audit', label: '批量审核' },
+  { key: 'confirm', label: '批量确认', permission: 'bank:statement:list' },
+  { key: 'audit', label: '批量审核', permission: 'bank:statement:list' },
 ]
 const BATCH_STATUS_MATRIX: Record<string, string[]> = {
   PENDING: ['confirm'],
@@ -581,7 +584,7 @@ const query = ref<{
   current: 1, size: 20,
 })
 
-const scope = ref<'pending' | 'vouchered' | 'all'>('pending')
+const scope = ref<'pending' | 'vouchered' | 'all'>('all')
 const monthGroups = ref<BankStatementMonthGroup[]>([])
 const expandedMonths = ref<string[]>([])
 const quickDate = ref('')

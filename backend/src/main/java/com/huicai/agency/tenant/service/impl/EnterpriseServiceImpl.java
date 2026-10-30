@@ -7,6 +7,7 @@ import com.huicai.common.security.ReferenceGuard;
 import com.huicai.common.security.Ref;
 import com.huicai.agency.tenant.dto.EnterpriseCreateDTO;
 import com.huicai.agency.tenant.dto.EnterpriseVO;
+import com.huicai.agency.tenant.vo.CurrentPeriodVO;
 import com.huicai.agency.tenant.entity.AgencyEnterpriseEntity;
 import com.huicai.agency.tenant.util.ContactMasker;
 import com.huicai.agency.tenant.entity.EnterpriseEntity;
@@ -14,6 +15,8 @@ import com.huicai.base.system.util.SecurityUtils;
 import com.huicai.agency.tenant.mapper.AgencyEnterpriseMapper;
 import com.huicai.agency.tenant.mapper.EnterpriseMapper;
 import com.huicai.agency.tenant.service.EnterpriseService;
+import com.huicai.base.system.entity.PeriodEntity;
+import com.huicai.base.system.mapper.PeriodMapper;
 import com.huicai.common.exception.BusinessException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -34,6 +37,7 @@ public class EnterpriseServiceImpl implements EnterpriseService {
 
     private final EnterpriseMapper enterpriseMapper;
     private final AgencyEnterpriseMapper agencyEnterpriseMapper;
+    private final PeriodMapper periodMapper;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -235,6 +239,37 @@ public class EnterpriseServiceImpl implements EnterpriseService {
         vo.setContactPhone(full ? e.getContactPhone() : ContactMasker.maskPhone(e.getContactPhone()));
         vo.setContactEmail(full ? e.getContactEmail() : ContactMasker.maskEmail(e.getContactEmail()));
         vo.setAddress(e.getAddress());
+        return vo;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public CurrentPeriodVO getCurrentPeriodInfo(Long enterpriseId) {
+        EnterpriseEntity enterprise = enterpriseMapper.selectById(enterpriseId);
+        if (enterprise == null || enterprise.getDeleted() == 1) {
+            throw BusinessException.notFound("企业不存在");
+        }
+        String startPeriod = enterprise.getStartPeriod();
+        CurrentPeriodVO vo = new CurrentPeriodVO();
+        vo.setStartPeriod(startPeriod);
+        vo.setEarliestUnclosedPeriod(enterpriseMapper.selectEarliestUnclosedPeriod(enterpriseId));
+        vo.setLatestClosedPeriod(enterpriseMapper.selectLatestClosedPeriod(enterpriseId));
+        if (startPeriod != null) {
+            String hasDataPeriod = enterpriseMapper.selectLatestPeriodWithData(enterpriseId);
+            if (hasDataPeriod != null && hasDataPeriod.compareTo(startPeriod) >= 0) {
+                vo.setHasDataPeriod(hasDataPeriod);
+                vo.setCurrentPeriod(hasDataPeriod);
+            } else {
+                vo.setCurrentPeriod(startPeriod);
+            }
+            return vo;
+        }
+        PeriodEntity latest = periodMapper.selectOne(
+                new LambdaQueryWrapper<PeriodEntity>()
+                        .eq(PeriodEntity::getEnterpriseId, enterpriseId)
+                        .orderByDesc(PeriodEntity::getPeriodCode)
+                        .last("LIMIT 1"));
+        vo.setCurrentPeriod(latest == null ? null : latest.getPeriodCode());
         return vo;
     }
 }

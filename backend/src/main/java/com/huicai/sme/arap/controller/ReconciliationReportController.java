@@ -3,12 +3,14 @@ package com.huicai.sme.arap.controller;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
-import com.huicai.common.response.R;
-import com.huicai.sme.arap.constant.ArapStatus;
-import com.huicai.sme.arap.entity.ReconciliationLogEntity;
-import com.huicai.sme.arap.mapper.ReconciliationLogMapper;
+import com.huicai.base.business.dto.BusinessDocVO;
 import com.huicai.base.business.entity.BusinessDocEntity;
 import com.huicai.base.business.mapper.BusinessDocMapper;
+import com.huicai.common.response.R;
+import com.huicai.sme.arap.constant.ArapStatus;
+import com.huicai.sme.arap.dto.vo.ReconciliationLogVO;
+import com.huicai.sme.arap.entity.ReconciliationLogEntity;
+import com.huicai.sme.arap.mapper.ReconciliationLogMapper;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
@@ -20,6 +22,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 @Tag(name = "核销报表")
 @RestController
@@ -34,7 +37,7 @@ public class ReconciliationReportController {
 
     @Operation(summary = "未核销应收明细 — t_business_doc (customerId != null) unsettledAmount > 0")
     @GetMapping("/unmatched-receivables")
-    public R<IPage<BusinessDocEntity>> unmatchedReceivables(
+    public R<IPage<BusinessDocVO>> unmatchedReceivables(
             @RequestParam(required = false) Long customerId,
             @RequestParam(required = false) String period,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dueDateBefore,
@@ -48,12 +51,13 @@ public class ReconciliationReportController {
                 .eq(period != null, BusinessDocEntity::getPeriod, period)
                 .le(dueDateBefore != null, BusinessDocEntity::getDueDate, dueDateBefore)
                 .orderByAsc(BusinessDocEntity::getDueDate, BusinessDocEntity::getDocDate);
-        return R.ok(businessDocMapper.selectPage(page, wrapper));
+        IPage<BusinessDocEntity> result = businessDocMapper.selectPage(page, wrapper);
+        return R.ok(result.convert(BusinessDocVO::fromEntity));
     }
 
     @Operation(summary = "未核销应付明细 — t_business_doc (supplierId != null) unsettledAmount > 0")
     @GetMapping("/unmatched-payables")
-    public R<IPage<BusinessDocEntity>> unmatchedPayables(
+    public R<IPage<BusinessDocVO>> unmatchedPayables(
             @RequestParam(required = false) Long vendorId,
             @RequestParam(required = false) String period,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dueDateBefore,
@@ -67,14 +71,15 @@ public class ReconciliationReportController {
                 .eq(period != null, BusinessDocEntity::getPeriod, period)
                 .le(dueDateBefore != null, BusinessDocEntity::getDueDate, dueDateBefore)
                 .orderByAsc(BusinessDocEntity::getDueDate, BusinessDocEntity::getDocDate);
-        return R.ok(businessDocMapper.selectPage(page, wrapper));
+        IPage<BusinessDocEntity> result = businessDocMapper.selectPage(page, wrapper);
+        return R.ok(result.convert(BusinessDocVO::fromEntity));
     }
 
     // ==================== 核销操作日志 ====================
 
     @Operation(summary = "核销操作日志 — 按来源/目标/状态/时间范围查询")
     @GetMapping("/logs")
-    public R<IPage<ReconciliationLogEntity>> reconciliationLogs(
+    public R<IPage<ReconciliationLogVO>> reconciliationLogs(
             @RequestParam(required = false) String sourceDocType,
             @RequestParam(required = false) Long sourceDocId,
             @RequestParam(required = false) String targetDocType,
@@ -94,7 +99,8 @@ public class ReconciliationReportController {
                 .ge(createdAfter != null, ReconciliationLogEntity::getCreatedAt, createdAfter)
                 .le(createdBefore != null, ReconciliationLogEntity::getCreatedAt, createdBefore)
                 .orderByDesc(ReconciliationLogEntity::getCreatedAt);
-        return R.ok(logMapper.selectPage(page, wrapper));
+        IPage<ReconciliationLogEntity> result = logMapper.selectPage(page, wrapper);
+        return R.ok(result.convert(ReconciliationLogVO::from));
     }
 
     @Operation(summary = "核销统计概览 — 按状态汇总核销金额")

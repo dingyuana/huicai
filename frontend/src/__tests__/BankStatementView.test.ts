@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { shallowMount } from '@vue/test-utils'
 import { createRouter, createWebHistory } from 'vue-router'
+import { createPinia } from 'pinia'
 import { nextTick } from 'vue'
 import BankStatementView from '@/views/finance/bank-statement/BankStatementView.vue'
 
@@ -82,14 +83,14 @@ describe('BankStatementView — 银行流水组件', () => {
   // ===== 维度 1: 基础挂载 =====
   it('挂载成功', () => {
     const wrapper = shallowMount(BankStatementView, {
-      global: { plugins: [router] },
+      global: { plugins: [router, createPinia()] },
     })
     expect(wrapper.exists()).toBe(true)
   })
 
   it('包含页面容器', () => {
     const wrapper = shallowMount(BankStatementView, {
-      global: { plugins: [router] },
+      global: { plugins: [router, createPinia()] },
     })
     expect(wrapper.find('.bank-statement').exists()).toBe(true)
   })
@@ -98,7 +99,7 @@ describe('BankStatementView — 银行流水组件', () => {
     const { getBankStatementPage } = await import('@/api/modules/bankStatement')
     vi.mocked(getBankStatementPage).mockResolvedValue({ records: [], total: 0, page: 1, size: 10, pages: 0 })
 
-    shallowMount(BankStatementView, { global: { plugins: [router] } })
+    shallowMount(BankStatementView, { global: { plugins: [router, createPinia()] } })
     await nextTick()
     await nextTick()
 
@@ -110,7 +111,7 @@ describe('BankStatementView — 银行流水组件', () => {
     const { getBankStatementPage } = await import('@/api/modules/bankStatement')
     vi.mocked(getBankStatementPage).mockResolvedValue({ records: [], total: 0, page: 1, size: 10, pages: 0 })
 
-    const wrapper = shallowMount(BankStatementView, { global: { plugins: [router] } })
+    const wrapper = shallowMount(BankStatementView, { global: { plugins: [router, createPinia()] } })
     await nextTick()
 
     const row = mockStatement(1, { classification: 'revenue', reviewStatus: 'PENDING' })
@@ -121,7 +122,7 @@ describe('BankStatementView — 银行流水组件', () => {
     const { getBankStatementPage } = await import('@/api/modules/bankStatement')
     vi.mocked(getBankStatementPage).mockResolvedValue({ records: [], total: 0, page: 1, size: 10, pages: 0 })
 
-    const wrapper = shallowMount(BankStatementView, { global: { plugins: [router] } })
+    const wrapper = shallowMount(BankStatementView, { global: { plugins: [router, createPinia()] } })
     await nextTick()
 
     const row = mockStatement(1, { classification: '', reviewStatus: 'PENDING' })
@@ -132,7 +133,7 @@ describe('BankStatementView — 银行流水组件', () => {
     const { getBankStatementPage } = await import('@/api/modules/bankStatement')
     vi.mocked(getBankStatementPage).mockResolvedValue({ records: [], total: 0, page: 1, size: 10, pages: 0 })
 
-    const wrapper = shallowMount(BankStatementView, { global: { plugins: [router] } })
+    const wrapper = shallowMount(BankStatementView, { global: { plugins: [router, createPinia()] } })
     await nextTick()
 
     const row = mockStatement(1, { classification: 'revenue', reviewStatus: 'CONFIRMED' })
@@ -144,7 +145,7 @@ describe('BankStatementView — 银行流水组件', () => {
     const { getBankStatementPage } = await import('@/api/modules/bankStatement')
     vi.mocked(getBankStatementPage).mockResolvedValue({ records: [], total: 0, page: 1, size: 10, pages: 0 })
 
-    const wrapper = shallowMount(BankStatementView, { global: { plugins: [router] } })
+    const wrapper = shallowMount(BankStatementView, { global: { plugins: [router, createPinia()] } })
     await nextTick()
 
     const row = mockStatement(1, { reviewStatus: 'CONFIRMED', generatedVoucherNo: null, generatedDocNo: null })
@@ -155,7 +156,7 @@ describe('BankStatementView — 银行流水组件', () => {
     const { getBankStatementPage } = await import('@/api/modules/bankStatement')
     vi.mocked(getBankStatementPage).mockResolvedValue({ records: [], total: 0, page: 1, size: 10, pages: 0 })
 
-    const wrapper = shallowMount(BankStatementView, { global: { plugins: [router] } })
+    const wrapper = shallowMount(BankStatementView, { global: { plugins: [router, createPinia()] } })
     await nextTick()
 
     const row = mockStatement(1, { reviewStatus: 'CONFIRMED', generatedVoucherNo: 'JZ-202607-0001' })
@@ -167,7 +168,7 @@ describe('BankStatementView — 银行流水组件', () => {
     const { getBankStatementPage } = await import('@/api/modules/bankStatement')
     vi.mocked(getBankStatementPage).mockResolvedValue({ records: [], total: 0, page: 1, size: 10, pages: 0 })
 
-    const wrapper = shallowMount(BankStatementView, { global: { plugins: [router] } })
+    const wrapper = shallowMount(BankStatementView, { global: { plugins: [router, createPinia()] } })
     await nextTick()
 
     const row = mockStatement(1, { reviewStatus: 'voucher_generated' })
@@ -178,7 +179,7 @@ describe('BankStatementView — 银行流水组件', () => {
     const { getBankStatementPage } = await import('@/api/modules/bankStatement')
     vi.mocked(getBankStatementPage).mockResolvedValue({ records: [], total: 0, page: 1, size: 10, pages: 0 })
 
-    const wrapper = shallowMount(BankStatementView, { global: { plugins: [router] } })
+    const wrapper = shallowMount(BankStatementView, { global: { plugins: [router, createPinia()] } })
     await nextTick()
 
     const row = mockStatement(1, { reviewStatus: 'PENDING' })
@@ -192,7 +193,7 @@ describe('BankStatementView — 银行流水组件', () => {
     vi.mocked(getClassificationCounts).mockResolvedValue({})
     vi.mocked(classifyStatement).mockResolvedValue(mockStatement(1))
 
-    const wrapper = shallowMount(BankStatementView, { global: { plugins: [router] } })
+    const wrapper = shallowMount(BankStatementView, { global: { plugins: [router, createPinia()] } })
     await nextTick()
     await nextTick()
 
@@ -209,7 +210,7 @@ describe('BankStatementView — 银行流水组件', () => {
     vi.mocked(getClassificationCounts).mockResolvedValue({})
     vi.mocked(reviewStatement).mockResolvedValue(mockStatement(1, { classification: 'revenue' }))
 
-    const wrapper = shallowMount(BankStatementView, { global: { plugins: [router] } })
+    const wrapper = shallowMount(BankStatementView, { global: { plugins: [router, createPinia()] } })
     await nextTick()
     await nextTick()
 
@@ -226,7 +227,7 @@ describe('BankStatementView — 银行流水组件', () => {
     vi.mocked(getClassificationCounts).mockResolvedValue({})
     vi.mocked(deleteStatement).mockResolvedValue(undefined)
 
-    const wrapper = shallowMount(BankStatementView, { global: { plugins: [router] } })
+    const wrapper = shallowMount(BankStatementView, { global: { plugins: [router, createPinia()] } })
     await nextTick()
     await nextTick()
 
@@ -250,7 +251,7 @@ describe('BankStatementView — 银行流水组件', () => {
       pages: 1,
     })
 
-    const wrapper = shallowMount(BankStatementView, { global: { plugins: [router] } })
+    const wrapper = shallowMount(BankStatementView, { global: { plugins: [router, createPinia()] } })
     await nextTick()
     await nextTick()
 
@@ -265,7 +266,7 @@ describe('BankStatementView — 银行流水组件', () => {
     const { getBankStatementPage } = await import('@/api/modules/bankStatement')
     vi.mocked(getBankStatementPage).mockResolvedValue({ records: [], total: 0, page: 1, size: 10, pages: 0 })
 
-    const wrapper = shallowMount(BankStatementView, { global: { plugins: [router] } })
+    const wrapper = shallowMount(BankStatementView, { global: { plugins: [router, createPinia()] } })
     await nextTick()
     await nextTick()
 
@@ -278,12 +279,12 @@ describe('BankStatementView — 银行流水组件', () => {
     vi.mocked(getBankStatementPage).mockResolvedValue({ records: [], total: 0, page: 1, size: 10, pages: 0 })
 
     await router.push({ path: '/finance/bank-statement', query: { reviewStatus: 'payment_created' } })
-    shallowMount(BankStatementView, { global: { plugins: [router] } })
+    shallowMount(BankStatementView, { global: { plugins: [router, createPinia()] } })
     await nextTick()
     await nextTick()
 
     expect(getBankStatementPage).toHaveBeenCalledWith(
-      expect.objectContaining({ reviewStatus: 'payment_created', scope: 'pending' })
+      expect.objectContaining({ reviewStatus: 'payment_created', scope: 'all' })
     )
     await router.replace({ path: '/finance/bank-statement' })
   })
