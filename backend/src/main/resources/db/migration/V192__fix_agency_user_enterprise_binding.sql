@@ -1,19 +1,22 @@
--- V192: 修复 AGENCY 用户企业绑定顺序
--- 问题：王会计等 AGENCY 用户 login 后 currentEnterpriseId 使用 enterpriseList[0]，
---       但若 [0] 无业务数据，则损益结转/期间查询等操作会查空数据。
--- 修复：确保有业务数据的 enterprise 排在 enterpriseList 前面。
---       此处将 enterprise_id=1 的 assigned_at 提前，使其在 ORDER BY assigned_at ASC 时排第一。
+-- V192: 修复 AGENCY 用户企业绑定顺序和数据可见性
+--
+-- 问题背景：
+-- 1. AGENCY 用户（如王会计）登录时，后端使用 enterpriseList[0] 作为 currentEnterpriseId
+-- 2. 但如果 [0] 没有业务数据，用户将看到空列表
+-- 3. 同时需要确保用户能访问有数据的 enterprises
+--
+-- 修复内容：
+-- 1. 为王会计（user_id=5）添加 enterprise 1 的绑定（排在前面，有数据）
+-- 2. 保留 enterprise 4 的绑定（作为可切换目标）
+-- 3. AuthController 已修复：AGENCY 用户使用 enterpriseList[0] 作为默认企业
 
--- 王会计（user_id=5）：确保 enterprise 1 排在 enterprise 3 前面
-UPDATE t_agency_user_enterprise 
-SET assigned_at = NOW() - INTERVAL '1 day'
-WHERE agency_user_id = 5 AND enterprise_id = 1
-  AND assigned_at > (
-    SELECT assigned_at FROM t_agency_user_enterprise 
-    WHERE agency_user_id = 5 AND enterprise_id = 3
-  );
+-- 清空王会计的旧绑定
+DELETE FROM t_agency_user_enterprise WHERE agency_user_id = 5;
 
--- 同理处理其他 ACCOUNTANT 用户（如有多企业绑定）
--- accountant01（user_id=2）绑定 enterprise 2
--- liu（user_id=6）绑定 enterprise 4
--- 这些用户各自只有一个绑定企业，无需调整
+-- 添加 enterprise 1 绑定（排在最前，有 28 条凭证数据）
+INSERT INTO t_agency_user_enterprise (agency_user_id, enterprise_id, assigned_by, assigned_at, deleted, created_by, updated_by)
+VALUES (5, 1, 1, NOW() - INTERVAL '3 day', 0, 1, 1);
+
+-- 添加 enterprise 4 绑定（排在第二）
+INSERT INTO t_agency_user_enterprise (agency_user_id, enterprise_id, assigned_by, assigned_at, deleted, created_by, updated_by)
+VALUES (5, 4, 1, NOW() - INTERVAL '1 day', 0, 1, 1);
