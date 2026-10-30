@@ -3,7 +3,13 @@
     <el-card shadow="never">
       <div class="page-header">
         <span class="page-title">凭证详情</span>
-        <div>
+        <div class="header-actions">
+          <!-- 凭证浏览导航：id 顺序取自进入页时的列表上下文（从列表进入=同筛选集；直达=全部凭证） -->
+          <el-button :disabled="disFirst || navLoading" @click="goVoucherFirst">第一条</el-button>
+          <el-button :disabled="disPrev || navLoading" @click="goVoucherPrev">上一条</el-button>
+          <el-button :disabled="disNext || navLoading" @click="goVoucherNext">下一条</el-button>
+          <el-button :disabled="disLast || navLoading" @click="goVoucherLast">末一条</el-button>
+          <span v-if="hasNav" class="nav-pos">{{ navIndex + 1 }} / {{ navIds.length }}</span>
           <el-button @click="goBack">返回</el-button>
           <el-button v-if="voucher?.status === 'DRAFT'" type="primary" @click="goEdit">编辑</el-button>
           <el-button
@@ -27,6 +33,13 @@
             :class="{ 'is-permission-locked': locked('voucher:post') }"
             @click="onPost"
           >记账</el-button>
+          <el-button
+            v-if="voucher?.status === 'POSTED'"
+            type="danger"
+            :aria-disabled="locked('voucher:unpost')"
+            :class="{ 'is-permission-locked': locked('voucher:unpost') }"
+            @click="onUnpost"
+          >反记账</el-button>
         </div>
       </div>
 
@@ -80,14 +93,16 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   getVoucher,
+  getVoucherPage,
   submitVoucher,
   auditVoucher,
   postVoucher,
+  unpostVoucher,
   VOUCHER_STATUS_MAP,
   type VoucherVO,
 } from '@/api/modules/voucher'
@@ -98,7 +113,17 @@ const { locked, ensure } = usePermissionGate()
 const route = useRoute()
 const router = useRouter()
 const voucher = ref<VoucherVO | null>(null)
-const id = Number(route.query.id)
+const currentId = ref<number>(Number(route.query.id) || 0)
+
+/** 导航 id 序列：与进入页时的列表上下文同序（period DESC, voucher_no DESC） */
+const navIds = ref<number[]>([])
+const navLoading = ref(false)
+const navIndex = computed(() => navIds.value.indexOf(currentId.value))
+const hasNav = computed(() => navIndex.value >= 0 && navIds.value.length > 0)
+const disFirst = computed(() => !hasNav.value || navIndex.value <= 0)
+const disPrev = computed(() => !hasNav.value || navIndex.value <= 0)
+const disNext = computed(() => !hasNav.value || navIndex.value >= navIds.value.length - 1)
+const disLast = computed(() => !hasNav.value || navIndex.value >= navIds.value.length - 1)
 
 function statusType(s: string): '' | 'success' | 'warning' | 'info' | 'primary' {
   switch (s) {
@@ -134,35 +159,100 @@ function goBack() {
 }
 
 function goEdit() {
-  router.push({ name: 'VoucherEdit', query: { mode: 'edit', id: String(id) } })
+  router.push({ name: 'VoucherEdit', query: { mode: 'edit', id: String(currentId.value) } })
+}
+
+/** 加载导航上下文：从列表进入时读取其筛选（VoucherList#goDetail 写入 sessionStorage），直达时为空=全部凭证 */
+async function loadNavContext() {
+  let ctx: Record<string, unknown> = { current: 1, size: 9999 }
+  try {
+    const saved = sessionStorage.getItem('voucherListFilter')
+    if (saved) {
+      const s = JSON.parse(saved)
+      if (s && typeof s === 'object') ctx = { ...s, current: 1, size: 9999 }
+    }
+  } catch {
+    ctx = { current: 1, size: 9999 }
+  }
+  try {
+    const res = await getVoucherPage(ctx as any)
+    navIds.value = (res.records || []).map((r: VoucherVO) => r.id)
+  } catch {
+    // 加载失败不阻断详情展示，仅导航禁用
+    navIds.value = []
+  }
+}
+
+async function goNav(target: number) {
+  if (!target || navLoading.value) return
+  navLoading.value = true
+  try {
+    currentId.value = target
+    await router.replace({ query: { ...route.query, id: String(target) } })
+    await fetchData()
+  } finally {
+    navLoading.value = false
+  }
+}
+
+async function goVoucherFirst() {
+  if (hasNav.value) await goNav(navIds.value[0])
+}
+async function goVoucherPrev() {
+  if (hasNav.value && navIndex.value > 0) await goNav(navIds.value[navIndex.value - 1])
+}
+async function goVoucherNext() {
+  if (hasNav.value && navIndex.value < navIds.value.length - 1) await goNav(navIds.value[navIndex.value + 1])
+}
+async function goVoucherLast() {
+  if (hasNav.value) await goNav(navIds.value[navIds.value.length - 1])
 }
 
 async function fetchData() {
-  voucher.value = await getVoucher(id)
+  voucher.value = await getVoucher(currentId.value)
 }
 
 async function onSubmit() {
   if (!(await ensure('voucher:submit', '提交'))) return
-  await submitVoucher(id)
+  await submitVoucher(currentId.value)
   ElMessage.success('提交成功')
   await fetchData()
 }
 
 async function onAudit() {
   if (!(await ensure('voucher:audit', '审核'))) return
-  await auditVoucher(id)
+  await auditVoucher(currentId.value)
   ElMessage.success('审核成功')
   await fetchData()
 }
 
 async function onPost() {
   if (!(await ensure('voucher:post', '记账'))) return
-  await postVoucher(id)
+  await postVoucher(currentId.value)
   ElMessage.success('记账成功')
   await fetchData()
 }
 
-onMounted(fetchData)
+/** 反记账：POSTED → AUDITED，后端对称回减科目余额（P142 补全） */
+async function onUnpost() {
+  if (!(await ensure('voucher:unpost', '反记账'))) return
+  try {
+    await ElMessageBox.confirm(
+      '反记账将凭证退回「已审核」状态，并回减该凭证计入的科目余额。确定执行？',
+      '反记账确认',
+      { type: 'warning', confirmButtonText: '确定反记账', cancelButtonText: '取消' },
+    )
+  } catch {
+    return
+  }
+  await unpostVoucher(currentId.value)
+  ElMessage.success('反记账成功，凭证已退回已审核状态')
+  await fetchData()
+}
+
+onMounted(async () => {
+  await Promise.all([fetchData(), loadNavContext()])
+})
 </script>
 
 <style scoped>
@@ -175,6 +265,18 @@ onMounted(fetchData)
 .page-title {
   font-size: 16px;
   font-weight: 600;
+}
+.header-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.nav-pos {
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+  margin: 0 4px;
+  white-space: nowrap;
 }
 .section-title {
   margin: 20px 0 12px;

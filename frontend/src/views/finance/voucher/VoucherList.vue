@@ -339,7 +339,15 @@ function goEdit(row: VoucherVO) {
 }
 
 function goDetail(row: VoucherVO) {
-  sessionStorage.setItem('voucherListFilter', JSON.stringify(query.value))
+  // 保存完整浏览上下文（含分类标签状态与日期范围），供详情页"第一条/上一条/下一条/末一条"
+  // 与同筛选集的凭证序列导航；列表 onMounted 亦从此恢复筛选。
+  const navCtx: Record<string, unknown> = { ...query.value }
+  if (tabType.value) navCtx.status = tabType.value
+  if (dateRange.value) {
+    navCtx.startDate = dateRange.value[0]
+    navCtx.endDate = dateRange.value[1]
+  }
+  sessionStorage.setItem('voucherListFilter', JSON.stringify(navCtx))
   router.push({ name: 'VoucherDetail', query: { id: String(row.id) } })
 }
 
