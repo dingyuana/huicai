@@ -171,6 +171,16 @@ public class AuthController {
                 }
             }
 
+            // ENTERPRISE 用户（企业自有账号）：补上当前归属企业，让前端能取到企业名称
+            if ("ENTERPRISE".equals(userType) && enterpriseList.isEmpty()) {
+                EnterpriseEntity ent = enterpriseMapper.selectById(enterpriseId);
+                if (ent != null) {
+                    enterpriseList.add(new EnterpriseSimpleVO(
+                            ent.getId(), ent.getEnterpriseName(),
+                            ent.getTaxId(), ent.getStatus(), ent.getSeedDataDone()));
+                }
+            }
+
             // 设置企业上下文（SUPER_ADMIN 不设，跳过数据权限拦截）
             if (enterpriseId != null && !"SUPER_ADMIN".equals(userType)) {
                 EnterpriseContextHolder.set(enterpriseId);
