@@ -255,6 +255,7 @@ import {
   yearCheck, yearClose,
   type CloseCheckResult, type CarryoverStepResult, type SequenceVoucher, type YearCheckResult,
 } from '@/api/modules/periodClose'
+import { getAllPeriods } from '@/api/modules/period'
 
 const period = ref('')
 const periodStatus = ref('')
@@ -298,12 +299,24 @@ const statusMap: Record<string, string> = {
 
 onMounted(async () => {
   period.value = await resolveEarliestUnclosedPeriod()
+  await refreshPeriodStatus()
 })
+
+async function refreshPeriodStatus() {
+  try {
+    const list = await getAllPeriods()
+    const found = list.find(p => p.periodCode === period.value)
+    periodStatus.value = found?.status ?? ''
+  } catch {
+    periodStatus.value = ''
+  }
+}
 
 function onPeriodChange() {
   // 切换期间需从第 1 步重来: 检查/序列/凭证均与期间绑定
   step.value = 1
   resetAll()
+  refreshPeriodStatus()
 }
 
 function resetAll() {
