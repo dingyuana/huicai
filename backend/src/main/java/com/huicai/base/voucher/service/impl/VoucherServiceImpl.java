@@ -400,6 +400,8 @@ public class VoucherServiceImpl extends ServiceImpl<VoucherMapper, VoucherEntity
         List<VoucherEntryEntity> entries = voucherEntryMapper.selectByVoucherId(id);
         voucherBudgetGuard.releasePost(entity, entries);
         voucherMapper.batchUpdateStatus(Collections.singletonList(id), "AUDITED", userId, entity.getVersion());
+        // 2026-10-30 缺口修复：科目余额对称回减（此前只回状态不减余额 ⇒ 重新记账双重累加）
+        subjectBalanceService.updateBalanceOnUnpost(entity, entries);
         log.info("反过账凭证: id={}, userId={}, version={}", id, userId, entity.getVersion());
     }
 

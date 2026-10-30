@@ -18,6 +18,17 @@ public interface SubjectBalanceService {
     void updateBalanceOnPost(VoucherEntity voucher, List<VoucherEntryEntity> entries);
 
     /**
+     * 反过账对称回减（2026-10-30 缺口修复）：把该凭证各分录的发生额从 t_subject_balance
+     * 中减回，使 post→unpost 后余额回到过账前口径。
+     *
+     * <p>与 {@link #updateBalanceOnPost} 严格对称：仅处理末级科目；红冲凭证（红字分录，
+     * 借贷金额为负）经减法自然实现「红冲反过账 = 回加」，无需特判——数学上自洽。</p>
+     *
+     * <p>事务：Propagation.MANDATORY——必须由调用方事务承载，保证与状态回退同滚同提交。</p>
+     */
+    void updateBalanceOnUnpost(VoucherEntity voucher, List<VoucherEntryEntity> entries);
+
+    /**
      * 期初建账：将传入科目余额写入 t_subject_balance，并标记 t_period.opening_status = 'entered'。
      * <p>balances 为空时表示"确认期初全为 0"，仍标记为 entered（支持零余额企业）。</p>
      * <p>前置条件：期间存在、status=open、opening_status != 'locked'。</p>
