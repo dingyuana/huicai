@@ -434,11 +434,17 @@ async function handleExport() {
     if (query.value.voucherTypeId) params.set('voucherTypeId', String(query.value.voucherTypeId))
     if (query.value.keyword) params.set('keyword', query.value.keyword)
 
-    const token = localStorage.getItem('token')
+    // 🔴 键名必须与 api/request.ts 拦截器一致（huicai_token）：
+    // 此前误读 localStorage['token']（全站从未写过该键）⇒ 请求头恒为 Bearer null ⇒ 导出 401
+    const token = localStorage.getItem('huicai_token')
+    if (!token) {
+      ElMessage.error('登录已失效，请重新登录后再导出')
+      return
+    }
     const res = await fetch(`/api/base/voucher/v1/vouchers/export?${params}`, {
       headers: { Authorization: `Bearer ${token}` }
     })
-    if (!res.ok) throw new Error('导出失败')
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
     const blob = await res.blob()
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
