@@ -44,9 +44,38 @@ public class LoginBruteForceGuard {
     private static final int FAILURE_THRESHOLD = 5;
     private static final Duration WINDOW_DURATION = Duration.ofMinutes(5);
     private static final Duration LOCK_DURATION = Duration.ofMinutes(15);
+    private static final String LOCK_MESSAGE =
+            "系统检测到异常登录活动，账户已被临时锁定，请 " + LOCK_DURATION.toMinutes() + " 分钟后再试";
 
     private final StringRedisTemplate redisTemplate;
     private final AuditLogService auditLogService;
+
+    /**
+     * 登录前调用——<b>只读</b>检查锁定状态，不写任何计数。
+     *
+     * <p>🔴 <b>为什么必须与 {@link #onLoginFailure} 分开</b>：后者是「记录一次失败」的写方法。
+     * 此前 {@code AuthController} 把它当预检查调用（注释写着"仅检查不计数"），
+     * 结果每一次登录尝试——包括随后成功的——都先被计一次失败，失败时再计一次：
+     * 阈值 5 于第 3 次尝试即被打穿。实测 2026-10-29：第 1、2 次返回 400，
+     * 第 3 次起直接返回锁定文案，正常用户极易被自己的两次手误锁在门外 15 分钟。
+     *
+     * <p>Redis 不可用时 fail-open，与计数路径同一策略（锁死所有人比放行更糟）。
+     */
+    public void checkLocked(String ip, String username) {
+        try {
+            if (redisTemplate.hasKey(KEY_PREFIX_LOCK_IP + ip)) {
+                throw BusinessException.tooManyRequests(LOCK_MESSAGE);
+            }
+            if (username != null && redisTemplate.hasKey(KEY_PREFIX_LOCK_USER + username)) {
+                throw BusinessException.tooManyRequests(LOCK_MESSAGE);
+            }
+        } catch (BusinessException e) {
+            // 锁定命中，原样上抛
+            throw e;
+        } catch (Exception e) {
+            log.warn("登录锁定状态检查失败，放行登录（fail-open）: {}", e.getMessage());
+        }
+    }
 
     /**
      * 登录失败时调用——记录失败、检查阈值、触发锁定。
@@ -119,8 +148,7 @@ public class LoginBruteForceGuard {
 
         // 先检查是否已锁定
         if (redisTemplate.hasKey(lockKey)) {
-            throw BusinessException.tooManyRequests(
-                    "系统检测到异常登录活动，账户已被临时锁定，请 " + lockDuration.toMinutes() + " 分钟后再试");
+            throw BusinessException.tooManyRequests(LOCK_MESSAGE);
         }
 
         Long count = redisTemplate.opsForValue().increment(failKey);
@@ -132,8 +160,7 @@ public class LoginBruteForceGuard {
             // 触发锁定
             redisTemplate.opsForValue().set(lockKey, "1", lockDuration);
             logLockEvent(dimensionName, displayValue);
-            throw BusinessException.tooManyRequests(
-                    "系统检测到异常登录活动，账户已被临时锁定，请 " + lockDuration.toMinutes() + " 分钟后再试");
+            throw BusinessException.tooManyRequests(LOCK_MESSAGE);
         }
     }
 

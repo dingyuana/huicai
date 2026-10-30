@@ -177,4 +177,63 @@ class LoginBruteForceGuardTest {
 
         assertThat(count).isEqualTo(0);
     }
+
+    // ==================== checkLocked：只读预检查（2026-10-29 修复） ====================
+
+    @Test
+    @DisplayName("R2-10: checkLocked 未锁定时放行，且【不写任何计数】")
+    void checkLocked_notLocked_passesWithoutCounting() {
+        lenient().when(redisTemplate.hasKey(anyString())).thenReturn(false);
+
+        guard.checkLocked("1.2.3.4", "alice");
+
+        // 🔴 回归锁：预检查绝对不能计数。此前 AuthController 误用 onLoginFailure 做预检查，
+        // 每次尝试先计一次失败 ⇒ 阈值 5 实际第 3 次即锁。若有值操作＝又退化了。
+        verifyNoInteractions(valueOps);
+        verify(redisTemplate, never()).delete(anyString());
+    }
+
+    @Test
+    @DisplayName("R2-11: checkLocked 连续多次调用不会累积计数（原先第 3 次即误锁）")
+    void checkLocked_repeatedCalls_neverAccumulate() {
+        lenient().when(redisTemplate.hasKey(anyString())).thenReturn(false);
+
+        // 模拟同一用户反复提交登录（含最终成功的那次）：10 次预检查后仍应放行
+        for (int i = 0; i < 10; i++) {
+            guard.checkLocked("1.2.3.4", "alice");
+        }
+
+        verifyNoInteractions(valueOps);
+    }
+
+    @Test
+    @DisplayName("R2-12: checkLocked 命中 IP 锁定 → 429")
+    void checkLocked_ipLocked_throws429() {
+        when(redisTemplate.hasKey("login:lock:ip:1.2.3.4")).thenReturn(true);
+
+        assertThatThrownBy(() -> guard.checkLocked("1.2.3.4", "alice"))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(e -> assertThat(((BusinessException) e).getCode()).isEqualTo(429));
+    }
+
+    @Test
+    @DisplayName("R2-13: checkLocked 命中用户名锁定 → 429")
+    void checkLocked_userLocked_throws429() {
+        when(redisTemplate.hasKey("login:lock:ip:1.2.3.4")).thenReturn(false);
+        when(redisTemplate.hasKey("login:lock:usr:alice")).thenReturn(true);
+
+        assertThatThrownBy(() -> guard.checkLocked("1.2.3.4", "alice"))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(e -> assertThat(((BusinessException) e).getCode()).isEqualTo(429));
+    }
+
+    @Test
+    @DisplayName("R2-14: checkLocked 在 Redis 异常时 fail-open（不抛）")
+    void checkLocked_redisDown_failsOpen() {
+        when(redisTemplate.hasKey(anyString())).thenThrow(new RuntimeException("Redis连接失败"));
+
+        guard.checkLocked("1.2.3.4", "alice");
+
+        verifyNoInteractions(valueOps);
+    }
 }

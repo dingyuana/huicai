@@ -8,6 +8,7 @@
       </PageHeader>
 
       <el-tabs v-model="scope" class="scope-root-tabs" @tab-change="onScopeChange">
+        <el-tab-pane label="全部" name="all" />
         <el-tab-pane label="待处理" name="pending" />
         <el-tab-pane label="已制证" name="vouchered" />
       </el-tabs>
@@ -91,7 +92,7 @@
         { label: '净额', value: `¥ ${fmtAmount(statementSummary.net)}` },
       ]" />
 
-        <el-space v-if="scope === 'pending'" style="margin-bottom: 12px" wrap>
+        <el-space v-if="scope !== 'vouchered'" style="margin-bottom: 12px" wrap>
           <el-button type="primary" @click="openImport">导入对账单</el-button>
           <el-button :disabled="!query.accountId" @click="onAutoClassify">自动分类全部</el-button>
           <BatchActionBar

@@ -100,9 +100,11 @@ public class AuthController {
         String ip = getClientIp(httpRequest);
         String username = request.getUsername();
 
-        // R2: 暴力破解防护 —— 先检查锁定状态，未锁才允许走认证
+        // R2: 暴力破解防护 —— 先【只读】检查锁定状态，未锁才允许走认证
+        // 🔴 此处原调 onLoginFailure（那是「记录失败」的写方法），每次尝试都先计一次失败、
+        //    失败时再计一次 ⇒ 阈值 5 于第 3 次尝试即被打穿。改为 checkLocked 后不再写计数。
         try {
-            bruteForceGuard.onLoginFailure(ip, username); // 仅检查不计数（失败后才计数）
+            bruteForceGuard.checkLocked(ip, username);
         } catch (BusinessException e) {
             return R.fail(e.getCode(), e.getMessage());
         }
