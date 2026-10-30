@@ -181,17 +181,24 @@ public class AuthController {
                 }
             }
 
+            // 确定有效企业 ID：AGENCY 用户使用其第一个分配企业，其他类型用 t_user.enterprise_id
+            Long effectiveEnterpriseId = enterpriseId;
+            if ("AGENCY".equals(userType) && !enterpriseList.isEmpty()) {
+                effectiveEnterpriseId = enterpriseList.get(0).getId();
+            }
+
             // 设置企业上下文（SUPER_ADMIN 不设，跳过数据权限拦截）
-            if (enterpriseId != null && !"SUPER_ADMIN".equals(userType)) {
-                EnterpriseContextHolder.set(enterpriseId);
+            // AGENCY 用户使用第一个分配企业作为上下文，而非 t_user.enterprise_id
+            if (effectiveEnterpriseId != null && !"SUPER_ADMIN".equals(userType)) {
+                EnterpriseContextHolder.set(effectiveEnterpriseId);
             }
 
             String accessToken = jwtProvider.generateAccessToken(username, user.getId(),
                     roleIds.stream().map(String::valueOf).collect(Collectors.toList()),
-                    enterpriseId, agencyId, userType, agencyRole);
+                    effectiveEnterpriseId, agencyId, userType, agencyRole);
             String refreshToken = jwtProvider.generateRefreshToken(username, user.getId(),
                     roleIds.stream().map(String::valueOf).collect(Collectors.toList()),
-                    enterpriseId, agencyId, userType, agencyRole);
+                    effectiveEnterpriseId, agencyId, userType, agencyRole);
 
             LoginResponse response = new LoginResponse();
             response.setToken(accessToken);
@@ -199,20 +206,20 @@ public class AuthController {
             response.setTokenType("Bearer");
             response.setUserType(userType);
             response.setHomeEnterpriseId(enterpriseId);
-            response.setCurrentEnterpriseId(enterpriseId);
+            response.setCurrentEnterpriseId(effectiveEnterpriseId);
             response.setEnterpriseSelectionRequired(
-                    "AGENCY".equals(userType) && enterpriseId == null);
+                    "AGENCY".equals(userType) && enterpriseList.isEmpty());
             response.setAgencyId(agencyId);
             response.setAgencyRole(agencyRole);
             response.setEnterpriseList(enterpriseList);
             UserInfoResponse loginInfo = new UserInfoResponse(user.getId(), user.getUsername(),
                     user.getRealName(), user.getNickname(), user.getEmail(), user.getPhone(),
                     user.getAvatar(), user.getDeptId(), roleIds, permissions,
-                    userType, agencyId, null, enterpriseId, false, agencyRole, enterpriseList);
+                    userType, agencyId, null, effectiveEnterpriseId, false, agencyRole, enterpriseList);
             loginInfo.setHomeEnterpriseId(enterpriseId);
-            loginInfo.setCurrentEnterpriseId(enterpriseId);
+            loginInfo.setCurrentEnterpriseId(effectiveEnterpriseId);
             loginInfo.setEnterpriseSelectionRequired(
-                    "AGENCY".equals(userType) && enterpriseId == null);
+                    "AGENCY".equals(userType) && enterpriseList.isEmpty());
             response.setUserInfo(loginInfo);
 
             return R.ok(response);
