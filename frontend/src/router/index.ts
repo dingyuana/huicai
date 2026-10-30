@@ -77,6 +77,15 @@ router.beforeEach(async (to, _from, next) => {
       }
     }
 
+    // ENTERPRISE 用户：无归属企业则拦截到 403（或专用页面）
+    // 代理会计由上面的 AGENCY 分支处理；这里只管 ENTERPRISE 类型
+    if (!authStore.isAgency && !authStore.isSuperAdmin && !authStore.currentEnterpriseId) {
+      const allowedPaths = ['/403', '/404']
+      if (!allowedPaths.includes(to.path)) {
+        return next({ path: '/403', query: { reason: 'no_enterprise' } })
+      }
+    }
+
     // 页面刷新后重新获取用户信息（token存在但userInfo为空）
     if (authStore.token && !authStore.userInfo) {
       try {

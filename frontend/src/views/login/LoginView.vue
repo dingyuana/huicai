@@ -59,9 +59,23 @@ async function handleLogin() {
   try {
     await authStore.login({ username: form.username, password: form.password })
 
-    const redirect = route.query.redirect
-    const targetPath = typeof redirect === 'string' ? redirect : '/dashboard'
-    await router.push(targetPath)
+    const { userType, currentEnterpriseId, isAgency, isSuperAdmin } = authStore
+    if (isSuperAdmin.value) {
+      await router.push({ path: '/dashboard' })
+    } else if (isAgency.value) {
+      if (!currentEnterpriseId.value) {
+        await router.push({ path: '/agency/enterprise-list' })
+      } else {
+        await router.push({ path: '/dashboard' })
+      }
+    } else {
+      // ENTERPRISE 类型：无归属企业则报错并留在登录页
+      if (!currentEnterpriseId.value) {
+        ElMessage.error('该账号未分配企业，无法进入账簿。请联系管理员在【用户管理】为该账号指定归属企业。')
+        return
+      }
+      await router.push({ path: '/dashboard' })
+    }
     ElMessage.success('登录成功')
   } catch (e: any) {
     errorMsg.value = e?.msg || e?.message || '登录失败，请检查账号密码'
