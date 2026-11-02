@@ -210,6 +210,20 @@ class PeriodControllerTest {
     }
 
     @Test
+    @DisplayName("关闭期间_期间不存在时不得静默成功_必须返回404业务码")
+    void closePeriod_missingPeriod_returns404() throws Exception {
+        // SPEC-P150：原实现对 getById 为 null 的请求直接 R.ok() ——
+        // 前端提示「期间已结账」而数据库什么都没发生（2026-11-02 生产实证）。
+        when(periodService.getById(eq(404L))).thenReturn(null);
+
+        mvc.perform(post("/api/v1/periods/404/close"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(404));
+
+        verify(periodCloseService, never()).closePeriod(any(), any());
+    }
+
+    @Test
     @DisplayName("锁定期间_PathVariable正确解析_返回200")
     void lockPeriod_pathVariable_boundCorrectly() throws Exception {
         doNothing().when(periodService).lockPeriod(anyLong());

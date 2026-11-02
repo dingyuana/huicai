@@ -691,6 +691,8 @@
 
 | REQ-2026-163 | 费用报销模块 | P1 | 报销申请（差旅费、业务费、办公费）+ 多级审批流可配置 + 报销凭证自动生成 + 费用分析报表；审批流复用现有代理派工流程 | SPC-P146 | 📝 SPEC 待编制（2027-Q1 排期） | PLANNED |
 
+| REQ-2026-164 | 清库端点加固 —— 确认令牌 + 按企业隔离（一次点击清掉跨账套数据的事故收口） | P0 | **2026-10-30 事故**：会计调 `POST /api/v1/system/clear-vouchers` 被 403（正确），26 秒后管理员在同端点一次点击，清掉**企业 4 的 26 张凭证**（`entries=52, vouchers=26` 见生产日志 05:11:24），并在 `t_business_doc.voucher_id` 留下 **26 条悬空引用**（该列无外键，删凭证不回收单据引用）；审计日志有企业 4 的 73 条凭证 CREATE、**零条 DELETE** ⇒ 删除绕过应用层。**根因**：`SystemClearController` 的 9 个清库端点全是**无 WHERE 的全表 DELETE**，跨所有账套生效，且**无任何二次确认**。`system:clear` 权限收口本身正确（仅 ADMIN 持有），但**持权者一次误触即全库不可逆丢失**。**修法**：①新增 `SystemClearService` 收口全部清库逻辑，控制器退化为薄委托；②**确认令牌**：必须传 `confirm=<动作名>`（如 `CLEAR_VOUCHERS`），缺失/不匹配一律 400，且校验在**任何 DELETE 之前**执行 ⇒ 「没确认就一行都不动」；③**按企业隔离**：每条 SQL 带 `enterprise_id = ?`，未传参时取 `EnterpriseContextHolder`，**上下文为空则 400 拒绝、绝不退化为清全部**；上下文与请求企业冲突则 403。**守卫**：`SystemClearServiceGuardTest` **10 例**全绿，含「零 SQL 交互」断言（`verifyNoInteractions`，比“抛异常”更强——抛异常但已删一半也算失败）与 SQL 文本扫描（所有 DELETE 必须含 WHERE + enterprise_id）。**反证三组全部成立**：F-1 移除令牌校验 ⇒ 恰 **5 例**转红；F-2 上下文空时 `return null`（复刻旧行为）⇒ 恰 AT-164-5 **1 例**转红；F-3 凭证删除改回无 WHERE 全表 ⇒ 恰 AT-164-9 **1 例**转红，均还原即绿。**连带**：`SystemClearControllerIntegrationTest` 同步改造为按企业断言 + 新增「其他企业单据一张不少」的跨企业不变量。**数据处置（老丁裁定选项②）**：企业 4 的 26 条演练单据 + 26 条银行流水已清零重来，悬空引用 **26→0**，企业 1 的 20 单据 / 29 凭证原样保留；清理前已 `pg_dump` 快照（`tmp_backup/huicai_before_cleanup_*.sql`）。**已知局限**：清库仍为物理删除、无回收站；`t_business_doc.voucher_id` 仍无外键约束（历史悬空引用需另行清理）；确认令牌是**防误触**而非防恶意，真边界仍是 `system:clear` 权限。关联 SPEC：`P148-system-clear-guard.md` | SPC-P148 | ✅ **已实施并验证**（2026-10-30）：守卫 10/10 绿 + 三组反证成立 + 全量 L1 回归通过 | DONE |
+
 
 
 ---

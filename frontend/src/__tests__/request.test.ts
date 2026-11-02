@@ -1,3 +1,11 @@
+/**
+ * @vitest-environment node
+ *
+ * 🔴 本文件是**源码扫描型**守卫（读 .vue/.ts 源文件做断言），依赖 `node:fs` / `node:path`。
+ * 全局 `environment: 'happy-dom'` 会把 node 内置模块 externalize 成空对象，
+ * 实测 `resolve is not a function` / `readFileSync is not a function` ⇒ 整文件挂掉。
+ * 逐文件切到 node 环境，既修复本文件，也不影响全局配置与其他组件测试。
+ */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
