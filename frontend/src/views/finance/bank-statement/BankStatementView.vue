@@ -81,7 +81,7 @@
       </FilterBar>
 
       <div class="view-mode-row">
-        <el-radio-group v-model="query.classification" size="small" @change="onSearch">
+        <el-radio-group v-model="query.classification" size="small" class="classification-tabs" @change="onFocusCategory">
           <el-radio-button :key="'__all__'" :value="''">全部 ({{ totalCount }})</el-radio-button>
           <el-radio-button
             v-for="(label, value) in CLASSIFICATION_LABELS"
@@ -175,9 +175,9 @@
         <el-empty v-else-if="query.startDate && query.endDate" description="所选日期范围内暂无已制证流水" />
         <el-empty v-else description="请先选择日期范围（本月/近3个月/近6个月/近12个月或自定义）查询已制证流水" />
       </template>
-      <template v-else-if="viewMode === 'category'">
+      <template v-else>
         <!-- SPEC-P151 分类视图：每个业务分类一个折叠区块，组头带条数与收支合计。
-             整组完整不分页（数据量由账期收窄兜住）；勾选批量操作请切「平铺明细」。 -->
+             整组完整不分页（数据量由账期收窄兜住）。勾选列保留：批量确认/审核跨组累加。 -->
         <el-collapse v-if="categoryGroups.length" v-model="expandedCategories">
           <el-collapse-item v-for="g in categoryGroups" :key="g.classification" :name="g.classification">
             <template #title>
@@ -190,7 +190,10 @@
               </span>
             </template>
             <el-table :data="g.items" border stripe size="small" show-summary
-              :summary-method="(ctx: any) => summaryMethod(ctx, g.items)" @row-click="onRowClick" style="cursor:pointer">
+              :summary-method="(ctx: any) => summaryMethod(ctx, g.items)"
+              @selection-change="(rows: any) => onGroupSelectionChange(g.classification, rows)"
+              @row-click="onRowClick" style="cursor:pointer">
+              <el-table-column type="selection" width="40" :selectable="isBatchable" />
               <el-table-column prop="txDate" label="日期" width="110" />
               <el-table-column prop="txType" label="方向" width="70" align="center">
                 <template #default="{ row }">
@@ -232,71 +235,6 @@
           </el-collapse-item>
         </el-collapse>
         <el-empty v-else-if="!loading" :description="query.period ? `${periodLabel(query.period)} 内暂无对账单据` : '暂无对账单据'" />
-      </template>
-      <template v-else>
-      <el-table ref="tableRef" :data="list" v-loading="loading" border stripe show-summary :summary-method="(ctx: any) => summaryMethod(ctx, list)" @selection-change="onSelectionChange" @row-click="onRowClick" style="cursor:pointer">
-        <el-table-column type="selection" width="40" :selectable="isBatchable" />
-        <el-table-column prop="txDate" label="日期" width="110" />
-        <el-table-column prop="txType" label="方向" width="70" align="center">
-          <template #default="{ row }">
-            <el-tag :type="row.txType === 'INCOME' ? 'success' : 'warning'" size="small">
-              {{ row.txType === 'INCOME' ? '收' : '支' }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column label="金额" width="130" align="right">
-          <template #default="{ row }">{{ fmtAmount(row.amount) }}</template>
-        </el-table-column>
-        <el-table-column prop="counterAccount" label="对方" min-width="140" show-overflow-tooltip />
-        <el-table-column prop="summary" label="摘要" min-width="180" show-overflow-tooltip />
-        <el-table-column label="分类" width="100" align="center">
-          <template #default="{ row }">
-            <el-tag v-if="row.classification && row.classification !== 'other_unknown'"
-              :type="row.reviewStatus === 'approved' ? 'success' : 'warning'" size="small">
-              {{ CLASSIFICATION_LABELS[row.classification] || row.classification }}
-            </el-tag>
-            <el-tag v-else type="info" size="small">未分类</el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column label="科目" width="150" align="center">
-          <template #default="{ row }">
-            <span v-if="hasSubjectLevel(row)" :title="getSubjectPath(row)" style="font-size:12px">
-              <span v-if="row.subjectLevel1">{{ row.subjectLevel1 }}</span>
-              <span v-if="row.subjectLevel2"> / {{ row.subjectLevel2 }}</span>
-              <span v-if="row.subjectLevel3"> / {{ row.subjectLevel3 }}</span>
-            </span>
-            <span v-else style="color:#c0c4cc">-</span>
-          </template>
-        </el-table-column>
-        <el-table-column label="流程状态" width="100" align="center">
-          <template #default="{ row }">
-            <el-tag :type="reviewStatusTagType(row.reviewStatus)" size="small">
-              {{ REVIEW_STATUS_LABELS[row.reviewStatus] || '待确认' }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column label="生成结果" width="130" align="center">
-          <template #default="{ row }">
-            <span v-if="row.generatedVoucherNo" style="color:var(--el-color-success)">
-              {{ row.generatedVoucherNo }}
-            </span>
-            <span v-else-if="row.generatedDocNo" style="color:var(--el-color-primary)">
-              {{ row.generatedDocNo }}
-            </span>
-            <span v-else>-</span>
-          </template>
-        </el-table-column>
-      </el-table>
-
-      <el-pagination
-        v-if="total > 0"
-        v-model:current-page="query.current"
-        v-model:page-size="query.size"
-        :total="total"
-        layout="total, prev, pager, next"
-        style="margin-top:12px;justify-content:flex-end"
-        @change="fetchData"
-      />
       </template>
     </el-card>
 
@@ -602,7 +540,9 @@ const { selectedRows, result, resultVisible, onSelectionChange, clearSelection, 
   refresh: async () => {
     await refreshAll()
   },
-  clearer: () => tableRef.value?.clearSelection(),
+  // SPEC-P151 分类视图：一个分类一张表，清空要逐表 clearSelection（clearGroupSelections），
+  // 不能再依赖单一 tableRef
+  clearer: () => clearGroupSelections(),
 })
 
 function onBatchAction(key: string) {
@@ -672,13 +612,28 @@ const monthGroups = ref<BankStatementMonthGroup[]>([])
 const expandedMonths = ref<string[]>([])
 const quickDate = ref('')
 
-// SPEC-P151 分类视图：默认按分类折叠展示（'category'），可切回平铺（'flat'）。
-// 勾选批量操作依赖平铺表格的 selection 列，批量前需切回平铺。
-const viewMode = ref<'category' | 'flat'>('category')
+// SPEC-P151 分类视图：全部/待处理页签的列表按业务分类折叠分组展示，
+// 不再平铺全量（旧平铺表 + 分页已移除，数据量由账期收窄兜住）。
 const categoryGroups = ref<BankStatementCategoryGroup[]>([])
 const expandedCategories = ref<string[]>([])
-// SPEC-P151：进页/重置的默认账期（企业当前期间，resolveDefaultPeriod 内含回退）
+// 进页/重置的默认账期（企业当前期间，resolveDefaultPeriod 内含回退）
 const defaultPeriod = ref('')
+
+// 跨分组表格的勾选聚合：每个分类一张表，selection 各自独立，批量操作取并集
+const groupSelections = ref<Record<string, BankStatementVO[]>>({})
+const categoryTableRefs = new Map<string, any>()
+function setCategoryTableRef(key: string, el: any) {
+  if (el) categoryTableRefs.set(key, el)
+  else categoryTableRefs.delete(key)
+}
+function onGroupSelectionChange(key: string, rows: BankStatementVO[]) {
+  groupSelections.value = { ...groupSelections.value, [key]: rows }
+  selectedRows.value = Object.values(groupSelections.value).flat()
+}
+function clearGroupSelections() {
+  groupSelections.value = {}
+  categoryTableRefs.forEach((t) => t?.clearSelection?.())
+}
 
 /** 202407 -> 2024年7月（提示文案用） */
 function periodLabel(period: string): string {
@@ -875,19 +830,16 @@ async function fetchData() {
       if (!expandedMonths.value.length && monthGroups.value.length) {
         expandedMonths.value = [monthGroups.value[0].month]
       }
-    } else if (viewMode.value === 'category') {
-      // 分类视图：整组完整不分页，数据量由账期收窄兜住；classification 是分组维度不传
-      const { classification: _cls, ...filter } = query.value
-      const groups = await getBankStatementGroupedByCategory({ ...filter, scope: scope.value } as any)
+    } else {
+      // SPEC-P151 分类视图：整组完整不分页，数据量由账期收窄兜住。
+      // 选中分类时把 classification 传下去（组视图收窄为只看该组）；
+      // 「全部」不传 —— 分组展示全部业务分类。
+      const groups = await getBankStatementGroupedByCategory({ ...query.value, scope: scope.value } as any)
       categoryGroups.value = groups || []
       total.value = categoryGroups.value.reduce((sum, g) => sum + (g.count || 0), 0)
       if (!expandedCategories.value.length && categoryGroups.value.length) {
         expandedCategories.value = [categoryGroups.value[0].classification]
       }
-    } else {
-      const res = await getBankStatementPage({ ...query.value, scope: scope.value } as any)
-      list.value = (res as any).records || []
-      total.value = (res as any).total || 0
     }
   } finally {
     loading.value = false
