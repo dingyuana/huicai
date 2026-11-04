@@ -164,10 +164,11 @@ export interface BankStatementCategoryGroup {
 /**
  * 按业务分类分组查询（分类视图）。
  *
- * <p>⚠️ 与 page 的差别：分组视图<b>不接受 classification</b>（分组维度就是它），
- * 且<b>不分页</b> —— 分页会把一组劈成两半，数据量靠期间收窄兜住。</p>
+ * <p>⚠️ 与 page 的差别：<b>不分页</b> —— 分页会把一组劈成两半，数据量靠期间收窄兜住。
+ * classification 可传（分类筛选条与列表同口径）；other_unknown 在后端连 NULL/空白
+ * 分类一起捞，与归组口径同源。</p>
  */
-export function getBankStatementGroupedByCategory(params: Omit<BankStatementQueryFilter, 'classification'>):
+export function getBankStatementGroupedByCategory(params: BankStatementQueryFilter):
   Promise<BankStatementCategoryGroup[]> {
   return request.get('/sme/cash/v1/bank-statements/grouped-by-category', { params })
 }

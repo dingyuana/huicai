@@ -100,18 +100,19 @@ describe('BankStatementView — 银行流水组件', () => {
     expect(wrapper.find('.bank-statement').exists()).toBe(true)
   })
 
-  it('onMounted 时调用 getBankStatementPage', async () => {
-    const { getBankStatementPage } = await import('@/api/modules/bankStatement')
-    vi.mocked(getBankStatementPage).mockResolvedValue({ records: [], total: 0, page: 1, size: 10, pages: 0 })
+  it('onMounted 时调用 getBankStatementGroupedByCategory（默认当前账期）', async () => {
+    const { getBankStatementGroupedByCategory } = await import('@/api/modules/bankStatement')
+    vi.mocked(getBankStatementGroupedByCategory).mockResolvedValue([])
 
-    const wrapper = shallowMount(BankStatementView, { global: { plugins: [router, createPinia()] } })
-    // SPEC-P151：默认 viewMode=category，先切到 flat 再断言
-    ;(wrapper.vm as any).viewMode = 'flat'
-    await (wrapper.vm as any).onViewModeChange()
+    shallowMount(BankStatementView, { global: { plugins: [router, createPinia()] } })
+    await nextTick()
     await nextTick()
     await nextTick()
 
-    expect(getBankStatementPage).toHaveBeenCalled()
+    // SPEC-P151：默认按分类分组 + 默认账期取企业当前期间（mock 为 202610）
+    expect(getBankStatementGroupedByCategory).toHaveBeenCalledWith(
+      expect.objectContaining({ period: '202610', scope: 'all' })
+    )
   })
 
   // ===== 维度 2: canReview 逻辑 =====
@@ -246,28 +247,27 @@ describe('BankStatementView — 银行流水组件', () => {
   })
 
   // ===== 维度 8: 流水包含收入/支出类型 =====
-  it('API 返回数据包含收入/支出类型', async () => {
-    const { getBankStatementPage } = await import('@/api/modules/bankStatement')
-    vi.mocked(getBankStatementPage).mockResolvedValue({
-      records: [
-        mockStatement(1, { txType: 'INCOME' }),
-        mockStatement(2, { txType: 'EXPENSE' }),
-      ],
-      total: 2,
-      page: 1,
-      size: 10,
-      pages: 1,
-    })
+  it('分类视图返回数据包含收入/支出类型', async () => {
+    const { getBankStatementGroupedByCategory } = await import('@/api/modules/bankStatement')
+    vi.mocked(getBankStatementGroupedByCategory).mockResolvedValue([
+      {
+        classification: 'revenue',
+        count: 2,
+        income: 50000,
+        expense: 0,
+        items: [
+          mockStatement(1, { txType: 'INCOME' }),
+          mockStatement(2, { txType: 'EXPENSE' }),
+        ] as any,
+      },
+    ] as any)
 
     const wrapper = shallowMount(BankStatementView, { global: { plugins: [router, createPinia()] } })
-    // SPEC-P151：默认 viewMode=category，先切到 flat 再断言
-    ;(wrapper.vm as any).viewMode = 'flat'
-    await (wrapper.vm as any).onViewModeChange()
-    await nextTick()
-    await nextTick()
+    // onMounted 内是「resolveDefaultPeriod → 账户 → 分组查询」串行链，nextTick 数不固定，用宏任务 flush
+    await new Promise((r) => setTimeout(r))
 
-    const list = (wrapper.vm as any).list
-    const txTypes = list.map((r: any) => r.txType)
+    const groups = (wrapper.vm as any).categoryGroups
+    const txTypes = groups.flatMap((g: any) => g.items.map((r: any) => r.txType))
     expect(txTypes).toContain('INCOME')
     expect(txTypes).toContain('EXPENSE')
   })
@@ -288,20 +288,71 @@ describe('BankStatementView — 银行流水组件', () => {
 
   // ===== 维度 10: route.query.reviewStatus 初始过滤 =====
   it('route.query.reviewStatus 挂载时应用为过滤条件', async () => {
-    const { getBankStatementPage } = await import('@/api/modules/bankStatement')
-    vi.mocked(getBankStatementPage).mockResolvedValue({ records: [], total: 0, page: 1, size: 10, pages: 0 })
+    const { getBankStatementGroupedByCategory } = await import('@/api/modules/bankStatement')
+    vi.mocked(getBankStatementGroupedByCategory).mockResolvedValue([])
 
     await router.push({ path: '/finance/bank-statement', query: { reviewStatus: 'payment_created' } })
-    const wrapper = shallowMount(BankStatementView, { global: { plugins: [router, createPinia()] } })
-    // SPEC-P151：默认 viewMode=category，先切到 flat 再断言
-    ;(wrapper.vm as any).viewMode = 'flat'
-    await (wrapper.vm as any).onViewModeChange()
+    shallowMount(BankStatementView, { global: { plugins: [router, createPinia()] } })
+    await nextTick()
     await nextTick()
     await nextTick()
 
-    expect(getBankStatementPage).toHaveBeenCalledWith(
+    expect(getBankStatementGroupedByCategory).toHaveBeenCalledWith(
       expect.objectContaining({ reviewStatus: 'payment_created', scope: 'all' })
     )
     await router.replace({ path: '/finance/bank-statement' })
+  })
+
+  // ===== 维度 11: SPEC-P151 账期口径 =====
+  it('默认账期 = 企业当前期间，且展开为月首月末传给后端', async () => {
+    const { getBankStatementGroupedByCategory } = await import('@/api/modules/bankStatement')
+    vi.mocked(getBankStatementGroupedByCategory).mockResolvedValue([])
+
+    shallowMount(BankStatementView, { global: { plugins: [router, createPinia()] } })
+    await nextTick()
+    await nextTick()
+    await nextTick()
+
+    // mock 的 currentPeriod=202610 → period 与日期区间同口径下发
+    expect(getBankStatementGroupedByCategory).toHaveBeenCalledWith(
+      expect.objectContaining({ period: '202610', startDate: '2026-10-01', endDate: '2026-10-31' })
+    )
+  })
+
+  it('clearPeriod 后不再带 period（全量口径）', async () => {
+    const { getBankStatementGroupedByCategory } = await import('@/api/modules/bankStatement')
+    vi.mocked(getBankStatementGroupedByCategory).mockResolvedValue([])
+
+    const wrapper = shallowMount(BankStatementView, { global: { plugins: [router, createPinia()] } })
+    await nextTick()
+    await nextTick()
+    await nextTick()
+
+    vi.mocked(getBankStatementGroupedByCategory).mockClear()
+    await (wrapper.vm as any).clearPeriod()
+    await nextTick()
+
+    expect(getBankStatementGroupedByCategory).toHaveBeenCalledWith(
+      expect.not.objectContaining({ period: expect.anything() })
+    )
+  })
+
+  it('onReset 重置回默认账期而不是全量', async () => {
+    const { getBankStatementGroupedByCategory } = await import('@/api/modules/bankStatement')
+    vi.mocked(getBankStatementGroupedByCategory).mockResolvedValue([])
+
+    const wrapper = shallowMount(BankStatementView, { global: { plugins: [router, createPinia()] } })
+    await nextTick()
+    await nextTick()
+    await nextTick()
+
+    await (wrapper.vm as any).clearPeriod()
+    vi.mocked(getBankStatementGroupedByCategory).mockClear()
+    await (wrapper.vm as any).onReset()
+    await nextTick()
+
+    expect(getBankStatementGroupedByCategory).toHaveBeenCalledWith(
+      expect.objectContaining({ period: '202610' })
+    )
   })
 })

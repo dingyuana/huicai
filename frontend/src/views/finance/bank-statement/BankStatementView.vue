@@ -770,9 +770,14 @@ function fmtAmount(v: number) {
   return v == null ? '' : Number(v).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
+/** 收入的判定口径（与后端 groupByCategory/summary 一致：TRANSFER_IN 计收入） */
+function isIncoming(r: BankStatementVO) {
+  return r.txType === 'INCOME' || r.txType === 'TRANSFER_IN'
+}
+
 /**
  * 底部小结：按方向拆分收入/支出，金额列显示净额(收-支)。
- * 待处理表列: 0勾选 1日期 2方向 3金额 4对方 5摘要 6分类 7科目 8流程 9生成
+ * 分类分组表列: 0勾选 1日期 2方向 3金额 4对方 5摘要 6科目 7流程 8生成
  * 已制证月分组表列: 0日期 1方向 2金额 3对方 4摘要 5分类 6流程 7生成（无勾选列）
  */
 function summaryMethod(
@@ -780,13 +785,12 @@ function summaryMethod(
   rows?: BankStatementVO[] | null,
 ) {
   const list = rows || data || []
-  const income = list.reduce((s, r) => s + (r.txType === 'INCOME' ? (Number(r.amount) || 0) : 0), 0)
-  const expense = list.reduce((s, r) => s + (r.txType !== 'INCOME' ? (Number(r.amount) || 0) : 0), 0)
-  const amountIdx = columns.length >= 10 ? 3 : 2 // 待处理表有勾选列，月分组表无
-  const hasMore = scope.value !== 'vouchered' && list.length > 0 && list.length < total.value
+  const income = list.reduce((s, r) => s + (isIncoming(r) ? (Number(r.amount) || 0) : 0), 0)
+  const expense = list.reduce((s, r) => s + (!isIncoming(r) ? (Number(r.amount) || 0) : 0), 0)
+  const amountIdx = scope.value === 'vouchered' ? 2 : 3 // 月分组表无勾选列，分类分组表有
   return columns.map((_, index) => {
-    if (index === 0) return hasMore ? '本页合计' : '合计'
-    if (index === 1 && columns.length < 10) return `收 ${fmtAmount(income)} / 支 ${fmtAmount(expense)}`
+    if (index === 0) return '合计'
+    if (scope.value === 'vouchered' && index === 1) return `收 ${fmtAmount(income)} / 支 ${fmtAmount(expense)}`
     if (index === amountIdx) return fmtAmount(income - expense)
     return ''
   })
