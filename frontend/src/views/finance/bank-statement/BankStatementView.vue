@@ -81,7 +81,7 @@
       </FilterBar>
 
       <div class="view-mode-row">
-        <el-radio-group v-model="query.classification" size="small" class="classification-tabs" @change="onFocusCategory">
+        <el-radio-group v-model="query.classification" size="small" class="classification-tabs" @change="onSearch">
           <el-radio-button :key="'__all__'" :value="''">全部 ({{ totalCount }})</el-radio-button>
           <el-radio-button
             v-for="(label, value) in CLASSIFICATION_LABELS"
@@ -618,6 +618,7 @@ const categoryGroups = ref<BankStatementCategoryGroup[]>([])
 const expandedCategories = ref<string[]>([])
 // 进页/重置的默认账期（企业当前期间，resolveDefaultPeriod 内含回退）
 const defaultPeriod = ref('')
+const viewMode = ref<'category' | 'flat'>('category')
 
 // 跨分组表格的勾选聚合：每个分类一张表，selection 各自独立，批量操作取并集
 const groupSelections = ref<Record<string, BankStatementVO[]>>({})
@@ -830,6 +831,11 @@ async function fetchData() {
       if (!expandedMonths.value.length && monthGroups.value.length) {
         expandedMonths.value = [monthGroups.value[0].month]
       }
+    } else if (viewMode.value === 'flat') {
+      // 平铺视图：分页查询
+      const res = await getBankStatementPage({ ...query.value, scope: scope.value } as any)
+      list.value = (res as any).records || []
+      total.value = (res as any).total || 0
     } else {
       // SPEC-P151 分类视图：整组完整不分页，数据量由账期收窄兜住。
       // 选中分类时把 classification 传下去（组视图收窄为只看该组）；

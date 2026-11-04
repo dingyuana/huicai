@@ -193,7 +193,7 @@ public class BankStatementServiceImpl implements BankStatementService {
      */
     @Override
     public List<com.huicai.base.business.dto.vo.BankStatementCategoryGroupVO> groupByCategory(
-            Long accountId, String status, String reviewStatus,
+            Long accountId, String status, String classification, String reviewStatus,
             LocalDate startDate, LocalDate endDate, String direction,
             String counterAccount, String summary, String keyword,
             BigDecimal minAmount, BigDecimal maxAmount, String scope) {
@@ -212,6 +212,19 @@ public class BankStatementServiceImpl implements BankStatementService {
                 .ge(minAmount != null, BankStatementEntity::getAmount, minAmount)
                 .le(maxAmount != null, BankStatementEntity::getAmount, maxAmount)
                 .last("ORDER BY tx_date DESC");
+
+        // 🔴 other_unknown 必须连 NULL/空串一起捞：本方法把 NULL/空白 classification 归组到
+        // other_unknown（见下方 groupingBy）。若这里只用 eq('other_unknown')，前端点「其它/待认领」
+        // 时组头计数与内容对不上（NULL 行凭空消失）—— 分组口径与过滤口径必须同源。
+        if (shouldFilter(classification)) {
+            if (BankClassification.OTHER_UNKNOWN.equals(classification)) {
+                wrapper.and(w -> w.isNull(BankStatementEntity::getClassification)
+                        .or().eq(BankStatementEntity::getClassification, "")
+                        .or().eq(BankStatementEntity::getClassification, BankClassification.OTHER_UNKNOWN));
+            } else {
+                wrapper.eq(BankStatementEntity::getClassification, classification);
+            }
+        }
 
         if ("pending".equalsIgnoreCase(scope)) {
             wrapper.and(w -> w.isNull(BankStatementEntity::getReviewStatus)

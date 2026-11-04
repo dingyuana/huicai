@@ -127,12 +127,16 @@ public class BankStatementController {
      *
      * <p><b>不做分页</b>：分组视图必须<b>整组完整</b>，分页会把一组劈成两半。
      * 数据量由期间收窄兜住（页面默认只查当前账期）。</p>
+     *
+     * <p>{@code classification} 可继续过滤（前端分类筛选条与列表同口径），
+     * other_unknown 含 NULL/空白分类，与归组口径同源。</p>
      */
     @Operation(summary = "按业务分类分组查询对账单（分类视图）")
     @GetMapping("/grouped-by-category")
     public R<java.util.List<com.huicai.base.business.dto.vo.BankStatementCategoryGroupVO>> groupedByCategory(
             @RequestParam(required = false) Long accountId,
             @RequestParam(required = false) String status,
+            @RequestParam(required = false) String classification,
             @RequestParam(required = false) String reviewStatus,
             @RequestParam(required = false) String period,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) java.time.LocalDate startDate,
@@ -145,7 +149,7 @@ public class BankStatementController {
             @RequestParam(required = false) BigDecimal maxAmount,
             @RequestParam(required = false) String scope) {
         com.huicai.common.util.PeriodRange.Range range = resolveRange(period, startDate, endDate);
-        return R.ok(service.groupByCategory(accountId, status, reviewStatus,
+        return R.ok(service.groupByCategory(accountId, status, classification, reviewStatus,
                 range.start(), range.end(), direction, counterAccount, summary, keyword,
                 minAmount, maxAmount, scope));
     }

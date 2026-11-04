@@ -149,12 +149,12 @@ public interface BankStatementService {
     /**
      * SPEC-P151 分类视图：按业务分类折叠分组（未分类归 other_unknown）。
      *
-     * <p>过滤条件与 {@link #pageQuery} 一致，<b>除 classification 外</b> ——
-     * 分组维度即分类本身，不支持再按单一分类过滤。
+     * <p>过滤条件与 {@link #pageQuery} 一致。传 {@code classification} 时组视图收窄为
+     * 只看该分类（other_unknown 连 NULL/空白一起捞，与归组口径同源）。
      * 收/支合计口径与 {@link #summary} 一致（TRANSFER_IN 计收、TRANSFER_OUT 计支）。</p>
      */
     List<com.huicai.base.business.dto.vo.BankStatementCategoryGroupVO> groupByCategory(
-            Long accountId, String status, String reviewStatus,
+            Long accountId, String status, String classification, String reviewStatus,
             LocalDate startDate, LocalDate endDate, String direction,
             String counterAccount, String summary, String keyword,
             BigDecimal minAmount, BigDecimal maxAmount, String scope);
