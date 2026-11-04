@@ -38,7 +38,7 @@
         </el-form>
       </div>
 
-      <el-table :data="list" v-loading="loading" border stripe style="width: 100%">
+      <el-table :data="list" v-loading="loading" border stripe style="width: 100%" data-testid="audit-log-table">
         <template #empty>
           <el-empty v-if="!query.startDate && !query.endDate" description="请先选择日期范围（开始/结束日期）查询审计日志" />
         </template>
@@ -84,7 +84,7 @@
       </div>
     </el-card>
 
-    <el-dialog v-model="detailVisible" title="操作详情" width="720" destroy-on-close>
+    <el-dialog v-model="detailVisible" title="操作详情" width="720" destroy-on-close data-testid="audit-detail-dialog">
       <el-descriptions :column="2" border v-if="detail">
         <el-descriptions-item label="ID" width="100">{{ detail.id }}</el-descriptions-item>
         <el-descriptions-item label="操作人">{{ detail.username }}</el-descriptions-item>
