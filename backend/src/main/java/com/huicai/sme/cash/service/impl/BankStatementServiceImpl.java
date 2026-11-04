@@ -178,6 +178,96 @@ public class BankStatementServiceImpl implements BankStatementService {
         return groups;
     }
 
+    /**
+     * SPEC-P151 分类视图：按业务分类折叠分组。
+     *
+     * <p><b>与 {@link #groupByMonth} 的分工</b>：月分组服务「已制证归档」，
+     * 本方法服务「按分类分批消化」。过滤条件与 {@link #pageQuery} 逐条一致，
+     * 唯一差别是<b>不接受 classification 参数</b> —— 分组维度就是它，
+     * 分组视图里再按单一分类过滤没有意义（收窄由前端点组完成）。</p>
+     *
+     * <p>🔴 <b>必须 {@code populateGeneratedRefs}</b>：{@code generatedVoucherNo} 是
+     * {@code @TableField(exist=false)} 的纯展示字段，此前只有 {@link #pageQuery} 填过。
+     * 首版直接 {@code selectList} 就漏了它 ⇒ 同一批流水在平铺视图显示凭证号、
+     * 在分组视图显示「-」，属两个视图口径不一致（§4.5 同款陷阱）。</p>
+     */
+    @Override
+    public List<com.huicai.base.business.dto.vo.BankStatementCategoryGroupVO> groupByCategory(
+            Long accountId, String status, String reviewStatus,
+            LocalDate startDate, LocalDate endDate, String direction,
+            String counterAccount, String summary, String keyword,
+            BigDecimal minAmount, BigDecimal maxAmount, String scope) {
+        LambdaQueryWrapper<BankStatementEntity> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(accountId != null, BankStatementEntity::getAccountId, accountId)
+                .eq(shouldFilter(status), BankStatementEntity::getMatchStatus, status)
+                .ge(startDate != null, BankStatementEntity::getTxDate, startDate)
+                .le(endDate != null, BankStatementEntity::getTxDate, endDate)
+                .eq(shouldFilter(direction), BankStatementEntity::getTxType, direction)
+                .like(shouldFilter(counterAccount), BankStatementEntity::getCounterAccount, counterAccount)
+                .like(shouldFilter(summary), BankStatementEntity::getSummary, summary)
+                .and(shouldFilter(keyword), w -> w
+                        .like(BankStatementEntity::getCounterAccount, keyword)
+                        .or().like(BankStatementEntity::getSummary, keyword)
+                        .or().like(BankStatementEntity::getExternalNo, keyword))
+                .ge(minAmount != null, BankStatementEntity::getAmount, minAmount)
+                .le(maxAmount != null, BankStatementEntity::getAmount, maxAmount)
+                .last("ORDER BY tx_date DESC");
+
+        if ("pending".equalsIgnoreCase(scope)) {
+            wrapper.and(w -> w.isNull(BankStatementEntity::getReviewStatus)
+                    .or().notIn(BankStatementEntity::getReviewStatus, "voucher_generated", "approved"));
+        } else if ("vouchered".equalsIgnoreCase(scope)) {
+            wrapper.in(BankStatementEntity::getReviewStatus, "voucher_generated", "approved");
+        }
+
+        if (shouldFilter(reviewStatus)) {
+            String[] statuses = reviewStatus.split(",");
+            if (statuses.length > 1) {
+                wrapper.in(BankStatementEntity::getReviewStatus, Arrays.asList(statuses));
+            } else {
+                wrapper.eq(BankStatementEntity::getReviewStatus, reviewStatus);
+            }
+        }
+
+        List<BankStatementEntity> all = statementMapper.selectList(wrapper);
+        populateGeneratedRefs(all);
+
+        Map<String, List<BankStatementEntity>> byCategory = all.stream().collect(
+                java.util.stream.Collectors.groupingBy(
+                        s -> s.getClassification() == null || s.getClassification().isBlank()
+                                ? BankClassification.OTHER_UNKNOWN : s.getClassification(),
+                        java.util.LinkedHashMap::new,
+                        java.util.stream.Collectors.toList()));
+
+        List<com.huicai.base.business.dto.vo.BankStatementCategoryGroupVO> groups = new java.util.ArrayList<>();
+        byCategory.forEach((category, items) -> {
+            com.huicai.base.business.dto.vo.BankStatementCategoryGroupVO g =
+                    new com.huicai.base.business.dto.vo.BankStatementCategoryGroupVO();
+            g.setClassification(category);
+            g.setCount(items.size());
+            // 收支配送口径与 summary() 一致：TRANSFER_IN 计收入、TRANSFER_OUT 计支出
+            g.setIncome(items.stream()
+                    .filter(s -> "INCOME".equals(s.getTxType()) || "TRANSFER_IN".equals(s.getTxType()))
+                    .map(s -> s.getAmount() != null ? s.getAmount().abs() : BigDecimal.ZERO)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add));
+            g.setExpense(items.stream()
+                    .filter(s -> !"INCOME".equals(s.getTxType()) && !"TRANSFER_IN".equals(s.getTxType()))
+                    .map(s -> s.getAmount() != null ? s.getAmount().abs() : BigDecimal.ZERO)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add));
+            g.setItems(items);
+            groups.add(g);
+        });
+        // 待认领恒末（它不是「另一类业务」而是「还没定性的那堆」），其余按条数降序、同数按分类码稳定排
+        groups.sort((a, b) -> {
+            boolean aOther = BankClassification.OTHER_UNKNOWN.equals(a.getClassification());
+            boolean bOther = BankClassification.OTHER_UNKNOWN.equals(b.getClassification());
+            if (aOther != bOther) return aOther ? 1 : -1;
+            int byCount = Integer.compare(b.getCount(), a.getCount());
+            return byCount != 0 ? byCount : a.getClassification().compareTo(b.getClassification());
+        });
+        return groups;
+    }
+
     public IPage<BankStatementEntity> pageQuery(Long accountId, String status, String classification, String reviewStatus,
             LocalDate startDate, LocalDate endDate, String direction,
             String counterAccount, String summary, String keyword,

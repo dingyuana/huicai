@@ -8,6 +8,7 @@ import BankStatementView from '@/views/finance/bank-statement/BankStatementView.
 vi.mock('@/api/modules/bankStatement', () => ({
   getBankStatementPage: vi.fn().mockResolvedValue({ records: [], total: 0, page: 1, size: 10, pages: 0 }),
   getClassificationCounts: vi.fn().mockResolvedValue({}),
+  getBankStatementGroupedByCategory: vi.fn().mockResolvedValue([]),
   classifyStatement: vi.fn(),
   reviewStatement: vi.fn(),
   auditStatement: vi.fn(),
@@ -41,6 +42,10 @@ vi.mock('@/api/modules/bankAccount', () => ({
   getActiveBankAccounts: vi.fn().mockResolvedValue([
     { id: '1', accountName: '基本户', accountNo: '6222021234567890', bankName: '工商银行' },
   ]),
+}))
+
+vi.mock('@/api/modules/agency', () => ({
+  getCurrentPeriod: vi.fn().mockResolvedValue({ currentPeriod: '202610' }),
 }))
 
 vi.mock('element-plus', async (importOriginal) => {
@@ -99,7 +104,10 @@ describe('BankStatementView — 银行流水组件', () => {
     const { getBankStatementPage } = await import('@/api/modules/bankStatement')
     vi.mocked(getBankStatementPage).mockResolvedValue({ records: [], total: 0, page: 1, size: 10, pages: 0 })
 
-    shallowMount(BankStatementView, { global: { plugins: [router, createPinia()] } })
+    const wrapper = shallowMount(BankStatementView, { global: { plugins: [router, createPinia()] } })
+    // SPEC-P151：默认 viewMode=category，先切到 flat 再断言
+    ;(wrapper.vm as any).viewMode = 'flat'
+    await (wrapper.vm as any).onViewModeChange()
     await nextTick()
     await nextTick()
 
@@ -252,6 +260,9 @@ describe('BankStatementView — 银行流水组件', () => {
     })
 
     const wrapper = shallowMount(BankStatementView, { global: { plugins: [router, createPinia()] } })
+    // SPEC-P151：默认 viewMode=category，先切到 flat 再断言
+    ;(wrapper.vm as any).viewMode = 'flat'
+    await (wrapper.vm as any).onViewModeChange()
     await nextTick()
     await nextTick()
 
@@ -269,6 +280,8 @@ describe('BankStatementView — 银行流水组件', () => {
     const wrapper = shallowMount(BankStatementView, { global: { plugins: [router, createPinia()] } })
     await nextTick()
     await nextTick()
+    await nextTick()
+    await nextTick()
 
     expect((wrapper.vm as any).query.accountId).toBe('1')
   })
@@ -279,7 +292,10 @@ describe('BankStatementView — 银行流水组件', () => {
     vi.mocked(getBankStatementPage).mockResolvedValue({ records: [], total: 0, page: 1, size: 10, pages: 0 })
 
     await router.push({ path: '/finance/bank-statement', query: { reviewStatus: 'payment_created' } })
-    shallowMount(BankStatementView, { global: { plugins: [router, createPinia()] } })
+    const wrapper = shallowMount(BankStatementView, { global: { plugins: [router, createPinia()] } })
+    // SPEC-P151：默认 viewMode=category，先切到 flat 再断言
+    ;(wrapper.vm as any).viewMode = 'flat'
+    await (wrapper.vm as any).onViewModeChange()
     await nextTick()
     await nextTick()
 

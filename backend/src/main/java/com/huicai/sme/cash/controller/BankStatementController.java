@@ -35,13 +35,16 @@ public class BankStatementController {
     private static final org.slf4j.Logger logger =
             org.slf4j.LoggerFactory.getLogger(BankStatementController.class);
 
-    @Operation(summary = "分页查询对账单")
+    @Operation(summary = "分页查询对账单",
+            description = "period=YYYYMM 时按月首/月末过滤 tx_date，且<b>优先于</b> startDate/endDate。"
+                    + "服务端不因缺省 period 而自动收窄（默认值由 UI 决定），缺省仍为全量。")
     @GetMapping("/page")
     public R<IPage<BankStatementVO>> page(
             @RequestParam(required = false) Long accountId,
             @RequestParam(required = false) String status,
             @RequestParam(required = false) String classification,
             @RequestParam(required = false) String reviewStatus,
+            @RequestParam(required = false) String period,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) java.time.LocalDate startDate,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) java.time.LocalDate endDate,
             @RequestParam(required = false) String direction,
@@ -53,19 +56,30 @@ public class BankStatementController {
             @RequestParam(required = false) String scope,
             @RequestParam(defaultValue = "1") Integer current,
             @RequestParam(defaultValue = "20") Integer size) {
+        com.huicai.common.util.PeriodRange.Range range = resolveRange(period, startDate, endDate);
         IPage<BankStatementEntity> pageResult = service.pageQuery(accountId, status, classification, reviewStatus,
-                startDate, endDate, direction, counterAccount, summary, keyword,
+                range.start(), range.end(), direction, counterAccount, summary, keyword,
                 minAmount, maxAmount, scope, current, size);
         return R.ok(pageResult == null ? null : pageResult.convert(BankStatementVO::from));
     }
 
-    @Operation(summary = "对账单汇总（与分页查询同过滤条件）")
+    /**
+     * 期间 → 日期区间的统一入口（SPEC-P151）。
+     * <p>非法 period 直接 400，不静默退化成「不过滤」。详见 {@code PeriodRange}。</p>
+     */
+    private static com.huicai.common.util.PeriodRange.Range resolveRange(
+            String period, java.time.LocalDate startDate, java.time.LocalDate endDate) {
+        return com.huicai.common.util.PeriodRange.resolve(period, startDate, endDate);
+    }
+
+    @Operation(summary = "对账单汇总（与分页查询同过滤条件，同样支持 period）")
     @GetMapping("/summary")
     public R<Map<String, Object>> summary(
             @RequestParam(required = false) Long accountId,
             @RequestParam(required = false) String status,
             @RequestParam(required = false) String classification,
             @RequestParam(required = false) String reviewStatus,
+            @RequestParam(required = false) String period,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) java.time.LocalDate startDate,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) java.time.LocalDate endDate,
             @RequestParam(required = false) String direction,
@@ -75,8 +89,9 @@ public class BankStatementController {
             @RequestParam(required = false) BigDecimal minAmount,
             @RequestParam(required = false) BigDecimal maxAmount,
             @RequestParam(required = false) String scope) {
+        com.huicai.common.util.PeriodRange.Range range = resolveRange(period, startDate, endDate);
         return R.ok(service.summary(accountId, status, classification, reviewStatus,
-                startDate, endDate, direction, counterAccount, summary, keyword,
+                range.start(), range.end(), direction, counterAccount, summary, keyword,
                 minAmount, maxAmount, scope));
     }
 
@@ -87,6 +102,7 @@ public class BankStatementController {
             @RequestParam(required = false) String status,
             @RequestParam(required = false) String classification,
             @RequestParam(required = false) String reviewStatus,
+            @RequestParam(required = false) String period,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) java.time.LocalDate startDate,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) java.time.LocalDate endDate,
             @RequestParam(required = false) String direction,
@@ -96,8 +112,41 @@ public class BankStatementController {
             @RequestParam(required = false) BigDecimal minAmount,
             @RequestParam(required = false) BigDecimal maxAmount,
             @RequestParam(required = false) String scope) {
+        com.huicai.common.util.PeriodRange.Range range = resolveRange(period, startDate, endDate);
         return R.ok(service.groupByMonth(accountId, status, classification, reviewStatus,
-                startDate, endDate, direction, counterAccount, summary, keyword,
+                range.start(), range.end(), direction, counterAccount, summary, keyword,
+                minAmount, maxAmount, scope));
+    }
+
+    /**
+     * SPEC-P151：按业务分类折叠分组（对账单「分类视图」）。
+     *
+     * <p><b>为什么要它</b>：平铺列表把当月几十条流水混在一屏，用户要「一批一类地消化」
+     * （先把手续费做完，再做收款）。此前只能靠分类筛选按钮逐类点，看不到「哪类多、
+     * 哪类还没动」的全貌。</p>
+     *
+     * <p><b>不做分页</b>：分组视图必须<b>整组完整</b>，分页会把一组劈成两半。
+     * 数据量由期间收窄兜住（页面默认只查当前账期）。</p>
+     */
+    @Operation(summary = "按业务分类分组查询对账单（分类视图）")
+    @GetMapping("/grouped-by-category")
+    public R<java.util.List<com.huicai.base.business.dto.vo.BankStatementCategoryGroupVO>> groupedByCategory(
+            @RequestParam(required = false) Long accountId,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String reviewStatus,
+            @RequestParam(required = false) String period,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) java.time.LocalDate startDate,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) java.time.LocalDate endDate,
+            @RequestParam(required = false) String direction,
+            @RequestParam(required = false) String counterAccount,
+            @RequestParam(required = false) String summary,
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) BigDecimal minAmount,
+            @RequestParam(required = false) BigDecimal maxAmount,
+            @RequestParam(required = false) String scope) {
+        com.huicai.common.util.PeriodRange.Range range = resolveRange(period, startDate, endDate);
+        return R.ok(service.groupByCategory(accountId, status, reviewStatus,
+                range.start(), range.end(), direction, counterAccount, summary, keyword,
                 minAmount, maxAmount, scope));
     }
 
@@ -186,11 +235,12 @@ public class BankStatementController {
         return R.ok(service.autoMatch(accountId));
     }
 
-    @Operation(summary = "按分类统计当前账户的流水数量")
+    @Operation(summary = "按分类统计当前账户的流水数量（同样支持 period）")
     @GetMapping("/classification-counts")
     public R<Map<String, Integer>> classificationCounts(@RequestParam Long accountId,
                                                          @RequestParam(required = false) String reviewStatus,
                                                          @RequestParam(required = false) String scope,
+                                                         @RequestParam(required = false) String period,
                                                          @RequestParam(required = false) @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE) java.time.LocalDate startDate,
                                                          @RequestParam(required = false) @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE) java.time.LocalDate endDate,
                                                          @RequestParam(required = false) String direction,
@@ -199,17 +249,22 @@ public class BankStatementController {
                                                          @RequestParam(required = false) String keyword,
                                                          @RequestParam(required = false) java.math.BigDecimal minAmount,
                                                          @RequestParam(required = false) java.math.BigDecimal maxAmount) {
-        return R.ok(service.classificationCounts(accountId, scope, reviewStatus, startDate, endDate,
+        // 🔴 计数必须与列表同期间：否则分类按钮上显示「全部 (26)」而列表只有本月 12 条，
+        //    用户会以为筛选坏了（SPEC-P151）。
+        com.huicai.common.util.PeriodRange.Range range = resolveRange(period, startDate, endDate);
+        return R.ok(service.classificationCounts(accountId, scope, reviewStatus, range.start(), range.end(),
                 direction, counterAccount, summary, keyword, minAmount, maxAmount));
     }
 
-    @Operation(summary = "按状态统计当前账户的流水数量")
+    @Operation(summary = "按状态统计当前账户的流水数量（同样支持 period）")
     @GetMapping("/status-counts")
     public R<Map<String, Integer>> statusCounts(@RequestParam Long accountId,
                                                  @RequestParam(required = false) String scope,
+                                                 @RequestParam(required = false) String period,
                                                  @RequestParam(required = false) @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE) java.time.LocalDate startDate,
                                                  @RequestParam(required = false) @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE) java.time.LocalDate endDate) {
-        return R.ok(service.statusCounts(accountId, scope, startDate, endDate));
+        com.huicai.common.util.PeriodRange.Range range = resolveRange(period, startDate, endDate);
+        return R.ok(service.statusCounts(accountId, scope, range.start(), range.end()));
     }
 
     @Operation(summary = "待核销(payment_created)流水数量，accountId 可选，缺省跨账户")
