@@ -8,6 +8,9 @@
 import { test, expect } from '@playwright/test';
 import { login, createErrorTracker } from './helpers';
 
+// vite dev 首次按需编译整页模块较慢，导航/动作超时放宽
+test.use({ navigationTimeout: 90_000, actionTimeout: 20_000 });
+
 test.describe('P151 银行流水分类视图（企业1 / 202407）', () => {
   test('默认按分类折叠 + 默认当前账期，组头计数与后端同口径', async ({ page }) => {
     const tracker = createErrorTracker(page);
