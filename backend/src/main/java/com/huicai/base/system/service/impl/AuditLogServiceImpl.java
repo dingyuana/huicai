@@ -49,14 +49,34 @@ public class AuditLogServiceImpl implements AuditLogService {
                 wrapper.eq("status", status);
             }
         }
+        // 🔴 日期必须先解析为 LocalDateTime 再进 wrapper：operation_time 是 timestamp 列，
+        // 直接塞 "2026-11-01" 字符串，Postgres 报 operator does not exist:
+        // timestamp >= character varying（2026-11-04 实机坐实；L1/H2 会隐式转换故拦不住，
+        // 属「H2 宽容掩盖真库缺陷」形态）。非法格式直接 400，不静默放宽过滤范围。
         if (StringUtils.hasText(startDate)) {
-            wrapper.ge("operation_time", startDate);
+            wrapper.ge("operation_time", parseDayStart(startDate));
         }
         if (StringUtils.hasText(endDate)) {
-            wrapper.le("operation_time", endDate + " 23:59:59");
+            wrapper.le("operation_time", parseDayEnd(endDate));
         }
         wrapper.orderByDesc("operation_time");
         return auditLogMapper.selectPage(new Page<>(page, size), wrapper);
+    }
+
+    static java.time.LocalDateTime parseDayStart(String date) {
+        try {
+            return java.time.LocalDate.parse(date.trim()).atStartOfDay();
+        } catch (java.time.format.DateTimeParseException e) {
+            throw com.huicai.common.exception.BusinessException.badRequest("开始日期格式非法，应为 yyyy-MM-dd: " + date);
+        }
+    }
+
+    static java.time.LocalDateTime parseDayEnd(String date) {
+        try {
+            return java.time.LocalDate.parse(date.trim()).atTime(23, 59, 59);
+        } catch (java.time.format.DateTimeParseException e) {
+            throw com.huicai.common.exception.BusinessException.badRequest("结束日期格式非法，应为 yyyy-MM-dd: " + date);
+        }
     }
 
     @Override
