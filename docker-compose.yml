@@ -150,6 +150,9 @@ services:
       MINIO_ACCESS_KEY: huicai
       MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-huicai123}
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set in .env - see .env.example}
+      # SPEC-P152：logback 文件日志落 /app/logs（宿主挂 ./logs/backend），
+      # 容器重建/升级后 backend-error.log 里的历史堆栈不丢
+      LOG_PATH: /app/logs
       # 敏感凭据从宿主环境注入，勿写入本文件（AGENTS §7-3）
       NVIDIA_API_KEY: ${NVIDIA_API_KEY:-}
     extra_hosts:
@@ -167,6 +170,9 @@ services:
         condition: service_healthy
       minio:
         condition: service_healthy
+    volumes:
+      # SPEC-P152：日志落宿主（logback LOG_PATH=/app/logs），容器可随意重建
+      - ./logs/backend:/app/logs
     networks:
       - huicai-net
     restart: always

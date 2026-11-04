@@ -1,6 +1,7 @@
 import axios from 'axios'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import type { ApiResponse } from '@/types/api'
+import { reportError } from '@/utils/errorReporter'
 
 const request = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || '/api',
@@ -157,8 +158,26 @@ request.interceptors.response.use(
         return Promise.reject(error)
       }
       const msg = data?.msg || data?.error || '请求失败'
+      // SPEC-P152：5xx = 服务端代码错误，前端也留一条线索（服务端另有 SERVER_ERROR 审计，
+      // 两边以 uri 对齐）；4xx 不上报 —— 那是业务口径，服务端已有日志，前端重复灌库无益。
+      // node 环境（本文件源码扫描测试）无 window ⇒ 取值必须护栏。
+      const pageUrl = typeof window !== 'undefined' ? window.location.href : ''
+      if (status >= 500) {
+        reportError({
+          level: 'ERROR',
+          message: `[http:${status}] ${(error.config?.method || '').toUpperCase()} ${error.config?.url || ''} ${msg}`.slice(0, 500),
+          url: pageUrl,
+        })
+      }
       ElMessage.error(msg)
     } else {
+      // 无 response：网络中断 / 超时 / 服务不可达 —— 同样是排障需要的信号
+      const pageUrl = typeof window !== 'undefined' ? window.location.href : ''
+      reportError({
+        level: 'ERROR',
+        message: `[network] ${(error.config?.method || '').toUpperCase()} ${error.config?.url || ''} ${error.message || '网络异常'}`.slice(0, 500),
+        url: pageUrl,
+      })
       ElMessage.error('网络异常，请检查连接')
     }
     return Promise.reject(error)

@@ -100,7 +100,10 @@ mybatis-plus:
       logic-not-delete-value: 0
   configuration:
     map-underscore-to-camel-case: true
-    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+    # MyBatis SQL 日志改走 SLF4J（原 StdOutImpl 直接 System.out，绕过 logback：
+  # 既进不了文件、也调不了级别，SPEC-P152）。默认不输出 SQL（mapper 包 INFO），
+  # 需要时把对应 mapper 包 logger 调 DEBUG。
+  log-impl: org.apache.ibatis.logging.slf4j.Slf4jImpl
 
 springdoc:
   swagger-ui:

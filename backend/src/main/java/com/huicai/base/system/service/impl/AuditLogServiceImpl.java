@@ -40,10 +40,14 @@ public class AuditLogServiceImpl implements AuditLogService {
             wrapper.eq("module", module);
         }
         if (StringUtils.hasText(status)) {
-            // t_audit_log 无 status 列（P103 缺陷 3）—— 该条件过去会直接抛 SQL 错。
-            // 审计表用 operation 表达动作、快照表达结果，故此处不再按 status 过滤，
-            // 仅在调用方明确要求时按 operation 近似（如 status=fail 无对应列，忽略）。
-            log.debug("pageLog 忽略 status={}：t_audit_log 无该列", status);
+            // SPEC-P152：status 列已真实存在（V193），过滤转正。
+            // 页端「失败」历史值为 failure，切面写入值为 fail —— 两种都认，
+            // 否则修了列却因口径不一致过滤出 0 行（又一处名实不符）。
+            if ("failure".equals(status)) {
+                wrapper.in("status", "fail", "failure");
+            } else {
+                wrapper.eq("status", status);
+            }
         }
         if (StringUtils.hasText(startDate)) {
             wrapper.ge("operation_time", startDate);

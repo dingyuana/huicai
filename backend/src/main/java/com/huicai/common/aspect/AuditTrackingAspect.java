@@ -100,8 +100,11 @@ public class AuditTrackingAspect {
                 auditLog.setMethod(signature.getName());
                 auditLog.setRequestParams(requestParams);
                 auditLog.setResponseResult(responseResult);
-                auditLog.setOldSnapshot(oldSnapshot);
-                auditLog.setNewSnapshot(newSnapshot);
+                // SPEC-P152：快照此前只写 exist=false 的 oldSnapshot/newSnapshot 幽灵字段，
+                // before_data/after_data 始终为 NULL —— @Auditable 的「前后快照」全部丢失。
+                // 改为直接写真实列（serializeEntity 走 ObjectMapper，必为合法 JSON）。
+                auditLog.setBeforeData(oldSnapshot);
+                auditLog.setAfterData(newSnapshot);
                 auditLog.setExecutionTimeMs((int) executionTime);
                 auditLog.setStatus(status);
                 auditLog.setModule(module);
@@ -149,7 +152,6 @@ public class AuditTrackingAspect {
             auditLog.setEntityNo(extractEntityNo(entity));
             auditLog.setAfterData(afterSnapshot);
             auditLog.setRequestParams(afterSnapshot);
-            auditLog.setNewSnapshot(afterSnapshot);
 
             auditLogService.save(auditLog);
 

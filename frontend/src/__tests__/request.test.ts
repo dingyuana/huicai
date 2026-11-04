@@ -24,6 +24,13 @@ vi.mock('element-plus', () => ({
   ElMessageBox: { alert: vi.fn().mockResolvedValue(undefined) },
 }))
 
+// SPEC-P152：request.ts 现会向 errorReporter 上报 5xx/网络错误；
+// 本文件只验 403/上报的调用面，用 spy 替身即可（真实行为在 errorReporter.test.ts 验）。
+const reportErrorSpy = vi.hoisted(() => vi.fn())
+vi.mock('@/utils/errorReporter', () => ({
+  reportError: reportErrorSpy,
+}))
+
 const ROOT = resolve(__dirname, '../..')
 
 /** axios 的拦截器栈是运行时结构，类型未公开 ⇒ 取 rejected 处理器直接驱动。 */
@@ -77,5 +84,42 @@ describe('SPEC-P136 request.ts 403 处理', () => {
     const branch = src.slice(start, end)
     expect(branch).not.toContain('ElMessage.error')
     expect(branch).toContain('showForbiddenDialog')
+  })
+
+  // ===== SPEC-P152 错误上报接线 =====
+
+  it('5xx → reportError 被调用（服务端代码错误前端也留线索）', async () => {
+    const err = {
+      config: { method: 'get', url: '/v1/report/balance' },
+      response: { status: 500, data: { msg: '系统繁忙，请稍后重试' } },
+    }
+    await rejected(err).catch(() => undefined)
+    expect(reportErrorSpy).toHaveBeenCalledTimes(1)
+    const payload = reportErrorSpy.mock.calls[0][0]
+    expect(payload.level).toBe('ERROR')
+    expect(payload.message).toContain('[http:500]')
+    expect(payload.message).toContain('/v1/report/balance')
+  })
+
+  it('4xx 业务错误不上报（服务端已有日志，前端灌库无益）', async () => {
+    const err = {
+      config: { method: 'post', url: '/v1/voucher' },
+      response: { status: 400, data: { msg: '借贷不平衡' } },
+    }
+    await rejected(err).catch(() => undefined)
+    expect(ElMessage.error).toHaveBeenCalled()
+    expect(reportErrorSpy).not.toHaveBeenCalled()
+  })
+
+  it('网络中断（无 response）→ 上报 network 级错误', async () => {
+    const err = { config: { method: 'get', url: '/v1/enterprise/current-period' }, message: 'Network Error' }
+    await rejected(err).catch(() => undefined)
+    expect(reportErrorSpy).toHaveBeenCalledTimes(1)
+    expect(reportErrorSpy.mock.calls[0][0].message).toContain('[network]')
+  })
+
+  it('403/401 路径不上报（预期内业务结果，非故障）', async () => {
+    await rejected(forbidden()).catch(() => undefined)
+    expect(reportErrorSpy).not.toHaveBeenCalled()
   })
 })

@@ -1,6 +1,7 @@
 package com.huicai.base.system.controller;
 
 import com.huicai.agency.tenant.entity.EnterpriseEntity;
+import com.huicai.base.system.entity.AuditLogEntity;
 import com.huicai.agency.tenant.mapper.AgencyEnterpriseMapper;
 import com.huicai.agency.tenant.mapper.EnterpriseMapper;
 import com.huicai.agency.tenant.vo.EnterpriseSimpleVO;
@@ -25,6 +26,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -40,6 +42,7 @@ import java.util.stream.Collectors;
 @RestController
 @RequestMapping("/api/v1/auth")
 @RequiredArgsConstructor
+@Slf4j
 public class AuthController {
 
     private final AuthenticationManager authenticationManager;
@@ -54,6 +57,8 @@ public class AuthController {
     private final AgencyUserMapper agencyUserMapper;
     private final AgencyUserEnterpriseMapper agencyUserEnterpriseMapper;
     private final LoginBruteForceGuard bruteForceGuard;
+    /** SPEC-P152：登录成功/失败留痕 */
+    private final com.huicai.base.system.service.AuditLogService auditLogService;
 
     /**
      * SPEC-P124：用 refresh token 换新的 access token。
@@ -222,11 +227,35 @@ public class AuthController {
                     "AGENCY".equals(userType) && enterpriseList.isEmpty());
             response.setUserInfo(loginInfo);
 
+            // SPEC-P152：登录成功留痕（人员操作日志的核心事件之一）。
+            // 审计失败绝不影响登录本身，故整段 try/catch 吞掉（LoginBruteForceGuard 同风格）。
+            recordLoginAudit(username, ip, "LOGIN", "登录成功", null, user.getId());
             return R.ok(response);
         } catch (BadCredentialsException e) {
             // 密码错误：记录失败计数，然后抛异常让 GlobalExceptionHandler 统一处理（返 400）
             bruteForceGuard.onLoginFailure(ip, username);
+            recordLoginAudit(username, ip, "LOGIN_FAIL", "用户名或密码错误", httpRequest.getHeader("User-Agent"), null);
             throw e;
+        }
+    }
+
+    /** 登录审计（SPEC-P152）：失败宽容，绝不因审计抖动阻断认证 */
+    private void recordLoginAudit(String username, String ip, String operation,
+                                  String result, String userAgent, Long userId) {
+        try {
+            AuditLogEntity entity = new AuditLogEntity();
+            entity.setModule("AUTH");
+            entity.setOperation(operation);
+            entity.setStatus(operation.equals("LOGIN") ? "success" : "fail");
+            entity.setUsername(username);
+            entity.setUserId(userId);
+            entity.setMethod("AuthController.login");
+            entity.setIpAddress(ip);
+            entity.setUserAgent(userAgent);
+            entity.setResponseResult(result);
+            auditLogService.save(entity);
+        } catch (Exception ex) {
+            log.warn("登录审计写入失败（不阻断认证）: username={}, op={}", username, operation, ex);
         }
     }
 
