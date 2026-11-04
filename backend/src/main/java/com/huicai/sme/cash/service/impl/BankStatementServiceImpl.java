@@ -182,9 +182,12 @@ public class BankStatementServiceImpl implements BankStatementService {
      * SPEC-P151 分类视图：按业务分类折叠分组。
      *
      * <p><b>与 {@link #groupByMonth} 的分工</b>：月分组服务「已制证归档」，
-     * 本方法服务「按分类分批消化」。过滤条件与 {@link #pageQuery} 逐条一致，
-     * 唯一差别是<b>不接受 classification 参数</b> —— 分组维度就是它，
-     * 分组视图里再按单一分类过滤没有意义（收窄由前端点组完成）。</p>
+     * 本方法服务「按分类分批消化」。过滤条件与 {@link #pageQuery} 逐条一致；
+     * {@code classification} 可继续过滤（分类筛选条与列表同口径），其中
+     * other_unknown 连 NULL/空白分类一起捞 —— 与下方归组口径同源，
+     * 否则点「其它/待认领」时组头计数与内容对不上（NULL 行凭空消失）。</p>
+     *
+     * <p><b>不做分页</b>：分组视图必须整组完整，分页会把一组劈成两半（数据量由账期收窄兜住）。</p>
      *
      * <p>🔴 <b>必须 {@code populateGeneratedRefs}</b>：{@code generatedVoucherNo} 是
      * {@code @TableField(exist=false)} 的纯展示字段，此前只有 {@link #pageQuery} 填过。
