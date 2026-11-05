@@ -1,6 +1,5 @@
 package com.huicai.security;
 
-import com.huicai.base.business.entity.BusinessDocEntity;
 import com.huicai.base.report.entity.VoucherCashFlowEntity;
 import com.huicai.base.report.mapper.VoucherCashFlowMapper;
 import com.huicai.base.system.entity.Subject;
@@ -93,22 +92,26 @@ class TenantInsertEnterpriseFillRealDBTest extends AbstractMapperTest {
                         + " ⇒ INSERT 语句不带 enterprise_id 列（实体缺 fill 标记），"
                         + "值来自 DB DEFAULT 1 —— 生产语义：企业 1 静默串数据、"
                         + "其余账套被 RLS WITH CHECK 拒 500（本次事故形态）");
+        // RLS 可见性回读：走 mapper（经 GUC + 应用层租户注入）——「写进去且查得回」
+        assertNotNull(probeSubjectMapper.selectById(s.getId()),
+                "enterprise_id 正确但按上下文企业查不回 ⇒ 读面谓词与写面口径漂移");
     }
 
     @Test
     @DisplayName("VoucherCashFlow（凭证现金流量分配）：同型缺陷同锁（DEFAULT 1 静默串账套）")
     void voucherCashFlowInsertCarriesContextEnterprise() {
         useEnterprise(CTX);
-        // fk_cf_voucher 外键真实存在 ⇒ 先造一张真凭证（voucher_type_id NOT NULL + FK）。
-        // 🔴 预读必须走 mapper 而不是 jdbcTemplate：jdbcTemplate 绕过 MyBatis 拦截器，
-        // 依赖「同事务同连接上 GUC 已被前一条 SQL 设过」这一脆弱前提（预热时序敏感）。
-        Long typeId = voucherTypeMapper.selectList(
-                new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<
-                        com.huicai.base.system.entity.VoucherTypeEntity>()
-                        .last("LIMIT 1"))
-                .stream().findFirst()
-                .map(com.huicai.base.system.entity.VoucherTypeEntity::getId)
-                .orElse(-1L);
+        // fk_cf_voucher 外键真实存在 ⇒ 先造一张真凭证。凭证类型<b>自造</b>：
+        // 全新测试库里企业 2 是运行时注册租户，V183 只回补建库时已存在的企业
+        // ⇒ 预取可能为空（V192 同族冷启动差异），依赖种子不如自己造。
+        com.huicai.base.system.entity.VoucherTypeEntity vt =
+                new com.huicai.base.system.entity.VoucherTypeEntity();
+        vt.setCode("P153T");
+        vt.setName("P153探针类型");
+        vt.setIsActive(true);
+        voucherTypeMapper.insert(vt);
+        Long typeId = vt.getId();
+        assertNotNull(typeId, "探针凭证类型未写入");
         com.huicai.base.voucher.entity.VoucherEntity v = new com.huicai.base.voucher.entity.VoucherEntity();
         v.setVoucherNo("P153-PROBE-V");
         v.setPeriod("202407");
@@ -172,7 +175,11 @@ class TenantInsertEnterpriseFillRealDBTest extends AbstractMapperTest {
                 if (!src.contains("extends BaseEntity") || !src.contains("@TableName")) {
                     continue;
                 }
-                if (Pattern.compile("private\\s+Long\\s+enterpriseId\\s*;").matcher(src).find()) {
+                // 🔴 必须先剥注释再匹配：BankReconciliationLogEntity 的修复说明注释里
+                // 引用了被删掉的 `private Long enterpriseId;` 原文，不剥注释守卫会
+                // 把「记录删除事实的注释」当成缺陷本身（首跑即被此绊倒）。
+                String code = src.replaceAll("(?s)/\\*.*?\\*/", "").replaceAll("//[^\\n]*", "");
+                if (Pattern.compile("private\\s+Long\\s+enterpriseId\\s*;").matcher(code).find()) {
                     String cls = p.getFileName().toString().replace(".java", "");
                     if (!whitelist.contains(cls)) {
                         violations.add(cls + "（遮蔽父类 fill ⇒ INSERT 漏 enterprise_id 列）");

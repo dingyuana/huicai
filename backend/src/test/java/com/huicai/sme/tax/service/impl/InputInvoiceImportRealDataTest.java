@@ -68,7 +68,9 @@ class InputInvoiceImportRealDataTest {
         service = new InputInvoiceImportService(
                 docMapper, docEntryMapper, voucherMapper, voucherEntryMapper,
                 voucherNoService, vendorMapper, subjectMapper, inputInvoiceMapper,
-                realResolver, invoiceDedupUtil, eventPublisher, voucherTypeService);
+                realResolver, invoiceDedupUtil, eventPublisher, voucherTypeService,
+                // SPEC-P153：裸实例 = 无 Spring 代理，行体原地执行
+                new com.huicai.common.transaction.RequiresNewRunner());
 
         lenient().when(invoiceDedupUtil.findExisting(any())).thenReturn(Collections.emptySet());
         lenient().when(vendorMapper.selectList(any())).thenReturn(Collections.emptyList());
@@ -109,7 +111,9 @@ class InputInvoiceImportRealDataTest {
         service = new InputInvoiceImportService(
                 docMapper, docEntryMapper, voucherMapper, voucherEntryMapper,
                 voucherNoService, vendorMapper, subjectMapper, inputInvoiceMapper,
-                realResolver, invoiceDedupUtil, eventPublisher, voucherTypeService);
+                realResolver, invoiceDedupUtil, eventPublisher, voucherTypeService,
+                // SPEC-P153：裸实例 = 无 Spring 代理，行体原地执行
+                new com.huicai.common.transaction.RequiresNewRunner());
 
         lenient().when(invoiceDedupUtil.findExisting(any())).thenReturn(Collections.emptySet());
         lenient().when(vendorMapper.selectList(any())).thenReturn(Collections.emptyList());
@@ -137,7 +141,9 @@ class InputInvoiceImportRealDataTest {
         service = new InputInvoiceImportService(
                 docMapper, docEntryMapper, voucherMapper, voucherEntryMapper,
                 voucherNoService, vendorMapper, subjectMapper, inputInvoiceMapper,
-                realResolver, invoiceDedupUtil, eventPublisher, voucherTypeService);
+                realResolver, invoiceDedupUtil, eventPublisher, voucherTypeService,
+                // SPEC-P153：裸实例 = 无 Spring 代理，行体原地执行
+                new com.huicai.common.transaction.RequiresNewRunner());
 
         return Stream.of(
                 DynamicTest.dynamicTest("空文件抛异常", () -> {
