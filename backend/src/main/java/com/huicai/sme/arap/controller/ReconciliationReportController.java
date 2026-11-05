@@ -15,6 +15,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
@@ -28,6 +29,11 @@ import java.util.stream.Collectors;
 @RestController
 @RequestMapping("/api/sme/arap/v1/reconciliation/report")
 @RequiredArgsConstructor
+// 🔴 类级事务（SPEC-P128 §7.1 同型，SPEC-P153-A2 实测坐实 + 守卫反证转红）：
+// 本控制器全部端点直调 Mapper 查 RLS 表（t_business_doc / t_reconciliation_log），
+// 无事务 ⇒ GUC 恒 NULL ⇒ 谓词取 NULL ⇒ 未核销明细恒 0 行、核销日志恒空、汇总恒 0
+// （实测 ent1 有 20 条单据仍 total=0）。纯只读，readOnly 语义即可。
+@Transactional(readOnly = true, rollbackFor = Exception.class)
 public class ReconciliationReportController {
 
     private final BusinessDocMapper businessDocMapper;
