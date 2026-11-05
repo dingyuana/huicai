@@ -68,6 +68,8 @@ class TenantInsertEnterpriseFillRealDBTest extends AbstractMapperTest {
     private com.huicai.base.voucher.mapper.VoucherMapper voucherMapper;
     @Autowired
     private com.huicai.sme.cash.mapper.BankReconciliationLogMapper bankReconciliationLogMapper;
+    @Autowired
+    private com.huicai.base.system.mapper.VoucherTypeMapper voucherTypeMapper;
 
     @Test
     @DisplayName("Subject（发票导入 ensureSubject 自动建科目）：INSERT 落上下文企业而非 DEFAULT 1")
@@ -97,10 +99,16 @@ class TenantInsertEnterpriseFillRealDBTest extends AbstractMapperTest {
     @DisplayName("VoucherCashFlow（凭证现金流量分配）：同型缺陷同锁（DEFAULT 1 静默串账套）")
     void voucherCashFlowInsertCarriesContextEnterprise() {
         useEnterprise(CTX);
-        // fk_cf_voucher 外键真实存在 ⇒ 先造一张真凭证（voucher_type_id NOT NULL + FK ⇒ 取真实类型）
-        Long typeId = jdbcTemplate.queryForObject(
-                "SELECT id FROM t_voucher_type WHERE enterprise_id = ? AND deleted = 0 LIMIT 1",
-                Long.class, CTX);
+        // fk_cf_voucher 外键真实存在 ⇒ 先造一张真凭证（voucher_type_id NOT NULL + FK）。
+        // 🔴 预读必须走 mapper 而不是 jdbcTemplate：jdbcTemplate 绕过 MyBatis 拦截器，
+        // 依赖「同事务同连接上 GUC 已被前一条 SQL 设过」这一脆弱前提（预热时序敏感）。
+        Long typeId = voucherTypeMapper.selectList(
+                new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<
+                        com.huicai.base.system.entity.VoucherTypeEntity>()
+                        .last("LIMIT 1"))
+                .stream().findFirst()
+                .map(com.huicai.base.system.entity.VoucherTypeEntity::getId)
+                .orElse(-1L);
         com.huicai.base.voucher.entity.VoucherEntity v = new com.huicai.base.voucher.entity.VoucherEntity();
         v.setVoucherNo("P153-PROBE-V");
         v.setPeriod("202407");
