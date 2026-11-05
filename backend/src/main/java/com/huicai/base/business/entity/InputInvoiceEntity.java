@@ -103,8 +103,8 @@ public class InputInvoiceEntity extends BaseEntity {
 
     private String remark;
     private Long createdBy;
-    @TableField(exist = false)
-    private Long updatedBy;
+    /* SPEC-P153：updated_by 真实列存在（此前误覆盖 exist=false，
+     * InputInvoiceStateMachineServiceImpl 6 处 setUpdatedBy 全不落库）*/
 
     @TableField(fill = FieldFill.INSERT)
     private LocalDateTime createdAt;

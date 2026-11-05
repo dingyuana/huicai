@@ -25,12 +25,16 @@ public class ArapSettlementEntryEntity extends BaseEntity {
     private BigDecimal settledAmount;
     private BigDecimal discountAmount;
 
-    /** 核销前单据余额快照 — DB 无此列 */
-    @TableField(exist = false)
+    /**
+     * 核销前单据余额快照 — V194 真实列。
+     * SPEC-P153 取证：ReconciliationServiceImpl#execute L462 正向写入、
+     * ArapSettlementServiceImpl 反核销 L510 读回拷贝 —— 读方在，此前恒 null。
+     */
+    @TableField("before_balance")
     private BigDecimal beforeBalance;
 
-    /** 核销后单据余额快照 — DB 无此列 */
-    @TableField(exist = false)
+    /** 核销后单据余额快照 — V194 真实列（对账审计依据） */
+    @TableField("after_balance")
     private BigDecimal afterBalance;
 
     @TableField(fill = FieldFill.INSERT)

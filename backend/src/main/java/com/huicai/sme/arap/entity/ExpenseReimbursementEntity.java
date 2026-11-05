@@ -24,7 +24,11 @@ public class ExpenseReimbursementEntity extends BaseEntity {
     @TableField("applicant_id")
     private Long applicantId;
 
-    /** 员工ID — 仅为 VO/前端契约字段，DB 无 employee_id 列 */
+    /**
+     * 员工ID — 保持非持久化（SPEC-P153 定性）：入参别名，L162 即
+     * {@code setApplicantId(getEmployeeId())} 转存真实列 applicant_id，
+     * VO 回填亦从 applicantId 取 —— 建列反而制造双真值源。
+     */
     @TableField(exist = false)
     private Long employeeId;
     private Long deptId;
@@ -43,19 +47,25 @@ public class ExpenseReimbursementEntity extends BaseEntity {
 
     private Long docId;
     private Long voucherId;
-    @TableField(exist = false)
+    /** 来源流水ID（流水自动报账的幂等键，findByBankStmtId 防重查询依赖）— V194 真实列 */
+    @TableField("bank_stmt_id")
     private Long bankStmtId;
-    @TableField(exist = false)
+    /** 附件ID列表 — V194 真实列 */
+    @TableField("attachment_ids")
     private String attachmentIds;
 
-    @TableField(exist = false)
+    /** 提交时间 — V194 真实列（页端列表直显，此前恒空） */
+    @TableField("submitted_at")
     private LocalDateTime submittedAt;
-    @TableField(exist = false)
+    /** 审批时间 — V194 真实列 */
+    @TableField("approved_at")
     private LocalDateTime approvedAt;
     private Long createdBy;
-    @TableField(exist = false)
+    /** 审批人姓名（SPEC-P119：非用户 id）— V194 真实列 */
+    @TableField("approved_by")
     private String approvedBy;
-    @TableField(exist = false)
+    /** 驳回原因 — V194 真实列（ExpenseEdit 红字提示，此前恒空） */
+    @TableField("reject_reason")
     private String rejectReason;
 
     @TableField(fill = FieldFill.INSERT)
