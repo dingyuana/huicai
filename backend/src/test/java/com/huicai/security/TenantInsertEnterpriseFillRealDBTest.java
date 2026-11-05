@@ -97,10 +97,14 @@ class TenantInsertEnterpriseFillRealDBTest extends AbstractMapperTest {
     @DisplayName("VoucherCashFlow（凭证现金流量分配）：同型缺陷同锁（DEFAULT 1 静默串账套）")
     void voucherCashFlowInsertCarriesContextEnterprise() {
         useEnterprise(CTX);
-        // fk_cf_voucher 外键真实存在 ⇒ 先造一张真凭证
+        // fk_cf_voucher 外键真实存在 ⇒ 先造一张真凭证（voucher_type_id NOT NULL + FK ⇒ 取真实类型）
+        Long typeId = jdbcTemplate.queryForObject(
+                "SELECT id FROM t_voucher_type WHERE enterprise_id = ? AND deleted = 0 LIMIT 1",
+                Long.class, CTX);
         com.huicai.base.voucher.entity.VoucherEntity v = new com.huicai.base.voucher.entity.VoucherEntity();
         v.setVoucherNo("P153-PROBE-V");
         v.setPeriod("202407");
+        v.setVoucherTypeId(typeId);
         v.setStatus("DRAFT");
         voucherMapper.insert(v);
 
@@ -123,9 +127,9 @@ class TenantInsertEnterpriseFillRealDBTest extends AbstractMapperTest {
     void bankReconciliationLogInsertCarriesContextEnterprise() {
         useEnterprise(CTX);
         BankReconciliationLogEntity log = new BankReconciliationLogEntity();
-        log.setStatementId(-1L);
-        log.setJournalId(-1L);
+        log.setStatementId(-1L);   // 本表无外键（V156 建表时即无 FK），-1 探针值可用
         log.setAction("CONFIRM");
+        log.setStatusAfter("MATCHED");   // NOT NULL
         log.setOperator("p153-probe");
         bankReconciliationLogMapper.insert(log);
 
