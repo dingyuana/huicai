@@ -46,8 +46,12 @@ import java.util.Set;
  * <h3>已知局限（如实登记）</h3>
  * <ul>
  *   <li>清库仍走物理删除（非逻辑删除），无回收站；本类只负责缩小爆炸半径并可审计。</li>
- *   <li>`t_business_doc.voucher_id` 仍无外键约束，删除凭证后单据引用不会被自动回收；
- *       本类在清空凭证时不删单据，故不会新造悬空引用，但历史悬空引用需另行清理。</li>
+ *   <li>`t_business_doc.voucher_id` 仍无外键约束 —— 🔴 SPEC-P153 A-3 更正：本类
+ *       原注释「清空凭证时不删单据故不会新造悬空引用」<b>方向搞反</b>：悬空的是
+ *       单据→凭证方向的引用（单据还挂着已删除凭证的 id），与删不删单据无关，
+ *       V1.99 事故的 26 条悬空正是本路径造成。已修：clearVouchers/clearAll 在
+ *       删凭证前解绑全部跨生命周期引用方（与 {@code VoucherServiceImpl#delete} 的
+ *       {@code @ReferenceGuard} 同一张 20 表普查清单，那边拒绝、这边解绑）。</li>
  *   <li>确认令牌是**防误触**而非防恶意 —— 真正的边界仍是 `system:clear` 权限。</li>
  * </ul>
  */
@@ -116,11 +120,74 @@ public class SystemClearService {
         return requestedEnterpriseId;
     }
 
+    /**
+     * A-3（SPEC-P153）：删凭证前解绑全部「跨生命周期」引用方。
+     *
+     * <p>清单与 {@code VoucherServiceImpl#delete} 上的 {@code @ReferenceGuard}
+     * 一致（20 张表普查清单）：那边是「有引用即拒绝」，这边是清库语义
+     * （清空重来）⇒ 解绑（SET ... = NULL）而非删除业务行。
+     * 同生命周期两张（t_voucher_entry/t_voucher_cash_flow）由调用方的
+     * 级联 DELETE 处理，不在此列。</p>
+     *
+     * @return 每表解绑行数的描述（进清库回执消息）
+     */
+    private String unlinkVoucherReferences(Long ent) {
+        List<String> steps = new ArrayList<>();
+        // 引用行随单据/流水等业务行保留，仅断开指向凭证的引用列
+        steps.add("解绑单据凭证 " + jdbcTemplate.update(
+                "UPDATE t_business_doc SET voucher_id = NULL WHERE enterprise_id = ? AND voucher_id IS NOT NULL", ent));
+        steps.add("解绑核销凭证 " + jdbcTemplate.update(
+                "UPDATE t_arap_settlement SET voucher_id = NULL WHERE enterprise_id = ? AND voucher_id IS NOT NULL", ent));
+        steps.add("解绑核销凭证号 " + jdbcTemplate.update(
+                "UPDATE t_arap_settlement SET voucher_no = NULL WHERE enterprise_id = ? AND voucher_no IS NOT NULL", ent));
+        steps.add("解绑银行日记账 " + jdbcTemplate.update(
+                "UPDATE t_bank_journal SET voucher_id = NULL WHERE enterprise_id = ? AND voucher_id IS NOT NULL", ent));
+        steps.add("解绑现金日记账 " + jdbcTemplate.update(
+                "UPDATE t_cash_journal SET voucher_id = NULL WHERE enterprise_id = ? AND voucher_id IS NOT NULL", ent));
+        steps.add("解绑银行流水 " + jdbcTemplate.update(
+                "UPDATE t_bank_statement SET generated_voucher_id = NULL WHERE enterprise_id = ? AND generated_voucher_id IS NOT NULL", ent));
+        steps.add("解绑进项发票 " + jdbcTemplate.update(
+                "UPDATE t_input_invoice SET voucher_id = NULL WHERE enterprise_id = ? AND voucher_id IS NOT NULL", ent));
+        steps.add("解绑销项发票 " + jdbcTemplate.update(
+                "UPDATE t_output_invoice SET voucher_id = NULL WHERE enterprise_id = ? AND voucher_id IS NOT NULL", ent));
+        steps.add("解绑报销单 " + jdbcTemplate.update(
+                "UPDATE t_expense_reimbursement SET voucher_id = NULL WHERE enterprise_id = ? AND voucher_id IS NOT NULL", ent));
+        steps.add("解绑应收票据 " + jdbcTemplate.update(
+                "UPDATE t_note_receivable SET voucher_id = NULL WHERE enterprise_id = ? AND voucher_id IS NOT NULL", ent));
+        steps.add("解绑票据交易 " + jdbcTemplate.update(
+                "UPDATE t_ticket_transaction SET voucher_id = NULL WHERE enterprise_id = ? AND voucher_id IS NOT NULL", ent));
+        steps.add("解绑预付款 " + jdbcTemplate.update(
+                "UPDATE t_prepayment SET voucher_id = NULL WHERE enterprise_id = ? AND voucher_id IS NOT NULL", ent));
+        steps.add("解绑采购退货 " + jdbcTemplate.update(
+                "UPDATE t_purchase_return SET voucher_id = NULL WHERE enterprise_id = ? AND voucher_id IS NOT NULL", ent));
+        steps.add("解绑坏账计提 " + jdbcTemplate.update(
+                "UPDATE t_bad_debt_provision SET voucher_id = NULL, voucher_no = NULL "
+                        + "WHERE enterprise_id = ? AND (voucher_id IS NOT NULL OR voucher_no IS NOT NULL)", ent));
+        steps.add("解绑资产卡片 " + jdbcTemplate.update(
+                "UPDATE t_asset_card SET voucher_id = NULL WHERE enterprise_id = ? AND voucher_id IS NOT NULL", ent));
+        steps.add("解绑资产变动 " + jdbcTemplate.update(
+                "UPDATE t_asset_change SET voucher_id = NULL WHERE enterprise_id = ? AND voucher_id IS NOT NULL", ent));
+        steps.add("解绑资产折旧 " + jdbcTemplate.update(
+                "UPDATE t_asset_depreciation SET voucher_id = NULL WHERE enterprise_id = ? AND voucher_id IS NOT NULL", ent));
+        steps.add("解绑资产处置 " + jdbcTemplate.update(
+                "UPDATE t_asset_disposal SET voucher_id = NULL WHERE enterprise_id = ? AND voucher_id IS NOT NULL", ent));
+        steps.add("解绑资产盘点 " + jdbcTemplate.update(
+                "UPDATE t_asset_inventory SET voucher_id = NULL WHERE enterprise_id = ? AND voucher_id IS NOT NULL", ent));
+        steps.add("解绑结转凭证 " + jdbcTemplate.update(
+                "UPDATE t_tax_carry_over SET voucher_id = NULL WHERE enterprise_id = ? AND voucher_id IS NOT NULL", ent));
+        steps.add("解绑税务申报 " + jdbcTemplate.update(
+                "UPDATE t_tax_declaration SET voucher_id = NULL WHERE enterprise_id = ? AND voucher_id IS NOT NULL", ent));
+        return String.join("，", steps);
+    }
+
     /** 清空凭证（含分录、科目余额、现金流），按企业隔离。 */
     @Transactional(rollbackFor = Exception.class)
     public String clearVouchers(String confirm, Long requestedEnterpriseId) {
         Long ent = resolveAndVerify(ClearAction.CLEAR_VOUCHERS, confirm, requestedEnterpriseId);
         List<String> steps = new ArrayList<>();
+        // 🔴 A-3：先解绑引用方再删凭证（修复前此路径每跑一次就把全部引用方打成悬空——
+        //    V1.99 事故的 26 条悬空正是这里造出来的）
+        steps.add(unlinkVoucherReferences(ent));
         // 顺序：先删子表分录，再删主表凭证，避免 fk_cf_voucher 等约束阻断
         steps.add("凭证分录 " + jdbcTemplate.update(
                 "DELETE FROM t_voucher_entry WHERE voucher_id IN "
@@ -226,6 +293,17 @@ public class SystemClearService {
                 "DELETE FROM t_reconciliation_log WHERE enterprise_id = ?", ent));
         steps.add("应收票据 " + jdbcTemplate.update(
                 "DELETE FROM t_note_receivable WHERE enterprise_id = ?", ent));
+        steps.add("账龄告警 " + jdbcTemplate.update(
+                "DELETE FROM t_aging_alert WHERE doc_id IN "
+                        + "(SELECT id FROM t_business_doc WHERE enterprise_id = ?)", ent));
+        // 🔴 A-3：本动作不删凭证 ⇒ 必须解绑凭证→单据引用，否则 t_voucher.business_doc_id 悬空
+        //    （与 clearBusinessDocs 的解绑语义对齐）
+        steps.add("解绑凭证单据引用 " + jdbcTemplate.update(
+                "UPDATE t_voucher SET business_doc_id = NULL WHERE business_doc_id IN "
+                        + "(SELECT id FROM t_business_doc WHERE enterprise_id = ?)", ent));
+        steps.add("解绑日记账单据引用 " + jdbcTemplate.update(
+                "UPDATE t_bank_journal SET business_doc_id = NULL "
+                        + "WHERE enterprise_id = ? AND business_doc_id IS NOT NULL", ent));
         steps.add("单据分录 " + jdbcTemplate.update(
                 "DELETE FROM t_business_doc_entry WHERE doc_id IN "
                         + "(SELECT id FROM t_business_doc WHERE enterprise_id = ?)", ent));
@@ -248,6 +326,16 @@ public class SystemClearService {
                 "DELETE FROM t_arap_settlement WHERE enterprise_id = ?", ent));
         steps.add("对账记录 " + jdbcTemplate.update(
                 "DELETE FROM t_reconciliation_log WHERE enterprise_id = ?", ent));
+        steps.add("账龄告警 " + jdbcTemplate.update(
+                "DELETE FROM t_aging_alert WHERE doc_id IN "
+                        + "(SELECT id FROM t_business_doc WHERE enterprise_id = ?)", ent));
+        // 🔴 A-3：本动作不删凭证 ⇒ 必须解绑凭证→单据引用，否则 t_voucher.business_doc_id 悬空
+        steps.add("解绑凭证单据引用 " + jdbcTemplate.update(
+                "UPDATE t_voucher SET business_doc_id = NULL WHERE business_doc_id IN "
+                        + "(SELECT id FROM t_business_doc WHERE enterprise_id = ?)", ent));
+        steps.add("解绑日记账单据引用 " + jdbcTemplate.update(
+                "UPDATE t_bank_journal SET business_doc_id = NULL "
+                        + "WHERE enterprise_id = ? AND business_doc_id IS NOT NULL", ent));
         steps.add("单据分录 " + jdbcTemplate.update(
                 "DELETE FROM t_business_doc_entry WHERE doc_id IN "
                         + "(SELECT id FROM t_business_doc WHERE enterprise_id = ?)", ent));
@@ -302,13 +390,20 @@ public class SystemClearService {
         steps.add("账龄告警 " + jdbcTemplate.update(
                 "DELETE FROM t_aging_alert WHERE doc_id IN "
                         + "(SELECT id FROM t_business_doc WHERE enterprise_id = ?)", ent));
-        // 2) 业务单据
+        // 2) 业务单据（先解绑凭证→单据引用，再删单据：t_voucher.business_doc_id 无外键）
+        steps.add("解绑凭证单据引用 " + jdbcTemplate.update(
+                "UPDATE t_voucher SET business_doc_id = NULL WHERE business_doc_id IN "
+                        + "(SELECT id FROM t_business_doc WHERE enterprise_id = ?)", ent));
+        steps.add("解绑日记账单据引用 " + jdbcTemplate.update(
+                "UPDATE t_bank_journal SET business_doc_id = NULL "
+                        + "WHERE enterprise_id = ? AND business_doc_id IS NOT NULL", ent));
         steps.add("单据分录 " + jdbcTemplate.update(
                 "DELETE FROM t_business_doc_entry WHERE doc_id IN "
                         + "(SELECT id FROM t_business_doc WHERE enterprise_id = ?)", ent));
         steps.add("业务单据 " + jdbcTemplate.update(
                 "DELETE FROM t_business_doc WHERE enterprise_id = ?", ent));
-        // 3) 凭证（先删分录与现金流，避免外键阻断）
+        // 3) 凭证（先删分录与现金流，避免外键阻断；删除前解绑跨生命周期引用方）
+        steps.add(unlinkVoucherReferences(ent));
         steps.add("凭证分录 " + jdbcTemplate.update(
                 "DELETE FROM t_voucher_entry WHERE voucher_id IN "
                         + "(SELECT id FROM t_voucher WHERE enterprise_id = ?)", ent));

@@ -8,6 +8,8 @@ import com.huicai.common.context.EnterpriseContextHolder;
 import com.huicai.agency.tenant.entity.EnterpriseEntity;
 import com.huicai.agency.tenant.mapper.EnterpriseMapper;
 import com.huicai.common.exception.BusinessException;
+import com.huicai.common.security.Ref;
+import com.huicai.common.security.ReferenceGuard;
 import com.huicai.base.voucher.dto.VoucherCreateDTO;
 import com.huicai.base.voucher.dto.VoucherCreateDTO.EntryDTO;
 import com.huicai.base.voucher.dto.VoucherQueryDTO;
@@ -284,6 +286,35 @@ public class VoucherServiceImpl extends ServiceImpl<VoucherMapper, VoucherEntity
 
     @Override
     @Transactional
+    @ReferenceGuard(
+            parent = "t_voucher",
+            label = "凭证",
+            children = {
+                    // 🔴 只登记「跨生命周期」引用方：t_voucher_entry / t_voucher_cash_flow
+                    // 随本方法级联删除，不登记（否则删除永远被挡）。
+                    // 20 张表来自 information_schema 全量普查（A-3，V1.104 轮）：
+                    // column_name IN ('voucher_id','generated_voucher_id') 且表 ≠ 同生命周期两张。
+                    @Ref(table = "t_business_doc", column = "voucher_id", label = "业务单据"),
+                    @Ref(table = "t_arap_settlement", column = "voucher_id", label = "应收应付核销单"),
+                    @Ref(table = "t_bank_journal", column = "voucher_id", label = "银行日记账"),
+                    @Ref(table = "t_cash_journal", column = "voucher_id", label = "现金日记账"),
+                    @Ref(table = "t_bank_statement", column = "generated_voucher_id", label = "银行流水"),
+                    @Ref(table = "t_input_invoice", column = "voucher_id", label = "进项发票"),
+                    @Ref(table = "t_output_invoice", column = "voucher_id", label = "销项发票"),
+                    @Ref(table = "t_expense_reimbursement", column = "voucher_id", label = "报销单"),
+                    @Ref(table = "t_note_receivable", column = "voucher_id", label = "应收票据"),
+                    @Ref(table = "t_ticket_transaction", column = "voucher_id", label = "票据交易"),
+                    @Ref(table = "t_prepayment", column = "voucher_id", label = "预付款"),
+                    @Ref(table = "t_purchase_return", column = "voucher_id", label = "采购退货"),
+                    @Ref(table = "t_bad_debt_provision", column = "voucher_id", label = "坏账计提"),
+                    @Ref(table = "t_asset_card", column = "voucher_id", label = "资产卡片"),
+                    @Ref(table = "t_asset_change", column = "voucher_id", label = "资产变动"),
+                    @Ref(table = "t_asset_depreciation", column = "voucher_id", label = "资产折旧"),
+                    @Ref(table = "t_asset_disposal", column = "voucher_id", label = "资产处置"),
+                    @Ref(table = "t_asset_inventory", column = "voucher_id", label = "资产盘点"),
+                    @Ref(table = "t_tax_carry_over", column = "voucher_id", label = "结转凭证"),
+                    @Ref(table = "t_tax_declaration", column = "voucher_id", label = "税务申报")
+            })
     public void delete(Long id) {
         VoucherEntity entity = voucherMapper.selectById(id);
         if (entity == null) {
