@@ -1329,3 +1329,11 @@ excluded:
   controller: EnterpriseController
   governed_by: self-service
   reason: 自助行为，任何登录用户都应可执行
+- method: POST
+  path: /api/sme/asset/v1/asset-changes
+  permission: asset:change:create
+  write: true
+- method: GET
+  path: /api/sme/asset/v1/asset-changes
+  permission: asset:card:list
+  write: false
