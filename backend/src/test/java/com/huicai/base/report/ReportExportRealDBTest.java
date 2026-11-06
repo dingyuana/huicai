@@ -150,6 +150,7 @@ class ReportExportRealDBTest extends AbstractMapperTest {
     }
 
     private JsonNode apiJson() throws Exception {
+        EnterpriseContextHolder.set(1L); // filter finally 会 clear，逐请求重设（同勾稽类家法）
         var r = mockMvc.perform(get("/api/base/report/v1/reports/subject-balance")
                         .param("period", PERIOD)
                         .with(SecurityMockMvcRequestPostProcessors.user("probe")

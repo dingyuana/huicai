@@ -109,6 +109,24 @@ public class PermissionManifest {
                 boolean write = Boolean.TRUE.equals(m.get("write"));
                 out.add(new Entry(method, path, perm, write, toPattern(path)));
             }
+
+            // 结构守卫（SPEC-P154 项④）：excluded 段若存在，不得包含 permission 键
+            // （permission 键只属于 endpoints 段；误落 excluded 的真端点会被静默丢弃）
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> excluded = (List<Map<String, Object>>) root.get("excluded");
+            if (excluded != null) {
+                for (int i = 0; i < excluded.size(); i++) {
+                    Map<String, Object> e = excluded.get(i);
+                    if (e.containsKey("permission")) {
+                        String method = String.valueOf(e.get("method"));
+                        String path = String.valueOf(e.get("path"));
+                        throw new IllegalStateException(
+                                "permission-manifest.yml excluded 段第 " + (i + 1) + " 条含 permission 键：" + method + " " + path
+                                        + " —— 真端点必须在 endpoints 段；excluded 仅保留 controller/governed_by/reason 元条目");
+                    }
+                }
+            }
+
             return out;
         } catch (IllegalStateException e) {
             throw e;

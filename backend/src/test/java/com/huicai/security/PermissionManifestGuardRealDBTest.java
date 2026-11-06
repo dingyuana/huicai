@@ -371,7 +371,10 @@ class PermissionManifestGuardRealDBTest extends AbstractMapperTest {
     @Test
     @DisplayName("G7 清单条目必须都能对上真实端点（反向漂移：清单有、运行时无）")
     void manifestEntriesMustExistAtRuntime() {
-        Set<String> real = realWriteEndpoints();
+        // 🔴 存在性口径必须用【全方法】真值源：清单自 SPEC-P154 项④ 起也登记读端点
+        // （GET 条目，拦截器对读面同样 enforce 的前置）。拿写端点真值源比 GET 条目
+        // 会把合法登记误判成 stale——存在性（任何方法）与写端点缺口（G2 口径）是两回事。
+        Set<String> real = realEndpointsAllMethods();
         List<String> stale = new ArrayList<>();
         for (String key : manifestKeys()) {
             if (!real.contains(key)) {
@@ -384,7 +387,7 @@ class PermissionManifestGuardRealDBTest extends AbstractMapperTest {
             }
         }
         assertTrue(stale.isEmpty(),
-                "清单里有 " + stale.size() + " 条对不上任何真实写端点（端点已改名/删除）："
+                "清单里有 " + stale.size() + " 条对不上任何真实端点（端点已改名/删除）："
                         + stale.subList(0, Math.min(10, stale.size()))
                         + "。这类条目不会让 G2 缺口变小，却会让清单看起来更全。");
     }
@@ -669,6 +672,36 @@ class PermissionManifestGuardRealDBTest extends AbstractMapperTest {
                 for (String p : info.getPatternValues()) {
                     if (p != null && !p.isBlank()) {
                         out.add(name + " " + p);
+                    }
+                }
+            }
+        });
+        return out;
+    }
+
+    /** 真实存在的全部端点（任意 HTTP 方法），G7 存在性比对口径。 */
+    private Set<String> realEndpointsAllMethods() {
+        Set<String> out = new LinkedHashSet<>();
+        var handlerMapping = applicationContext.getBeansOfType(
+                org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerMapping.class)
+                .values().iterator().next();
+        handlerMapping.getHandlerMethods().forEach((info, handler) -> {
+            if (info.getMethodsCondition() == null) {
+                return;
+            }
+            if (info.getMethodsCondition().getMethods().isEmpty()) {
+                // 未限定 method 的映射 = 任意方法可达
+                for (String p : info.getPatternValues()) {
+                    if (p != null && !p.isBlank()) {
+                        out.add("ANY " + p);
+                    }
+                }
+                return;
+            }
+            for (var rm : info.getMethodsCondition().getMethods()) {
+                for (String p : info.getPatternValues()) {
+                    if (p != null && !p.isBlank()) {
+                        out.add(rm.name() + " " + p);
                     }
                 }
             }

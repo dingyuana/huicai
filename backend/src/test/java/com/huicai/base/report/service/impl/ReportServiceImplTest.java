@@ -2,6 +2,9 @@ package com.huicai.base.report.service.impl;
 
 import com.huicai.base.balance.service.SubjectBalanceService;
 import com.huicai.base.report.mapper.ReportDataMapper;
+import com.huicai.common.context.EnterpriseContextHolder;
+import com.huicai.common.exception.BusinessException;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -24,6 +27,125 @@ class ReportServiceImplTest {
     @Mock private ReportDataMapper reportDataMapper;
     @Mock private SubjectBalanceService subjectBalanceService;
     @InjectMocks private ReportServiceImpl service;
+
+    /** 上下文 ThreadLocal 不随测试回滚，必须逐用例清理（本仓家法）。 */
+    @AfterEach
+    void clearCtx() {
+        EnterpriseContextHolder.clear();
+    }
+
+    // ==================== SPEC-P154 项⑤：撞行修复（租户收敛 + 混企 fail-loud） ====================
+
+    @Test
+    void p154_converge_by_context_enterprise() {
+        // 有上下文：混企结果集（ent0 参考库 4103=0 + ent1 真实 4103=8000）必须收敛到
+        // 本企业行 ⇒ currentYearProfit=8000。RLS 被绕（超管查询）时这是唯一防线。
+        EnterpriseContextHolder.set(1L);
+        List<Map<String, Object>> b = new ArrayList<>();
+        Map<String, Object> ref4103 = bal("4103", "本年利润", "credit", 0, 0, 0);
+        ref4103.put("enterprise_id", 0L);
+        Map<String, Object> real4103 = bal("4103", "本年利润", "credit", 0, 8000, 8000);
+        real4103.put("enterprise_id", 1L);
+        b.add(ref4103);
+        b.add(real4103);
+        when(reportDataMapper.subjectBalance("202612")).thenReturn(b);
+
+        Map<String, Object> r = service.balanceSheet("202612");
+        assertEquals(0, new BigDecimal("8000.00").compareTo((BigDecimal) r.get("currentYearProfit")),
+                "必须取 ent1 的 8000，不得被 ent0 参考库同码 0 覆盖");
+    }
+
+    @Test
+    void p154_no_context_mixed_enterprise_rejected() {
+        // 无上下文（非 JWT 认证态调用方）且结果集混入多企业 ⇒ fail-loud 拒绝出表。
+        // 反证位：convergeOrReject 的 failLoud 分支被移除后本例必绿转红——
+        // 静默出表 = 参考库 0 覆盖真实 8000 的缺陷形态复活。
+        List<Map<String, Object>> b = new ArrayList<>();
+        Map<String, Object> ref4103 = bal("4103", "本年利润", "credit", 0, 0, 0);
+        ref4103.put("enterprise_id", 0L);
+        Map<String, Object> real4103 = bal("4103", "本年利润", "credit", 0, 8000, 8000);
+        real4103.put("enterprise_id", 1L);
+        b.add(ref4103);
+        b.add(real4103);
+        when(reportDataMapper.subjectBalance("202612")).thenReturn(b);
+
+        BusinessException ex = assertThrows(BusinessException.class, () -> service.balanceSheet("202612"));
+        assertTrue(ex.getMessage().contains("多企业"), "必须是混企污染拒绝，实际：" + ex.getMessage());
+    }
+
+    @Test
+    void p154_no_context_single_enterprise_passes() {
+        // 无上下文但结果集只有单一 enterprise_id（RLS 正常生效）⇒ 原样放行，零误伤
+        // ——后台任务/定时链路（无 JWT 上下文但连接身份 RLS 兜底）不受影响。
+        List<Map<String, Object>> b = new ArrayList<>();
+        Map<String, Object> real4103 = bal("4103", "本年利润", "credit", 0, 5000, 5000);
+        real4103.put("enterprise_id", 1L);
+        b.add(real4103);
+        when(reportDataMapper.subjectBalance("202612")).thenReturn(b);
+
+        Map<String, Object> r = service.balanceSheet("202612");
+        assertEquals(0, new BigDecimal("5000.00").compareTo((BigDecimal) r.get("currentYearProfit")),
+                "单企业结果集不得被拦截，4103 正常入账");
+    }
+
+    // ── 直测收敛核（private converge 三档组合，反射驱动，行为面断言不依赖调用方）──
+
+    @SuppressWarnings("unchecked")
+    private static List<Map<String, Object>> invokeConverge(List<Map<String, Object>> rows, boolean failLoud)
+            throws Throwable {
+        java.lang.reflect.Method m = ReportServiceImpl.class
+                .getDeclaredMethod("converge", List.class, boolean.class);
+        m.setAccessible(true);
+        try {
+            return (List<Map<String, Object>>) m.invoke(null, rows, failLoud);
+        } catch (java.lang.reflect.InvocationTargetException e) {
+            throw e.getCause();
+        }
+    }
+
+    private static Map<String, Object> entRow(long ent) {
+        Map<String, Object> m = new HashMap<>();
+        m.put("code", "4103");
+        m.put("enterprise_id", ent);
+        return m;
+    }
+
+    @Test
+    void p154_converge_mixed_with_context_filters_even_when_failLoud() throws Throwable {
+        // 上下文在位 ⇒ 即使 failLoud=true 也只过滤不拒绝（生产 JWT 请求的正常形态：
+        // 超管绕 RLS 混入 ent0 参考行，按 ctx=1 滤掉参考行）
+        EnterpriseContextHolder.set(1L);
+        List<Map<String, Object>> rows = List.of(entRow(0L), entRow(1L), entRow(2L));
+
+        List<Map<String, Object>> out = invokeConverge(rows, true);
+        assertEquals(1, out.size(), "必须只剩上下文企业行");
+        assertEquals(1L, out.get(0).get("enterprise_id"));
+    }
+
+    @Test
+    void p154_converge_no_context_mixed_lenient_passes_through() throws Throwable {
+        // 无上下文 + 混企 + failLoud=false（展示路径 subjectBalanceTable 档）⇒ 原样放行。
+        // 反证位：lenient 档被改成也抛异常（一刀切严格）时本例必红——视图端点会整体瘫痪。
+        List<Map<String, Object>> rows = List.of(entRow(0L), entRow(1L));
+
+        List<Map<String, Object>> out = invokeConverge(rows, false);
+        assertEquals(2, out.size(), "宽松档不得过滤/拒绝");
+    }
+
+    @Test
+    void p154_converge_no_enterprise_id_column_passes() throws Throwable {
+        // 两种宽容形态（ctx=1 在位）：① 行上无 enterprise_id 键（测试替身/SQL 改动）⇒ 保留；
+        // ② Integer 型 enterprise_id（非 Long）⇒ toLong 按 Number 族兼容收敛，不得 CCE。
+        EnterpriseContextHolder.set(1L);
+        Map<String, Object> legacy = new HashMap<>();
+        legacy.put("code", "1002"); // 无 enterprise_id 键
+        Map<String, Object> intEnt = new HashMap<>();
+        intEnt.put("code", "4103");
+        intEnt.put("enterprise_id", 1); // Integer 非 Long
+
+        List<Map<String, Object>> out = invokeConverge(new ArrayList<>(List.of(legacy, intEnt)), true);
+        assertEquals(2, out.size(), "无键行必须保留 + Integer 型必须按 Number 正确收敛（不得 CCE/误滤）");
+    }
 
     @Test
     void subjectBalanceTable_returns_list() {
@@ -721,6 +843,12 @@ class ReportServiceImplTest {
 
     private Map<String, Object> bal(String code, String name, String direction,
                                     double debitTotal, double creditTotal, double endBalance) {
+        return bal(code, name, direction, debitTotal, creditTotal, endBalance, null);
+    }
+
+    private Map<String, Object> bal(String code, String name, String direction,
+                                    double debitTotal, double creditTotal, double endBalance,
+                                    Long subjectId) {
         Map<String, Object> m = new HashMap<>();
         m.put("code", code);
         m.put("name", name);
@@ -728,6 +856,7 @@ class ReportServiceImplTest {
         m.put("debit_total", debitTotal);
         m.put("credit_total", creditTotal);
         m.put("end_balance", endBalance);
+        if (subjectId != null) m.put("subject_id", subjectId);
         return m;
     }
 

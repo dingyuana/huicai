@@ -35,11 +35,14 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * 本类把 v4.0 的攻击面矩阵落到真库 + 真 Controller 链（MockMvc 走权限拦截器 →
  * GUC 拦截器 → RLS 谓词全链），每例锁两断言：<b>操作被拒 + 受害行数据不变</b>。</p>
  *
- * <p><b>🔴 已登记差距（八类禁自动修复：审计日志策略，须人工裁定）</b>：权限拦截器 403
- * 在 preHandle 阶段直接写 response，@Auditable 切面不触发 —— <b>越权尝试不留 DB 审计，
- * 只有 log.warn</b>。v4.0 红线要求「审计日志已记录该尝试（主体/租户/资源/动作）」。
- * 修法建议（人工审核队列）：拦截器 403 分支落 module=AUTH/operation=ACCESS_DENIED 审计行，
- * 复用 P152 真列（request_params 记 method+uri，operator 取 SecurityContext）。</p>
+ * <p><b>SPEC-P154 项② 已闭合（八类红线「审计日志策略」用户裁定修复）**：此前权限拦截器
+ * 403 在 preHandle 阶段直接写 response、@Auditable 切面不触发 ⇒ 越权尝试零 DB 留痕。
+ * 现 preHandle 的 enforcing 拒绝分支发布 {@link com.huicai.common.exception.AccessDeniedEvent}，
+ * 由 {@link com.huicai.common.exception.AccessDeniedAuditListener}（AFTER_COMPLETION +
+ * fallbackExecution，生产 preHandle 阶段无事务⇒即时落）写 t_audit_log
+ * module=SECURITY / operation=ACCESS_DENIED，复用 P152 真列。锁点：本类
+ * {@code accessDeniedEventPersistsAuditRow}（落库全字段）+ L1
+ * {@code PermissionEnforcementInterceptorRealDBTest}（403 恰发一次事件）。</p>
  *
  * <p><b>探针口径（与生产同构）</b>：攻击者持<b>充足功能权限</b>（salary:save 等），
  * 只缺「数据归属」——功能层全放行、数据层 RLS 必须兜住。这比「无权限 403」更硬：
@@ -57,6 +60,7 @@ class TenantIsolationAttackSurfaceRealDBTest extends AbstractMapperTest {
     @Autowired private SalaryBillMapper billMapper;
     @Autowired private SalaryItemMapper salaryItemMapper;
     @Autowired private AttachmentMapper attachmentMapper;
+    @Autowired private com.huicai.common.exception.AccessDeniedAuditListener accessDeniedAuditListener;
 
     // ── 造数（受害方 = ent1）──
 
@@ -207,6 +211,35 @@ class TenantIsolationAttackSurfaceRealDBTest extends AbstractMapperTest {
         Integer cnt = jdbcTemplate.queryForObject(
                 "SELECT count(*) FROM t_salary_bill WHERE period = '202612'", Integer.class);
         assertEquals(0, cnt, "403 请求不得留下任何工资单行");
+    }
+
+    @Test
+    @DisplayName("项② ACCESS_DENIED 审计落库：监听器收到事件后写 t_audit_log 全字段（module=SECURITY）")
+    void accessDeniedEventPersistsAuditRow() {
+        // 端到端「拦截器发布」已由 L1 PermissionEnforcementInterceptorRealDBTest 锁死
+        // （record 型 publisher 断言事件恰发一次）；MockMvc 全链在本类 @Transactional 下
+        // AFTER_COMPLETION 监听器要到测试事务终结才触发、方法体内不可见——生产 preHandle
+        // 阶段无事务，fallbackExecution=true 即时落库。故此处按生产同构直接驱动监听器。
+        var event = new com.huicai.common.exception.AccessDeniedEvent(
+                "probe-cashier", "salary:save",
+                new org.springframework.mock.web.MockHttpServletRequest("POST",
+                        "/api/sme/salary/v1/salary-bills"));
+        accessDeniedAuditListener.onAccessDenied(event);
+
+        var rows = jdbcTemplate.queryForList(
+                "SELECT module, operation, status, operator_name, request_params, "
+                        + "after_data::text AS ad, ip_address FROM t_audit_log "
+                        + "WHERE operation = 'ACCESS_DENIED' AND operator_name = 'probe-cashier'");
+        assertEquals(1, rows.size(), "监听器必须恰写 1 条 ACCESS_DENIED 审计行，实际：" + rows);
+        var r = rows.get(0);
+        assertEquals("SECURITY", r.get("module"), "module 必须是 SECURITY（越权尝试独立模块口径）");
+        assertEquals("fail", r.get("status"), "越权尝试状态必须是 fail");
+        assertEquals("POST /api/sme/salary/v1/salary-bills", r.get("request_params"),
+                "request_params 必须记 METHOD + URI（P152 真列口径）");
+        String ad = String.valueOf(r.get("ad"));
+        // after_data 是 JSONB：非法转义会在写入即炸（JsonbTypeHandler 吞错形态已收口），
+        // 这里再断言关键键在位
+        assertTrue(ad.contains("salary:save"), "after_data 必须携带被拒权限码：" + ad);
     }
 
     // ── 攻击面 6：列表不串户 ──

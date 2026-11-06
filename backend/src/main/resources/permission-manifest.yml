@@ -1193,6 +1193,51 @@ endpoints:
   path: /api/sme/arap/v1/aging-analysis/alerts/{id}/resolve
   permission: arap:aging:resolve
   write: true
+- method: POST
+  path: /api/sme/asset/v1/asset-changes
+  permission: asset:change:create
+  write: true
+- method: GET
+  path: /api/sme/asset/v1/asset-changes
+  permission: asset:card:list
+  write: false
+- method: GET
+  path: /api/sme/salary/v1/salary-items
+  permission: salary:list
+  write: false
+- method: POST
+  path: /api/sme/salary/v1/salary-items
+  permission: salary:save
+  write: true
+- method: PUT
+  path: /api/sme/salary/v1/salary-items/{id}
+  permission: salary:save
+  write: true
+- method: DELETE
+  path: /api/sme/salary/v1/salary-items/{id}
+  permission: salary:save
+  write: true
+- method: GET
+  path: /api/sme/salary/v1/salary-bills
+  permission: salary:list
+  write: false
+- method: GET
+  path: /api/sme/salary/v1/salary-bills/{id}
+  permission: salary:list
+  write: false
+- method: POST
+  path: /api/sme/salary/v1/salary-bills
+  permission: salary:save
+  write: true
+- method: POST
+  path: /api/sme/salary/v1/salary-bills/{id}/confirm
+  permission: salary:confirm
+  write: true
+- method: POST
+  path: /api/sme/salary/v1/salary-bills/{id}/pay
+  permission: salary:pay
+  write: true
+
 excluded:
 - method: DELETE
   path: /api/v1/agency/agencies/{id}
@@ -1330,46 +1375,7 @@ excluded:
   governed_by: self-service
   reason: 自助行为，任何登录用户都应可执行
 - method: POST
-  path: /api/sme/asset/v1/asset-changes
-  permission: asset:change:create
-  write: true
-- method: GET
-  path: /api/sme/asset/v1/asset-changes
-  permission: asset:card:list
-  write: false
-- method: GET
-  path: /api/sme/salary/v1/salary-items
-  permission: salary:list
-  write: false
-- method: POST
-  path: /api/sme/salary/v1/salary-items
-  permission: salary:save
-  write: true
-- method: PUT
-  path: /api/sme/salary/v1/salary-items/{id}
-  permission: salary:save
-  write: true
-- method: DELETE
-  path: /api/sme/salary/v1/salary-items/{id}
-  permission: salary:save
-  write: true
-- method: GET
-  path: /api/sme/salary/v1/salary-bills
-  permission: salary:list
-  write: false
-- method: GET
-  path: /api/sme/salary/v1/salary-bills/{id}
-  permission: salary:list
-  write: false
-- method: POST
-  path: /api/sme/salary/v1/salary-bills
-  permission: salary:save
-  write: true
-- method: POST
-  path: /api/sme/salary/v1/salary-bills/{id}/confirm
-  permission: salary:confirm
-  write: true
-- method: POST
-  path: /api/sme/salary/v1/salary-bills/{id}/pay
-  permission: salary:pay
-  write: true
+  path: /api/v1/system/audit-log/client
+  controller: ClientLogController
+  governed_by: self-service
+  reason: P152 前端错误上报端点，SecurityConfig permitAll（登录页报错也须可上报），自带 IP 限流与截断；登记权限码反成越权探测面

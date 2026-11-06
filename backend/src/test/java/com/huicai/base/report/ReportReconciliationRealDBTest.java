@@ -43,18 +43,17 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
  * V3 期末结转（voucher_no 号段 {@code CLOSE-}，借 6001 10,000 / 贷 6602 2,000 + 贷 4103 8,000）。
  * 期末态手算硬值：1002=108,000；6001=0；6602=0；4103=8,000；净利润=8,000。</p>
  *
- * <p><b>🔴 已发现缺陷（v4.0 八类红线「报表取数」——只登记 + diff 建议，禁自动修）</b>：
+ * <p><b>🔴 撞行缺陷（曾登记「报表取数」红线，SPEC-P154 项⑤ 用户裁定修复已落地）</b>：
  * {@code buildBalanceSheet} 的权益组装 {@code if (code.equals("4103")) profit4103 = signed}
  * 按<b>科目编码</b>覆盖赋值，隐含「结果集内 code 唯一」的 RLS 前提。测试容器连接用户是
- * 超级用户（绕 RLS，FORCE 也压不住）⇒ subject-balance 返回 ent0 参考库 + ent1 两套科目
- * ⇒ ent0 的 4103（余额 0）覆盖 ent1 的 8,000 ⇒ {@code currentYearProfit=0}、
- * 权益缺净利润、试算平衡差恰 8,000。生产 GUC 正常时单企业视图不会显现
- * （应用层 WHERE 过滤 + DB RLS 双兜底），但「绕过 RLS 即静默错值」违背纵深防御本义。
- * <b>diff 建议</b>：4103/4104 识别改按 {@code subject_id} 归属本企业的行（或结果集
- * GROUP BY enterprise 先收敛）；同型风险点：所有按 {@code code.equals} 硬编码的分支
- * （4001/4103/4104、现金白名单 1001/1002/1009/1012）。
- * 守卫断言 {@code balanceSheetTrialBalance} 锁住「currentYearProfit=0」这一缺陷形态——
- * <b>修复实现后此断言必红，届时按 8,000 翻面</b>。</p>
+ * 超级用户（绕 RLS，FORCE 也压不住）时 subject-balance 返回 ent0 参考库 + ent1 两套科目
+ * ⇒ ent0 的 4103（余额 0）覆盖 ent1 的 8,000 ⇒ 权益静默缺净利润。
+ * <b>已修（2026-11-06）</b>：subjectBalance SQL 带出 {@code s.enterprise_id}，
+ * buildBalanceSheet 按 {@code EnterpriseContextHolder} 收敛到本企业行——RLS 正常时恒真
+ * no-op，属纵深防御。守卫断言随之从缺陷形态（0 / 100,000）翻面为正确值（8,000 / 108,000）。
+ * 同型风险点登记：其余按 {@code code.equals}/{@code code IN} 的取数分支（利润表段位、
+ * 现金白名单 1001/1002/1009/1012）在超管绕 RLS 下同样会混企业聚合——利润表 SQL 走
+ * t_voucher_entry 实时 SUM 天然带凭证归属，风险面较小，留待专项。</p>
  *
  * <p><b>勾稽断言（全部按 subject_id 对齐——同 code 撞行是上述缺陷的暴露面，
  * 按 id 才是精确勾稽语义）</b>：A 科目余额（快照 vs 分录 SUM 逐科目）；B 资产侧
@@ -174,9 +173,9 @@ class ReportReconciliationRealDBTest extends AbstractMapperTest {
         JsonNode bs = apiGet("/api/base/report/v1/reports/balance-sheet?period=" + PERIOD).path("data");
         assertMoney(bs, "totalAssets", "108000", "资产负债表资产总计");
 
-        // B2：权益缺陷守卫（🔴 见类注释「已发现缺陷」——修复实现后此断言必红，按 8,000 翻面）
-        assertMoney(bs, "currentYearProfit", "0", "currentYearProfit（撞行覆盖缺陷形态）");
-        assertMoney(bs, "totalLiabEquity", "100000", "负债权益总计（缺陷形态：缺 4103 的 8,000）");
+        // B2：权益缺陷守卫（撞行缺陷已修复——原断言 0/100000 为缺陷形态，现翻面为 8000/108000）
+        assertMoney(bs, "currentYearProfit", "8000", "currentYearProfit（撞行已修复，应含 4103 的 8,000）");
+        assertMoney(bs, "totalLiabEquity", "108000", "负债权益总计（含 4103 的 8,000）");
     }
 
     @Test
@@ -294,7 +293,14 @@ class ReportReconciliationRealDBTest extends AbstractMapperTest {
         voucherService.post(v.getId(), 1L);
     }
 
+    /**
+     * 🔴 必须逐请求重设上下文：JwtAuthenticationFilter 的 finally 无条件
+     * {@code EnterpriseContextHolder.clear()}，MockMvc 与测试同线程 ⇒ 首个 apiGet 返回后
+     * @BeforeEach 设的 ctx 已被抹掉。生产由 JWT 逐请求重建上下文，这里按同构模拟
+     * （撞行修复的租户收敛逻辑依赖 ctx 存在，ctx=null 时刻意不猜归属）。
+     */
     private JsonNode apiGet(String url) throws Exception {
+        EnterpriseContextHolder.set(1L);
         var result = mockMvc.perform(get(url)
                         .with(SecurityMockMvcRequestPostProcessors.user("probe")
                                 .authorities(() -> "report:view")))

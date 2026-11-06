@@ -85,8 +85,24 @@ public class GlobalExceptionHandler {
      */
     @ExceptionHandler(org.springframework.security.access.AccessDeniedException.class)
     @ResponseStatus(HttpStatus.FORBIDDEN)
-    public R<Void> handleAccessDenied(org.springframework.security.access.AccessDeniedException e) {
+    public R<Void> handleAccessDenied(org.springframework.security.access.AccessDeniedException e,
+                                      HttpServletRequest request) {
         log.warn("权限不足: {}", e.getMessage());
+        // SPEC-P154 项①：@PreAuthorize 这一路 403 同样落审计（拦截器路在其前置 preHandle
+        // 已拒、handler 不执行，两路互斥不会双落）。事件走 AccessDeniedAuditListener 旁路，
+        // 发布失败不反噬 403 响应。requiredPermission 此路不可得（Spring 异常不带），记原始 msg。
+        try {
+            String username = null;
+            Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+            if (auth != null && auth.isAuthenticated()
+                    && !"anonymousUser".equals(String.valueOf(auth.getPrincipal()))) {
+                username = auth.getName();
+            }
+            eventPublisher.publishEvent(
+                    new AccessDeniedEvent(username, "preauthorize:" + e.getMessage(), request));
+        } catch (Exception auditEx) {
+            log.warn("403 审计事件发布失败（不影响拒绝响应）: {}", auditEx.getMessage());
+        }
         return R.fail(HttpStatus.FORBIDDEN.value(), "权限不足，无法执行该操作");
     }
 
