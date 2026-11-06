@@ -21,7 +21,9 @@
 -- 防「曾 SET LOCAL 的会话」空串 ::bigint 抛 invalid input syntax）。
 --
 -- 【幂等】DROP POLICY IF EXISTS + CREATE POLICY，可重跑。
--- 【自证】DO 块：4 表策略齐 + relrowsecurity 全真 + 模拟跨租户 GUC 查询滤空。
+-- 【自证】DO 块三不变量：4 表策略齐 + relrowsecurity 全真 + 跨租户滤空行为断言
+--   （🔴 行为断言必须代入非超管身份 huicai_app——超级用户绕过 RLS 是 Postgres 语义，
+--   用超级用户直查断言恒见全表：生产首次部署即炸、测试容器空表则空转假绿，两态同根）。
 -- =====================================================================
 
 -- ── 1. 开启并强制 RLS（FORCE：连表属主也受策略约束）──
@@ -71,7 +73,19 @@ DECLARE
     v_policies int;
     v_enabled bool;
     v_visible_rows int;
+    v_probe_role text := 'huicai_app';
+    v_has_probe bool;
 BEGIN
+    -- 🔴 行为断言前提（生产首次部署炸出的教训）：必须以【非超级用户】身份执行。
+    -- 超级用户绕过 RLS 是 Postgres 语义，FORCE 也压不住——生产 Flyway 用户 huicai
+    -- 是超级用户，不变量 3 首版用它直查 ⇒ 恒见全表 ⇒ 有数据必炸；
+    -- 测试容器用户 test 同为超级用户且迁移时点表为空 ⇒ 同一断言在 L2 空转假绿。
+    -- 两态同根：RLS 行为断言的执行身份必须是应用真实身份（非超管）。
+    SELECT EXISTS (
+        SELECT 1 FROM pg_roles
+         WHERE rolname = v_probe_role AND NOT rolsuper AND NOT rolbypassrls
+    ) INTO v_has_probe;
+
     FOREACH t IN ARRAY v_tables LOOP
         -- 不变量 1：策略存在
         SELECT count(*) INTO v_policies FROM pg_policies
@@ -85,12 +99,20 @@ BEGIN
         IF NOT v_enabled THEN
             RAISE EXCEPTION 'RLS 自证失败：% 未开启 ENABLE+FORCE ROW LEVEL SECURITY', t;
         END IF;
-        -- 不变量 3：跨租户 GUC 查询必须滤空（模拟攻击者 GUC=999999 扫全表 → 0 行）
-        EXECUTE format('SET LOCAL app.enterprise_id = ''999999''');
-        EXECUTE format('SELECT count(*) FROM %I', t) INTO v_visible_rows;
-        IF v_visible_rows <> 0 THEN
-            RAISE EXCEPTION 'RLS 自证失败：% 在 GUC=999999 下仍可见 % 行 —— 谓词未生效', t, v_visible_rows;
+        -- 不变量 3：跨租户滤空行为断言（代入应用真实身份 huicai_app；无可代入角色则显式跳过）
+        IF v_has_probe THEN
+            EXECUTE format('SET LOCAL ROLE %I', v_probe_role);
+            EXECUTE format('SET LOCAL app.enterprise_id = %L', '999999');
+            EXECUTE format('SELECT count(*) FROM %I', t) INTO v_visible_rows;
+            IF v_visible_rows <> 0 THEN
+                RAISE EXCEPTION 'RLS 自证失败：% 在 GUC=999999（% 身份）下仍可见 % 行 —— 谓词未生效',
+                    t, v_probe_role, v_visible_rows;
+            END IF;
+            EXECUTE 'RESET ROLE';
+            EXECUTE 'RESET app.enterprise_id';
+        ELSE
+            RAISE NOTICE 'RLS 行为断言跳过：角色 % 不存在或为超管（超级用户语义绕过 RLS，断言必假）；策略存在性/启用性已由不变量 1/2 锁死，滤空行为由 L2 真库用例覆盖',
+                v_probe_role;
         END IF;
-        EXECUTE format('RESET app.enterprise_id');
     END LOOP;
 END $$;

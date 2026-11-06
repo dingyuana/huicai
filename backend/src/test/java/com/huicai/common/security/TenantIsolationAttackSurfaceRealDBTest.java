@@ -227,6 +227,80 @@ class TenantIsolationAttackSurfaceRealDBTest extends AbstractMapperTest {
         }
     }
 
+    // ── 攻击面 7：DB 层 RLS 独立有效性（V198 回归锁）──
+    //
+    // 🔴 背景（生产部署翻车 + L2 假绿同根，2026-11-06）：超级用户绕过 RLS 是 Postgres
+    // 语义（FORCE 也压不住）。本测试容器用户 test 与生产 Flyway 用户 huicai 都是超级
+    // 用户 ⇒ 此前本类 7 例的绿全靠【应用层 SQL 过滤】（EnterpriseDataPermissionInterceptor），
+    // DB RLS 层的行为在 L2 从未被真实验证过；V198 DO 块首版行为断言在生产有数据时炸、
+    // 在测试库空表时空转假绿，同根。
+    //
+    // 本例以【临时非超管角色】SET ROLE 后直查，把 DB 层行为真正锁进测试：
+    // 态1 策略在 → GUC=999999 滤空 / GUC=本租户可见；态2（自反证）撤策略 → 必穿透。
+    // CREATE ROLE / DROP POLICY 均为事务性 DDL，@Transactional 回滚自动复原，零清理。
+
+    @Test
+    @DisplayName("攻击面7 DB层RLS行为：非超管角色下策略在→滤空、策略撤→穿透（双态自反证）")
+    void dbLayerRlsBehaviorUnderNonSuperRole() {
+        // 造受害行（ent1）——直插绕过 MP fill，enterprise_id 显式指定
+        jdbcTemplate.update(
+                "INSERT INTO t_salary_bill(period, enterprise_id) VALUES ('202612', 1)");
+
+        // 临时非超管角色（不 LOGIN，仅 SET ROLE 代入身份）
+        jdbcTemplate.execute("CREATE ROLE p154_probe NOSUPERUSER NOBYPASSRLS");
+        jdbcTemplate.execute("GRANT SELECT ON t_salary_bill TO p154_probe");
+
+        jdbcTemplate.execute((java.sql.Connection conn) -> {
+            try (var st = conn.createStatement()) {
+                st.execute("SET ROLE p154_probe");
+                try {
+                    // 态1：策略在 —— 攻击者身份（GUC=999999）必滤空
+                    st.execute("SET app.enterprise_id = '999999'");
+                    try (var rs = st.executeQuery("SELECT count(*) FROM t_salary_bill")) {
+                        rs.next();
+                        assertEquals(0, rs.getInt(1),
+                                "策略在：GUC=999999 必须滤空 —— DB 层 RLS 谓词未生效（V198 被撤？）");
+                    }
+                    // 态1b：受害者身份（GUC=1）必见自己的行
+                    st.execute("SET app.enterprise_id = '1'");
+                    try (var rs = st.executeQuery("SELECT count(*) FROM t_salary_bill")) {
+                        rs.next();
+                        org.junit.jupiter.api.Assertions.assertTrue(rs.getInt(1) >= 1,
+                                "策略在：本租户 GUC=1 必须可见自己的行 —— RLS 把自己也滤了");
+                    }
+                    // 态2a（fail-closed 语义锁）：撤策略后非超管视角必须【全锁死】——
+                    // RLS 启用且无策略 = deny-all，策略意外丢失时安全语义是全锁不是全开
+                    st.execute("RESET ROLE");
+                    st.execute("DROP POLICY enterprise_policy ON t_salary_bill");
+                    st.execute("SET ROLE p154_probe");
+                    st.execute("SET app.enterprise_id = '999999'");
+                    try (var rs = st.executeQuery("SELECT count(*) FROM t_salary_bill")) {
+                        rs.next();
+                        assertEquals(0, rs.getInt(1),
+                                "撤策略后 RLS 启用无策略 = deny-all：必须全锁死（fail-closed），不得变全开");
+                    }
+                    // 态2b（自反证核心）：关掉 RLS 本身 —— 同一身份同一 GUC 必须真穿透，
+                    // 证明态1 的滤空确实来自 RLS 而非恒绿
+                    st.execute("RESET ROLE");
+                    st.execute("ALTER TABLE t_salary_bill DISABLE ROW LEVEL SECURITY");
+                    st.execute("SET ROLE p154_probe");
+                    st.execute("SET app.enterprise_id = '999999'");
+                    try (var rs = st.executeQuery("SELECT count(*) FROM t_salary_bill")) {
+                        rs.next();
+                        org.junit.jupiter.api.Assertions.assertTrue(rs.getInt(1) >= 1,
+                                "关 RLS 后必须穿透 —— 若仍 0 行说明态1断言恒绿，反证失效");
+                    }
+                } finally {
+                    // SET ROLE / SET 是连接级状态，池化连接上必须成对还原（防泄漏给后续借出者）
+                    st.execute("RESET ROLE");
+                    st.execute("RESET app.enterprise_id");
+                }
+            }
+            return null;
+        });
+    }
+
+
     private void assertBillStatus(Long billId, String expected) {
         // jdbcTemplate 绕 MyBatis 一级缓存（@Transactional 同 SqlSession 假阴性，V1.104 教训）
         String status = jdbcTemplate.queryForObject(
