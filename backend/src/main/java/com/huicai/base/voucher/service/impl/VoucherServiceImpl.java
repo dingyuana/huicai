@@ -313,7 +313,10 @@ public class VoucherServiceImpl extends ServiceImpl<VoucherMapper, VoucherEntity
                     @Ref(table = "t_asset_disposal", column = "voucher_id", label = "资产处置"),
                     @Ref(table = "t_asset_inventory", column = "voucher_id", label = "资产盘点"),
                     @Ref(table = "t_tax_carry_over", column = "voucher_id", label = "结转凭证"),
-                    @Ref(table = "t_tax_declaration", column = "voucher_id", label = "税务申报")
+                    @Ref(table = "t_tax_declaration", column = "voucher_id", label = "税务申报"),
+                    // SPEC-P143 工资薪酬（V1.107）：计提/发放两凭证引用
+                    @Ref(table = "t_salary_bill", column = "voucher_id", label = "工资单（计提）"),
+                    @Ref(table = "t_salary_bill", column = "pay_voucher_id", label = "工资单（发放）")
             })
     public void delete(Long id) {
         VoucherEntity entity = voucherMapper.selectById(id);

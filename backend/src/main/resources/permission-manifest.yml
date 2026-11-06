@@ -1337,3 +1337,39 @@ excluded:
   path: /api/sme/asset/v1/asset-changes
   permission: asset:card:list
   write: false
+- method: GET
+  path: /api/sme/salary/v1/salary-items
+  permission: salary:list
+  write: false
+- method: POST
+  path: /api/sme/salary/v1/salary-items
+  permission: salary:save
+  write: true
+- method: PUT
+  path: /api/sme/salary/v1/salary-items/{id}
+  permission: salary:save
+  write: true
+- method: DELETE
+  path: /api/sme/salary/v1/salary-items/{id}
+  permission: salary:save
+  write: true
+- method: GET
+  path: /api/sme/salary/v1/salary-bills
+  permission: salary:list
+  write: false
+- method: GET
+  path: /api/sme/salary/v1/salary-bills/{id}
+  permission: salary:list
+  write: false
+- method: POST
+  path: /api/sme/salary/v1/salary-bills
+  permission: salary:save
+  write: true
+- method: POST
+  path: /api/sme/salary/v1/salary-bills/{id}/confirm
+  permission: salary:confirm
+  write: true
+- method: POST
+  path: /api/sme/salary/v1/salary-bills/{id}/pay
+  permission: salary:pay
+  write: true

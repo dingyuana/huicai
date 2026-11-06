@@ -4,6 +4,7 @@ import smeBaseRoutes from './routes/sme-base'
 import smeBusinessRoutes from './routes/sme-business'
 import smeTaxRoutes from './routes/sme-tax'
 import smeAssetRoutes from './routes/sme-asset'
+import smeSalaryRoutes from './routes/sme-salary'
 import smeReportRoutes from './routes/sme-report'
 import labRoutes from './routes/lab'
 import agencyRoutes from './routes/agency'
@@ -15,6 +16,7 @@ const baseSmeRoutes: RouteRecordRaw[] = [
   ...smeBusinessRoutes,
   ...smeTaxRoutes,
   ...smeAssetRoutes,
+  ...smeSalaryRoutes,
   ...smeReportRoutes,
 ]
 

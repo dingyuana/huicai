@@ -177,6 +177,10 @@ public class SystemClearService {
                 "UPDATE t_tax_carry_over SET voucher_id = NULL WHERE enterprise_id = ? AND voucher_id IS NOT NULL", ent));
         steps.add("解绑税务申报 " + jdbcTemplate.update(
                 "UPDATE t_tax_declaration SET voucher_id = NULL WHERE enterprise_id = ? AND voucher_id IS NOT NULL", ent));
+        // SPEC-P143 工资薪酬（V1.107）：计提/发放两引用列
+        steps.add("解绑工资单凭证 " + jdbcTemplate.update(
+                "UPDATE t_salary_bill SET voucher_id = NULL, pay_voucher_id = NULL "
+                        + "WHERE enterprise_id = ? AND (voucher_id IS NOT NULL OR pay_voucher_id IS NOT NULL)", ent));
         return String.join("，", steps);
     }
 
