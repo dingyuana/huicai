@@ -14,7 +14,9 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Deque;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -110,13 +112,48 @@ public class MenuServiceImpl implements MenuService {
             return new ArrayList<>();
         }
 
-        List<MenuEntity> allMenus = menuMapper.selectBatchIds(menuIds).stream()
+        List<MenuEntity> nodes = menuMapper.selectBatchIds(menuIds).stream()
                 // menu_type 是大写：DB 种子数据与 CHECK 约束 chk_menu_type 都只允许
                 // MENU / BUTTON / DIR。原先写小写 "menu" 永远匹配不上，导致用户路由恒为空。
-                .filter(m -> "MENU".equals(m.getType()) && m.getIsActive())
-                .collect(Collectors.toList());
+                // DIR 必须随行（V1.117 装配层修复）：buildTree 按 parentId 建树，DIR 是树的
+                // 内部骨架——把 DIR 滤掉则 MENU 行全部 parentId≠null 无根可挂，
+                // 实库顶层 8 行全是 DIR ⇒ 任何角色路由恒空（V1.103③ 缺陷本体）。
+                .filter(m -> ("MENU".equals(m.getType()) || "DIR".equals(m.getType())) && m.getIsActive())
+                .collect(Collectors.toCollection(ArrayList::new));
 
-        return buildTree(allMenus, null);
+        // 「只授子不授父」授权形态回填：角色管理页可只勾子节点（V195 的「授子必授父」
+        // DO 不变量只约束种子迁移行，管不住运行时勾选），selectBatchIds 拿不到缺失的
+        // 祖先 DIR 行 ⇒ 树依然断根。这里逐级向上补查祖先，knownIds 先登记防环，
+        // 停用行（isActive=false）跳过不回填。
+        Set<Long> knownIds = nodes.stream().map(MenuEntity::getId).collect(Collectors.toSet());
+        Deque<Long> missingParents = nodes.stream()
+                .map(MenuEntity::getParentId)
+                .filter(pid -> pid != null && !knownIds.contains(pid))
+                .distinct()
+                .collect(Collectors.toCollection(ArrayDeque::new));
+        while (!missingParents.isEmpty()) {
+            Long pid = missingParents.poll();
+            if (!knownIds.add(pid)) {
+                continue;
+            }
+            MenuEntity parent = menuMapper.selectById(pid);
+            if (parent == null || Boolean.FALSE.equals(parent.getIsActive())) {
+                // 父行已删/停用：把挂在缺失父下的已授权行提升为根——授权不因装配
+                // 断链而被吞（可见性优先于树形完整，与 RLS「能给的尽量给」同哲学）。
+                for (MenuEntity node : nodes) {
+                    if (pid.equals(node.getParentId())) {
+                        node.setParentId(null);
+                    }
+                }
+                continue;
+            }
+            nodes.add(parent);
+            if (parent.getParentId() != null && !knownIds.contains(parent.getParentId())) {
+                missingParents.add(parent.getParentId());
+            }
+        }
+
+        return buildTree(nodes, null);
     }
 
     @Override
