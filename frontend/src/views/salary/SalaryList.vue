@@ -7,6 +7,7 @@
           <div>
             <el-button type="primary" @click="openCreate">新建工资单</el-button>
             <el-button @click="openItemConfig">薪资项目配置</el-button>
+            <el-button @click="openSocialConfig">社保与分摊配置</el-button>
             <el-button circle @click="loadBills">
               <el-icon><Refresh /></el-icon>
             </el-button>
@@ -22,24 +23,31 @@
           </template>
         </el-table-column>
         <el-table-column prop="totalGross" label="应发合计" align="right" :formatter="money" />
+        <el-table-column prop="totalCompanySocial" label="社保(单位)" align="right" :formatter="money" />
         <el-table-column prop="totalSocial" label="社保(个人)" align="right" :formatter="money" />
         <el-table-column prop="totalSpecialAdd" label="专项附加" align="right" :formatter="money" />
         <el-table-column prop="totalOtherDeduct" label="其他扣款" align="right" :formatter="money" />
         <el-table-column prop="totalTax" label="个税" align="right" :formatter="money" />
         <el-table-column prop="totalNet" label="实发合计" align="right" :formatter="money" />
-        <el-table-column label="凭证" min-width="140">
+        <el-table-column label="凭证" min-width="150">
           <template #default="{ row }">
             <div v-if="row.voucherNo">计提: {{ row.voucherNo }}</div>
             <div v-if="row.payVoucherNo">发放: {{ row.payVoucherNo }}</div>
+            <div v-if="row.socialVoucherNo">缴纳: {{ row.socialVoucherNo }}</div>
           </template>
         </el-table-column>
         <el-table-column prop="remark" label="备注" min-width="120" show-overflow-tooltip />
-        <el-table-column label="操作" width="200" fixed="right">
+        <el-table-column label="操作" width="300" fixed="right">
           <template #default="{ row }">
             <el-button link type="primary" @click="openDetail(row)">详情</el-button>
             <el-button v-if="row.status === 'DRAFT'" link type="primary" @click="openEdit(row)">编辑</el-button>
             <el-button v-if="row.status === 'DRAFT'" link type="warning" @click="onConfirm(row)">确认计提</el-button>
             <el-button v-if="row.status === 'CONFIRMED'" link type="success" @click="onPay(row)">发放</el-button>
+            <el-button
+              v-if="(row.status === 'CONFIRMED' || row.status === 'PAID') && !row.socialPaid"
+              link type="success" @click="onPaySocial(row)">缴社保</el-button>
+            <el-button link type="info" @click="onExportPayroll(row)">工资条</el-button>
+            <el-button link type="info" @click="onExportTax(row)">个税表</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -155,29 +163,119 @@
           <el-button type="primary" :loading="savingItem" @click="onSaveItem">新增项目</el-button>
         </el-form-item>
       </el-form>
-      <div class="hint">EARN=收入（参与计税看「计税」开关）；SOCIAL_INS=个人社保公积金（减税不减实发）；SPECIAL_ADD=专项附加扣除（只进个税公式）；OTHER_DEDUCT=其他扣款（直接扣实发）。</div>
+      <div class="hint">EARN=收入（参与计税看「计税」开关）；SOCIAL_INS=个人社保公积金（减税不减实发）；SPECIAL_ADD=专项附加扣除（只进个税公式）；OTHER_DEDUCT=其他扣款（直接扣实发）；COMPANY_SOCIAL=单位社保（按比例自动算，锁定只读）。</div>
+    </el-dialog>
+
+    <!-- SPEC-P155：社保比例 + 部门分摊配置（双 tab） -->
+    <el-dialog v-model="socialConfigVisible" title="社保与分摊配置" width="780px">
+      <el-tabs>
+        <el-tab-pane label="单位社保比例">
+          <el-table :data="socialRates" border size="small">
+            <el-table-column prop="itemName" label="险种项目" min-width="140" />
+            <el-table-column label="单位比例" width="110" align="right">
+              <template #default="{ row }">{{ (row.companyRate * 100).toFixed(2) }}%</template>
+            </el-table-column>
+            <el-table-column prop="baseFloor" label="基数下限" width="100" align="right" />
+            <el-table-column prop="baseCap" label="基数上限" width="100" align="right" />
+            <el-table-column label="" width="70">
+              <template #default="{ row }">
+                <el-button link type="danger" @click="onDeleteSocialRate(row)">删除</el-button>
+              </template>
+            </el-table-column>
+          </el-table>
+          <div class="hint" v-if="socialRates.length === 0">
+            先在「薪资项目配置」新建类别为 COMPANY_SOCIAL 的项目（如 养老保险(单位)），再为其配比例。
+          </div>
+          <el-divider />
+          <el-form :inline="true">
+            <el-form-item label="项目">
+              <el-select v-model="socialForm.itemId" filterable style="width: 180px">
+                <el-option v-for="it in companySocialItems" :key="it.id" :value="it.id!" :label="it.itemName" />
+              </el-select>
+            </el-form-item>
+            <el-form-item label="比例%">
+              <el-input-number v-model="socialForm.ratePercent" :min="0.01" :max="100" :precision="2" :controls="false" style="width: 100px" />
+            </el-form-item>
+            <el-form-item label="基数下限">
+              <el-input-number v-model="socialForm.baseFloor" :min="0" :precision="2" :controls="false" style="width: 110px" />
+            </el-form-item>
+            <el-form-item label="基数上限">
+              <el-input-number v-model="socialForm.baseCap" :min="0" :precision="2" :controls="false" style="width: 110px" />
+            </el-form-item>
+            <el-form-item>
+              <el-button type="primary" :loading="savingSocial" @click="onSaveSocialRate"
+                         :disabled="companySocialItems.length === 0">保存比例</el-button>
+            </el-form-item>
+          </el-form>
+          <div class="hint">保存工资单时自动算：基数 = 当期应发（clamp 上下限）× 比例，明细锁定只读。基数口径为当期应发，与社保局申报基数可能不同。</div>
+        </el-tab-pane>
+
+        <el-tab-pane label="部门费用科目分摊">
+          <el-table :data="deptMaps" border size="small">
+            <el-table-column prop="deptName" label="部门" min-width="120" />
+            <el-table-column label="费用科目" min-width="160">
+              <template #default="{ row }">{{ row.subjectCode }} {{ row.subjectName }}</template>
+            </el-table-column>
+            <el-table-column label="" width="70">
+              <template #default="{ row }">
+                <el-button link type="danger" @click="onDeleteDeptMap(row)">删除</el-button>
+              </template>
+            </el-table-column>
+          </el-table>
+          <div class="hint" v-if="deptMaps.length === 0">无映射时全部员工费用计入 6602 管理费用；配置后按员工部门拆分（如销售部→6601 销售费用）。</div>
+          <el-divider />
+          <el-form :inline="true">
+            <el-form-item label="部门">
+              <el-select v-model="mapForm.deptId" filterable style="width: 150px">
+                <el-option v-for="d in depts" :key="d.id" :value="d.id" :label="d.name" />
+              </el-select>
+            </el-form-item>
+            <el-form-item label="费用科目">
+              <el-select v-model="mapForm.subjectId" filterable style="width: 200px">
+                <el-option v-for="s in expenseSubjects" :key="s.id" :value="s.id" :label="`${s.code} ${s.name}`" />
+              </el-select>
+            </el-form-item>
+            <el-form-item>
+              <el-button type="primary" :loading="savingMap" @click="onSaveDeptMap">保存映射</el-button>
+            </el-form-item>
+          </el-form>
+        </el-tab-pane>
+      </el-tabs>
     </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Refresh } from '@element-plus/icons-vue'
 import {
   type SalaryBill,
   type SalaryBillDetail,
   type SalaryItem,
+  type SocialRate,
+  type DeptSubjectMap,
   listSalaryBills,
   getSalaryBill,
   getSalaryBillItems,
   saveSalaryBill,
   confirmSalaryBill,
   paySalaryBill,
+  paySocialSalaryBill,
+  exportPayroll,
+  exportTaxDeclaration,
   listSalaryItems,
   createSalaryItem,
   deleteSalaryItem,
+  listSocialRates,
+  saveSocialRate,
+  deleteSocialRate,
+  listDeptSubjectMaps,
+  saveDeptSubjectMap,
+  deleteDeptSubjectMap,
+  listDepts,
 } from '@/api/modules/salary'
+import { getSubjectTree, type SubjectVO } from '@/api/modules/subject'
 import { listEmployee, type Employee } from '@/api/modules/employee'
 
 const CATEGORIES = [
@@ -353,6 +451,163 @@ async function onPay(row: any): Promise<void> {
     await loadBills()
   } catch (e: any) {
     ElMessage.error(e?.message ?? '发放失败')
+  }
+}
+
+// ─── SPEC-P155 R1：缴纳社保 ───
+
+async function onPaySocial(row: any): Promise<void> {
+  try {
+    await ElMessageBox.confirm(
+      `缴纳 ${row.period} 社保公积金？将生成缴纳凭证（SALJ-${row.id}）：借应付职工薪酬(单位) + 借其他应付款(个人代扣) / 贷银行存款。仅可缴纳一次。`,
+      '缴纳社保',
+    )
+  } catch {
+    return
+  }
+  try {
+    await paySocialSalaryBill(row.id!)
+    ElMessage.success('社保已缴纳（缴纳凭证已生成）')
+    await loadBills()
+  } catch (e: any) {
+    ElMessage.error(e?.message ?? '缴纳失败')
+  }
+}
+
+// ─── SPEC-P155：社保比例 + 部门分摊配置 ───
+
+const socialConfigVisible = ref(false)
+const socialRates = ref<SocialRate[]>([])
+const deptMaps = ref<DeptSubjectMap[]>([])
+const depts = ref<Array<{ id: number; name: string }>>([])
+const savingSocial = ref(false)
+const savingMap = ref(false)
+const socialForm = reactive<{ itemId?: number; ratePercent?: number; baseFloor?: number; baseCap?: number }>({})
+const mapForm = reactive<{ deptId?: number; subjectId?: number }>({})
+
+const companySocialItems = computed(() => items.value.filter((it) => it.category === 'COMPANY_SOCIAL'))
+const subjects = ref<SubjectVO[]>([])
+const expenseSubjects = computed(() =>
+  subjects.value.filter((s) => s.code.startsWith('66') || s.code.startsWith('5')),
+)
+
+async function openSocialConfig(): Promise<void> {
+  socialConfigVisible.value = true
+  try {
+    ;[socialRates.value, deptMaps.value, depts.value] = await Promise.all([
+      listSocialRates(),
+      listDeptSubjectMaps(),
+      listDepts(),
+    ])
+  } catch (e: any) {
+    ElMessage.error(e?.message ?? '配置加载失败')
+  }
+  loadItems()
+  loadSubjects()
+}
+
+async function onSaveSocialRate(): Promise<void> {
+  if (!socialForm.itemId || !socialForm.ratePercent) {
+    ElMessage.warning('选择项目并填写比例')
+    return
+  }
+  savingSocial.value = true
+  try {
+    await saveSocialRate({
+      itemId: socialForm.itemId,
+      companyRate: socialForm.ratePercent / 100,
+      baseFloor: socialForm.baseFloor || undefined,
+      baseCap: socialForm.baseCap || undefined,
+    })
+    ElMessage.success('比例已保存')
+    socialRates.value = await listSocialRates()
+  } catch (e: any) {
+    ElMessage.error(e?.message ?? '保存失败')
+  } finally {
+    savingSocial.value = false
+  }
+}
+
+async function onDeleteSocialRate(row: any): Promise<void> {
+  try {
+    await deleteSocialRate(row.id!)
+    socialRates.value = await listSocialRates()
+  } catch (e: any) {
+    ElMessage.error(e?.message ?? '删除失败')
+  }
+}
+
+async function onSaveDeptMap(): Promise<void> {
+  if (!mapForm.deptId || !mapForm.subjectId) {
+    ElMessage.warning('选择部门与费用科目')
+    return
+  }
+  savingMap.value = true
+  try {
+    await saveDeptSubjectMap({ deptId: mapForm.deptId, subjectId: mapForm.subjectId })
+    ElMessage.success('映射已保存')
+    deptMaps.value = await listDeptSubjectMaps()
+  } catch (e: any) {
+    ElMessage.error(e?.message ?? '保存失败')
+  } finally {
+    savingMap.value = false
+  }
+}
+
+async function onDeleteDeptMap(row: any): Promise<void> {
+  try {
+    await deleteDeptSubjectMap(row.id!)
+    deptMaps.value = await listDeptSubjectMaps()
+  } catch (e: any) {
+    ElMessage.error(e?.message ?? '删除失败')
+  }
+}
+
+async function loadSubjects(): Promise<void> {
+  if (subjects.value.length) return
+  try {
+    const tree = await getSubjectTree()
+    // 树拍平（费用科目可能挂一级科目下）
+    const flat: SubjectVO[] = []
+    const walk = (nodes: SubjectVO[]) => {
+      for (const n of nodes) {
+        flat.push(n)
+        if (n.children?.length) walk(n.children)
+      }
+    }
+    walk(tree)
+    subjects.value = flat
+  } catch {
+    subjects.value = []
+  }
+}
+
+// ─── SPEC-P155 R3：导出 ───
+
+function downloadBlob(blob: Blob, fileName: string): void {
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = fileName
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
+async function onExportPayroll(row: any): Promise<void> {
+  try {
+    const blob = await exportPayroll(row.id!)
+    downloadBlob(blob, `工资条_${row.period}.xlsx`)
+  } catch (e: any) {
+    ElMessage.error(e?.message ?? '导出失败')
+  }
+}
+
+async function onExportTax(row: any): Promise<void> {
+  try {
+    const blob = await exportTaxDeclaration(row.id!)
+    downloadBlob(blob, `个税申报表_${row.period}.xlsx`)
+  } catch (e: any) {
+    ElMessage.error(e?.message ?? '导出失败')
   }
 }
 

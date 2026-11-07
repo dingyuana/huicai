@@ -21,6 +21,8 @@ public class SalaryBillDetailVO extends SalaryBillVO {
         private java.math.BigDecimal social;
         private java.math.BigDecimal specialAdd;
         private java.math.BigDecimal otherDeduct;
+        /** SPEC-P155：单位社保（自动算，不扣员工钱） */
+        private java.math.BigDecimal companySocial;
         private java.math.BigDecimal tax;
         private java.math.BigDecimal net;
     }

@@ -111,3 +111,81 @@ export function confirmSalaryBill(id: number): Promise<void> {
 export function paySalaryBill(id: number): Promise<void> {
   return request.post(`/sme/salary/v1/salary-bills/${id}/pay`)
 }
+
+/** SPEC-P155 R1：缴纳社保（凭证 SALJ-{id}，幂等） */
+export function paySocialSalaryBill(id: number): Promise<void> {
+  return request.post(`/sme/salary/v1/salary-bills/${id}/social-pay`)
+}
+
+/** SPEC-P155 R3：工资条导出（xlsx blob 下载） */
+export function exportPayroll(id: number): Promise<Blob> {
+  return request.get(`/sme/salary/v1/salary-bills/${id}/export`, { responseType: 'blob' })
+}
+
+/** SPEC-P155 R3：个税申报表导出（xlsx blob 下载） */
+export function exportTaxDeclaration(id: number): Promise<Blob> {
+  return request.get(`/sme/salary/v1/salary-bills/${id}/tax-export`, { responseType: 'blob' })
+}
+
+// ─── SPEC-P155 R1：单位社保险种比例配置 ───
+
+export interface SocialRate {
+  id?: number
+  itemId: number
+  itemName?: string
+  companyRate: number
+  baseFloor?: number
+  baseCap?: number
+  remark?: string
+}
+
+export function listSocialRates(): Promise<SocialRate[]> {
+  return request.get('/sme/salary/v1/social-rates')
+}
+
+export function saveSocialRate(data: {
+  itemId: number
+  companyRate: number
+  baseFloor?: number
+  baseCap?: number
+  remark?: string
+}): Promise<number> {
+  return request.post('/sme/salary/v1/social-rates', data)
+}
+
+export function deleteSocialRate(id: number): Promise<void> {
+  return request.delete(`/sme/salary/v1/social-rates/${id}`)
+}
+
+// ─── SPEC-P155 R2：部门→费用科目映射 ───
+
+export interface DeptSubjectMap {
+  id?: number
+  deptId: number
+  deptName?: string
+  subjectId: number
+  subjectCode?: string
+  subjectName?: string
+  remark?: string
+}
+
+export function listDeptSubjectMaps(): Promise<DeptSubjectMap[]> {
+  return request.get('/sme/salary/v1/dept-subject-maps')
+}
+
+export function saveDeptSubjectMap(data: {
+  deptId: number
+  subjectId: number
+  remark?: string
+}): Promise<number> {
+  return request.post('/sme/salary/v1/dept-subject-maps', data)
+}
+
+export function deleteDeptSubjectMap(id: number): Promise<void> {
+  return request.delete(`/sme/salary/v1/dept-subject-maps/${id}`)
+}
+
+/** 部门列表（映射配置用，system 模块 re-export 简化引用） */
+export function listDepts(): Promise<Array<{ id: number; name: string }>> {
+  return request.get('/v1/system/dept/tree')
+}

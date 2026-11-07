@@ -31,6 +31,8 @@ public class SalaryBillEmployeeEntity extends BaseEntity {
     private BigDecimal specialAdd;
     /** 其他扣款 */
     private BigDecimal otherDeduct;
+    /** SPEC-P155 R1：单位承担社保（按比例自动算，进 SALC 费用分摊与 2211 贷方，不扣员工钱） */
+    private BigDecimal companySocial;
     /** 本月应预扣个税 */
     private BigDecimal tax;
     /** 实发 = gross - social - otherDeduct - tax */

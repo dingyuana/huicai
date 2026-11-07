@@ -219,4 +219,107 @@ class SalaryBillRealDBTest extends AbstractMapperTest {
                         .eq(SalaryBillEmployeeEntity::getBillId, bill1));
         assertEquals(0, new BigDecimal("645.00").compareTo(row1.getTax()));
     }
+
+    @Test
+    @DisplayName("SPEC-P155：单位社保自动算 + 部门分摊 + 缴纳社保 SALJ 全链真库")
+    void companySocialWithDeptSplitAndPaySocial() {
+        // ① 项目：基本工资(EARN) + 个人社保 + 养老保险单位(COMPANY_SOCIAL) + 16% 比例
+        makeItems();
+        insertItem("PENSION-CO", "养老保险(单位)", "COMPANY_SOCIAL", false);
+        Long basic = jdbcTemplate.queryForObject(
+                "SELECT id FROM t_salary_item WHERE item_name='基本工资' AND deleted=0 ORDER BY id DESC LIMIT 1", Long.class);
+        Long social = jdbcTemplate.queryForObject(
+                "SELECT id FROM t_salary_item WHERE item_name='个人社保公积金' AND deleted=0 ORDER BY id DESC LIMIT 1", Long.class);
+        Long special = jdbcTemplate.queryForObject(
+                "SELECT id FROM t_salary_item WHERE item_name='专项附加扣除' AND deleted=0 ORDER BY id DESC LIMIT 1", Long.class);
+        Long pensionCo = jdbcTemplate.queryForObject(
+                "SELECT id FROM t_salary_item WHERE item_name='养老保险(单位)' AND deleted=0 ORDER BY id DESC LIMIT 1", Long.class);
+        jdbcTemplate.update(
+                "INSERT INTO t_social_insurance_rate (enterprise_id, item_id, company_rate, created_at, deleted) "
+                        + "VALUES (1, ?, 0.16, NOW(), 0)", pensionCo);
+
+        // ② 员工×2：sales 员工挂部门（映射 6601）、admin 员工无部门（回落 6602）
+        Long salesEmp = makeEmployee();
+        Long adminEmp = makeEmployee();
+        jdbcTemplate.update("INSERT INTO t_dept (enterprise_id, dept_code, dept_name, created_at, deleted) "
+                + "VALUES (1, ?, '销售部', NOW(), 0)", "D-" + System.nanoTime());
+        Long deptId = jdbcTemplate.queryForObject(
+                "SELECT id FROM t_dept WHERE dept_name='销售部' AND deleted=0 ORDER BY id DESC LIMIT 1", Long.class);
+        jdbcTemplate.update("UPDATE t_employee SET dept_id=? WHERE id=?", deptId, salesEmp);
+        Long s6601 = subjectId("6601");
+        jdbcTemplate.update(
+                "INSERT INTO t_dept_subject_map (enterprise_id, dept_id, subject_id, created_at, deleted) "
+                        + "VALUES (1, ?, ?, NOW(), 0)", deptId, s6601);
+
+        // ③ save：前端只传三项，公司社保明细应由 save 自动算出（30000×16%=4800/人）
+        SalaryBillSaveDTO dto = new SalaryBillSaveDTO();
+        dto.setPeriod("202603");
+        dto.setRemark("SPEC-P155 真库测试");
+        dto.setItems(List.of(
+                entry(salesEmp, basic, BASIC),
+                entry(salesEmp, social, SOCIAL),
+                entry(salesEmp, special, SPECIAL),
+                entry(adminEmp, basic, BASIC),
+                entry(adminEmp, social, SOCIAL),
+                entry(adminEmp, special, SPECIAL)));
+        Long billId = salaryBillService.save(dto, 9L);
+
+        BigDecimal cs11 = jdbcTemplate.queryForObject(
+                "SELECT amount FROM t_salary_bill_item WHERE bill_id=? AND employee_id=? AND item_id=?",
+                BigDecimal.class, billId, salesEmp, pensionCo);
+        assertEquals(0, new BigDecimal("4800.00").compareTo(cs11),
+                "销售员工公司社保 = 30000×16% = 4800，实际：" + cs11);
+        BigDecimal cs12 = jdbcTemplate.queryForObject(
+                "SELECT amount FROM t_salary_bill_item WHERE bill_id=? AND employee_id=? AND item_id=?",
+                BigDecimal.class, billId, adminEmp, pensionCo);
+        assertEquals(0, new BigDecimal("4800.00").compareTo(cs12), "管理员工公司社保同为 4800");
+
+        // ④ confirm：SALC 三行——借6601(销售 应发34800)/借6602(管理 应发34800)/贷2211(69600)
+        salaryBillService.confirm(billId, 9L);
+        SalaryBillEntity bill = billMapper.selectById(billId);
+        assertEquals("CONFIRMED", bill.getStatus());
+        VoucherEntity salc = voucherMapper.selectById(bill.getVoucherId());
+        assertEquals("SALC-" + billId, salc.getVoucherNo());
+        List<VoucherEntryEntity> salcLines = voucherEntryMapper.selectList(
+                new LambdaQueryWrapper<VoucherEntryEntity>()
+                        .eq(VoucherEntryEntity::getVoucherId, salc.getId())
+                        .orderByAsc(VoucherEntryEntity::getSortOrder));
+        assertEquals(3, salcLines.size(), "两个部门科目 + 一个贷方 = 三行");
+        assertEquals(subjectId("6601"), salcLines.get(0).getSubjectId(), "销售部员工分摊 6601");
+        assertEquals(0, new BigDecimal("34800.00").compareTo(salcLines.get(0).getDebit()),
+                "借 6601 = 应发 30000 + 公司社保 4800");
+        assertEquals(subjectId("6602"), salcLines.get(1).getSubjectId(), "无映射员工回落 6602");
+        assertEquals(0, new BigDecimal("34800.00").compareTo(salcLines.get(1).getDebit()));
+        assertEquals(subjectId("2211"), salcLines.get(2).getSubjectId());
+        assertEquals(0, new BigDecimal("69600.00").compareTo(salcLines.get(2).getCredit()),
+                "贷 2211 = 应发 60000 + 公司社保 9600");
+
+        // ⑤ pay：SALP 四行（口径不变）
+        salaryBillService.pay(billId, 9L);
+        SalaryBillEntity paid = billMapper.selectById(billId);
+        assertEquals("PAID", paid.getStatus());
+
+        // ⑥ paySocial：SALJ 借2211(9600)+借2241(个人社保 4000)/贷1002(13600)；幂等 400
+        salaryBillService.paySocial(billId, 9L);
+        SalaryBillEntity socialPaid = billMapper.selectById(billId);
+        assertEquals(Boolean.TRUE, socialPaid.getSocialPaid());
+        assertNotNull(socialPaid.getSocialVoucherId());
+        VoucherEntity salj = voucherMapper.selectById(socialPaid.getSocialVoucherId());
+        assertEquals("SALJ-" + billId, salj.getVoucherNo());
+        List<VoucherEntryEntity> saljLines = voucherEntryMapper.selectList(
+                new LambdaQueryWrapper<VoucherEntryEntity>()
+                        .eq(VoucherEntryEntity::getVoucherId, salj.getId())
+                        .orderByAsc(VoucherEntryEntity::getSortOrder));
+        assertEquals(3, saljLines.size());
+        assertEquals(subjectId("2211"), saljLines.get(0).getSubjectId(), "借 2211 单位社保");
+        assertEquals(0, new BigDecimal("9600.00").compareTo(saljLines.get(0).getDebit()));
+        assertEquals(subjectId("2241"), saljLines.get(1).getSubjectId(), "借 2241 个人社保代扣");
+        assertEquals(0, new BigDecimal("4000.00").compareTo(saljLines.get(1).getDebit()));
+        assertEquals(subjectId("1002"), saljLines.get(2).getSubjectId());
+        assertEquals(0, new BigDecimal("13600.00").compareTo(saljLines.get(2).getCredit()));
+
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> salaryBillService.paySocial(billId, 9L));
+        assertTrue(ex.getMessage().contains("不可重复"), "缴纳幂等，实际：" + ex.getMessage());
+    }
 }

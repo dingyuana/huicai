@@ -27,5 +27,12 @@ public class SalaryBillVO {
     /** 查询回填：发放凭证号 */
     private String payVoucherNo;
 
+    /** SPEC-P155：单位社保合计（confirm 回填） */
+    private BigDecimal totalCompanySocial;
+    /** 社保是否已缴纳（SALJ 幂等标记） */
+    private Boolean socialPaid;
+    /** 查询回填：缴纳社保凭证号 */
+    private String socialVoucherNo;
+
     private String remark;
 }

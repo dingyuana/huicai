@@ -32,4 +32,17 @@ public interface SalaryBillService {
 
     /** 发放：生成发放凭证 SALP-{id}（借应付职工薪酬 / 贷个税+社保+银行）。 */
     void pay(Long billId, Long userId);
+
+    /**
+     * SPEC-P155 R1：缴纳社保，生成凭证 SALJ-{id}
+     * （借 2211 单位社保 + 借 2241 个人社保代扣 / 贷 1002）；
+     * 幂等：{@code socialPaid} 单标记，仅可缴纳一次；权限复用 salary:pay。
+     */
+    void paySocial(Long billId, Long userId);
+
+    /** SPEC-P155 R3：工资条导出（xlsx，每员工一个行组，纵表项目明细+实发）。 */
+    void exportPayroll(Long billId, jakarta.servlet.http.HttpServletResponse response);
+
+    /** SPEC-P155 R3：个税申报表导出（xlsx，期间×员工台账快照，纯导出无计算）。 */
+    void exportTaxDeclaration(Long billId, jakarta.servlet.http.HttpServletResponse response);
 }

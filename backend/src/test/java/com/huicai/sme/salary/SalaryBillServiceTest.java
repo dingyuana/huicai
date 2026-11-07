@@ -17,6 +17,8 @@ import com.huicai.sme.salary.entity.SalaryBillEmployeeEntity;
 import com.huicai.sme.salary.entity.SalaryBillEntity;
 import com.huicai.sme.salary.entity.SalaryBillItemEntity;
 import com.huicai.sme.salary.entity.SalaryItemEntity;
+import com.huicai.sme.salary.entity.SocialInsuranceRateEntity;
+import com.huicai.sme.salary.entity.DeptSubjectMapEntity;
 import com.huicai.sme.salary.mapper.SalaryBillEmployeeMapper;
 import com.huicai.sme.salary.mapper.SalaryBillItemMapper;
 import com.huicai.sme.salary.mapper.SalaryBillMapper;
@@ -57,6 +59,8 @@ class SalaryBillServiceTest {
     @Mock private SalaryBillItemMapper itemMapper;
     @Mock private SalaryBillEmployeeMapper billEmployeeMapper;
     @Mock private SalaryItemMapper salaryItemMapper;
+    @Mock private com.huicai.sme.salary.mapper.SocialInsuranceRateMapper socialRateMapper;
+    @Mock private com.huicai.sme.salary.mapper.DeptSubjectMapMapper deptSubjectMapMapper;
     @Mock private EmployeeMapper employeeMapper;
     @Mock private SubjectMapper subjectMapper;
     @Mock private VoucherMapper voucherMapper;
@@ -132,8 +136,10 @@ class SalaryBillServiceTest {
 
     private void stubHappyPath() {
         subjectQueue.clear();
-        subjectQueue.add(s6602);
+        // SPEC-P155 后 confirm 的 requireSubject 调用序：payable(2211) 先取，
+        // 再逐员工 resolveExpenseSubject（无映射回落 6602）
         subjectQueue.add(s2211);
+        subjectQueue.add(s6602);
         when(billMapper.selectById(77L)).thenReturn(bill);
         when(itemMapper.selectList(any())).thenReturn(items());
         when(salaryItemMapper.selectList(any())).thenReturn(List.of(
@@ -141,6 +147,7 @@ class SalaryBillServiceTest {
                 def(102L, "SOCIAL_INS", false),
                 def(103L, "SPECIAL_ADD", false),
                 def(104L, "OTHER_DEDUCT", false)));
+        lenient().when(deptSubjectMapMapper.selectList(any())).thenReturn(List.of());
         lenient().when(employeeMapper.selectCount(any())).thenReturn(1L);
         lenient().when(billEmployeeMapper.selectCumulative(any(), any(), any())).thenAnswer(inv -> {
             SalaryBillEmployeeMapper.CumulativeRow r = new SalaryBillEmployeeMapper.CumulativeRow();
@@ -249,5 +256,196 @@ class SalaryBillServiceTest {
         dto.setItems(List.of());
         BusinessException ex = assertThrows(BusinessException.class, () -> service.save(dto, 9L));
         assertTrue(ex.getMessage().contains("不可修改"));
+    }
+
+    // ==================== SPEC-P155 R1/R2 ====================
+
+    /** DTO 明细行 */
+    private SalaryBillSaveDTO.ItemDTO dtoItem(long employeeId, long itemId, String amount) {
+        SalaryBillSaveDTO.ItemDTO i = new SalaryBillSaveDTO.ItemDTO();
+        i.setEmployeeId(employeeId);
+        i.setItemId(itemId);
+        i.setAmount(new BigDecimal(amount));
+        return i;
+    }
+
+    @Test
+    @DisplayName("R1 save 自动算：剔除前端公司社保明细，按基数×比例逐员工重算落明细")
+    void saveRecomputesCompanySocial() {
+        SalaryItemEntity csItem = def(201L, "COMPANY_SOCIAL", false);
+        csItem.setItemName("养老保险(单位)");
+        SocialInsuranceRateEntity rate = new SocialInsuranceRateEntity();
+        rate.setItemId(201L);
+        rate.setCompanyRate(new BigDecimal("0.16"));
+        // save 链 selectList 调用序（MP Wrapper 参数路由不稳，用调用序）：
+        // ①recompute 查 COMPANY_SOCIAL 项目 ②recompute 查 EARN 项目（缴费基数）
+        when(salaryItemMapper.selectList(any())).thenReturn(
+                List.of(csItem),
+                List.of(def(101L, "EARN", true)));
+        lenient().when(salaryItemMapper.selectCount(any())).thenReturn(2L);
+        when(socialRateMapper.selectList(any())).thenReturn(List.of(rate));
+        when(billMapper.selectOne(any())).thenReturn(null);
+        lenient().when(deptSubjectMapMapper.selectList(any())).thenReturn(List.of());
+
+        SalaryBillSaveDTO dto = new SalaryBillSaveDTO();
+        dto.setPeriod("202611");
+        dto.setItems(List.of(
+                dtoItem(11L, 101L, "10000"),          // EARN
+                dtoItem(11L, 201L, "9999")));         // 前端传的假值，应被剔除后重算 1600.00
+        service.save(dto, 9L);
+
+        ArgumentCaptor<SalaryBillItemEntity> rows = ArgumentCaptor.forClass(SalaryBillItemEntity.class);
+        verify(itemMapper, times(2)).insert(rows.capture());
+        List<SalaryBillItemEntity> lines = rows.getAllValues();
+        assertEquals(101L, lines.get(0).getItemId(), "EARN 行保留");
+        assertEquals(0, new BigDecimal("10000").compareTo(lines.get(0).getAmount()));
+        assertEquals(201L, lines.get(1).getItemId(), "公司社保行被自动重算");
+        assertEquals(0, new BigDecimal("1600.00").compareTo(lines.get(1).getAmount()),
+                "基数=应发 10000 × 16% = 1600.00");
+        // 新单实体经 insert 回填断言（service 内部 new，测试字段引用不更新）
+        ArgumentCaptor<SalaryBillEntity> billCap = ArgumentCaptor.forClass(SalaryBillEntity.class);
+        verify(billMapper).insert(billCap.capture());
+        assertEquals(Boolean.FALSE, billCap.getValue().getSocialPaid(), "新单 social_paid 初始 false");
+    }
+
+    @Test
+    @DisplayName("R1 clamp：基数低于下限按下限、高于上限按上限")
+    void saveClampsBase() {
+        SalaryItemEntity csItem = def(201L, "COMPANY_SOCIAL", false);
+        // save 链 selectList 调用序：①COMPANY_SOCIAL ②EARN
+        when(salaryItemMapper.selectList(any())).thenReturn(
+                List.of(csItem),
+                List.of(def(101L, "EARN", true)));
+        SocialInsuranceRateEntity rate = new SocialInsuranceRateEntity();
+        rate.setItemId(201L);
+        rate.setCompanyRate(new BigDecimal("0.10"));
+        rate.setBaseFloor(new BigDecimal("5000"));
+        rate.setBaseCap(new BigDecimal("20000"));
+        when(socialRateMapper.selectList(any())).thenReturn(List.of(rate));
+        when(billMapper.selectOne(any())).thenReturn(null);
+        lenient().when(salaryItemMapper.selectCount(any())).thenReturn(2L);
+        lenient().when(deptSubjectMapMapper.selectList(any())).thenReturn(List.of());
+
+        SalaryBillSaveDTO dto = new SalaryBillSaveDTO();
+        dto.setPeriod("202611");
+        dto.setItems(List.of(
+                dtoItem(11L, 101L, "3000"),    // 低于下限 5000 → 基数 5000 → 500.00
+                dtoItem(12L, 101L, "50000"))); // 高于上限 20000 → 基数 20000 → 2000.00
+        service.save(dto, 9L);
+
+        ArgumentCaptor<SalaryBillItemEntity> rows = ArgumentCaptor.forClass(SalaryBillItemEntity.class);
+        verify(itemMapper, times(4)).insert(rows.capture());
+        List<SalaryBillItemEntity> lines = rows.getAllValues();
+        // 行序：kept(EARN×2) 先插入，补算的公司社保行后插入
+        assertEquals(0, new BigDecimal("500.00").compareTo(lines.get(2).getAmount()),
+                "员工11 基数 clamp 下限 5000×10%");
+        assertEquals(0, new BigDecimal("2000.00").compareTo(lines.get(3).getAmount()),
+                "员工12 基数 clamp 上限 20000×10%");
+    }
+
+    @Test
+    @DisplayName("R2 分摊：员工部门→映射科目，同科目合并一行；无映射回落 6602")
+    void confirmSplitsByDeptSubject() {
+        stubHappyPath();
+        bill.setStatus("DRAFT");
+        // 三员工：11/12 部门 7（映射到 6601 销售费用）、13 无部门（回落 6602）
+        SalaryItemEntity csItem = def(201L, "COMPANY_SOCIAL", false);
+        when(salaryItemMapper.selectList(any())).thenReturn(List.of(
+                def(101L, "EARN", true), def(102L, "SOCIAL_INS", false),
+                def(103L, "SPECIAL_ADD", false), def(104L, "OTHER_DEDUCT", false), csItem));
+        SalaryBillItemEntity i11 = item(1L, 101L, "10000");
+        SalaryBillItemEntity i12 = new SalaryBillItemEntity();
+        i12.setBillId(77L);
+        i12.setEmployeeId(12L);
+        i12.setItemId(101L);
+        i12.setAmount(new BigDecimal("8000"));
+        SalaryBillItemEntity i13 = new SalaryBillItemEntity();
+        i13.setBillId(77L);
+        i13.setEmployeeId(13L);
+        i13.setItemId(101L);
+        i13.setAmount(new BigDecimal("6000"));
+        when(itemMapper.selectList(any())).thenReturn(List.of(i11, i12, i13));
+        lenient().when(socialRateMapper.selectList(any())).thenReturn(List.of());
+        DeptSubjectMapEntity map = new DeptSubjectMapEntity();
+        map.setDeptId(7L);
+        map.setSubjectId(610L);
+        when(deptSubjectMapMapper.selectList(any())).thenReturn(List.of(map));
+        Subject s6601 = subj(610L, "6601");
+        when(subjectMapper.selectList(any())).thenReturn(List.of(s6601)); // 映射科目校验
+        // 队列：payable(2211) → 员工11/12 部门7直取映射不弹队列 → 员工13 回落 6602
+        subjectQueue.clear();
+        subjectQueue.add(s2211);
+        subjectQueue.add(s6602);
+        EmployeeEntity e11 = new EmployeeEntity();
+        e11.setId(11L);
+        e11.setDeptId(7L);
+        EmployeeEntity e12 = new EmployeeEntity();
+        e12.setId(12L);
+        e12.setDeptId(7L);
+        EmployeeEntity e13 = new EmployeeEntity();
+        e13.setId(13L);
+        when(employeeMapper.selectList(any())).thenReturn(List.of(e11, e12, e13));
+        lenient().when(employeeMapper.selectCount(any())).thenReturn(3L);
+        lenient().when(billEmployeeMapper.selectCumulative(any(), any(), any())).thenAnswer(inv -> {
+            SalaryBillEmployeeMapper.CumulativeRow r = new SalaryBillEmployeeMapper.CumulativeRow();
+            r.cumTaxableRunning = BigDecimal.ZERO;
+            r.cumTax = BigDecimal.ZERO;
+            return r;
+        });
+
+        service.confirm(77L, 9L);
+
+        ArgumentCaptor<VoucherEntryEntity> entries = ArgumentCaptor.forClass(VoucherEntryEntity.class);
+        verify(voucherEntryMapper, times(3)).insert(entries.capture());
+        List<VoucherEntryEntity> lines = entries.getAllValues();
+        assertEquals(610L, lines.get(0).getSubjectId(), "部门7→6601 销售费用");
+        assertEquals(0, new BigDecimal("18000").compareTo(lines.get(0).getDebit()),
+                "员工11+12 应发合并 10000+8000");
+        assertEquals(601L, lines.get(1).getSubjectId(), "员工13 无映射回落 6602");
+        assertEquals(0, new BigDecimal("6000").compareTo(lines.get(1).getDebit()));
+        assertEquals(602L, lines.get(2).getSubjectId(), "贷 2211 = 应发合计 24000");
+        assertEquals(0, new BigDecimal("24000").compareTo(lines.get(2).getCredit()));
+    }
+
+    @Test
+    @DisplayName("R1 paySocial：借2211单位+借2241个人/贷1002；幂等拒绝；无金额拒绝")
+    void paySocialVoucherAndGuards() {
+        subjectQueue.clear();
+        subjectQueue.add(s2211);
+        subjectQueue.add(s2241);
+        subjectQueue.add(s1002);
+        bill.setStatus("PAID");
+        bill.setTotalCompanySocial(new BigDecimal("1600.00"));
+        bill.setTotalSocial(new BigDecimal("2000"));
+        when(billMapper.selectById(77L)).thenReturn(bill);
+
+        service.paySocial(77L, 9L);
+
+        ArgumentCaptor<VoucherEntity> voucherCap = ArgumentCaptor.forClass(VoucherEntity.class);
+        verify(voucherMapper).insert(voucherCap.capture());
+        assertEquals("SALJ-77", voucherCap.getValue().getVoucherNo());
+        assertEquals(0, new BigDecimal("3600.00").compareTo(voucherCap.getValue().getTotalDebit()));
+        ArgumentCaptor<VoucherEntryEntity> entries = ArgumentCaptor.forClass(VoucherEntryEntity.class);
+        verify(voucherEntryMapper, times(3)).insert(entries.capture());
+        List<VoucherEntryEntity> lines = entries.getAllValues();
+        assertEquals(602L, lines.get(0).getSubjectId(), "借 2211 单位社保");
+        assertEquals(0, new BigDecimal("1600.00").compareTo(lines.get(0).getDebit()));
+        assertEquals(604L, lines.get(1).getSubjectId(), "借 2241 个人社保代扣");
+        assertEquals(0, new BigDecimal("2000").compareTo(lines.get(1).getDebit()));
+        assertEquals(605L, lines.get(2).getSubjectId(), "贷 1002");
+        assertEquals(0, new BigDecimal("3600.00").compareTo(lines.get(2).getCredit()));
+        assertEquals(Boolean.TRUE, bill.getSocialPaid());
+        assertEquals("SALJ-77", bill.getSocialVoucherNo());
+
+        // 幂等：已缴纳拒绝
+        BusinessException ex = assertThrows(BusinessException.class, () -> service.paySocial(77L, 9L));
+        assertTrue(ex.getMessage().contains("不可重复"));
+
+        // 无金额拒绝
+        bill.setSocialPaid(Boolean.FALSE);
+        bill.setTotalCompanySocial(BigDecimal.ZERO);
+        bill.setTotalSocial(BigDecimal.ZERO);
+        BusinessException ex2 = assertThrows(BusinessException.class, () -> service.paySocial(77L, 9L));
+        assertTrue(ex2.getMessage().contains("无社保金额"));
     }
 }

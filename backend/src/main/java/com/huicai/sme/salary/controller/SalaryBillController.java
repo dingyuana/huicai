@@ -77,4 +77,26 @@ public class SalaryBillController {
         salaryBillService.pay(id, SecurityUtils.getCurrentUserId());
         return R.ok();
     }
+
+    @Operation(summary = "缴纳社保（SPEC-P155 R1，凭证 SALJ-{id}；幂等）")
+    @PreAuthorize("hasAuthority('salary:pay')")
+    @PostMapping("/{id}/social-pay")
+    public R<Void> paySocial(@PathVariable Long id) {
+        salaryBillService.paySocial(id, SecurityUtils.getCurrentUserId());
+        return R.ok();
+    }
+
+    @Operation(summary = "工资条导出（SPEC-P155 R3，xlsx，每员工一个分区）")
+    @PreAuthorize("hasAuthority('salary:list')")
+    @GetMapping("/{id}/export")
+    public void export(@PathVariable Long id, jakarta.servlet.http.HttpServletResponse response) {
+        salaryBillService.exportPayroll(id, response);
+    }
+
+    @Operation(summary = "个税申报表导出（SPEC-P155 R3，xlsx）")
+    @PreAuthorize("hasAuthority('salary:list')")
+    @GetMapping("/{id}/tax-export")
+    public void exportTax(@PathVariable Long id, jakarta.servlet.http.HttpServletResponse response) {
+        salaryBillService.exportTaxDeclaration(id, response);
+    }
 }

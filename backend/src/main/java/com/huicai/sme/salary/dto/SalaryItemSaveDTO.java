@@ -17,9 +17,10 @@ public class SalaryItemSaveDTO {
     private String itemName;
 
     @NotBlank(message = "项目类别不能为空")
-    @Pattern(regexp = "EARN|SOCIAL_INS|SPECIAL_ADD|OTHER_DEDUCT",
+    @Pattern(regexp = "EARN|SOCIAL_INS|SPECIAL_ADD|OTHER_DEDUCT|COMPANY_SOCIAL",
             message = "类别仅支持 EARN（收入）/ SOCIAL_INS（个人社保公积金）/ "
-                    + "SPECIAL_ADD（专项附加扣除）/ OTHER_DEDUCT（其他扣款）")
+                    + "SPECIAL_ADD（专项附加扣除）/ OTHER_DEDUCT（其他扣款）"
+                    + "/ COMPANY_SOCIAL（单位社保，SPEC-P155）")
     private String category;
 
     private BigDecimal defaultAmount;

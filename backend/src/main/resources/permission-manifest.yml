@@ -1237,6 +1237,26 @@ endpoints:
   path: /api/sme/salary/v1/salary-bills/{id}/pay
   permission: salary:pay
   write: true
+- method: POST
+  path: /api/sme/salary/v1/salary-bills/{id}/social-pay
+  permission: salary:pay
+  write: true
+- method: POST
+  path: /api/sme/salary/v1/social-rates
+  permission: salary:save
+  write: true
+- method: DELETE
+  path: /api/sme/salary/v1/social-rates/{id}
+  permission: salary:save
+  write: true
+- method: POST
+  path: /api/sme/salary/v1/dept-subject-maps
+  permission: salary:save
+  write: true
+- method: DELETE
+  path: /api/sme/salary/v1/dept-subject-maps/{id}
+  permission: salary:save
+  write: true
 
 excluded:
 - method: DELETE
