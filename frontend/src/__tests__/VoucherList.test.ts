@@ -3,6 +3,7 @@ import { shallowMount, flushPromises } from '@vue/test-utils'
 import { createRouter, createWebHistory } from 'vue-router'
 import { nextTick } from 'vue'
 import VoucherList from '@/views/finance/voucher/VoucherList.vue'
+import BatchActionBar from '@/components/batch/BatchActionBar.vue'
 
 // Mock API module — must match component's actual imports
 vi.mock('@/api/modules/voucher', () => ({
@@ -77,6 +78,7 @@ vi.mock('element-plus', async (importOriginal) => {
     ElMessageBox: {
       confirm: vi.fn().mockResolvedValue('confirm'),
       prompt: vi.fn().mockResolvedValue({ value: '原因' }),
+      alert: vi.fn().mockResolvedValue(undefined),
     },
   }
 })
@@ -397,6 +399,31 @@ describe('VoucherList — 凭证列表组件', () => {
       period: '202607',
       current: 1,
     }))
+  })
+
+  // ===== 维度 17: SPEC-P136 批量动作权限声明 =====
+  it('AT-136-7 batchActionsDeclarePermissions 每个批量动作都带 permission（防静默永久禁用）', async () => {
+    const { getVoucherPage } = await import('@/api/modules/voucher')
+    vi.mocked(getVoucherPage).mockResolvedValue(mockPageResponse([], 0))
+
+    // 🔴 el-card 内容在默认 slot 里，VTU 默认 stub 会吞掉 slot ⇒ findComponent 落空。
+    // 用仓库既有模式给 ElCard 一个透传替身（arap-reconciliation-core / BusinessDocDetail 同型）。
+    const wrapper = shallowMount(VoucherList, {
+      global: {
+        plugins: [router],
+        stubs: { ElCard: { name: 'ElCard', template: '<div><slot /></div>' } },
+      },
+    })
+    await nextTick()
+
+    // 断言真实接线：组件传给批量条的 actions 即用户实际点的那批定义
+    const actions = (wrapper.findComponent(BatchActionBar).props('actions') as any[]) ?? []
+    expect(actions.map((a) => a.key)).toEqual(['submit', 'audit', 'post'])
+    for (const a of actions) {
+      expect(typeof a.permission, `${a.key} 缺 permission`).toBe('string')
+      expect(a.permission.length).toBeGreaterThan(0)
+    }
+    expect(actions.find((a) => a.key === 'audit').permission).toBe('voucher:audit')
   })
 
   // ===== 维度 16: 重置功能 =====

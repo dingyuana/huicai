@@ -59,6 +59,10 @@ class AuthControllerTest {
     @MockBean
     private AuthenticationManager authenticationManager;
 
+    // SPEC-P152：AuthController 新增登录审计依赖，测试上下文必须补桩
+    @MockBean
+    private com.huicai.base.system.service.AuditLogService auditLogService;
+
     @MockBean
     private JwtProvider jwtProvider;
 

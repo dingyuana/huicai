@@ -1,5 +1,6 @@
 package com.huicai.base.system.controller;
 
+import com.huicai.base.system.service.SystemClearService;
 import com.huicai.common.response.R;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -7,15 +8,29 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
 
+/**
+ * 数据维护（清库）控制器。
+ *
+ * <p>🔴 <b>P148 / REQ-2026-164 加固说明</b>：本控制器原先直接执行无 WHERE 的全表 DELETE，
+ * 一次调用可跨所有账套清空数据（2026-10-30 实测清掉企业 4 的 26 张凭证并留下 26 条悬空引用）。
+ * 现改为**薄委托层**，所有清库逻辑收口到 {@link SystemClearService}，并强制两道护栏：</p>
+ * <ol>
+ *   <li><b>确认令牌</b>：必须传 `confirm=&lt;动作名&gt;`（如 `CLEAR_VOUCHERS`），否则 400；</li>
+ *   <li><b>按企业隔离</b>：必须能确定目标企业（上下文或显式 `enterpriseId`），
+ *       且每条 SQL 都带 `enterprise_id = ?`；无法确定企业时 400 拒绝，**不退化为清全部**。</li>
+ * </ol>
+ *
+ * <p>两个校验都在 service 内、**任何 DELETE 之前**执行，故“没确认就一行都不动”。</p>
+ */
 @Slf4j
 @Tag(name = "数据维护")
 @RestController
@@ -23,64 +38,52 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class SystemClearController {
 
+    private final SystemClearService systemClearService;
     private final JdbcTemplate jdbcTemplate;
 
-    private Map<String, Object> result(int deleted, String message) {
+    private Map<String, Object> result(String message) {
         Map<String, Object> r = new LinkedHashMap<>();
-        r.put("deleted", deleted);
         r.put("message", message);
         return r;
     }
 
-    @Operation(summary = "清空银行流水")
+    @Operation(summary = "清空银行流水（需 confirm=CLEAR_BANK_STATEMENTS，按企业隔离）")
     @PostMapping("/clear-bank-statements")
     @PreAuthorize("hasAuthority('system:clear')")
-    @Transactional(rollbackFor = Exception.class)
-    public R<Map<String, Object>> clearBankStatements() {
-        int deleted = jdbcTemplate.update("DELETE FROM t_bank_statement");
-        log.info("清空银行流水: deleted={}", deleted);
-        return R.ok(result(deleted, "清空银行流水 " + deleted + " 条"));
+    public R<Map<String, Object>> clearBankStatements(
+            @RequestParam(value = "confirm", required = false) String confirm,
+            @RequestParam(value = "enterpriseId", required = false) Long enterpriseId) {
+        return R.ok(result(systemClearService.clearBankStatements(confirm, enterpriseId)));
     }
 
-    @Operation(summary = "清空发票记录")
+    @Operation(summary = "清空发票记录（需 confirm=CLEAR_INVOICE_RECORDS，按企业隔离）")
     @PostMapping("/clear-invoice-records")
     @PreAuthorize("hasAuthority('system:clear')")
-    @Transactional(rollbackFor = Exception.class)
-    public R<Map<String, Object>> clearInvoiceRecords() {
-        int d1 = jdbcTemplate.update("DELETE FROM t_input_invoice");
-        int d2 = jdbcTemplate.update("DELETE FROM t_output_invoice");
-        int total = d1 + d2;
-        log.info("清空发票记录: input={}, output={}", d1, d2);
-        return R.ok(result(total, "清空发票记录 " + total + " 条"));
+    public R<Map<String, Object>> clearInvoiceRecords(
+            @RequestParam(value = "confirm", required = false) String confirm,
+            @RequestParam(value = "enterpriseId", required = false) Long enterpriseId) {
+        return R.ok(result(systemClearService.clearInvoiceRecords(confirm, enterpriseId)));
     }
 
-    @Operation(summary = "清空所有凭证")
+    @Operation(summary = "清空所有凭证（需 confirm=CLEAR_VOUCHERS，按企业隔离）")
     @PostMapping("/clear-vouchers")
     @PreAuthorize("hasAuthority('system:clear')")
-    @Transactional(rollbackFor = Exception.class)
-    public R<Map<String, Object>> clearVouchers() {
-        int d1 = jdbcTemplate.update("DELETE FROM t_voucher_entry");
-        int d2 = jdbcTemplate.update("DELETE FROM t_voucher");
-        int d3 = jdbcTemplate.update("DELETE FROM t_subject_balance");
-        int d4 = jdbcTemplate.update("DELETE FROM t_voucher_cash_flow");
-        int total = d1 + d2 + d3 + d4;
-        log.info("清空凭证: entries={}, vouchers={}, balance={}, cash_flow={}", d1, d2, d3, d4);
-        return R.ok(result(total, "清空凭证 " + total + " 条"));
+    public R<Map<String, Object>> clearVouchers(
+            @RequestParam(value = "confirm", required = false) String confirm,
+            @RequestParam(value = "enterpriseId", required = false) Long enterpriseId) {
+        return R.ok(result(systemClearService.clearVouchers(confirm, enterpriseId)));
     }
 
-    @Operation(summary = "清空报表数据")
+    @Operation(summary = "清空报表数据（需 confirm=CLEAR_REPORT_DATA，按企业隔离）")
     @PostMapping("/clear-report-data")
     @PreAuthorize("hasAuthority('system:clear')")
-    @Transactional(rollbackFor = Exception.class)
-    public R<Map<String, Object>> clearReportData() {
-        int d1 = jdbcTemplate.update("DELETE FROM t_subject_balance");
-        int d2 = jdbcTemplate.update("DELETE FROM t_voucher_cash_flow");
-        int total = d1 + d2;
-        log.info("清空报表数据: subject_balance={}, cash_flow={}", d1, d2);
-        return R.ok(result(total, "清空报表数据 " + total + " 条"));
+    public R<Map<String, Object>> clearReportData(
+            @RequestParam(value = "confirm", required = false) String confirm,
+            @RequestParam(value = "enterpriseId", required = false) Long enterpriseId) {
+        return R.ok(result(systemClearService.clearReportData(confirm, enterpriseId)));
     }
 
-    @Operation(summary = "报表数据统计")
+    @Operation(summary = "报表数据统计（只读）")
     @GetMapping("/report-data-stats")
     public R<Long> reportDataStats() {
         Long balance = jdbcTemplate.queryForObject(
@@ -92,97 +95,48 @@ public class SystemClearController {
         return R.ok(total);
     }
 
-    @Operation(summary = "清空业务单据")
+    @Operation(summary = "清空业务单据（需 confirm=CLEAR_BUSINESS_DOCS，按企业隔离）")
     @PostMapping("/clear-business-docs")
     @PreAuthorize("hasAuthority('system:clear')")
-    @Transactional(rollbackFor = Exception.class)
-    public R<Map<String, Object>> clearBusinessDocs() {
-        // 先清理引用业务单据的外键行（fk_settle_entry_doc / fk_aging_alert_doc 无级联删除）
-        int d1 = jdbcTemplate.update("DELETE FROM t_arap_settlement_entry");
-        int d2 = jdbcTemplate.update("DELETE FROM t_arap_settlement");
-        int d3 = jdbcTemplate.update("DELETE FROM t_reconciliation_log");
-        int d4 = jdbcTemplate.update("DELETE FROM t_aging_alert");
-        // 保留银行流水/凭证：解绑 business_doc_id 引用而非删除记录
-        int d5 = jdbcTemplate.update("UPDATE t_bank_journal SET business_doc_id = NULL WHERE business_doc_id IS NOT NULL");
-        int d6 = jdbcTemplate.update("UPDATE t_voucher SET business_doc_id = NULL WHERE business_doc_id IS NOT NULL");
-        int d7 = jdbcTemplate.update("DELETE FROM t_business_doc_entry");
-        int d8 = jdbcTemplate.update("DELETE FROM t_business_doc");
-        int total = d1 + d2 + d3 + d4 + d5 + d6 + d7 + d8;
-        log.info("清空业务单据: settlement_entry={}, settlement={}, recon_log={}, aging_alert={}, bank_journal_unlink={}, voucher_unlink={}, doc_entry={}, doc={}",
-                d1, d2, d3, d4, d5, d6, d7, d8);
-        return R.ok(result(total, "清空业务单据 " + total + " 条"));
+    public R<Map<String, Object>> clearBusinessDocs(
+            @RequestParam(value = "confirm", required = false) String confirm,
+            @RequestParam(value = "enterpriseId", required = false) Long enterpriseId) {
+        return R.ok(result(systemClearService.clearBusinessDocs(confirm, enterpriseId)));
     }
 
-    @Operation(summary = "清空应收相关数据（业务单据+票据+核销）")
+    @Operation(summary = "清空应收相关数据（需 confirm=CLEAR_RECEIVABLES，按企业隔离）")
     @PostMapping("/clear-receivables")
     @PreAuthorize("hasAuthority('system:clear')")
-    @Transactional(rollbackFor = Exception.class)
-    public R<Map<String, Object>> clearReceivables() {
-        int d1 = jdbcTemplate.update("DELETE FROM t_arap_settlement_entry");
-        int d2 = jdbcTemplate.update("DELETE FROM t_arap_settlement");
-        int d3 = jdbcTemplate.update("DELETE FROM t_reconciliation_log");
-        int d4 = jdbcTemplate.update("DELETE FROM t_note_receivable");
-        int d5 = jdbcTemplate.update("DELETE FROM t_business_doc_entry");
-        int d6 = jdbcTemplate.update("DELETE FROM t_business_doc");
-        int total = d1 + d2 + d3 + d4 + d5 + d6;
-        log.info("清空应收: settlement_entry={}, settlement={}, recon_log={}, note_receivable={}, doc_entry={}, doc={}",
-                d1, d2, d3, d4, d5, d6);
-        return R.ok(result(total, "清空应收相关数据 " + total + " 条"));
+    public R<Map<String, Object>> clearReceivables(
+            @RequestParam(value = "confirm", required = false) String confirm,
+            @RequestParam(value = "enterpriseId", required = false) Long enterpriseId) {
+        return R.ok(result(systemClearService.clearReceivables(confirm, enterpriseId)));
     }
 
-    @Operation(summary = "清空应付相关数据（业务单据+核销）")
+    @Operation(summary = "清空应付相关数据（需 confirm=CLEAR_PAYABLES，按企业隔离）")
     @PostMapping("/clear-payables")
     @PreAuthorize("hasAuthority('system:clear')")
-    @Transactional(rollbackFor = Exception.class)
-    public R<Map<String, Object>> clearPayables() {
-        int d1 = jdbcTemplate.update("DELETE FROM t_arap_settlement_entry");
-        int d2 = jdbcTemplate.update("DELETE FROM t_arap_settlement");
-        int d3 = jdbcTemplate.update("DELETE FROM t_reconciliation_log");
-        int d4 = jdbcTemplate.update("DELETE FROM t_business_doc_entry");
-        int d5 = jdbcTemplate.update("DELETE FROM t_business_doc");
-        int total = d1 + d2 + d3 + d4 + d5;
-        log.info("清空应付: settlement_entry={}, settlement={}, recon_log={}, doc_entry={}, doc={}",
-                d1, d2, d3, d4, d5);
-        return R.ok(result(total, "清空应付相关数据 " + total + " 条"));
+    public R<Map<String, Object>> clearPayables(
+            @RequestParam(value = "confirm", required = false) String confirm,
+            @RequestParam(value = "enterpriseId", required = false) Long enterpriseId) {
+        return R.ok(result(systemClearService.clearPayables(confirm, enterpriseId)));
     }
 
-    @Operation(summary = "清空核销数据")
+    @Operation(summary = "清空核销数据（需 confirm=CLEAR_SETTLEMENTS，按企业隔离）")
     @PostMapping("/clear-settlements")
     @PreAuthorize("hasAuthority('system:clear')")
-    @Transactional(rollbackFor = Exception.class)
-    public R<Map<String, Object>> clearSettlements() {
-        int d1 = jdbcTemplate.update("DELETE FROM t_arap_settlement_entry");
-        int d2 = jdbcTemplate.update("DELETE FROM t_arap_settlement");
-        int d3 = jdbcTemplate.update("DELETE FROM t_reconciliation_log");
-        // 重置业务单据核销金额：未核销金额恢复为单据金额
-        int d4 = jdbcTemplate.update(
-                "UPDATE t_business_doc SET settled_amount = 0, unsettled_amount = amount WHERE settled_amount != 0 OR unsettled_amount != amount");
-        int total = d1 + d2 + d3 + d4;
-        log.info("清空核销数据: entries={}, settlements={}, recon_logs={}, docs_reset={}", d1, d2, d3, d4);
-        return R.ok(result(total, "清空核销数据 " + total + " 条"));
+    public R<Map<String, Object>> clearSettlements(
+            @RequestParam(value = "confirm", required = false) String confirm,
+            @RequestParam(value = "enterpriseId", required = false) Long enterpriseId) {
+        return R.ok(result(systemClearService.clearSettlements(confirm, enterpriseId)));
     }
 
-    @Operation(summary = "清空全部数据")
+    @Operation(summary = "清空全部数据（需 confirm=CLEAR_ALL，按企业隔离）")
     @PostMapping("/clear-all")
     @PreAuthorize("hasAuthority('system:clear')")
-    @Transactional(rollbackFor = Exception.class)
-    public R<Map<String, Object>> clearAll() {
-        int total = 0;
-        total += jdbcTemplate.update("DELETE FROM t_arap_settlement_entry");
-        total += jdbcTemplate.update("DELETE FROM t_arap_settlement");
-        total += jdbcTemplate.update("DELETE FROM t_reconciliation_log");
-        total += jdbcTemplate.update("DELETE FROM t_note_receivable");
-        total += jdbcTemplate.update("DELETE FROM t_business_doc_entry");
-        total += jdbcTemplate.update("DELETE FROM t_business_doc");
-        total += jdbcTemplate.update("DELETE FROM t_voucher_entry");
-        total += jdbcTemplate.update("DELETE FROM t_voucher");
-        // 同步清运行期报表数据, 避免 clear-all 后报表残留
-        total += jdbcTemplate.update("DELETE FROM t_subject_balance");
-        total += jdbcTemplate.update("DELETE FROM t_voucher_cash_flow");
-        total += jdbcTemplate.update("DELETE FROM t_input_invoice");
-        total += jdbcTemplate.update("DELETE FROM t_output_invoice");
-        total += jdbcTemplate.update("DELETE FROM t_bank_statement");
-        log.info("清空全部数据: total={}", total);
-        return R.ok(result(total, "清空全部数据 " + total + " 条"));
+    public R<Map<String, Object>> clearAll(
+            @RequestParam(value = "confirm", required = false) String confirm,
+            @RequestParam(value = "enterpriseId", required = false) Long enterpriseId) {
+        return R.ok(result(systemClearService.clearAll(confirm, enterpriseId)));
     }
 }

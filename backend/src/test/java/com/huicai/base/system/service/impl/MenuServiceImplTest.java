@@ -89,14 +89,87 @@ class MenuServiceImplTest {
     }
 
     @Test
-    void getRoutesByUserId_只收MENU_排除BUTTON与DIR() {
+    void getRoutesByUserId_DIR作骨架收入_BUTTON仍排除() {
+        // 翻面（V1.117）：DIR 是 buildTree 的内部骨架，滤掉则 MENU 行 parentId≠null
+        // 无根可挂（实库顶层 8 行全是 DIR ⇒ 任何角色路由恒空）。BUTTON 仍排除。
         when(userRoleMapper.getRoleIdsByUserId(1L)).thenReturn(List.of(1L));
         when(roleMenuMapper.getMenuIdsByRoleId(1L)).thenReturn(List.of(1L, 2L, 3L));
+        MenuEntity menu = stubEntity("MENU");
+        MenuEntity dir = stubEntity("DIR");
         when(menuMapper.selectBatchIds(Set.of(1L, 2L, 3L))).thenReturn(List.of(
-                stubEntity("MENU"), stubEntity("BUTTON"), stubEntity("DIR")));
+                menu, stubEntity("BUTTON"), dir));
         List<MenuEntity> result = service.getRoutesByUserId(1L);
-        assertEquals(1, result.size(), "仅 MENU 应进路由，BUTTON/DIR 必须被过滤");
-        assertEquals("MENU", result.get(0).getType());
+        assertEquals(2, result.size(), "MENU 与 DIR（骨架）应进路由树，仅 BUTTON 排除");
+        assertTrue(result.stream().anyMatch(m -> "DIR".equals(m.getType())));
+        assertTrue(result.stream().noneMatch(m -> "BUTTON".equals(m.getType())));
+    }
+
+    @Test
+    void getRoutesByUserId_只授子不授父_逐级回填DIR祖先() {
+        // V1.117 核心守卫：授权行只有子 MENU(51)，父 DIR(5) 不在 selectBatchIds 结果里
+        // ⇒ 必须经 selectById 逐级回填，树以 DIR 为根、MENU 挂其 children。
+        // 反证：撤实现里的回填块 ⇒ 本例恰红（结果空列表）。
+        when(userRoleMapper.getRoleIdsByUserId(1L)).thenReturn(List.of(1L));
+        when(roleMenuMapper.getMenuIdsByRoleId(1L)).thenReturn(List.of(51L));
+        MenuEntity child = stubEntity("MENU");
+        child.setId(51L);
+        child.setParentId(5L);
+        when(menuMapper.selectBatchIds(Set.of(51L))).thenReturn(List.of(child));
+        MenuEntity parent = stubEntity("DIR");
+        parent.setId(5L);
+        parent.setParentId(null);
+        when(menuMapper.selectById(5L)).thenReturn(parent);
+
+        List<MenuEntity> result = service.getRoutesByUserId(1L);
+        assertEquals(1, result.size(), "回填父 DIR 后应以 DIR 为唯一根");
+        assertEquals("DIR", result.get(0).getType());
+        assertEquals(1, result.get(0).getChildren().size(), "子 MENU 应挂在回填 DIR 的 children");
+        assertEquals(51L, result.get(0).getChildren().get(0).getId());
+    }
+
+    @Test
+    void getRoutesByUserId_祖先链多级缺失_回填到根() {
+        // 两级缺失：MENU(51, parent=5) → DIR(5, parent=2) → DIR(2, parent=null)
+        // 回填必须逐级向上直到 parentId=null 的根，缺一级树就断一层。
+        when(userRoleMapper.getRoleIdsByUserId(1L)).thenReturn(List.of(1L));
+        when(roleMenuMapper.getMenuIdsByRoleId(1L)).thenReturn(List.of(51L));
+        MenuEntity child = stubEntity("MENU");
+        child.setId(51L);
+        child.setParentId(5L);
+        when(menuMapper.selectBatchIds(Set.of(51L))).thenReturn(List.of(child));
+        MenuEntity mid = stubEntity("DIR");
+        mid.setId(5L);
+        mid.setParentId(2L);
+        when(menuMapper.selectById(5L)).thenReturn(mid);
+        MenuEntity root = stubEntity("DIR");
+        root.setId(2L);
+        root.setParentId(null);
+        when(menuMapper.selectById(2L)).thenReturn(root);
+
+        List<MenuEntity> result = service.getRoutesByUserId(1L);
+        assertEquals(1, result.size(), "回填链应到达 parentId=null 的根");
+        assertEquals(2L, result.get(0).getId(), "根是祖父 DIR(2)");
+        assertEquals(1, result.get(0).getChildren().size());
+        assertEquals(5L, result.get(0).getChildren().get(0).getId(), "第二层是 DIR(5)");
+        assertEquals(51L, result.get(0).getChildren().get(0).getChildren().get(0).getId(),
+                "第三层是原始授权的 MENU(51)");
+    }
+
+    @Test
+    void getRoutesByUserId_祖先停用或不存在_静默跳过不炸() {
+        // 负向：父行已删（selectById null）或停用——回填宽容处理，子行仍以平铺根出现，
+        // 不能 NPE 也不能丢掉已授权的 MENU 行。
+        when(userRoleMapper.getRoleIdsByUserId(1L)).thenReturn(List.of(1L));
+        when(roleMenuMapper.getMenuIdsByRoleId(1L)).thenReturn(List.of(51L));
+        MenuEntity child = stubEntity("MENU");
+        child.setId(51L);
+        child.setParentId(5L);
+        when(menuMapper.selectBatchIds(Set.of(51L))).thenReturn(List.of(child));
+        when(menuMapper.selectById(5L)).thenReturn(null);
+
+        List<MenuEntity> result = service.getRoutesByUserId(1L);
+        assertEquals(1, result.size(), "父缺失不吞掉已授权的子 MENU 行");
+        assertEquals(51L, result.get(0).getId());
     }
 
     @Test

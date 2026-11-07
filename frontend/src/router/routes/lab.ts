@@ -49,14 +49,6 @@ const routes: RouteRecordRaw[] = [
     meta: { title: '杜邦分析', keepAlive: true },
   },
 
-  // ─── 工资薪酬（待建）───
-  {
-    path: 'salary',
-    name: 'SalaryList',
-    component: () => import('@/views/salary/SalaryList.vue'),
-    meta: { title: '工资薪酬', keepAlive: true },
-  },
-
   // ─── AI 能力（内嵌业务页，保留路由供直链）───
   {
     path: 'ai/task',

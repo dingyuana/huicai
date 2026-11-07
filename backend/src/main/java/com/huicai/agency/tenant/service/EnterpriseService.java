@@ -23,4 +23,14 @@ public interface EnterpriseService {
     void delete(Long id);
     void bind(Long enterpriseId, Long agencyId);
     void unbind(Long enterpriseId, Long agencyId);
+
+    /**
+     * P142 修复：获取企业当前期间信息（含 earliestUnclosedPeriod）。
+     * 必须在事务内执行——{@code EnterpriseDataPermissionInterceptor} 依赖
+     * {@code TransactionSynchronizationManager.isActualTransactionActive()} 来决定
+     * 是否注入 {@code app.enterprise_id} GUC；无事务时 GUC 为 null，RLS 谓词
+     * {@code enterprise_id = NULLIF(current_setting(...), '')::bigint} 恒 false ⇒
+     * 所有租户表查询返回 0 行，{@code earliestUnclosedPeriod} 恒 null。
+     */
+    com.huicai.agency.tenant.vo.CurrentPeriodVO getCurrentPeriodInfo(Long enterpriseId);
 }

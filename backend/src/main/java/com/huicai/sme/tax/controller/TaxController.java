@@ -13,6 +13,10 @@ import com.huicai.sme.tax.dto.vo.AppendixIIResponse;
 import com.huicai.sme.tax.dto.vo.TaxBurdenVO;
 import com.huicai.sme.tax.dto.OutputInvoiceBatchDTO;
 import com.huicai.sme.tax.dto.TaxTypeSaveDTO;
+import com.huicai.sme.tax.dto.vo.TaxTypeVO;
+import com.huicai.sme.tax.dto.vo.InputInvoiceVO;
+import com.huicai.sme.tax.dto.vo.OutputInvoiceVO;
+import com.huicai.sme.tax.dto.vo.TaxDeclarationVO;
 import com.huicai.sme.tax.entity.TaxDeclarationEntity;
 import com.huicai.sme.tax.entity.TaxTypeEntity;
 import com.huicai.sme.tax.service.InputInvoiceStateMachineService;
@@ -42,31 +46,35 @@ public class TaxController {
     // ========== 税种管理 ==========
     @Operation(summary = "税种分页查询")
     @GetMapping("/types/page")
-    public R<IPage<TaxTypeEntity>> pageQueryTaxType(
+    public R<IPage<TaxTypeVO>> pageQueryTaxType(
             @RequestParam(required = false) String keyword,
             @RequestParam(defaultValue = "1") Integer current,
             @RequestParam(defaultValue = "20") Integer size) {
-        return R.ok(service.pageQueryTaxType(keyword, current, size));
+        IPage<TaxTypeEntity> tp = service.pageQueryTaxType(keyword, current, size);
+        return R.ok(tp == null ? null : tp.convert(TaxTypeVO::from));
     }
 
     @Operation(summary = "查询全部税种")
     @GetMapping("/types/list")
-    public R<List<TaxTypeEntity>> listTaxTypes() {
-        return R.ok(service.listAllTaxTypes());
+    public R<List<TaxTypeVO>> listTaxTypes() {
+        List<TaxTypeEntity> tts = service.listAllTaxTypes();
+        return R.ok(tts == null ? null : tts.stream().map(TaxTypeVO::from).collect(java.util.stream.Collectors.toList()));
     }
 
     @Operation(summary = "创建税种")
     @PostMapping("/types")
-    public R<TaxTypeEntity> createTaxType(@Valid @RequestBody TaxTypeSaveDTO dto) {
-        return R.ok(service.createTaxType(dto.toEntity()));
+    public R<TaxTypeVO> createTaxType(@Valid @RequestBody TaxTypeSaveDTO dto) {
+        TaxTypeEntity tte = service.createTaxType(dto.toEntity());
+        return R.ok(tte == null ? null : TaxTypeVO.from(tte));
     }
 
     @Operation(summary = "更新税种")
     @PutMapping("/types/{id}")
-    public R<TaxTypeEntity> updateTaxType(@PathVariable Long id, @Valid @RequestBody TaxTypeSaveDTO dto) {
+    public R<TaxTypeVO> updateTaxType(@PathVariable Long id, @Valid @RequestBody TaxTypeSaveDTO dto) {
         TaxTypeEntity entity = dto.toEntity();
         entity.setId(id);
-        return R.ok(service.updateTaxType(entity));
+        TaxTypeEntity ute = service.updateTaxType(entity);
+        return R.ok(ute == null ? null : TaxTypeVO.from(ute));
     }
 
     @Operation(summary = "删除税种")
@@ -79,7 +87,7 @@ public class TaxController {
     // ========== 进项发票 ==========
     @Operation(summary = "进项发票分页")
     @GetMapping("/input-invoices/page")
-    public R<IPage<InputInvoiceEntity>> pageInput(
+    public R<IPage<InputInvoiceVO>> pageInput(
             @RequestParam(required = false) String vendorName,
             @RequestParam(required = false) String period,
             @RequestParam(required = false) String certStatus,
@@ -88,20 +96,23 @@ public class TaxController {
             @RequestParam(required = false) LocalDate endDate,
             @RequestParam(defaultValue = "1") Integer current,
             @RequestParam(defaultValue = "20") Integer size) {
-        return R.ok(service.pageQueryInput(vendorName, period, certStatus, scope, startDate, endDate, current, size));
+        IPage<InputInvoiceEntity> ip = service.pageQueryInput(vendorName, period, certStatus, scope, startDate, endDate, current, size);
+        return R.ok(ip == null ? null : ip.convert(InputInvoiceVO::from));
     }
 
     @Operation(summary = "创建进项发票")
     @PostMapping("/input-invoices")
-    public R<InputInvoiceEntity> createInput(@Valid @RequestBody InputInvoiceCreateDTO dto) {
-        return R.ok(service.createInput(dto.toEntity()));
+    public R<InputInvoiceVO> createInput(@Valid @RequestBody InputInvoiceCreateDTO dto) {
+        InputInvoiceEntity iie = service.createInput(dto.toEntity());
+        return R.ok(iie == null ? null : InputInvoiceVO.from(iie));
     }
 
     @Operation(summary = "认证进项发票")
     @PostMapping("/input-invoices/{id}/certify")
-    public R<InputInvoiceEntity> certify(@PathVariable Long id,
+    public R<InputInvoiceVO> certify(@PathVariable Long id,
                                           @RequestParam(required = false) String deductionPeriod) {
-        return R.ok(service.certify(id, deductionPeriod));
+        InputInvoiceEntity ice = service.certify(id, deductionPeriod);
+        return R.ok(ice == null ? null : InputInvoiceVO.from(ice));
     }
 
     @Operation(summary = "进项汇总")
@@ -171,7 +182,7 @@ public class TaxController {
     // ========== 销项发票 ==========
     @Operation(summary = "销项发票分页")
     @GetMapping("/output-invoices/page")
-    public R<IPage<OutputInvoiceEntity>> pageOutput(
+    public R<IPage<OutputInvoiceVO>> pageOutput(
             @RequestParam(required = false) String customerName,
             @RequestParam(required = false) String period,
             @RequestParam(required = false) String status,
@@ -181,19 +192,22 @@ public class TaxController {
             @RequestParam(required = false) @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE) LocalDate endDate,
             @RequestParam(defaultValue = "1") Integer current,
             @RequestParam(defaultValue = "20") Integer size) {
-        return R.ok(service.pageQueryOutput(customerName, period, status, invoiceType, scope, startDate, endDate, current, size));
+        IPage<OutputInvoiceEntity> op = service.pageQueryOutput(customerName, period, status, invoiceType, scope, startDate, endDate, current, size);
+        return R.ok(op == null ? null : op.convert(OutputInvoiceVO::from));
     }
 
     @Operation(summary = "销项发票详情")
     @GetMapping("/output-invoices/{id}")
-    public R<OutputInvoiceEntity> getOutput(@PathVariable Long id) {
-        return R.ok(service.getOutputById(id));
+    public R<OutputInvoiceVO> getOutput(@PathVariable Long id) {
+        OutputInvoiceEntity oge = service.getOutputById(id);
+        return R.ok(oge == null ? null : OutputInvoiceVO.from(oge));
     }
 
     @Operation(summary = "创建销项发票（入参 DTO，不接受 status —— 人工审核链不可跳过）")
     @PostMapping("/output-invoices")
-    public R<OutputInvoiceEntity> createOutput(@Valid @RequestBody OutputInvoiceCreateDTO dto) {
-        return R.ok(service.createOutput(dto));
+    public R<OutputInvoiceVO> createOutput(@Valid @RequestBody OutputInvoiceCreateDTO dto) {
+        OutputInvoiceEntity oce = service.createOutput(dto);
+        return R.ok(oce == null ? null : OutputInvoiceVO.from(oce));
     }
 
     @Operation(summary = "删除销项发票（逻辑删除）")
@@ -325,40 +339,45 @@ public class TaxController {
     // ========== 申报 ==========
     @Operation(summary = "申报分页")
     @GetMapping("/declarations/page")
-    public R<IPage<TaxDeclarationEntity>> pageDeclaration(
+    public R<IPage<TaxDeclarationVO>> pageDeclaration(
             @RequestParam(required = false) String status,
             @RequestParam(defaultValue = "1") Integer current,
             @RequestParam(defaultValue = "20") Integer size) {
-        return R.ok(service.pageQueryDeclaration(status, current, size));
+        IPage<TaxDeclarationEntity> dp = service.pageQueryDeclaration(status, current, size);
+        return R.ok(dp == null ? null : dp.convert(TaxDeclarationVO::from));
     }
 
     @Operation(summary = "创建申报")
     @PostMapping("/declarations")
-    public R<TaxDeclarationEntity> createDeclaration(@Valid @RequestBody TaxDeclarationCreateDTO dto) {
-        return R.ok(service.createDeclaration(dto));
+    public R<TaxDeclarationVO> createDeclaration(@Valid @RequestBody TaxDeclarationCreateDTO dto) {
+        TaxDeclarationEntity dce = service.createDeclaration(dto);
+        return R.ok(dce == null ? null : TaxDeclarationVO.from(dce));
     }
 
     @Operation(summary = "提交申报")
     @PostMapping("/declarations/{id}/submit")
-    public R<TaxDeclarationEntity> submitDeclaration(@PathVariable Long id) {
-        return R.ok(service.submitDeclaration(id));
+    public R<TaxDeclarationVO> submitDeclaration(@PathVariable Long id) {
+        TaxDeclarationEntity dse = service.submitDeclaration(id);
+        return R.ok(dse == null ? null : TaxDeclarationVO.from(dse));
     }
 
     @Operation(summary = "P18-1 申报审批通过 (SUBMITTED → APPROVED)")
     @PostMapping("/declarations/{id}/approve")
-    public R<TaxDeclarationEntity> approveDeclaration(
+    public R<TaxDeclarationVO> approveDeclaration(
             @PathVariable Long id,
             @RequestParam(required = false) String approver) {
-        return R.ok(service.approveDeclaration(id, approver));
+        TaxDeclarationEntity dae = service.approveDeclaration(id, approver);
+        return R.ok(dae == null ? null : TaxDeclarationVO.from(dae));
     }
 
     @Operation(summary = "P18-1 申报驳回 (SUBMITTED → REJECTED, reason 必填)")
     @PostMapping("/declarations/{id}/reject")
-    public R<TaxDeclarationEntity> rejectDeclaration(
+    public R<TaxDeclarationVO> rejectDeclaration(
             @PathVariable Long id,
             @RequestParam String reason,
             @RequestParam(required = false) String approver) {
-        return R.ok(service.rejectDeclaration(id, approver, reason));
+        TaxDeclarationEntity dre = service.rejectDeclaration(id, approver, reason);
+        return R.ok(dre == null ? null : TaxDeclarationVO.from(dre));
     }
 
     @Operation(summary = "批量合并生成凭证（多张销项发票→一张凭证）")

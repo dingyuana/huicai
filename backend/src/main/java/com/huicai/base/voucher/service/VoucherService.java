@@ -5,6 +5,7 @@ import com.huicai.base.voucher.dto.VoucherCreateDTO;
 import com.huicai.base.voucher.dto.VoucherQueryDTO;
 import com.huicai.base.voucher.dto.VoucherTemplateVO;
 import com.huicai.base.voucher.dto.VoucherVO;
+import com.huicai.base.voucher.dto.VoucherPostResultVO;
 
 import java.io.InputStream;
 import java.util.List;
@@ -61,8 +62,11 @@ public interface VoucherService {
 
     /**
      * 记账凭证 (AUDITED → POSTED).
+     *
+     * <p>P142（D-7A）：返回过账结果 VO，携带预算提示（WARN/REQUIRE_APPROVE）；
+     * BLOCK 超额仍以 BusinessException 拒绝。
      */
-    void post(Long id, Long userId);
+    VoucherPostResultVO post(Long id, Long userId);
 
     /**
      * 结账凭证 (POSTED → CLOSED).

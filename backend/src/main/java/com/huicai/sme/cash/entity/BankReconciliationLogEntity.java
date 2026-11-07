@@ -32,7 +32,11 @@ public class BankReconciliationLogEntity extends BaseEntity {
     private String operator;
     private String remark;
 
-    private Long enterpriseId;
+    // 🔴 SPEC-P153：此处曾有 `private Long enterpriseId;` —— Lombok 字段遮蔽了
+    // BaseEntity 带 fill 的同名字段，MP 按子类裸字段建模 ⇒ INSERT 漏
+    // enterprise_id 列 ⇒ 落 NULL（本表无 DB 默认值）⇒ RLS 谓词恒假
+    // ⇒ 对账确认日志「写成功但永远查不到」（生产 0 行与此一致）。
+    // 租户列一律由 BaseEntity 提供，子类不得重复声明。
 
     @TableField(fill = FieldFill.INSERT)
     private LocalDateTime createdAt;

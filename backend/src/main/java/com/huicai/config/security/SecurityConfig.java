@@ -82,7 +82,9 @@ public class SecurityConfig {
                         .requestMatchers(
                                 "/api/v1/auth/login",
                                 "/api/v1/auth/refresh",
-                                "/api/v1/auth/test-password",
+                                // SPEC-P152：前端错误上报允许匿名（登录页的报错也要能捕捉）；
+                                // 防滥用靠 ClientLogController 的截断 + IP 限流，见该类注释。
+                                "/api/v1/system/audit-log/client",
                                 "/api/v1/system/health",
                                 "/actuator/health",
                                 "/doc.html",

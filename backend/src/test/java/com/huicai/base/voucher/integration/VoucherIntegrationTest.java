@@ -11,6 +11,7 @@ import com.huicai.base.system.entity.PeriodEntity;
 import com.huicai.base.system.mapper.SubjectMapper;
 import com.huicai.base.system.mapper.PeriodMapper;
 import com.huicai.base.balance.service.SubjectBalanceService;
+import com.huicai.base.balance.entity.SubjectBalanceEntity;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -244,6 +245,63 @@ public class VoucherIntegrationTest extends AbstractMapperTest {
         voucherService.unpost(id, USER_ID);
         VoucherVO unposted = voucherService.getDetail(id);
         assertEquals("AUDITED", unposted.getStatus(), "反过账后状态应回到 AUDITED");
+    }
+
+    /**
+     * 🔴 反记账缺口回归锁（2026-10-30）：
+     * {@code VoucherServiceImpl#unpost} 此前只回退状态，未对称回减科目余额——
+     * post 时 {@code updateBalanceOnPost} 已把发生额写进 t_subject_balance，
+     * unpost 后不回减 ⇒ 反过账→重新记账会**双重累加**，且反过账状态下查余额虚增。
+     * 修法：SubjectBalanceService 新增 updateBalanceOnUnpost（对称减法）并接入 unpost。
+     */
+    @Test
+    @DisplayName("反过账: 科目余额对称回减")
+    void unpost_shouldReverseSubjectBalance() {
+        VoucherCreateDTO dto = new VoucherCreateDTO();
+        dto.setPeriod(TEST_PERIOD);
+        dto.setVoucherTypeId(VOUCHER_TYPE_ID);
+        dto.setSummary("反过账余额回减测试");
+        VoucherCreateDTO.EntryDTO entry1 = new VoucherCreateDTO.EntryDTO();
+        entry1.setSubjectId(debitSubjectId);
+        entry1.setDebit(new BigDecimal("300.00"));
+        entry1.setCredit(BigDecimal.ZERO);
+        VoucherCreateDTO.EntryDTO entry2 = new VoucherCreateDTO.EntryDTO();
+        entry2.setSubjectId(creditSubjectId);
+        entry2.setDebit(BigDecimal.ZERO);
+        entry2.setCredit(new BigDecimal("300.00"));
+        dto.setEntries(List.of(entry1, entry2));
+
+        VoucherVO created = voucherService.create(dto, USER_ID);
+        Long id = created.getId();
+
+        voucherService.submit(id, USER_ID);
+        voucherService.audit(id, AUDITOR_ID);
+        voucherService.post(id, USER_ID);
+
+        // 自证前提：过账后余额已累加
+        SubjectBalanceEntity debitAfterPost = balanceOf(debitSubjectId);
+        assertEquals(0, new BigDecimal("300.00").compareTo(debitAfterPost.getDebitTotal()), "过账后借方科目发生额=300");
+        assertEquals(0, new BigDecimal("300.00").compareTo(debitAfterPost.getEndBalance()), "过账后借方科目期末=300");
+        SubjectBalanceEntity creditAfterPost = balanceOf(creditSubjectId);
+        assertEquals(0, new BigDecimal("300.00").compareTo(creditAfterPost.getCreditTotal()), "过账后贷方科目发生额=300");
+        assertEquals(0, new BigDecimal("300.00").compareTo(creditAfterPost.getEndBalance()), "过账后贷方科目期末=300");
+
+        voucherService.unpost(id, USER_ID);
+
+        // 反过账后必须回到过账前口径（本用例期初为 0）
+        SubjectBalanceEntity debitAfterUnpost = balanceOf(debitSubjectId);
+        assertEquals(0, BigDecimal.ZERO.compareTo(debitAfterUnpost.getDebitTotal()), "反过账后借方科目发生额应回减为 0");
+        assertEquals(0, BigDecimal.ZERO.compareTo(debitAfterUnpost.getEndBalance()), "反过账后借方科目期末应回到 0");
+        SubjectBalanceEntity creditAfterUnpost = balanceOf(creditSubjectId);
+        assertEquals(0, BigDecimal.ZERO.compareTo(creditAfterUnpost.getCreditTotal()), "反过账后贷方科目发生额应回减为 0");
+        assertEquals(0, BigDecimal.ZERO.compareTo(creditAfterUnpost.getEndBalance()), "反过账后贷方科目期末应回到 0");
+    }
+
+    private SubjectBalanceEntity balanceOf(Long subjectId) {
+        return subjectBalanceService.queryByPeriod(TEST_PERIOD).stream()
+                .filter(b -> subjectId.equals(b.getSubjectId()))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("科目余额行不存在: subjectId=" + subjectId));
     }
 
     @Test

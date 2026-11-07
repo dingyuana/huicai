@@ -4,6 +4,7 @@ import com.huicai.agency.tenant.entity.EnterpriseEntity;
 import com.huicai.agency.tenant.mapper.AgencyEnterpriseMapper;
 import com.huicai.agency.tenant.mapper.EnterpriseMapper;
 import com.huicai.agency.tenant.service.EnterpriseService;
+import com.huicai.agency.tenant.vo.CurrentPeriodVO;
 import com.huicai.agency.user.entity.AgencyUserEntity;
 import com.huicai.agency.user.mapper.AgencyUserEnterpriseMapper;
 import com.huicai.agency.user.mapper.AgencyUserMapper;
@@ -360,10 +361,15 @@ class EnterpriseControllerTest {
         enterprise.setId(1L);
         enterprise.setDeleted(0);
         enterprise.setStartPeriod("202401");
-        when(enterpriseMapper.selectById(1L)).thenReturn(enterprise);
-        when(enterpriseMapper.selectLatestPeriodWithData(1L)).thenReturn("202403");
-        when(enterpriseMapper.selectEarliestUnclosedPeriod(1L)).thenReturn("202402");
-        when(enterpriseMapper.selectLatestClosedPeriod(1L)).thenReturn("202403");
+        when(enterpriseService.getCurrentPeriodInfo(1L)).thenAnswer(invocation -> {
+            CurrentPeriodVO vo = new CurrentPeriodVO();
+            vo.setCurrentPeriod("202403");
+            vo.setStartPeriod("202401");
+            vo.setHasDataPeriod("202403");
+            vo.setEarliestUnclosedPeriod("202402");
+            vo.setLatestClosedPeriod("202403");
+            return vo;
+        });
 
         mvc.perform(get("/api/v1/enterprise/current-period")
                         .header("Authorization", "Bearer " + TOKEN_ADMIN))
@@ -392,10 +398,13 @@ class EnterpriseControllerTest {
         enterprise.setId(1L);
         enterprise.setDeleted(0);
         enterprise.setStartPeriod("202401");
-        when(enterpriseMapper.selectById(1L)).thenReturn(enterprise);
-        when(enterpriseMapper.selectLatestPeriodWithData(1L)).thenReturn(null);
-        when(enterpriseMapper.selectEarliestUnclosedPeriod(1L)).thenReturn("202401");
-        when(enterpriseMapper.selectLatestClosedPeriod(1L)).thenReturn(null);
+        when(enterpriseService.getCurrentPeriodInfo(1L)).thenAnswer(invocation -> {
+            CurrentPeriodVO vo = new CurrentPeriodVO();
+            vo.setCurrentPeriod("202401");
+            vo.setStartPeriod("202401");
+            vo.setEarliestUnclosedPeriod("202401");
+            return vo;
+        });
 
         mvc.perform(get("/api/v1/enterprise/current-period")
                         .header("Authorization", "Bearer " + TOKEN_ADMIN))
@@ -420,15 +429,11 @@ class EnterpriseControllerTest {
                 .thenReturn(List.of(1L));
         EnterpriseContextHolder.set(1L);
 
-        EnterpriseEntity enterprise = new EnterpriseEntity();
-        enterprise.setId(1L);
-        enterprise.setDeleted(0);
-        enterprise.setStartPeriod(null);
-        when(enterpriseMapper.selectById(1L)).thenReturn(enterprise);
-
-        PeriodEntity latestPeriod = new PeriodEntity();
-        latestPeriod.setPeriodCode("202601");
-        when(periodMapper.selectOne(any())).thenReturn(latestPeriod);
+        when(enterpriseService.getCurrentPeriodInfo(1L)).thenAnswer(invocation -> {
+            CurrentPeriodVO vo = new CurrentPeriodVO();
+            vo.setCurrentPeriod("202601");
+            return vo;
+        });
 
         mvc.perform(get("/api/v1/enterprise/current-period")
                         .header("Authorization", "Bearer " + TOKEN_ADMIN))

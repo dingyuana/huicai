@@ -8,6 +8,7 @@ import com.huicai.base.voucher.dto.VoucherQueryDTO;
 import com.huicai.base.voucher.dto.VoucherStatusDTO;
 import com.huicai.base.voucher.dto.VoucherTemplateVO;
 import com.huicai.base.voucher.dto.VoucherVO;
+import com.huicai.base.voucher.dto.VoucherPostResultVO;
 import com.huicai.base.voucher.service.NumberingTraceService;
 import com.huicai.base.voucher.service.VoucherService;
 import com.huicai.base.system.util.SecurityUtils;
@@ -96,9 +97,8 @@ public class VoucherController {
 
     @Operation(summary = "记账")
     @PostMapping("/{id}/post")
-    public R<Void> post(@PathVariable Long id) {
-        voucherService.post(id, SecurityUtils.getCurrentUserId());
-        return R.ok();
+    public R<VoucherPostResultVO> post(@PathVariable Long id) {
+        return R.ok(voucherService.post(id, SecurityUtils.getCurrentUserId()));
     }
 
     @Operation(summary = "批量记账")

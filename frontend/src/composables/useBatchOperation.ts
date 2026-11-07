@@ -1,5 +1,7 @@
 import { ref } from 'vue'
+import { getActivePinia } from 'pinia'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { useAuthStore } from '@/stores/auth.store'
 
 /**
  * P67 批量操作统一 composable。
@@ -32,6 +34,11 @@ export interface BatchActionDef {
   confirmText?: string
   /** 单次上限，默认 100 */
   maxCount?: number
+  /**
+   * SPEC-P136：执行该动作所需权限码（与 permission-manifest.yml 一致）。
+   * 缺省 = 不做前端权限判断（向后兼容），此时仍由后端 403 兜底。
+   */
+  permission?: string
 }
 
 interface UseBatchOptions {
@@ -39,6 +46,21 @@ interface UseBatchOptions {
   refresh?: () => any
   /** 清空表格勾选的回调（tableRef.clearSelection()） */
   clearer?: () => void
+  /** SPEC-P136：权限判定，默认读 auth store（测试可注入，避免必须建 pinia） */
+  hasPermission?: (perm: string) => boolean
+}
+
+/**
+ * SPEC-P136：默认权限判定。
+ *
+ * <p>⚠️ **无 pinia 时放行**：`useBatchOperation` 只在组件内使用，生产环境 pinia
+ * 在 `main.ts` 中先于挂载安装 ⇒ 该分支只会在「纯单元测试 / 组件外调用」命中。
+ * 此时放行是刻意的 —— 真正的边界是后端 403，前端只是体验层（P133 D-4）。
+ * 有测试锁住这一行为，避免它变成无人知晓的静默放行。
+ */
+function defaultHasPermission(perm: string): boolean {
+  if (!getActivePinia()) return true
+  return useAuthStore().hasPermission(perm)
 }
 
 /**
@@ -84,6 +106,22 @@ export function useBatchOperation(options: UseBatchOptions = {}) {
   }
 
   async function run(def: BatchActionDef, executor: (ids: number[], reason: string) => Promise<any>) {
+    // SPEC-P136：权限前置校验必须**先于**任何执行动作。
+    //
+    // ⚠️ 这里刻意弹 alert 而**不抛异常**：run() 是 UI 事件处理器，抛异常只会进
+    //    下方 catch 再弹一条红字 —— 正是本次要消除的「一次点击两条报错」。
+    if (def.permission) {
+      const has = options.hasPermission ?? defaultHasPermission
+      if (!has(def.permission)) {
+        await ElMessageBox.alert(
+          `当前账号缺少「${def.label}」所需的权限（${def.permission}），请联系管理员开通。`,
+          '权限不足',
+          { type: 'warning' },
+        ).catch(() => undefined)
+        return
+      }
+    }
+
     const ids = selectedRows.value.map((r) => r.id).filter(Boolean)
     if (ids.length === 0) {
       ElMessage.warning('请先勾选记录')
@@ -131,6 +169,11 @@ export function useBatchOperation(options: UseBatchOptions = {}) {
       await options.refresh?.()
     } catch (e: any) {
       // 全有全无契约（如凭证批量接口）整批报错时走这里
+      //
+      // SPEC-P136：403 已由 request.ts 弹过对话框（权限是预期内的业务结果，
+      // 不是故障），此处**不得**再弹一次 —— 否则一次点击会出现「弹窗 + 红字」。
+      // 判据用状态码，不比中文文案（文案会随 i18n/措辞调整而失效）。
+      if (e?.response?.status === 403) return
       const msg = e?.message || '批量操作失败'
       if (msg.includes('期初建账未完成')) {
         ElMessage.error(`${msg}，请前往「基础数据-期初建账」录入期初余额`)

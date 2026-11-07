@@ -95,6 +95,54 @@ public class SubjectBalanceServiceImpl implements SubjectBalanceService {
         }
     }
 
+    /**
+     * 反过账对称回减（2026-10-30）：与 {@link #updateBalanceOnPost} 严格镜像——
+     * 发生额做减法、期末余额按科目方向重算。红冲凭证的红字分录金额为负，
+     * 减负得正自动实现「红冲反过账 = 回加」，与 P142 预算侧回加语义一致。
+     */
+    @Override
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void updateBalanceOnUnpost(VoucherEntity voucher, List<VoucherEntryEntity> entries) {
+        String period = voucher.getPeriod();
+        int year = Integer.parseInt(period.substring(0, 4));
+
+        for (VoucherEntryEntity entry : entries) {
+            Subject subject = subjectService.getById(entry.getSubjectId());
+            if (subject == null) {
+                throw BusinessException.notFound("科目不存在: " + entry.getSubjectId());
+            }
+
+            if (!Boolean.TRUE.equals(subject.getIsLeaf())) {
+                continue;
+            }
+
+            SubjectBalanceEntity balance = subjectBalanceMapper.selectOne(
+                    new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<SubjectBalanceEntity>()
+                            .eq(SubjectBalanceEntity::getSubjectId, subject.getId())
+                            .eq(SubjectBalanceEntity::getPeriod, period));
+            if (balance == null) {
+                // 余额行缺失说明过账时也从未累加过（数据不一致），反过账侧无事可做，保持幂等不建行
+                log.warn("反过账回减跳过: 余额行不存在 subjectId={}, period={}", subject.getId(), period);
+                continue;
+            }
+
+            balance.setDebitTotal(balance.getDebitTotal().subtract(entry.getDebit()));
+            balance.setCreditTotal(balance.getCreditTotal().subtract(entry.getCredit()));
+
+            BigDecimal endBalance;
+            if ("debit".equals(subject.getDirection())) {
+                endBalance = balance.getBeginBalance().add(balance.getDebitTotal()).subtract(balance.getCreditTotal());
+            } else {
+                endBalance = balance.getBeginBalance().add(balance.getCreditTotal()).subtract(balance.getDebitTotal());
+            }
+            balance.setEndBalance(endBalance);
+
+            subjectBalanceMapper.updateById(balance);
+            log.info("反过账回减科目余额: subjectId={}, period={}, debitTotal={}, creditTotal={}, endBalance={}",
+                    subject.getId(), period, balance.getDebitTotal(), balance.getCreditTotal(), endBalance);
+        }
+    }
+
     @Override
     @Transactional(rollbackFor = Exception.class)
     @Auditable(operation = "期初建账", module = "SUBJECT_BALANCE")

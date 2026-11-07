@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  SPEC-P152 日志落地：此前全项目只有 Spring Boot 默认控制台输出，容器一重启
+  堆栈即丢，「以错误日志为后期检测修复依据」没有载体。本配置补三件事：
+
+  1. 控制台保留（docker logs 实时看）；
+  2. 全量文件 logs/backend.log（INFO 及以上）——按天+大小滚动，留 30 天；
+  3. 错误专档 logs/backend-error.log——只收 WARN 里的 ERROR 级与堆栈，
+     留 90 天：修复依据要活得比常规运行日志久。
+
+  路径经 springProperty LOG_PATH 注入（默认 ./logs）；容器 compose 配
+  LOG_PATH=/app/logs 并挂载宿主 ./logs/backend，实现「容器重建日志不丢」。
+  MyBatis SQL 默认静默（log-impl 已换 Slf4jImpl，见 application.yml 注释），
+  需要时把 logback 里对应 mapper 包 logger 调 DEBUG。
+-->
+<configuration>
+    <springProperty scope="context" name="LOG_PATH" source="LOG_PATH" defaultValue="logs"/>
+
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%thread] %logger{40} - %msg%n</pattern>
+            <charset>UTF-8</charset>
+        </encoder>
+    </appender>
+
+    <!-- 全量运行日志 -->
+    <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>${LOG_PATH}/backend.log</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+            <fileNamePattern>${LOG_PATH}/backend.%d{yyyy-MM-dd}.%i.log.gz</fileNamePattern>
+            <maxFileSize>100MB</maxFileSize>
+            <maxHistory>30</maxHistory>
+            <totalSizeCap>5GB</totalSizeCap>
+        </rollingPolicy>
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%thread] %logger{40} - %msg%n</pattern>
+            <charset>UTF-8</charset>
+        </encoder>
+    </appender>
+
+    <!-- 错误专档：修复依据留更久（90 天），单独成文件方便 grep/导入 -->
+    <appender name="ERROR_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>${LOG_PATH}/backend-error.log</file>
+        <filter class="ch.qos.logback.classic.filter.ThresholdFilter">
+            <level>ERROR</level>
+        </filter>
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+            <fileNamePattern>${LOG_PATH}/backend-error.%d{yyyy-MM-dd}.%i.log.gz</fileNamePattern>
+            <maxFileSize>50MB</maxFileSize>
+            <maxHistory>90</maxHistory>
+            <totalSizeCap>2GB</totalSizeCap>
+        </rollingPolicy>
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%thread] %logger{40} - %msg%n%ex</pattern>
+            <charset>UTF-8</charset>
+        </encoder>
+    </appender>
+
+    <!-- MyBatis SQL：默认关（application.yml 已把 log-impl 从 StdOutImpl 换成 Slf4jImpl，
+         否则 SQL 绕过 logback 直刷 stdout）。需要看 SQL 时把下面 logger 改 DEBUG 即可
+         （不引入 janino 的 <if> 条件装配——本仓日志保持零额外依赖）。 -->
+    <logger name="com.huicai.base.business.mapper" level="INFO"/>
+    <logger name="com.huicai" level="INFO"/>
+
+    <root level="INFO">
+        <appender-ref ref="CONSOLE"/>
+        <appender-ref ref="FILE"/>
+        <appender-ref ref="ERROR_FILE"/>
+    </root>
+</configuration>

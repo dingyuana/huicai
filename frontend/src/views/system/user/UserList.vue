@@ -8,8 +8,8 @@
           </el-form-item>
           <el-form-item label="状态">
             <el-select v-model="query.status" placeholder="全部" clearable @change="search">
-              <el-option label="正常" value="active" />
-              <el-option label="禁用" value="inactive" />
+              <el-option label="正常" value="ACTIVE" />
+              <el-option label="禁用" value="INACTIVE" />
             </el-select>
           </el-form-item>
           <el-form-item>
@@ -30,8 +30,8 @@
         <el-table-column prop="deptName" label="部门" width="120" />
         <el-table-column prop="status" label="状态" width="80">
           <template #default="{ row }">
-            <el-tag :type="row.status === 'active' ? 'success' : 'danger'" size="small">
-              {{ row.status === 'active' ? '正常' : '禁用' }}
+            <el-tag :type="row.status === 'ACTIVE' ? 'success' : 'danger'" size="small">
+              {{ row.status === 'ACTIVE' ? '正常' : '禁用' }}
             </el-tag>
           </template>
         </el-table-column>
@@ -41,12 +41,12 @@
             <el-button text size="small" @click="openEdit(row as UserVO)">编辑</el-button>
             <el-button text size="small" @click="handleResetPwd(row as UserVO)">重置密码</el-button>
             <el-button
-              :type="(row as UserVO).status === 'active' ? 'warning' : 'success'"
+              :type="(row as UserVO).status === 'ACTIVE' ? 'warning' : 'success'"
               text
               size="small"
               @click="handleToggleStatus(row as UserVO)"
             >
-              {{ (row as UserVO).status === 'active' ? '禁用' : '启用' }}
+              {{ (row as UserVO).status === 'ACTIVE' ? '禁用' : '启用' }}
             </el-button>
             <el-popconfirm title="确认删除此用户？" @confirm="handleDelete(row as UserVO)">
               <template #reference>
@@ -90,8 +90,8 @@
         </el-form-item>
         <el-form-item label="状态">
           <el-radio-group v-model="form.status">
-            <el-radio value="active">正常</el-radio>
-            <el-radio value="inactive">禁用</el-radio>
+            <el-radio value="ACTIVE">正常</el-radio>
+            <el-radio value="INACTIVE">禁用</el-radio>
           </el-radio-group>
         </el-form-item>
         <el-form-item label="角色">
@@ -180,7 +180,7 @@ function openCreate() {
   form.email = ''
   form.phone = ''
   form.password = ''
-  form.status = 'active'
+  form.status = 'ACTIVE'
   form.roleIds = []
   dialogVisible.value = true
 }
@@ -214,18 +214,24 @@ async function handleSubmit() {
     }
     dialogVisible.value = false
     fetchData()
+  } catch (error: any) {
+    // 保留对话框打开，显示具体错误信息
+    ElMessage.error(error?.message || '操作失败，请重试')
   } finally {
     submitting.value = false
   }
 }
 
 async function handleToggleStatus(row: UserVO) {
-  const newStatus = row.status === 'active' ? 'inactive' : 'active'
+  // DB CHECK 约束只接受大写: ACTIVE / INACTIVE / LOCKED
+  const newStatus = row.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE'
   try {
     await updateUserStatus(row.id, newStatus)
-    ElMessage.success(newStatus === 'active' ? '已启用' : '已禁用')
+    ElMessage.success(newStatus === 'ACTIVE' ? '已启用' : '已禁用')
     fetchData()
-  } catch { /* ignore */ }
+  } catch (error: any) {
+    ElMessage.error(error?.message || '操作失败')
+  }
 }
 
 async function handleResetPwd(row: UserVO) {

@@ -613,14 +613,15 @@ const tableRef = ref()
 const TERMINAL_STATUSES = ['VOIDED', 'REVERSED', 'FULLY_RECONCILED']
 const rowSelectable = (row: any) => !TERMINAL_STATUSES.includes(row.status)
 
+// SPEC-P136：permission 与 permission-manifest.yml 的 batch 端点一一对应
 const BATCH_ACTIONS: BatchActionDef[] = [
-  { key: 'submitReview', label: '批量提交审核' },
-  { key: 'confirm', label: '批量审核通过' },
-  { key: 'reject', label: '批量驳回', type: 'warning', needReason: true },
-  { key: 'revert', label: '批量回退', type: 'warning' },
-  { key: 'markVouchered', label: '批量生成凭证' },
-  { key: 'void', label: '批量作废', type: 'danger', needReason: true, needConfirm: true },
-  { key: 'reverse', label: '批量红冲', type: 'danger', needReason: true, needConfirm: true },
+  { key: 'submitReview', label: '批量提交审核', permission: 'tax:output:review' },
+  { key: 'confirm', label: '批量审核通过', permission: 'tax:output:confirm' },
+  { key: 'reject', label: '批量驳回', type: 'warning', needReason: true, permission: 'tax:output:reject' },
+  { key: 'revert', label: '批量回退', type: 'warning', permission: 'tax:output:revert' },
+  { key: 'markVouchered', label: '批量生成凭证', permission: 'tax:output:vouchered' },
+  { key: 'void', label: '批量作废', type: 'danger', needReason: true, needConfirm: true, permission: 'tax:output:void' },
+  { key: 'reverse', label: '批量红冲', type: 'danger', needReason: true, needConfirm: true, permission: 'tax:output:reverse' },
 ]
 
 const BATCH_STATUS_MATRIX: Record<string, string[]> = {

@@ -1,21 +1,33 @@
 package com.huicai.common.exception;
 
 import com.huicai.common.response.R;
+import jakarta.servlet.http.HttpServletRequest;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
-import org.springframework.web.multipart.MultipartException;
 import org.springframework.web.servlet.NoHandlerFoundException;
 
 @Slf4j
 @RestControllerAdvice
+@RequiredArgsConstructor
 public class GlobalExceptionHandler {
+
+    /**
+     * 🔴 只依赖事件发布器（Spring 核心设施，任何上下文含 @WebMvcTest 切片都有），
+     * <b>不得注入服务层 bean</b>：本类被 {@code @WebMvcTest} 自动装配，
+     * 一旦依赖 AuditLogService，所有 WebMvc 切片上下文会因缺 bean 起不来
+     * （SPEC-P152 实测打挂 97 个契约测试）。
+     */
+    private final org.springframework.context.ApplicationEventPublisher eventPublisher;
 
     /**
      * 参数校验异常
@@ -73,8 +85,24 @@ public class GlobalExceptionHandler {
      */
     @ExceptionHandler(org.springframework.security.access.AccessDeniedException.class)
     @ResponseStatus(HttpStatus.FORBIDDEN)
-    public R<Void> handleAccessDenied(org.springframework.security.access.AccessDeniedException e) {
+    public R<Void> handleAccessDenied(org.springframework.security.access.AccessDeniedException e,
+                                      HttpServletRequest request) {
         log.warn("权限不足: {}", e.getMessage());
+        // SPEC-P154 项①：@PreAuthorize 这一路 403 同样落审计（拦截器路在其前置 preHandle
+        // 已拒、handler 不执行，两路互斥不会双落）。事件走 AccessDeniedAuditListener 旁路，
+        // 发布失败不反噬 403 响应。requiredPermission 此路不可得（Spring 异常不带），记原始 msg。
+        try {
+            String username = null;
+            Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+            if (auth != null && auth.isAuthenticated()
+                    && !"anonymousUser".equals(String.valueOf(auth.getPrincipal()))) {
+                username = auth.getName();
+            }
+            eventPublisher.publishEvent(
+                    new AccessDeniedEvent(username, "preauthorize:" + e.getMessage(), request));
+        } catch (Exception auditEx) {
+            log.warn("403 审计事件发布失败（不影响拒绝响应）: {}", auditEx.getMessage());
+        }
         return R.fail(HttpStatus.FORBIDDEN.value(), "权限不足，无法执行该操作");
     }
 
@@ -128,12 +156,37 @@ public class GlobalExceptionHandler {
     }
 
     /**
-     * 未知异常
+     * 未知异常 —— 500 + <b>发布留痕事件</b>（SPEC-P152）。
+     *
+     * <p>此前未知异常只有 {@code log.error}：容器一重启堆栈即丢，「后期检测修复」无从查起。
+     * 现在发一条 {@link ServerErrorEvent}，由 {@code ServerErrorAuditListener} 落
+     * {@code t_audit_log}（module=SYSTEM / operation=SERVER_ERROR，截断堆栈进 after_data），
+     * 页端「操作日志」按模块 SYSTEM 即可回溯。</p>
+     *
+     * <p>发布失败或上下文无监听器（如 {@code @WebMvcTest} 切片）都<b>不影响 500 响应</b>。</p>
      */
     @ExceptionHandler(Exception.class)
     @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
-    public R<Void> handleUnknown(Exception e) {
+    public R<Void> handleUnknown(Exception e, HttpServletRequest request) {
         log.error("系统异常: {}", e.getMessage(), e);
+        try {
+            eventPublisher.publishEvent(new ServerErrorEvent(e, currentUsername(), request));
+        } catch (Exception publishEx) {
+            // 留痕失败绝不能再抛 —— 500 响应必须返回
+            log.warn("系统异常留痕事件发布失败（堆栈仍在本行日志中）: {}", publishEx.getMessage());
+        }
         return R.fail("系统繁忙，请稍后重试");
+    }
+
+    static String currentUsername() {
+        try {
+            Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+            if (auth != null && auth.isAuthenticated() && !"anonymousUser".equals(auth.getPrincipal())) {
+                return auth.getName();
+            }
+        } catch (Exception ignore) {
+            // 无上下文按匿名处理
+        }
+        return "anonymous";
     }
 }

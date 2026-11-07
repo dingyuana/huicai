@@ -1,10 +1,10 @@
 import type { RouteRecordRaw } from 'vue-router'
-import AppLayout from '@/layouts/AppLayout.vue'
 
 const routes: RouteRecordRaw[] = [
   {
     path: '/agency',
-    component: AppLayout,
+    // 懒加载：断开 agency → AppLayout → auth.store → router/index 的求值循环（同 sme-base.ts）
+    component: () => import('@/layouts/AppLayout.vue'),
     children: [
       {
         path: 'enterprise-list',

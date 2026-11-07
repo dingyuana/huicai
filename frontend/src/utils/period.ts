@@ -22,6 +22,25 @@ export function yearStartPeriod(period: string): string | null {
 }
 
 /**
+ * 期间 → 该月首末日（YYYY-MM-DD 闭区间）。格式非法返回 null。
+ *
+ * <p>SPEC-P151：不存 period 列的单据表（如 {@code t_bank_statement} 只有 {@code tx_date}）
+ * 要「只看当前账期」，必须由期间算出日期区间。口径与后端
+ * {@code PeriodRange}（YearMonth.atDay(1)/atEndOfMonth）严格一致，
+ * 否则前端显示「本月」、后端按别的区间查，是又一处两端漂移。</p>
+ */
+export function periodRange(period: string | null | undefined): { start: string; end: string } | null {
+  if (!period || !PERIOD_RE.test(period)) return null
+  const year = Number(period.slice(0, 4))
+  const month = Number(period.slice(4, 6))
+  if (month < 1 || month > 12) return null
+  const mm = String(month).padStart(2, '0')
+  // 下月第 0 天 = 本月最后一天；用原生 Date，与 dayjs 插件配置无关
+  const lastDay = new Date(year, month, 0).getDate()
+  return { start: `${year}-${mm}-01`, end: `${year}-${mm}-${String(lastDay).padStart(2, '0')}` }
+}
+
+/**
  * 获取企业默认期间（P57）：优先取企业当前期间，失败回退当前月。
  * 用于替代各页面写死 dayjs().format('YYYYMM') 的默认期间。
  */

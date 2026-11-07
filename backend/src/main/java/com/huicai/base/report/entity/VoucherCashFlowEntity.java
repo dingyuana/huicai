@@ -30,5 +30,11 @@ public class VoucherCashFlowEntity {
     @TableField(fill = com.baomidou.mybatisplus.annotation.FieldFill.INSERT)
     private LocalDateTime createdAt;
 
+    /**
+     * 🔴 SPEC-P153 同型缺陷（与 Subject 同根）：漏 fill ⇒ INSERT 不带列
+     * ⇒ DEFAULT 1 兜底 ⇒ 企业 2 的凭证现金流静默挂到企业 1 名下
+     * （RLS 下企业 2 永远查不到自己的现金流量 = 静默数据丢失）。
+     */
+    @TableField(fill = com.baomidou.mybatisplus.annotation.FieldFill.INSERT)
     private Long enterpriseId;
 }

@@ -97,10 +97,15 @@ public class AgencyUserEnterpriseServiceImpl implements AgencyUserEnterpriseServ
             throw BusinessException.notFound("分配记录不存在");
         }
 
-        assignment.setDeleted(1);
+        // 🔴 必须使用 deleteById 而非 updateById：
+        // MyBatis-Plus 的 @TableLogic 注解只在 deleteById 时自动转换为 UPDATE SET deleted=1，
+        // updateById 会跳过逻辑删除字段（不生成 SET deleted=?），导致取消分配后记录仍可见。
         assignment.setUnassignedBy(SecurityUtils.getCurrentUserId());
         assignment.setUnassignedAt(LocalDateTime.now());
+        // 先更新时间戳字段
         agencyUserEnterpriseMapper.updateById(assignment);
+        // 再执行逻辑删除（转换为 UPDATE SET deleted=1）
+        agencyUserEnterpriseMapper.deleteById(assignmentId);
 
         log.info("Enterprise unassigned: assignmentId={}, unassignedBy={}",
                 assignmentId, SecurityUtils.getCurrentUserId());

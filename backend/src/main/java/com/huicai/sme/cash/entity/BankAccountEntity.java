@@ -27,11 +27,7 @@ public class BankAccountEntity extends BaseEntity {
     @TableField(fill = FieldFill.INSERT_UPDATE)
     private LocalDateTime updatedAt;
 
-    /** t_bank_account 表没有 created_by/updated_by 列 */
-    @TableField(exist = false)
-    private Long createdBy;
-    @TableField(exist = false)
-    private Long updatedBy;
+    /** SPEC-P153：t_bank_account 实测有 created_by/updated_by 列（原注释不实），删除误覆盖 */
 
     @TableLogic
     private Integer deleted;

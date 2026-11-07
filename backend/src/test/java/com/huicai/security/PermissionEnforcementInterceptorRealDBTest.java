@@ -72,16 +72,16 @@ class PermissionEnforcementInterceptorRealDBTest extends AbstractMapperTest {
     // ───────── 逻辑 ─────────
 
     @Test
-    @DisplayName("清单已加载：269 条（全是写端点）")
+    @DisplayName("清单已加载：280 条（SPEC-P154 项④ 修复后：11 条曾误落 excluded 的端点已归位）")
     void manifestLoads() {
         assertNotNull(manifest);
-        assertEquals(269, manifest.size(),
-                "清单条数应为 269（307 写端点：已登记 269 + 显式排除 27 + 真实缺口 11）；"
-                        + "变更时同步改本断言 —— 这正是清单条数漂移的第一道信号");
+        // 项④ 修复前：269（307 声明 = 269 已登记 + 27 显式排除 + 11 因段错位静默丢失的真实缺口）
+        // 项④ 修复后：11 条归位 endpoints ⇒ 280（其中含 4 条 GET 读端点，write=true 为 276）
+        assertEquals(280, manifest.size(),
+                "清单条数应为 280（269 原有 + 11 归位）；变更时同步改本断言 —— 这正是清单条数漂移的第一道信号");
         long writes = manifest.entries().stream().filter(PermissionManifest.Entry::write).count();
-        assertEquals(269, writes,
-                "当前登记的应**全是写端点**（读端点留待批次 3 后续），实际非写端点 "
-                        + (269 - writes) + " 条");
+        assertEquals(276, writes,
+                "归位的 11 条含 4 条读端点（GET salary-*、GET asset-changes）⇒ 写端点应为 276");
     }
 
     @Test
@@ -129,8 +129,11 @@ class PermissionEnforcementInterceptorRealDBTest extends AbstractMapperTest {
         f.set(enforcingManifest, true);
         assertTrue(enforcingManifest.isEnforcing(), "置位失败：本用例将失去意义");
         var provider = fixedProvider(enforcingManifest);
+        // 记录器：捕捉 403 分支发布的 AccessDeniedEvent（SPEC-P154 项①）
+        java.util.List<Object> published = new java.util.ArrayList<>();
+        org.springframework.context.ApplicationEventPublisher recorder = published::add;
         PermissionEnforcementInterceptor enforcing =
-                new PermissionEnforcementInterceptor(provider);
+                new PermissionEnforcementInterceptor(provider, recorder);
 
         loginAs("nobody");
         MockHttpServletRequest req = new MockHttpServletRequest("DELETE", "/api/v1/system/role/1");
@@ -142,6 +145,14 @@ class PermissionEnforcementInterceptorRealDBTest extends AbstractMapperTest {
         assertEquals(403, res.getStatus(), "缺权限必须 403");
         assertTrue(res.getContentAsString().contains("system:role:list"),
                 "403 响应须指名所需权限码，实际：" + res.getContentAsString());
+        // SPEC-P154 项①：enforcing 403 分支必须发布 AccessDeniedEvent（由监听器落 t_audit_log）
+        assertEquals(1, published.size(), "403 分支必须发布且仅发布一次审计事件，实际：" + published);
+        Object evt = published.get(0);
+        assertTrue(evt instanceof com.huicai.common.exception.AccessDeniedEvent,
+                "发布的必须是 AccessDeniedEvent，实际：" + evt.getClass());
+        assertEquals("system:role:list",
+                ((com.huicai.common.exception.AccessDeniedEvent) evt).getRequiredPermission(),
+                "事件必须携带被拒所需权限码");
     }
 
 

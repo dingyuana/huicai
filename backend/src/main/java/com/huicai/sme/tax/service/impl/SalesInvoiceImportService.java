@@ -79,6 +79,15 @@ public class SalesInvoiceImportService {
     private final BusinessDocService businessDocService;
     private final OutputInvoiceStateMachineService invoiceStateMachineService;
     private final InvoiceDedupUtil invoiceDedupUtil;
+    /**
+     * SPEC-P153：逐行独立事务。Controller 挂上事务后，PG 的「一条 SQL 失败即中止
+     * 整个事务」语义会击穿本方法的<b>行级容错</b>承诺（单行失败只记 errors、
+     * 其余行继续）——第一行报错后所有后续行都会以 "current transaction is
+     * aborted" 假失败。行体（客户匹配+发票插入）经 REQUIRES_NEW 执行：
+     * 单行失败只回滚该行自己的事务（P137 同款正解）。
+     * 单测直接 new 本服务时注入裸实例 ⇒ 无代理、动作原地执行，行为等价旧语义。
+     */
+    private final com.huicai.common.transaction.RequiresNewRunner rowTx;
 
     @Value("${invoice.auto-flow-after-import:false}")
     private boolean autoFlowAfterImport;
@@ -430,14 +439,21 @@ public class SalesInvoiceImportService {
                     errors.add(err);
                     continue;
                 }
-                Long customerId = matchOrCreateCustomer(row);
-                if (customerId == null) {
+                // 🔴 整行动作（客户匹配 + 发票插入）在一个 REQUIRES_NEW 事务里：
+                //    单行 SQL 失败只中止该行自己的事务，外层批量事务继续（P137 正解）
+                OutputInvoiceEntity invoice = rowTx.run(() -> {
+                    Long customerId = matchOrCreateCustomer(row);
+                    if (customerId == null) {
+                        return null;
+                    }
+                    String period = row.invoiceDate.format(DateTimeFormatter.ofPattern("yyyyMM"));
+                    // P31 修正: 导入时只创建发票，业务单和应收单在审核后才生成
+                    return insertOutputInvoice(row, customerId, period);
+                });
+                if (invoice == null) {
                     errors.add(Map.of("row", row.rowNum, "invoiceNo", row.invoiceNo, "message", "客户匹配失败"));
                     continue;
                 }
-                String period = row.invoiceDate.format(DateTimeFormatter.ofPattern("yyyyMM"));
-                // P31 修正: 导入时只创建发票，业务单和应收单在审核后才生成
-                OutputInvoiceEntity invoice = insertOutputInvoice(row, customerId, period);
                 importedInvoiceIds.add(invoice.getId());
                 success++;
             } catch (Exception e) {
