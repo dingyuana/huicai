@@ -96,6 +96,40 @@ export function getAssetCategory(id: number): Promise<AssetCategory> {
   return request.get(`/sme/asset/v1/asset-categories/${id}`)
 }
 
+// ─── 资产变动（V1.106 D-4：VALUE_ADJUST 调整原值 / DEPT_TRANSFER 部门转移）───
+
+export interface AssetChangeCreate {
+  assetId: number
+  /** VALUE_ADJUST = 调整原值（amount 正调增/负调减）；DEPT_TRANSFER = 部门转移（deptId 必填） */
+  changeType: string
+  changeDate: string
+  amount?: number
+  deptId?: number
+  remark?: string
+}
+
+export interface AssetChangeVO {
+  id: number
+  assetId: number
+  assetCode?: string
+  assetName?: string
+  changeType: string
+  beforeValue?: string
+  afterValue?: string
+  changeDate: string
+  voucherId?: number
+  voucherNo?: string
+  remark?: string
+}
+
+export function createAssetChange(data: AssetChangeCreate): Promise<number> {
+  return request.post('/sme/asset/v1/asset-changes', data)
+}
+
+export function listAssetChanges(assetId: number): Promise<AssetChangeVO[]> {
+  return request.get('/sme/asset/v1/asset-changes', { params: { assetId } })
+}
+
 // ==================== 资产处置 ====================
 
 /**
