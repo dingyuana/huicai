@@ -60,6 +60,8 @@ class TaxServiceImplTest {
     private com.huicai.sme.tax.mapper.TaxBurdenConfigMapper taxBurdenConfigMapper;
     @Mock
     private com.huicai.base.report.service.ReportService reportService;
+    @Mock
+    private com.huicai.base.masterdata.mapper.EmployeeMapper employeeMapper;
     @InjectMocks private TaxServiceImpl service;
 
     private InputInvoiceEntity stubInput(Long id, String status) {
@@ -939,18 +941,26 @@ class TaxServiceImplTest {
         Map<String, Object> income = new HashMap<>();
         income.put("cumulativeProfit", new BigDecimal("2000000"));
         when(reportService.incomeStatement("202609")).thenReturn(income);
+        // SPEC-P158：三条件判定——补从业/资产桩（小微命中）
+        when(employeeMapper.selectCount(any())).thenReturn(12L);
+        Map<String, Object> balance = new HashMap<>();
+        balance.put("totalAssets", new BigDecimal("8000000"));
+        when(reportService.balanceSheet("202609")).thenReturn(balance);
         Map<String, Object> r = service.calculateCit("202609");
         assertEquals(0, new BigDecimal("100000.00").compareTo((BigDecimal) r.get("estimatedTax")),
                 "200万 × 5% = 10万");
         assertEquals(new BigDecimal("0.05"), r.get("taxRate"));
+        assertEquals(Boolean.TRUE, r.get("smallMicro"), "三条件齐 → 小微");
 
-        // 标准档
+        // 标准档（利润超 300 万；从业/资产仍小，note 应点名利润）
         income.put("cumulativeProfit", new BigDecimal("5000000"));
         Map<String, Object> r2 = service.calculateCit("202609");
         assertEquals(0, new BigDecimal("1250000.00").compareTo((BigDecimal) r2.get("estimatedTax")));
         assertEquals(new BigDecimal("0.25"), r2.get("taxRate"));
+        assertTrue(String.valueOf(r2.get("note")).contains("累计利润 5000000 超 300 万"),
+                "note 点名挡路条件，实际：" + r2.get("note"));
 
-        // 亏损免预缴
+        // 亏损免预缴（提前 return，不碰三条件）
         income.put("cumulativeProfit", new BigDecimal("-50000"));
         Map<String, Object> r3 = service.calculateCit("202609");
         assertEquals(0, BigDecimal.ZERO.compareTo((BigDecimal) r3.get("estimatedTax")));
@@ -963,7 +973,66 @@ class TaxServiceImplTest {
         Map<String, Object> income = new HashMap<>();
         income.put("cumulativeProfit", new BigDecimal("3000000"));
         when(reportService.incomeStatement("202609")).thenReturn(income);
+        when(employeeMapper.selectCount(any())).thenReturn(300L);
+        Map<String, Object> balance = new HashMap<>();
+        balance.put("totalAssets", new BigDecimal("50000000"));
+        when(reportService.balanceSheet("202609")).thenReturn(balance);
         Map<String, Object> r = service.calculateCit("202609");
         assertEquals(new BigDecimal("0.05"), r.get("taxRate"), "≤300万含等于");
+        assertEquals(Boolean.TRUE, r.get("smallMicro"), "恰 300 人/5000 万边界仍计小微");
+    }
+
+    // ==================== SPEC-P158 三条件精确判定 ====================
+
+    @Test
+    @DisplayName("P158 从业人数超 300：利润虽小仍走 25%，note 点名从业")
+    void citHeadcountExceeded() {
+        Map<String, Object> income = new HashMap<>();
+        income.put("cumulativeProfit", new BigDecimal("2000000"));
+        when(reportService.incomeStatement("202609")).thenReturn(income);
+        when(employeeMapper.selectCount(any())).thenReturn(301L);
+        Map<String, Object> balance = new HashMap<>();
+        balance.put("totalAssets", new BigDecimal("8000000"));
+        when(reportService.balanceSheet("202609")).thenReturn(balance);
+        Map<String, Object> r = service.calculateCit("202609");
+        assertEquals(new BigDecimal("0.25"), r.get("taxRate"), "从业 301 挡小微");
+        assertEquals(Boolean.FALSE, r.get("smallMicro"));
+        assertTrue(String.valueOf(r.get("note")).contains("从业人数 301 超 300 人"),
+                "实际：" + r.get("note"));
+        assertEquals(301L, r.get("headcount"), "响应携带判定依据");
+    }
+
+    @Test
+    @DisplayName("P158 资产总额超 5000 万：利润/从业均达标仍走 25%，note 点名资产")
+    void citAssetsExceeded() {
+        Map<String, Object> income = new HashMap<>();
+        income.put("cumulativeProfit", new BigDecimal("2000000"));
+        when(reportService.incomeStatement("202609")).thenReturn(income);
+        when(employeeMapper.selectCount(any())).thenReturn(10L);
+        Map<String, Object> balance = new HashMap<>();
+        balance.put("totalAssets", new BigDecimal("50000000.01"));
+        when(reportService.balanceSheet("202609")).thenReturn(balance);
+        Map<String, Object> r = service.calculateCit("202609");
+        assertEquals(new BigDecimal("0.25"), r.get("taxRate"), "资产 5000 万+0.01 挡小微");
+        assertTrue(String.valueOf(r.get("note")).contains("超 5000 万"),
+                "实际：" + r.get("note"));
+    }
+
+    @Test
+    @DisplayName("P158 多条件同时超限：note 逐条点名（不止挡一条）")
+    void citMultipleExceeded() {
+        Map<String, Object> income = new HashMap<>();
+        income.put("cumulativeProfit", new BigDecimal("8000000"));
+        when(reportService.incomeStatement("202609")).thenReturn(income);
+        when(employeeMapper.selectCount(any())).thenReturn(500L);
+        Map<String, Object> balance = new HashMap<>();
+        balance.put("totalAssets", new BigDecimal("60000000"));
+        when(reportService.balanceSheet("202609")).thenReturn(balance);
+        Map<String, Object> r = service.calculateCit("202609");
+        String note = String.valueOf(r.get("note"));
+        assertTrue(note.contains("超 300 万") && note.contains("超 300 人") && note.contains("超 5000 万"),
+                "三条件逐条点名，实际：" + note);
+        assertEquals(0, new BigDecimal("2000000.00").compareTo((BigDecimal) r.get("estimatedTax")),
+                "800 万 × 25% = 200 万");
     }
 }

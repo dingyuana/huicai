@@ -1,6 +1,7 @@
 package com.huicai.sme.tax.service.impl;
 
 import com.huicai.base.system.service.VoucherTypeService;
+import com.huicai.base.masterdata.entity.EmployeeEntity;
 import com.huicai.sme.tax.dto.TaxDeclarationCreateDTO;
 import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
@@ -99,6 +100,9 @@ public class TaxServiceImpl implements TaxService {
 
     /** SPEC-P156：企业所得税预缴取利润表口径（复用报表服务，不建平行体系） */
     private final com.huicai.base.report.service.ReportService reportService;
+
+    /** SPEC-P158：小微从业人数条件取期末在职员工数（t_employee，RLS 自动滤租户） */
+    private final com.huicai.base.masterdata.mapper.EmployeeMapper employeeMapper;
     // ========== 税种 ==========
     @Override
     public IPage<TaxTypeEntity> pageQueryTaxType(String keyword, Integer current, Integer size) {
@@ -1511,10 +1515,28 @@ public class TaxServiceImpl implements TaxService {
             return r;
         }
 
-        // 预缴税率档：≤300 万且从业≤300 人且资产≤5000 万适用小型微利 5%（2.5%×2 政策延续口径）；
-        // 否则 25% 标准档。判定按累计利润额近似（从业/资产条件由企业自查，登记说明）。
-        // 🔴 税务规则属八类红线：此处为「测算」非「申报定值」，档位判定登记遗留由用户裁定细化。
-        boolean smallMicro = cumulativeProfit.compareTo(new BigDecimal("3000000")) <= 0;
+        // 预缴税率档：三条件 AND —— 累计利润≤300万 且 从业≤300人 且 资产≤5000万 → 小型微利 5%
+        // （2.5%×2 政策延续口径）；任一条件超限 → 25% 标准档，note 点名挡路条件。
+        // 🔴 SPEC-P158（2026-11-09 用户裁定开工）：三个条件全部实测——
+        //   从业人数 = 期末在职员工数（t_employee deleted=0 AND is_active=true）；
+        //   资产总额 = 资产负债表期末资产总计（复用报表服务）。
+        // ⚠️ 均为「期末值」近似，非税法官方「季度平均值」口径（系统未保留期末快照历史，
+        //   季度均值不可回算，SPEC-P158 登记遗留）；仍是「测算」非「申报定值」（八类红线）。
+        java.util.List<String> exceeded = new java.util.ArrayList<>();
+        if (cumulativeProfit.compareTo(new BigDecimal("3000000")) > 0) {
+            exceeded.add("累计利润 " + cumulativeProfit.stripTrailingZeros().toPlainString() + " 超 300 万");
+        }
+        Long headcount = employeeMapper.selectCount(new LambdaQueryWrapper<EmployeeEntity>()
+                .eq(EmployeeEntity::getDeleted, 0)
+                .eq(EmployeeEntity::getIsActive, true));
+        if (headcount != null && headcount > 300) {
+            exceeded.add("从业人数 " + headcount + " 超 300 人");
+        }
+        BigDecimal totalAssets = toBigDecimal(reportService.balanceSheet(period).get("totalAssets"));
+        if (totalAssets.compareTo(new BigDecimal("50000000")) > 0) {
+            exceeded.add("资产总额 " + totalAssets.stripTrailingZeros().toPlainString() + " 超 5000 万");
+        }
+        boolean smallMicro = exceeded.isEmpty();
         BigDecimal rate = smallMicro ? new BigDecimal("0.05") : new BigDecimal("0.25");
         BigDecimal estimatedTax = cumulativeProfit.multiply(rate).setScale(2, RoundingMode.HALF_UP);
 
@@ -1524,9 +1546,14 @@ public class TaxServiceImpl implements TaxService {
         r.put("taxableIncome", cumulativeProfit);
         r.put("taxRate", rate);
         r.put("estimatedTax", estimatedTax);
+        r.put("smallMicro", smallMicro);
+        r.put("headcount", headcount);
+        r.put("totalAssets", totalAssets);
         r.put("note", smallMicro
-                ? "按小型微利 5% 测算（利润≤300万档）；从业人数/资产总额条件需企业自查确认"
-                : "按标准 25% 测算");
+                ? "按小型微利 5% 测算（利润≤300万 且 从业≤300人 且 资产≤5000万；"
+                  + "从业/资产取期末值，非官方季度平均值口径）"
+                : "按标准 25% 测算——" + String.join("；", exceeded)
+                  + "（从业/资产取期末值，非官方季度平均值口径）");
         return r;
     }
 
