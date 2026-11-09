@@ -127,6 +127,21 @@ export function exportTaxDeclaration(id: number): Promise<Blob> {
   return request.get(`/sme/salary/v1/salary-bills/${id}/tax-export`, { responseType: 'blob' })
 }
 
+/** SPEC-P157 R4：员工自助——我的工资单（绑定员工 PAID 单） */
+export function getMySalaryBills(): Promise<SalaryBill[]> {
+  return request.get('/sme/salary/v1/salary-bills/my')
+}
+
+/** SPEC-P157 R4：员工自助——我的工资单明细（仅本人 PAID 单） */
+export function getMySalaryItems(id: number): Promise<SalaryBillItemRow[]> {
+  return request.get(`/sme/salary/v1/salary-bills/my/${id}/items`)
+}
+
+/** SPEC-P157 R4：绑定员工自助账号（userId=null 解绑） */
+export function bindEmployeeUser(employeeId: number, userId: number | null): Promise<void> {
+  return request.put(`/v1/employees/${employeeId}/bind-user`, { userId })
+}
+
 // ─── SPEC-P155 R1：单位社保险种比例配置 ───
 
 export interface SocialRate {

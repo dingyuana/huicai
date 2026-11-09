@@ -41,6 +41,22 @@ public class SalaryBillController {
         return R.ok(salaryBillService.list());
     }
 
+    // ==================== SPEC-P157 R4：员工自助 ====================
+
+    @Operation(summary = "我的工资单（员工自助：绑定员工的 PAID 单，salary:self:view）")
+    @PreAuthorize("hasAuthority('salary:self:view')")
+    @GetMapping("/my")
+    public R<List<SalaryBillVO>> myBills() {
+        return R.ok(salaryBillService.listMyBills(SecurityUtils.getCurrentUserId()));
+    }
+
+    @Operation(summary = "我的工资单明细（员工自助：仅本人 PAID 单，salary:self:view）")
+    @PreAuthorize("hasAuthority('salary:self:view')")
+    @GetMapping("/my/{id}/items")
+    public R<List<com.huicai.sme.salary.vo.SalaryBillItemVO>> myItems(@PathVariable Long id) {
+        return R.ok(salaryBillService.myItems(SecurityUtils.getCurrentUserId(), id));
+    }
+
     @Operation(summary = "工资单详情（员工级明细 + 个税快照）")
     @PreAuthorize("hasAuthority('salary:list')")
     @GetMapping("/{id}")

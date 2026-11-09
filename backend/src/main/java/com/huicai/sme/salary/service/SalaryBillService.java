@@ -21,6 +21,12 @@ public interface SalaryBillService {
     /** 工资单列表（含凭证号回显）。 */
     List<SalaryBillVO> list();
 
+    /** SPEC-P157 R4：员工自助——当前登录账号绑定员工的 PAID 工资单（未绑定返空表）。 */
+    List<SalaryBillVO> listMyBills(Long userId);
+
+    /** SPEC-P157 R4：员工自助——本人 PAID 单明细（他人单/未发放 400）。 */
+    List<SalaryBillItemVO> myItems(Long userId, Long billId);
+
     /** 工资单详情（员工级明细 + 个税快照）。 */
     SalaryBillDetailVO detail(Long billId);
 

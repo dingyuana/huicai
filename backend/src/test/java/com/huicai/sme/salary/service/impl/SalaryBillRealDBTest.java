@@ -12,6 +12,8 @@ import com.huicai.common.test.AbstractMapperTest;
 import com.huicai.sme.salary.dto.SalaryBillSaveDTO;
 import com.huicai.sme.salary.entity.SalaryBillEmployeeEntity;
 import com.huicai.sme.salary.entity.SalaryBillEntity;
+import com.huicai.sme.salary.vo.SalaryBillItemVO;
+import com.huicai.sme.salary.vo.SalaryBillVO;
 import com.huicai.sme.salary.entity.SalaryItemEntity;
 import com.huicai.sme.salary.mapper.SalaryBillEmployeeMapper;
 import com.huicai.sme.salary.mapper.SalaryBillItemMapper;
@@ -27,6 +29,7 @@ import java.math.BigDecimal;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -321,5 +324,52 @@ class SalaryBillRealDBTest extends AbstractMapperTest {
         BusinessException ex = assertThrows(BusinessException.class,
                 () -> salaryBillService.paySocial(billId, 9L));
         assertTrue(ex.getMessage().contains("不可重复"), "缴纳幂等，实际：" + ex.getMessage());
+    }
+
+    @Test
+    @DisplayName("SPEC-P157 R4：员工绑定账号 → myBills 只见本人 PAID 单 + myItems 越权 400")
+    void selfServiceMyBills() {
+        // ① 员工 + 工资单全链到 PAID
+        makeItems();
+        Long employeeId = makeEmployee();
+        Long basic = jdbcTemplate.queryForObject(
+                "SELECT id FROM t_salary_item WHERE item_name='基本工资' AND deleted=0 ORDER BY id DESC LIMIT 1", Long.class);
+        Long social = jdbcTemplate.queryForObject(
+                "SELECT id FROM t_salary_item WHERE item_name='个人社保公积金' AND deleted=0 ORDER BY id DESC LIMIT 1", Long.class);
+        Long special = jdbcTemplate.queryForObject(
+                "SELECT id FROM t_salary_item WHERE item_name='专项附加扣除' AND deleted=0 ORDER BY id DESC LIMIT 1", Long.class);
+        Long billId = saveBill("202602", employeeId, basic, social, special);
+        salaryBillService.confirm(billId, 9L);
+        salaryBillService.pay(billId, 9L);
+
+        // 第二张单保持 DRAFT（未发放不给看）
+        Long draftBillId = saveBill("202603", employeeId, basic, social, special);
+
+        // 第二个员工 + 其 PAID 单（越权目标；期间须错开——uq(enterprise_id,period) 同期间仅一单）
+        Long otherEmp = makeEmployee();
+        Long otherBill = saveBill("202601", otherEmp, basic, social, special);
+        salaryBillService.confirm(otherBill, 9L);
+        salaryBillService.pay(otherBill, 9L);
+
+        // ② 绑定账号 → myBills 只见本人 2 张 PAID（202602 本人 + 不含他人单；DRAFT 202603 不见）
+        Long userId = 9001L;
+        EmployeeEntity me = employeeMapper.selectById(employeeId);
+        me.setUserId(userId);
+        employeeMapper.updateById(me);
+
+        List<SalaryBillVO> mine = salaryBillService.listMyBills(userId);
+        List<Long> mineIds = mine.stream().map(SalaryBillVO::getId).collect(java.util.stream.Collectors.toList());
+        assertTrue(mineIds.contains(billId), "本人 PAID 单可见");
+        assertFalse(mineIds.contains(draftBillId), "未发放单不可见");
+        assertFalse(mineIds.contains(otherBill), "他人单不可见");
+
+        // ③ myItems 本人单放行
+        List<SalaryBillItemVO> rows = salaryBillService.myItems(userId, billId);
+        assertFalse(rows.isEmpty());
+
+        // ④ myItems 他人单 400
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> salaryBillService.myItems(userId, otherBill));
+        assertTrue(ex.getMessage().contains("无权"));
     }
 }

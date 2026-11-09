@@ -155,6 +155,53 @@ public class SalaryBillServiceImpl implements SalaryBillService {
 
     @Override
     @Transactional(readOnly = true)
+    public List<SalaryBillVO> listMyBills(Long userId) {
+        // SPEC-P157 R4：员工自助——按绑定关系反查本员工的 PAID 单；
+        // 未绑定账号 = 从未参与自助，返回空表（不越权看他人）。
+        EmployeeEntity me = employeeMapper.selectOne(new LambdaQueryWrapper<EmployeeEntity>()
+                .eq(EmployeeEntity::getUserId, userId)
+                .last("LIMIT 1"));
+        if (me == null) {
+            return List.of();
+        }
+        List<Long> billIds = itemMapper.selectList(new LambdaQueryWrapper<SalaryBillItemEntity>()
+                .eq(SalaryBillItemEntity::getEmployeeId, me.getId()))
+                .stream().map(SalaryBillItemEntity::getBillId).distinct().collect(Collectors.toList());
+        if (billIds.isEmpty()) {
+            return List.of();
+        }
+        return billMapper.selectList(new LambdaQueryWrapper<SalaryBillEntity>()
+                .in(SalaryBillEntity::getId, billIds)
+                .eq(SalaryBillEntity::getStatus, "PAID")
+                .orderByDesc(SalaryBillEntity::getPeriod))
+                .stream().map(this::toVO).collect(Collectors.toList());
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<SalaryBillItemVO> myItems(Long userId, Long billId) {
+        // 自助明细：绑定员工 + 该单必须 PAID（未发工资不给看明细），且单据属本人
+        EmployeeEntity me = employeeMapper.selectOne(new LambdaQueryWrapper<EmployeeEntity>()
+                .eq(EmployeeEntity::getUserId, userId)
+                .last("LIMIT 1"));
+        if (me == null) {
+            throw new BusinessException("当前账号未绑定员工，请联系管理员在员工管理中绑定");
+        }
+        SalaryBillEntity bill = billMapper.selectById(billId);
+        if (bill == null || !"PAID".equals(bill.getStatus())) {
+            throw new BusinessException("工资单不存在或未发放");
+        }
+        boolean mine = itemMapper.selectCount(new LambdaQueryWrapper<SalaryBillItemEntity>()
+                .eq(SalaryBillItemEntity::getBillId, billId)
+                .eq(SalaryBillItemEntity::getEmployeeId, me.getId())) > 0;
+        if (!mine) {
+            throw new BusinessException("无权查看他人工资单");
+        }
+        return items(billId);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public SalaryBillDetailVO detail(Long billId) {
         SalaryBillEntity bill = mustGet(billId);
         SalaryBillDetailVO vo = new SalaryBillDetailVO();

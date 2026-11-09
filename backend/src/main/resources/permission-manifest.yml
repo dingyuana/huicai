@@ -1226,12 +1226,24 @@ endpoints:
   permission: salary:list
   write: false
 - method: GET
+  path: /api/sme/salary/v1/salary-bills/my
+  permission: salary:self:view
+  write: false
+- method: GET
+  path: /api/sme/salary/v1/salary-bills/my/{id}/items
+  permission: salary:self:view
+  write: false
+- method: GET
   path: /api/sme/salary/v1/salary-bills/{id}
   permission: salary:list
   write: false
 - method: POST
   path: /api/sme/salary/v1/salary-bills
   permission: salary:save
+  write: true
+- method: PUT
+  path: /api/v1/employees/{id}/bind-user
+  permission: party:list
   write: true
 - method: POST
   path: /api/sme/salary/v1/salary-bills/{id}/confirm

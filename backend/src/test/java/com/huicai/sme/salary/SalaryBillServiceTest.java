@@ -24,6 +24,8 @@ import com.huicai.sme.salary.mapper.SalaryBillItemMapper;
 import com.huicai.sme.salary.mapper.SalaryBillMapper;
 import com.huicai.sme.salary.mapper.SalaryItemMapper;
 import com.huicai.sme.salary.service.impl.SalaryBillServiceImpl;
+import com.huicai.sme.salary.vo.SalaryBillItemVO;
+import com.huicai.sme.salary.vo.SalaryBillVO;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -447,5 +449,83 @@ class SalaryBillServiceTest {
         bill.setTotalSocial(BigDecimal.ZERO);
         BusinessException ex2 = assertThrows(BusinessException.class, () -> service.paySocial(77L, 9L));
         assertTrue(ex2.getMessage().contains("无社保金额"));
+    }
+
+    // ==================== SPEC-P157 R4 员工自助 ====================
+
+    @Test
+    @DisplayName("P157 R4 myBills：未绑定返空表；绑定后只见本人 PAID 单")
+    void myBillsFiltering() {
+        // ① 未绑定 → 空
+        when(employeeMapper.selectOne(any())).thenReturn(null);
+        assertTrue(service.listMyBills(99L).isEmpty(), "未绑定账号返空表不越权");
+
+        // ② 绑定员工 11 → bill 77 PAID 放行
+        EmployeeEntity me = new EmployeeEntity();
+        me.setId(11L);
+        me.setUserId(99L);
+        when(employeeMapper.selectOne(any())).thenReturn(me);
+        SalaryBillItemEntity it77 = new SalaryBillItemEntity();
+        it77.setBillId(77L);
+        it77.setEmployeeId(11L);
+        when(itemMapper.selectList(any())).thenReturn(List.of(it77));
+        SalaryBillEntity paid = new SalaryBillEntity();
+        paid.setId(77L);
+        paid.setPeriod("202611");
+        paid.setStatus("PAID");
+        when(billMapper.selectList(any())).thenReturn(List.of(paid));
+
+        List<SalaryBillVO> bills = service.listMyBills(99L);
+        assertEquals(1, bills.size());
+        assertEquals(77L, bills.get(0).getId());
+    }
+
+    @Test
+    @DisplayName("P157 R4 myItems：他人单 400 / 未发放 400 / 本人 PAID 单放行")
+    void myItemsGuards() {
+        EmployeeEntity me = new EmployeeEntity();
+        me.setId(11L);
+        me.setUserId(99L);
+        when(employeeMapper.selectOne(any())).thenReturn(me);
+
+        // 未发放（DRAFT）→ 400
+        SalaryBillEntity draft = new SalaryBillEntity();
+        draft.setId(78L);
+        draft.setStatus("DRAFT");
+        when(billMapper.selectById(78L)).thenReturn(draft);
+        BusinessException ex1 = assertThrows(BusinessException.class, () -> service.myItems(99L, 78L));
+        assertTrue(ex1.getMessage().contains("未发放"));
+
+        // 他人的单（明细无员工 11）→ 400
+        SalaryBillEntity paidOther = new SalaryBillEntity();
+        paidOther.setId(79L);
+        paidOther.setStatus("PAID");
+        when(billMapper.selectById(79L)).thenReturn(paidOther);
+        when(itemMapper.selectCount(any())).thenReturn(0L);
+        BusinessException ex2 = assertThrows(BusinessException.class, () -> service.myItems(99L, 79L));
+        assertTrue(ex2.getMessage().contains("无权"));
+
+        // 本人 PAID 单 → 放行（items 查询链）
+        SalaryBillEntity paidMine = new SalaryBillEntity();
+        paidMine.setId(77L);
+        paidMine.setStatus("PAID");
+        when(billMapper.selectById(77L)).thenReturn(paidMine);
+        when(itemMapper.selectCount(any())).thenReturn(1L);
+        when(itemMapper.selectList(any())).thenReturn(List.of(
+                itemRowForVo(101L, "10000")));
+        when(salaryItemMapper.selectList(any())).thenReturn(List.of(
+                def(101L, "EARN", true)));
+        List<SalaryBillItemVO> rows = service.myItems(99L, 77L);
+        assertEquals(1, rows.size());
+    }
+
+    /** myItems → items 链路用的明细行 */
+    private SalaryBillItemEntity itemRowForVo(long itemId, String amount) {
+        SalaryBillItemEntity e = new SalaryBillItemEntity();
+        e.setBillId(77L);
+        e.setEmployeeId(11L);
+        e.setItemId(itemId);
+        e.setAmount(new BigDecimal(amount));
+        return e;
     }
 }

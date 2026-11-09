@@ -11,6 +11,13 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/salary/SalaryList.vue'),
     meta: { title: '工资单', permission: 'salary:list', keepAlive: true },
   },
+  {
+    // SPEC-P157 R4：员工自助只读页（V201 menu-salary 下 btn-salary-self-view → salary:self:view）
+    path: 'salary/my',
+    name: 'MySalaryView',
+    component: () => import('@/views/salary/MySalaryView.vue'),
+    meta: { title: '我的工资单', permission: 'salary:self:view', keepAlive: true },
+  },
 ]
 
 export default routes

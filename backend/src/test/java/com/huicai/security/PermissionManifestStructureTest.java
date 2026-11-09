@@ -11,6 +11,7 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -32,7 +33,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class PermissionManifestStructureTest {
 
     /** 当前 endpoints 段条目数基线（只许增不许减；段错位会导致骤减）。 */
-    private static final int ENDPOINTS_BASELINE = 280;
+    private static final int ENDPOINTS_BASELINE = 283;
 
     @SuppressWarnings("unchecked")
     private Map<String, Object> load() throws Exception {
@@ -104,5 +105,51 @@ class PermissionManifestStructureTest {
                 "POST salary-bills/confirm 必须在 endpoints 段可命中");
         assertTrue(m.find("POST", "/api/sme/asset/v1/asset-changes") != null,
                 "POST asset-changes 必须在 endpoints 段可命中");
+    }
+
+    @Test
+    @DisplayName("SPEC-P157 字面量优先：/my 不被 {id} 吞（自助端点命中 salary:self:view）")
+    void literalPathWinsOverWildcard() {
+        PermissionManifest m = new PermissionManifest();
+        m.loadForTest();
+
+        // GET /my 必须命中 /my 条目（salary:self:view），而非 /{id}（salary:list）
+        PermissionManifest.Entry my = m.find("GET", "/api/sme/salary/v1/salary-bills/my");
+        assertTrue(my != null, "/my 必须可命中");
+        assertEquals("salary:self:view", my.permission(),
+                "/my 不得被 /{id}（[^/]+）吞掉 —— 字面量路径优先于通配段");
+
+        // GET /my/1/items 同理
+        PermissionManifest.Entry myItems = m.find("GET", "/api/sme/salary/v1/salary-bills/my/1/items");
+        assertTrue(myItems != null);
+        assertEquals("salary:self:view", myItems.permission(), "/my/{id}/items 命中自助码");
+
+        // 回归面：普通数字 id 仍命中 {id} 条目（salary:list）
+        PermissionManifest.Entry byId = m.find("GET", "/api/sme/salary/v1/salary-bills/1");
+        assertTrue(byId != null && "salary:list".equals(byId.permission()),
+                "数字 id 仍走 /{id} 条目");
+
+        // 反证锚：/my 若走 /{id} 条目，此断言即红（守卫真实参战）
+        assertNotEquals("/api/sme/salary/v1/salary-bills/{id}", my.path(),
+                "/my 命中的不得是 {id} 模板路径");
+    }
+
+    @Test
+    @DisplayName("SPEC-P157 字面量优先（合成条目，顺序无关）：{id} 在前也必须让位字面量")
+    void literalWinsRegardlessOfOrder() {
+        PermissionManifest m = new PermissionManifest();
+        // 合成清单：{id} 条目故意排在字面量 /my 之前（生产清单顺序恰好侥幸，
+        // 该守卫锁的是匹配语义本身，防未来条目重排/新同类路径踩坑）
+        java.util.List<PermissionManifest.Entry> seeded = java.util.List.of(
+                new PermissionManifest.Entry("GET", "/api/x/v1/objs/{id}", "x:one", false,
+                        PermissionManifest.toPattern("/api/x/v1/objs/{id}")),
+                new PermissionManifest.Entry("GET", "/api/x/v1/objs/my", "x:self", false,
+                        PermissionManifest.toPattern("/api/x/v1/objs/my")));
+        m.injectEntriesForTest(seeded);
+
+        PermissionManifest.Entry hit = m.find("GET", "/api/x/v1/objs/my");
+        assertTrue(hit != null && "x:self".equals(hit.permission()),
+                "{id} 排前时 /my 仍须命中字面量条目（旧首中逻辑在此必红）");
+        assertEquals("/api/x/v1/objs/my", hit.path());
     }
 }

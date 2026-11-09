@@ -53,6 +53,13 @@
         <el-form-item label="启用">
           <el-switch v-model="form.isActive" />
         </el-form-item>
+        <el-form-item v-if="isEdit" label="自助账号">
+          <el-select v-model="form.userId" filterable clearable placeholder="选择登录账号（员工自助查工资单）"
+                     style="width: 100%" @change="bindChanged = true">
+            <el-option v-for="u in accountOptions" :key="u.id" :value="u.id"
+                       :label="`${u.username}${u.realName ? ' / ' + u.realName : ''}`" />
+          </el-select>
+        </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="createVisible = false">取消</el-button>
@@ -66,6 +73,8 @@
 import { ref, onMounted } from 'vue'
 import { ElMessage, type FormInstance } from 'element-plus'
 import { listEmployee, createEmployee, updateEmployee } from '@/api/modules/employee'
+import { getUserPage } from '@/api/modules/system'
+import { bindEmployeeUser } from '@/api/modules/salary'
 
 const list = ref<any[]>([])
 const loading = ref(false)
@@ -74,8 +83,10 @@ const isEdit = ref(false)
 const saving = ref(false)
 const editId = ref<number | null>(null)
 const formRef = ref<FormInstance>()
+const accountOptions = ref<Array<{ id: number; username: string; realName?: string }>>([])
+const bindChanged = ref(false)
 
-const form = ref({ code: '', name: '', deptName: '', position: '', phone: '', email: '', isActive: true })
+const form = ref<any>({ code: '', name: '', deptName: '', position: '', phone: '', email: '', isActive: true, userId: null })
 const rules = {
   code: [{ required: true, message: '请输入工号', trigger: 'blur' }],
   name: [{ required: true, message: '请输入姓名', trigger: 'blur' }],
@@ -107,8 +118,22 @@ function openEdit(row: any) {
     phone: row.phone || '',
     email: row.email || '',
     isActive: row.isActive !== false,
+    userId: row.userId ?? null,
   }
+  bindChanged.value = false
+  loadAccounts()
   createVisible.value = true
+}
+
+/** SPEC-P157：拉企业内登录账号做绑定候选（分页取 100 足够小企业；更大规模再做搜索） */
+async function loadAccounts() {
+  if (accountOptions.value.length) return
+  try {
+    const page = await getUserPage({ page: 1, size: 100 })
+    accountOptions.value = (page.records ?? []) as any
+  } catch {
+    accountOptions.value = []
+  }
 }
 
 async function handleSave() {
@@ -118,6 +143,10 @@ async function handleSave() {
   try {
     if (isEdit.value && editId.value) {
       await updateEmployee(editId.value, form.value)
+      // 绑定单独走端点（save DTO 不含 userId，语义分离）
+      if (bindChanged.value) {
+        await bindEmployeeUser(editId.value, form.value.userId ?? null)
+      }
       ElMessage.success('更新成功')
     } else {
       await createEmployee(form.value)

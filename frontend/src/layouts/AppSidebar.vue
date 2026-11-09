@@ -123,12 +123,13 @@
       </el-sub-menu>
 
       <!-- 工资薪酬（SPEC-P143 / REQ-2026-160，V197 菜单行 menu-salary-bill → /salary/bill） -->
-      <el-sub-menu v-if="hasVisible(['/salary/bill'])"  index="salary">
+      <el-sub-menu v-if="hasVisible(['/salary/bill', '/salary/my'])"  index="salary">
         <template #title>
           <el-icon><User /></el-icon>
           <span>工资薪酬</span>
         </template>
         <el-menu-item v-if="authStore.canAccess('/salary/bill')" index="/salary/bill">工资单</el-menu-item>
+        <el-menu-item v-if="authStore.canAccess('/salary/my')" index="/salary/my">我的工资单</el-menu-item>
       </el-sub-menu>
 
       <!-- 报表中心 -->

@@ -11,6 +11,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 import com.huicai.base.masterdata.dto.EmployeeSaveDTO;
 import jakarta.validation.Valid;
 
@@ -75,5 +76,20 @@ public class EmployeeController {
     public R<Void> delete(@PathVariable Long id) {
         service.delete(id);
         return R.ok();
+    }
+
+    // ==================== SPEC-P157 R4：员工自助绑定 ====================
+
+    @Operation(summary = "绑定自助登录账号（userId=null 解绑；party:list 粗粒度闸门同族）")
+    @PutMapping("/{id}/bind-user")
+    @PreAuthorize("hasAuthority('party:list')")
+    public R<com.huicai.base.masterdata.vo.EmployeeVO> bindUser(
+            @PathVariable Long id,
+            @RequestBody(required = false) Map<String, Object> body) {
+        Long userId = null;
+        if (body != null && body.get("userId") != null) {
+            userId = Long.valueOf(String.valueOf(body.get("userId")));
+        }
+        return R.ok(com.huicai.base.masterdata.vo.EmployeeVO.from(service.bindUser(id, userId)));
     }
 }
