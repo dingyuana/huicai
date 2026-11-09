@@ -29,6 +29,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
@@ -334,6 +335,42 @@ public class TaxController {
             @RequestParam String period,
             @RequestParam(defaultValue = "CURR") String type) {
         return R.ok(service.taxBurden(period, type));
+    }
+
+    // ========== SPEC-P156：P1-1 税务申报收尾 ==========
+
+    @Operation(summary = "SPEC-P156 增值税申报表导出（汇总+附表一+附表二，xlsx）")
+    @GetMapping("/vat/export")
+    public void exportVatDeclaration(@RequestParam String period,
+                                     jakarta.servlet.http.HttpServletResponse response) throws java.io.IOException {
+        service.exportVatDeclaration(period, response);
+    }
+
+    @Operation(summary = "SPEC-P156 企业所得税预缴测算（纯测算不落库）")
+    @GetMapping("/cit/estimate")
+    public R<Map<String, Object>> calculateCit(@RequestParam String period) {
+        return R.ok(service.calculateCit(period));
+    }
+
+    @Operation(summary = "SPEC-P156 税负预警阈值查询（未配置返回系统默认 3%）")
+    @GetMapping("/burden-config")
+    public R<com.huicai.sme.tax.dto.vo.TaxBurdenConfigVO> getBurdenConfig(
+            @RequestParam(required = false, defaultValue = "VAT") String taxType) {
+        return R.ok(com.huicai.sme.tax.dto.vo.TaxBurdenConfigVO.from(service.getBurdenConfig(taxType)));
+    }
+
+    @Operation(summary = "SPEC-P156 税负预警阈值保存（upsert）")
+    @PostMapping("/burden-config")
+    public R<com.huicai.sme.tax.dto.vo.TaxBurdenConfigVO> saveBurdenConfig(@RequestBody Map<String, Object> body) {
+        String taxType = body.get("taxType") == null ? "VAT" : String.valueOf(body.get("taxType"));
+        BigDecimal thresholdRate = body.get("thresholdRate") == null
+                ? null
+                : new BigDecimal(String.valueOf(body.get("thresholdRate")));
+        Boolean enabled = body.get("enabled") == null ? Boolean.TRUE : (Boolean) body.get("enabled");
+        String remark = body.get("remark") == null ? null : String.valueOf(body.get("remark"));
+        return R.ok(com.huicai.sme.tax.dto.vo.TaxBurdenConfigVO.from(
+                service.saveBurdenConfig(taxType, thresholdRate, enabled, remark,
+                        SecurityUtils.getCurrentUserId())));
     }
 
     // ========== 申报 ==========

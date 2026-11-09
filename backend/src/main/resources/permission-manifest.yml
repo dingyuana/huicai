@@ -868,6 +868,10 @@ endpoints:
   permission: tax:output:list
   write: true
 - method: POST
+  path: /api/sme/tax/v1/tax/burden-config
+  permission: tax:output:list
+  write: true
+- method: POST
   path: /api/sme/tax/v1/tax/declarations/{id}/approve
   permission: tax:output:list
   write: true

@@ -132,6 +132,35 @@ export function outputInvoiceSummary(params?: Record<string, any>): Promise<any>
 export function calculateVat(period: string): Promise<any> {
   return request.get('/sme/tax/v1/tax/vat/calculate', { params: { period } })
 }
+
+// ====== SPEC-P156：P1-1 税务申报收尾 ======
+
+/** 增值税申报表导出（汇总+附表一+附表二，xlsx blob） */
+export function exportVatDeclaration(period: string): Promise<Blob> {
+  return request.get('/sme/tax/v1/tax/vat/export', { params: { period }, responseType: 'blob' })
+}
+
+/** 企业所得税预缴测算 */
+export function calculateCit(period: string): Promise<any> {
+  return request.get('/sme/tax/v1/tax/cit/estimate', { params: { period } })
+}
+
+export interface TaxBurdenConfig {
+  taxType: string
+  thresholdRate: number
+  enabled: boolean
+  remark?: string
+}
+
+/** 税负预警阈值查询（未配置返回系统默认 3%） */
+export function getBurdenConfig(taxType = 'VAT'): Promise<TaxBurdenConfig> {
+  return request.get('/sme/tax/v1/tax/burden-config', { params: { taxType } })
+}
+
+/** 税负预警阈值保存（upsert） */
+export function saveBurdenConfig(data: { taxType?: string; thresholdRate: number; enabled?: boolean; remark?: string }): Promise<TaxBurdenConfig> {
+  return request.post('/sme/tax/v1/tax/burden-config', data)
+}
 // ====== P56 销项发票批量操作 ======
 export interface BatchFailure {
   id: number
