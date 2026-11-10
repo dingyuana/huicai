@@ -498,7 +498,7 @@ public class SalaryBillServiceImpl implements SalaryBillService {
             return kept;
         }
 
-        // 每员工 EARN 合计 = 缴费基数
+        // 每员工 EARN 合计 = GROSS 模式下的缴费基数
         Set<Long> earnItemIds = salaryItemMapper.selectList(
                         new LambdaQueryWrapper<SalaryItemEntity>()
                                 .eq(SalaryItemEntity::getCategory, "EARN"))
@@ -510,13 +510,41 @@ public class SalaryBillServiceImpl implements SalaryBillService {
             }
         }
 
+        // SPEC-P159（V203 双模式）：任一项目配 EMP_DECL ⇒ 涉及员工基数取其社保核定值；
+        // 员工未核定 → fail-loud 400 点名员工（静默回落会把核定基数错算成应发）。
+        Set<Long> declaredItemIds = csItems.stream().filter(c -> {
+            SocialInsuranceRateEntity r0 = rates.get(c.getId());
+            return "EMP_DECL".equals(r0 == null ? null : r0.getBaseMode());
+        }).map(SalaryItemEntity::getId).collect(Collectors.toSet());
+        Map<Long, BigDecimal> declaredBaseByEmployee = Map.of();
+        if (!declaredItemIds.isEmpty()) {
+            Set<Long> involved = grossByEmployee.keySet();
+            Map<Long, BigDecimal> declared = employeeMapper.selectList(
+                            new LambdaQueryWrapper<EmployeeEntity>()
+                                    .in(EmployeeEntity::getId, involved)
+                                    .isNotNull(EmployeeEntity::getSocialBaseDeclared))
+                    .stream().collect(Collectors.toMap(
+                            EmployeeEntity::getId, EmployeeEntity::getSocialBaseDeclared));
+            for (Long empId : involved) {
+                if (!declared.containsKey(empId)) {
+                    throw BusinessException.badRequest("员工 " + empId
+                            + " 未配置社保核定基数（单位社保基数模式=社保局核定），请先在员工档案补录");
+                }
+            }
+            declaredBaseByEmployee = declared;
+        }
+
         for (Map.Entry<Long, BigDecimal> en : grossByEmployee.entrySet()) {
             for (SalaryItemEntity cs : csItems) {
                 SocialInsuranceRateEntity rate = rates.get(cs.getId());
                 if (rate == null) {
                     continue;
                 }
-                BigDecimal base = en.getValue();
+                // SPEC-P159：基数按项目模式取值——GROSS=当期应发（原有口径）；
+                // EMP_DECL=该员工社保局核定基数（无核定值已在上方 fail-loud 拦截）。上下限 clamp 双模式通用。
+                BigDecimal base = declaredItemIds.contains(cs.getId())
+                        ? declaredBaseByEmployee.get(en.getKey())
+                        : en.getValue();
                 if (rate.getBaseFloor() != null && base.compareTo(rate.getBaseFloor()) < 0) {
                     base = rate.getBaseFloor();
                 }

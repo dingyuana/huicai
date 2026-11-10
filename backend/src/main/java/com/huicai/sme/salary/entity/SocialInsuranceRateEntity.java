@@ -12,9 +12,11 @@ import java.math.BigDecimal;
  * （category=COMPANY_SOCIAL）项目行上，每项目一条生效比例。
  *
  * <p>金额来源按用户裁定=【按比例自动算】：保存工资单时按
- * 基数（当期应发 clamp [baseFloor, baseCap]）× {@code companyRate}
+ * 基数（按 {@code baseMode} 取值，V203 SPEC-P159）× {@code companyRate}
  * 计算并落 {@code t_salary_bill_item} 明细（计算结果落库留痕）。
- * 🔴 基数口径 = 当期应发合计，与社保局合规申报基数可能不同（登记遗留）。</p>
+ * baseMode=GROSS（默认，历史口径）基数=该员工当期应发合计；
+ * baseMode=EMP_DECL 基数=该员工社保核定基数（t_employee.social_base_declared，
+ * 员工未核定 fail-loud 拒存——静默回落会把核定基数错算成应发）。</p>
  */
 @Data
 @EqualsAndHashCode(callSuper = true)
@@ -29,5 +31,10 @@ public class SocialInsuranceRateEntity extends BaseEntity {
     private BigDecimal baseFloor;
     /** 缴费基数上限（NULL = 不设上限） */
     private BigDecimal baseCap;
+    /**
+     * SPEC-P159（V203）：基数口径 GROSS=当期应发（默认，兼容存量行）；
+     * EMP_DECL=员工社保核定基数（t_employee.social_base_declared）。
+     */
+    private String baseMode;
     private String remark;
 }

@@ -151,6 +151,8 @@ export interface SocialRate {
   companyRate: number
   baseFloor?: number
   baseCap?: number
+  /** SPEC-P159：基数口径 GROSS=当期应发 | EMP_DECL=员工社保核定基数 */
+  baseMode?: 'GROSS' | 'EMP_DECL'
   remark?: string
 }
 
@@ -163,6 +165,8 @@ export function saveSocialRate(data: {
   companyRate: number
   baseFloor?: number
   baseCap?: number
+  /** SPEC-P159：基数口径，默认 GROSS */
+  baseMode?: 'GROSS' | 'EMP_DECL'
   remark?: string
 }): Promise<number> {
   return request.post('/sme/salary/v1/social-rates', data)

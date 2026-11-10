@@ -177,6 +177,9 @@
             </el-table-column>
             <el-table-column prop="baseFloor" label="基数下限" width="100" align="right" />
             <el-table-column prop="baseCap" label="基数上限" width="100" align="right" />
+            <el-table-column label="基数口径" width="150">
+              <template #default="{ row }">{{ row.baseMode === 'EMP_DECL' ? '社保核定基数' : '当期应发' }}</template>
+            </el-table-column>
             <el-table-column label="" width="70">
               <template #default="{ row }">
                 <el-button link type="danger" @click="onDeleteSocialRate(row)">删除</el-button>
@@ -202,12 +205,18 @@
             <el-form-item label="基数上限">
               <el-input-number v-model="socialForm.baseCap" :min="0" :precision="2" :controls="false" style="width: 110px" />
             </el-form-item>
+            <el-form-item label="基数口径">
+              <el-select v-model="socialForm.baseMode" style="width: 150px">
+                <el-option value="GROSS" label="当期应发" />
+                <el-option value="EMP_DECL" label="社保核定基数" />
+              </el-select>
+            </el-form-item>
             <el-form-item>
               <el-button type="primary" :loading="savingSocial" @click="onSaveSocialRate"
                          :disabled="companySocialItems.length === 0">保存比例</el-button>
             </el-form-item>
           </el-form>
-          <div class="hint">保存工资单时自动算：基数 = 当期应发（clamp 上下限）× 比例，明细锁定只读。基数口径为当期应发，与社保局申报基数可能不同。</div>
+          <div class="hint">保存工资单时自动算：基数 × 比例，明细锁定只读。基数口径二选一——「当期应发」=该员工当期应发合计（clamp 上下限，历史口径）；「社保核定基数」=该员工社保局年度核定值（t_employee 核定基数，员工未核定保存工资单会拒绝并点名），上下限对两种口径通用。</div>
         </el-tab-pane>
 
         <el-tab-pane label="部门费用科目分摊">
@@ -482,7 +491,7 @@ const deptMaps = ref<DeptSubjectMap[]>([])
 const depts = ref<Array<{ id: number; name: string }>>([])
 const savingSocial = ref(false)
 const savingMap = ref(false)
-const socialForm = reactive<{ itemId?: number; ratePercent?: number; baseFloor?: number; baseCap?: number }>({})
+const socialForm = reactive<{ itemId?: number; ratePercent?: number; baseFloor?: number; baseCap?: number; baseMode?: 'GROSS' | 'EMP_DECL' }>({})
 const mapForm = reactive<{ deptId?: number; subjectId?: number }>({})
 
 const companySocialItems = computed(() => items.value.filter((it) => it.category === 'COMPANY_SOCIAL'))
@@ -518,6 +527,7 @@ async function onSaveSocialRate(): Promise<void> {
       companyRate: socialForm.ratePercent / 100,
       baseFloor: socialForm.baseFloor || undefined,
       baseCap: socialForm.baseCap || undefined,
+      baseMode: socialForm.baseMode || 'GROSS',
     })
     ElMessage.success('比例已保存')
     socialRates.value = await listSocialRates()

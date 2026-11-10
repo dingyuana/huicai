@@ -13,6 +13,7 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
@@ -72,6 +73,8 @@ public class SocialInsuranceRateController {
         rate.setBaseFloor(dto.getBaseFloor());
         rate.setBaseCap(dto.getBaseCap());
         rate.setRemark(dto.getRemark());
+        // SPEC-P159：基数口径透传（null 归一为 GROSS，DB 列 NOT NULL DEFAULT 'GROSS' 由实体 fill 兜底也可）
+        rate.setBaseMode(dto.getBaseMode() == null ? "GROSS" : dto.getBaseMode());
         if (old == null) {
             rateMapper.insert(rate);
         } else {
@@ -109,6 +112,7 @@ public class SocialInsuranceRateController {
         vo.setCompanyRate(r.getCompanyRate());
         vo.setBaseFloor(r.getBaseFloor());
         vo.setBaseCap(r.getBaseCap());
+        vo.setBaseMode(r.getBaseMode());
         vo.setRemark(r.getRemark());
         return vo;
     }
@@ -122,6 +126,8 @@ public class SocialInsuranceRateController {
         private BigDecimal companyRate;
         private BigDecimal baseFloor;
         private BigDecimal baseCap;
+        /** SPEC-P159：基数口径 GROSS=当期应发 | EMP_DECL=员工社保核定基数 */
+        private String baseMode;
         private String remark;
     }
 
@@ -140,5 +146,9 @@ public class SocialInsuranceRateController {
 
         private BigDecimal baseFloor;
         private BigDecimal baseCap;
+
+        /** SPEC-P159：基数口径 GROSS=当期应发（默认） | EMP_DECL=员工社保核定基数 */
+        @Pattern(regexp = "GROSS|EMP_DECL", message = "基数口径只允许 GROSS 或 EMP_DECL")
+        private String baseMode;
     }
 }

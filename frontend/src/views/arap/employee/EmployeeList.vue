@@ -50,6 +50,10 @@
         <el-form-item label="邮箱">
           <el-input v-model="form.email" />
         </el-form-item>
+        <el-form-item label="社保核定基数">
+          <el-input-number v-model="form.socialBaseDeclared" :min="0" :precision="2" :controls="false"
+                           placeholder="社保局年度核定值（未核定留空）" style="width: 100%" />
+        </el-form-item>
         <el-form-item label="启用">
           <el-switch v-model="form.isActive" />
         </el-form-item>
@@ -86,7 +90,7 @@ const formRef = ref<FormInstance>()
 const accountOptions = ref<Array<{ id: number; username: string; realName?: string }>>([])
 const bindChanged = ref(false)
 
-const form = ref<any>({ code: '', name: '', deptName: '', position: '', phone: '', email: '', isActive: true, userId: null })
+const form = ref<any>({ code: '', name: '', deptName: '', position: '', phone: '', email: '', isActive: true, userId: null, socialBaseDeclared: undefined })
 const rules = {
   code: [{ required: true, message: '请输入工号', trigger: 'blur' }],
   name: [{ required: true, message: '请输入姓名', trigger: 'blur' }],
@@ -119,6 +123,7 @@ function openEdit(row: any) {
     email: row.email || '',
     isActive: row.isActive !== false,
     userId: row.userId ?? null,
+    socialBaseDeclared: row.socialBaseDeclared ?? undefined,
   }
   bindChanged.value = false
   loadAccounts()

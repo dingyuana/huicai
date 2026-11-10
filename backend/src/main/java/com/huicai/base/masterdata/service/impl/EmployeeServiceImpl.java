@@ -101,6 +101,8 @@ public class EmployeeServiceImpl implements EmployeeService {
         existing.setEmail(entity.getEmail());
         existing.setIsActive(entity.getIsActive());
         existing.setRemark(entity.getRemark());
+        // SPEC-P159：社保核定基数必须在这里搬运（读-改-写形态，漏掉=编辑一次就静默丢弃）
+        existing.setSocialBaseDeclared(entity.getSocialBaseDeclared());
         // ⚠️ 刻意**不再**搬运 bankName / bankAccount / idCard：
         // 它们在 EmployeeEntity 上标着 exist=false，t_employee 无对应列 ⇒ 这三行
         // 读到的恒为 null、写进的也被 MyBatis 丢弃，属**误导性死代码**

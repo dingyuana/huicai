@@ -44,6 +44,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -527,5 +528,116 @@ class SalaryBillServiceTest {
         e.setItemId(itemId);
         e.setAmount(new BigDecimal(amount));
         return e;
+    }
+
+    @Test
+    @DisplayName("P159 EMP_DECL：基数取员工社保核定值（非 EARN 应发）；未核定员工 fail-loud 400")
+    void saveEmpDeclaredBase() {
+        SalaryItemEntity csItem = def(201L, "COMPANY_SOCIAL", false);
+        csItem.setItemName("养老保险(单位)");
+        SocialInsuranceRateEntity rate = new SocialInsuranceRateEntity();
+        rate.setItemId(201L);
+        rate.setCompanyRate(new BigDecimal("0.16"));
+        rate.setBaseMode("EMP_DECL");
+        when(salaryItemMapper.selectList(any())).thenReturn(
+                List.of(csItem),
+                List.of(def(101L, "EARN", true)));
+        lenient().when(salaryItemMapper.selectCount(any())).thenReturn(2L);
+        when(socialRateMapper.selectList(any())).thenReturn(List.of(rate));
+        when(billMapper.selectOne(any())).thenReturn(null);
+        lenient().when(deptSubjectMapMapper.selectList(any())).thenReturn(List.of());
+        // 员工 11 已核定基数 8000（社保局年申报值）；应发 10000 ≠ 基数——必须按核定值算
+        EmployeeEntity e11 = new EmployeeEntity();
+        e11.setId(11L);
+        e11.setSocialBaseDeclared(new BigDecimal("8000"));
+        when(employeeMapper.selectList(any())).thenReturn(List.of(e11));
+
+        SalaryBillSaveDTO dto = new SalaryBillSaveDTO();
+        dto.setPeriod("202612");
+        dto.setItems(List.of(
+                dtoItem(11L, 101L, "10000"),
+                dtoItem(11L, 201L, "9999")));
+        service.save(dto, 9L);
+
+        ArgumentCaptor<SalaryBillItemEntity> rows = ArgumentCaptor.forClass(SalaryBillItemEntity.class);
+        verify(itemMapper, times(2)).insert(rows.capture());
+        assertEquals(0, new BigDecimal("1280.00").compareTo(rows.getAllValues().get(1).getAmount()),
+                "基数=核定 8000 × 16% = 1280.00（若错误按应发 10000 算会是 1600）");
+    }
+
+    @Test
+    @DisplayName("P159 EMP_DECL：员工未核定基数 → fail-loud 400 点名（不静默回落应发）")
+    void saveEmpDeclaredMissingFailLoud() {
+        SalaryItemEntity csItem = def(201L, "COMPANY_SOCIAL", false);
+        SocialInsuranceRateEntity rate = new SocialInsuranceRateEntity();
+        rate.setItemId(201L);
+        rate.setCompanyRate(new BigDecimal("0.16"));
+        rate.setBaseMode("EMP_DECL");
+        when(salaryItemMapper.selectList(any())).thenReturn(
+                List.of(csItem),
+                List.of(def(101L, "EARN", true)));
+        lenient().when(salaryItemMapper.selectCount(any())).thenReturn(2L);
+        when(socialRateMapper.selectList(any())).thenReturn(List.of(rate));
+        when(billMapper.selectOne(any())).thenReturn(null);
+        lenient().when(deptSubjectMapMapper.selectList(any())).thenReturn(List.of());
+        // 员工 11 无核定值（selectList 返回空）
+        when(employeeMapper.selectList(any())).thenReturn(List.of());
+
+        SalaryBillSaveDTO dto = new SalaryBillSaveDTO();
+        dto.setPeriod("202612");
+        dto.setItems(List.of(dtoItem(11L, 101L, "10000")));
+        BusinessException ex = assertThrows(BusinessException.class, () -> service.save(dto, 9L));
+        assertTrue(ex.getMessage().contains("社保核定基数"), "实际：" + ex.getMessage());
+        verify(billMapper, never()).insert(any(SalaryBillEntity.class));
+        verify(itemMapper, never()).insert(any(SalaryBillItemEntity.class));
+    }
+
+    @Test
+    @DisplayName("P159 混合模式：GROSS 项目按应发、EMP_DECL 项目按核定（同单同员工双项目并存）")
+    void saveMixedModes() {
+        SalaryItemEntity csGross = def(201L, "COMPANY_SOCIAL", false);
+        csGross.setItemName("养老(单位)");
+        SalaryItemEntity csDecl = def(202L, "COMPANY_SOCIAL", false);
+        csDecl.setItemName("医疗(单位)");
+        SocialInsuranceRateEntity rGross = new SocialInsuranceRateEntity();
+        rGross.setItemId(201L);
+        rGross.setCompanyRate(new BigDecimal("0.16"));
+        rGross.setBaseMode("GROSS");
+        SocialInsuranceRateEntity rDecl = new SocialInsuranceRateEntity();
+        rDecl.setItemId(202L);
+        rDecl.setCompanyRate(new BigDecimal("0.08"));
+        rDecl.setBaseMode("EMP_DECL");
+        rDecl.setBaseFloor(new BigDecimal("3000"));
+        when(salaryItemMapper.selectList(any())).thenReturn(
+                List.of(csGross, csDecl),
+                List.of(def(101L, "EARN", true)));
+        lenient().when(salaryItemMapper.selectCount(any())).thenReturn(3L);
+        when(socialRateMapper.selectList(any())).thenReturn(List.of(rGross, rDecl));
+        when(billMapper.selectOne(any())).thenReturn(null);
+        lenient().when(deptSubjectMapMapper.selectList(any())).thenReturn(List.of());
+        // 核定 2000 低于 EMP_DECL 项目下限 3000 → clamp 3000；GROSS 项目不受 EMP_DECL 下限影响
+        EmployeeEntity e11 = new EmployeeEntity();
+        e11.setId(11L);
+        e11.setSocialBaseDeclared(new BigDecimal("2000"));
+        when(employeeMapper.selectList(any())).thenReturn(List.of(e11));
+
+        SalaryBillSaveDTO dto = new SalaryBillSaveDTO();
+        dto.setPeriod("202612");
+        dto.setItems(List.of(
+                dtoItem(11L, 101L, "10000"),
+                dtoItem(11L, 201L, "0"),
+                dtoItem(11L, 202L, "0")));
+        service.save(dto, 9L);
+
+        ArgumentCaptor<SalaryBillItemEntity> rows = ArgumentCaptor.forClass(SalaryBillItemEntity.class);
+        verify(itemMapper, times(3)).insert(rows.capture());
+        List<SalaryBillItemEntity> lines = rows.getAllValues();
+        // 行1=EARN 保留；行2=GROSS 养老（基数应发 10000×16%=1600）；行3=EMP_DECL 医疗（核定 2000 clamp 3000×8%=240）
+        assertEquals(201L, lines.get(1).getItemId());
+        assertEquals(0, new BigDecimal("1600.00").compareTo(lines.get(1).getAmount()),
+                "GROSS 项目基数=应发 10000");
+        assertEquals(202L, lines.get(2).getItemId());
+        assertEquals(0, new BigDecimal("240.00").compareTo(lines.get(2).getAmount()),
+                "EMP_DECL 项目基数=核定 2000 clamp 下限 3000 × 8% = 240");
     }
 }
