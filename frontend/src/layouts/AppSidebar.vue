@@ -122,6 +122,16 @@
         <el-menu-item v-if="authStore.canAccess('/asset/report')" index="/asset/report">折旧与资产统计</el-menu-item>
       </el-sub-menu>
 
+      <!-- 工资薪酬（SPEC-P143 / REQ-2026-160，V197 菜单行 menu-salary-bill → /salary/bill） -->
+      <el-sub-menu v-if="hasVisible(['/salary/bill', '/salary/my'])"  index="salary">
+        <template #title>
+          <el-icon><User /></el-icon>
+          <span>工资薪酬</span>
+        </template>
+        <el-menu-item v-if="authStore.canAccess('/salary/bill')" index="/salary/bill">工资单</el-menu-item>
+        <el-menu-item v-if="authStore.canAccess('/salary/my')" index="/salary/my">我的工资单</el-menu-item>
+      </el-sub-menu>
+
       <!-- 报表中心 -->
       <el-sub-menu v-if="hasVisible(['/report/subject-balance', '/report/balance-sheet', '/report/income-statement', '/report/cash-flow'])"  index="report">
         <template #title>
@@ -196,7 +206,6 @@
         <el-menu-item v-if="authStore.canAccess('/budget')" index="/budget">预算管理</el-menu-item>
         <el-menu-item v-if="authStore.canAccess('/analysis/key-metrics')" index="/analysis/key-metrics">关键指标</el-menu-item>
         <el-menu-item v-if="authStore.canAccess('/analysis/dupont')" index="/analysis/dupont">杜邦分析</el-menu-item>
-        <el-menu-item v-if="authStore.canAccess('/salary')" index="/salary">工资薪酬</el-menu-item>
         <el-menu-item v-if="authStore.canAccess('/ai/task')" index="/ai/task">AI 任务</el-menu-item>
         <el-menu-item v-if="authStore.canAccess('/ai/anomaly')" index="/ai/anomaly">AI 异常</el-menu-item>
       </el-sub-menu>
@@ -210,7 +219,7 @@ import { useAppStore } from '@/stores/app.store'
 import { useAuthStore } from '@/stores/auth.store'
 import { useLabStore } from '@/stores/lab.store'
 import {
-  HomeFilled, Coin, Wallet, Connection, Files, Document, Ticket, Box,
+  HomeFilled, Coin, Wallet, Connection, Files, Document, Ticket, Box, User,
   DataAnalysis, Notebook, Setting, OfficeBuilding, MagicStick,
 } from '@element-plus/icons-vue'
 

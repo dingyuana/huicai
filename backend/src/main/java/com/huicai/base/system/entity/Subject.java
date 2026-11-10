@@ -53,7 +53,17 @@ public class Subject {
     /** 备注 */
     private String remark;
 
-    /** 企业ID（多租户隔离） */
+    /**
+     * 企业ID（多租户隔离）
+     *
+     * <p>🔴 SPEC-P153（2026-11-05 王会计导入发票 500）：此前为<b>裸字段</b>，
+     * MyBatis-Plus 生成的 INSERT 列清单<b>整列缺席</b>（列按 fill 标记收录），
+     * {@code MyMetaObjectHandler} 往实体 set 的值根本进不了 SQL
+     * ⇒ DB 用 {@code DEFAULT 1} 兜底 —— 企业 1「碰巧正确」，
+     * 其余账套被 RLS WITH CHECK 拒（new row violates row-level security）。
+     * 复发锁：{@code TenantInsertEnterpriseFillRealDBTest}。
+     */
+    @TableField(fill = FieldFill.INSERT)
     private Long enterpriseId;
 
     @TableField(fill = FieldFill.INSERT)

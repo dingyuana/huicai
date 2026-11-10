@@ -87,6 +87,15 @@ public class InputInvoiceImportService {
 
     private final VoucherTypeService voucherTypeService;
 
+    /**
+     * SPEC-P153：与 {@code SalesInvoiceImportService.rowTx} 同型 —— 行体在
+     * REQUIRES_NEW 事务中执行，单行 SQL 失败只中止该行自己的事务，
+     * 外层批量事务继续（保住「单行失败记 errors、其余行继续」的承诺）。
+     * 🔴 必须保持为<b>最后一个字段</b>：@RequiredArgsConstructor 按声明序生成
+     * 构造器，两处测试直接 new 的实参表以此为契约。
+     */
+    private final com.huicai.common.transaction.RequiresNewRunner rowTx;
+
     public Map<String, Object> previewInvoices(MultipartFile file) {
         if (file == null || file.isEmpty()) {
             throw BusinessException.badRequest("上传文件为空");
@@ -331,16 +340,22 @@ public class InputInvoiceImportService {
                     errors.add(err);
                     continue;
                 }
-                Long vendorId = matchOrCreateVendor(row);
-                if (vendorId == null) {
+                Boolean okRow = rowTx.run(() -> {
+                    Long vendorId = matchOrCreateVendor(row);
+                    if (vendorId == null) {
+                        return false;
+                    }
+                    String period = row.invoiceDate.format(DateTimeFormatter.ofPattern("yyyyMM"));
+                    // P40: 导入时只创建发票，审核通过后才创建业务单据和凭证
+                    insertInputInvoice(row, vendorId, period);
+                    return true;
+                });
+                if (!Boolean.TRUE.equals(okRow)) {
                     errors.add(Map.of("row", row.rowNum, "invoiceNo", row.invoiceNo, "message", "供应商匹配失败"));
                     continue;
                 }
-                String period = row.invoiceDate.format(DateTimeFormatter.ofPattern("yyyyMM"));
-                // P40: 导入时只创建发票，审核通过后才创建业务单据和凭证
-                insertInputInvoice(row, vendorId, period);
                 success++;
-                successPeriods.add(period);
+                successPeriods.add(row.invoiceDate.format(DateTimeFormatter.ofPattern("yyyyMM")));
             } catch (Exception e) {
                 log.warn("处理采购发票行失败 row={}: {}", row.rowNum, e.getMessage());
                 Map<String, Object> err = new LinkedHashMap<>();

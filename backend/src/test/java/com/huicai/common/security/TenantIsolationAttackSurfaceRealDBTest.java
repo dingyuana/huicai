@@ -1,0 +1,343 @@
+package com.huicai.common.security;
+
+import com.huicai.base.storage.entity.AttachmentEntity;
+import com.huicai.base.storage.mapper.AttachmentMapper;
+import com.huicai.common.context.EnterpriseContextHolder;
+import com.huicai.common.test.AbstractMapperTest;
+import com.huicai.sme.salary.entity.SalaryBillEntity;
+import com.huicai.sme.salary.entity.SalaryItemEntity;
+import com.huicai.sme.salary.mapper.SalaryBillMapper;
+import com.huicai.sme.salary.mapper.SalaryItemMapper;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors;
+import org.springframework.test.web.servlet.MockMvc;
+
+import java.math.BigDecimal;
+import java.util.UUID;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/**
+ * SPEC-P154 切片一：多租户隔离攻击面负向探针（v4.0 §8 映射）。
+ *
+ * <p><b>隔离架构</b>：慧财数据层隔离 = RLS（enterprise_id = GUC，Postgres 行级安全兜底）
+ * + GUC 逐 SQL 设置；功能层隔离 = PermissionEnforcementInterceptor（enforcing，307 端点）。
+ * 本类把 v4.0 的攻击面矩阵落到真库 + 真 Controller 链（MockMvc 走权限拦截器 →
+ * GUC 拦截器 → RLS 谓词全链），每例锁两断言：<b>操作被拒 + 受害行数据不变</b>。</p>
+ *
+ * <p><b>SPEC-P154 项② 已闭合（八类红线「审计日志策略」用户裁定修复）**：此前权限拦截器
+ * 403 在 preHandle 阶段直接写 response、@Auditable 切面不触发 ⇒ 越权尝试零 DB 留痕。
+ * 现 preHandle 的 enforcing 拒绝分支发布 {@link com.huicai.common.exception.AccessDeniedEvent}，
+ * 由 {@link com.huicai.common.exception.AccessDeniedAuditListener}（AFTER_COMPLETION +
+ * fallbackExecution，生产 preHandle 阶段无事务⇒即时落）写 t_audit_log
+ * module=SECURITY / operation=ACCESS_DENIED，复用 P152 真列。锁点：本类
+ * {@code accessDeniedEventPersistsAuditRow}（落库全字段）+ L1
+ * {@code PermissionEnforcementInterceptorRealDBTest}（403 恰发一次事件）。</p>
+ *
+ * <p><b>探针口径（与生产同构）</b>：攻击者持<b>充足功能权限</b>（salary:save 等），
+ * 只缺「数据归属」——功能层全放行、数据层 RLS 必须兜住。这比「无权限 403」更硬：
+ * 它证明隔离不依赖功能权限配置的正确性。</p>
+ */
+@DisplayName("SPEC-P154：多租户攻击面 —— BOLA 读/写/删 + 附件签名 URL + 功能越权 + 列表不串户")
+@AutoConfigureMockMvc
+class TenantIsolationAttackSurfaceRealDBTest extends AbstractMapperTest {
+
+    private static final long VICTIM_ENT = 1L;
+    private static final long ATTACKER_ENT = 2L;
+
+    @Autowired private MockMvc mockMvc;
+    @Autowired private JdbcTemplate jdbcTemplate;
+    @Autowired private SalaryBillMapper billMapper;
+    @Autowired private SalaryItemMapper salaryItemMapper;
+    @Autowired private AttachmentMapper attachmentMapper;
+    @Autowired private com.huicai.common.exception.AccessDeniedAuditListener accessDeniedAuditListener;
+
+    // ── 造数（受害方 = ent1）──
+
+    private Long makeVictimBill() {
+        SalaryItemEntity item = new SalaryItemEntity();
+        item.setItemCode("ATK-" + System.nanoTime());
+        item.setItemName("探针项目");
+        item.setCategory("EARN");
+        salaryItemMapper.insert(item);
+
+        SalaryBillEntity bill = new SalaryBillEntity();
+        bill.setPeriod("202612");
+        bill.setStatus("DRAFT");
+        billMapper.insert(bill);
+        return bill.getId();
+    }
+
+    private Long makeVictimAttachment() {
+        AttachmentEntity att = new AttachmentEntity();
+        att.setBizType("salary_bill");
+        att.setBizId(0L);
+        att.setFileName("atk/" + UUID.randomUUID() + ".bin");
+        att.setOriginalName("victim-secret.bin");
+        att.setFilePath("huicai-files/atk/" + UUID.randomUUID() + ".bin");
+        att.setBucketName("huicai-files");
+        att.setFileSize(1L);
+        att.setContentType("application/octet-stream");
+        attachmentMapper.insert(att);
+        return att.getId();
+    }
+
+    // ── 自证前提（防探针恒绿：RLS 表集若被撤策略，本类全部断言失去意义）──
+
+    @Test
+    @DisplayName("自证：t_salary_bill / t_attachment 确在 RLS 策略内（探针有效性前提）")
+    void rlsPremiseHolds() {
+        for (String table : new String[] {"t_salary_bill", "t_attachment"}) {
+            Integer policies = jdbcTemplate.queryForObject(
+                    "SELECT count(*) FROM pg_policies WHERE tablename = ?", Integer.class, table);
+            assertEquals(1, policies, table + " 必须挂 enterprise_policy —— 策略被撤则探针全部失效");
+        }
+    }
+
+    // ── 攻击面 1：BOLA 读（嵌套资源）──
+
+    @Test
+    @DisplayName("攻击面1 BOLA读：ent2 会话读 ent1 工资单详情 → 拒 + 行不变")
+    void bolaReadDenied() throws Exception {
+        Long billId = makeVictimBill();
+        EnterpriseContextHolder.set(ATTACKER_ENT);
+        try {
+            // R 信封口径：BusinessException = HTTP 200 + body code 400（V1.105 实机家法）
+            mockMvc.perform(get("/api/sme/salary/v1/salary-bills/" + billId)
+                            .with(SecurityMockMvcRequestPostProcessors.user("attacker")
+                                    .authorities(() -> "salary:list", () -> "salary:save")))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.code").value(org.hamcrest.Matchers.greaterThanOrEqualTo(400)));
+        } finally {
+            EnterpriseContextHolder.clear();
+        }
+        assertBillStatus(billId, "DRAFT");
+    }
+
+    // ── 攻击面 2：BOLA 写（跨租户状态推进）──
+
+    @Test
+    @DisplayName("攻击面2 BOLA写：ent2 会话确认 ent1 工资单 → 拒 + 状态不变 + 不产生凭证")
+    void bolaWriteDenied() throws Exception {
+        Long billId = makeVictimBill();
+        EnterpriseContextHolder.set(ATTACKER_ENT);
+        try {
+            mockMvc.perform(post("/api/sme/salary/v1/salary-bills/" + billId + "/confirm")
+                            .with(SecurityMockMvcRequestPostProcessors.user("attacker")
+                                    .authorities(() -> "salary:confirm")))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.code").value(org.hamcrest.Matchers.greaterThanOrEqualTo(400)));
+        } finally {
+            EnterpriseContextHolder.clear();
+        }
+        assertBillStatus(billId, "DRAFT");
+        Integer salc = jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM t_voucher WHERE voucher_no LIKE 'SALC-%' AND enterprise_id = 1",
+                Integer.class);
+        assertEquals(0, salc, "被拒的确认不得产生任何计提凭证");
+    }
+
+    // ── 攻击面 3：文件存储 —— 跨租户换签名下载 URL ──
+
+    @Test
+    @DisplayName("攻击面3 附件：ent2 会话换 ent1 附件签名 URL → 拒（RLS 滤空）+ 行不变")
+    void bolaPresignDenied() throws Exception {
+        Long attId = makeVictimAttachment();
+        EnterpriseContextHolder.set(ATTACKER_ENT);
+        try {
+            mockMvc.perform(get("/api/v1/attachments/" + attId + "/url")
+                            .with(SecurityMockMvcRequestPostProcessors.user("attacker")
+                                    .authorities(() -> "file:attachment:manage")))
+                    .andDo(org.springframework.test.web.servlet.result.MockMvcResultHandlers.print())
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.code").value(org.hamcrest.Matchers.greaterThanOrEqualTo(400)));
+        } finally {
+            EnterpriseContextHolder.clear();
+        }
+        Integer alive = jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM t_attachment WHERE id = ? AND deleted = 0", Integer.class, attId);
+        assertEquals(1, alive, "受害附件行必须原样存在");
+    }
+
+    // ── 攻击面 4：跨租户删除 ──
+
+    @Test
+    @DisplayName("攻击面4 BOLA删：ent2 会话删 ent1 附件 → 拒 + 行不变")
+    void bolaDeleteDenied() throws Exception {
+        Long attId = makeVictimAttachment();
+        EnterpriseContextHolder.set(ATTACKER_ENT);
+        try {
+            mockMvc.perform(delete("/api/v1/attachments/" + attId)
+                            .with(SecurityMockMvcRequestPostProcessors.user("attacker")
+                                    .authorities(() -> "file:attachment:manage")))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.code").value(org.hamcrest.Matchers.greaterThanOrEqualTo(400)));
+        } finally {
+            EnterpriseContextHolder.clear();
+        }
+        Integer alive = jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM t_attachment WHERE id = ? AND deleted = 0", Integer.class, attId);
+        assertEquals(1, alive, "被拒的删除不得软删受害行");
+    }
+
+    // ── 攻击面 5：功能越权（缺权限 403，enforcing 模式）──
+
+    @Test
+    @DisplayName("攻击面5 功能越权：无 salary:save 者新建工资单 → 403 + 数据不变")
+    void missingPermissionDenied403() throws Exception {
+        EnterpriseContextHolder.set(ATTACKER_ENT);
+        try {
+            // body 必须合法（items 非空）：@Valid 校验先于 @PreAuthorize 执行，
+            // 空 items 会以 400「工资明细不能为空」抢在权限拒绝之前返回（信息面小泄露，另登记）
+            mockMvc.perform(post("/api/sme/salary/v1/salary-bills")
+                            .with(SecurityMockMvcRequestPostProcessors.user("cashier")
+                                    .authorities(() -> "bank:journal:list"))
+                            .contentType("application/json")
+                            .content("{\"period\":\"202612\",\"items\":[{\"employeeId\":1,\"itemId\":1,\"amount\":1}]}"))
+                    .andExpect(status().isForbidden());
+        } finally {
+            EnterpriseContextHolder.clear();
+        }
+        Integer cnt = jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM t_salary_bill WHERE period = '202612'", Integer.class);
+        assertEquals(0, cnt, "403 请求不得留下任何工资单行");
+    }
+
+    @Test
+    @DisplayName("项② ACCESS_DENIED 审计落库：监听器收到事件后写 t_audit_log 全字段（module=SECURITY）")
+    void accessDeniedEventPersistsAuditRow() {
+        // 端到端「拦截器发布」已由 L1 PermissionEnforcementInterceptorRealDBTest 锁死
+        // （record 型 publisher 断言事件恰发一次）；MockMvc 全链在本类 @Transactional 下
+        // AFTER_COMPLETION 监听器要到测试事务终结才触发、方法体内不可见——生产 preHandle
+        // 阶段无事务，fallbackExecution=true 即时落库。故此处按生产同构直接驱动监听器。
+        var event = new com.huicai.common.exception.AccessDeniedEvent(
+                "probe-cashier", "salary:save",
+                new org.springframework.mock.web.MockHttpServletRequest("POST",
+                        "/api/sme/salary/v1/salary-bills"));
+        accessDeniedAuditListener.onAccessDenied(event);
+
+        var rows = jdbcTemplate.queryForList(
+                "SELECT module, operation, status, operator_name, request_params, "
+                        + "after_data::text AS ad, ip_address FROM t_audit_log "
+                        + "WHERE operation = 'ACCESS_DENIED' AND operator_name = 'probe-cashier'");
+        assertEquals(1, rows.size(), "监听器必须恰写 1 条 ACCESS_DENIED 审计行，实际：" + rows);
+        var r = rows.get(0);
+        assertEquals("SECURITY", r.get("module"), "module 必须是 SECURITY（越权尝试独立模块口径）");
+        assertEquals("fail", r.get("status"), "越权尝试状态必须是 fail");
+        assertEquals("POST /api/sme/salary/v1/salary-bills", r.get("request_params"),
+                "request_params 必须记 METHOD + URI（P152 真列口径）");
+        String ad = String.valueOf(r.get("ad"));
+        // after_data 是 JSONB：非法转义会在写入即炸（JsonbTypeHandler 吞错形态已收口），
+        // 这里再断言关键键在位
+        assertTrue(ad.contains("salary:save"), "after_data 必须携带被拒权限码：" + ad);
+    }
+
+    // ── 攻击面 6：列表不串户 ──
+
+    @Test
+    @DisplayName("攻击面6 列表不串户：ent2 会话的工资单列表 ID 集合 ⊆ 本租户")
+    void listScopedToTenant() throws Exception {
+        makeVictimBill(); // ent1 的行
+        EnterpriseContextHolder.set(ATTACKER_ENT);
+        try {
+            mockMvc.perform(get("/api/sme/salary/v1/salary-bills")
+                            .with(SecurityMockMvcRequestPostProcessors.user("attacker")
+                                    .authorities(() -> "salary:list")))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data[?(@.enterpriseId != 2)]").isEmpty());
+        } finally {
+            EnterpriseContextHolder.clear();
+        }
+    }
+
+    // ── 攻击面 7：DB 层 RLS 独立有效性（V198 回归锁）──
+    //
+    // 🔴 背景（生产部署翻车 + L2 假绿同根，2026-11-06）：超级用户绕过 RLS 是 Postgres
+    // 语义（FORCE 也压不住）。本测试容器用户 test 与生产 Flyway 用户 huicai 都是超级
+    // 用户 ⇒ 此前本类 7 例的绿全靠【应用层 SQL 过滤】（EnterpriseDataPermissionInterceptor），
+    // DB RLS 层的行为在 L2 从未被真实验证过；V198 DO 块首版行为断言在生产有数据时炸、
+    // 在测试库空表时空转假绿，同根。
+    //
+    // 本例以【临时非超管角色】SET ROLE 后直查，把 DB 层行为真正锁进测试：
+    // 态1 策略在 → GUC=999999 滤空 / GUC=本租户可见；态2（自反证）撤策略 → 必穿透。
+    // CREATE ROLE / DROP POLICY 均为事务性 DDL，@Transactional 回滚自动复原，零清理。
+
+    @Test
+    @DisplayName("攻击面7 DB层RLS行为：非超管角色下策略在→滤空、策略撤→穿透（双态自反证）")
+    void dbLayerRlsBehaviorUnderNonSuperRole() {
+        // 造受害行（ent1）——直插绕过 MP fill，enterprise_id 显式指定
+        jdbcTemplate.update(
+                "INSERT INTO t_salary_bill(period, enterprise_id) VALUES ('202612', 1)");
+
+        // 临时非超管角色（不 LOGIN，仅 SET ROLE 代入身份）
+        jdbcTemplate.execute("CREATE ROLE p154_probe NOSUPERUSER NOBYPASSRLS");
+        jdbcTemplate.execute("GRANT SELECT ON t_salary_bill TO p154_probe");
+
+        jdbcTemplate.execute((java.sql.Connection conn) -> {
+            try (var st = conn.createStatement()) {
+                st.execute("SET ROLE p154_probe");
+                try {
+                    // 态1：策略在 —— 攻击者身份（GUC=999999）必滤空
+                    st.execute("SET app.enterprise_id = '999999'");
+                    try (var rs = st.executeQuery("SELECT count(*) FROM t_salary_bill")) {
+                        rs.next();
+                        assertEquals(0, rs.getInt(1),
+                                "策略在：GUC=999999 必须滤空 —— DB 层 RLS 谓词未生效（V198 被撤？）");
+                    }
+                    // 态1b：受害者身份（GUC=1）必见自己的行
+                    st.execute("SET app.enterprise_id = '1'");
+                    try (var rs = st.executeQuery("SELECT count(*) FROM t_salary_bill")) {
+                        rs.next();
+                        org.junit.jupiter.api.Assertions.assertTrue(rs.getInt(1) >= 1,
+                                "策略在：本租户 GUC=1 必须可见自己的行 —— RLS 把自己也滤了");
+                    }
+                    // 态2a（fail-closed 语义锁）：撤策略后非超管视角必须【全锁死】——
+                    // RLS 启用且无策略 = deny-all，策略意外丢失时安全语义是全锁不是全开
+                    st.execute("RESET ROLE");
+                    st.execute("DROP POLICY enterprise_policy ON t_salary_bill");
+                    st.execute("SET ROLE p154_probe");
+                    st.execute("SET app.enterprise_id = '999999'");
+                    try (var rs = st.executeQuery("SELECT count(*) FROM t_salary_bill")) {
+                        rs.next();
+                        assertEquals(0, rs.getInt(1),
+                                "撤策略后 RLS 启用无策略 = deny-all：必须全锁死（fail-closed），不得变全开");
+                    }
+                    // 态2b（自反证核心）：关掉 RLS 本身 —— 同一身份同一 GUC 必须真穿透，
+                    // 证明态1 的滤空确实来自 RLS 而非恒绿
+                    st.execute("RESET ROLE");
+                    st.execute("ALTER TABLE t_salary_bill DISABLE ROW LEVEL SECURITY");
+                    st.execute("SET ROLE p154_probe");
+                    st.execute("SET app.enterprise_id = '999999'");
+                    try (var rs = st.executeQuery("SELECT count(*) FROM t_salary_bill")) {
+                        rs.next();
+                        org.junit.jupiter.api.Assertions.assertTrue(rs.getInt(1) >= 1,
+                                "关 RLS 后必须穿透 —— 若仍 0 行说明态1断言恒绿，反证失效");
+                    }
+                } finally {
+                    // SET ROLE / SET 是连接级状态，池化连接上必须成对还原（防泄漏给后续借出者）
+                    st.execute("RESET ROLE");
+                    st.execute("RESET app.enterprise_id");
+                }
+            }
+            return null;
+        });
+    }
+
+
+    private void assertBillStatus(Long billId, String expected) {
+        // jdbcTemplate 绕 MyBatis 一级缓存（@Transactional 同 SqlSession 假阴性，V1.104 教训）
+        String status = jdbcTemplate.queryForObject(
+                "SELECT status FROM t_salary_bill WHERE id = ?", String.class, billId);
+        assertTrue(expected.equals(status), "受害工资单状态必须保持 " + expected + "，实际 " + status);
+    }
+}

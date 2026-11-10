@@ -68,7 +68,9 @@ class InputInvoiceImportServiceTest {
         service = new InputInvoiceImportService(
                 docMapper, docEntryMapper, voucherMapper, voucherEntryMapper,
                 voucherNoService, vendorMapper, subjectMapper, inputInvoiceMapper,
-                columnMappingResolver, invoiceDedupUtil, eventPublisher, voucherTypeService);
+                columnMappingResolver, invoiceDedupUtil, eventPublisher, voucherTypeService,
+                // SPEC-P153：裸实例 = 无 Spring 代理，行体原地执行（语义与加事务前等价）
+                new com.huicai.common.transaction.RequiresNewRunner());
     }
 
     private InputInvoiceImportService.ParsedInputInvoiceRow stubRow(int rowNum, String invoiceNo,

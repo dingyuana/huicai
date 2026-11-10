@@ -39,9 +39,9 @@ import java.time.LocalDate;
  * {@code createdBy}/{@code createdAt}/{@code updatedAt}（审计列 —— 且 grep
  * {@code SettlementPanel.vue} 的引用行数<b>全为 0</b>，页面一个都不读，
  * 故它们既非合法展示字段也不该进契约，AGENTS §4.5 第 38 条）、
- * {@code voucherNo} 与 {@code reversedFromSettlementId}（⚠️ Entity 里两者都标了
- * {@code exist = false}，是<b>幽灵字段</b> —— DB 无这些列、赋值不参与 SQL、读回恒 null，
- * AGENTS §4.2 第 10 条；本 VO 因此既不含它们，也不从 Entity 拷贝）。
+ * {@code voucherNo} 与 {@code reversedFromSettlementId}（SPEC-P153 / V194 起两者已由
+ * 幽灵字段转正为真实列 —— generateVoucher 回写与红冲链从此可溯源；VO 是否外露
+ * 仍按本注释所在批次的既有裁定：SettlementPanel.vue 引用行数 0 ⇒ 继续不外露）。
  *
  * @see AGENTS.md §0「出参面 Entity 直出」待办
  */

@@ -74,6 +74,11 @@ public class PermissionManifest {
                         : "命中但缺权限**只告警仍放行**，**尚未完成权限管控**");
     }
 
+    /** 测试钩子：注入合成条目（守卫「字面量优先与清单顺序无关」用，SPEC-P157）。 */
+    public void injectEntriesForTest(List<Entry> seeded) {
+        entries = new ArrayList<>(seeded);
+    }
+
     @SuppressWarnings("unchecked")
     private List<Entry> doLoad() {
         ClassPathResource res = new ClassPathResource("permission-manifest.yml");
@@ -109,6 +114,24 @@ public class PermissionManifest {
                 boolean write = Boolean.TRUE.equals(m.get("write"));
                 out.add(new Entry(method, path, perm, write, toPattern(path)));
             }
+
+            // 结构守卫（SPEC-P154 项④）：excluded 段若存在，不得包含 permission 键
+            // （permission 键只属于 endpoints 段；误落 excluded 的真端点会被静默丢弃）
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> excluded = (List<Map<String, Object>>) root.get("excluded");
+            if (excluded != null) {
+                for (int i = 0; i < excluded.size(); i++) {
+                    Map<String, Object> e = excluded.get(i);
+                    if (e.containsKey("permission")) {
+                        String method = String.valueOf(e.get("method"));
+                        String path = String.valueOf(e.get("path"));
+                        throw new IllegalStateException(
+                                "permission-manifest.yml excluded 段第 " + (i + 1) + " 条含 permission 键：" + method + " " + path
+                                        + " —— 真端点必须在 endpoints 段；excluded 仅保留 controller/governed_by/reason 元条目");
+                    }
+                }
+            }
+
             return out;
         } catch (IllegalStateException e) {
             throw e;
@@ -148,14 +171,25 @@ public class PermissionManifest {
         return Pattern.compile(sb.toString());
     }
 
-    /** 找到与该请求匹配的清单项；没有则返回 null（= 未登记）。 */
+    /** 找到与该请求匹配的清单项；没有则返回 null（= 未登记）。
+     *  🔴 SPEC-P157 教训：{id} 段正则 [^/]+ 会吞掉字面量段（/salary-bills/my 被
+     *  /salary-bills/{id} 命中 ⇒ 员工自助被要求 salary:list）。匹配分两轮：
+     *  先精确字面量路径，再通配条目——字面量优先是路由语义的常识。 */
     public Entry find(String method, String uri) {
+        Entry wildcard = null;
         for (Entry e : entries) {
-            if (e.matches(method, uri)) {
-                return e;
+            if (!e.matches(method, uri)) {
+                continue;
+            }
+            if (e.path().contains("{")) {
+                if (wildcard == null) {
+                    wildcard = e;
+                }
+            } else {
+                return e; // 字面量命中即胜出
             }
         }
-        return null;
+        return wildcard;
     }
 
     /** 当前是否 fail-closed。批次 4 之前恒为 false。 */

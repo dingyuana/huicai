@@ -96,15 +96,24 @@ public class LogAspect {
             auditLog.setUsername(username);
             auditLog.setOperation(operation);
             auditLog.setMethod(method.getName());
-            auditLog.setRequestParams(requestParams);
-            auditLog.setResponseResult(responseResult);
+            auditLog.setRequestParams(truncate(requestParams, MAX_PARAM_LEN));
+            auditLog.setResponseResult(truncate(responseResult, MAX_PARAM_LEN));
             auditLog.setIpAddress(ipAddress);
-            auditLog.setUserAgent(userAgent);
+            auditLog.setUserAgent(truncate(userAgent, MAX_UA_LEN));
             auditLog.setExecutionTimeMs((int) executionTime);
             auditLog.setStatus(status);
             auditLog.setModule(module);
 
             auditLogService.save(auditLog);
         }
+    }
+
+    /** 参数/响应截断上限：审计是排障线索不是数据备份，防大请求体撑爆审计表 */
+    static final int MAX_PARAM_LEN = 4000;
+    static final int MAX_UA_LEN = 500;
+
+    static String truncate(String s, int max) {
+        if (s == null) return null;
+        return s.length() <= max ? s : s.substring(0, max) + "...(truncated)";
     }
 }

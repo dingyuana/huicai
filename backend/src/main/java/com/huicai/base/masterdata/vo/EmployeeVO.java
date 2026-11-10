@@ -51,6 +51,9 @@ public class EmployeeVO {
     private Boolean isActive;
     private String remark;
 
+    /** SPEC-P159：社保局核定缴费基数（年申报值），NULL=未核定 */
+    private java.math.BigDecimal socialBaseDeclared;
+
     public static EmployeeVO from(EmployeeEntity e) {
         if (e == null) {
             return null;
@@ -65,6 +68,7 @@ public class EmployeeVO {
         vo.setEmail(e.getEmail());
         vo.setIsActive(e.getIsActive());
         vo.setRemark(e.getRemark());
+        vo.setSocialBaseDeclared(e.getSocialBaseDeclared());
         return vo;
     }
 

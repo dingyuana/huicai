@@ -23,6 +23,12 @@
         <result column="posted_by" property="postedBy"/>
         <result column="posted_at" property="postedAt"/>
         <result column="reversed_from" property="reversedFrom"/>
+        <!-- SPEC-P153 / V194：溯源三元组 + 模板/驳回原因转正，显式登记不赌 autoMapping -->
+        <result column="source_doc_id" property="sourceDocId"/>
+        <result column="source_doc_no" property="sourceDocNo"/>
+        <result column="source_doc_type" property="sourceDocType"/>
+        <result column="template_id" property="templateId"/>
+        <result column="rejected_reason" property="rejectedReason"/>
     </resultMap>
 
     <select id="selectVoucherPage" resultMap="VoucherDetailMap">

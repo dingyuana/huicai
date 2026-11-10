@@ -1,6 +1,7 @@
 package com.huicai.base.voucher.controller;
 
 import com.huicai.common.context.EnterpriseContextHolder;
+import com.huicai.common.context.ReferenceContextSwap;
 import com.huicai.common.response.R;
 import com.huicai.base.voucher.dto.VoucherTemplateVO;
 import com.huicai.base.voucher.entity.VoucherTemplateEntity;
@@ -11,8 +12,10 @@ import com.huicai.base.system.mapper.SubjectMapper;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
+import javax.sql.DataSource;
 import java.util.List;
 import java.util.stream.Collectors;
 import com.huicai.base.voucher.dto.VoucherTemplateUpdateDTO;
@@ -29,9 +32,17 @@ public class VoucherTemplateController {
 
     private final VoucherTemplateService templateService;
     private final SubjectMapper subjectMapper;
+    private final DataSource dataSource;
 
+    // 🔴 只读端点挂 Controller 事务（SPEC-P128 §7.1 同型，SPEC-P153-A2 实测坐实）：
+    //   enrichLines 直调 subjectMapper.selectById（t_subject 是 RLS 表），它在
+    //   service 事务<b>之外</b>执行 ⇒ GUC 恒 NULL ⇒ 分录行科目代码/名称恒 null
+    //   （实测模板 1 的 lines 全为 null/null，DB ent1 实有 92 科目）。
+    //   ⚠️ 只给读端点加 readOnly 事务：写端点若被外层 readOnly 事务包住，
+    //   PG 会拒内部 service 的写（read-only transaction 不允许 INSERT/UPDATE）。
     @Operation(summary = "模板列表 (含分录行)")
     @GetMapping
+    @Transactional(readOnly = true, rollbackFor = Exception.class)
     public R<List<VoucherTemplateVO>> list(@RequestParam(required = false) String classification) {
         List<VoucherTemplateEntity> templates;
         if (classification != null && !classification.isEmpty()) {
@@ -52,6 +63,7 @@ public class VoucherTemplateController {
 
     @Operation(summary = "全部模板 (含未激活、含分录行)")
     @GetMapping("/all")
+    @Transactional(readOnly = true, rollbackFor = Exception.class)
     public R<List<VoucherTemplateVO>> listAll() {
         List<VoucherTemplateEntity> templates = templateService.listAllActive();
         List<VoucherTemplateVO> vos = templates.stream()
@@ -62,6 +74,7 @@ public class VoucherTemplateController {
 
     @Operation(summary = "模板详情 (含分录行)")
     @GetMapping("/{id}")
+    @Transactional(readOnly = true, rollbackFor = Exception.class)
     public R<VoucherTemplateVO> getById(@PathVariable Long id) {
         VoucherTemplateEntity template = templateService.getById(id);
         if (template == null) {
@@ -72,6 +85,9 @@ public class VoucherTemplateController {
 
     @Operation(summary = "创建模板 (含分录行)")
     @PostMapping
+    // enrichLines 在 service 事务外直调 subjectMapper（同 list 端点批注），
+    // 创建响应里的科目代码/名称此前恒 null。非 readOnly：内部 service.create 要写库。
+    @Transactional(rollbackFor = Exception.class)
     public R<VoucherTemplateVO> create(@RequestBody VoucherTemplateCreateRequest request) {
         VoucherTemplateEntity template = templateService.create(request.toEntity(), request.getLines());
         return R.ok(enrichLines(VoucherTemplateVO.fromEntity(template, templateService.getLines(template.getId()))));
@@ -122,11 +138,20 @@ public class VoucherTemplateController {
 
     @Operation(summary = "查看参考库模板列表 (enterprise_id=0)")
     @GetMapping("/reference-list")
+    // enrichLines 同样直调 subjectMapper（SPEC-P153-A2 守卫抓出的第 5 处）：
+    // 不加事务时参考模板分录行的科目代码/名称恒 null。
+    @Transactional(readOnly = true, rollbackFor = Exception.class)
     public R<List<VoucherTemplateVO>> listReferenceTemplates() {
-        List<VoucherTemplateEntity> templates = templateService.listReferenceTemplates();
-        List<VoucherTemplateVO> vos = templates.stream()
-                .map(t -> enrichLines(VoucherTemplateVO.fromEntity(t, templateService.getLines(t.getId()))))
-                .collect(Collectors.toList());
+        // SPEC-P161：参考库放行通道——ent0 模板的分录行 subject 挂 ent0 科目，
+        // enrichLines 的 subjectMapper.selectById 在租户上下文下会被应用层过滤
+        // （enterprise_id=租户）杀成 null ⇒ 科目代码恒 null。整个方法体（含科目富集）
+        // 包进 ctx=0 交换。
+        List<VoucherTemplateVO> vos = ReferenceContextSwap.withReferenceLibrary(dataSource, () -> {
+            List<VoucherTemplateEntity> templates = templateService.listReferenceTemplates();
+            return templates.stream()
+                    .map(t -> enrichLines(VoucherTemplateVO.fromEntity(t, templateService.getLines(t.getId()))))
+                    .collect(Collectors.toList());
+        });
         return R.ok(vos);
     }
 

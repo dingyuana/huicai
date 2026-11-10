@@ -47,9 +47,12 @@ class CarryoverSequenceServiceImplTest {
 
     @BeforeEach
     void setUp() {
+        // SPEC-P137：真 runner 实例（无 Spring 代理）＝ 原地 inline 执行，
+        // 与旧「无事务直接调步」语义等价；L2 代理形态由 CarryoverSequenceTxIsolationRealDBTest 锁住
         service = new CarryoverSequenceServiceImpl(
                 depreciationVoucherService, periodCloseService,
-                voucherMapper, voucherEntryMapper, voucherTypeService);
+                voucherMapper, voucherEntryMapper, voucherTypeService,
+                new com.huicai.common.transaction.RequiresNewRunner());
     }
 
     /** 造一张凭证实体（含类型 id）。 */

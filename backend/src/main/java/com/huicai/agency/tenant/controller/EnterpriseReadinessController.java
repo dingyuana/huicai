@@ -6,9 +6,11 @@ import com.huicai.base.system.entity.VoucherTypeEntity;
 import com.huicai.base.system.service.VoucherTypeService;
 import com.huicai.sme.cash.mapper.BankAccountMapper;
 import com.huicai.sme.cash.entity.BankAccountEntity;
+import com.huicai.common.context.EnterpriseContextHolder;
 import com.huicai.common.exception.BusinessException;
 import com.huicai.common.response.R;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -47,6 +49,13 @@ public class EnterpriseReadinessController {
     }
 
     @GetMapping
+    // 🔴 事务必须在 Controller 上（SPEC-P128 §7.1 同型，SPEC-P153-A2 实测坐实）：
+    //   t_bank_account/t_voucher_type 是 RLS 表。无事务 ⇒ GUC 恒 NULL ⇒
+    //   count 恒 0；两个探测又各自 catch(Exception){false}，就绪度面板对
+    //   <b>所有企业恒显「未配置」</b>（实测 ent1 实有 1 银行账号/4 凭证类型
+    //   仍报 false/false）。 voucherTypeService.count 走 IService default 方法
+    //   同样不建事务，故单给 mapper 侧加事务不够，整个方法都要在事务内。
+    @Transactional(rollbackFor = Exception.class)
     public R<Map<String, Object>> readiness(@RequestParam Long enterpriseId) {
         // 可见性校验：与其它客户企业端点同一口径（P120）
         roleGuard.requireVisibleEnterprise(enterpriseId);
@@ -56,12 +65,27 @@ public class EnterpriseReadinessController {
             throw BusinessException.notFound("企业不存在");
         }
 
+        // 🔴 就绪度探测的是「目标企业」的配置，而 RLS GUC 只按「当前上下文
+        // 企业」设置（SPEC-P153-A2）：代账会计切在 A 客户时探测 B 客户，即使
+        // 有事务，GUC=A ⇒ B 的 t_bank_account/t_voucher_type 行全被谓词滤掉，
+        // 探测恒 false。探测期间把上下文切到目标企业（每条 SQL 都会经
+        // EnterpriseDataPermissionInterceptor 按新上下文重设 GUC），finally 还原。
+        Long previous = EnterpriseContextHolder.get();
         Map<String, Object> result = new LinkedHashMap<>();
-        result.put("enterpriseId", enterpriseId);
-        result.put("enterpriseName", enterprise.getEnterpriseName());
-        result.put("basicInfoDone", true);
-        result.put("bankAccount", hasBankAccount(enterpriseId));
-        result.put("voucherType", hasVoucherType(enterpriseId));
+        try {
+            EnterpriseContextHolder.set(enterpriseId);
+            result.put("enterpriseId", enterpriseId);
+            result.put("enterpriseName", enterprise.getEnterpriseName());
+            result.put("basicInfoDone", true);
+            result.put("bankAccount", hasBankAccount(enterpriseId));
+            result.put("voucherType", hasVoucherType(enterpriseId));
+        } finally {
+            if (previous != null) {
+                EnterpriseContextHolder.set(previous);
+            } else {
+                EnterpriseContextHolder.clear();
+            }
+        }
         return R.ok(result);
     }
 

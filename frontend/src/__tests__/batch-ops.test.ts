@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { useBatchOperation, normalizeBatchResult } from '@/composables/useBatchOperation'
+import { useBatchOperation, normalizeBatchResult, type BatchActionDef } from '@/composables/useBatchOperation'
 
 // Mock element-plus（P67 批量操作的二次确认 / 原因输入 / 消息提示）
 vi.mock('element-plus', () => ({
@@ -8,6 +8,7 @@ vi.mock('element-plus', () => ({
   ElMessageBox: {
     confirm: vi.fn().mockResolvedValue('confirm'),
     prompt: vi.fn().mockResolvedValue({ value: '驳回原因' }),
+    alert: vi.fn().mockResolvedValue(undefined),
   },
 }))
 
@@ -130,5 +131,94 @@ describe('useBatchOperation.run 门槛与交互', () => {
     expect(ElMessage.error).toHaveBeenCalledWith('整批失败')
     expect(clearer).not.toHaveBeenCalled()
     expect(op.running.value).toBe(false)
+  })
+})
+
+/**
+ * SPEC-P136 —— run() 的权限前置校验（AT-136-4 / AT-136-5 / AT-136-6）。
+ *
+ * <p>这些用例**绕过 UI** 直接调 run()，锁住「即使按钮可变可点（devtools 改权限、
+ * token 被篡改），执行路径也不会发出请求」这一层。
+ */
+describe('useBatchOperation.run 权限前置校验', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  function setup(hasPermission?: (p: string) => boolean) {
+    const refresh = vi.fn().mockResolvedValue(undefined)
+    const clearer = vi.fn()
+    const op = useBatchOperation({ refresh, clearer, hasPermission })
+    return { op, refresh, clearer }
+  }
+
+  const AUDIT: BatchActionDef = { key: 'audit', label: '批量审核', permission: 'voucher:audit' }
+
+  it('AT-136-4 runBlocksWhenLacksPermission：无权限 → 弹 alert、不调 executor、不发确认', async () => {
+    const { op } = setup(() => false)
+    op.onSelectionChange([{ id: 1 }, { id: 2 }])
+    const executor = vi.fn()
+
+    await op.run(AUDIT, executor)
+
+    expect(ElMessageBox.alert).toHaveBeenCalledTimes(1)
+    expect(String(vi.mocked(ElMessageBox.alert).mock.calls[0][0])).toContain('voucher:audit')
+    // 负向断言：只断言弹窗无法排除「弹了窗但仍执行」
+    expect(executor).not.toHaveBeenCalled()
+    expect(ElMessageBox.confirm).not.toHaveBeenCalled()
+    expect(ElMessage.success).not.toHaveBeenCalled()
+  })
+
+  it('AT-136-5 runAlertsInsteadOfThrowing：无权限不抛异常、不弹红色 toast', async () => {
+    const { op } = setup(() => false)
+    op.onSelectionChange([{ id: 1 }])
+
+    // 若 run() 抛异常，这里会 reject —— 那正是本次要消除的「点击 → 红字」形态
+    await expect(op.run(AUDIT, vi.fn())).resolves.toBeUndefined()
+    expect(ElMessage.error).not.toHaveBeenCalled()
+    expect(op.running.value).toBe(false)
+  })
+
+  it('有权限 → 正常执行 executor', async () => {
+    const { op } = setup((p) => p === 'voucher:audit')
+    op.onSelectionChange([{ id: 7 }])
+    const executor = vi.fn().mockResolvedValue(undefined)
+
+    await op.run(AUDIT, executor)
+
+    expect(executor).toHaveBeenCalledWith([7], '')
+    expect(ElMessageBox.alert).not.toHaveBeenCalled()
+  })
+
+  it('AT-136-6 未声明 permission → 不查权限、行为与改动前一致', async () => {
+    const { op } = setup(() => false)
+    op.onSelectionChange([{ id: 1 }])
+    const executor = vi.fn().mockResolvedValue(undefined)
+
+    await op.run({ key: 'submit', label: '提交' }, executor)
+
+    expect(executor).toHaveBeenCalledWith([1], '')
+    expect(ElMessageBox.alert).not.toHaveBeenCalled()
+  })
+
+  it('executor 抛 403：不再重复弹红色 toast（request.ts 已弹过对话框）', async () => {
+    const { op } = setup(() => true)
+    op.onSelectionChange([{ id: 1 }])
+    const executor = vi.fn().mockRejectedValue({ response: { status: 403 } })
+
+    await op.run(AUDIT, executor)
+
+    expect(ElMessage.error).not.toHaveBeenCalled()
+    expect(op.running.value).toBe(false)
+  })
+
+  it('executor 抛非 403：仍走红色 toast（不误吞真实故障）', async () => {
+    const { op } = setup(() => true)
+    op.onSelectionChange([{ id: 1 }])
+    const executor = vi.fn().mockRejectedValue(new Error('整批失败'))
+
+    await op.run(AUDIT, executor)
+
+    expect(ElMessage.error).toHaveBeenCalledWith('整批失败')
   })
 })

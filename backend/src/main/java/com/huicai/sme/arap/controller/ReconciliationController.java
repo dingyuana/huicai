@@ -1,9 +1,12 @@
 package com.huicai.sme.arap.controller;
 
+import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.huicai.common.response.R;
 import com.huicai.sme.arap.dto.ReconciliationToleranceDTO;
 import com.huicai.sme.arap.dto.vo.ReconciliationToleranceVO;
 import com.huicai.sme.arap.dto.vo.ReconciliationTraceVO;
+import com.huicai.sme.arap.dto.vo.ReconciliationExceptionVO;
+import com.huicai.sme.arap.dto.vo.ReconciliationLogVO;
 import com.huicai.sme.arap.entity.ReconciliationExceptionEntity;
 import com.huicai.sme.arap.entity.ReconciliationLogEntity;
 import com.huicai.sme.arap.service.ReconciliationService;
@@ -61,39 +64,44 @@ public class ReconciliationController {
 
     @Operation(summary = "执行单笔核销")
     @PostMapping("/execute")
-    public R<ReconciliationLogEntity> execute(@RequestBody ReconciliationService.ExecuteRequest request) {
-        return R.ok(reconciliationService.execute(request));
+    public R<ReconciliationLogVO> execute(@RequestBody ReconciliationService.ExecuteRequest request) {
+        ReconciliationLogEntity r0 = reconciliationService.execute(request);
+        return R.ok(r0 == null ? null : ReconciliationLogVO.from(r0));
     }
 
     @Operation(summary = "带差额调整的核销 (如手续费/折扣/尾差)")
     @PostMapping("/execute-with-adjustment")
-    public R<ReconciliationLogEntity> executeWithAdjustment(
+    public R<ReconciliationLogVO> executeWithAdjustment(
             @RequestBody ReconciliationService.ExecuteRequest request,
             @RequestParam BigDecimal adjustAmount,
             @RequestParam String adjustType,
             @RequestParam(defaultValue = "0") Long adjustSubjectId) {
-        return R.ok(reconciliationService.executeWithAdjustment(request, adjustAmount, adjustType, adjustSubjectId));
+        ReconciliationLogEntity r1 = reconciliationService.executeWithAdjustment(request, adjustAmount, adjustType, adjustSubjectId);
+        return R.ok(r1 == null ? null : ReconciliationLogVO.from(r1));
     }
 
     @Operation(summary = "批量核销")
     @PostMapping("/batch-execute")
-    public R<List<ReconciliationLogEntity>> batchExecute(@RequestBody List<ReconciliationService.ExecuteRequest> requests) {
-        return R.ok(reconciliationService.batchExecute(requests));
+    public R<List<ReconciliationLogVO>> batchExecute(@RequestBody List<ReconciliationService.ExecuteRequest> requests) {
+        List<ReconciliationLogEntity> r2 = reconciliationService.batchExecute(requests);
+        return R.ok(r2 == null ? null : r2.stream().map(ReconciliationLogVO::from).collect(java.util.stream.Collectors.toList()));
     }
 
     @Operation(summary = "查询核销记录")
     @GetMapping("/records")
-    public R<List<ReconciliationLogEntity>> getRecords(@RequestParam String sourceDocType, @RequestParam Long sourceDocId) {
-        return R.ok(reconciliationService.getRecords(sourceDocType, sourceDocId));
+    public R<List<ReconciliationLogVO>> getRecords(@RequestParam String sourceDocType, @RequestParam Long sourceDocId) {
+        List<ReconciliationLogEntity> r3 = reconciliationService.getRecords(sourceDocType, sourceDocId);
+        return R.ok(r3 == null ? null : r3.stream().map(ReconciliationLogVO::from).collect(java.util.stream.Collectors.toList()));
     }
 
     @Operation(summary = "分页查询核销日志")
     @GetMapping("/logs/page")
-    public R<com.baomidou.mybatisplus.core.metadata.IPage<ReconciliationLogEntity>> pageLogs(
+    public R<com.baomidou.mybatisplus.core.metadata.IPage<ReconciliationLogVO>> pageLogs(
             @RequestParam(required = false) String sourceDocType,
             @RequestParam(defaultValue = "1") Integer current,
             @RequestParam(defaultValue = "20") Integer size) {
-        return R.ok(reconciliationService.pageLogs(sourceDocType, current, size));
+        IPage<ReconciliationLogEntity> lp = reconciliationService.pageLogs(sourceDocType, current, size);
+        return R.ok(lp == null ? null : lp.convert(ReconciliationLogVO::from));
     }
 
     @Operation(summary = "反核销 (需原因)")
@@ -105,8 +113,9 @@ public class ReconciliationController {
 
     @Operation(summary = "审批执行核销 (CONFIRMED → EXECUTED)")
     @PostMapping("/{id}/approve")
-    public R<ReconciliationLogEntity> approve(@PathVariable Long id) {
-        return R.ok(reconciliationService.approve(id));
+    public R<ReconciliationLogVO> approve(@PathVariable Long id) {
+        ReconciliationLogEntity r4 = reconciliationService.approve(id);
+        return R.ok(r4 == null ? null : ReconciliationLogVO.from(r4));
     }
 
     @Operation(summary = "驳回核销 (CONFIRMED → REJECTED, 恢复应收/应付未结金额)")
@@ -120,12 +129,13 @@ public class ReconciliationController {
 
     @Operation(summary = "分页查询核销异常池")
     @GetMapping("/exceptions/page")
-    public R<com.baomidou.mybatisplus.core.metadata.IPage<ReconciliationExceptionEntity>> pageExceptions(
+    public R<com.baomidou.mybatisplus.core.metadata.IPage<ReconciliationExceptionVO>> pageExceptions(
             @RequestParam(required = false) String status,
             @RequestParam(required = false) String exceptionType,
             @RequestParam(defaultValue = "1") Integer current,
             @RequestParam(defaultValue = "20") Integer size) {
-        return R.ok(reconciliationService.pageExceptions(status, exceptionType, current, size));
+        IPage<ReconciliationExceptionEntity> ep = reconciliationService.pageExceptions(status, exceptionType, current, size);
+        return R.ok(ep == null ? null : ep.convert(ReconciliationExceptionVO::from));
     }
 
     @Operation(summary = "解决异常 (OPEN → RESOLVED)")
@@ -148,9 +158,10 @@ public class ReconciliationController {
 
     @Operation(summary = "重试异常核销 (重新执行核销)")
     @PostMapping("/exceptions/{id}/retry")
-    public R<ReconciliationLogEntity> retryException(@PathVariable Long id,
+    public R<ReconciliationLogVO> retryException(@PathVariable Long id,
                                                       @RequestParam(defaultValue = "0") Long userId) {
-        return R.ok(reconciliationService.retryException(id, userId));
+        ReconciliationLogEntity r5 = reconciliationService.retryException(id, userId);
+        return R.ok(r5 == null ? null : ReconciliationLogVO.from(r5));
     }
 
     // ==================== 多对多核销拓扑 ====================
@@ -177,7 +188,7 @@ public class ReconciliationController {
 
     @Operation(summary = "拆分核销 — 一笔来源拆分核销多张目标单据")
     @PostMapping("/split-allocate")
-    public R<List<ReconciliationLogEntity>> splitAllocate(
+    public R<List<ReconciliationLogVO>> splitAllocate(
             @RequestParam String sourceDocType,
             @RequestParam Long sourceDocId,
             @RequestParam(required = false) Long customerId,
@@ -186,14 +197,15 @@ public class ReconciliationController {
             @RequestBody List<ReconciliationService.AllocationItem> allocations,
             @RequestParam(required = false) String period,
             @RequestParam(required = false) String summary) {
-        return R.ok(reconciliationService.splitAllocate(
+        List<ReconciliationLogEntity> sr = reconciliationService.splitAllocate(
                 sourceDocType, sourceDocId, customerId, vendorId,
-                totalAmount, allocations, period, summary));
+                totalAmount, allocations, period, summary);
+        return R.ok(sr == null ? null : sr.stream().map(ReconciliationLogVO::from).collect(java.util.stream.Collectors.toList()));
     }
 
     @Operation(summary = "智能最优匹配 — 自动 N:M 分配核销")
     @PostMapping("/smart-allocate")
-    public R<List<ReconciliationLogEntity>> smartAllocate(
+    public R<List<ReconciliationLogVO>> smartAllocate(
             @RequestParam String sourceDocType,
             @RequestParam Long sourceDocId,
             @RequestParam Long partyId,
@@ -202,9 +214,10 @@ public class ReconciliationController {
             @RequestParam BigDecimal amount,
             @RequestParam(required = false) String period,
             @RequestParam(required = false) String summary) {
-        return R.ok(reconciliationService.smartAllocate(
+        List<ReconciliationLogEntity> sm = reconciliationService.smartAllocate(
                 sourceDocType, sourceDocId, partyId, partyType,
-                targetDocType, amount, period, summary));
+                targetDocType, amount, period, summary);
+        return R.ok(sm == null ? null : sm.stream().map(ReconciliationLogVO::from).collect(java.util.stream.Collectors.toList()));
     }
 
     // ==================== 全链路追溯 ====================
@@ -251,4 +264,5 @@ public class ReconciliationController {
         toleranceService.delete(id);
         return R.ok();
     }
+
 }

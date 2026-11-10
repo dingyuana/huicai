@@ -38,6 +38,9 @@ class AttachmentServiceTest {
         BusinessException ex = assertThrows(BusinessException.class,
                 () -> service.runOcr(99L, Map.of("bizType", "bank_statement")));
         assertTrue(ex.getMessage().contains("附件不存在"));
+        // SPEC-P154 项③：不存在必须是 404 语义（此前裸 new 默认 code=500，
+        // 语义错会把「资源不存在」混进服务端错误告警面）
+        assertEquals(404, ex.getCode(), "附件不存在必须是 notFound(404) 语义");
     }
 
     @Test

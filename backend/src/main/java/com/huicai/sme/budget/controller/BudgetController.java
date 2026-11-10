@@ -5,6 +5,8 @@ import com.huicai.common.response.R;
 import com.huicai.sme.budget.dto.BudgetAdjustmentCreateDTO;
 import com.huicai.sme.budget.entity.BudgetAdjustmentEntity;
 import jakarta.validation.Valid;
+import com.huicai.sme.budget.dto.vo.BudgetVO;
+import com.huicai.sme.budget.dto.vo.BudgetAdjustmentVO;
 import com.huicai.sme.budget.entity.BudgetEntity;
 import com.huicai.sme.budget.entity.BudgetEntryEntity;
 import com.huicai.sme.budget.service.BudgetService;
@@ -27,42 +29,48 @@ public class BudgetController {
 
     @Operation(summary = "分页查询")
     @GetMapping("/page")
-    public R<IPage<BudgetEntity>> page(
+    public R<IPage<BudgetVO>> page(
             @RequestParam(required = false) String period,
             @RequestParam(required = false) String status,
             @RequestParam(defaultValue = "1") Integer current,
             @RequestParam(defaultValue = "20") Integer size) {
-        return R.ok(service.pageQuery(period, status, current, size));
+        IPage<BudgetEntity> result = service.pageQuery(period, status, current, size);
+        return R.ok(result == null ? null : result.convert(BudgetVO::from));
     }
 
     @Operation(summary = "详情")
     @GetMapping("/{id}")
-    public R<BudgetEntity> getById(@PathVariable Long id) {
-        return R.ok(service.getById(id));
+    public R<BudgetVO> getById(@PathVariable Long id) {
+        BudgetEntity b0 = service.getById(id);
+        return R.ok(b0 == null ? null : BudgetVO.from(b0));
     }
 
     @Operation(summary = "创建预算")
     @PostMapping
-    public R<BudgetEntity> create(@RequestBody CreateRequest request) {
-        return R.ok(service.create(request.budget, request.entries));
+    public R<BudgetVO> create(@RequestBody CreateRequest request) {
+        BudgetEntity b1 = service.create(request.budget, request.entries);
+        return R.ok(b1 == null ? null : BudgetVO.from(b1));
     }
 
     @Operation(summary = "提交预算")
     @PostMapping("/{id}/submit")
-    public R<BudgetEntity> submit(@PathVariable Long id) {
-        return R.ok(service.submit(id));
+    public R<BudgetVO> submit(@PathVariable Long id) {
+        BudgetEntity b2 = service.submit(id);
+        return R.ok(b2 == null ? null : BudgetVO.from(b2));
     }
 
     @Operation(summary = "审批预算")
     @PostMapping("/{id}/approve")
-    public R<BudgetEntity> approve(@PathVariable Long id) {
-        return R.ok(service.approve(id));
+    public R<BudgetVO> approve(@PathVariable Long id) {
+        BudgetEntity b3 = service.approve(id);
+        return R.ok(b3 == null ? null : BudgetVO.from(b3));
     }
 
     @Operation(summary = "激活预算")
     @PostMapping("/{id}/activate")
-    public R<BudgetEntity> activate(@PathVariable Long id) {
-        return R.ok(service.activate(id));
+    public R<BudgetVO> activate(@PathVariable Long id) {
+        BudgetEntity b4 = service.activate(id);
+        return R.ok(b4 == null ? null : BudgetVO.from(b4));
     }
 
     @Operation(summary = "预算检查(用于单据/凭证保存时校验)")
@@ -82,23 +90,26 @@ public class BudgetController {
 
     @Operation(summary = "调整分页")
     @GetMapping("/adjustments/page")
-    public R<IPage<BudgetAdjustmentEntity>> pageAdjustment(
+    public R<IPage<BudgetAdjustmentVO>> pageAdjustment(
             @RequestParam(required = false) String status,
             @RequestParam(defaultValue = "1") Integer current,
             @RequestParam(defaultValue = "20") Integer size) {
-        return R.ok(service.pageQueryAdjustment(status, current, size));
+        IPage<BudgetAdjustmentEntity> adjResult = service.pageQueryAdjustment(status, current, size);
+        return R.ok(adjResult == null ? null : adjResult.convert(BudgetAdjustmentVO::from));
     }
 
     @Operation(summary = "创建调整")
     @PostMapping("/adjustments")
-    public R<BudgetAdjustmentEntity> createAdjustment(@Valid @RequestBody BudgetAdjustmentCreateDTO dto) {
-        return R.ok(service.createAdjustment(dto.toEntity()));
+    public R<BudgetAdjustmentVO> createAdjustment(@Valid @RequestBody BudgetAdjustmentCreateDTO dto) {
+        BudgetAdjustmentEntity a0 = service.createAdjustment(dto.toEntity());
+        return R.ok(a0 == null ? null : BudgetAdjustmentVO.from(a0));
     }
 
     @Operation(summary = "审批调整")
     @PostMapping("/adjustments/{id}/approve")
-    public R<BudgetAdjustmentEntity> approveAdjustment(@PathVariable Long id) {
-        return R.ok(service.approveAdjustment(id));
+    public R<BudgetAdjustmentVO> approveAdjustment(@PathVariable Long id) {
+        BudgetAdjustmentEntity a1 = service.approveAdjustment(id);
+        return R.ok(a1 == null ? null : BudgetAdjustmentVO.from(a1));
     }
 
     public static class CreateRequest {

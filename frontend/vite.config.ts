@@ -47,6 +47,13 @@ export default defineConfig({
         // 同理：用 127.0.0.1 而非 localhost，避免代理端再踩 IPv6 回环
         target: 'http://127.0.0.1:8000',
         changeOrigin: true,
+        // 🔴 xfwd 必须开：开启后 vite 会补 X-Forwarded-For / X-Forwarded-Host，
+        //    后端 LoginBruteForceGuard 才能拿到**真实客户端 IP**。
+        //    否则所有浏览器请求在容器侧都显示为 docker 网关 172.18.0.1 ⇒
+        //    IP 维度限流退化成「一人触发、全员锁定 15 分钟」的全局开关。
+        //    生产 nginx（docker/nginx.conf、frontend/nginx.conf）本就设置了
+        //    X-Real-IP / X-Forwarded-For，此处只是让开发环境与生产同构。
+        xfwd: true,
       },
     },
   },

@@ -42,13 +42,18 @@ public class ArapSettlementEntity extends BaseEntity {
     private String remark;
 
     /**
-     * 凭证编号（冗余存储，用于快速查询）— DB 无此列
+     * 凭证编号（冗余存储，用于快速查询）— V194 真实列。
+     * SPEC-P153 取证修正：原注释「DB 无此列」，实际 generateVoucher L438 在
+     * updateById 前 setVoucherNo 明确回写 —— 落库意图，此前写了白写。
+     * VO 是否外露仍按 ArapSettlementVO 既有裁定，本批不动契约。
      */
-    @TableField(exist = false)
+    @TableField("voucher_no")
     private String voucherNo;
 
-    /** 被对冲的原核销单ID（红冲时指向原单）— DB 无此列 */
-    @TableField(value = "reversed_from_settlement_id", exist = false)
+    /**
+     * 被对冲的原核销单ID（红冲时指向原单）— V194 真实列（红冲链 红→蓝）。
+     */
+    @TableField("reversed_from_settlement_id")
     private Long reversedFromSettlementId;
     @StatusChangeable(entity = "ARAP_SETTLEMENT", fieldName = "status")
     private String status;

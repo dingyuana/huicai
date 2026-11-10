@@ -100,13 +100,13 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  async function switchEnterprise(enterpriseId: number) {
+  async function switchEnterprise(enterpriseId: number): Promise<{ token?: string; refreshToken?: string; status?: string }> {
     // ⚠️ request 的响应拦截器在运行期已返回 `body.data`（后端 R 结构解包），
     // 但其 TS 类型仍标注为 AxiosResponse<T>，故此处按运行期实际形态断言。
     // （依据：src/api/request.ts:38 `return body.data`）
     const res = (await request.post('/v1/enterprise/switch', null, {
       params: { enterpriseId },
-    })) as unknown as { token?: string; refreshToken?: string }
+    })) as unknown as { token?: string; refreshToken?: string; status?: string }
     currentEnterpriseId.value = enterpriseId
     localStorage.setItem('huicai_current_enterprise_id', String(enterpriseId))
 
@@ -125,6 +125,7 @@ export const useAuthStore = defineStore('auth', () => {
     if (res?.refreshToken) {
       localStorage.setItem('huicai_refresh_token', res.refreshToken)
     }
+    return res
   }
 
   async function fetchUserInfo() {

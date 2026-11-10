@@ -142,6 +142,11 @@ export function auditVoucher(id: number): Promise<void> {
   return request.post(`/base/voucher/v1/vouchers/${id}/audit`)
 }
 
+/** 撤审 (AUDITED → DRAFT, SPEC-P160) */
+export function unauditVoucher(id: number): Promise<void> {
+  return request.post(`/base/voucher/v1/vouchers/${id}/unaudit`)
+}
+
 /** 批量审核 */
 export function batchAuditVouchers(data: VoucherStatusDTO): Promise<void> {
   return request.post('/base/voucher/v1/vouchers/batch-audit', data)

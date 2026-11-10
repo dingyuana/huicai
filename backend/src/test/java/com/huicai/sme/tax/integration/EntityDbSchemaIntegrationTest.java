@@ -75,11 +75,13 @@ class EntityDbSchemaIntegrationTest extends AbstractMapperTest {
         log.setModule("SCHEMA_TEST");
         log.setOperation("INSERT");
         log.setMethod("test");
-        log.setRequestParams("{}");
-        log.setResponseResult("{}");
-        log.setOldSnapshot("{}");
-        log.setNewSnapshot("{}");
-        log.setStatus("success");
+        log.setRequestParams("{\"a\":1}");
+        log.setResponseResult("{\"ok\":true}");
+        log.setBeforeData("{\"v\":1}");
+        log.setAfterData("{\"v\":2}");
+        log.setStatus("fail");
+        log.setExecutionTimeMs(42);
+        log.setUserAgent("junit-agent");
         log.setCreatedAt(LocalDateTime.now());
 
         int rows = auditLogMapper.insert(log);
@@ -89,6 +91,17 @@ class EntityDbSchemaIntegrationTest extends AbstractMapperTest {
         AuditLogEntity read = auditLogMapper.selectById(log.getId());
         assertNotNull(read);
         assertEquals("SCHEMA_TEST", read.getModule());
+        // SPEC-P152：这些字段曾经是 exist=false 幽灵字段（写了不落库），
+        // 下面每行回读断言即「列真实存在且映射正确」的守卫
+        assertEquals("test", read.getMethod());
+        assertEquals("{\"a\":1}", read.getRequestParams());
+        assertEquals("{\"ok\":true}", read.getResponseResult());
+        assertEquals("fail", read.getStatus());
+        assertEquals(42, read.getExecutionTimeMs());
+        assertEquals("junit-agent", read.getUserAgent());
+        assertNotNull(read.getCreatedAt(), "createdAt 复用 operation_time，插入应非空");
+        assertNotNull(read.getBeforeData());
+        assertNotNull(read.getAfterData());
 
         System.out.println("[PASS] AuditLog insert: id=" + log.getId());
     }

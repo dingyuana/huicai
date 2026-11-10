@@ -1,8 +1,8 @@
 import type { RouteRecordRaw } from 'vue-router'
-import AppLayout from '@/layouts/AppLayout.vue'
 import smeBusinessRoutes from './sme-business'
 import smeTaxRoutes from './sme-tax'
 import smeAssetRoutes from './sme-asset'
+import smeSalaryRoutes from './sme-salary'
 import smeReportRoutes from './sme-report'
 import labRoutes from './lab'
 
@@ -31,7 +31,9 @@ const routes: RouteRecordRaw[] = [
   },
   {
     path: '/',
-    component: AppLayout,
+    // 懒加载：断开 sme-base → AppLayout → auth.store → router/index → sme-base 的模块求值循环
+    // （auth.store 顶层 import router；node 环境守卫测试在此循环上炸 window，生产亦属隐患形态）
+    component: () => import('@/layouts/AppLayout.vue'),
     redirect: '/dashboard',
     children: [
       // ─── 首页 ───
@@ -176,6 +178,10 @@ const routes: RouteRecordRaw[] = [
 
       // ─── 资产管理 ───
       ...smeAssetRoutes,
+
+      // ─── 工资薪酬（SPEC-P143；🔴 必须挂进此 children —— 业务路由唯一生效挂载点。
+      // 曾错挂在 router/index.ts 的死变量里 → /salary/bill 404（P153 复盘）───
+      ...smeSalaryRoutes,
 
       // ─── 财务报表 ───
       ...smeReportRoutes,

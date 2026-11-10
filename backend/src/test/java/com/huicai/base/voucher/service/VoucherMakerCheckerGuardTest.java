@@ -170,6 +170,69 @@ class VoucherMakerCheckerGuardTest extends AbstractMapperTest {
         }
     }
 
+    // ───────────────── SPEC-P160：撤审（AUDITED → DRAFT，纠错重审）─────────────────
+
+    @Test
+    @DisplayName("SPEC-P160 撤审：AUDITED → DRAFT 成功（不动余额，重走提交）")
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    void unauditTransitionsAuditedBackToDraft() {
+        long vid = fixtureSubmittedVoucherBy(MAKER);
+        try {
+            voucherService.audit(vid, REVIEWER);
+            assertEquals("AUDITED", jdbc.queryForObject(
+                    "SELECT status FROM t_voucher WHERE id=?", String.class, vid),
+                    "前提：已审核");
+
+            voucherService.unaudit(vid, REVIEWER);
+            assertEquals("DRAFT", jdbc.queryForObject(
+                    "SELECT status FROM t_voucher WHERE id=?", String.class, vid),
+                    "撤审应把凭证退回 DRAFT");
+
+            // 撤审后应可重新提交（状态机回环完整）
+            voucherService.submit(vid, MAKER);
+            assertEquals("SUBMITTED", jdbc.queryForObject(
+                    "SELECT status FROM t_voucher WHERE id=?", String.class, vid),
+                    "撤审回 DRAFT 后应能重新走 submit → audit → post");
+        } finally {
+            voucherEntryMapper.delete(
+                    com.baomidou.mybatisplus.core.toolkit.Wrappers
+                            .<com.huicai.base.voucher.entity.VoucherEntryEntity>lambdaQuery()
+                            .eq(com.huicai.base.voucher.entity.VoucherEntryEntity::getVoucherId, vid));
+            voucherMapper.deleteById(vid);
+        }
+    }
+
+    @Test
+    @DisplayName("SPEC-P160 撤审：非 AUDITED 拒绝且状态不变")
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    void unauditRejectedForNonAudited() {
+        long vid = fixtureSubmittedVoucherBy(MAKER);
+        try {
+            // fixture 即 SUBMITTED：撤审只认 AUDITED，必须被拒
+            BusinessException exSub = assertThrows(BusinessException.class,
+                    () -> voucherService.unaudit(vid, REVIEWER), "SUBMITTED 竟可撤审");
+            assertEquals(400, exSub.getCode());
+            assertEquals("SUBMITTED", jdbc.queryForObject(
+                    "SELECT status FROM t_voucher WHERE id=?", String.class, vid),
+                    "被拒后状态不得变化");
+
+            // DRAFT 同样不可撤审（fixture 初始形态即 SUBMITTED，模拟撤回草稿的自证前提）
+            jdbc.update("UPDATE t_voucher SET status='DRAFT', rejected_reason=NULL WHERE id=?", vid);
+            BusinessException exDraft = assertThrows(BusinessException.class,
+                    () -> voucherService.unaudit(vid, REVIEWER), "DRAFT 竟可撤审");
+            assertEquals(400, exDraft.getCode());
+            assertEquals("DRAFT", jdbc.queryForObject(
+                    "SELECT status FROM t_voucher WHERE id=?", String.class, vid),
+                    "被拒后状态不得变化");
+        } finally {
+            voucherEntryMapper.delete(
+                    com.baomidou.mybatisplus.core.toolkit.Wrappers
+                            .<com.huicai.base.voucher.entity.VoucherEntryEntity>lambdaQuery()
+                            .eq(com.huicai.base.voucher.entity.VoucherEntryEntity::getVoucherId, vid));
+            voucherMapper.deleteById(vid);
+        }
+    }
+
     // ───────────────── 遗留：created_by 为空时不触发（如实标注）─────────────────
 
     @Test

@@ -1,6 +1,12 @@
 package com.huicai.sme.arap.e2e;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.huicai.base.voucher.dto.BudgetWarningDTO;
+import com.huicai.base.voucher.dto.VoucherCreateDTO;
+import com.huicai.base.voucher.dto.VoucherPostResultVO;
+import com.huicai.base.voucher.dto.VoucherVO;
+import com.huicai.base.voucher.entity.VoucherEntity;
+import com.huicai.base.voucher.service.VoucherService;
 import com.huicai.common.test.AbstractMapperTest;
 import com.huicai.sme.budget.constant.BudgetStatus;
 import com.huicai.sme.budget.entity.BudgetEntity;
@@ -8,6 +14,7 @@ import com.huicai.sme.budget.entity.BudgetEntryEntity;
 import com.huicai.sme.budget.mapper.BudgetEntryMapper;
 import com.huicai.sme.budget.mapper.BudgetMapper;
 import com.huicai.sme.budget.service.BudgetService;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 
@@ -21,7 +28,10 @@ import static org.junit.jupiter.api.Assertions.*;
  * 预算全流程 E2E 测试.
  * <p>
  * 模拟: 预算编制(DRAFT) → 提交(SUBMITTED) → 审批(APPROVED) → 激活(ACTIVE) → 执行检查
- * 一个 @Test 方法完成完整流程，使用 @Transactional 自动回滚清理数据.
+ * <p>
+ * <b>P142 改造</b>：Step 5/6 改为走「制凭证→提交→审核→过账」真实过账链路，
+ * 不再直调 {@code BudgetService.checkBudget} / {@code BudgetEntryMapper.addUsedAmount}，
+ * 验证预算执行联动钩子在过账事务内正确触发。
  *
  * <h3>历史说明（REQ-2026-121）</h3>
  * 夹具有两处与 DB 约束不符：
@@ -43,13 +53,44 @@ public class BudgetFlowE2ETest extends AbstractMapperTest {
     @Autowired
     private BudgetService budgetService;
 
+    @Autowired
+    private VoucherService voucherService;
+
+    @Autowired
+    private com.huicai.base.system.mapper.PeriodMapper periodMapper;
+
+    @Autowired
+    private com.huicai.base.balance.service.SubjectBalanceService subjectBalanceService;
+
+    /** 期间与期初：凭证过账需期间 open + 期初建账，AbstractMapperTest 容器无硬编码，故在方法内建 */
+    private static final String TEST_PERIOD = "202610";
+
+    @BeforeEach
+    void setUpPeriod() {
+        // 企业上下文（基类已设，此处保持兼容）
+        com.huicai.common.context.EnterpriseContextHolder.set(DEFAULT_ENTERPRISE_ID);
+
+        com.huicai.base.system.entity.PeriodEntity period = new com.huicai.base.system.entity.PeriodEntity();
+        period.setYear(2026);
+        period.setMonth(10);
+        period.setPeriodCode(TEST_PERIOD);
+        period.setStartDate(java.time.LocalDate.of(2026, 10, 1));
+        period.setEndDate(java.time.LocalDate.of(2026, 10, 31));
+        period.setStatus("open");
+        period.setEnterpriseId(DEFAULT_ENTERPRISE_ID);
+        period.setDeleted(0);
+        periodMapper.insert(period);
+
+        subjectBalanceService.initOpeningBalances(TEST_PERIOD, new java.util.HashMap<>());
+    }
+
     @Test
     void fullBudgetFlow_endToEnd_shouldCompleteSuccessfully() {
         // ==================== Step 1: 创建预算 (DRAFT) ====================
         BudgetEntity budget = new BudgetEntity();
         budget.setBudgetNo("BUD-E2E-" + System.currentTimeMillis());
         budget.setBudgetName("E2E预算全流程测试");
-        budget.setPeriod("202607");
+        budget.setPeriod("202610");
         // chk_budget_type 允许集：DEPARTMENT / PROJECT / SUBJECT / OVERALL
         budget.setBudgetType("OVERALL");
         budget.setStatus(BudgetStatus.BUDGET_DRAFT);
@@ -79,6 +120,9 @@ public class BudgetFlowE2ETest extends AbstractMapperTest {
         entry2.setAmount(new BigDecimal("20000.00"));
         entry2.setControlType("BLOCK");
         entry2.setUsedAmount(BigDecimal.ZERO);
+
+        // P142：贷方科目（无预算，用于凭证借贷平衡）
+        Long creditSubjectId = ensureSubject(DEFAULT_ENTERPRISE_ID, "9901", "资金账户", "credit");
 
         List<BudgetEntryEntity> entries = List.of(entry1, entry2);
 
@@ -126,50 +170,56 @@ public class BudgetFlowE2ETest extends AbstractMapperTest {
         BudgetEntity savedActivated = budgetMapper.selectById(created.getId());
         assertEquals(BudgetStatus.BUDGET_ACTIVE, savedActivated.getStatus());
 
-        // ==================== Step 5: 预算检查 - 未超预算 (WARN 模式) ====================
-        // 科目 6601 申请 30000，在预算 80000 范围内，通过
-        // ⚠️ REQ-2026-126：原代码传 6601L（科目**编码**），而
-        // findBySubjectAndPeriod 按 be.subject_id（**主键 id**）匹配，
-        // ensureSubject 返回的是自增 id 而非编码 → 必然查不到预算。
-        Map<String, Object> checkResult = budgetService.checkBudget(subjectId1, "202607", new BigDecimal("30000.00"));
-        assertNotNull(checkResult, "预算检查应返回结果");
-        assertTrue((Boolean) checkResult.get("pass"), "未超预算时应通过检查");
-        assertEquals("WARN", checkResult.get("controlType"), "控制方式应为 WARN");
-        assertEquals(0, new BigDecimal("80000.00").compareTo((BigDecimal) checkResult.get("budget")),
-                "预算金额应为 80000");
-        assertEquals(0, new BigDecimal("30000.00").compareTo((BigDecimal) checkResult.get("newUsed")),
-                "新使用金额应为 30000");
-
-        // ==================== Step 6: 预算检查 - 超预算 (BLOCK 模式) ====================
-        // 科目 6602 预算 20000，先模拟使用 15000，再申请 10000，累计 25000 > 20000，应被阻止
-        // ⚠️ REQ-2026-126：原代码用 savedEntries.get(1) 定位条目2，而 selectList
-        // 无 ORDER BY，返回顺序无保证 → 改为按 subject_id 精确定位。
-        BudgetEntryEntity entry2Row = budgetEntryMapper.selectOne(
+        // ==================== Step 5: 预算执行联动 - WARN 模式（走过账链路） ====================
+        // 科目 subjectId1 (6601) 预算 80000，先用 50000 (62.5%)，再过 20000 → 累计 70000 (87.5% >80%)
+        // 造凭证：借方 subjectId1 20000，贷方复用 creditSubjectId
+        BudgetEntryEntity e1Row = budgetEntryMapper.selectOne(
                 new QueryWrapper<BudgetEntryEntity>()
-                        .eq("budget_id", created.getId())
-                        .eq("subject_id", subjectId2));
-        assertNotNull(entry2Row, "应能按 subject_id 精确定位到科目 6602 的预算条目");
-        budgetEntryMapper.addUsedAmount(entry2Row.getId(), new BigDecimal("15000.00"));
+                        .eq("budget_id", created.getId()).eq("subject_id", subjectId1));
+        budgetEntryMapper.addUsedAmount(e1Row.getId(), new BigDecimal("50000.00"));
 
-        Map<String, Object> overResult = budgetService.checkBudget(subjectId2, "202607", new BigDecimal("10000.00"));
-        assertNotNull(overResult, "超预算检查应返回结果");
-        assertFalse((Boolean) overResult.get("pass"), "BLOCK 模式超预算时应不通过");
-        assertEquals("BLOCK", overResult.get("action"), "超预算时 action 应为 BLOCK");
-        assertEquals(0, new BigDecimal("20000.00").compareTo((BigDecimal) overResult.get("budget")),
-                "预算金额应为 20000");
-        assertEquals(0, new BigDecimal("25000.00").compareTo((BigDecimal) overResult.get("newUsed")),
-                "新使用金额应为 25000 (15000 + 10000)");
+        VoucherPostResultVO result1 = postVoucher(new BigDecimal("20000.00"), subjectId1, creditSubjectId);
+
+        assertNotNull(result1, "过账应返回结果");
+        assertEquals("POSTED", result1.getStatus(), "WARN 模式未超额应成功过账");
+        assertFalse(result1.getBudgetWarnings().isEmpty(), "累计 87.5% >80% 应返回 WARN 提示");
+        BudgetWarningDTO w1 = result1.getBudgetWarnings().get(0);
+        assertEquals("WARN", w1.action());
+        assertEquals(subjectId1, w1.subjectId());
+        assertEquals(new BigDecimal("80000.00"), w1.budget());
+        assertEquals(new BigDecimal("70000.00"), w1.newUsed());
+
+        // ==================== Step 6: 预算执行联动 - BLOCK 模式（走过账链路） ====================
+        // 科目 subjectId2 (6602) 预算 20000，先模拟使用 15000，再申请 10000，累计 25000 > 20000 → BLOCK
+        BudgetEntryEntity e2Row = budgetEntryMapper.selectOne(
+                new QueryWrapper<BudgetEntryEntity>()
+                        .eq("budget_id", created.getId()).eq("subject_id", subjectId2));
+        assertNotNull(e2Row, "应能按 subject_id 精确定位到科目 6602 的预算条目");
+        budgetEntryMapper.addUsedAmount(e2Row.getId(), new BigDecimal("15000.00"));
+
+        // BLOCK 超额应抛 BusinessException，凭证不落 POSTED
+        assertThrows(com.huicai.common.exception.BusinessException.class, () ->
+                postVoucher(new BigDecimal("10000.00"), subjectId2, creditSubjectId),
+                "BLOCK 模式超预算应抛异常拒绝过账");
+
+        // 验证 used_amount 未变（事务回滚）
+        BudgetEntryEntity afterBlock = budgetEntryMapper.selectById(e2Row.getId());
+        assertEquals(new BigDecimal("15000.00"), afterBlock.getUsedAmount(),
+                "BLOCK 拒绝后 used_amount 应回滚保持 15000");
 
         // ==================== Step 7: 预算执行分析 ====================
-        Map<String, Object> analysis = budgetService.executionAnalysis("202607");
+        // Step 5 已通过过账回写 subjectId1 used_amount = 50000(预置) + 20000(凭证) = 70000
+        // Step 6 BLOCK 拒绝，subjectId2 used_amount 保持 15000
+        // executionAnalysis 对 period 内所有条目 used_amount 求和 = 70000 + 15000 = 85000
+        Map<String, Object> analysis = budgetService.executionAnalysis("202610");
         assertNotNull(analysis, "执行分析应返回结果");
-        assertEquals("202607", analysis.get("period"), "期间应匹配");
+        assertEquals("202610", analysis.get("period"), "期间应匹配");
         assertEquals(0, new BigDecimal("100000.00").compareTo((BigDecimal) analysis.get("totalBudget")),
                 "总预算应为 100000");
-        assertEquals(0, new BigDecimal("15000.00").compareTo((BigDecimal) analysis.get("totalUsed")),
-                "总使用应为 15000 (仅科目6602使用了15000)");
-        assertEquals(0, new BigDecimal("85000.00").compareTo((BigDecimal) analysis.get("remaining")),
-                "剩余应为 85000 (100000 - 15000)");
+        assertEquals(0, new BigDecimal("85000.00").compareTo((BigDecimal) analysis.get("totalUsed")),
+                "总使用应为 85000 (6601:70000 + 6602:15000)");
+        assertEquals(0, new BigDecimal("15000.00").compareTo((BigDecimal) analysis.get("remaining")),
+                "剩余应为 15000 (100000 - 85000)");
 
         // ==================== 最终数据完整性验证 ====================
         BudgetEntity finalBudget = budgetMapper.selectById(created.getId());
@@ -186,10 +236,11 @@ public class BudgetFlowE2ETest extends AbstractMapperTest {
         for (BudgetEntryEntity e : finalEntries) {
             if (e.getSubjectId().equals(subjectId2)) {
                 assertEquals(0, new BigDecimal("15000.00").compareTo(e.getUsedAmount()),
-                        "科目6602 已使用金额应为 15000");
+                        "科目6602 已使用金额应为 15000（BLOCK 阻止了追加）");
             } else if (e.getSubjectId().equals(subjectId1)) {
-                assertEquals(0, BigDecimal.ZERO.compareTo(e.getUsedAmount()),
-                        "科目6601 已使用金额应为 0");
+                // subjectId1 走了过账，used_amount = 50000 (预置) + 20000 (凭证) = 70000
+                assertEquals(0, new BigDecimal("70000.00").compareTo(e.getUsedAmount()),
+                        "科目6601 已使用金额应为 70000");
             } else {
                 fail("出现预期外科目 " + e.getSubjectId());
             }
@@ -203,10 +254,11 @@ public class BudgetFlowE2ETest extends AbstractMapperTest {
         assertEquals(101L, reloadedEntry1.getDeptId().longValue(), "部门维度应落库");
         assertEquals(7, reloadedEntry1.getPeriodMonth().intValue(), "月份维度应落库");
         assertEquals("WARN", reloadedEntry1.getControlType(), "控制方式应落库");
-        assertEquals(0, BigDecimal.ZERO.compareTo(reloadedEntry1.getUsedAmount()), "已用额应落库且为 0");
+        assertEquals(0, new BigDecimal("70000.00").compareTo(reloadedEntry1.getUsedAmount()),
+                "Step 5 过账后 entry1.used_amount 应为 70000（预置 50000 + 凭证 20000）");
         assertNotNull(reloadedEntry1.getUpdatedAt(), "updated_at 是真实列，应被 MetaObjectHandler 填充");
 
-        BudgetEntryEntity reloadedEntry2 = budgetEntryMapper.selectById(entry2Row.getId());
+        BudgetEntryEntity reloadedEntry2 = budgetEntryMapper.selectById(e2Row.getId());
         assertNotNull(reloadedEntry2, "条目2 应可按主键回查");
         assertEquals(102L, reloadedEntry2.getDeptId().longValue(), "部门维度应落库");
         assertEquals(7, reloadedEntry2.getPeriodMonth().intValue(), "月份维度应落库");
@@ -215,5 +267,37 @@ public class BudgetFlowE2ETest extends AbstractMapperTest {
         // 审批审计：approved_at 此前为幽灵字段，DB 往返恒 null（E2E 首个失败点）
         BudgetEntity reloadedApproved = budgetMapper.selectById(created.getId());
         assertNotNull(reloadedApproved.getApprovedAt(), "审批时间应真落库");
+    }
+
+    /**
+     * P142：造凭证并走完 submit→audit→post，返回 VoucherPostResultVO（含 warnings）。
+     * 用于验证预算执行联动钩子在真实过账事务内触发。
+     */
+    private VoucherPostResultVO postVoucher(BigDecimal debitAmount, Long debitSubject, Long creditSubject) {
+        VoucherCreateDTO dto = new VoucherCreateDTO();
+        dto.setPeriod(TEST_PERIOD);
+        dto.setVoucherTypeId(1L);
+        dto.setSummary("E2E 预算执行联动测试凭证");
+
+        VoucherCreateDTO.EntryDTO e1 = new VoucherCreateDTO.EntryDTO();
+        e1.setSubjectId(debitSubject);
+        e1.setDebit(debitAmount);
+        e1.setCredit(BigDecimal.ZERO);
+        e1.setSummary("借方");
+
+        VoucherCreateDTO.EntryDTO e2 = new VoucherCreateDTO.EntryDTO();
+        e2.setSubjectId(creditSubject);
+        e2.setDebit(BigDecimal.ZERO);
+        e2.setCredit(debitAmount);
+        e2.setSummary("贷方");
+
+        dto.setEntries(List.of(e1, e2));
+
+        VoucherVO created = voucherService.create(dto, 1L);
+        Long id = created.getId();
+
+        voucherService.submit(id, 1L);
+        voucherService.audit(id, 2L); // 审核人须与制单人不同（SPEC-P117）
+        return voucherService.post(id, 1L);
     }
 }

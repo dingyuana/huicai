@@ -1,16 +1,18 @@
 """AI 任务消息消费者(RabbitMQ)"""
 import asyncio
 import json
-import logging
 from typing import Callable, Dict
 
 import aio_pika
 from aio_pika.abc import AbstractIncomingMessage
 
 from app.api import anomaly, embedding, match, ocr
+from app.core.logging import get_logger
 from app.core.config import settings
 
-logger = logging.getLogger(__name__)
+# ⚠️ 用 loguru 而非 std logging：容器的 stderr handler 只配在 loguru 上，
+# std logging 无 handler ⇒ 消费者启动/处理日志全静默（连带缺陷③排查中坐实）。
+logger = get_logger(__name__)
 
 
 class TaskConsumer:
@@ -19,6 +21,7 @@ class TaskConsumer:
     def __init__(self):
         self._connection: aio_pika.RobustConnection | None = None
         self._channel: aio_pika.abc.AbstractChannel | None = None
+        self._exchange: aio_pika.abc.AbstractExchange | None = None
         self._stop_event = asyncio.Event()
         self._handlers: Dict[str, Callable] = {
             "OCR":       self._handle_ocr,
@@ -33,12 +36,27 @@ class TaskConsumer:
             self._connection = await aio_pika.connect_robust(settings.rabbitmq_url)
             self._channel = await self._connection.channel()
             await self._channel.set_qos(prefetch_count=10)
-            queue = await self._channel.declare_queue(settings.task_queue, durable=True)
+            queue = await self._channel.declare_queue(
+                settings.task_queue,
+                # SPEC-P139 连带缺陷②：Java(AiRabbitConfig) 声明了带 DLX 参数的队列，
+                # 本服务再用无参主动声明 ⇒ PRECONDITION_FAILED inequivalent arg 死循环，
+                # 任务队列从未被消费。改为 passive 声明：拓扑以 Java 为唯一事实源。
+                passive=True,
+            )
+            # SPEC-P139 连带缺陷③：结果必须经 huicai.ai.exchange 发布。
+            # 旧实现走 default 交换机 + routing_key="ai.result"，而 default 交换机
+            # 只认「队列名」（result 队列名是 huicai.ai.result.queue）⇒ 无机路由、
+            # 消息被 RabbitMQ 静默丢弃，全链路从未走通。passive 声明，拓扑以 Java 为准。
+            self._exchange = await self._channel.declare_exchange(
+                settings.task_exchange,
+                aio_pika.ExchangeType.DIRECT,
+                passive=True,
+            )
             await queue.consume(self._on_message)
-            logger.info("AI 任务消费者已启动, 监听: %s", settings.task_queue)
+            logger.info("AI 任务消费者已启动, 监听: {}", settings.task_queue)
             await self._stop_event.wait()
         except Exception as e:
-            logger.error("AI 消费者启动失败: %s", e)
+            logger.error("AI 消费者启动失败: {}", e)
             await asyncio.sleep(5)
             # 自动重连
             if not self._stop_event.is_set():
@@ -57,22 +75,23 @@ class TaskConsumer:
                 task_type = body.get("taskType", "")
                 handler = self._handlers.get(task_type)
                 if not handler:
-                    logger.warning("未知任务类型: %s", task_type)
+                    logger.warning("未知任务类型: {}", task_type)
                     await self._publish_result(body, "FAILED", error=f"未知任务类型: {task_type}")
                     return
-                logger.info("处理 AI 任务: %s taskId=%s", task_type, body.get("taskId"))
+                logger.info("处理 AI 任务: {} taskId={}", task_type, body.get("taskId"))
                 output = await handler(body)
                 await self._publish_result(body, "COMPLETED", output=output)
             except Exception as e:
-                logger.exception("任务处理失败: %s", e)
+                logger.exception("任务处理失败: {}", e)
                 await self._publish_result(
                     body, "FAILED", error=str(e) if 'body' in locals() else "unknown"
                 )
 
     async def _publish_result(self, body: dict, status: str,
                                output: dict | None = None, error: str | None = None):
-        """回传结果到结果队列"""
-        if not self._channel:
+        """回传结果到 AI 交换机（direct 路由到 result 队列）"""
+        if not self._exchange:
+            logger.error("结果未发布: 交换机未就绪, taskId={}", body.get("taskId"))
             return
         result = {
             "taskId": body.get("taskId"),
@@ -81,8 +100,11 @@ class TaskConsumer:
             "outputData": output or {},
             "confidence": 0.9 if status == "COMPLETED" else 0.0,
             "errorMessage": error,
+            # SPEC-P139 AT-139-4：必须原样透传下发消息携带的 enterpriseId，
+            # 否则 Java 监听侧无法重建租户上下文 ⇒ 写回被 RLS 静默过滤（生产探针坐实）。
+            "enterpriseId": body.get("enterpriseId"),
         }
-        await self._channel.default_exchange.publish(
+        await self._exchange.publish(
             aio_pika.Message(
                 body=json.dumps(result, ensure_ascii=False).encode("utf-8"),
                 delivery_mode=aio_pika.DeliveryMode.PERSISTENT,

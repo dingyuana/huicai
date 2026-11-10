@@ -25,6 +25,8 @@ public class EmployeeServiceImpl implements EmployeeService {
 
     private final EmployeeMapper mapper;
 
+    private final com.huicai.base.system.mapper.UserMapper userMapper;
+
     @Override
     public IPage<EmployeeEntity> pageQuery(String keyword, Boolean isActive, Integer current, Integer size) {
         Page<EmployeeEntity> page = new Page<>(
@@ -99,6 +101,8 @@ public class EmployeeServiceImpl implements EmployeeService {
         existing.setEmail(entity.getEmail());
         existing.setIsActive(entity.getIsActive());
         existing.setRemark(entity.getRemark());
+        // SPEC-P159：社保核定基数必须在这里搬运（读-改-写形态，漏掉=编辑一次就静默丢弃）
+        existing.setSocialBaseDeclared(entity.getSocialBaseDeclared());
         // ⚠️ 刻意**不再**搬运 bankName / bankAccount / idCard：
         // 它们在 EmployeeEntity 上标着 exist=false，t_employee 无对应列 ⇒ 这三行
         // 读到的恒为 null、写进的也被 MyBatis 丢弃，属**误导性死代码**
@@ -111,6 +115,43 @@ public class EmployeeServiceImpl implements EmployeeService {
     @Override
     public void delete(Long id) {
         mapper.deleteById(id);
+    }
+
+    @Override
+    public EmployeeEntity bindUser(Long employeeId, Long userId) {
+        EmployeeEntity emp = mapper.selectById(employeeId);
+        if (emp == null) {
+            throw new BusinessException("员工不存在");
+        }
+        if (userId == null) {
+            // 解绑
+            emp.setUserId(null);
+            mapper.updateById(emp);
+            return emp;
+        }
+        // 账号必须存在
+        com.huicai.base.system.entity.UserEntity user =
+                userMapper.selectById(userId);
+        if (user == null) {
+            throw new BusinessException("登录账号不存在: " + userId);
+        }
+        // 同企业校验：员工账号归属企业必须与员工档案一致（跨企业绑定会破坏 RLS 隔离）
+        Long currentEnt = com.huicai.base.system.util.SecurityUtils.getCurrentEnterpriseId();
+        if (user.getEnterpriseId() != null && !user.getEnterpriseId().equals(currentEnt)) {
+            throw new BusinessException("账号归属企业(+" + user.getEnterpriseId()
+                    + ")与当前企业(+" + currentEnt + ")不一致，禁止绑定");
+        }
+        // 一账号至多绑一员工（DB 有 uq_employee_user 兜底，此处给友好报错）
+        EmployeeEntity taken = mapper.selectOne(new LambdaQueryWrapper<EmployeeEntity>()
+                .eq(EmployeeEntity::getUserId, userId)
+                .ne(EmployeeEntity::getId, employeeId)
+                .last("LIMIT 1"));
+        if (taken != null) {
+            throw new BusinessException("该账号已绑定员工「" + taken.getName() + "」，请先解绑");
+        }
+        emp.setUserId(userId);
+        mapper.updateById(emp);
+        return emp;
     }
 
     private void validateCode(String code, Long excludeId) {

@@ -19,6 +19,7 @@ import com.huicai.base.business.service.OutputInvoiceStateMachineService;
 import com.huicai.base.business.util.TemplateMatcher;
 import com.huicai.sme.tax.mapper.TaxDeclarationMapper;
 import com.huicai.sme.tax.mapper.TaxTypeMapper;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -55,6 +56,12 @@ class TaxServiceImplTest {
     @Mock private ApplicationEventPublisher eventPublisher;
     @Mock
     private VoucherTypeService voucherTypeService;
+    @Mock
+    private com.huicai.sme.tax.mapper.TaxBurdenConfigMapper taxBurdenConfigMapper;
+    @Mock
+    private com.huicai.base.report.service.ReportService reportService;
+    @Mock
+    private com.huicai.base.masterdata.mapper.EmployeeMapper employeeMapper;
     @InjectMocks private TaxServiceImpl service;
 
     private InputInvoiceEntity stubInput(Long id, String status) {
@@ -854,4 +861,178 @@ class TaxServiceImplTest {
         VoucherTypeStub.install(voucherTypeService);
     }
 
+    // ==================== SPEC-P156：P1-1 税务申报收尾 ====================
+
+    @org.junit.jupiter.api.AfterEach
+    void clearSecurityContext() {
+        org.springframework.security.core.context.SecurityContextHolder.clearContext();
+    }
+
+    private void loginAs(long enterpriseId) {
+        com.huicai.base.system.entity.UserEntity user = new com.huicai.base.system.entity.UserEntity();
+        user.setId(9L);
+        user.setUsername("p156-admin");
+        user.setPassword("encoded");
+        user.setUserType("AGENCY");
+        user.setAgencyId(enterpriseId);
+        user.setStatus("ACTIVE");
+        user.setDeleted(0);
+        com.huicai.config.security.LoginUser loginUser =
+                new com.huicai.config.security.LoginUser(user, java.util.List.of(), null,
+                        enterpriseId, "AGENCY", "AGENCY_ADMIN");
+        org.springframework.security.authentication.UsernamePasswordAuthenticationToken auth =
+                new org.springframework.security.authentication.UsernamePasswordAuthenticationToken(
+                        loginUser, null, loginUser.getAuthorities());
+        org.springframework.security.core.context.SecurityContextHolder.getContext()
+                .setAuthentication(auth);
+    }
+
+    @Test
+    @DisplayName("P156 阈值：未配置返回系统默认 3% 虚拟行；配置后返回真实行")
+    void burdenConfigDefaultAndExisting() {
+        when(taxBurdenConfigMapper.selectOne(any())).thenReturn(null);
+        com.huicai.sme.tax.entity.TaxBurdenConfigEntity cfg = service.getBurdenConfig("VAT");
+        assertEquals("VAT", cfg.getTaxType());
+        assertEquals(0, new BigDecimal("0.03").compareTo(cfg.getThresholdRate()), "系统默认 3%");
+        assertEquals(Boolean.TRUE, cfg.getEnabled());
+        assertTrue(cfg.getRemark().contains("默认"));
+
+        com.huicai.sme.tax.entity.TaxBurdenConfigEntity saved = new com.huicai.sme.tax.entity.TaxBurdenConfigEntity();
+        saved.setTaxType("VAT");
+        saved.setThresholdRate(new BigDecimal("0.02"));
+        saved.setEnabled(Boolean.TRUE);
+        when(taxBurdenConfigMapper.selectOne(any())).thenReturn(saved);
+        com.huicai.sme.tax.entity.TaxBurdenConfigEntity got = service.getBurdenConfig("VAT");
+        assertEquals(0, new BigDecimal("0.02").compareTo(got.getThresholdRate()), "配置后取真实行");
+    }
+
+    @Test
+    @DisplayName("P156 阈值保存：upsert（insert 新行 / update 已有行）+ 非法值 400")
+    void burdenConfigSaveUpsertAndGuard() {
+        loginAs(1L);
+        // 新增分支
+        when(taxBurdenConfigMapper.selectOne(any())).thenReturn(null);
+        service.saveBurdenConfig("VAT", new BigDecimal("0.025"), Boolean.TRUE, "测试", 9L);
+        verify(taxBurdenConfigMapper).insert(any(com.huicai.sme.tax.entity.TaxBurdenConfigEntity.class));
+
+        // 更新分支
+        com.huicai.sme.tax.entity.TaxBurdenConfigEntity existing = new com.huicai.sme.tax.entity.TaxBurdenConfigEntity();
+        existing.setId(5L);
+        existing.setTaxType("VAT");
+        when(taxBurdenConfigMapper.selectOne(any())).thenReturn(existing);
+        service.saveBurdenConfig("VAT", new BigDecimal("0.04"), Boolean.FALSE, null, 9L);
+        verify(taxBurdenConfigMapper).updateById(existing);
+        assertEquals(Boolean.FALSE, existing.getEnabled());
+
+        // 非法值：>100% 或负数
+        com.huicai.common.exception.BusinessException ex1 = assertThrows(
+                com.huicai.common.exception.BusinessException.class,
+                () -> service.saveBurdenConfig("VAT", new BigDecimal("1.5"), null, null, 9L));
+        assertTrue(ex1.getMessage().contains("0~100%"));
+        com.huicai.common.exception.BusinessException ex2 = assertThrows(
+                com.huicai.common.exception.BusinessException.class,
+                () -> service.saveBurdenConfig("VAT", new BigDecimal("-0.01"), null, null, 9L));
+        assertTrue(ex2.getMessage().contains("0~100%"));
+    }
+
+    @Test
+    @DisplayName("P156 CIT 测算：累计利润>0 → 小微 5% 档；≤0 → 免预缴")
+    void citEstimate() {
+        Map<String, Object> income = new HashMap<>();
+        income.put("cumulativeProfit", new BigDecimal("2000000"));
+        when(reportService.incomeStatement("202609")).thenReturn(income);
+        // SPEC-P158：三条件判定——补从业/资产桩（小微命中）
+        when(employeeMapper.selectCount(any())).thenReturn(12L);
+        Map<String, Object> balance = new HashMap<>();
+        balance.put("totalAssets", new BigDecimal("8000000"));
+        when(reportService.balanceSheet("202609")).thenReturn(balance);
+        Map<String, Object> r = service.calculateCit("202609");
+        assertEquals(0, new BigDecimal("100000.00").compareTo((BigDecimal) r.get("estimatedTax")),
+                "200万 × 5% = 10万");
+        assertEquals(new BigDecimal("0.05"), r.get("taxRate"));
+        assertEquals(Boolean.TRUE, r.get("smallMicro"), "三条件齐 → 小微");
+
+        // 标准档（利润超 300 万；从业/资产仍小，note 应点名利润）
+        income.put("cumulativeProfit", new BigDecimal("5000000"));
+        Map<String, Object> r2 = service.calculateCit("202609");
+        assertEquals(0, new BigDecimal("1250000.00").compareTo((BigDecimal) r2.get("estimatedTax")));
+        assertEquals(new BigDecimal("0.25"), r2.get("taxRate"));
+        assertTrue(String.valueOf(r2.get("note")).contains("累计利润 5000000 超 300 万"),
+                "note 点名挡路条件，实际：" + r2.get("note"));
+
+        // 亏损免预缴（提前 return，不碰三条件）
+        income.put("cumulativeProfit", new BigDecimal("-50000"));
+        Map<String, Object> r3 = service.calculateCit("202609");
+        assertEquals(0, BigDecimal.ZERO.compareTo((BigDecimal) r3.get("estimatedTax")));
+        assertTrue(String.valueOf(r3.get("note")).contains("无需预缴"));
+    }
+
+    @Test
+    @DisplayName("P156 CIT 档位边界：恰 300 万仍走小微 5%")
+    void citBoundary() {
+        Map<String, Object> income = new HashMap<>();
+        income.put("cumulativeProfit", new BigDecimal("3000000"));
+        when(reportService.incomeStatement("202609")).thenReturn(income);
+        when(employeeMapper.selectCount(any())).thenReturn(300L);
+        Map<String, Object> balance = new HashMap<>();
+        balance.put("totalAssets", new BigDecimal("50000000"));
+        when(reportService.balanceSheet("202609")).thenReturn(balance);
+        Map<String, Object> r = service.calculateCit("202609");
+        assertEquals(new BigDecimal("0.05"), r.get("taxRate"), "≤300万含等于");
+        assertEquals(Boolean.TRUE, r.get("smallMicro"), "恰 300 人/5000 万边界仍计小微");
+    }
+
+    // ==================== SPEC-P158 三条件精确判定 ====================
+
+    @Test
+    @DisplayName("P158 从业人数超 300：利润虽小仍走 25%，note 点名从业")
+    void citHeadcountExceeded() {
+        Map<String, Object> income = new HashMap<>();
+        income.put("cumulativeProfit", new BigDecimal("2000000"));
+        when(reportService.incomeStatement("202609")).thenReturn(income);
+        when(employeeMapper.selectCount(any())).thenReturn(301L);
+        Map<String, Object> balance = new HashMap<>();
+        balance.put("totalAssets", new BigDecimal("8000000"));
+        when(reportService.balanceSheet("202609")).thenReturn(balance);
+        Map<String, Object> r = service.calculateCit("202609");
+        assertEquals(new BigDecimal("0.25"), r.get("taxRate"), "从业 301 挡小微");
+        assertEquals(Boolean.FALSE, r.get("smallMicro"));
+        assertTrue(String.valueOf(r.get("note")).contains("从业人数 301 超 300 人"),
+                "实际：" + r.get("note"));
+        assertEquals(301L, r.get("headcount"), "响应携带判定依据");
+    }
+
+    @Test
+    @DisplayName("P158 资产总额超 5000 万：利润/从业均达标仍走 25%，note 点名资产")
+    void citAssetsExceeded() {
+        Map<String, Object> income = new HashMap<>();
+        income.put("cumulativeProfit", new BigDecimal("2000000"));
+        when(reportService.incomeStatement("202609")).thenReturn(income);
+        when(employeeMapper.selectCount(any())).thenReturn(10L);
+        Map<String, Object> balance = new HashMap<>();
+        balance.put("totalAssets", new BigDecimal("50000000.01"));
+        when(reportService.balanceSheet("202609")).thenReturn(balance);
+        Map<String, Object> r = service.calculateCit("202609");
+        assertEquals(new BigDecimal("0.25"), r.get("taxRate"), "资产 5000 万+0.01 挡小微");
+        assertTrue(String.valueOf(r.get("note")).contains("超 5000 万"),
+                "实际：" + r.get("note"));
+    }
+
+    @Test
+    @DisplayName("P158 多条件同时超限：note 逐条点名（不止挡一条）")
+    void citMultipleExceeded() {
+        Map<String, Object> income = new HashMap<>();
+        income.put("cumulativeProfit", new BigDecimal("8000000"));
+        when(reportService.incomeStatement("202609")).thenReturn(income);
+        when(employeeMapper.selectCount(any())).thenReturn(500L);
+        Map<String, Object> balance = new HashMap<>();
+        balance.put("totalAssets", new BigDecimal("60000000"));
+        when(reportService.balanceSheet("202609")).thenReturn(balance);
+        Map<String, Object> r = service.calculateCit("202609");
+        String note = String.valueOf(r.get("note"));
+        assertTrue(note.contains("超 300 万") && note.contains("超 300 人") && note.contains("超 5000 万"),
+                "三条件逐条点名，实际：" + note);
+        assertEquals(0, new BigDecimal("2000000.00").compareTo((BigDecimal) r.get("estimatedTax")),
+                "800 万 × 25% = 200 万");
+    }
 }

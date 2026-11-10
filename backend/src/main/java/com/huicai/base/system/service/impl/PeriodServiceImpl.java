@@ -12,6 +12,7 @@ import com.huicai.common.context.EnterpriseContextHolder;
 import com.huicai.common.exception.BusinessException;
 import org.springframework.stereotype.Service;
 
+import java.io.Serializable;
 import java.util.List;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -75,6 +76,50 @@ public class PeriodServiceImpl extends ServiceImpl<PeriodMapper, PeriodEntity> i
     @Transactional
     public <E extends IPage<PeriodEntity>> E page(E page, Wrapper<PeriodEntity> queryWrapper) {
         return super.page(page, queryWrapper);
+    }
+
+    /**
+     * 🔴 SPEC-P150：按 id 的读/改/删同样是 {@code IService} 的 default 方法 ——
+     * 类级 {@code @Transactional} 对它们不生效，必须逐个显式覆盖。
+     *
+     * <p><b>生产实证（2026-11-02）</b>：同一张 {@code t_period}、同一个企业，
+     * <pre>
+     *   GET  /api/v1/periods        -> 1 条（走已覆盖的 page()）
+     *   GET  /api/v1/periods/all    -> 1 条（走已覆盖的 list()）
+     *   GET  /api/v1/periods/2      -> data: null          ← getById 未覆盖
+     *   POST /api/v1/periods/3/close-> HTTP 200 但 status 仍为 open，
+     *                                  t_close_log 无新增行 ⇒ closePeriod 从未被调用
+     * </pre>
+     *
+     * <p><b>用户可见形态</b>：在「会计期间」页点「结账」→ 提示「期间已结账」→
+     * 状态仍是「开启」⇒ 而「反结账」按钮只在 {@code closed} 时渲染 ⇒
+     * <b>反结账入口永远不出现</b>。同一根因下「编辑」「删除」期间也一并静默无效。
+     *
+     * <p><b>为什么静默</b>：无事务 ⇒ {@code SET LOCAL app.enterprise_id} 无处生效 ⇒
+     * RLS 谓词取到 NULL ⇒ 整表被过滤；{@code getById} 返回 {@code null} 后，
+     * 控制器原来走的是 {@code if (entity != null)} 的空分支，直接 {@code R.ok()}。
+     *
+     * <p>⚠️ 与 {@link #list}/{@link #page} 同一处方：注解必须落在<b>本类声明</b>的方法上，
+     * AOP 才认为「声明类型带 @Transactional」而织入事务与 RLS 切面。
+     */
+    @Override
+    @Transactional
+    public PeriodEntity getById(Serializable id) {
+        return super.getById(id);
+    }
+
+    /** 同上：{@code updateById} 是 default 方法（实测 {@code PUT /api/v1/periods/{id}} 静默不生效）。 */
+    @Override
+    @Transactional
+    public boolean updateById(PeriodEntity entity) {
+        return super.updateById(entity);
+    }
+
+    /** 同上：{@code removeById} 是 default 方法（实测 {@code DELETE /api/v1/periods/{id}} 静默不生效）。 */
+    @Override
+    @Transactional
+    public boolean removeById(Serializable id) {
+        return super.removeById(id);
     }
 
     @Override
