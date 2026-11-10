@@ -372,6 +372,10 @@ endpoints:
   permission: voucher:submit
   write: true
 - method: POST
+  path: /api/base/voucher/v1/vouchers/{id}/unaudit
+  permission: voucher:audit
+  write: true
+- method: POST
   path: /api/base/voucher/v1/vouchers/{id}/unpost
   permission: voucher:unpost
   write: true

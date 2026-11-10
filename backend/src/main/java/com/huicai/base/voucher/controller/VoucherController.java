@@ -135,6 +135,13 @@ public class VoucherController {
         return R.ok();
     }
 
+    @Operation(summary = "撤审 (AUDITED → DRAFT, 仅纠错重审; SPEC-P160)")
+    @PostMapping("/{id}/unaudit")
+    public R<Void> unaudit(@PathVariable Long id) {
+        voucherService.unaudit(id, SecurityUtils.getCurrentUserId());
+        return R.ok();
+    }
+
     @Operation(summary = "获取凭证类型绑定的模板 (用于手工新增凭证预填分录)")
     @GetMapping("/template-by-type/{typeId}")
     public R<VoucherTemplateVO> getTemplateByVoucherType(@PathVariable Long typeId) {

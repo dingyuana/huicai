@@ -440,6 +440,17 @@ public class VoucherServiceImpl extends ServiceImpl<VoucherMapper, VoucherEntity
     }
 
     @Override
+    @Transactional
+    public void unaudit(Long id, Long userId) {
+        VoucherEntity entity = getValidVoucher(id);
+        voucherStateMachineService.assertUnauditable(entity);
+        assertPeriodOpen(entity.getPeriod());
+        // 仅回状态不动余额（余额快照只随 post/unpost 变化）；控制字由 batchUpdateStatus 带乐观锁
+        voucherMapper.batchUpdateStatus(Collections.singletonList(id), "DRAFT", userId, entity.getVersion());
+        log.info("撤审凭证: id={}, userId={}, version={}", id, userId, entity.getVersion());
+    }
+
+    @Override
     public VoucherTemplateVO getTemplateByVoucherType(Long voucherTypeId) {
         // 凭证类型与模板已解耦，不再自动加载模板。
         // 自动制证场景由模板匹配引擎（source + businessType + direction）接管。

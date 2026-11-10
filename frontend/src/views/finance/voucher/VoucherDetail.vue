@@ -34,6 +34,12 @@
             @click="onPost"
           >记账</el-button>
           <el-button
+            v-if="voucher?.status === 'AUDITED'"
+            :aria-disabled="locked('voucher:audit')"
+            :class="{ 'is-permission-locked': locked('voucher:audit') }"
+            @click="onUnaudit"
+          >撤审</el-button>
+          <el-button
             v-if="voucher?.status === 'POSTED'"
             type="danger"
             :aria-disabled="locked('voucher:unpost')"
@@ -101,6 +107,7 @@ import {
   getVoucherPage,
   submitVoucher,
   auditVoucher,
+  unauditVoucher,
   postVoucher,
   unpostVoucher,
   VOUCHER_STATUS_MAP,
@@ -247,6 +254,23 @@ async function onUnpost() {
   }
   await unpostVoucher(currentId.value)
   ElMessage.success('反记账成功，凭证已退回已审核状态')
+  await fetchData()
+}
+
+/** 撤审：AUDITED → DRAFT，纠错重审（SPEC-P160；不动余额，重走提交→审核→记账） */
+async function onUnaudit() {
+  if (!(await ensure('voucher:audit', '撤审'))) return
+  try {
+    await ElMessageBox.confirm(
+      '撤审将凭证退回「草稿」状态（不影响科目余额），可修改后重新提交审核。确定执行？',
+      '撤审确认',
+      { type: 'warning', confirmButtonText: '确定撤审', cancelButtonText: '取消' },
+    )
+  } catch {
+    return
+  }
+  await unauditVoucher(currentId.value)
+  ElMessage.success('撤审成功，凭证已退回草稿状态')
   await fetchData()
 }
 

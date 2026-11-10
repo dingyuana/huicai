@@ -1,6 +1,7 @@
 package com.huicai.base.voucher.controller;
 
 import com.huicai.common.context.EnterpriseContextHolder;
+import com.huicai.common.context.ReferenceContextSwap;
 import com.huicai.common.response.R;
 import com.huicai.base.voucher.dto.VoucherTemplateVO;
 import com.huicai.base.voucher.entity.VoucherTemplateEntity;
@@ -14,6 +15,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
+import javax.sql.DataSource;
 import java.util.List;
 import java.util.stream.Collectors;
 import com.huicai.base.voucher.dto.VoucherTemplateUpdateDTO;
@@ -30,6 +32,7 @@ public class VoucherTemplateController {
 
     private final VoucherTemplateService templateService;
     private final SubjectMapper subjectMapper;
+    private final DataSource dataSource;
 
     // 🔴 只读端点挂 Controller 事务（SPEC-P128 §7.1 同型，SPEC-P153-A2 实测坐实）：
     //   enrichLines 直调 subjectMapper.selectById（t_subject 是 RLS 表），它在
@@ -139,10 +142,16 @@ public class VoucherTemplateController {
     // 不加事务时参考模板分录行的科目代码/名称恒 null。
     @Transactional(readOnly = true, rollbackFor = Exception.class)
     public R<List<VoucherTemplateVO>> listReferenceTemplates() {
-        List<VoucherTemplateEntity> templates = templateService.listReferenceTemplates();
-        List<VoucherTemplateVO> vos = templates.stream()
-                .map(t -> enrichLines(VoucherTemplateVO.fromEntity(t, templateService.getLines(t.getId()))))
-                .collect(Collectors.toList());
+        // SPEC-P161：参考库放行通道——ent0 模板的分录行 subject 挂 ent0 科目，
+        // enrichLines 的 subjectMapper.selectById 在租户上下文下会被应用层过滤
+        // （enterprise_id=租户）杀成 null ⇒ 科目代码恒 null。整个方法体（含科目富集）
+        // 包进 ctx=0 交换。
+        List<VoucherTemplateVO> vos = ReferenceContextSwap.withReferenceLibrary(dataSource, () -> {
+            List<VoucherTemplateEntity> templates = templateService.listReferenceTemplates();
+            return templates.stream()
+                    .map(t -> enrichLines(VoucherTemplateVO.fromEntity(t, templateService.getLines(t.getId()))))
+                    .collect(Collectors.toList());
+        });
         return R.ok(vos);
     }
 

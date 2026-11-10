@@ -30,6 +30,10 @@ public final class VoucherStatus {
     public static boolean isPostable(String status) {
         return AUDITED.equals(status);
     }
+    /** SPEC-P160：撤审 = AUDITED 回 DRAFT（纠错重审） */
+    public static boolean isUnauditable(String status) {
+        return AUDITED.equals(status);
+    }
     /** 仅 POSTED 可结账 */
     public static boolean isClosable(String status) {
         return POSTED.equals(status);

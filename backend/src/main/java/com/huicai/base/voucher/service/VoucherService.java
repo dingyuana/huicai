@@ -94,6 +94,16 @@ public interface VoucherService {
     void unpost(Long id, Long userId);
 
     /**
+     * SPEC-P160：撤审（AUDITED → DRAFT，纠错重审）。
+     *
+     * <p>撤审后凭证回 DRAFT，重新走 submit→audit→post。分权语义与
+     * {@link #unpost} 同形：撤审动作本身要求 voucher:audit 权限，撤审回草稿后
+     * 制单人重提交仍需他人审核（制审分离由 audit 自有的 assertNotSelfReview 把关），
+     * 故此处不额外增设自审检查；不动余额快照（余额只随 post/unpost 动）。</p>
+     */
+    void unaudit(Long id, Long userId);
+
+    /**
      * 根据凭证类型 ID 获取绑定的模板 (含分录行), 无绑定返回 null
      */
     VoucherTemplateVO getTemplateByVoucherType(Long voucherTypeId);
