@@ -5,6 +5,7 @@ import com.huicai.agency.security.AgencyEnterpriseRoleGuard;
 import com.huicai.agency.batch.service.BatchAuditService;
 import com.huicai.agency.batch.service.BatchCloseService;
 import com.huicai.agency.batch.service.BatchImportService;
+import com.huicai.base.system.util.SecurityUtils;
 import com.huicai.common.response.R;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
@@ -24,31 +25,40 @@ public class BatchOperationController {
 
     @PostMapping("/import")
     public R<BatchResultVO> importInvoices(@RequestParam List<MultipartFile> files,
-                                            @RequestParam Long enterpriseId) {
-        // SPEC-P120：批量操作是跨客户管理动作。本端点当前为 501 未实现桩，
-        // 但实现放开时若无守卫即成为越权入口 —— 故在此先钉住。
+                                            @RequestParam Long enterpriseId,
+                                            @RequestParam String invoiceType) {
         roleGuard.requireAgencyAdmin("批量导入");
-        return R.ok(batchImportService.importInvoices(files, enterpriseId));
+        roleGuard.requireVisibleEnterprise(enterpriseId);
+        return R.ok(batchImportService.importInvoices(files, enterpriseId, invoiceType));
     }
 
     @PostMapping("/audit-vouchers")
     public R<BatchResultVO> auditVouchers(@RequestBody List<Long> voucherIds,
                                            @RequestParam Long enterpriseId) {
         roleGuard.requireAgencyAdmin("批量审核凭证");
-        return R.ok(batchAuditService.auditVouchers(voucherIds, enterpriseId));
+        roleGuard.requireVisibleEnterprise(enterpriseId);
+        return R.ok(batchAuditService.auditVouchers(
+                voucherIds, enterpriseId, SecurityUtils.getCurrentUserId()));
     }
 
     @PostMapping("/audit-invoices")
     public R<BatchResultVO> auditInvoices(@RequestBody List<Long> invoiceIds,
-                                           @RequestParam Long enterpriseId) {
+                                           @RequestParam Long enterpriseId,
+                                           @RequestParam String invoiceType) {
         roleGuard.requireAgencyAdmin("批量审核发票");
-        return R.ok(batchAuditService.auditInvoices(invoiceIds, enterpriseId));
+        roleGuard.requireVisibleEnterprise(enterpriseId);
+        return R.ok(batchAuditService.auditInvoices(
+                invoiceIds, enterpriseId, SecurityUtils.getCurrentUserId(), invoiceType));
     }
 
     @PostMapping("/close")
     public R<BatchResultVO> closePeriods(@RequestBody List<Long> enterpriseIds,
                                           @RequestParam String period) {
         roleGuard.requireAgencyAdmin("批量结账");
-        return R.ok(batchCloseService.closePeriods(enterpriseIds, period));
+        if (enterpriseIds != null && enterpriseIds.size() <= 100) {
+            enterpriseIds.forEach(roleGuard::requireVisibleEnterprise);
+        }
+        return R.ok(batchCloseService.closePeriods(
+                enterpriseIds, period, SecurityUtils.getCurrentUserId()));
     }
 }

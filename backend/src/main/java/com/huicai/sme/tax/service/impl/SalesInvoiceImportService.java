@@ -416,7 +416,9 @@ public class SalesInvoiceImportService {
         }
 
         if (rows.isEmpty()) {
-            return Map.of("total", 0, "success", 0, "docCreated", 0, "voucherCreated", 0, "batchId", batchId);
+            return Map.of(
+                    "total", 0, "success", 0, "duplicateSkipped", 0,
+                    "docCreated", 0, "voucherCreated", 0, "errors", List.of(), "batchId", batchId);
         }
 
         ensureStandardSubjects();

@@ -27,6 +27,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import com.huicai.base.system.util.SecurityUtils;
+import com.huicai.common.context.EnterpriseContextHolder;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -319,7 +320,9 @@ public class InputInvoiceImportService {
             throw BusinessException.notFound("批次不存在或已过期, 请重新上传文件");
         }
         if (rows.isEmpty()) {
-            return Map.of("total", 0, "success", 0, "docCreated", 0, "voucherCreated", 0, "batchId", batchId);
+            return Map.of(
+                    "total", 0, "success", 0, "duplicateSkipped", 0,
+                    "docCreated", 0, "voucherCreated", 0, "errors", List.of(), "batchId", batchId);
         }
 
         Set<String> existingSet = invoiceDedupUtil.findExisting(
@@ -370,7 +373,7 @@ public class InputInvoiceImportService {
         if (!successPeriods.isEmpty()) {
             try {
                 Long agencyId = SecurityUtils.getCurrentAgencyId();
-                Long enterpriseId = SecurityUtils.getCurrentEnterpriseId();
+                Long enterpriseId = EnterpriseContextHolder.get();
                 for (String p : successPeriods) {
                     eventPublisher.publishEvent(
                             new ServiceProgressStageEvent(agencyId, enterpriseId, p, ServiceProgressStageEvent.STAGE_INTAKE));

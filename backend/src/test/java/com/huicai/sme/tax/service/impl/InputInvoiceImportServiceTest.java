@@ -17,7 +17,10 @@ import com.huicai.base.voucher.mapper.VoucherEntryMapper;
 import com.huicai.base.voucher.mapper.VoucherMapper;
 import com.huicai.base.voucher.service.VoucherNoService;
 import com.huicai.common.exception.BusinessException;
+import com.huicai.common.context.EnterpriseContextHolder;
+import com.huicai.common.event.ServiceProgressStageEvent;
 import com.huicai.sme.tax.constant.InvoiceStatus;
+import com.huicai.base.system.util.SecurityUtils;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -25,6 +28,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
 import org.mockito.Mock;
+import org.mockito.MockedStatic;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.web.multipart.MultipartFile;
@@ -314,7 +318,19 @@ class InputInvoiceImportServiceTest {
         when(vendorMapper.selectList(any())).thenReturn(List.of(stubVendor(5L, "供应商A", "91110000ABC")));
         when(inputInvoiceMapper.insert(any(InputInvoiceEntity.class))).thenReturn(1);
 
-        Map<String, Object> result = service.confirmImport("batch-1");
+        EnterpriseContextHolder.set(45L);
+        Map<String, Object> result;
+        try (MockedStatic<SecurityUtils> security = mockStatic(SecurityUtils.class)) {
+            security.when(SecurityUtils::getCurrentAgencyId).thenReturn(7L);
+            result = service.confirmImport("batch-1");
+
+            ArgumentCaptor<ServiceProgressStageEvent> event =
+                    ArgumentCaptor.forClass(ServiceProgressStageEvent.class);
+            verify(eventPublisher).publishEvent(event.capture());
+            assertEquals(45L, event.getValue().enterpriseId());
+        } finally {
+            EnterpriseContextHolder.clear();
+        }
         assertEquals(1, result.get("total"));
         assertEquals(1, result.get("success"));
         assertEquals(0, result.get("duplicateSkipped"));

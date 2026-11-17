@@ -354,7 +354,7 @@ public class PeriodCloseServiceImpl implements PeriodCloseService {
         // P79 REVIEW：本期结账完成 → 发事件推进 REVIEW 节点（监听器按 agencyId 降级；无安全上下文时静默跳过，绝不影响业务）
         try {
             Long agencyId = SecurityUtils.getCurrentAgencyId();
-            Long enterpriseId = SecurityUtils.getCurrentEnterpriseId();
+            Long enterpriseId = EnterpriseContextHolder.get();
             eventPublisher.publishEvent(new ServiceProgressStageEvent(
                     agencyId, enterpriseId, period, ServiceProgressStageEvent.STAGE_REVIEW));
             log.info("P79 结账完成发 REVIEW 事件: agencyId={} enterpriseId={} period={}",
