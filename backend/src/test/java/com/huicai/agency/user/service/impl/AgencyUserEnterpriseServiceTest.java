@@ -245,10 +245,15 @@ class AgencyUserEnterpriseServiceTest {
 
         assertDoesNotThrow(() -> service.unassign(1L));
 
-        assertEquals(1, assignment.getDeleted());
-        assertNotNull(assignment.getUnassignedBy());
-        assertNotNull(assignment.getUnassignedAt());
+        // 🔴 契约变更（commit 3aa482aa）：{@code @TableLogic} 只在 deleteById 时生效，
+        // updateById 会跳过 deleted 字段 ⇒ 取消分配后记录仍可见（线上缺陷）。
+        // 故实现改为「updateById 写时间戳 + deleteById 做逻辑删除」，
+        // 本断言随之从「内存字段被置 1」改为「deleteById 被调用」——
+        // 内存字段本来就不再被赋值，继续断言它等于把测试钉在旧实现上。
+        assertNotNull(assignment.getUnassignedBy(), "取消分配人应被记录");
+        assertNotNull(assignment.getUnassignedAt(), "取消分配时间应被记录");
         verify(agencyUserEnterpriseMapper).updateById(assignment);
+        verify(agencyUserEnterpriseMapper).deleteById(1L);
     }
 
     @Test

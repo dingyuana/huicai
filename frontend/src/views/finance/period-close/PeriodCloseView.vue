@@ -3,7 +3,16 @@
     <el-card shadow="never">
       <div class="page-header">
         <span class="page-title">期末结账工作台</span>
-        <el-button @click="onReopen" v-if="periodStatus === 'closed'">反结账</el-button>
+        <!-- 反结账入口（SPEC-P149）：仅期间已结账时显示，是已结账期间唯一的正确出口 -->
+        <el-button
+          v-if="periodStatus === 'closed'"
+          type="danger"
+          plain
+          :icon="RefreshLeft"
+          @click="onReopen"
+        >
+          反结账
+        </el-button>
       </div>
 
       <el-form inline>
@@ -14,6 +23,17 @@
           <el-tag v-if="periodStatus" :type="statusTagType" size="small">{{ statusLabel }}</el-tag>
         </el-form-item>
       </el-form>
+
+      <!-- SPEC-P149：已结账期间的醒目警示 —— 必须盖过后续所有步骤的视觉权重 -->
+      <el-alert
+        v-if="alreadyClosed"
+        class="already-closed-alert"
+        type="error"
+        :closable="false"
+        show-icon
+        title="该期间已结账, 不能重复结转"
+        :description="alreadyClosedNoticeText"
+      />
 
       <el-divider />
 
@@ -27,7 +47,9 @@
       <!-- Step 1: 结账前检查 -->
       <div v-show="step === 1" class="step-body">
         <div class="step-action">
-          <el-button type="primary" :loading="checking" @click="onCheck">执行结账前检查</el-button>
+          <el-button type="primary" :loading="checking" @click="onCheck">
+            {{ alreadyClosed ? '已结账, 不能重复结转' : '执行结账前检查' }}
+          </el-button>
         </div>
 
         <div v-if="checkResult">
@@ -163,7 +185,7 @@
             type="warning"
             :closable="false"
             show-icon
-            :title="canClose ? '全部结转凭证已记账, 可执行结账' : '仍有未记账凭证或检查未通过, 结账将被拦截'"
+            :title="closeHint(canClose, allVouchers.length)"
             class="step-tip"
           />
           <div class="step-action">
@@ -246,7 +268,9 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { RefreshLeft } from '@element-plus/icons-vue'
 import { resolveEarliestUnclosedPeriod } from '@/utils/period'
+import { canClosePeriod, closeHint, isPeriodAlreadyClosed, alreadyClosedNotice } from '@/utils/periodClose'
 import PeriodNavigator from '@/components/finance/PeriodNavigator.vue'
 import {
   checkClose, closePeriod, reopenPeriod,
@@ -254,6 +278,7 @@ import {
   yearCheck, yearClose,
   type CloseCheckResult, type CarryoverStepResult, type SequenceVoucher, type YearCheckResult,
 } from '@/api/modules/periodClose'
+import { getAllPeriods } from '@/api/modules/period'
 
 const period = ref('')
 const periodStatus = ref('')
@@ -297,12 +322,24 @@ const statusMap: Record<string, string> = {
 
 onMounted(async () => {
   period.value = await resolveEarliestUnclosedPeriod()
+  await refreshPeriodStatus()
 })
+
+async function refreshPeriodStatus() {
+  try {
+    const list = await getAllPeriods()
+    const found = list.find(p => p.periodCode === period.value)
+    periodStatus.value = found?.status ?? ''
+  } catch {
+    periodStatus.value = ''
+  }
+}
 
 function onPeriodChange() {
   // 切换期间需从第 1 步重来: 检查/序列/凭证均与期间绑定
   step.value = 1
   resetAll()
+  refreshPeriodStatus()
 }
 
 function resetAll() {
@@ -318,12 +355,22 @@ const reviewableIds = computed(() =>
   allVouchers.value.filter(v => v.status === 'DRAFT').map(v => v.voucherId),
 )
 
-/** 全部结转凭证已记账, 且结账检查通过 */
-const canClose = computed(() =>
-  checkResult.value?.passed === true &&
-  allVouchers.value.length > 0 &&
-  allVouchers.value.every(v => v.status === 'POSTED'),
+/**
+ * 本次会话已执行结转序列且无失败步（SPEC-P138）。
+ * 保留「不允许跳过第 2 步直接结账」的原意图，同时允许三步全 SKIPPED 的空账套结账。
+ */
+const sequenceRan = computed(() =>
+  sequence.value.length > 0 && !sequence.value.some(r => r.status === 'FAILED'),
 )
+
+/** 结账检查通过, 且本次生成的结转凭证全部已记账（0 张凭证视为满足, SPEC-P138） */
+const canClose = computed(() =>
+  canClosePeriod(checkResult.value?.passed, sequenceRan.value, allVouchers.value),
+)
+
+/** 期间是否已结账（SPEC-P149）—— 已结账则不得重复结转，只能反结账 */
+const alreadyClosed = computed(() => isPeriodAlreadyClosed(periodStatus.value))
+const alreadyClosedNoticeText = computed(() => alreadyClosedNotice(period.value))
 
 const statusTagType = computed(() =>
   periodStatus.value === 'closed' ? 'danger' : 'info',
@@ -350,6 +397,11 @@ function voucherTagType(s: string) {
 async function onCheck() {
   if (!period.value) {
     ElMessage.warning('请先选择会计期间')
+    return
+  }
+  // SPEC-P149：已结账期间不做检查、不进结转 —— 正确动作是「反结账」
+  if (alreadyClosed.value) {
+    await showAlreadyClosedDialog()
     return
   }
   checking.value = true
@@ -431,6 +483,11 @@ async function doBatchReview(ids: number[]) {
 
 // ===== Step 4: 执行结账 =====
 async function onClose() {
+  // SPEC-P149 纵深防御：跳过前几步直达结账时同样拦截
+  if (alreadyClosed.value) {
+    await showAlreadyClosedDialog()
+    return
+  }
   if (!canClose.value) {
     ElMessage.warning('仍有未记账凭证或结账检查未通过, 无法结账')
     return
@@ -450,6 +507,33 @@ async function onClose() {
   }
 }
 
+/**
+ * 已结账拦截弹窗（SPEC-P149 AT-149-3）。
+ *
+ * <p>不用 `ElMessage.warning`：一句 3 秒就消失的顶部提示，用户很可能没看到就
+ * 继续点下一步。这里用**阻塞式弹窗**，并把「去反结账」作为确认按钮 ——
+ * 把用户从错误路径直接引导到正确路径，而不是只告诉他做错了。</p>
+ */
+async function showAlreadyClosedDialog() {
+  try {
+    await ElMessageBox.confirm(
+      alreadyClosedNoticeText.value,
+      '该期间已结账, 不能重复结转',
+      {
+        type: 'warning',
+        confirmButtonText: '去反结账',
+        cancelButtonText: '知道了',
+        distinguishCancelAndClose: true,
+      },
+    )
+  } catch {
+    // 用户选择「知道了」或关闭弹窗 —— 停留原地，不做任何操作
+    return
+  }
+  // 用户点「去反结账」：直接进入反结账确认流程
+  await onReopen()
+}
+
 async function onReopen() {
   await ElMessageBox.confirm(
     `确认对期间 ${period.value} 执行反结账? 需最高权限, 操作将记入日志.`,
@@ -459,6 +543,9 @@ async function onReopen() {
   await reopenPeriod(period.value)
   resetAll()
   step.value = 1
+  // 🔴 反结账后必须刷新期间状态，否则页头仍显示「已结账」、
+  //    按钮与提示都停在旧状态（同 P118 periodStatus 未回填的形态）。
+  await refreshPeriodStatus()
   ElMessage.success('反结账成功')
 }
 </script>
@@ -473,6 +560,10 @@ async function onReopen() {
 .page-title {
   font-size: 16px;
   font-weight: 600;
+}
+/* SPEC-P149：已结账警示条 —— 与步骤条拉开距离，确保首屏可见 */
+.already-closed-alert {
+  margin-top: 12px;
 }
 .wizard-steps {
   margin: 8px 0 20px;

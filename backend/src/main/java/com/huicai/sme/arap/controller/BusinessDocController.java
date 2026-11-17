@@ -12,6 +12,7 @@ import com.huicai.base.system.util.SecurityUtils;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -92,6 +93,11 @@ public class BusinessDocController {
 
     @Operation(summary = "查询所有有效凭证模板")
     @GetMapping("/templates")
+    // 🔴 事务必须在 Controller 上（SPEC-P128 §7.1 同型，2026-11-05 实测坐实）：
+    //   t_voucher_template 是 RLS 租户表，直调 Mapper 无事务 ⇒ TenantGucSetter
+    //   提前 return ⇒ GUC 恒 NULL ⇒ 谓词取 NULL ⇒ DB 有 18 个模板仍返 []。
+    //   同表对照：走 Service 的 /voucher-templates/all 返回 18 行。
+    @Transactional(rollbackFor = Exception.class)
     public R<List<VoucherTemplateVO>> templates() {
         // 第二参传 null：分录行需逐模板再查一次 N+1，此处只要模板头（P102 批次 15）
         return R.ok(templateMapper.selectAllActive().stream()

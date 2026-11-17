@@ -59,9 +59,26 @@ async function handleLogin() {
   try {
     await authStore.login({ username: form.username, password: form.password })
 
-    const redirect = route.query.redirect
-    const targetPath = typeof redirect === 'string' ? redirect : '/dashboard'
-    await router.push(targetPath)
+    // Pinia store: computed/ref 均已自动解包，直接取值（无需 .value）
+    const isSuper = authStore.isSuperAdmin
+    const isAgc = authStore.isAgency
+    const curEnt = authStore.currentEnterpriseId
+    if (isSuper) {
+      await router.push({ path: '/dashboard' })
+    } else if (isAgc) {
+      if (!curEnt) {
+        await router.push({ path: '/agency/enterprise-list' })
+      } else {
+        await router.push({ path: '/dashboard' })
+      }
+    } else {
+      // ENTERPRISE 类型：无归属企业则报错并留在登录页
+      if (!curEnt) {
+        ElMessage.error('该账号未分配企业，无法进入账簿。请联系管理员在【用户管理】为该账号指定归属企业。')
+        return
+      }
+      await router.push({ path: '/dashboard' })
+    }
     ElMessage.success('登录成功')
   } catch (e: any) {
     errorMsg.value = e?.msg || e?.message || '登录失败，请检查账号密码'

@@ -45,6 +45,14 @@ import static org.junit.jupiter.api.Assertions.*;
  *
  * <p>@SlowTest — 需要 Docker + Testcontainers
  *
+ * <h3>🔴 P148 / REQ-2026-164 加固后的语义变化（本类已同步）</h3>
+ * 清库端点由「跨企业全表 DELETE」改为「按企业隔离 + 确认令牌」。本类因此：
+ * <ul>
+ *   <li>调用签名带 {@code confirm=CLEAR_BUSINESS_DOCS} 与 {@code enterpriseId=1L}（种子企业）；</li>
+ *   <li>断言从 {@code deleted} 行数改为**各表该企业的剩余行数**——新语义下不再返回总删除行数，
+ *       且「其他企业的行必须原样保留」才是必须守住的不变量。</li>
+ * </ul>
+ *
  * <h3>为什么全部断言都是「相对基线」而不是固定绝对值</h3>
  * {@code clearBusinessDocs()} 是<b>全表维护操作</b>（无 WHERE 的 DELETE / 全表 UPDATE），
  * 其返回的 {@code deleted} 等于 {@link SystemClearController#clearBusinessDocs()} 里
@@ -145,50 +153,56 @@ public class SystemClearControllerIntegrationTest extends AbstractMapperTest {
         return jdbcTemplate.queryForObject(sql, Integer.class);
     }
 
+    /** 某表在指定企业的行数（P148 按企业隔离后，断言必须按企业收敛）。 */
+    private int countEnt(String table, Long enterpriseId) {
+        return jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM " + table + " WHERE enterprise_id = ?", Integer.class, enterpriseId);
+    }
+
+    /** 某表中**属于其他企业**的行数 —— 跨企业不变量（本类必须守住的隔离断言）。 */
+    private int countOtherEnt(String table, Long enterpriseId) {
+        return jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM " + table + " WHERE enterprise_id <> ?", Integer.class, enterpriseId);
+    }
+
     /**
-     * {@code clearBusinessDocs()} 在调用前已存在的行数合计 —— 与被测方法里 8 个 DML
-     * 一一对应（6 个 DELETE + 2 个「解绑 business_doc_id」的 UPDATE）。
-     * 被测方法返回的 {@code deleted} 应当等于「本基线 + 本用例新建的行数」。
+     * 调用前「其他企业」的业务单据基线。
+     *
+     * <p>🔴 这是 P148 加固后最关键的断言：清企业 1 的数据，**企业 4 等其它账套必须一张不少**。
+     * 原实现（无 WHERE 全表 DELETE）会让本断言必然失败。</p>
      */
-    private int baselineClearOps() {
-        return count("SELECT count(*) FROM t_arap_settlement_entry")
-                + count("SELECT count(*) FROM t_arap_settlement")
-                + count("SELECT count(*) FROM t_reconciliation_log")
-                + count("SELECT count(*) FROM t_aging_alert")
-                + count("SELECT count(*) FROM t_bank_journal WHERE business_doc_id IS NOT NULL")
-                + count("SELECT count(*) FROM t_voucher WHERE business_doc_id IS NOT NULL")
-                + count("SELECT count(*) FROM t_business_doc_entry")
-                + count("SELECT count(*) FROM t_business_doc");
+    private int baselineOtherDocs() {
+        return countOtherEnt("t_business_doc", 1L);
     }
 
     @Test
     @DisplayName("回归: 存在核销明细引用时清空业务单据应成功而非 500")
     void clearBusinessDocs_withSettlementEntry_shouldSucceed() {
-        int baseline = baselineClearOps();
+        int baselineOtherDocs = baselineOtherDocs();
 
         BusinessDocEntity doc = createBusinessDoc("STL");
         ArapSettlementEntity settlement = createSettlement("STL");
         createSettlementEntry(settlement.getId(), doc.getId());
 
-        R<Map<String, Object>> result = clearController.clearBusinessDocs();
+        R<Map<String, Object>> result = clearController.clearBusinessDocs("CLEAR_BUSINESS_DOCS", 1L);
 
         assertNotNull(result, "返回结果不应为 null");
         assertEquals(200, result.getCode(), "清空业务单据应返回 code=200");
-        Integer deleted = (Integer) result.getData().get("deleted");
-        assertNotNull(deleted, "deleted 统计不应为 null");
-        // 增量断言：本用例新增 1 条核销明细 + 1 条核销单 + 1 条业务单据
-        assertEquals(baseline + 3, deleted.intValue(),
-                "应清理基线 " + baseline + " 条 + 本用例 1 条核销明细/1 条核销单/1 条业务单据");
+        assertNotNull(result.getData().get("message"), "应返回可审计的清理摘要");
 
-        assertEquals(0, count("SELECT count(*) FROM t_arap_settlement_entry"), "核销明细应被全部清理");
-        assertEquals(0, count("SELECT count(*) FROM t_arap_settlement"), "核销单应被全部清理");
-        assertEquals(0, count("SELECT count(*) FROM t_business_doc"), "业务单据应被全部清理");
+        // 新语义（P148）：按企业隔离，断言「企业 1 剩余 0」而非「全表剩余 0」
+        assertEquals(0, countEnt("t_arap_settlement_entry", 1L), "企业 1 核销明细应被清理");
+        assertEquals(0, countEnt("t_arap_settlement", 1L), "企业 1 核销单应被清理");
+        assertEquals(0, countEnt("t_business_doc", 1L), "企业 1 业务单据应被清理");
+        // 🔴 跨企业不变量：其他企业的业务单据一张都不能少
+        assertEquals(baselineOtherDocs, countOtherEnt("t_business_doc", 1L),
+                "其他企业的业务单据必须原样保留（按企业隔离的核心断言）");
     }
 
     @Test
     @DisplayName("保留银行日记账: 清空业务单据后 journal 存在且 business_doc_id 置空")
     void clearBusinessDocs_shouldUnlinkBankJournalNotDelete() {
-        int baseline = baselineClearOps();
+        int baselineOtherDocs = baselineOtherDocs();
         int journalBaseline = count("SELECT count(*) FROM t_bank_journal");
 
         BusinessDocEntity doc = createBusinessDoc("JNL");
@@ -205,24 +219,24 @@ public class SystemClearControllerIntegrationTest extends AbstractMapperTest {
         journal.setDeleted(0);
         bankJournalMapper.insert(journal);
 
-        R<Map<String, Object>> result = clearController.clearBusinessDocs();
+        R<Map<String, Object>> result = clearController.clearBusinessDocs("CLEAR_BUSINESS_DOCS", 1L);
 
         assertEquals(200, result.getCode(), "清空业务单据应返回 code=200");
-        // 增量断言：本用例新增 1 条业务单据（删除）+ 1 条 journal 解绑（UPDATE）
-        Integer deleted = (Integer) result.getData().get("deleted");
-        assertEquals(baseline + 2, deleted.intValue(),
-                "应清理基线 " + baseline + " 条 + 本用例 1 条业务单据/1 条 journal 解绑");
+        // 银行日记账必须保留（只解绑引用，不删除记录）
         assertEquals(journalBaseline + 1, count("SELECT count(*) FROM t_bank_journal"),
                 "银行日记账应保留（本用例 1 条 + 基线 " + journalBaseline + " 条）");
-        assertEquals(0, count("SELECT count(*) FROM t_bank_journal WHERE business_doc_id IS NOT NULL"),
-                "银行日记账的 business_doc_id 应被置空");
-        assertEquals(0, count("SELECT count(*) FROM t_business_doc"), "业务单据应被全部清理");
+        assertEquals(0,
+                count("SELECT count(*) FROM t_bank_journal WHERE enterprise_id = 1 AND business_doc_id IS NOT NULL"),
+                "企业 1 银行日记账的 business_doc_id 应被置空");
+        assertEquals(0, countEnt("t_business_doc", 1L), "企业 1 业务单据应被清理");
+        assertEquals(baselineOtherDocs, countOtherEnt("t_business_doc", 1L),
+                "其他企业的业务单据必须原样保留");
     }
 
     @Test
     @DisplayName("保留凭证: 清空业务单据后凭证存在且 business_doc_id 置空")
     void clearBusinessDocs_shouldUnlinkVoucherNotDelete() {
-        int baseline = baselineClearOps();
+        int baselineOtherDocs = baselineOtherDocs();
         int voucherBaseline = count("SELECT count(*) FROM t_voucher");
 
         BusinessDocEntity doc = createBusinessDoc("VCH");
@@ -241,17 +255,17 @@ public class SystemClearControllerIntegrationTest extends AbstractMapperTest {
         voucher.setDeleted(0);
         voucherMapper.insert(voucher);
 
-        R<Map<String, Object>> result = clearController.clearBusinessDocs();
+        R<Map<String, Object>> result = clearController.clearBusinessDocs("CLEAR_BUSINESS_DOCS", 1L);
 
         assertEquals(200, result.getCode(), "清空业务单据应返回 code=200");
-        // 增量断言：本用例新增 1 条业务单据（删除）+ 1 张凭证解绑（UPDATE）
-        Integer deleted = (Integer) result.getData().get("deleted");
-        assertEquals(baseline + 2, deleted.intValue(),
-                "应清理基线 " + baseline + " 条 + 本用例 1 条业务单据/1 张凭证解绑");
+        // 凭证必须保留（只解绑引用，不删除记录）
         assertEquals(voucherBaseline + 1, count("SELECT count(*) FROM t_voucher"),
                 "凭证应保留（本用例 1 张 + 基线 " + voucherBaseline + " 张）");
-        assertEquals(0, count("SELECT count(*) FROM t_voucher WHERE business_doc_id IS NOT NULL"),
-                "凭证的 business_doc_id 应被置空");
-        assertEquals(0, count("SELECT count(*) FROM t_business_doc"), "业务单据应被全部清理");
+        assertEquals(0,
+                count("SELECT count(*) FROM t_voucher WHERE enterprise_id = 1 AND business_doc_id IS NOT NULL"),
+                "企业 1 凭证的 business_doc_id 应被置空");
+        assertEquals(0, countEnt("t_business_doc", 1L), "企业 1 业务单据应被清理");
+        assertEquals(baselineOtherDocs, countOtherEnt("t_business_doc", 1L),
+                "其他企业的业务单据必须原样保留");
     }
 }

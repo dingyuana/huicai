@@ -371,7 +371,10 @@ class PermissionManifestGuardRealDBTest extends AbstractMapperTest {
     @Test
     @DisplayName("G7 清单条目必须都能对上真实端点（反向漂移：清单有、运行时无）")
     void manifestEntriesMustExistAtRuntime() {
-        Set<String> real = realWriteEndpoints();
+        // 🔴 存在性口径必须用【全方法】真值源：清单自 SPEC-P154 项④ 起也登记读端点
+        // （GET 条目，拦截器对读面同样 enforce 的前置）。拿写端点真值源比 GET 条目
+        // 会把合法登记误判成 stale——存在性（任何方法）与写端点缺口（G2 口径）是两回事。
+        Set<String> real = realEndpointsAllMethods();
         List<String> stale = new ArrayList<>();
         for (String key : manifestKeys()) {
             if (!real.contains(key)) {
@@ -384,7 +387,7 @@ class PermissionManifestGuardRealDBTest extends AbstractMapperTest {
             }
         }
         assertTrue(stale.isEmpty(),
-                "清单里有 " + stale.size() + " 条对不上任何真实写端点（端点已改名/删除）："
+                "清单里有 " + stale.size() + " 条对不上任何真实端点（端点已改名/删除）："
                         + stale.subList(0, Math.min(10, stale.size()))
                         + "。这类条目不会让 G2 缺口变小，却会让清单看起来更全。");
     }
@@ -508,6 +511,50 @@ class PermissionManifestGuardRealDBTest extends AbstractMapperTest {
                         + "必须写明管辖机制与理由，且 governed_by 只能在受控词表内。");
         System.out.println("[G10] 排除项 " + manifestExcluded().size()
                 + " 条，全部已声明管辖机制与理由");
+    }
+
+    // ─────────────────────────── G11 ───────────────────────────
+
+    /**
+     * 🔴 G11：清单引用的权限码<b>必须有至少一个角色持有</b>——否则该端点在 enforcing
+     * 模式下对<b>全员恒 403</b>（功能不可用），且 G1 抓不到它（G1 只断言码在 t_menu 有行）。
+     *
+     * <p>这正是 V195 {@code tax:*:preview} 的缺陷形态（按钮行建了、授权漏了 ⇒
+     * 「导入→预览」全库无人走得通）；V1.105 登记的「voucher:update 全库无人持有 ⇒
+     * 编辑/删除凭证 403」也以该形态出现——但 <b>2026-11-07 已勘误为误诊</b>：错法按
+     * {@code menu_code}（下划线 voucher_update）查持有者得假空集，正法按 {@code permission}
+     * 列查得 ACCOUNTANT/FINANCE_MGR 双持有、实机 PUT/DELETE 均过权限门（400/404 业务层）。
+     * 本守卫把「查持有者必须走 permission 列」这一正法固化，防同类误诊第 5 次复发。</p>
+     */
+    @Test
+    @DisplayName("G11 清单权限码必须有角色持有（防「建码未授」⇒ 端点对全员恒 403）")
+    void manifestPermissionsMustHaveHolders() {
+        // 取数前提自证（V196「授权空转 0=0」家法）：voucher:update 实测 2 角色持有，
+        // 若本查询对它数出 0，说明取数本身坏了、守卫会恒绿假绿。
+        Integer known = jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM t_role_menu rm JOIN t_menu m ON m.id = rm.menu_id AND m.deleted = 0"
+                        + " WHERE m.permission = 'voucher:update'", Integer.class);
+        assertTrue(known != null && known >= 1,
+                "自证前提失效：voucher:update 实测应有人持有，查询却数出 " + known
+                        + " —— 持有面查询本身是坏的，本守卫失去意义（V196 空转同族）");
+
+        List<String> orphans = new ArrayList<>();
+        for (String perm : manifestPermissions()) {
+            if (perm == null || perm.startsWith("TODO")) {
+                continue; // 幽灵码由 G1 处置
+            }
+            Integer holders = jdbcTemplate.queryForObject(
+                    "SELECT count(*) FROM t_role_menu rm JOIN t_menu m ON m.id = rm.menu_id AND m.deleted = 0"
+                            + " WHERE m.permission = ?", Integer.class, perm);
+            if (holders == null || holders == 0) {
+                orphans.add(perm);
+            }
+        }
+        assertTrue(orphans.isEmpty(),
+                "清单引用了 " + orphans.size() + " 个「无任何角色持有」的权限码：" + orphans
+                        + "。enforcing 下这些端点对全员恒 403（建码未授，V195 tax:*:preview 同族）。"
+                        + "正解：补授权迁移并带「授权行数≥1」不变量（V196 家法）。");
+        System.out.println("[G11] 清单权限码全部有角色持有");
     }
 
 
@@ -669,6 +716,36 @@ class PermissionManifestGuardRealDBTest extends AbstractMapperTest {
                 for (String p : info.getPatternValues()) {
                     if (p != null && !p.isBlank()) {
                         out.add(name + " " + p);
+                    }
+                }
+            }
+        });
+        return out;
+    }
+
+    /** 真实存在的全部端点（任意 HTTP 方法），G7 存在性比对口径。 */
+    private Set<String> realEndpointsAllMethods() {
+        Set<String> out = new LinkedHashSet<>();
+        var handlerMapping = applicationContext.getBeansOfType(
+                org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerMapping.class)
+                .values().iterator().next();
+        handlerMapping.getHandlerMethods().forEach((info, handler) -> {
+            if (info.getMethodsCondition() == null) {
+                return;
+            }
+            if (info.getMethodsCondition().getMethods().isEmpty()) {
+                // 未限定 method 的映射 = 任意方法可达
+                for (String p : info.getPatternValues()) {
+                    if (p != null && !p.isBlank()) {
+                        out.add("ANY " + p);
+                    }
+                }
+                return;
+            }
+            for (var rm : info.getMethodsCondition().getMethods()) {
+                for (String p : info.getPatternValues()) {
+                    if (p != null && !p.isBlank()) {
+                        out.add(rm.name() + " " + p);
                     }
                 }
             }

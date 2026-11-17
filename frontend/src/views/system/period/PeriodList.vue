@@ -26,7 +26,30 @@
           <template #default="{ row }">
             <el-button text size="small" @click="openEdit(row as PeriodVO)">编辑</el-button>
             <el-button text size="small" v-if="row.status === 'open'" type="warning" @click="handleClose(row as PeriodVO)">结账</el-button>
-            <el-button text size="small" v-if="row.status === 'closed'" type="warning" @click="handleUnClose(row as PeriodVO)">反结账</el-button>
+            <!--
+              SPEC-P150：按钮<b>常驻渲染</b>，只有已结账期间可点。
+              原来整颗按钮在非 closed 时消失 ⇒ 用户感知为「功能没了」，
+              而真正的原因可能是「结账没成功」。禁用态必须能问出原因（tooltip）。
+            -->
+            <el-button
+              v-if="isReopenable(row.status)"
+              text
+              size="small"
+              type="warning"
+              data-test="period-reopen"
+              @click="handleUnClose(row as PeriodVO)"
+            >反结账</el-button>
+            <el-tooltip v-else :content="reopenBlockedHint(row.status)" placement="top">
+              <span class="disabled-action-wrap">
+                <el-button
+                  text
+                  size="small"
+                  type="warning"
+                  disabled
+                  data-test="period-reopen-disabled"
+                >反结账</el-button>
+              </span>
+            </el-tooltip>
             <el-popconfirm title="确认删除此期间？" @confirm="handleDelete(row as PeriodVO)">
               <template #reference>
                 <el-button text type="danger" size="small">删除</el-button>
@@ -78,6 +101,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import type { FormInstance } from 'element-plus'
 import { getPeriodPage, createPeriod, updatePeriod, deletePeriod, closePeriod, unlockPeriod } from '@/api/modules/period'
 import type { PeriodVO, PeriodCreateParam } from '@/api/modules/period'
+import { isPeriodAlreadyClosed, periodStatusLabel, reopenBlockedHint } from '@/utils/periodClose'
 
 const loading = ref(false)
 const saving = ref(false)
@@ -101,7 +125,12 @@ function statusType(s: string) {
   return s === 'open' ? 'success' : s === 'closed' ? 'info' : 'warning'
 }
 function statusLabel(s: string) {
-  return s === 'open' ? '开启' : s === 'closed' ? '已结账' : '已锁定'
+  // SPEC-P150：文案统一收口到 utils/periodClose，避免与「为何不可反结账」提示口径漂移
+  return periodStatusLabel(s)
+}
+/** 仅「已结账」期间可反结账（与后端 reopenPeriod 的前置校验同口径） */
+function isReopenable(status: string | null | undefined) {
+  return isPeriodAlreadyClosed(status)
 }
 
 async function fetchData() {
@@ -204,5 +233,9 @@ onMounted(fetchData)
   margin-top: 16px;
   display: flex;
   justify-content: flex-end;
+}
+/* 禁用态按钮需要包一层元素才能触发 tooltip（Element Plus 的 disabled 按钮不派发事件） */
+.disabled-action-wrap {
+  display: inline-block;
 }
 </style>

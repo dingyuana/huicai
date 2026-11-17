@@ -46,22 +46,24 @@ public class VoucherEntity extends BaseEntity {
     private String attachmentIds;
 
     /**
-     * 溯源单据ID（生成该凭证的原始单据ID）— DB 无此列
+     * 溯源单据ID（生成该凭证的原始单据ID）。
+     * SPEC-P153：DB 无列时期红冲级联 cascadeReverseToSourceDocs / 数字穿透
+     * 读回恒 null，「级联回写源单状态」对存量凭证从未生效。V194 补真实列。
      */
-    @TableField(exist = false)
+    @TableField("source_doc_id")
     private Long sourceDocId;
 
     /**
-     * 溯源单据编号（冗余存储，用于快速查询）— DB 无此列
+     * 溯源单据编号（冗余存储，用于快速查询）— V194 真实列
      */
-    @TableField(exist = false)
+    @TableField("source_doc_no")
     private String sourceDocNo;
 
     /**
      * 溯源单据类型：BUSINESS_DOC, OUTPUT_INVOICE, INPUT_INVOICE, RECEIVABLE, PAYABLE
-     * — DB 无此列
+     * — V194 真实列
      */
-    @TableField(exist = false)
+    @TableField("source_doc_type")
     private String sourceDocType;
 
     /** 提交人 */
@@ -82,8 +84,8 @@ public class VoucherEntity extends BaseEntity {
     /** 记账时间 */
     private LocalDateTime postedAt;
 
-    /** 生成该凭证的模板ID (配置驱动, 替代硬编码) — DB 无此列 */
-    @TableField(exist = false)
+    /** 生成该凭证的模板ID (配置驱动, 替代硬编码) — V194 真实列 */
+    @TableField("template_id")
     private Long templateId;
 
     /** 被红冲凭证ID */
@@ -94,11 +96,16 @@ public class VoucherEntity extends BaseEntity {
     @TableField("business_doc_id")
     private Long businessDocId;
 
-    /** 驳回原因 (P22, 2026-06-22 新增) — DB 无此列 */
-    @TableField(exist = false)
+    /** 驳回原因 (P22) — V194 真实列（此前写了不落库，页端驳回意见恒空） */
+    @TableField("rejected_reason")
     private String rejectedReason;
 
-    /** 红冲原因 (P22, 2026-06-22 新增) — DB 无此列 */
+    /**
+     * 红冲原因 — 保持幽灵字段（SPEC-P153 取证裁定，不建列）。
+     * 🔴 全仓无写方/读方（InputInvoiceStateMachineServiceImpl L226 的
+     * setReverseReason 接收者是 InputInvoiceEntity，扫描器同名片段误配）。
+     * 若要启用红冲原因展示，写方与展示面须同批落地再转正。
+     */
     @TableField(exist = false)
     private String reverseReason;
 

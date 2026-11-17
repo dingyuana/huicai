@@ -13,6 +13,8 @@ export interface Employee {
   email?: string
   isActive?: boolean
   remark?: string
+  /** SPEC-P159：社保局核定缴费基数（年申报值），NULL=未核定 */
+  socialBaseDeclared?: number | null
 }
 
 export function pageEmployee(params: any): Promise<any> {

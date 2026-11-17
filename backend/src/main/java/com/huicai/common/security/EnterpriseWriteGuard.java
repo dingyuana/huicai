@@ -37,6 +37,9 @@ import java.util.List;
  * <p><b>已知风险</b>：Spring AOP 代理下，同类内自调用（{@code this.xxx()}）
  * <b>绕过切面</b>（§4.5 第 27 条「有注解 ≠ 会生效」同型）。故守卫测试除结构断言外，
  * 另有走 HTTP 代理的端到端用例证明切面真被触发。</p>
+ *
+ * <p><b>豁免路径</b>：企业生命周期管理端点（switch / activate / suspend / reseed
+ * 等）必须在非 ACTIVE 状态下仍可调用，否则永远无法激活 PENDING 账套。</p>
  */
 @Slf4j
 @Aspect
@@ -46,6 +49,18 @@ public class EnterpriseWriteGuard {
 
     private final JdbcTemplate jdbcTemplate;
 
+    /**
+     * 豁免的企业生命周期管理端点前缀。
+     * 这些操作本身就是为了管理账套状态而存在，不应受 ACTIVE 限制。
+     */
+    private static final List<String> LIFECYCLE_EXEMPT_PATHS = List.of(
+            // 企业生命周期管理
+            "/api/v1/enterprise/switch",
+            "/api/v1/agency/enterprises/",
+            // 科目余额初始化/锁定/解锁（账套_setup_必需操作，PENDING 状态下仍需执行）
+            "/api/base/balance/v1/subject-balances/"
+    );
+
     /** 只拦写操作；读路径刻意放行（停用账套仍需可查历史，见类注释）。 */
     @Around("@annotation(org.springframework.web.bind.annotation.PostMapping)"
             + " || @annotation(org.springframework.web.bind.annotation.PutMapping)"
@@ -54,6 +69,12 @@ public class EnterpriseWriteGuard {
         Long enterpriseId = EnterpriseContextHolder.get();
         if (enterpriseId == null) {
             log.debug("无企业上下文，跳过账套状态准入校验（系统路径）：{}", pjp.getSignature());
+            return pjp.proceed();
+        }
+
+        // 豁免企业生命周期管理端点：switch / activate / suspend / reseed 等
+        if (isLifecycleExempt(pjp)) {
+            log.debug("豁免账套状态准入校验（生命周期管理）：{}", pjp.getSignature());
             return pjp.proceed();
         }
 
@@ -69,6 +90,68 @@ public class EnterpriseWriteGuard {
                     + "（enterpriseId=" + enterpriseId + "）");
         }
         return pjp.proceed();
+    }
+
+    /**
+     * 判断当前切面匹配的方法是否属于「企业生命周期管理」豁免端点。
+     * 通过提取 @RequestMapping 路径前缀进行匹配，不依赖运行时请求对象。
+     */
+    private boolean isLifecycleExempt(ProceedingJoinPoint pjp) {
+        java.lang.reflect.Method method = null;
+        try {
+            org.aspectj.lang.Signature sig = pjp.getSignature();
+            if (sig instanceof org.aspectj.lang.reflect.MethodSignature ms) {
+                method = ms.getMethod();
+            }
+        } catch (Exception ignored) { /* 反射失败则不豁免 */ }
+        if (method == null) return false;
+
+        // 收集方法上的所有 RequestMapping 路径
+        java.lang.annotation.Annotation[] annotations = method.getAnnotations();
+        for (java.lang.annotation.Annotation ann : annotations) {
+            String value = extractRequestMappingPath(ann);
+            if (value != null) {
+                for (String prefix : LIFECYCLE_EXEMPT_PATHS) {
+                    if (value.startsWith(prefix)) return true;
+                }
+            }
+            // 处理类级别 @RequestMapping
+            Class<?> targetClass = pjp.getTarget().getClass();
+            String classPath = extractRequestMappingPathFromType(targetClass, method);
+            if (classPath != null) {
+                for (String prefix : LIFECYCLE_EXEMPT_PATHS) {
+                    if (classPath.startsWith(prefix)) return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    private String extractRequestMappingPath(java.lang.annotation.Annotation ann) {
+        if (ann instanceof org.springframework.web.bind.annotation.RequestMapping req) {
+            String[] paths = req.path();
+            if (paths.length > 0) return paths[0];
+            String[] value = req.value();
+            if (value.length > 0) return value[0];
+        }
+        if (ann instanceof org.springframework.web.bind.annotation.PostMapping post) {
+            String[] paths = post.path();
+            if (paths.length > 0) return paths[0];
+            String[] value = post.value();
+            if (value.length > 0) return value[0];
+        }
+        return null;
+    }
+
+    private String extractRequestMappingPathFromType(Class<?> clazz, java.lang.reflect.Method method) {
+        org.springframework.web.bind.annotation.RequestMapping classAnn =
+                clazz.getAnnotation(org.springframework.web.bind.annotation.RequestMapping.class);
+        if (classAnn == null) return null;
+        String[] paths = classAnn.path();
+        if (paths.length > 0) return paths[0];
+        String[] value = classAnn.value();
+        if (value.length > 0) return value[0];
+        return null;
     }
 
     private String currentStatus(Long enterpriseId) {

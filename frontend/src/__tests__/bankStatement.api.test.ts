@@ -82,4 +82,34 @@ describe('BankStatement API Module', () => {
     expect(mockRequest.put).toHaveBeenCalledWith('/sme/cash/v1/bank-statements/1/classification', { classification: 'SALES' })
     expect(result).toEqual({ id: 1, classification: 'SALES' })
   })
+
+  // ===== SPEC-P151: period 参数与新端点 =====
+  it('getBankStatementPage 透传 period 参数', async () => {
+    mockRequest.get.mockResolvedValue({ records: [], total: 0 })
+    await bsApi.getBankStatementPage({ current: 1, size: 20, period: '202407' })
+    expect(mockRequest.get).toHaveBeenCalledWith('/sme/cash/v1/bank-statements/page', {
+      params: { current: 1, size: 20, period: '202407' },
+    })
+  })
+
+  it('getBankStatementGroupedByCategory 调用新端点并透传 period/classification', async () => {
+    mockRequest.get.mockResolvedValue([
+      { classification: 'revenue', count: 2, income: 100, expense: 0, items: [] },
+    ])
+    const result = await bsApi.getBankStatementGroupedByCategory({
+      accountId: '1', scope: 'all', period: '202407', classification: 'revenue',
+    } as any)
+    expect(mockRequest.get).toHaveBeenCalledWith('/sme/cash/v1/bank-statements/grouped-by-category', {
+      params: { accountId: '1', scope: 'all', period: '202407', classification: 'revenue' },
+    })
+    expect(result).toEqual([{ classification: 'revenue', count: 2, income: 100, expense: 0, items: [] }])
+  })
+
+  it('getBankStatementGroupedByCategory 不带 classification 时参数原样下发', async () => {
+    mockRequest.get.mockResolvedValue([])
+    await bsApi.getBankStatementGroupedByCategory({ accountId: '1', scope: 'all' } as any)
+    expect(mockRequest.get).toHaveBeenCalledWith('/sme/cash/v1/bank-statements/grouped-by-category', {
+      params: { accountId: '1', scope: 'all' },
+    })
+  })
 })

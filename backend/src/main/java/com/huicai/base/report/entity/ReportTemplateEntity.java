@@ -16,12 +16,12 @@ public class ReportTemplateEntity extends BaseEntity {
     private String templateName;
     private String reportType;
     private String config;
-    /** 是否系统模板 — DB 无此列 */
+    /** 是否系统模板 — DB 无此列（SPEC-P153 复核：真库列集无 is_system，且全仓无写方） */
     @TableField(exist = false)
     private Boolean isSystem;
-    /** 创建人 — DB 无此列 */
-    @TableField(exist = false)
-    private Long createdBy;
+    /* SPEC-P153：created_by 真实列存在（原注释「DB 无此列」不实），
+     * 删除 exist=false 覆盖，由 BaseEntity 映射。当前无写方，转正为
+     * 「后续 Service 补 setCreatedBy 时即落库」铺路，行为无回归。 */
 
     @TableField(fill = FieldFill.INSERT)
     private LocalDateTime createdAt;

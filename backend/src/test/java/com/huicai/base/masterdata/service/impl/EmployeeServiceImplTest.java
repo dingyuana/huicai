@@ -120,4 +120,23 @@ class EmployeeServiceImplTest {
         assertTrue(r.getIsActive());
         verify(mapper).insert(any(EmployeeEntity.class));
     }
+
+    @Test
+    void update_搬运socialBaseDeclared_读改写形态不丢P159() {
+        EmployeeEntity incoming = stubEmp(2L, "E001", "员工A");
+        incoming.setIsActive(true);
+        incoming.setSocialBaseDeclared(new java.math.BigDecimal("8000"));
+        EmployeeEntity existing = stubEmp(2L, "E001", "员工A");
+        existing.setIsActive(true);
+        when(mapper.selectById(2L)).thenReturn(existing);
+        lenient().when(mapper.selectCount(any())).thenReturn(0L);
+
+        service.update(incoming);
+
+        org.mockito.ArgumentCaptor<EmployeeEntity> cap =
+                org.mockito.ArgumentCaptor.forClass(EmployeeEntity.class);
+        verify(mapper).updateById(cap.capture());
+        assertEquals(new java.math.BigDecimal("8000"), cap.getValue().getSocialBaseDeclared(),
+                "读-改-写形态：新字段必须逐字段搬运，漏掉=编辑一次静默丢弃（§4.4 第 11 条同型）");
+    }
 }

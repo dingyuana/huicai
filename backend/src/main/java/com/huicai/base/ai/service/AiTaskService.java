@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.huicai.common.exception.BusinessException;
+import com.huicai.common.context.EnterpriseContextHolder;
 import com.huicai.base.ai.config.AiRabbitConfig;
 import com.huicai.base.ai.entity.AiAnomalyTagEntity;
 import com.huicai.base.ai.entity.AiTaskEntity;
@@ -40,6 +41,13 @@ public class AiTaskService {
     private final RabbitTemplate rabbitTemplate;
 
     /**
+     * SPEC-P139 连带缺陷修复：outputData 附 jsonb 列（JsonbTypeHandler 断言合法 JSON），
+     * 旧实现 {@code outputData.toString()} 生成 Map.toString 格式（{k=v}）⇒ handler
+     * catch 后<b>静默落 {}</b>，AI 结果正文全丢。必须经 Jackson 序列化。
+     */
+    private final com.fasterxml.jackson.databind.ObjectMapper objectMapper;
+
+    /**
      * 创建并下发 AI 任务
      */
     @Transactional(rollbackFor = Exception.class)
@@ -65,6 +73,9 @@ public class AiTaskService {
         message.setBizId(bizId);
         message.setInputData(inputData);
         message.setCallbackQueue(AiRabbitConfig.RESULT_ROUTING_KEY);
+        // SPEC-P139 C-01：回调链路无租户上下文 ⇒ GUC NULL ⇒ RLS 过滤 ⇒ 静默丢写；
+        // 企业必须随消息全链路透传（下发时取 web 线程上下文；Python 原样回传）
+        message.setEnterpriseId(EnterpriseContextHolder.get());
 
         try {
             rabbitTemplate.convertAndSend(
@@ -90,11 +101,18 @@ public class AiTaskService {
                               Double confidence, String errorMessage) {
         AiTaskEntity task = taskMapper.selectById(taskId);
         if (task == null) {
-            log.warn("AI 任务不存在: taskId={}", taskId);
+            // SPEC-P139：此处上下文已在场（监听层已重建），能查到就能查到——
+            // 真不存在（已删除/传错）才走这里，文案必须与「RLS 过滤」的假象区分开
+            log.warn("AI 结果写回失败: 任务不存在(可能已删除或传错 taskId), taskId={}", taskId);
             return;
         }
         task.setStatus(status);
-        task.setOutputData(outputData == null ? null : outputData.toString());
+        try {
+            task.setOutputData(outputData == null ? null : objectMapper.writeValueAsString(outputData));
+        } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
+            // fail-loud（探针已坐实 handler 吞错 ⇒ 静默丢正文的代价）；非法入参必须显式可见
+            throw new BusinessException("AI 结果 outputData 序列化失败: " + e.getMessage());
+        }
         task.setConfidence(confidence == null ? null : BigDecimal.valueOf(confidence));
         task.setErrorMessage(errorMessage);
         task.setStartedAt(LocalDateTime.now());

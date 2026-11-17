@@ -113,17 +113,18 @@ class AgencyEnterpriseRoleGuardStructureTest {
     @Test
     @DisplayName("current-period 的期间查询必须按 enterprise_id 过滤")
     void currentPeriodMustFilterByEnterprise() throws Exception {
-        String src = Files.readString(Path.of(CONTROLLER), StandardCharsets.UTF_8);
-        int i = src.indexOf("/api/v1/enterprise/current-period");
-        assertTrue(i > 0);
-        int end = src.indexOf("\n    }", i);
-        String body = src.substring(i, end);
+        // 可见性校验在 controller 层（commit 6aebd41d 把 period 查询下沉到 service，
+        // 守卫须同时锁 service 层的 enterprise_id 过滤，防二次回归）
+        String serviceSrc = Files.readString(
+                Path.of("src/main/java/com/huicai/agency/tenant/service/impl/EnterpriseServiceImpl.java"),
+                StandardCharsets.UTF_8);
+        int i = serviceSrc.indexOf("getCurrentPeriodInfo");
+        assertTrue(i > 0, "未找到 getCurrentPeriodInfo");
+        int end = serviceSrc.indexOf("\n    }", i);
+        String body = serviceSrc.substring(i, end);
 
-        assertTrue(body.contains("requireVisibleEnterprise"),
-                "current-period 未做可见性校验");
-        // 兜底分支的 periodMapper 查询必须带企业过滤
         assertTrue(body.contains("PeriodEntity::getEnterpriseId"),
-                "current-period 的期间兜底查询未按 enterprise_id 过滤 ⇒ "
+                "current-period 的期间查询未按 enterprise_id 过滤 ⇒ "
                         + "会取到全库最新期间（跨企业串数据）");
     }
 

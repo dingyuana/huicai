@@ -1,25 +1,16 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import type { RouteRecordRaw } from 'vue-router'
 import smeBaseRoutes from './routes/sme-base'
-import smeBusinessRoutes from './routes/sme-business'
-import smeTaxRoutes from './routes/sme-tax'
-import smeAssetRoutes from './routes/sme-asset'
-import smeReportRoutes from './routes/sme-report'
-import labRoutes from './routes/lab'
 import agencyRoutes from './routes/agency'
+import labRoutes from './routes/lab'
 import { useAuthStore } from '@/stores/auth.store'
 import { useLabStore } from '@/stores/lab.store'
 
-// 基础 SME 路由（不含实验室路由）
-const baseSmeRoutes: RouteRecordRaw[] = [
-  ...smeBusinessRoutes,
-  ...smeTaxRoutes,
-  ...smeAssetRoutes,
-  ...smeReportRoutes,
-]
-
 export const routes: RouteRecordRaw[] = [
-  ...smeBaseRoutes, // 包含 /login、/403、404 和 / 路由（带 children）
+  ...smeBaseRoutes, // 包含 /login、/403、404 和 / 路由（带 children）；
+                    // 业务/税务/资产/工资/报表/实验室路由组统一在 sme-base.ts 的 / children 中 spread。
+                    // 🔴 P153 复盘：曾在此定义 baseSmeRoutes 汇总 smeSalaryRoutes——死变量从未被引用，
+                    // noUnusedLocals 未开不报错 → /salary/bill 404。新增路由组必须挂 sme-base.ts children。
   ...agencyRoutes, // Agency 分支：当前为空，Phase 2 实现
 ]
 
@@ -74,6 +65,15 @@ router.beforeEach(async (to, _from, next) => {
       const allowedPaths = ['/agency/enterprise-list', '/403', '/404']
       if (!allowedPaths.includes(to.path)) {
         return next({ path: '/agency/enterprise-list' })
+      }
+    }
+
+    // ENTERPRISE 用户：无归属企业则拦截到 403（或专用页面）
+    // 代理会计由上面的 AGENCY 分支处理；这里只管 ENTERPRISE 类型
+    if (!authStore.isAgency && !authStore.isSuperAdmin && !authStore.currentEnterpriseId) {
+      const allowedPaths = ['/403', '/404']
+      if (!allowedPaths.includes(to.path)) {
+        return next({ path: '/403', query: { reason: 'no_enterprise' } })
       }
     }
 

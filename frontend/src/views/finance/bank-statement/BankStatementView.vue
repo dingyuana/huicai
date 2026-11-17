@@ -8,6 +8,7 @@
       </PageHeader>
 
       <el-tabs v-model="scope" class="scope-root-tabs" @tab-change="onScopeChange">
+        <el-tab-pane label="全部" name="all" />
         <el-tab-pane label="待处理" name="pending" />
         <el-tab-pane label="已制证" name="vouchered" />
       </el-tabs>
@@ -17,6 +18,19 @@
           <el-select v-model="query.accountId" placeholder="选择账户" clearable style="width:240px" @change="onAccountChange">
             <el-option v-for="a in accounts" :key="a.id" :label="`${a.accountName} (${a.accountNo})`" :value="a.id" />
           </el-select>
+        </el-form-item>
+        <!-- SPEC-P151：账期是三个页签通用的时间口径（默认当前账期），故放在
+             vouchered-only 的筛选块之外 -->
+        <el-form-item label="账期">
+          <el-date-picker
+            v-model="query.period"
+            type="month"
+            value-format="YYYYMM"
+            placeholder="全部期间"
+            clearable
+            style="width:130px"
+            @change="onPeriodChange"
+          />
         </el-form-item>
         <template v-if="scope === 'vouchered'">
         <el-form-item label="快捷时段">
@@ -66,22 +80,30 @@
         </template>
       </FilterBar>
 
-      <el-radio-group v-model="query.classification" class="classification-tabs" @change="onSearch">
-        <el-radio-button :key="'__all__'" :value="''">全部 ({{ totalCount }})</el-radio-button>
-        <el-radio-button
-          v-for="(label, value) in CLASSIFICATION_LABELS"
-          :key="value"
-          :value="value">
-          {{ label }} ({{ classificationCounts[value] || 0 }})
-        </el-radio-button>
-      </el-radio-group>
+      <div class="view-mode-row">
+        <el-radio-group v-model="query.classification" size="small" class="classification-tabs" @change="onSearch">
+          <el-radio-button :key="'__all__'" :value="''">全部 ({{ totalCount }})</el-radio-button>
+          <el-radio-button
+            v-for="(label, value) in CLASSIFICATION_LABELS"
+            :key="value"
+            :value="value">
+            {{ label }} ({{ classificationCounts[value] || 0 }})
+          </el-radio-button>
+        </el-radio-group>
+        <span class="period-hint" data-testid="period-hint">
+          <template v-if="query.period">
+            仅显示 {{ periodLabel(query.period) }}（当前账期）
+            <el-link type="primary" :underline="false" @click="clearPeriod">查看全部期间</el-link>
+          </template>
+          <template v-else>显示全部期间</template>
+        </span>
+      </div>
 
       <div v-if="query.accountId" class="status-summary">
         <el-tag size="small" type="info">共 {{ totalCount }} 条</el-tag>
         <el-tag size="small" type="warning">待确认 {{ statusCounts.pending }}</el-tag>
-        <el-tag size="small" type="success">已确认 {{ statusCounts.confirmed }}</el-tag>
-        <el-tag size="small" type="primary">待制证 {{ statusCounts.paymentCreated }}</el-tag>
-        <el-tag size="small" type="primary">已制证 {{ statusCounts.voucherGenerated }}</el-tag>
+        <el-tag size="small" type="success">已确认/待制证 {{ statusCounts.confirmed }}</el-tag>
+        <el-tag size="small" type="primary">已制证 {{ statusCounts.paymentCreated + statusCounts.voucherGenerated }}</el-tag>
         <el-tag v-if="statusCounts.approved > 0" size="small" type="success">已过账 {{ statusCounts.approved }}</el-tag>
       </div>
 
@@ -92,7 +114,7 @@
         { label: '净额', value: `¥ ${fmtAmount(statementSummary.net)}` },
       ]" />
 
-        <el-space v-if="scope === 'pending'" style="margin-bottom: 12px" wrap>
+        <el-space v-if="scope !== 'vouchered'" style="margin-bottom: 12px" wrap>
           <el-button type="primary" @click="openImport">导入对账单</el-button>
           <el-button :disabled="!query.accountId" @click="onAutoClassify">自动分类全部</el-button>
           <BatchActionBar
@@ -154,69 +176,65 @@
         <el-empty v-else description="请先选择日期范围（本月/近3个月/近6个月/近12个月或自定义）查询已制证流水" />
       </template>
       <template v-else>
-      <el-table ref="tableRef" :data="list" v-loading="loading" border stripe show-summary :summary-method="(ctx: any) => summaryMethod(ctx, list)" @selection-change="onSelectionChange" @row-click="onRowClick" style="cursor:pointer">
-        <el-table-column type="selection" width="40" :selectable="isBatchable" />
-        <el-table-column prop="txDate" label="日期" width="110" />
-        <el-table-column prop="txType" label="方向" width="70" align="center">
-          <template #default="{ row }">
-            <el-tag :type="row.txType === 'INCOME' ? 'success' : 'warning'" size="small">
-              {{ row.txType === 'INCOME' ? '收' : '支' }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column label="金额" width="130" align="right">
-          <template #default="{ row }">{{ fmtAmount(row.amount) }}</template>
-        </el-table-column>
-        <el-table-column prop="counterAccount" label="对方" min-width="140" show-overflow-tooltip />
-        <el-table-column prop="summary" label="摘要" min-width="180" show-overflow-tooltip />
-        <el-table-column label="分类" width="100" align="center">
-          <template #default="{ row }">
-            <el-tag v-if="row.classification && row.classification !== 'other_unknown'"
-              :type="row.reviewStatus === 'approved' ? 'success' : 'warning'" size="small">
-              {{ CLASSIFICATION_LABELS[row.classification] || row.classification }}
-            </el-tag>
-            <el-tag v-else type="info" size="small">未分类</el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column label="科目" width="150" align="center">
-          <template #default="{ row }">
-            <span v-if="hasSubjectLevel(row)" :title="getSubjectPath(row)" style="font-size:12px">
-              <span v-if="row.subjectLevel1">{{ row.subjectLevel1 }}</span>
-              <span v-if="row.subjectLevel2"> / {{ row.subjectLevel2 }}</span>
-              <span v-if="row.subjectLevel3"> / {{ row.subjectLevel3 }}</span>
-            </span>
-            <span v-else style="color:#c0c4cc">-</span>
-          </template>
-        </el-table-column>
-        <el-table-column label="流程状态" width="100" align="center">
-          <template #default="{ row }">
-            <el-tag :type="reviewStatusTagType(row.reviewStatus)" size="small">
-              {{ REVIEW_STATUS_LABELS[row.reviewStatus] || '待确认' }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column label="生成结果" width="130" align="center">
-          <template #default="{ row }">
-            <span v-if="row.generatedVoucherNo" style="color:var(--el-color-success)">
-              {{ row.generatedVoucherNo }}
-            </span>
-            <span v-else-if="row.generatedDocNo" style="color:var(--el-color-primary)">
-              {{ row.generatedDocNo }}
-            </span>
-            <span v-else>-</span>
-          </template>
-        </el-table-column>
-      </el-table>
-
-      <el-pagination
-        v-if="total > 0"
-        v-model:current-page="query.current"
-        v-model:page-size="query.size"
-        :total="total"
-        layout="total, prev, pager, next"
-        style="margin-top:12px;justify-content:flex-end"
-        @change="fetchData"
-      />
+        <!-- SPEC-P151 分类视图：每个业务分类一个折叠区块，组头带条数与收支合计。
+             整组完整不分页（数据量由账期收窄兜住）。勾选列保留：批量确认/审核跨组累加。 -->
+        <el-collapse v-if="categoryGroups.length" v-model="expandedCategories">
+          <el-collapse-item v-for="g in categoryGroups" :key="g.classification" :name="g.classification">
+            <template #title>
+              <span class="category-group-title">
+                {{ CLASSIFICATION_LABELS[g.classification] || g.classification }}
+                <el-tag size="small" class="category-count">{{ g.count }} 条</el-tag>
+                <span class="category-sums">
+                  收 {{ fmtAmount(g.income) }} / 支 {{ fmtAmount(g.expense) }}
+                </span>
+              </span>
+            </template>
+            <el-table :data="g.items" border stripe size="small" show-summary
+              :summary-method="(ctx: any) => summaryMethod(ctx, g.items)"
+              @selection-change="(rows: any) => onGroupSelectionChange(g.classification, rows)"
+              @row-click="onRowClick" style="cursor:pointer">
+              <el-table-column type="selection" width="40" :selectable="isBatchable" />
+              <el-table-column prop="txDate" label="日期" width="110" />
+              <el-table-column prop="txType" label="方向" width="70" align="center">
+                <template #default="{ row }">
+                  <el-tag :type="row.txType === 'INCOME' ? 'success' : 'warning'" size="small">
+                    {{ row.txType === 'INCOME' ? '收' : '支' }}
+                  </el-tag>
+                </template>
+              </el-table-column>
+              <el-table-column label="金额" width="130" align="right">
+                <template #default="{ row }">{{ fmtAmount(row.amount) }}</template>
+              </el-table-column>
+              <el-table-column prop="counterAccount" label="对方" min-width="140" show-overflow-tooltip />
+              <el-table-column prop="summary" label="摘要" min-width="180" show-overflow-tooltip />
+              <el-table-column label="科目" width="150" align="center">
+                <template #default="{ row }">
+                  <span v-if="hasSubjectLevel(row)" :title="getSubjectPath(row)" style="font-size:12px">
+                    <span v-if="row.subjectLevel1">{{ row.subjectLevel1 }}</span>
+                    <span v-if="row.subjectLevel2"> / {{ row.subjectLevel2 }}</span>
+                    <span v-if="row.subjectLevel3"> / {{ row.subjectLevel3 }}</span>
+                  </span>
+                  <span v-else style="color:#c0c4cc">-</span>
+                </template>
+              </el-table-column>
+              <el-table-column label="流程状态" width="100" align="center">
+                <template #default="{ row }">
+                  <el-tag :type="reviewStatusTagType(row.reviewStatus)" size="small">
+                    {{ REVIEW_STATUS_LABELS[row.reviewStatus] || '待确认' }}
+                  </el-tag>
+                </template>
+              </el-table-column>
+              <el-table-column label="生成结果" width="130" align="center">
+                <template #default="{ row }">
+                  <span v-if="row.generatedVoucherNo" style="color:var(--el-color-success)">{{ row.generatedVoucherNo }}</span>
+                  <span v-else-if="row.generatedDocNo" style="color:var(--el-color-primary)">{{ row.generatedDocNo }}</span>
+                  <span v-else>-</span>
+                </template>
+              </el-table-column>
+            </el-table>
+          </el-collapse-item>
+        </el-collapse>
+        <el-empty v-else-if="!loading" :description="query.period ? `${periodLabel(query.period)} 内暂无对账单据` : '暂无对账单据'" />
       </template>
     </el-card>
 
@@ -475,11 +493,13 @@ import {
   auditStatement, batchAuditStatements,
   deleteStatement, updateStatementClassification,
   getBankStatementDetail, getClassificationCounts, getStatusCounts,
-  getBankStatementSummary,
+  getBankStatementSummary, getBankStatementGroupedByCategory,
   CLASSIFICATION_LABELS, REVIEW_STATUS_LABELS,
   type BankStatementVO,
   type BankStatementMonthGroup,
+  type BankStatementCategoryGroup,
 } from '@/api/modules/bankStatement'
+import { periodRange, resolveDefaultPeriod } from '@/utils/period'
 import PageHeader from '@/components/page/PageHeader.vue'
 import FilterBar from '@/components/page/FilterBar.vue'
 import StatBar from '@/components/page/StatBar.vue'
@@ -500,9 +520,12 @@ const selectedFile = ref<File | null>(null)
 const tableRef = ref()
 
 // P67 统一批量操作：状态矩阵基于既有批量刷新语义（PENDING/classified→确认，CONFIRMED→审核）
+//
+// SPEC-P136：两个动作在后端清单中**同为** `bank:statement:list`（coarse，P133 D-9b 范围），
+// 故前端只能做到「有该码才可点」，无法区分确认/审核。已登记为已知局限。
 const BATCH_ACTIONS: BatchActionDef[] = [
-  { key: 'confirm', label: '批量确认' },
-  { key: 'audit', label: '批量审核' },
+  { key: 'confirm', label: '批量确认', permission: 'bank:statement:list' },
+  { key: 'audit', label: '批量审核', permission: 'bank:statement:list' },
 ]
 const BATCH_STATUS_MATRIX: Record<string, string[]> = {
   PENDING: ['confirm'],
@@ -517,7 +540,9 @@ const { selectedRows, result, resultVisible, onSelectionChange, clearSelection, 
   refresh: async () => {
     await refreshAll()
   },
-  clearer: () => tableRef.value?.clearSelection(),
+  // SPEC-P151 分类视图：一个分类一张表，清空要逐表 clearSelection（clearGroupSelections），
+  // 不能再依赖单一 tableRef
+  clearer: () => clearGroupSelections(),
 })
 
 function onBatchAction(key: string) {
@@ -573,6 +598,7 @@ const query = ref<{
   keyword?: string
   minAmount?: number
   maxAmount?: number
+  period?: string
   startDate?: string
   endDate?: string
   current: number
@@ -581,30 +607,102 @@ const query = ref<{
   current: 1, size: 20,
 })
 
-const scope = ref<'pending' | 'vouchered' | 'all'>('pending')
+const scope = ref<'pending' | 'vouchered' | 'all'>('all')
 const monthGroups = ref<BankStatementMonthGroup[]>([])
 const expandedMonths = ref<string[]>([])
 const quickDate = ref('')
 
+// SPEC-P151 分类视图：全部/待处理页签的列表按业务分类折叠分组展示，
+// 不再平铺全量（旧平铺表 + 分页已移除，数据量由账期收窄兜住）。
+const categoryGroups = ref<BankStatementCategoryGroup[]>([])
+const expandedCategories = ref<string[]>([])
+// 进页/重置的默认账期（企业当前期间，resolveDefaultPeriod 内含回退）
+const defaultPeriod = ref('')
+const viewMode = ref<'category' | 'flat'>('category')
+
+// 跨分组表格的勾选聚合：每个分类一张表，selection 各自独立，批量操作取并集
+const groupSelections = ref<Record<string, BankStatementVO[]>>({})
+const categoryTableRefs = new Map<string, any>()
+function setCategoryTableRef(key: string, el: any) {
+  if (el) categoryTableRefs.set(key, el)
+  else categoryTableRefs.delete(key)
+}
+function onGroupSelectionChange(key: string, rows: BankStatementVO[]) {
+  groupSelections.value = { ...groupSelections.value, [key]: rows }
+  selectedRows.value = Object.values(groupSelections.value).flat()
+}
+function clearGroupSelections() {
+  groupSelections.value = {}
+  categoryTableRefs.forEach((t) => t?.clearSelection?.())
+}
+
+/** 202407 -> 2024年7月（提示文案用） */
+function periodLabel(period: string): string {
+  const y = period.slice(0, 4)
+  const m = Number(period.slice(4, 6))
+  return m >= 1 && m <= 12 ? `${y}年${m}月` : period
+}
+
+/**
+ * 应用「只看某账期」这一时间口径（SPEC-P151）。
+ *
+ * <p>账期与 startDate/endDate 是同一维度的两种表达，后端 period 优先。
+ * 三者（period / query 日期 / 日期条显示值）必须一起改，否则会出现
+ * 「日期条显示 7 月、实际查的是上季度」这类 UI 与实际口径漂移。</p>
+ */
+function applyPeriod(period?: string) {
+  query.value.period = period
+  const r = period ? periodRange(period) : null
+  query.value.startDate = r?.start
+  query.value.endDate = r?.end
+  dateRange.value = r ? [r.start, r.end] : null
+  quickDate.value = ''
+}
+
+/** 选账期 = 明确的时间口径，统一走 applyPeriod 清掉快捷时段/自定义日期，避免两套口径并存 */
+function onPeriodChange() {
+  applyPeriod(query.value.period || undefined)
+  onSearch()
+}
+
+function clearPeriod() {
+  applyPeriod(undefined)
+  onSearch()
+}
+
+function onViewModeChange() {
+  query.value.current = 1
+  if (viewMode.value === 'category') {
+    // 分组维度就是分类，切过去时清掉平铺遗留的分类筛选，避免「切回来还带着上次的过滤」的错觉
+    query.value.classification = undefined
+  }
+  fetchData()
+}
+
 function onScopeChange() {
   query.value.current = 1
   query.value.reviewStatus = undefined
-  if (scope.value === 'vouchered') {
-    monthGroups.value = []
-    total.value = 0
-    refreshCountsOnly()
-    return
-  }
+  // SPEC-P151：三个页签同口径 —— 账期(或日期区间)已就位时切页签直接取数；
+  // 没有任何时间口径时 vouchered 的 fetchData 会自行清空，不会全表扫
   refreshAll()
 }
 
 // 日期范围 (Element Plus daterange)
 const dateRange = ref<[string, string] | null>(null)
 function onDateRangeChange(val: [string, string] | null) {
-  query.value.startDate = val?.[0]
-  query.value.endDate = val?.[1]
-  quickDate.value = ''
-  onSearch()
+  if (val) {
+    // 后端 period 优先于日期区间；用户显式选了日期就清掉账期，
+    // 否则「点了近3个月却还是只查本月」
+    query.value.startDate = val[0]
+    query.value.endDate = val[1]
+    query.value.period = undefined
+    quickDate.value = ''
+    onSearch()
+  } else {
+    // 清空日期条：回到账期口径（日期条随之显示账期区间），不留下「两条都空=全量」的假象
+    applyPeriod(query.value.period)
+    onSearch()
+  }
 }
 
 function fmtDate(d: Date): string {
@@ -626,6 +724,8 @@ function onQuickDate(val: string | number | boolean | undefined) {
   dateRange.value = [fmtDate(start), end]
   query.value.startDate = fmtDate(start)
   query.value.endDate = end
+  // 同 onDateRangeChange：显式选了快捷时段就不再受账期过滤压制
+  query.value.period = undefined
   onSearch()
 }
 
@@ -670,9 +770,14 @@ function fmtAmount(v: number) {
   return v == null ? '' : Number(v).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
+/** 收入的判定口径（与后端 groupByCategory/summary 一致：TRANSFER_IN 计收入） */
+function isIncoming(r: BankStatementVO) {
+  return r.txType === 'INCOME' || r.txType === 'TRANSFER_IN'
+}
+
 /**
  * 底部小结：按方向拆分收入/支出，金额列显示净额(收-支)。
- * 待处理表列: 0勾选 1日期 2方向 3金额 4对方 5摘要 6分类 7科目 8流程 9生成
+ * 分类分组表列: 0勾选 1日期 2方向 3金额 4对方 5摘要 6科目 7流程 8生成
  * 已制证月分组表列: 0日期 1方向 2金额 3对方 4摘要 5分类 6流程 7生成（无勾选列）
  */
 function summaryMethod(
@@ -680,13 +785,12 @@ function summaryMethod(
   rows?: BankStatementVO[] | null,
 ) {
   const list = rows || data || []
-  const income = list.reduce((s, r) => s + (r.txType === 'INCOME' ? (Number(r.amount) || 0) : 0), 0)
-  const expense = list.reduce((s, r) => s + (r.txType !== 'INCOME' ? (Number(r.amount) || 0) : 0), 0)
-  const amountIdx = columns.length >= 10 ? 3 : 2 // 待处理表有勾选列，月分组表无
-  const hasMore = scope.value !== 'vouchered' && list.length > 0 && list.length < total.value
+  const income = list.reduce((s, r) => s + (isIncoming(r) ? (Number(r.amount) || 0) : 0), 0)
+  const expense = list.reduce((s, r) => s + (!isIncoming(r) ? (Number(r.amount) || 0) : 0), 0)
+  const amountIdx = scope.value === 'vouchered' ? 2 : 3 // 月分组表无勾选列，分类分组表有
   return columns.map((_, index) => {
-    if (index === 0) return hasMore ? '本页合计' : '合计'
-    if (index === 1 && columns.length < 10) return `收 ${fmtAmount(income)} / 支 ${fmtAmount(expense)}`
+    if (index === 0) return '合计'
+    if (scope.value === 'vouchered' && index === 1) return `收 ${fmtAmount(income)} / 支 ${fmtAmount(expense)}`
     if (index === amountIdx) return fmtAmount(income - expense)
     return ''
   })
@@ -704,7 +808,7 @@ function getSubjectPath(row: any) {
 const statementSummary = ref<{ count: number; income: number; expense: number; net: number } | null>(null)
 
 async function fetchSummary() {
-  if (scope.value === 'vouchered' && (!query.value.startDate || !query.value.endDate)) {
+  if (scope.value === 'vouchered' && !query.value.period && (!query.value.startDate || !query.value.endDate)) {
     statementSummary.value = null
     return
   }
@@ -720,7 +824,7 @@ async function fetchData() {
   fetchSummary()
   try {
     if (scope.value === 'vouchered') {
-      if (!query.value.startDate || !query.value.endDate) {
+      if (!query.value.startDate && !query.value.endDate && !query.value.period) {
         monthGroups.value = []
         total.value = 0
         return
@@ -731,10 +835,21 @@ async function fetchData() {
       if (!expandedMonths.value.length && monthGroups.value.length) {
         expandedMonths.value = [monthGroups.value[0].month]
       }
-    } else {
+    } else if (viewMode.value === 'flat') {
+      // 平铺视图：分页查询
       const res = await getBankStatementPage({ ...query.value, scope: scope.value } as any)
       list.value = (res as any).records || []
       total.value = (res as any).total || 0
+    } else {
+      // SPEC-P151 分类视图：整组完整不分页，数据量由账期收窄兜住。
+      // 选中分类时把 classification 传下去（组视图收窄为只看该组）；
+      // 「全部」不传 —— 分组展示全部业务分类。
+      const groups = await getBankStatementGroupedByCategory({ ...query.value, scope: scope.value } as any)
+      categoryGroups.value = groups || []
+      total.value = categoryGroups.value.reduce((sum, g) => sum + (g.count || 0), 0)
+      if (!expandedCategories.value.length && categoryGroups.value.length) {
+        expandedCategories.value = [categoryGroups.value[0].classification]
+      }
     }
   } finally {
     loading.value = false
@@ -747,7 +862,7 @@ async function fetchClassificationCounts() {
     statusCountsRaw.value = {}
     return
   }
-  if (scope.value === 'vouchered' && (!query.value.startDate || !query.value.endDate)) {
+  if (scope.value === 'vouchered' && !query.value.period && (!query.value.startDate || !query.value.endDate)) {
     classificationCounts.value = {}
     statusCountsRaw.value = {}
     return
@@ -758,6 +873,7 @@ async function fetchClassificationCounts() {
       getStatusCounts({
         accountId: query.value.accountId,
         scope: scope.value,
+        period: query.value.period,
         startDate: query.value.startDate,
         endDate: query.value.endDate,
       } as any),
@@ -786,12 +902,15 @@ async function refreshCountsOnly() {
 
 function onSearch() { query.value.current = 1; refreshAll() }
 function onReset() {
-  query.value = { current: 1, size: 20 }
+  // SPEC-P151：重置回「当前账期」而不是全量 —— 重置的语义是回到本页默认视图，
+  // 而默认视图就是当前账期（与进页时一致），不是把用户扔到全表
+  query.value = { current: 1, size: 20, accountId: query.value.accountId }
+  applyPeriod(defaultPeriod.value)
   scope.value = 'pending'
-  dateRange.value = null
-  quickDate.value = ''
   expandedMonths.value = []
-  fetchData()
+  expandedCategories.value = []
+  viewMode.value = 'category'
+  refreshAll()
 }
 
 function openImport() {
@@ -1062,6 +1181,10 @@ async function onDelete(row: any) {
 const route = useRoute()
 
 onMounted(async () => {
+  // SPEC-P151：先定默认账期再取数 —— 顺序反了会先发一次「全量」查询，
+  // 用户看到的条数闪一下才对，且三个页签里有两个会白跑一次全表
+  defaultPeriod.value = await resolveDefaultPeriod()
+  applyPeriod(defaultPeriod.value)
   try {
     accounts.value = await getActiveBankAccounts()
     // Build bank name map for detail dialog
@@ -1088,6 +1211,11 @@ onMounted(async () => {
 .classification-tabs { margin-bottom: 8px; flex-wrap: wrap; row-gap: 4px; }
 .classification-tabs :deep(.el-radio-button__inner) { padding: 8px 14px; }
 .month-group-title { font-weight: 600; }
+.view-mode-row { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
+.period-hint { font-size: 12px; color: var(--el-text-color-secondary); display: inline-flex; align-items: center; gap: 6px; }
+.category-group-title { font-weight: 600; display: inline-flex; align-items: center; gap: 8px; }
+.category-count { margin-left: 2px; }
+.category-sums { font-weight: 400; font-size: 12px; color: var(--el-text-color-secondary); }
 .status-summary { display: flex; gap: 6px; margin-bottom: 12px; flex-wrap: wrap; }
 :deep(.preview-row-error) {
   background-color: #fef0f0 !important;

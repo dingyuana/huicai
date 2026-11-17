@@ -164,6 +164,16 @@
             <artifactId>spring-boot-starter-test</artifactId>
             <scope>test</scope>
         </dependency>
+        <!-- jqwik：属性测试引擎（SPEC-P154 切片三）。
+             JUnit Platform 多引擎并存：jqwik-engine 挂上 classpath 即被 surefire 3.x
+             自动发现，@Property 类与 JUnit @Test 类互不干扰；不受 excludedGroups=slow
+             影响（属性测试是纯函数毫秒级，进 L1 基线）。 -->
+        <dependency>
+            <groupId>net.jqwik</groupId>
+            <artifactId>jqwik</artifactId>
+            <version>1.9.2</version>
+            <scope>test</scope>
+        </dependency>
         <!-- Spring Security Test for @WithUserDetails, MockSecurityContextHolder etc. -->
         <dependency>
             <groupId>org.springframework.security</groupId>

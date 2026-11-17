@@ -62,3 +62,4 @@ ai-service/__pycache__/
 
 # Deploy backups (local snapshots, not version-controlled)
 backups/
+backend/.jqwik-database

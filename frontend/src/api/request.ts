@@ -1,6 +1,7 @@
 import axios from 'axios'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import type { ApiResponse } from '@/types/api'
+import { reportError } from '@/utils/errorReporter'
 
 const request = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || '/api',
@@ -97,6 +98,30 @@ async function handleUnauthorized(error: unknown) {
 }
 
 // 响应拦截器：统一错误处理
+/**
+ * SPEC-P136：403 是**预期内的业务结果**（当前账号没有该操作权限），不是系统故障。
+ *
+ * <p>故用对话框（需要用户确认知悉）而非红色 toast（暗示出了错）。
+ *
+ * <p><b>去重是必需的</b>：页面初始化常并发多个请求，一次操作可能同时触发多条 403；
+ * 若每条都弹对话框，用户要点很多次「知道了」。用时间窗内只弹一次的守卫，
+ * 并把后续的合并掉。窗口取 800ms —— 足够覆盖并发请求，又不会把
+ * 「过一会儿再点另一个无权限按钮」也吞掉。
+ */
+let forbiddenDialogAt = 0
+const FORBIDDEN_DIALOG_WINDOW_MS = 800
+
+function showForbiddenDialog() {
+  const now = Date.now()
+  if (now - forbiddenDialogAt < FORBIDDEN_DIALOG_WINDOW_MS) return
+  forbiddenDialogAt = now
+  ElMessageBox.alert(
+    '当前账号缺少该操作权限，请联系管理员开通。',
+    '权限不足',
+    { type: 'warning' },
+  ).catch(() => undefined)
+}
+
 request.interceptors.response.use(
   (response) => {
     // P89-D：文件下载（Excel 导出）直接返回 blob，不走 R 结构解析
@@ -118,7 +143,7 @@ request.interceptors.response.use(
         return handleUnauthorized(error)
       }
       if (status === 403) {
-        ElMessage.error('权限不足，请联系管理员')
+        showForbiddenDialog()
         return Promise.reject(error)
       }
       // S-26: 跨租户/企业暂停错误
@@ -133,8 +158,26 @@ request.interceptors.response.use(
         return Promise.reject(error)
       }
       const msg = data?.msg || data?.error || '请求失败'
+      // SPEC-P152：5xx = 服务端代码错误，前端也留一条线索（服务端另有 SERVER_ERROR 审计，
+      // 两边以 uri 对齐）；4xx 不上报 —— 那是业务口径，服务端已有日志，前端重复灌库无益。
+      // node 环境（本文件源码扫描测试）无 window ⇒ 取值必须护栏。
+      const pageUrl = typeof window !== 'undefined' ? window.location.href : ''
+      if (status >= 500) {
+        reportError({
+          level: 'ERROR',
+          message: `[http:${status}] ${(error.config?.method || '').toUpperCase()} ${error.config?.url || ''} ${msg}`.slice(0, 500),
+          url: pageUrl,
+        })
+      }
       ElMessage.error(msg)
     } else {
+      // 无 response：网络中断 / 超时 / 服务不可达 —— 同样是排障需要的信号
+      const pageUrl = typeof window !== 'undefined' ? window.location.href : ''
+      reportError({
+        level: 'ERROR',
+        message: `[network] ${(error.config?.method || '').toUpperCase()} ${error.config?.url || ''} ${error.message || '网络异常'}`.slice(0, 500),
+        url: pageUrl,
+      })
       ElMessage.error('网络异常，请检查连接')
     }
     return Promise.reject(error)

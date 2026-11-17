@@ -16,4 +16,7 @@ public interface EmployeeService {
     EmployeeEntity create(EmployeeEntity entity);
     EmployeeEntity update(EmployeeEntity entity);
     void delete(Long id);
+
+    /** SPEC-P157 R4：绑定员工自助登录账号（校验账号存在、同企业、未被他员工绑定；user_id=null 即解绑）。 */
+    EmployeeEntity bindUser(Long employeeId, Long userId);
 }

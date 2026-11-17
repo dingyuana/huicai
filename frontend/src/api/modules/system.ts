@@ -244,17 +244,25 @@ export function deleteDept(id: number): Promise<void> {
 
 // ==================== Audit Log ====================
 export interface AuditLogVO {
+  // SPEC-P152：字段名与后端 AuditLogEntity 序列化结果对齐
+  // （此前 action/resourceType/resourceId/ip/errorMsg 全是页面虚构键，整列恒空）
   id: number
   username: string
+  userId?: number
   module: string
-  action: string
-  resourceType: string
-  resourceId: string
-  ip: string
-  userAgent: string
-  requestParams: any
+  operation: string
+  method?: string
+  entityType?: string
+  entityId?: number
+  entityNo?: string
+  requestParams?: string
+  responseResult?: string
+  beforeData?: string
+  afterData?: string
+  ipAddress: string
+  userAgent?: string
+  executionTimeMs?: number
   status: string
-  errorMsg: string
   createdAt: string
 }
 

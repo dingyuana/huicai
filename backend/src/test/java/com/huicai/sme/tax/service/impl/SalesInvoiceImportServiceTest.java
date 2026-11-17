@@ -45,6 +45,11 @@ class SalesInvoiceImportServiceTest {
     @Mock private com.huicai.base.business.util.ColumnMappingResolver columnMappingResolver;
     @Mock
     private VoucherTypeService voucherTypeService;
+    // SPEC-P153：行级 REQUIRES_NEW 执行器 —— 单测用裸实例（无 Spring 代理 ⇒ 动作原地
+    // 执行，行为与加事务前等价），防止 @InjectMocks 构造注入落 null 打挂 confirmImport。
+    @org.mockito.Spy
+    private com.huicai.common.transaction.RequiresNewRunner rowTx =
+            new com.huicai.common.transaction.RequiresNewRunner();
 
     @InjectMocks private com.huicai.sme.tax.service.impl.SalesInvoiceImportService service;
 

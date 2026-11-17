@@ -46,6 +46,12 @@ public class EmployeeEntity extends BaseEntity {
     private String phone;
     private String email;
 
+    /** SPEC-P157：绑定的登录账号（t_user.id），NULL=未绑定员工自助；一账号至多绑一员工（uq_employee_user） */
+    private Long userId;
+
+    /** SPEC-P159（V203）：社保局核定缴费基数（年度申报值），NULL=未核定；EMP_DECL 基数模式的数据源 */
+    private java.math.BigDecimal socialBaseDeclared;
+
     /** 工资卡银行 — DB 无此列 */
     @TableField(exist = false)
     private String bankName;

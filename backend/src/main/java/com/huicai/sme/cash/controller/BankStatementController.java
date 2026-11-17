@@ -3,6 +3,7 @@ package com.huicai.sme.cash.controller;
 import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.huicai.common.response.R;
+import com.huicai.base.business.dto.vo.BankStatementVO;
 import com.huicai.base.business.entity.BankStatementEntity;
 import com.huicai.sme.cash.service.BankStatementService;
 import com.huicai.base.system.util.SecurityUtils;
@@ -34,13 +35,16 @@ public class BankStatementController {
     private static final org.slf4j.Logger logger =
             org.slf4j.LoggerFactory.getLogger(BankStatementController.class);
 
-    @Operation(summary = "分页查询对账单")
+    @Operation(summary = "分页查询对账单",
+            description = "period=YYYYMM 时按月首/月末过滤 tx_date，且<b>优先于</b> startDate/endDate。"
+                    + "服务端不因缺省 period 而自动收窄（默认值由 UI 决定），缺省仍为全量。")
     @GetMapping("/page")
-    public R<IPage<BankStatementEntity>> page(
+    public R<IPage<BankStatementVO>> page(
             @RequestParam(required = false) Long accountId,
             @RequestParam(required = false) String status,
             @RequestParam(required = false) String classification,
             @RequestParam(required = false) String reviewStatus,
+            @RequestParam(required = false) String period,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) java.time.LocalDate startDate,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) java.time.LocalDate endDate,
             @RequestParam(required = false) String direction,
@@ -52,18 +56,30 @@ public class BankStatementController {
             @RequestParam(required = false) String scope,
             @RequestParam(defaultValue = "1") Integer current,
             @RequestParam(defaultValue = "20") Integer size) {
-        return R.ok(service.pageQuery(accountId, status, classification, reviewStatus,
-                startDate, endDate, direction, counterAccount, summary, keyword,
-                minAmount, maxAmount, scope, current, size));
+        com.huicai.common.util.PeriodRange.Range range = resolveRange(period, startDate, endDate);
+        IPage<BankStatementEntity> pageResult = service.pageQuery(accountId, status, classification, reviewStatus,
+                range.start(), range.end(), direction, counterAccount, summary, keyword,
+                minAmount, maxAmount, scope, current, size);
+        return R.ok(pageResult == null ? null : pageResult.convert(BankStatementVO::from));
     }
 
-    @Operation(summary = "对账单汇总（与分页查询同过滤条件）")
+    /**
+     * 期间 → 日期区间的统一入口（SPEC-P151）。
+     * <p>非法 period 直接 400，不静默退化成「不过滤」。详见 {@code PeriodRange}。</p>
+     */
+    private static com.huicai.common.util.PeriodRange.Range resolveRange(
+            String period, java.time.LocalDate startDate, java.time.LocalDate endDate) {
+        return com.huicai.common.util.PeriodRange.resolve(period, startDate, endDate);
+    }
+
+    @Operation(summary = "对账单汇总（与分页查询同过滤条件，同样支持 period）")
     @GetMapping("/summary")
     public R<Map<String, Object>> summary(
             @RequestParam(required = false) Long accountId,
             @RequestParam(required = false) String status,
             @RequestParam(required = false) String classification,
             @RequestParam(required = false) String reviewStatus,
+            @RequestParam(required = false) String period,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) java.time.LocalDate startDate,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) java.time.LocalDate endDate,
             @RequestParam(required = false) String direction,
@@ -73,8 +89,9 @@ public class BankStatementController {
             @RequestParam(required = false) BigDecimal minAmount,
             @RequestParam(required = false) BigDecimal maxAmount,
             @RequestParam(required = false) String scope) {
+        com.huicai.common.util.PeriodRange.Range range = resolveRange(period, startDate, endDate);
         return R.ok(service.summary(accountId, status, classification, reviewStatus,
-                startDate, endDate, direction, counterAccount, summary, keyword,
+                range.start(), range.end(), direction, counterAccount, summary, keyword,
                 minAmount, maxAmount, scope));
     }
 
@@ -85,6 +102,7 @@ public class BankStatementController {
             @RequestParam(required = false) String status,
             @RequestParam(required = false) String classification,
             @RequestParam(required = false) String reviewStatus,
+            @RequestParam(required = false) String period,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) java.time.LocalDate startDate,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) java.time.LocalDate endDate,
             @RequestParam(required = false) String direction,
@@ -94,15 +112,53 @@ public class BankStatementController {
             @RequestParam(required = false) BigDecimal minAmount,
             @RequestParam(required = false) BigDecimal maxAmount,
             @RequestParam(required = false) String scope) {
+        com.huicai.common.util.PeriodRange.Range range = resolveRange(period, startDate, endDate);
         return R.ok(service.groupByMonth(accountId, status, classification, reviewStatus,
-                startDate, endDate, direction, counterAccount, summary, keyword,
+                range.start(), range.end(), direction, counterAccount, summary, keyword,
+                minAmount, maxAmount, scope));
+    }
+
+    /**
+     * SPEC-P151：按业务分类折叠分组（对账单「分类视图」）。
+     *
+     * <p><b>为什么要它</b>：平铺列表把当月几十条流水混在一屏，用户要「一批一类地消化」
+     * （先把手续费做完，再做收款）。此前只能靠分类筛选按钮逐类点，看不到「哪类多、
+     * 哪类还没动」的全貌。</p>
+     *
+     * <p><b>不做分页</b>：分组视图必须<b>整组完整</b>，分页会把一组劈成两半。
+     * 数据量由期间收窄兜住（页面默认只查当前账期）。</p>
+     *
+     * <p>{@code classification} 可继续过滤（前端分类筛选条与列表同口径），
+     * other_unknown 含 NULL/空白分类，与归组口径同源。</p>
+     */
+    @Operation(summary = "按业务分类分组查询对账单（分类视图）")
+    @GetMapping("/grouped-by-category")
+    public R<java.util.List<com.huicai.base.business.dto.vo.BankStatementCategoryGroupVO>> groupedByCategory(
+            @RequestParam(required = false) Long accountId,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String classification,
+            @RequestParam(required = false) String reviewStatus,
+            @RequestParam(required = false) String period,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) java.time.LocalDate startDate,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) java.time.LocalDate endDate,
+            @RequestParam(required = false) String direction,
+            @RequestParam(required = false) String counterAccount,
+            @RequestParam(required = false) String summary,
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) BigDecimal minAmount,
+            @RequestParam(required = false) BigDecimal maxAmount,
+            @RequestParam(required = false) String scope) {
+        com.huicai.common.util.PeriodRange.Range range = resolveRange(period, startDate, endDate);
+        return R.ok(service.groupByCategory(accountId, status, classification, reviewStatus,
+                range.start(), range.end(), direction, counterAccount, summary, keyword,
                 minAmount, maxAmount, scope));
     }
 
     @Operation(summary = "获取对账单详情")
     @GetMapping("/{id}")
-    public R<BankStatementEntity> detail(@PathVariable Long id) {
-        return R.ok(service.getDetail(id));
+    public R<BankStatementVO> detail(@PathVariable Long id) {
+        BankStatementEntity e0 = service.getDetail(id);
+        return R.ok(e0 == null ? null : BankStatementVO.from(e0));
     }
 
     @Operation(summary = "导入CSV对账单")
@@ -183,11 +239,12 @@ public class BankStatementController {
         return R.ok(service.autoMatch(accountId));
     }
 
-    @Operation(summary = "按分类统计当前账户的流水数量")
+    @Operation(summary = "按分类统计当前账户的流水数量（同样支持 period）")
     @GetMapping("/classification-counts")
     public R<Map<String, Integer>> classificationCounts(@RequestParam Long accountId,
                                                          @RequestParam(required = false) String reviewStatus,
                                                          @RequestParam(required = false) String scope,
+                                                         @RequestParam(required = false) String period,
                                                          @RequestParam(required = false) @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE) java.time.LocalDate startDate,
                                                          @RequestParam(required = false) @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE) java.time.LocalDate endDate,
                                                          @RequestParam(required = false) String direction,
@@ -196,17 +253,22 @@ public class BankStatementController {
                                                          @RequestParam(required = false) String keyword,
                                                          @RequestParam(required = false) java.math.BigDecimal minAmount,
                                                          @RequestParam(required = false) java.math.BigDecimal maxAmount) {
-        return R.ok(service.classificationCounts(accountId, scope, reviewStatus, startDate, endDate,
+        // 🔴 计数必须与列表同期间：否则分类按钮上显示「全部 (26)」而列表只有本月 12 条，
+        //    用户会以为筛选坏了（SPEC-P151）。
+        com.huicai.common.util.PeriodRange.Range range = resolveRange(period, startDate, endDate);
+        return R.ok(service.classificationCounts(accountId, scope, reviewStatus, range.start(), range.end(),
                 direction, counterAccount, summary, keyword, minAmount, maxAmount));
     }
 
-    @Operation(summary = "按状态统计当前账户的流水数量")
+    @Operation(summary = "按状态统计当前账户的流水数量（同样支持 period）")
     @GetMapping("/status-counts")
     public R<Map<String, Integer>> statusCounts(@RequestParam Long accountId,
                                                  @RequestParam(required = false) String scope,
+                                                 @RequestParam(required = false) String period,
                                                  @RequestParam(required = false) @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE) java.time.LocalDate startDate,
                                                  @RequestParam(required = false) @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE) java.time.LocalDate endDate) {
-        return R.ok(service.statusCounts(accountId, scope, startDate, endDate));
+        com.huicai.common.util.PeriodRange.Range range = resolveRange(period, startDate, endDate);
+        return R.ok(service.statusCounts(accountId, scope, range.start(), range.end()));
     }
 
     @Operation(summary = "待核销(payment_created)流水数量，accountId 可选，缺省跨账户")
@@ -229,14 +291,16 @@ public class BankStatementController {
 
     @Operation(summary = "手动触发单条分类")
     @PostMapping("/{id}/classify")
-    public R<BankStatementEntity> classify(@PathVariable Long id) {
-        return R.ok(service.classifySingle(id));
+    public R<BankStatementVO> classify(@PathVariable Long id) {
+        BankStatementEntity e1 = service.classifySingle(id);
+        return R.ok(e1 == null ? null : BankStatementVO.from(e1));
     }
 
     @Operation(summary = "出纳单条审核确认（仅改状态，不生成凭证）")
     @PostMapping("/{id}/review")
-    public R<BankStatementEntity> review(@PathVariable Long id) {
-        return R.ok(service.review(id, SecurityUtils.getCurrentUserId()));
+    public R<BankStatementVO> review(@PathVariable Long id) {
+        BankStatementEntity e2 = service.review(id, SecurityUtils.getCurrentUserId());
+        return R.ok(e2 == null ? null : BankStatementVO.from(e2));
     }
 
     @Operation(summary = "批量审核确认")
@@ -249,8 +313,9 @@ public class BankStatementController {
 
     @Operation(summary = "主管审核并制证（CONFIRMED → voucher_generated / payment_created）")
     @PostMapping("/{id}/audit")
-    public R<BankStatementEntity> audit(@PathVariable Long id) {
-        return R.ok(service.audit(id, SecurityUtils.getCurrentUserId()));
+    public R<BankStatementVO> audit(@PathVariable Long id) {
+        BankStatementEntity e3 = service.audit(id, SecurityUtils.getCurrentUserId());
+        return R.ok(e3 == null ? null : BankStatementVO.from(e3));
     }
 
     @Operation(summary = "批量主管审核")
@@ -263,8 +328,9 @@ public class BankStatementController {
 
     @Operation(summary = "生成凭证/单据（audit() 失败后的恢复重试，仅 CONFIRMED 可达）")
     @PostMapping("/{id}/generate")
-    public R<BankStatementEntity> generate(@PathVariable Long id) {
-        return R.ok(service.generateVoucher(id, SecurityUtils.getCurrentUserId()));
+    public R<BankStatementVO> generate(@PathVariable Long id) {
+        BankStatementEntity e4 = service.generateVoucher(id, SecurityUtils.getCurrentUserId());
+        return R.ok(e4 == null ? null : BankStatementVO.from(e4));
     }
 
     @Operation(summary = "批量生成凭证")
@@ -291,19 +357,21 @@ public class BankStatementController {
 
     @Operation(summary = "手动修改流水分类")
     @PutMapping("/{id}/classification")
-    public R<BankStatementEntity> updateClassification(
+    public R<BankStatementVO> updateClassification(
             @PathVariable Long id,
             @RequestBody Map<String, String> body) {
         String classification = body.get("classification");
-        return R.ok(service.updateClassification(id, classification));
+        BankStatementEntity e5 = service.updateClassification(id, classification);
+        return R.ok(e5 == null ? null : BankStatementVO.from(e5));
     }
 
     @Operation(summary = "P2: C类人工处理 - 指定 A/B 类型后自动生成")
     @PostMapping("/{id}/process-manual")
-    public R<BankStatementEntity> processManual(@PathVariable Long id,
+    public R<BankStatementVO> processManual(@PathVariable Long id,
                                                  @RequestParam String targetType,
                                                  @RequestParam(required = false) String paymentType) {
-        return R.ok(service.processManual(id, targetType, paymentType, SecurityUtils.getCurrentUserId()));
+        BankStatementEntity e6 = service.processManual(id, targetType, paymentType, SecurityUtils.getCurrentUserId());
+        return R.ok(e6 == null ? null : BankStatementVO.from(e6));
     }
 
     @Operation(summary = "P2: 预览凭证草稿 (只计算不写入)")

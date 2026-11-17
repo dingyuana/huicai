@@ -78,12 +78,20 @@ export const REVIEW_STATUS_LABELS: Record<string, string> = {
   approved: '已过账',
 }
 
-export function getBankStatementPage(params: {
+/**
+ * 查询类端点共用的过滤条件（SPEC-P151）。
+ *
+ * <p>{@code period}（YYYYMM）与 {@code startDate/endDate} 二选一即可；
+ * 后端 period <b>优先于</b> 日期区间。对账单表本身没有期间列（只有 tx_date），
+ * 收窄由后端把 period 展开成月首月末完成 —— 前端不要自己算，两端只留一个口径。</p>
+ */
+export interface BankStatementQueryFilter {
   accountId?: string
   status?: string
   classification?: string
   reviewStatus?: string
   scope?: string
+  period?: string
   direction?: string
   counterAccount?: string
   summary?: string
@@ -92,6 +100,9 @@ export function getBankStatementPage(params: {
   maxAmount?: number
   startDate?: string
   endDate?: string
+}
+
+export function getBankStatementPage(params: BankStatementQueryFilter & {
   current?: number
   size?: number
 }): Promise<PageResult<BankStatementVO>> {
@@ -101,6 +112,8 @@ export function getClassificationCounts(params: {
   accountId: string
   reviewStatus?: string
   scope?: string
+  /** YYYYMM；后端展开成月首月末，优先于 startDate/endDate */
+  period?: string
   direction?: string
   counterAccount?: string
   summary?: string
@@ -120,21 +133,7 @@ export interface BankStatementSummary {
   net: number
 }
 
-export function getBankStatementSummary(params: {
-  accountId?: string
-  status?: string
-  classification?: string
-  reviewStatus?: string
-  scope?: string
-  direction?: string
-  counterAccount?: string
-  summary?: string
-  keyword?: string
-  minAmount?: number
-  maxAmount?: number
-  startDate?: string
-  endDate?: string
-}): Promise<BankStatementSummary> {
+export function getBankStatementSummary(params: BankStatementQueryFilter): Promise<BankStatementSummary> {
   return request.get('/sme/cash/v1/bank-statements/summary', { params })
 }
 
@@ -145,26 +144,39 @@ export interface BankStatementMonthGroup {
   items: BankStatementVO[]
 }
 
-export function getBankStatementGrouped(params: {
-  accountId?: string
-  status?: string
-  classification?: string
-  reviewStatus?: string
-  scope?: string
-  direction?: string
-  counterAccount?: string
-  summary?: string
-  keyword?: string
-  minAmount?: number
-  maxAmount?: number
-  startDate?: string
-  endDate?: string
-}): Promise<BankStatementMonthGroup[]> {
+export function getBankStatementGrouped(params: BankStatementQueryFilter): Promise<BankStatementMonthGroup[]> {
   return request.get('/sme/cash/v1/bank-statements/grouped', { params })
 }
+
+/**
+ * 分类视图的分组结果（SPEC-P151）。
+ * <p>未分类（classification 为空）在后端归到 other_unknown，
+ * 且<b>恒排末位</b> —— 它是「还没定性的那堆」，不是另一类业务。</p>
+ */
+export interface BankStatementCategoryGroup {
+  classification: string
+  count: number
+  income: number
+  expense: number
+  items: BankStatementVO[]
+}
+
+/**
+ * 按业务分类分组查询（分类视图）。
+ *
+ * <p>⚠️ 与 page 的差别：<b>不分页</b> —— 分页会把一组劈成两半，数据量靠期间收窄兜住。
+ * classification 可传（分类筛选条与列表同口径）；other_unknown 在后端连 NULL/空白
+ * 分类一起捞，与归组口径同源。</p>
+ */
+export function getBankStatementGroupedByCategory(params: BankStatementQueryFilter):
+  Promise<BankStatementCategoryGroup[]> {
+  return request.get('/sme/cash/v1/bank-statements/grouped-by-category', { params })
+}
+
 export function getStatusCounts(params: {
   accountId: string
   scope?: string
+  period?: string
   startDate?: string
   endDate?: string
 }): Promise<Record<string, number>> {

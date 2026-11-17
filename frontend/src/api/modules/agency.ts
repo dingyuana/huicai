@@ -68,15 +68,25 @@ export function suspendEnterprise(id: number): Promise<EnterpriseVO> {
   return request.post(`/v1/agency/enterprises/${id}/suspend`)
 }
 
-export function batchImport(files: FormData, enterpriseId: number): Promise<BatchResult> {
+export function batchImport(files: FormData, enterpriseId: number, invoiceType: 'input' | 'output'): Promise<BatchResult> {
   return request.post('/v1/agency/batch/import', files, {
     headers: { 'Content-Type': 'multipart/form-data' },
-    params: { enterpriseId },
+    params: { enterpriseId, invoiceType },
   })
 }
 
 export function batchAuditVouchers(voucherIds: number[], enterpriseId: number): Promise<BatchResult> {
   return request.post('/v1/agency/batch/audit-vouchers', voucherIds, { params: { enterpriseId } })
+}
+
+export function batchAuditInvoices(
+  invoiceIds: number[],
+  enterpriseId: number,
+  invoiceType: 'input' | 'output',
+): Promise<BatchResult> {
+  return request.post('/v1/agency/batch/audit-invoices', invoiceIds, {
+    params: { enterpriseId, invoiceType },
+  })
 }
 
 export function batchClose(enterpriseIds: number[], period: string): Promise<BatchResult> {

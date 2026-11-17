@@ -6,5 +6,5 @@ import org.springframework.web.multipart.MultipartFile;
 import java.util.List;
 
 public interface BatchImportService {
-    BatchResultVO importInvoices(List<MultipartFile> files, Long enterpriseId);
+    BatchResultVO importInvoices(List<MultipartFile> files, Long enterpriseId, String invoiceType);
 }

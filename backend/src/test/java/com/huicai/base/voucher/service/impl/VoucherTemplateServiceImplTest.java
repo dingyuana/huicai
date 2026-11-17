@@ -14,6 +14,8 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.jdbc.core.JdbcTemplate;
 
+import javax.sql.DataSource;
+
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -37,6 +39,9 @@ class VoucherTemplateServiceImplTest {
     @Mock
     private JdbcTemplate jdbcTemplate;
 
+    @Mock
+    private DataSource dataSource;
+
     private VoucherTemplateServiceImpl service;
 
     private static final Long TEMPLATE_ID = 100L;
@@ -45,7 +50,7 @@ class VoucherTemplateServiceImplTest {
 
     @BeforeEach
     void setUp() {
-        service = new VoucherTemplateServiceImpl(templateMapper, lineMapper, jdbcTemplate);
+        service = new VoucherTemplateServiceImpl(templateMapper, lineMapper, jdbcTemplate, dataSource);
     }
 
     private VoucherTemplateEntity mockTemplate() {

@@ -32,6 +32,11 @@ public interface VoucherStateMachineService {
     void assertPostable(VoucherEntity entity);
 
     /**
+     * SPEC-P160：校验可撤审 (AUDITED → DRAFT).
+     */
+    void assertUnauditable(VoucherEntity entity);
+
+    /**
      * 校验可红冲 (POSTED → 红字凭证, reversedFrom + reverseReason).
      */
     void assertReversible(VoucherEntity entity);

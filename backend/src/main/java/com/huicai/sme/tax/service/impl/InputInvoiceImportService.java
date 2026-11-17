@@ -27,6 +27,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import com.huicai.base.system.util.SecurityUtils;
+import com.huicai.common.context.EnterpriseContextHolder;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -86,6 +87,15 @@ public class InputInvoiceImportService {
     private final Map<String, List<ParsedInputInvoiceRow>> batchCache = new ConcurrentHashMap<>();
 
     private final VoucherTypeService voucherTypeService;
+
+    /**
+     * SPEC-P153：与 {@code SalesInvoiceImportService.rowTx} 同型 —— 行体在
+     * REQUIRES_NEW 事务中执行，单行 SQL 失败只中止该行自己的事务，
+     * 外层批量事务继续（保住「单行失败记 errors、其余行继续」的承诺）。
+     * 🔴 必须保持为<b>最后一个字段</b>：@RequiredArgsConstructor 按声明序生成
+     * 构造器，两处测试直接 new 的实参表以此为契约。
+     */
+    private final com.huicai.common.transaction.RequiresNewRunner rowTx;
 
     public Map<String, Object> previewInvoices(MultipartFile file) {
         if (file == null || file.isEmpty()) {
@@ -310,7 +320,9 @@ public class InputInvoiceImportService {
             throw BusinessException.notFound("批次不存在或已过期, 请重新上传文件");
         }
         if (rows.isEmpty()) {
-            return Map.of("total", 0, "success", 0, "docCreated", 0, "voucherCreated", 0, "batchId", batchId);
+            return Map.of(
+                    "total", 0, "success", 0, "duplicateSkipped", 0,
+                    "docCreated", 0, "voucherCreated", 0, "errors", List.of(), "batchId", batchId);
         }
 
         Set<String> existingSet = invoiceDedupUtil.findExisting(
@@ -331,16 +343,22 @@ public class InputInvoiceImportService {
                     errors.add(err);
                     continue;
                 }
-                Long vendorId = matchOrCreateVendor(row);
-                if (vendorId == null) {
+                Boolean okRow = rowTx.run(() -> {
+                    Long vendorId = matchOrCreateVendor(row);
+                    if (vendorId == null) {
+                        return false;
+                    }
+                    String period = row.invoiceDate.format(DateTimeFormatter.ofPattern("yyyyMM"));
+                    // P40: 导入时只创建发票，审核通过后才创建业务单据和凭证
+                    insertInputInvoice(row, vendorId, period);
+                    return true;
+                });
+                if (!Boolean.TRUE.equals(okRow)) {
                     errors.add(Map.of("row", row.rowNum, "invoiceNo", row.invoiceNo, "message", "供应商匹配失败"));
                     continue;
                 }
-                String period = row.invoiceDate.format(DateTimeFormatter.ofPattern("yyyyMM"));
-                // P40: 导入时只创建发票，审核通过后才创建业务单据和凭证
-                insertInputInvoice(row, vendorId, period);
                 success++;
-                successPeriods.add(period);
+                successPeriods.add(row.invoiceDate.format(DateTimeFormatter.ofPattern("yyyyMM")));
             } catch (Exception e) {
                 log.warn("处理采购发票行失败 row={}: {}", row.rowNum, e.getMessage());
                 Map<String, Object> err = new LinkedHashMap<>();
@@ -355,7 +373,7 @@ public class InputInvoiceImportService {
         if (!successPeriods.isEmpty()) {
             try {
                 Long agencyId = SecurityUtils.getCurrentAgencyId();
-                Long enterpriseId = SecurityUtils.getCurrentEnterpriseId();
+                Long enterpriseId = EnterpriseContextHolder.get();
                 for (String p : successPeriods) {
                     eventPublisher.publishEvent(
                             new ServiceProgressStageEvent(agencyId, enterpriseId, p, ServiceProgressStageEvent.STAGE_INTAKE));

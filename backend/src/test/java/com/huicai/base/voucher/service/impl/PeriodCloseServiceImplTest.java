@@ -23,10 +23,13 @@ import com.huicai.base.system.entity.Subject;
 import com.huicai.base.system.mapper.SubjectMapper;
 import com.huicai.base.system.service.PeriodService;
 import com.huicai.base.system.service.SubjectService;
+import com.huicai.base.system.util.SecurityUtils;
+import com.huicai.common.event.ServiceProgressStageEvent;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.MockedStatic;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -222,6 +225,27 @@ class PeriodCloseServiceImplTest {
         // 验证 periodService.updateById 被调用, 且状态为小写 closed
         verify(periodService).updateById(argThat(e ->
                 "closed".equals(e.getStatus())));
+    }
+
+    @Test
+    @DisplayName("P162: 批量切换租户后结账事件使用目标企业上下文")
+    void closePeriod_eventUsesTenantContext() {
+        stubFindPeriod(stubPeriod("open"));
+        stubCheckPasses();
+        EnterpriseContextHolder.set(45L);
+
+        try (MockedStatic<SecurityUtils> security = mockStatic(SecurityUtils.class)) {
+            security.when(SecurityUtils::getCurrentAgencyId).thenReturn(7L);
+
+            service.closePeriod("202607", 1L);
+
+            ArgumentCaptor<ServiceProgressStageEvent> event =
+                    ArgumentCaptor.forClass(ServiceProgressStageEvent.class);
+            verify(eventPublisher).publishEvent(event.capture());
+            assertEquals(45L, event.getValue().enterpriseId());
+        } finally {
+            EnterpriseContextHolder.clear();
+        }
     }
 
     // ==================== reopenPeriod ====================

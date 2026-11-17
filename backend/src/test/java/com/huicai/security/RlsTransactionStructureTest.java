@@ -93,9 +93,97 @@ class RlsTransactionStructureTest {
         // isSmallAmountDirectVoucher 同理只读入参。两者无 Mapper 调用。
         EXEMPT.put("AutoGenerationService", "被点名的 classifyType/isSmallAmountDirectVoucher 是 static 纯规则路由，不触表；"
                 + "其读表方法 generateDocThenVoucher 等已在类内各自带事务");
-        // previewInvoices 只解析上传的 Excel 文件，不查库；写方法 confirmImport/importInvoices 已有事务。
-        EXEMPT.put("SalesInvoiceImportService", "被点名的 previewInvoices 仅解析上传文件不触表；写方法已有 @Transactional");
-        EXEMPT.put("InputInvoiceImportService", "被点名的 previewInvoices 仅解析上传文件不触表；写方法已有 @Transactional");
+        // SPEC-P153 更正（2026-11-05）：原理由「写方法已有 @Transactional」为**假**——
+        // 写方法从未有方法级事务，王会计导入发票 500（t_audit_log id=1238）正是被这条
+        // 假豁免掩护的。真实口径：事务挂在 Controller 端点（SalesInvoiceController /
+        // InputInvoiceController 的 preview=readOnly、confirm/import=读写），
+        // 行级容错由服务内 rowTx（REQUIRES_NEW）承担 —— 与本守卫「Service 侧有事务」
+        // 的等价性依赖 Controller 侧事务存在，该面由 ControllerRlsTransactionGuardRealDBTest
+        // 与 SalesInvoiceImportFlowRealDBTest 盯住。
+        EXEMPT.put("SalesInvoiceImportService", "SPEC-P153 更正：事务在 Controller 端点（preview readOnly / confirm 读写），行级 REQUIRES_NEW=rowTx；流程集成锁 SalesInvoiceImportFlowRealDBTest");
+        EXEMPT.put("InputInvoiceImportService", "SPEC-P153 更正：事务在 Controller 端点（与销方同构），行级 REQUIRES_NEW=rowTx");
+    }
+
+    /**
+     * SPEC-P153：🔴 「豁免理由 = 事务在 Controller」的<b>机械校验</b>。
+     *
+     * <p>上面两条 ImportService 豁免的理由声称「事务挂在 Controller 端点」，但 L2
+     * 真库容器是超级用户（RLS 原生豁免）⇒ <b>撤销 Controller 事务后数据仍写得进去</b>
+     * ⇒ 集成测试对这一半根因零鉴别力（本轮实测确认）。若不把该前提做成结构断言，
+     * 豁免理由就是一句可被悄悄推翻的空话 —— 王会计导入 500 正是这么藏回来的。</p>
+     */
+    @Test
+    @DisplayName("SPEC-P153：两条 ImportService 豁免的前提必须为真——导入端点全部挂 @Transactional")
+    void importServiceExemptionPremiseHolds() throws IOException {
+        record Endpoint(String cls, String method) {}
+        List<Endpoint> required = List.of(
+                new Endpoint("SalesInvoiceController", "previewInvoices"),
+                new Endpoint("SalesInvoiceController", "confirmImport"),
+                new Endpoint("SalesInvoiceController", "importInvoices"),
+                new Endpoint("SalesInvoiceController", "batchLinkRedFlush"),
+                new Endpoint("InputInvoiceController", "previewInvoices"),
+                new Endpoint("InputInvoiceController", "confirmImport"),
+                new Endpoint("InputInvoiceController", "importInvoices"));
+
+        List<String> missing = new ArrayList<>();
+        List<Path> allJava;
+        try (Stream<Path> walk = Files.walk(Path.of("src/main/java"))) {
+            allJava = walk.toList();
+        }
+        for (Endpoint ep : required) {
+            Path file = allJava.stream()
+                    .filter(p -> p.getFileName().toString().equals(ep.cls() + ".java"))
+                    .findFirst().orElse(null);
+            org.junit.jupiter.api.Assertions.assertNotNull(file, "找不到 " + ep.cls());
+            String src = stripComments(Files.readString(file, StandardCharsets.UTF_8));
+            if (!methodHasTransactional(src, ep.method()) && !hasClassLevelTransactional(src, ep.cls())) {
+                missing.add(ep.cls() + "#" + ep.method()
+                        + " 缺 @Transactional ⇒ ImportService 豁免理由失效（GUC 不设 ⇒ 导入 500/查重恒 0）");
+            }
+        }
+        assertTrue(missing.isEmpty(), String.join("\n", missing));
+
+        // 🔴 判定逻辑自证（防恒绿）
+        String probeBad = "@RestController\npublic class P {\n    @PostMapping\n    public R<X> doIt(String a) { return null; }\n}\n";
+        org.junit.jupiter.api.Assertions.assertFalse(methodHasTransactional(probeBad, "doIt"),
+                "无 @Transactional 的方法必须判 false（否则本用例恒绿）");
+        String probeGood = "@RestController\npublic class P {\n    @PostMapping\n    @Transactional(readOnly = true)\n    public R<X> doIt(String a) { return null; }\n}\n";
+        org.junit.jupiter.api.Assertions.assertTrue(methodHasTransactional(probeGood, "doIt"),
+                "带 @Transactional 的方法必须判 true");
+        String probeAdjacent = "@RestController\npublic class P {\n    @GetMapping\n    public R<X> other() { return null; }\n    @Transactional\n    @PostMapping\n    public R<X> doIt(String a) { return null; }\n}\n";
+        org.junit.jupiter.api.Assertions.assertTrue(methodHasTransactional(probeAdjacent, "doIt"),
+                "注解紧邻区内跨行匹配必须为 true，且不越界到上一个方法");
+    }
+
+    /**
+     * 行级判定：找到方法定义行（public + 返回类型 + 方法名 + 左括号），
+     * 向上收集紧邻注解区（注释已被 stripComments 剥除、行数保持不变，
+     * {@link #stripCommentsKeepsLineCount} 已自证），判定区含 @Transactional 即为真。
+     */
+    private static boolean methodHasTransactional(String strippedSrc, String name) {
+        String[] lines = strippedSrc.split("\n", -1);
+        java.util.regex.Pattern sig = java.util.regex.Pattern.compile(
+                "^\\s+public\\s+[\\w<>?,.\\[\\]\\s]+\\s" + java.util.regex.Pattern.quote(name) + "\\s*\\(");
+        for (int i = 0; i < lines.length; i++) {
+            if (!sig.matcher(lines[i]).find()) {   // 🔴 find 而非 matches：签名行括号后还有形参，matches 要求整行匹配会恒 miss
+                continue;
+            }
+            for (int j = i - 1; j >= 0; j--) {
+                String t = lines[j].trim();
+                if (t.isEmpty()) {
+                    continue;
+                }
+                if (t.startsWith("@")) {
+                    if (t.startsWith("@Transactional")) {
+                        return true;
+                    }
+                    continue;
+                }
+                break; // 到达上一成员结尾（} 或字段分号）
+            }
+            return false;
+        }
+        return false;
     }
 
     @Test

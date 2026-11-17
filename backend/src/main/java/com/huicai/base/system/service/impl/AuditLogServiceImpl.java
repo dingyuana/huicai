@@ -40,19 +40,43 @@ public class AuditLogServiceImpl implements AuditLogService {
             wrapper.eq("module", module);
         }
         if (StringUtils.hasText(status)) {
-            // t_audit_log 无 status 列（P103 缺陷 3）—— 该条件过去会直接抛 SQL 错。
-            // 审计表用 operation 表达动作、快照表达结果，故此处不再按 status 过滤，
-            // 仅在调用方明确要求时按 operation 近似（如 status=fail 无对应列，忽略）。
-            log.debug("pageLog 忽略 status={}：t_audit_log 无该列", status);
+            // SPEC-P152：status 列已真实存在（V193），过滤转正。
+            // 页端「失败」历史值为 failure，切面写入值为 fail —— 两种都认，
+            // 否则修了列却因口径不一致过滤出 0 行（又一处名实不符）。
+            if ("failure".equals(status)) {
+                wrapper.in("status", "fail", "failure");
+            } else {
+                wrapper.eq("status", status);
+            }
         }
+        // 🔴 日期必须先解析为 LocalDateTime 再进 wrapper：operation_time 是 timestamp 列，
+        // 直接塞 "2026-11-01" 字符串，Postgres 报 operator does not exist:
+        // timestamp >= character varying（2026-11-04 实机坐实；L1/H2 会隐式转换故拦不住，
+        // 属「H2 宽容掩盖真库缺陷」形态）。非法格式直接 400，不静默放宽过滤范围。
         if (StringUtils.hasText(startDate)) {
-            wrapper.ge("operation_time", startDate);
+            wrapper.ge("operation_time", parseDayStart(startDate));
         }
         if (StringUtils.hasText(endDate)) {
-            wrapper.le("operation_time", endDate + " 23:59:59");
+            wrapper.le("operation_time", parseDayEnd(endDate));
         }
         wrapper.orderByDesc("operation_time");
         return auditLogMapper.selectPage(new Page<>(page, size), wrapper);
+    }
+
+    static java.time.LocalDateTime parseDayStart(String date) {
+        try {
+            return java.time.LocalDate.parse(date.trim()).atStartOfDay();
+        } catch (java.time.format.DateTimeParseException e) {
+            throw com.huicai.common.exception.BusinessException.badRequest("开始日期格式非法，应为 yyyy-MM-dd: " + date);
+        }
+    }
+
+    static java.time.LocalDateTime parseDayEnd(String date) {
+        try {
+            return java.time.LocalDate.parse(date.trim()).atTime(23, 59, 59);
+        } catch (java.time.format.DateTimeParseException e) {
+            throw com.huicai.common.exception.BusinessException.badRequest("结束日期格式非法，应为 yyyy-MM-dd: " + date);
+        }
     }
 
     @Override

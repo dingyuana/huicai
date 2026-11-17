@@ -1,11 +1,13 @@
 package com.huicai.common.security;
 
+import com.huicai.common.exception.AccessDeniedEvent;
 import com.huicai.common.response.R;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.servlet.HandlerInterceptor;
@@ -53,10 +55,20 @@ public class PermissionEnforcementInterceptor implements HandlerInterceptor {
      *    要么用可选依赖 —— 塞进 WebMvcConfigurer 的 @Bean 是第三种、通常最糟的选择。</b>
      */
     private final ObjectProvider<PermissionManifest> manifestProvider;
+    /**
+     * 直接注入而非 ObjectProvider：ApplicationEventPublisher 是 {@code prepareBeanFactory}
+     * 注册的 resolvable dependency，<b>每个上下文（含 @WebMvcTest 切片）必有</b>——
+     * GlobalExceptionHandler 注入它跑通 97 个契约测试是实证。而 ObjectProvider 的
+     * {@code getIfAvailable()} 走 beanNamesForType，<b>看不到 resolvable dependency</b>，
+     * 会把「必有」误判成「缺失」⇒ 静默不发布（正是本仓最忌的哑火形态）。
+     */
+    private final ApplicationEventPublisher eventPublisher;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
-    public PermissionEnforcementInterceptor(ObjectProvider<PermissionManifest> manifestProvider) {
+    public PermissionEnforcementInterceptor(ObjectProvider<PermissionManifest> manifestProvider,
+                                            ApplicationEventPublisher eventPublisher) {
         this.manifestProvider = manifestProvider;
+        this.eventPublisher = eventPublisher;
     }
 
     /** 未命中端点的告警计数：按 (METHOD uri 前缀) 聚合，避免刷屏把日志淹掉。 */
@@ -113,6 +125,14 @@ public class PermissionEnforcementInterceptor implements HandlerInterceptor {
             return true;
         }
         log.warn("端点权限拒绝: {} {} 需要={}", request.getMethod(), uri, entry.permission());
+        // 发布审计事件（SPEC-P154 项①：403 落审计）。eventPublisher 恒非空（resolvable
+        // dependency），发布失败也不得影响 403 响应，故 try 兜住。
+        try {
+            eventPublisher.publishEvent(
+                    new AccessDeniedEvent(auth.getName(), entry.permission(), request));
+        } catch (Exception auditEx) {
+            log.warn("403 审计事件发布失败（不影响拒绝响应）: {}", auditEx.getMessage());
+        }
         writeJson(response, R.forbidden(msg));
         return false;
     }

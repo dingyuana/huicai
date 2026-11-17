@@ -1,0 +1,125 @@
+/**
+ * @vitest-environment node
+ *
+ * 🔴 本文件是**源码扫描型**守卫（读 .vue/.ts 源文件做断言），依赖 `node:fs` / `node:path`。
+ * 全局 `environment: 'happy-dom'` 会把 node 内置模块 externalize 成空对象，
+ * 实测 `resolve is not a function` / `readFileSync is not a function` ⇒ 整文件挂掉。
+ * 逐文件切到 node 环境，既修复本文件，也不影响全局配置与其他组件测试。
+ */
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import request from '@/api/request'
+
+/**
+ * SPEC-P136 —— 403 的全局处理（AT-136-8 / G-4）。
+ *
+ * <p>403 是**预期内的业务结果**（当前账号没有该操作权限），不是系统故障 ⇒
+ * 必须用对话框让用户确认知悉，而不是红色 toast（暗示「系统出错了」）。
+ */
+
+vi.mock('element-plus', () => ({
+  ElMessage: { success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() },
+  ElMessageBox: { alert: vi.fn().mockResolvedValue(undefined) },
+}))
+
+// SPEC-P152：request.ts 现会向 errorReporter 上报 5xx/网络错误；
+// 本文件只验 403/上报的调用面，用 spy 替身即可（真实行为在 errorReporter.test.ts 验）。
+const reportErrorSpy = vi.hoisted(() => vi.fn())
+vi.mock('@/utils/errorReporter', () => ({
+  reportError: reportErrorSpy,
+}))
+
+const ROOT = resolve(__dirname, '../..')
+
+/** axios 的拦截器栈是运行时结构，类型未公开 ⇒ 取 rejected 处理器直接驱动。 */
+const rejected = (request.interceptors.response as any).handlers[0].rejected as (
+  e: any,
+) => Promise<any>
+
+const forbidden = () => ({
+  response: { status: 403, data: { code: 403, msg: '权限不足：该操作需要权限 voucher:audit' } },
+})
+
+let clock = 0
+
+describe('SPEC-P136 request.ts 403 处理', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    // 请求拦截器内有 800ms 的弹窗合并窗口（模块级时间戳）⇒ 用单调递增的假时钟
+    // 保证每个用例都落在窗口之外，否则会出现「测试互相吞掉弹窗」的顺序依赖。
+    vi.useFakeTimers()
+    clock += 5000
+    vi.setSystemTime(new Date(2026, 9, 19, 0, 0, 0).getTime() + clock)
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('AT-136-8 forbiddenShowsDialogNotToast：403 → 弹对话框，且不再弹红色 toast', async () => {
+    const err = forbidden()
+    await expect(rejected(err)).rejects.toBe(err)
+
+    expect(ElMessageBox.alert).toHaveBeenCalledTimes(1)
+    expect(ElMessage.error).not.toHaveBeenCalled()
+    // 文案要能指导用户（说明是权限问题），而不是「请求失败」这类无行动指引的话
+    expect(String(vi.mocked(ElMessageBox.alert).mock.calls[0][0])).toContain('权限')
+  })
+
+  it('并发/连续 403 只弹一次（800ms 合并窗口）', async () => {
+    const err = forbidden()
+    await rejected(err).catch(() => undefined)
+    await rejected(err).catch(() => undefined)
+    expect(ElMessageBox.alert).toHaveBeenCalledTimes(1)
+  })
+
+  it('G-4：src/api/request.ts 的 403 分支不得出现 ElMessage.error（源码断言）', () => {
+    const src = readFileSync(resolve(ROOT, 'src/api/request.ts'), 'utf-8')
+    const start = src.indexOf('if (status === 403)')
+    expect(start).toBeGreaterThanOrEqual(0)
+    const end = src.indexOf('return Promise.reject(error)', start)
+    expect(end).toBeGreaterThan(start)
+    const branch = src.slice(start, end)
+    expect(branch).not.toContain('ElMessage.error')
+    expect(branch).toContain('showForbiddenDialog')
+  })
+
+  // ===== SPEC-P152 错误上报接线 =====
+
+  it('5xx → reportError 被调用（服务端代码错误前端也留线索）', async () => {
+    const err = {
+      config: { method: 'get', url: '/v1/report/balance' },
+      response: { status: 500, data: { msg: '系统繁忙，请稍后重试' } },
+    }
+    await rejected(err).catch(() => undefined)
+    expect(reportErrorSpy).toHaveBeenCalledTimes(1)
+    const payload = reportErrorSpy.mock.calls[0][0]
+    expect(payload.level).toBe('ERROR')
+    expect(payload.message).toContain('[http:500]')
+    expect(payload.message).toContain('/v1/report/balance')
+  })
+
+  it('4xx 业务错误不上报（服务端已有日志，前端灌库无益）', async () => {
+    const err = {
+      config: { method: 'post', url: '/v1/voucher' },
+      response: { status: 400, data: { msg: '借贷不平衡' } },
+    }
+    await rejected(err).catch(() => undefined)
+    expect(ElMessage.error).toHaveBeenCalled()
+    expect(reportErrorSpy).not.toHaveBeenCalled()
+  })
+
+  it('网络中断（无 response）→ 上报 network 级错误', async () => {
+    const err = { config: { method: 'get', url: '/v1/enterprise/current-period' }, message: 'Network Error' }
+    await rejected(err).catch(() => undefined)
+    expect(reportErrorSpy).toHaveBeenCalledTimes(1)
+    expect(reportErrorSpy.mock.calls[0][0].message).toContain('[network]')
+  })
+
+  it('403/401 路径不上报（预期内业务结果，非故障）', async () => {
+    await rejected(forbidden()).catch(() => undefined)
+    expect(reportErrorSpy).not.toHaveBeenCalled()
+  })
+})

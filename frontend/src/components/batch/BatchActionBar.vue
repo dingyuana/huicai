@@ -2,9 +2,22 @@
 /**
  * P67 批量操作统一按钮条（见 docs/development/frontend-batch-ops-convention.md）。
  * 启用语义：every() —— 全部选中行都支持该操作才启用，杜绝静默子集执行。
+ *
+ * SPEC-P136：在状态矩阵之外增加**权限门禁**。
+ *
+ * <p>无权限时**不用原生 disabled**：原生 disabled 的按钮不派发 click，
+ * 用户点不出任何解释（只能靠 hover tooltip）。改为「视觉禁用 + 仍可点击」，
+ * 由 useBatchOperation.run 弹窗说明缺少哪个权限码。
  */
 import { computed } from 'vue'
+import { useAuthStore } from '@/stores/auth.store'
 import type { BatchActionDef } from '@/composables/useBatchOperation'
+import {
+  actionTooltip,
+  isNativelyDisabled,
+  isPermissionLocked,
+  type ActionGate,
+} from './batchActionPermission'
 
 const props = withDefaults(
   defineProps<{
@@ -21,19 +34,29 @@ const props = withDefaults(
 
 const emit = defineEmits<{ (e: 'action', key: string): void; (e: 'clear'): void }>()
 
+const authStore = useAuthStore()
+
 const selectedCount = computed(() => props.rows.length)
 
-const enabledOf = (action: BatchActionDef) => {
-  if (selectedCount.value === 0 || selectedCount.value > props.maxCount) return false
+const gateOf = (action: BatchActionDef): ActionGate => {
   const statusOf = props.statusOf ?? ((row: any) => row.status)
-  return props.rows.every((r) => (props.statusMatrix[statusOf(r)] || []).includes(action.key))
+  return {
+    action,
+    selectedCount: selectedCount.value,
+    maxCount: props.maxCount,
+    statusOk: props.rows.every((r) =>
+      (props.statusMatrix[statusOf(r)] || []).includes(action.key),
+    ),
+    hasPermission: (perm: string) => authStore.hasPermission(perm),
+  }
 }
 
-const tooltipOf = (action: BatchActionDef) => {
-  if (selectedCount.value === 0) return '请先勾选记录'
-  if (selectedCount.value > props.maxCount) return `单次最多批量操作 ${props.maxCount} 条`
-  return `当前选中记录不支持「${action.label}」`
-}
+const lockedOf = (action: BatchActionDef) =>
+  isPermissionLocked(action, (perm: string) => authStore.hasPermission(perm))
+
+const disabledOf = (action: BatchActionDef) => isNativelyDisabled(gateOf(action))
+
+const tooltipOf = (action: BatchActionDef) => actionTooltip(gateOf(action))
 </script>
 
 <template>
@@ -44,7 +67,7 @@ const tooltipOf = (action: BatchActionDef) => {
     <el-tooltip
       v-for="ba in actions"
       :key="ba.key"
-      :disabled="enabledOf(ba)"
+      :disabled="!tooltipOf(ba)"
       :content="tooltipOf(ba)"
       placement="top"
     >
@@ -53,7 +76,9 @@ const tooltipOf = (action: BatchActionDef) => {
           :type="ba.type || 'primary'"
           plain
           size="small"
-          :disabled="!enabledOf(ba)"
+          :disabled="disabledOf(ba)"
+          :aria-disabled="lockedOf(ba)"
+          :class="{ 'is-permission-locked': lockedOf(ba) }"
           :data-test="`batch-action-${ba.key}`"
           @click="emit('action', ba.key)"
         >{{ ba.label }}</el-button>
@@ -69,5 +94,11 @@ const tooltipOf = (action: BatchActionDef) => {
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
+}
+
+/* SPEC-P136：无权限的按钮视觉上禁用，但保留可点击以给出解释 */
+.batch-action-bar :deep(.is-permission-locked) {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 </style>

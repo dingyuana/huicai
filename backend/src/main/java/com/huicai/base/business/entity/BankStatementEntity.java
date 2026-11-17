@@ -21,22 +21,26 @@ public class BankStatementEntity extends BaseEntity {
     private String counterAccount;
     private BigDecimal amount;
     private String summary;
-    @TableField(exist = false)
+    @TableField("purpose")
     private String purpose;
-    @TableField(exist = false)
+    @TableField("transaction_remark")
     private String transactionRemark;
     private String externalNo;
     private String rawData;
     private Long matchedJournalId;
     private String matchStatus;
 
-    // P1 业务分类字段 (V17) — DB 无对应列，仅内存缓存
+    // P1 业务分类字段 (V17)
     @TableField(exist = false)
-    private String direction;             // 业务方向 in/out
-    @TableField(exist = false)
-    private String batchId;               // 导入批号
-    @TableField(exist = false)
-    private Long ruleId;                  // 命中规则 ID
+    private String direction;             // 业务方向 in/out — 由 txType 严格派生，刻意不建列
+    /** 导入批号 — V194 真实列（导入批次追溯） */
+    @TableField("batch_id")
+    private String batchId;
+    /** 命中的分类规则ID — V194 真实列（分类结果溯源到规则） */
+    @TableField("rule_id")
+    private Long ruleId;
+    // 🔴 SPEC-P153 遗留登记：AI 分类溯源 3 字段按「AI 项目除外」裁定暂缓，
+    // 仍为幽灵字段（写了不落库）；AI 侧整改时与列/读回消费方同批转正。
     @TableField(exist = false)
     private Integer aiConfidence;         // AI 置信度 0-100
     @TableField(exist = false)
@@ -55,21 +59,26 @@ public class BankStatementEntity extends BaseEntity {
     private String classification;        // 业务分类（DB 列名 category）
     @StatusChangeable(entity = "BANK_STATEMENT", fieldName = "reviewStatus")
     private String reviewStatus;          // 出纳确认状态
-    @TableField(exist = false)
-    private Long reviewedBy;              // 审核人
-    @TableField(exist = false)
-    private LocalDateTime reviewedAt;     // 审核时间
+    /** 确认/复核人 — V194 真实列（自动制证以复核人身份发起，此前恒 null） */
+    @TableField("reviewed_by")
+    private Long reviewedBy;
+    /** 确认/复核时间 — V194 真实列 */
+    @TableField("reviewed_at")
+    private LocalDateTime reviewedAt;
 
-    // V22: 自动生成单据与凭证
-    @TableField(exist = false)
-    private Long generatedDocId;          // 生成的业务单据 ID
-    @TableField(exist = false)
-    private Long generatedVoucherId;      // 生成的会计凭证 ID
-    @TableField(exist = false)
-    private LocalDateTime generatedAt;    // 生成时间
+    // V22: 自动生成单据与凭证 — V194 全部转真实列（流水→单→证 溯源闭环）
+    /** 生成的业务单据ID */
+    @TableField("generated_doc_id")
+    private Long generatedDocId;
+    /** 生成的会计凭证ID */
+    @TableField("generated_voucher_id")
+    private Long generatedVoucherId;
+    /** 生成时间 */
+    @TableField("generated_at")
+    private LocalDateTime generatedAt;
 
-    // 非持久化: 用于前端展示凭证号/单据号
-    @TableField(exist = false)
+    /** 生成的凭证号（流水行直接展示）— V194 真实列 */
+    @TableField("generated_voucher_no")
     private String generatedVoucherNo;
 
     /* P110 Phase 3: t_bank_statement.generated_doc_no 真实存在，
@@ -80,15 +89,10 @@ public class BankStatementEntity extends BaseEntity {
     @TableField(fill = FieldFill.INSERT)
     private LocalDateTime importedAt;
 
-    // 覆盖 BaseEntity 字段，标记为不存在于 DB
-    @TableField(exist = false)
-    private Long createdBy;
-    @TableField(exist = false)
-    private LocalDateTime createdAt;
-    @TableField(exist = false)
-    private Long updatedBy;
-    @TableField(exist = false)
-    private LocalDateTime updatedAt;
+    // SPEC-P153：删除对 BaseEntity created_by/created_at/updated_by/updated_at 的
+    // exist=false 覆盖。四列真库全部存在（created_by V178 补、updated_by 更早、
+    // created_at/updated_at V194 补）；P117 修 BaseEntity 时漏了本表，
+    // 导致 setReviewedBy/setCreatedBy 全不落库。
 
     @TableLogic
     private Integer deleted;

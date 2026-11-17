@@ -46,9 +46,10 @@
           </template>
         </el-table-column>
         <el-table-column prop="acquisitionDate" label="购置日期" width="120" />
-        <el-table-column label="操作" width="240" fixed="right">
+        <el-table-column label="操作" width="300" fixed="right">
           <template #default="{ row }">
             <el-button text type="primary" @click="openEdit(row)">编辑</el-button>
+            <el-button text type="success" @click="openChange(row)">变动</el-button>
             <el-button text type="warning" @click="onDepreciateOne(row)">计提</el-button>
             <el-popconfirm title="确认删除?" @confirm="onDelete(row)">
               <template #reference>
@@ -105,6 +106,64 @@
         <el-button type="primary" @click="onSubmit">确定</el-button>
       </template>
     </el-dialog>
+
+    <!-- 资产变动对话框（V1.106 D-4 收尾：VALUE_ADJUST 调整原值 / DEPT_TRANSFER 部门转移；
+         STATUS_CHANGE/DEPRECIATION 后端 400 拒绝，不提供入口） -->
+    <el-dialog v-model="changeDialogVisible" :title="`资产变动 - ${changeAsset?.assetName || ''}`" width="720px">
+      <el-form :model="changeForm" label-width="100px" :rules="changeRules" ref="changeFormRef">
+        <el-form-item label="变动类型" prop="changeType">
+          <el-radio-group v-model="changeForm.changeType" @change="onChangeTypeSwitch">
+            <el-radio-button value="VALUE_ADJUST">调整原值</el-radio-button>
+            <el-radio-button value="DEPT_TRANSFER">部门转移</el-radio-button>
+          </el-radio-group>
+        </el-form-item>
+        <el-form-item v-if="changeForm.changeType === 'VALUE_ADJUST'" label="调整金额" prop="amount">
+          <el-input-number v-model="changeForm.amount" :precision="2" style="width:100%" />
+          <div class="change-amount-hint">正数为调增，负数为调减；调减后净值不得为负</div>
+        </el-form-item>
+        <el-form-item v-if="changeForm.changeType === 'DEPT_TRANSFER'" label="转入部门" prop="deptId">
+          <el-tree-select
+            v-model="changeForm.deptId"
+            :data="deptTree"
+            :props="({ label: 'name', value: 'id' } as any)"
+            node-key="id"
+            check-strictly
+            style="width:100%"
+          />
+        </el-form-item>
+        <el-form-item label="变动日期" prop="changeDate">
+          <el-date-picker v-model="changeForm.changeDate" value-format="YYYY-MM-DD" style="width:100%" />
+        </el-form-item>
+        <el-form-item label="备注">
+          <el-input v-model="changeForm.remark" type="textarea" :rows="2" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="changeDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="changeSubmitting" @click="onChangeSubmit">提交变动</el-button>
+      </template>
+
+      <el-divider>变动流水</el-divider>
+      <el-table :data="changeList" v-loading="changeListLoading" size="small" border>
+        <el-table-column label="类型" width="100" align="center">
+          <template #default="{ row }">{{ CHANGE_TYPE_MAP[row.changeType] || row.changeType }}</template>
+        </el-table-column>
+        <el-table-column label="变动前" width="110" align="right">
+          <template #default="{ row }">{{ row.beforeValue != null ? fmtAmount(row.beforeValue) : '—' }}</template>
+        </el-table-column>
+        <el-table-column label="变动后" width="110" align="right">
+          <template #default="{ row }">{{ row.afterValue != null ? fmtAmount(row.afterValue) : '—' }}</template>
+        </el-table-column>
+        <el-table-column prop="changeDate" label="日期" width="110" />
+        <el-table-column label="凭证" width="130">
+          <template #default="{ row }">
+            <span v-if="row.voucherNo">{{ row.voucherNo }}</span>
+            <span v-else class="change-voucher-empty">—</span>
+          </template>
+        </el-table-column>
+        <el-table-column prop="remark" label="备注" min-width="120" show-overflow-tooltip />
+      </el-table>
+    </el-dialog>
   </div>
 </template>
 
@@ -113,6 +172,7 @@ import { onMounted, reactive, ref } from 'vue'
 import { ElMessage, type FormInstance } from 'element-plus'
 import dayjs from 'dayjs'
 import { resolveDefaultPeriod } from '@/utils/period'
+import { getDeptTree } from '@/api/modules/system'
 import {
   pageAssetCard,
   createAssetCard,
@@ -121,6 +181,8 @@ import {
   depreciatePeriod,
   depreciateOne,
   listAssetCategory,
+  createAssetChange,
+  listAssetChanges,
 } from '@/api/modules/asset'
 
 const STATUS_OPTIONS = [
@@ -222,9 +284,117 @@ const onDepreciateOne = async (row: any) => {
   fetchData()
 }
 
+// ─── 资产变动 ───
+const CHANGE_TYPE_MAP: Record<string, string> = {
+  VALUE_ADJUST: '调整原值',
+  DEPT_TRANSFER: '部门转移',
+}
+
+const changeDialogVisible = ref(false)
+const changeSubmitting = ref(false)
+const changeFormRef = ref<FormInstance>()
+const changeAsset = ref<any>(null)
+const changeForm = reactive<any>({})
+const changeList = ref<any[]>([])
+const changeListLoading = ref(false)
+const deptTree = ref<any[]>([])
+
+const changeRules = {
+  changeType: [{ required: true, message: '请选择变动类型', trigger: 'change' }],
+  changeDate: [{ required: true, message: '请选择变动日期', trigger: 'change' }],
+  amount: [
+    { required: true, message: '请输入调整金额', trigger: 'blur' },
+    {
+      validator: (_rule: any, value: any, callback: (e?: Error) => void) => {
+        if (value === 0) callback(new Error('调整金额不能为 0'))
+        else callback()
+      },
+      trigger: 'blur',
+    },
+  ],
+  deptId: [{ required: true, message: '请选择转入部门', trigger: 'change' }],
+}
+
+const onChangeTypeSwitch = () => {
+  // 类型切换时清另一形态的字段，避免脏值随提交送出（后端按类型分别校验）
+  if (changeForm.changeType === 'VALUE_ADJUST') {
+    changeForm.deptId = undefined
+  } else {
+    changeForm.amount = undefined
+  }
+  changeFormRef.value?.clearValidate()
+}
+
+const openChange = async (row: any) => {
+  changeAsset.value = row
+  Object.assign(changeForm, {
+    changeType: 'VALUE_ADJUST',
+    changeDate: dayjs().format('YYYY-MM-DD'),
+    amount: undefined,
+    deptId: undefined,
+    remark: '',
+  })
+  changeDialogVisible.value = true
+  loadDeptTree()
+  loadChangeList(row.id)
+}
+
+const loadDeptTree = async () => {
+  if (deptTree.value.length) return
+  try {
+    deptTree.value = await getDeptTree()
+  } catch {
+    deptTree.value = []
+  }
+}
+
+const loadChangeList = async (assetId: number) => {
+  changeListLoading.value = true
+  try {
+    changeList.value = (await listAssetChanges(assetId)) || []
+  } finally {
+    changeListLoading.value = false
+  }
+}
+
+const onChangeSubmit = async () => {
+  if (!changeFormRef.value || !changeAsset.value) return
+  await changeFormRef.value.validate(async (valid) => {
+    if (!valid) return
+    changeSubmitting.value = true
+    try {
+      const changeId = await createAssetChange({
+        assetId: changeAsset.value.id,
+        changeType: changeForm.changeType,
+        changeDate: changeForm.changeDate,
+        amount: changeForm.amount,
+        deptId: changeForm.deptId,
+        remark: changeForm.remark,
+      })
+      ElMessage.success(`变动已登记，凭证 ADJ-${changeId} 已生成（草稿，可在凭证管理过账）`)
+      loadChangeList(changeAsset.value.id)
+      fetchData()
+    } finally {
+      changeSubmitting.value = false
+    }
+  })
+}
+
 onMounted(async () => {
   depreciationPeriod.value = await resolveDefaultPeriod()
   loadCategories()
   fetchData()
 })
 </script>
+
+<style scoped>
+.change-amount-hint {
+  width: 100%;
+  font-size: 12px;
+  color: #909399;
+  line-height: 1.6;
+}
+.change-voucher-empty {
+  color: #c0c4cc;
+}
+</style>

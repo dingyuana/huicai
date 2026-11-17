@@ -17,8 +17,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * SPEC-P120：`BatchOperationController` 的角色守卫。
  *
  * <h2>为什么需要它</h2>
- * 4 个端点当前<b>全是 501 未实现桩</b>（P107 D3 为避免假成功而显式禁用），
- * 所以<b>今天并无越权漏洞</b> —— 会计调这个端点只会拿到 501。
+ * 4 个端点此前<b>全是 501 未实现桩</b>（P107 D3 为避免假成功而显式禁用）；
+ * P162 接入真实状态机后，端点必须继续同时受角色和目标企业归属校验保护。
  *
  * <p>但本 SPEC 在修复 `EnterpriseController` 时<b>漏扫了同功能域的本控制器</b>，
  * 一度把它记成「会计仍可跨客户批量结账/审核」。实为过度断言，
@@ -26,9 +26,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * 别因为「没有守卫」就自动推导「可被打」。
  *
  * <h2>本守卫的价值</h2>
- * 这些端点<b>终将实现</b>（REQ-2026-134 / P107 D3 只是暂禁）。届时授权是
- * 最容易漏的一环 —— 本守卫把「端点必须有角色校验」钉成机械不变量：
- * <b>实现放开而忘了加守卫 ⇒ 立刻红</b>。
+ * 这些端点已接入现有状态机。守卫把「端点必须有角色校验和目标企业归属校验」
+ * 钉成机械不变量，防止后续新增/修改时漏掉代理边界。
  */
 @DisplayName("SPEC-P120：批量操作端点角色守卫")
 class BatchOperationControllerGuardStructureTest {
@@ -52,18 +51,17 @@ class BatchOperationControllerGuardStructureTest {
             // 取该方法体（按大括号配平）
             String body = methodBody(src, openBraceAfter(src, m.end()));
 
-            boolean guarded = body.contains("roleGuard.")
-                    || body.contains("requireAgencyAdmin")
-                    || body.contains("requireVisibleEnterprise")
-                    || body.contains("resolveVisibleEnterpriseIds")
-                    || body.contains("@PreAuthorize");
-            if (!guarded) {
+            int roleCheck = body.indexOf("requireAgencyAdmin");
+            int enterpriseCheck = body.indexOf("requireVisibleEnterprise");
+            int delegation = body.indexOf("return R.ok(");
+            if (roleCheck < 0 || enterpriseCheck < 0 || delegation < 0
+                    || roleCheck > enterpriseCheck || enterpriseCheck > delegation) {
                 unguarded.add(path);
             }
         }
 
         assertTrue(unguarded.isEmpty(),
-                "以下批量操作端点未接入角色守卫 —— 实现放开时即成为越权入口：\n  "
+                "以下端点缺少按顺序执行的角色/企业归属守卫：\n  "
                         + String.join("\n  ", unguarded));
     }
 
@@ -82,21 +80,26 @@ class BatchOperationControllerGuardStructureTest {
     }
 
     @Test
-    @DisplayName("三处仍未实现的 501 必须保留 —— 不得为了让前端「看起来能用」而恢复假成功")
-    void notImplementedStubMustRemainFailLoud() throws Exception {
-        // 与 BatchServiceNotImplementedTest 呼应：那里锁 Service 行为，
-        // 这里锁控制器级不变量。两个层次任一被破坏都会被发现。
-        assertTrue(read(CONTROLLER).contains("class BatchOperationController"),
-                "文件路径/类名已变，本守卫的锚点失效");
-
-        // 控制器本身不 return R.ok(...) 之外的成功包装 —— 由 Service 抛 501，
-        // 控制器不得捕获后转成成功响应。
+    @DisplayName("每个端点都先校验角色与企业归属，不吞掉服务层失败")
+    void everyEndpointChecksEnterpriseOwnershipAndPropagatesFailures() throws Exception {
         String src = read(CONTROLLER);
+        Matcher m = Pattern.compile("@PostMapping\\(\"([^\"]+)\"\\)").matcher(src);
+        List<String> missingOwnershipGuard = new ArrayList<>();
+        while (m.find()) {
+            String path = m.group(1);
+            String body = methodBody(src, openBraceAfter(src, m.end()));
+            if (!body.contains("requireVisibleEnterprise")) {
+                missingOwnershipGuard.add(path);
+            }
+        }
+        assertTrue(missingOwnershipGuard.isEmpty(),
+                "以下端点未校验目标企业属于当前代理：\n  "
+                        + String.join("\n  ", missingOwnershipGuard));
+
         assertTrue(!src.contains("catch (BusinessException"),
-                "控制器不得捕获 BatchOperation 的 BusinessException —— "
-                        + "那会把 501 假成功包装成 200，是本 SPEC 明令禁止的假成功");
+                "控制器不得吞掉业务异常并包装成成功响应");
         assertTrue(!src.contains("try {"),
-                "控制器不得用 try 包裹批量调用 —— 同上，会吞噬 fail-loud");
+                "控制器不得用 try 包裹批量调用并隐藏失败");
     }
 
     @Test

@@ -1,6 +1,7 @@
 package com.huicai.sme.tax.service.impl;
 
 import com.huicai.base.system.service.VoucherTypeService;
+import com.huicai.base.masterdata.entity.EmployeeEntity;
 import com.huicai.sme.tax.dto.TaxDeclarationCreateDTO;
 import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
@@ -32,6 +33,8 @@ import com.huicai.base.business.mapper.InputInvoiceMapper;
 import com.huicai.base.business.mapper.OutputInvoiceMapper;
 import com.huicai.sme.tax.mapper.TaxDeclarationMapper;
 import com.huicai.sme.tax.mapper.TaxTypeMapper;
+import com.huicai.sme.tax.mapper.TaxBurdenConfigMapper;
+import com.huicai.sme.tax.entity.TaxBurdenConfigEntity;
 import com.huicai.sme.tax.service.TaxService;
 import com.huicai.base.business.service.OutputInvoiceStateMachineService;
 import com.huicai.base.business.util.TemplateMatcher;
@@ -58,6 +61,7 @@ import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -90,6 +94,15 @@ public class TaxServiceImpl implements TaxService {
     private final ApplicationEventPublisher eventPublisher; // P79：FILING 节点推进事件
 
     private final VoucherTypeService voucherTypeService;
+
+    /** SPEC-P156：税负预警阈值配置（D-3） */
+    private final TaxBurdenConfigMapper taxBurdenConfigMapper;
+
+    /** SPEC-P156：企业所得税预缴取利润表口径（复用报表服务，不建平行体系） */
+    private final com.huicai.base.report.service.ReportService reportService;
+
+    /** SPEC-P158：小微从业人数条件取期末在职员工数（t_employee，RLS 自动滤租户） */
+    private final com.huicai.base.masterdata.mapper.EmployeeMapper employeeMapper;
     // ========== 税种 ==========
     @Override
     public IPage<TaxTypeEntity> pageQueryTaxType(String keyword, Integer current, Integer size) {
@@ -1393,5 +1406,206 @@ public class TaxServiceImpl implements TaxService {
         }
         log.info("{} 完成: 成功={}, 失败={}", actionLabel, success.size(), failure.size());
         return new BatchOperationResult(success, failure);
+    }
+
+    // ==================== SPEC-P156：P1-1 税务申报收尾 ====================
+
+    @Override
+    @Transactional(readOnly = true)
+    public void exportVatDeclaration(String period, jakarta.servlet.http.HttpServletResponse response)
+            throws java.io.IOException {
+        validatePeriod(period);
+        Map<String, Object> vat = calculateVat(period);
+        AppendixIResponse appI = appendixI(period, null);
+        AppendixIIResponse appII = appendixII(period, null);
+
+        cn.hutool.poi.excel.ExcelWriter writer = cn.hutool.poi.excel.ExcelUtil.getWriter(true);
+        response.setContentType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+        String fileName = "增值税申报表_" + period;
+        response.setHeader("Content-Disposition", "attachment;filename="
+                + java.net.URLEncoder.encode(fileName, java.nio.charset.StandardCharsets.UTF_8) + ".xlsx");
+        try {
+            int row = 0;
+            // ── 段1：增值税汇总 ──
+            writer.writeCellValue(0, row++, "增值税申报表（" + period + "）");
+            writer.writeCellValue(0, row, "销项税额");
+            writer.writeCellValue(1, row, vat.get("outputTax"));
+            row++;
+            writer.writeCellValue(0, row, "进项税额");
+            writer.writeCellValue(1, row, vat.get("inputTax"));
+            row++;
+            writer.writeCellValue(0, row, "应纳增值税");
+            writer.writeCellValue(1, row, vat.get("payableTax"));
+            row++;
+            writer.writeCellValue(0, row, "附加税(12%)");
+            writer.writeCellValue(1, row, vat.get("surcharge"));
+            row++;
+            writer.writeCellValue(0, row, "合计应纳");
+            writer.writeCellValue(1, row, vat.get("totalPayable"));
+            if (vat.get("note") != null) {
+                writer.writeCellValue(2, row, String.valueOf(vat.get("note")));
+            }
+            row += 2;
+
+            // ── 段2：附表一（销项，按客户+税率）──
+            writer.writeCellValue(0, row++, "附表一：销项（按客户+税率）");
+            writer.writeCellValue(0, row, "客户");
+            writer.writeCellValue(1, row, "税率");
+            writer.writeCellValue(2, row, "销售额(不含税)");
+            writer.writeCellValue(3, row, "销项税额");
+            writer.writeCellValue(4, row, "价税合计");
+            row++;
+            for (AppendixIRow r : appI.getRows()) {
+                writer.writeCellValue(0, row, r.customerName());
+                writer.writeCellValue(1, row, r.rate());
+                writer.writeCellValue(2, row, r.salesAmount());
+                writer.writeCellValue(3, row, r.taxAmount());
+                writer.writeCellValue(4, row, r.totalAmount());
+                row++;
+            }
+            writer.writeCellValue(0, row, "合计");
+            writer.writeCellValue(2, row, appI.getTotalSalesAmount());
+            writer.writeCellValue(3, row, appI.getTotalTaxAmount());
+            writer.writeCellValue(4, row, appI.getTotalAmount());
+            row += 2;
+
+            // ── 段3：附表二（进项）──
+            writer.writeCellValue(0, row++, "附表二：进项（按供应商+税率）");
+            writer.writeCellValue(0, row, "供应商");
+            writer.writeCellValue(1, row, "税率");
+            writer.writeCellValue(2, row, "金额(不含税)");
+            writer.writeCellValue(3, row, "税额");
+            writer.writeCellValue(4, row, "价税合计");
+            row++;
+            for (AppendixIIRow r : appII.getRows()) {
+                writer.writeCellValue(0, row, r.vendorName());
+                writer.writeCellValue(1, row, r.rate());
+                writer.writeCellValue(2, row, r.amountExTax());
+                writer.writeCellValue(3, row, r.taxAmount());
+                writer.writeCellValue(4, row, r.totalAmount());
+                row++;
+            }
+            writer.writeCellValue(0, row, "合计");
+            writer.writeCellValue(2, row, appII.getTotalAmountExTax());
+            writer.writeCellValue(3, row, appII.getTotalTaxAmount());
+            writer.writeCellValue(4, row, "其中可抵扣: " + appII.getDeductibleTax());
+            row++;
+            writer.flush(response.getOutputStream());
+        } finally {
+            writer.close();
+        }
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Map<String, Object> calculateCit(String period) {
+        validatePeriod(period);
+        Map<String, Object> income = reportService.incomeStatement(period);
+        // 企业所得税按累计口径预缴申报（季度申报取累计利润总额）
+        BigDecimal cumulativeProfit = toBigDecimal(income.get("cumulativeProfit"));
+        if (cumulativeProfit.compareTo(BigDecimal.ZERO) <= 0) {
+            Map<String, Object> r = new LinkedHashMap<>();
+            r.put("period", period);
+            r.put("cumulativeProfit", cumulativeProfit);
+            r.put("taxableIncome", BigDecimal.ZERO);
+            r.put("taxRate", BigDecimal.ZERO);
+            r.put("estimatedTax", BigDecimal.ZERO);
+            r.put("note", "累计利润总额为 " + cumulativeProfit.stripTrailingZeros().toPlainString()
+                    + "，无需预缴（亏损或持平）");
+            return r;
+        }
+
+        // 预缴税率档：三条件 AND —— 累计利润≤300万 且 从业≤300人 且 资产≤5000万 → 小型微利 5%
+        // （2.5%×2 政策延续口径）；任一条件超限 → 25% 标准档，note 点名挡路条件。
+        // 🔴 SPEC-P158（2026-11-09 用户裁定开工）：三个条件全部实测——
+        //   从业人数 = 期末在职员工数（t_employee deleted=0 AND is_active=true）；
+        //   资产总额 = 资产负债表期末资产总计（复用报表服务）。
+        // ⚠️ 均为「期末值」近似，非税法官方「季度平均值」口径（系统未保留期末快照历史，
+        //   季度均值不可回算，SPEC-P158 登记遗留）；仍是「测算」非「申报定值」（八类红线）。
+        java.util.List<String> exceeded = new java.util.ArrayList<>();
+        if (cumulativeProfit.compareTo(new BigDecimal("3000000")) > 0) {
+            exceeded.add("累计利润 " + cumulativeProfit.stripTrailingZeros().toPlainString() + " 超 300 万");
+        }
+        Long headcount = employeeMapper.selectCount(new LambdaQueryWrapper<EmployeeEntity>()
+                .eq(EmployeeEntity::getDeleted, 0)
+                .eq(EmployeeEntity::getIsActive, true));
+        if (headcount != null && headcount > 300) {
+            exceeded.add("从业人数 " + headcount + " 超 300 人");
+        }
+        BigDecimal totalAssets = toBigDecimal(reportService.balanceSheet(period).get("totalAssets"));
+        if (totalAssets.compareTo(new BigDecimal("50000000")) > 0) {
+            exceeded.add("资产总额 " + totalAssets.stripTrailingZeros().toPlainString() + " 超 5000 万");
+        }
+        boolean smallMicro = exceeded.isEmpty();
+        BigDecimal rate = smallMicro ? new BigDecimal("0.05") : new BigDecimal("0.25");
+        BigDecimal estimatedTax = cumulativeProfit.multiply(rate).setScale(2, RoundingMode.HALF_UP);
+
+        Map<String, Object> r = new LinkedHashMap<>();
+        r.put("period", period);
+        r.put("cumulativeProfit", cumulativeProfit);
+        r.put("taxableIncome", cumulativeProfit);
+        r.put("taxRate", rate);
+        r.put("estimatedTax", estimatedTax);
+        r.put("smallMicro", smallMicro);
+        r.put("headcount", headcount);
+        r.put("totalAssets", totalAssets);
+        r.put("note", smallMicro
+                ? "按小型微利 5% 测算（利润≤300万 且 从业≤300人 且 资产≤5000万；"
+                  + "从业/资产取期末值，非官方季度平均值口径）"
+                : "按标准 25% 测算——" + String.join("；", exceeded)
+                  + "（从业/资产取期末值，非官方季度平均值口径）");
+        return r;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public TaxBurdenConfigEntity getBurdenConfig(String taxType) {
+        String t = (taxType == null || taxType.isBlank()) ? "VAT" : taxType;
+        TaxBurdenConfigEntity cfg = taxBurdenConfigMapper.selectOne(
+                new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<TaxBurdenConfigEntity>()
+                        .eq(TaxBurdenConfigEntity::getTaxType, t)
+                        .last("LIMIT 1"));
+        if (cfg == null) {
+            // 未配置 → 返回系统默认 3% 的虚拟行（不落库）
+            cfg = new TaxBurdenConfigEntity();
+            cfg.setTaxType(t);
+            cfg.setThresholdRate(TaxBurdenConfigEntity.DEFAULT_BURDEN_THRESHOLD);
+            cfg.setEnabled(Boolean.TRUE);
+            cfg.setRemark("系统默认（未配置）");
+        }
+        return cfg;
+    }
+
+    @Override
+    public TaxBurdenConfigEntity saveBurdenConfig(String taxType, BigDecimal thresholdRate,
+                                                  Boolean enabled, String remark, Long userId) {
+        if (thresholdRate == null || thresholdRate.compareTo(BigDecimal.ZERO) < 0
+                || thresholdRate.compareTo(BigDecimal.ONE) > 0) {
+            throw new BusinessException("预警阈值必须在 0~100% 之间");
+        }
+        String t = (taxType == null || taxType.isBlank()) ? "VAT" : taxType;
+        TaxBurdenConfigEntity existing = taxBurdenConfigMapper.selectOne(
+                new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<TaxBurdenConfigEntity>()
+                        .eq(TaxBurdenConfigEntity::getTaxType, t)
+                        .last("LIMIT 1"));
+        TaxBurdenConfigEntity cfg;
+        if (existing == null) {
+            cfg = new TaxBurdenConfigEntity();
+            cfg.setTaxType(t);
+            cfg.setEnterpriseId(com.huicai.base.system.util.SecurityUtils.getCurrentEnterpriseId());
+        } else {
+            cfg = existing;
+        }
+        cfg.setThresholdRate(thresholdRate);
+        cfg.setEnabled(enabled == null ? Boolean.TRUE : enabled);
+        cfg.setRemark(remark);
+        cfg.setUpdatedBy(userId);
+        if (existing == null) {
+            taxBurdenConfigMapper.insert(cfg);
+        } else {
+            taxBurdenConfigMapper.updateById(cfg);
+        }
+        log.info("税负预警阈值保存: taxType={}, rate={}, enabled={}, userId={}", t, thresholdRate, cfg.getEnabled(), userId);
+        return cfg;
     }
 }

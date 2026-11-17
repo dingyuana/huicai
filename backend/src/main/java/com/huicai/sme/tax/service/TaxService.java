@@ -8,6 +8,7 @@ import com.huicai.base.business.entity.OutputInvoiceEntity;
 import com.huicai.sme.tax.dto.BatchOperationResult;
 import com.huicai.sme.tax.entity.TaxDeclarationEntity;
 import com.huicai.sme.tax.entity.TaxTypeEntity;
+import com.huicai.sme.tax.entity.TaxBurdenConfigEntity;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -98,4 +99,25 @@ public interface TaxService {
     BatchOperationResult batchMarkVouchered(List<Long> ids, Long userId);
     BatchOperationResult batchVoid(List<Long> ids, Long userId, String reason);
     BatchOperationResult batchReverse(List<Long> ids, Long userId, String reason);
+
+    // ==================== SPEC-P156：P1-1 税务申报收尾 ====================
+
+    /**
+     * 增值税申报表导出（D-1 首期项）：汇总行（应纳增值税+附加税+合计）
+     * + 附表一按客户税率 + 附表二按供应商税率，单 xlsx 多段。
+     */
+    void exportVatDeclaration(String period, jakarta.servlet.http.HttpServletResponse response) throws java.io.IOException;
+
+    /**
+     * 企业所得税预缴测算（D-1 补充，纯测算不落库）：
+     * 利润总额（报表口径）→ 纳税调增暂不展开 → 应纳税所得额 → 按预缴税率档测算。
+     */
+    Map<String, Object> calculateCit(String period);
+
+    /** 税负预警阈值（D-3）：取企业配置，未配置返回系统默认 3%。 */
+    TaxBurdenConfigEntity getBurdenConfig(String taxType);
+
+    /** 保存（upsert）税负预警阈值。 */
+    TaxBurdenConfigEntity saveBurdenConfig(String taxType, java.math.BigDecimal thresholdRate,
+                                           Boolean enabled, String remark, Long userId);
 }

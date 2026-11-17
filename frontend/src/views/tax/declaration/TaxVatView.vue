@@ -11,6 +11,7 @@
         </el-form-item>
         <el-form-item>
           <el-button type="primary" @click="fetchAll">计算</el-button>
+          <el-button type="success" :disabled="!result" @click="onExportVat">导出申报表</el-button>
         </el-form-item>
       </el-form>
 
@@ -198,6 +199,51 @@
                 </el-card>
               </el-col>
             </el-row>
+            <el-divider />
+            <el-form :inline="true" size="small">
+              <el-form-item label="预警阈值%">
+                <el-input-number v-model="burdenForm.ratePercent" :min="0.01" :max="100" :precision="2" :controls="false" style="width: 90px" />
+              </el-form-item>
+              <el-form-item>
+                <el-switch v-model="burdenForm.enabled" active-text="启用预警" />
+              </el-form-item>
+              <el-form-item>
+                <el-button type="primary" size="small" :loading="savingBurden" @click="onSaveBurden">保存阈值</el-button>
+              </el-form-item>
+              <el-form-item v-if="burdenAlert">
+                <el-tag type="danger">⚠️ 税负率低于预警阈值（{{ (Number(burdenConfig.thresholdRate) * 100).toFixed(2) }}%）</el-tag>
+              </el-form-item>
+              <el-form-item v-else-if="burdenConfig.enabled">
+                <el-tag type="success" size="small">税负率正常</el-tag>
+              </el-form-item>
+            </el-form>
+          </template>
+          <div v-else style="color:#999;padding:16px;text-align:center">请先计算</div>
+        </el-tab-pane>
+
+        <el-tab-pane label="企业所得税预缴测算" name="cit">
+          <template v-if="cit">
+            <el-row :gutter="20">
+              <el-col :span="6">
+                <el-card shadow="never" style="text-align:center">
+                  <div class="card-title">累计利润总额</div>
+                  <div class="card-value primary">{{ fmtAmount(cit.cumulativeProfit) }}</div>
+                </el-card>
+              </el-col>
+              <el-col :span="6">
+                <el-card shadow="never" style="text-align:center">
+                  <div class="card-title">适用预缴税率</div>
+                  <div class="card-value warning">{{ (Number(cit.taxRate) * 100).toFixed(2) }}%</div>
+                </el-card>
+              </el-col>
+              <el-col :span="6">
+                <el-card shadow="never" style="text-align:center">
+                  <div class="card-title">测算应预缴税额</div>
+                  <div class="card-value danger">{{ fmtAmount(cit.estimatedTax) }}</div>
+                </el-card>
+              </el-col>
+            </el-row>
+            <el-alert :title="cit.note" type="info" show-icon :closable="false" style="margin-top: 12px" />
           </template>
           <div v-else style="color:#999;padding:16px;text-align:center">请先计算</div>
         </el-tab-pane>
@@ -207,9 +253,10 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
+import { ElMessage } from 'element-plus'
 import { resolveDefaultPeriod } from '@/utils/period'
-import { calculateVat } from '@/api/modules/tax'
+import { calculateVat, calculateCit, exportVatDeclaration, getBurdenConfig, saveBurdenConfig } from '@/api/modules/tax'
 import request from '@/api/request'
 import PeriodNavigator from '@/components/finance/PeriodNavigator.vue'
 
@@ -221,6 +268,17 @@ const subTab = ref<string>('appendix-i')
 const appendixI = ref<any>(null)
 const appendixII = ref<any>(null)
 const burden = ref<any>(null)
+const cit = ref<any>(null)
+
+// SPEC-P156：税负预警阈值（D-3）
+const burdenConfig = ref<any>({ taxType: 'VAT', thresholdRate: 0.03, enabled: true })
+const burdenForm = reactive<{ ratePercent?: number; enabled: boolean }>({ ratePercent: 3, enabled: true })
+const savingBurden = ref(false)
+const burdenAlert = computed(() =>
+  burden.value?.taxBurdenRate != null
+  && burdenConfig.value?.enabled
+  && Number(burden.value.taxBurdenRate) < Number(burdenConfig.value.thresholdRate),
+)
 
 const fmtAmount = (v: any) => Number(v || 0).toFixed(2)
 
@@ -229,6 +287,52 @@ const fetchAppendices = async () => {
   appendixI.value = await request.get('/sme/tax/v1/tax/vat/appendix-i', { params: { period: query.period } })
   appendixII.value = await request.get('/sme/tax/v1/tax/vat/appendix-ii', { params: { period: query.period } })
   burden.value = await request.get('/sme/tax/v1/tax/vat/tax-burden', { params: { period: query.period, type: 'YOY' } })
+  cit.value = await calculateCit(query.period)
+}
+
+const fetchBurdenConfig = async () => {
+  try {
+    burdenConfig.value = await getBurdenConfig('VAT')
+    burdenForm.ratePercent = Number((Number(burdenConfig.value.thresholdRate) * 100).toFixed(2))
+    burdenForm.enabled = burdenConfig.value.enabled !== false
+  } catch {
+    // 未配置走后端默认值，前端兜底
+  }
+}
+
+const onSaveBurden = async () => {
+  if (!burdenForm.ratePercent || burdenForm.ratePercent <= 0 || burdenForm.ratePercent > 100) {
+    ElMessage.warning('阈值须在 0~100% 之间')
+    return
+  }
+  savingBurden.value = true
+  try {
+    burdenConfig.value = await saveBurdenConfig({
+      taxType: 'VAT',
+      thresholdRate: burdenForm.ratePercent / 100,
+      enabled: burdenForm.enabled,
+    })
+    ElMessage.success('预警阈值已保存')
+  } catch (e: any) {
+    ElMessage.error(e?.message ?? '保存失败')
+  } finally {
+    savingBurden.value = false
+  }
+}
+
+// SPEC-P156 D-1：申报表导出（blob 下载）
+const onExportVat = async () => {
+  try {
+    const blob = await exportVatDeclaration(query.period)
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `增值税申报表_${query.period}.xlsx`
+    a.click()
+    URL.revokeObjectURL(url)
+  } catch (e: any) {
+    ElMessage.error(e?.message ?? '导出失败')
+  }
 }
 
 const fetchAll = async () => {
@@ -243,6 +347,7 @@ const fetchAll = async () => {
 onMounted(async () => {
   query.period = await resolveDefaultPeriod()
   fetchAll()
+  fetchBurdenConfig()
 })
 </script>
 

@@ -109,8 +109,7 @@ public class OutputInvoiceEntity extends BaseEntity {
     @TableField(exist = false)
     private String reversedByInvoiceNo;
 
-    @TableField(exist = false)
-    private Long updatedBy;
+    /* SPEC-P153：updated_by 真实列存在（此前误覆盖 exist=false）*/
 
     /** 关联单据编号（冗余存储，用于快速查询）— DB 无此列 */
     @TableField(exist = false)
@@ -129,12 +128,16 @@ public class OutputInvoiceEntity extends BaseEntity {
     @TableField(fill = FieldFill.INSERT_UPDATE)
     private LocalDateTime updatedAt;
 
-    /** 审核人ID（非数据库字段，仅 VO 回填） */
-    @TableField(exist = false)
+    /**
+     * 审核人ID — V194 真实列。
+     * 🔴 原注释「仅 VO 回填」不实：OutputInvoiceStateMachineServiceImpl#confirm
+     * 在 updateById 之前 setAuditedBy(userId)，是落库意图，与进项侧同构。
+     */
+    @TableField("audited_by")
     private Long auditedBy;
 
-    /** 审核时间（非数据库字段，仅 VO 回填） */
-    @TableField(exist = false)
+    /** 审核时间 — V194 真实列（同上） */
+    @TableField("audited_at")
     private LocalDateTime auditedAt;
 
     /** 关联销售发票状态（P2 跨单据查询） */

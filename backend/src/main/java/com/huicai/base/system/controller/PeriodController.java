@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.huicai.common.response.R;
+import com.huicai.common.exception.BusinessException;
 import com.huicai.base.system.dto.PeriodSaveDTO;
 import com.huicai.base.system.entity.PeriodEntity;
 import com.huicai.base.system.service.PeriodService;
@@ -87,9 +88,14 @@ public class PeriodController {
     @PostMapping("/{id}/close")
     public R<Void> closePeriod(@PathVariable Long id) {
         PeriodEntity entity = periodService.getById(id);
-        if (entity != null) {
-            periodCloseService.closePeriod(entity.getPeriodCode(), SecurityUtils.getCurrentUserId());
+        // 🔴 SPEC-P150：原实现 `if (entity != null) {...} return R.ok();` —— 期间不存在
+        // （或按 id 读取因缺事务被 RLS 过滤成 null）时**静默返回 200**，前端提示
+        // 「期间已结账」却什么都没发生（2026-11-02 实测：t_close_log 无新增行、
+        // t_period.status 仍为 open）。结账是写操作，禁止再用静默成功掩盖。
+        if (entity == null) {
+            throw BusinessException.notFound("会计期间不存在: id=" + id);
         }
+        periodCloseService.closePeriod(entity.getPeriodCode(), SecurityUtils.getCurrentUserId());
         return R.ok();
     }
 

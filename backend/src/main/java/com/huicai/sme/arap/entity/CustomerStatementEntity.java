@@ -58,8 +58,8 @@ public class CustomerStatementEntity extends BaseEntity {
     private String status;
 
     private LocalDateTime sentAt;
-    /** 确认时间 — DB 无此列 */
-    @TableField(exist = false)
+    /** 确认时间 — V194 真实列（此前 setConfirmedAt 不落库） */
+    @TableField("confirmed_at")
     private LocalDateTime confirmedAt;
 
     @TableField(fill = FieldFill.INSERT)

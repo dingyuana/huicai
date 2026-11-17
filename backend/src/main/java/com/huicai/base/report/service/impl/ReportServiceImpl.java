@@ -8,6 +8,7 @@ import com.huicai.base.balance.service.SubjectBalanceService;
 import com.huicai.base.report.mapper.ReportDataMapper;
 import com.huicai.base.report.service.ReportService;
 import com.huicai.base.system.util.SecurityUtils;
+import com.huicai.common.context.EnterpriseContextHolder;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -58,7 +59,7 @@ public class ReportServiceImpl implements ReportService {
 
     @Override
     public List<Map<String, Object>> subjectBalanceTable(String period) {
-        return reportDataMapper.subjectBalance(period);
+        return convergeToCurrentEnterprise(reportDataMapper.subjectBalance(period));
     }
 
     /**
@@ -172,7 +173,8 @@ public class ReportServiceImpl implements ReportService {
 
     private Map<String, Object> buildBalanceSheet(String period, String balanceField, boolean reclassify) {
         Map<String, Object> result = new LinkedHashMap<>();
-        List<Map<String, Object>> balances = reportDataMapper.subjectBalance(period);
+        List<Map<String, Object>> balances = convergeOrReject(
+                reportDataMapper.subjectBalance(period));
 
         List<Map<String, Object>> assets = new ArrayList<>();
         List<Map<String, Object>> liab = new ArrayList<>();
@@ -243,6 +245,7 @@ public class ReportServiceImpl implements ReportService {
                     }
                 }
                 case '4' -> {
+                    // 撞行修复后此处安全：上方已按租户上下文收敛，结果集内 code 唯一前提成立
                     BigDecimal signed = "credit".equals(direction) ? balance : balance.negate();
                     if (code.equals("4103")) {
                         profit4103 = signed;
@@ -651,6 +654,58 @@ public class ReportServiceImpl implements ReportService {
     private static BigDecimal toBigDecimal(Object o) {
         if (o == null) return BigDecimal.ZERO;
         return new BigDecimal(o.toString()).setScale(2, RoundingMode.HALF_UP);
+    }
+
+    private static Long toLong(Object o) {
+        if (o == null) return null;
+        return ((Number) o).longValue();
+    }
+
+    /**
+     * 撞行修复（SPEC-P154 项⑤，八类红线「报表取数」用户裁定修复）：
+     * subjectBalance 会混入其他企业同码科目行——DB 层超管绕 RLS（FORCE 也压不住超级用户），
+     * 应用层注入在【无租户上下文】时跳过（如非 JWT 认证态的调用方），此时 ent0 参考库
+     * 与本企业的 4103/4104 并存，{@code code.equals("4103")} 覆盖赋值被参考库的 0
+     * 静默覆盖真实利润（实测差恰 8,000）。
+     *
+     * <p>收敛策略：<b>有上下文按上下文过滤</b>（RLS 正常时恒真 no-op，纯纵深）；
+     * <b>无上下文且实测混入多企业行 ⇒ fail-loud</b>——宁可报错也不静默错值（报表红线）；
+     * 单企业结果集或行上无 enterprise_id 列（测试替身/未来改 SQL）原样返回，零误伤。</p>
+     */
+    private static List<Map<String, Object>> convergeToCurrentEnterprise(List<Map<String, Object>> rows) {
+        return converge(rows, false);
+    }
+
+    /**
+     * 同 {@link #convergeToCurrentEnterprise} 但【无上下文且混企时 fail-loud】——
+     * 供资产负债表：{@code code.equals("4103")} 隐含「结果集 code 唯一」前提，混企结果
+     * 无法安全归属（猜 max|balance| 会掩盖真实污染），宁可拒绝对静默出静默错值的表。
+     */
+    private static List<Map<String, Object>> convergeOrReject(List<Map<String, Object>> rows) {
+        return converge(rows, true);
+    }
+
+    private static List<Map<String, Object>> converge(List<Map<String, Object>> rows, boolean failLoud) {
+        Long ctx = EnterpriseContextHolder.get();
+        if (ctx != null) {
+            return rows.stream()
+                    .filter(r -> {
+                        Long entId = toLong(r.get("enterprise_id"));
+                        return entId == null || entId.equals(ctx);
+                    })
+                    .collect(java.util.stream.Collectors.toList());
+        }
+        boolean multiEnterprise = rows.stream()
+                .map(r -> toLong(r.get("enterprise_id")))
+                .filter(java.util.Objects::nonNull)
+                .distinct()
+                .count() > 1;
+        if (failLoud && multiEnterprise) {
+            throw new com.huicai.common.exception.BusinessException(
+                    "报表取数被多企业数据污染（无租户上下文且结果集含多个 enterprise_id），"
+                            + "已拒绝出表 —— 静默出表即静默错值");
+        }
+        return rows;
     }
 
     private void writeExcel(HttpServletResponse response, String title, String period, String[] headers, List<List<Object>> rows) throws IOException {

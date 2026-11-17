@@ -5,6 +5,9 @@ import com.huicai.common.exception.BusinessException;
 import com.huicai.common.test.StateMachineTestHelper;
 import com.huicai.sme.arap.service.impl.AutoGenerationService;
 import com.huicai.base.business.entity.BankStatementEntity;
+import com.huicai.base.business.mapper.BusinessDocMapper;
+import com.huicai.base.voucher.entity.VoucherEntity;
+import com.huicai.base.voucher.mapper.VoucherMapper;
 import com.huicai.sme.cash.mapper.BankJournalMapper;
 import com.huicai.base.business.mapper.BankStatementMapper;
 import com.huicai.sme.cash.service.ClassificationRuleService;
@@ -16,6 +19,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -45,6 +49,9 @@ class BankStatementServiceTest {
     @Mock private ClassificationRuleService classificationRuleService;
     @Mock private FallbackHeuristicService fallbackHeuristic;
     @Mock private AutoGenerationService autoGenerationService;
+    // SPEC-P151 groupByCategory 必调 populateGeneratedRefs：凭证/单据号回填的两条数据通路
+    @Mock private VoucherMapper voucherMapper;
+    @Mock private BusinessDocMapper businessDocMapper;
 
     @InjectMocks private BankStatementServiceImpl service;
 
@@ -625,6 +632,97 @@ class BankStatementServiceTest {
                 verify(statementMapper, never()).updateById(any(BankStatementEntity.class));
                 reset(statementMapper);
             }
+        }
+    }
+
+    // ==================== SPEC-P151: groupByCategory（分类视图） ====================
+
+    @Nested
+    class GroupByCategoryTest {
+
+        private BankStatementEntity stmt(Long id, String classification, String txType, String amount) {
+            BankStatementEntity s = stub(id, classification);
+            s.setTxType(txType);
+            s.setAmount(amount != null ? new BigDecimal(amount) : null);
+            return s;
+        }
+
+        @Test
+        void 分组_NULL与空串分类归other_unknown() {
+            when(statementMapper.selectList(any())).thenReturn(List.of(
+                    stmt(1L, "business_payment", "EXPENSE", "100"),
+                    stmt(2L, null, "EXPENSE", "50"),
+                    stmt(3L, "", "INCOME", "30"),
+                    stmt(4L, "business_receipt", "INCOME", "200")));
+
+            List<com.huicai.base.business.dto.vo.BankStatementCategoryGroupVO> groups =
+                    service.groupByCategory(1L, null, null, null, null, null, null, null, null, null, null, null, null);
+
+            assertEquals(3, groups.size());
+            // other_unknown 一组收编 NULL + 空串
+            com.huicai.base.business.dto.vo.BankStatementCategoryGroupVO other = groups.stream()
+                    .filter(g -> "other_unknown".equals(g.getClassification())).findFirst().orElseThrow();
+            assertEquals(2, other.getCount());
+            assertEquals(2, other.getItems().size());
+        }
+
+        @Test
+        void 排序_other_unknown恒末_其余按条数降序() {
+            when(statementMapper.selectList(any())).thenReturn(List.of(
+                    stmt(1L, "business_payment", "EXPENSE", "100"),
+                    stmt(2L, "business_payment", "EXPENSE", "101"),
+                    stmt(3L, "business_payment", "EXPENSE", "102"),
+                    stmt(4L, null, "EXPENSE", "50"),
+                    stmt(5L, "bank_interest_fee", "INCOME", "10"),
+                    stmt(6L, "bank_interest_fee", "INCOME", "11")));
+
+            List<com.huicai.base.business.dto.vo.BankStatementCategoryGroupVO> groups =
+                    service.groupByCategory(1L, null, null, null, null, null, null, null, null, null, null, null, null);
+
+            assertEquals(3, groups.size());
+            // 待认领不是一类业务，永远排最末
+            assertEquals("other_unknown", groups.get(groups.size() - 1).getClassification());
+            // business_payment(3) > bank_interest_fee(2)
+            assertEquals("business_payment", groups.get(0).getClassification());
+            assertEquals("bank_interest_fee", groups.get(1).getClassification());
+        }
+
+        @Test
+        void 收支合计_TRANSFER_IN计收_金额取绝对值() {
+            // 口径与 summary() 一致：TRANSFER_IN 计收入；外币/负号金额按 abs 计入
+            when(statementMapper.selectList(any())).thenReturn(List.of(
+                    stmt(1L, "business_payment", "EXPENSE", "-300"),
+                    stmt(2L, null, "TRANSFER_IN", "77"),
+                    stmt(3L, null, "INCOME", "23")));
+
+            List<com.huicai.base.business.dto.vo.BankStatementCategoryGroupVO> groups =
+                    service.groupByCategory(1L, null, null, null, null, null, null, null, null, null, null, null, null);
+
+            com.huicai.base.business.dto.vo.BankStatementCategoryGroupVO other = groups.get(1); // other_unknown 恒末
+            assertEquals("other_unknown", other.getClassification());
+            assertEquals(0, other.getIncome().compareTo(new BigDecimal("100"))); // 77 + 23
+            assertEquals(2, other.getItems().size());
+            com.huicai.base.business.dto.vo.BankStatementCategoryGroupVO payment = groups.get(0);
+            assertEquals(0, payment.getExpense().compareTo(new BigDecimal("300")));
+            assertEquals(0, BigDecimal.ZERO.compareTo(payment.getIncome()));
+        }
+
+        @Test
+        void 必调populateGeneratedRefs_凭证号回填不缺() {
+            // 🔴 generatedVoucherNo 是 @TableField(exist=false) 纯展示字段：
+            // 分组视图漏填 ⇒ 同一批流水平铺显示凭证号、分组显示「-」
+            BankStatementEntity s = stmt(1L, "business_payment", "EXPENSE", "100");
+            s.setGeneratedVoucherId(9L);
+            when(statementMapper.selectList(any())).thenReturn(List.of(s));
+            VoucherEntity v = new VoucherEntity();
+            v.setId(9L);
+            v.setVoucherNo("JZ-2024-001");
+            when(voucherMapper.selectBatchIds(List.of(9L))).thenReturn(List.of(v));
+
+            List<com.huicai.base.business.dto.vo.BankStatementCategoryGroupVO> groups =
+                    service.groupByCategory(1L, null, null, null, null, null, null, null, null, null, null, null, null);
+
+            assertEquals("JZ-2024-001", groups.get(0).getItems().get(0).getGeneratedVoucherNo());
         }
     }
 }

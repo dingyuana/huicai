@@ -205,8 +205,8 @@ async function handleCreate() {
     ElMessage.success('创建成功')
     createVisible.value = false
     fetchList()
-  } catch {
-    ElMessage.error('创建失败')
+  } catch (error: any) {
+    ElMessage.error(error?.message || '创建失败')
   } finally {
     creating.value = false
   }

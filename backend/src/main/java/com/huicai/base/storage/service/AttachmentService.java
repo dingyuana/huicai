@@ -60,7 +60,7 @@ public class AttachmentService {
     @Transactional(rollbackFor = Exception.class)
     public void delete(Long id) {
         AttachmentEntity entity = mapper.selectById(id);
-        if (entity == null) throw new BusinessException("附件不存在");
+        if (entity == null) throw BusinessException.notFound("附件不存在");
         try {
             minioService.delete(entity.getBucketName(), entity.getFileName());
         } catch (Exception e) {
@@ -75,7 +75,7 @@ public class AttachmentService {
     @Transactional(rollbackFor = Exception.class)
     public String presignedUrl(Long id) {
         AttachmentEntity entity = mapper.selectById(id);
-        if (entity == null) throw new BusinessException("附件不存在");
+        if (entity == null) throw BusinessException.notFound("附件不存在");
         try {
             return minioService.presignedUrl(entity.getBucketName(), entity.getFileName());
         } catch (Exception e) {
@@ -93,7 +93,7 @@ public class AttachmentService {
     @Transactional(rollbackFor = Exception.class)
     public String runOcr(Long id, java.util.Map<String, String> hint) {
         AttachmentEntity entity = mapper.selectById(id);
-        if (entity == null) throw new BusinessException("附件不存在: " + id);
+        if (entity == null) throw BusinessException.notFound("附件不存在: " + id);
         String bizType = hint != null && hint.containsKey("bizType")
                 ? hint.get("bizType") : entity.getBizType();
         String json = mockExtract(bizType, hint == null ? java.util.Collections.emptyMap() : hint);

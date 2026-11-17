@@ -19,7 +19,13 @@ import sys
 
 import yaml
 
-WORKFLOW_DIR = '/home/dy/huicai/.github/workflows'
+# 🔴 修复（CI 实测红/本地绿的根因）：原为硬编码本机绝对路径
+#    `/home/dy/huicai/.github/workflows` —— CI runner 上该目录不存在，
+#    守卫打印「工作流目录不存在」即 exit 1 ⇒ **在 CI 恒红、本地恒绿**。
+#    改为相对脚本位置推导（脚本位于 <repo>/scripts/ 下）。
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+REPO_ROOT = os.path.dirname(SCRIPT_DIR)
+WORKFLOW_DIR = os.path.join(REPO_ROOT, '.github', 'workflows')
 
 # GitHub 内置环境变量，不需要在 step 里声明
 BUILTIN = {

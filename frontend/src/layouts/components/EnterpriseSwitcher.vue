@@ -76,11 +76,22 @@ const currentEnterpriseName = computed(() => {
 
 async function handleSwitch(enterpriseId: number) {
   try {
-    await authStore.switchEnterprise(enterpriseId)
+    const res = await authStore.switchEnterprise(enterpriseId)
+    // 切换到 PENDING 企业时，提示用户需要先激活
+    if (res?.status === 'PENDING') {
+      ElMessage.warning(`该账套尚未激活，请先完成【激活】后再访问业务页面。`)
+      router.push({ path: '/agency/enterprises', query: { id: String(enterpriseId) } })
+      return
+    }
     ElMessage.success('已切换客户企业')
     router.push('/dashboard')
-  } catch {
-    ElMessage.error('切换失败')
+  } catch (e: any) {
+    const msg = e?.msg || e?.message || '切换失败'
+    if (msg.includes('PENDING') || msg.includes('仅 ACTIVE')) {
+      ElMessage.warning('该账套尚未激活，请联系管理员完成激活后再访问。')
+    } else {
+      ElMessage.error(msg)
+    }
   }
 }
 </script>

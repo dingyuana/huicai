@@ -50,24 +50,43 @@ public class AuditLogEntity {
     @TableField(value = "after_data", typeHandler = JsonbTypeHandler.class)
     private String afterData;
 
-    @TableField(exist = false)
+    /** 目标方法名，对应 method（SPEC-P152 补列，此前是 exist=false 幽灵字段） */
+    @TableField("method")
     private String method;
-    @TableField(typeHandler = JsonbTypeHandler.class, exist = false)
+
+    /**
+     * 请求参数（LogAspect 已脱敏），对应 request_params TEXT。
+     * <p>刻意不用 JSONB：现存写方（recordStatusChange 的 "newValue=..." 拼串、
+     * 异常 message）不是合法 JSON，JSONB 列会整行插入失败。</p>
+     */
+    @TableField("request_params")
     private String requestParams;
-    @TableField(typeHandler = JsonbTypeHandler.class, exist = false)
+
+    /** 响应结果或异常 message，对应 response_result TEXT */
+    @TableField("response_result")
     private String responseResult;
-    @TableField(typeHandler = JsonbTypeHandler.class, exist = false)
-    private String oldSnapshot;
-    @TableField(typeHandler = JsonbTypeHandler.class, exist = false)
-    private String newSnapshot;
+
     private String ipAddress;
-    @TableField(exist = false)
+
+    /** 客户端 UA，对应 user_agent */
+    @TableField("user_agent")
     private String userAgent;
-    @TableField(exist = false)
+
+    /** 执行耗时毫秒，对应 execution_time_ms */
+    @TableField("execution_time_ms")
     private Integer executionTimeMs;
-    @TableField(exist = false)
+
+    /** 操作结果 success/fail，对应 status（页端过滤列） */
+    @TableField("status")
     private String status;
+
     private String module;
-    @TableField(exist = false)
+
+    /**
+     * 创建时间 — 复用 operation_time 列（表无独立 created_at；SPEC-P152 由
+     * exist=false 转正，页端「操作时间」列与详情弹窗直接可用）。
+     * 插入时留 null 走 DB 默认值 CURRENT_TIMESTAMP。
+     */
+    @TableField("operation_time")
     private LocalDateTime createdAt;
 }

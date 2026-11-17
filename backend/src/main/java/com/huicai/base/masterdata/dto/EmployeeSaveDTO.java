@@ -56,6 +56,9 @@ public class EmployeeSaveDTO {
     @Size(max = 500, message = "备注过长")
     private String remark;
 
+    /** SPEC-P159：社保局核定缴费基数（年申报值）；NULL=未核定，EMP_DECL 基数模式的数据源 */
+    private java.math.BigDecimal socialBaseDeclared;
+
     public EmployeeEntity toEntity() {
         EmployeeEntity e = new EmployeeEntity();
         e.setCode(code);
@@ -66,6 +69,7 @@ public class EmployeeSaveDTO {
         e.setEmail(email);
         e.setIsActive(isActive);
         e.setRemark(remark);
+        e.setSocialBaseDeclared(socialBaseDeclared);
         return e;
     }
 }

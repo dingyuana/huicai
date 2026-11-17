@@ -43,6 +43,15 @@ public class VoucherStateMachineServiceImpl implements VoucherStateMachineServic
         }
     }
 
+    /** SPEC-P160：撤审 = AUDITED → DRAFT（纠错重审；撤审后重新走 submit→audit→post） */
+    @Override
+    public void assertUnauditable(VoucherEntity entity) {
+        if (!VoucherStatus.isUnauditable(entity.getStatus())) {
+            throw BusinessException.badRequest(
+                    "凭证当前状态 " + entity.getStatus() + " 不可撤审, 需 AUDITED");
+        }
+    }
+
     @Override
     public void assertReversible(VoucherEntity entity) {
         if (!VoucherStatus.isReversible(entity.getStatus())) {

@@ -20,4 +20,11 @@ public class AiTaskResult implements Serializable {
     private Map<String, Object> outputData;
     private Double confidence;
     private String errorMessage;
+
+    /**
+     * SPEC-P139：回调结果须携带目标账套企业（Python 侧从下发消息透传）。
+     * 监听线程据此在写回前重建租户上下文；缺失时按 D-2 兜底（log.error + DLQ），
+     * 不得静默丢弃。
+     */
+    private Long enterpriseId;
 }
